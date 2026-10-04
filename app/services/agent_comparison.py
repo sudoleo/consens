@@ -10,7 +10,7 @@ import time
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from app.core import config as cfg
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
@@ -60,6 +60,8 @@ class AgentPreferences(BaseModel):
 def stored_preferences(value):
     """Turns saved before a field existed compare with its default."""
     return AgentPreferences.model_validate(value or {}).model_dump()
+
+
 # Differences and Coverage (in windows) for up to three comparisons.
 JUDGE_PARALLEL = 6
 DEPTH_GUIDANCE = {
@@ -98,28 +100,28 @@ def quorum_size(total, depth, mode="balanced"):
 FREE_PROMPT = """
 Agent freedom is FREE for this message (user setting). Your goal is the best
 possible answer for the user, and you decide how to get there. Every
-compare_models call asks only the families you list in `models` (at least two;
-all available families when you leave it empty). Choose per call what the
-question needs: the families strongest for this kind of task, diverse
-perspectives where a point is contested or the stakes are high, fewer models for
-simple questions. You may run several comparisons, for example a focused
-subquestion to selected families when answers disagree, evidence is thin or one
-aspect needs depth, and a broader panel for decisions with real consequences.
-Do not ask more models or rounds than improve the answer: every call spends the
-user's tokens. Fixed by the app, not by you: every substantive answer rests on at
-least one comparison with independent answers from at least two families, and
-the judges always check the final answer.
-Available comparison families: """
+compare_models call asks only the families you list in `models`, at least two
+of the user's comparison models. Choose per call what the question needs: the
+families strongest for this kind of task, diverse perspectives where a point is
+contested or the stakes are high, fewer models for simple questions. You may run
+several comparisons, for example a focused subquestion to selected families when
+answers disagree, evidence is thin or one aspect needs depth, and a broader panel
+for decisions with real consequences. If a family fails and fewer than two
+answers remain, ask other families instead of answering from one. Do not ask
+more models or rounds than improve the answer: every call spends the user's
+tokens. Fixed by the app, not by you: every substantive answer rests on at least
+one comparison with independent answers from at least two families, and the
+judges always check the final answer."""
 
 
-def preference_prompt(preferences, models=None):
+def preference_prompt(preferences):
     """Tell the orchestrator about what the user fixed in Settings."""
     text = ""
     if preferences.depth != "auto":
         text += (f"\nThe user fixed the comparison depth to \"{preferences.depth}\" in Settings; "
                  "every comparison uses it whatever depth you pass.")
     if preferences.autonomy == "free":
-        text += FREE_PROMPT + json.dumps({provider: model.label for provider, model in (models or {}).items()})
+        text += FREE_PROMPT
     return text
 
 
@@ -330,10 +332,15 @@ class CompareArgs(ProgressArgs):
         "more_work: you still need another comparison, a document or an action preparation before the answer.")
 
 
-class FreeCompareArgs(CompareArgs):
-    models: list[str] = Field(default_factory=list, max_length=cfg.MAX_RUN_FAMILIES, description=
-        "Families to ask in this comparison (keys from the available comparison families), at least two. "
-        "Empty asks all of them.")
+def free_compare_args(models):
+    """compare_models with a model choice, for Agent freedom "free".
+
+    The schema enumerates exactly this turn's families, so tool validation
+    rejects an unknown key before a paid comparison starts."""
+    labels = ", ".join(f"{provider} = {model.label}" for provider, model in models.items())
+    return create_model("FreeCompareArgs", __base__=CompareArgs, models=(
+        list[Literal[tuple(models)]], Field(min_length=2, max_length=len(models), description=
+            f"Families to ask in this comparison, at least two different ones: {labels}.")))
 
 
 class JudgeArgs(ProgressArgs):
@@ -372,9 +379,7 @@ class ComparisonTools:
         # Text a model had written before it stopped or failed. Kept for the
         # reader, marked incomplete; never part of the synthesis or its check.
         self._partials = {}
-        # Models asked per comparison: all of them unless free mode chose some.
-        self._asked = {}
-        compare = (ReadOnlyTool("compare_models", "Get independent answers from the families you choose (at least two) before synthesizing and checking the answer. Every substantive answer needs at least one comparison.", FreeCompareArgs, self.compare)
+        compare = (ReadOnlyTool("compare_models", "Get independent answers from the families you choose (at least two) before synthesizing and checking the answer. Every substantive answer needs at least one comparison.", free_compare_args(models), self.compare)
                    if self.free else
                    ReadOnlyTool("compare_models", "Start the Consensus pipeline for every user question or task. Get independent answers from the selected models before synthesizing and checking the answer.", CompareArgs, self.compare))
         self.tools = [compare,
@@ -390,17 +395,13 @@ class ComparisonTools:
         return self.preferences.autonomy == "free"
 
     def _choose(self, args):
-        """The models of one comparison; free mode keeps the two-family floor."""
-        chosen = list(dict.fromkeys(getattr(args, "models", None) or []))
-        if not chosen:
-            return dict(self.models)
-        unknown = [p for p in chosen if p not in self.models]
-        if unknown:
-            raise ValueError(f"Unknown comparison families {unknown}; choose from {sorted(self.models)}")
+        """Families of one comparison: guided asks all, free its own choice."""
+        if not self.free:
+            return list(self.models)
+        chosen = list(dict.fromkeys(args.models))
         if len(chosen) < 2:
-            raise ValueError("Every comparison needs independent answers from at least two families; "
-                             f"choose two or more from {sorted(self.models)}")
-        return {p: self.models[p] for p in chosen}
+            raise ValueError("Every comparison needs independent answers from at least two different families.")
+        return chosen
 
     def snapshot(self, status=None):
         data = {"version": 1, "status": status or (self.review or {}).get("status", "required"),
@@ -551,8 +552,8 @@ class ComparisonTools:
             loop.store.protect_review(loop.uid, loop.chat_id, loop.turn_id, loop.run_token, future, cost=future * 10_000)
         if not loop.policy.account_budget_only and loop.costs.calls + len(asked) + 4 + 2 * len(self.comparisons) > loop.policy.max_calls:
             raise ValueError("Remaining calls are reserved for synthesis and judges")
-        comparison = {"id": uuid4().hex, **args.model_dump(exclude={"status_update", "models"}), "status": "running",
-                      "answers": [], "failed_models": [], **({"asked": list(asked)} if self.free else {})}
+        comparison = {"id": uuid4().hex, **args.model_dump(exclude={"status_update", "models"}), "asked": asked,
+                      "status": "running", "answers": [], "failed_models": []}
         self.comparisons.append(comparison)
         # New evidence invalidates even an unchanged synthesis's earlier check.
         self.review = None
@@ -566,11 +567,10 @@ class ComparisonTools:
         system = comparison_system_prompt(depth)
         cid = comparison["id"]
         self._raw[cid], self._failures[cid], self._running[cid], self._partials[cid] = {}, {}, {}, {}
-        self._asked[cid] = asked
         comparison["depth"] = depth
         share = self._output_share(len(asked))
-        models = {p: replace(m, max_output_tokens=min(m.max_output_tokens, share)) if share else m
-                  for p, m in asked.items()}
+        models = {p: replace(self.models[p], max_output_tokens=min(self.models[p].max_output_tokens, share))
+                  for p in asked}
         done = threading.Condition()
         finished = set()
         # Own slots per comparison: a straggler of an earlier comparison must
@@ -672,7 +672,7 @@ class ComparisonTools:
 
     def _await_quorum(self, comparison, depth, done, finished, cancellation):
         cid = comparison["id"]
-        total = len(self._asked[cid])
+        total = len(comparison["asked"])
         mode = self.preferences.quorum
         quorum = quorum_size(total, depth, mode)
         grace, minimum = ((FAST_GRACE, FAST_MIN_GRACE_SECONDS) if mode == "fast"
@@ -697,7 +697,7 @@ class ComparisonTools:
         never the text. Stragglers stay pending until finish_comparisons."""
         cid = comparison["id"]
         raw, failures, partials = self._raw[cid], self._failures[cid], self._partials.get(cid, {})
-        asked = self._asked.get(cid, self.models)
+        asked = {p: self.models[p] for p in comparison["asked"]}
         ordered = [p for p in transport.PROVIDER_ORDER if p in raw] + [p for p in raw if p not in transport.PROVIDER_ORDER]
         normalized = normalize_provider_answers({p: transport.ProviderAnswer(
             provider=transport.PROVIDER_LABELS.get(p, p), model=self.models[p].selection_id,

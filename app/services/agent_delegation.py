@@ -156,7 +156,7 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_comparison import ComparisonTools, PROMPT, preference_prompt
             self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
                                               preferences=agent_preferences)
-            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences, comparison_models)
+            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences)
             if check_sources:
                 from app.services.agent_contradictions import PROMPT as SOURCE_PROMPT
                 self.messages[0]["content"] += "\n" + SOURCE_PROMPT

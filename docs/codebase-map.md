@@ -2359,8 +2359,8 @@ Vergleichsmodelle. Der Produktprompt verpflichtet das Chatmodell ausdrücklich,
 Bezüge wie „davon“ aufzulösen und relevante frühere Anforderungen in Frage/Kontext
 zu übernehmen; unabhängige Fragen brauchen keinen unnötigen Gesprächsrückblick.
 Im freien Modus (`AgentPreferences.autonomy == "free"`) wählt es zusätzlich pro
-Vergleich die Familien (`FreeCompareArgs.models`, mindestens zwei, serverseitig in
-`_choose`; gespeichert als `asked`), und `DelegationLoop._free_floor` schickt eine
+Vergleich die Familien (`free_compare_args`: Enum der Turn-Auswahl, mindestens zwei,
+Duplikate in `_choose`; jeder Vergleich speichert `asked`), und `DelegationLoop._free_floor` schickt eine
 Direktantwort ohne Vergleich einmal zurück, damit jede Sachantwort auf zwei
 Familien und den Judges beruht.
 `ComparisonTools.compare` startet alle gefragten Vergleichsmodelle gleichzeitig in eigenen

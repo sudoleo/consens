@@ -119,18 +119,25 @@ Reiter Runs und im Composer.
 `guided` (Standard) ist der bisherige Ablauf: jeder Vergleich fragt alle gewählten
 Vergleichsmodelle. `free` (Opt-in) gibt dem Chatmodell als einziges Ziel die
 bestmögliche Antwort und lässt es den Weg wählen: `compare_models` bekommt das
-Feld `models` (`FreeCompareArgs`, Schlüssel aus der Compare-Auswahl, leer = alle),
-der Orchestrierungsprompt den Zusatz `FREE_PROMPT` samt verfügbarer Familien.
-Das Chatmodell entscheidet so pro Vergleich, welche Familien es fragt, und wie viele
-Runden es braucht (im Chat ohnehin nur durch das Tokenkonto begrenzt). Der Vergleich
-speichert die gefragten Familien als `asked`; Quorum, `failed_models`,
-`pending_models` und `status` beziehen sich auf sie statt auf die ganze Auswahl.
+Pflichtfeld `models` (`free_compare_args`: das Schema zählt genau die Familien der
+Compare-Auswahl dieses Turns samt Modellnamen als Enum auf, mindestens zwei), der
+Orchestrierungsprompt den Zusatz `FREE_PROMPT`. Das Chatmodell entscheidet so pro
+Vergleich, welche Familien es fragt, und wie viele Runden es braucht (im Chat ohnehin
+nur durch das Tokenkonto begrenzt). Die Auswahl im Compare-Picker bleibt der Pool:
+der Nutzer bestimmt, welche Modelle infrage kommen, der Agent, welche er wann fragt.
+Jeder Vergleich speichert die gefragten Familien als `asked` (im geführten Modus die
+ganze Auswahl); Quorum, `failed_models`, `pending_models` und `status` beziehen
+sich auf sie. Welcher Modus lief, steht im Turn unter
+`agent_settings.agent_preferences.autonomy` – die Grundlage für den Vergleich
+free gegen guided.
 
 Zwei Regeln setzt der Server durch, nicht der Prompt:
 
-- **Mindestens zwei Familien je Vergleich.** `ComparisonTools._choose` weist
-  weniger als zwei oder unbekannte Familien als Toolfehler zurück. Damit hat jeder
-  Vergleich etwas, das Differences und Coverage gegeneinander prüfen können.
+- **Mindestens zwei Familien je Vergleich.** Unbekannte Familien und weniger als
+  zwei Einträge scheitern schon an der Schema-Validierung, eine doppelt genannte
+  Familie an `ComparisonTools._choose` – jeweils als Toolfehler vor jedem bezahlten
+  Aufruf. Damit hat jeder Vergleich etwas, das Differences und Coverage
+  gegeneinander prüfen können.
 - **Keine ungeprüfte Sachantwort.** Antwortet das Chatmodell im freien Modus ohne
   jeden Vergleich direkt, veröffentlicht der Server den Text nicht, sondern
   verlangt einmal (`DelegationLoop._free_floor`) einen Vergleich oder die

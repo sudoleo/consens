@@ -659,6 +659,8 @@ def test_last_comparison_goes_straight_to_the_checked_answer(store):
     assert saved["status"] == "completed"
     assert saved["agent_review"]["status"] == "succeeded"
     assert review_is_bound(saved["agent_review"], saved["consensus"])
+    # Guided: every comparison records that it asked the whole selection.
+    assert saved["agent_review"]["comparisons"][0]["asked"] == ["anthropic", "openai"]
     # compare_models, then the tool-free answer step: no routing round that
     # would only have emitted judge_answer.
     assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0", "completion:1"]
@@ -949,7 +951,7 @@ def test_free_mode_asks_only_the_families_the_agent_chose(store):
     script = Script(direct=True, pick=["gemini", "anthropic"])
     loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(autonomy="free"))
     system = loop.messages[0]["content"]
-    assert "Agent freedom is FREE" in system and '"gemini"' in system
+    assert "Agent freedom is FREE" in system
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     comparison = saved["agent_review"]["comparisons"][0]
@@ -962,21 +964,29 @@ def test_free_mode_asks_only_the_families_the_agent_chose(store):
 
 
 def test_free_mode_keeps_the_two_family_floor(store):
-    from app.services.agent_comparison import AgentPreferences, CompareArgs, FreeCompareArgs
+    from pydantic import ValidationError
+    from app.services.agent_comparison import AgentPreferences, CompareArgs
     loop = make_loop(store, Script(), models=THREE, preferences=AgentPreferences(autonomy="free"))
+    args = loop.registry.tools["compare_models"].arguments
+    schema = args.model_json_schema()
+    # The schema itself offers exactly this turn's families and requires a choice.
+    assert schema["properties"]["models"]["items"]["enum"] == ["anthropic", "openai", "gemini"]
+    assert "models" in schema["required"] and schema["properties"]["models"]["minItems"] == 2
+    assert "Claude Haiku 4.5" in schema["properties"]["models"]["description"]
     base = {"question": "Q", "context": "", "reason": "R", "next_step": "answer"}
+    for invalid in ({}, {"models": ["openai"]}, {"models": ["openai", "mistral"]}):
+        with pytest.raises(ValidationError):
+            args.model_validate({**base, **invalid})
     choose = loop.comparison._choose
-    assert sorted(choose(FreeCompareArgs(**base))) == ["anthropic", "gemini", "openai"]
-    assert list(choose(FreeCompareArgs(**base, models=["openai", "openai", "gemini"]))) == ["openai", "gemini"]
-    with pytest.raises(ValueError, match="at least two families"):
-        choose(FreeCompareArgs(**base, models=["openai"]))
-    with pytest.raises(ValueError, match="Unknown comparison families"):
-        choose(FreeCompareArgs(**base, models=["openai", "mistral"]))
-    assert loop.registry.tools["compare_models"].arguments is FreeCompareArgs
+    assert choose(args.model_validate({**base, "models": ["gemini", "openai"]})) == ["gemini", "openai"]
+    # A repeated family is still one opinion.
+    with pytest.raises(ValueError, match="at least two different families"):
+        choose(args.model_validate({**base, "models": ["openai", "openai"]}))
     # Guided mode has no model choice at all: every comparison asks everyone.
     guided = make_loop(store, Script(), models=THREE)
     assert guided.registry.tools["compare_models"].arguments is CompareArgs
     assert "models" not in CompareArgs.model_fields
+    assert guided.comparison._choose(CompareArgs.model_validate(base)) == ["anthropic", "openai", "gemini"]
     assert "Agent freedom" not in guided.messages[0]["content"]
 
 
@@ -1006,7 +1016,7 @@ class DirectFirst(Script):
 
 def test_free_mode_sends_a_direct_answer_back_through_a_comparison(store):
     from app.services.agent_comparison import AgentPreferences
-    script = DirectFirst()
+    script = DirectFirst(pick=["openai", "anthropic"])
     loop = make_loop(store, script, preferences=AgentPreferences(autonomy="free"))
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
@@ -1019,7 +1029,7 @@ def test_free_mode_sends_a_direct_answer_back_through_a_comparison(store):
 
 def test_free_mode_accepts_a_confirmed_greeting_and_guided_mode_never_asks(store):
     from app.services.agent_comparison import AgentPreferences
-    loop = make_loop(store, DirectFirst(repeat=True), preferences=AgentPreferences(autonomy="free"))
+    loop = make_loop(store, DirectFirst(repeat=True, pick=["openai", "anthropic"]), preferences=AgentPreferences(autonomy="free"))
     list(loop.run())
     assert loop.completion.text == "Hello! How can I help?"
     assert not loop.comparison.comparisons
