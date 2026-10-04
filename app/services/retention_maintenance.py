@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 
-from app.core.background_tasks import task_succeeded
+from app.core.background_tasks import task_partially_failed, task_succeeded
 from app.core.observability import safe_exception
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 
@@ -21,6 +21,10 @@ def _interval_seconds() -> int:
 
 RETENTION_MAINTENANCE_INTERVAL_SECONDS = _interval_seconds()
 TASK_NAME = "retention-maintenance"
+# Ticks in a row with at least one failed step before one alert goes out.
+# Account/chat deletion and Google cleanup are deletion obligations; a step
+# that fails every hour must not stay silent behind an "ok" health status.
+PARTIAL_FAILURE_ALERT_AFTER = 3
 
 
 def _cleanup_steps():
@@ -47,10 +51,28 @@ def _cleanup_steps():
     )
 
 
+async def _alert_repeated_failure(exc: BaseException, failed: list[str], failures: int) -> None:
+    from app.core.error_context import server_error_report
+    from app.services.telegram_notifier import send_critical_error_notification
+    report = server_error_report(
+        exc,
+        phase="background",
+        path=TASK_NAME,
+        message=f"Background task {TASK_NAME} has repeatedly failed steps.",
+        type="background_task_repeated_failure",
+        details=f"failed_steps={','.join(failed)}; failures={failures}",
+    )
+    try:
+        await asyncio.to_thread(send_critical_error_notification, report)
+    except Exception as alert_exc:
+        logging.error("retention alert delivery failed category=%s", safe_exception(alert_exc))
+
+
 async def retention_maintenance_loop() -> None:
     while True:
         details: dict = {}
         failed: list[str] = []
+        last_error: BaseException | None = None
         for key, step in _cleanup_steps():
             # Steps are independent: one failing cleanup (for example a
             # Firestore index that is not deployed yet) must not stop the
@@ -59,6 +81,7 @@ async def retention_maintenance_loop() -> None:
                 details[key] = await asyncio.to_thread(step)
             except Exception as exc:
                 failed.append(key)
+                last_error = exc
                 logging.error("retention step failed step=%s category=%s", key, safe_exception(exc))
         memory = details.pop("memory_edit_records", None)
         if isinstance(memory, dict):
@@ -66,5 +89,9 @@ async def retention_maintenance_loop() -> None:
             details["memory_edits_recovered"] = memory.get("edits_recovered", 0)
         if failed:
             details["failed_steps"] = failed
-        task_succeeded(TASK_NAME, **details)
+            failures = task_partially_failed(TASK_NAME, **details)
+            if failures == PARTIAL_FAILURE_ALERT_AFTER:
+                await _alert_repeated_failure(last_error, failed, failures)
+        else:
+            task_succeeded(TASK_NAME, **details)
         await asyncio.sleep(RETENTION_MAINTENANCE_INTERVAL_SECONDS)

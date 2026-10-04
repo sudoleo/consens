@@ -5888,6 +5888,12 @@ gefiltert, deterministisch sortiert und vollständig in begrenzten Seiten
 abgearbeitet. Consensus-API-Retention/Lease-/Queue-Recovery laufen alle 60
 Sekunden; fehlgeschlagene API- und Vollkonto-Löschkaskaden alle fünf Minuten.
 Alle Loops werden beaufsichtigt und melden nach jedem erfolgreichen Tick Health.
+Die Retention-Schritte laufen unabhängig weiter, wenn einer scheitert; ein Tick
+mit gescheitertem Schritt setzt den Task über `task_partially_failed` auf
+`degraded` (`/health/maintenance` meldet dann `degraded`, `last_success_at` bleibt
+der letzte vollständige Tick). Beim dritten Fehl-Tick in Folge geht genau ein
+Telegram-Alert (`background_task_repeated_failure`, mit Frames, ohne
+Exception-Text) raus; ein sauberer Tick setzt Zähler und Episode zurück.
 Unter `MOCK_LLM=1` startet die Retention-Maintenance nicht (siehe Lifespan-Abschnitt).
 
 **Weekly SEO Review** läuft in einem eigenen Lifespan-Task mit 15-minütigem

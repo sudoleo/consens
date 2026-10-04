@@ -40,6 +40,27 @@ def task_succeeded(name: str, **details) -> None:
     )
 
 
+def task_partially_failed(name: str, **details) -> int:
+    """Record a finished tick in which some steps failed.
+
+    The loop keeps running, health reports ``degraded`` and the last complete
+    success stays visible. Returns the number of consecutive failed ticks; a
+    clean tick (``task_succeeded``) resets it.
+    """
+    with _lock:
+        current = dict(_health.get(name) or {})
+        failures = int(current.get("consecutive_failures") or 0) + 1
+        current.update(
+            name=name,
+            state="degraded",
+            last_failure_at=_now(),
+            consecutive_failures=failures,
+            details=details,
+        )
+        _health[name] = current
+    return failures
+
+
 def mark_task_disabled(name: str, reason: str) -> None:
     _update(name, state="disabled", disabled_reason=reason)
 

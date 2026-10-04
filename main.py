@@ -255,7 +255,7 @@ app = FastAPI(
 def maintenance_health():
     tasks = task_health_snapshot()
     degraded = any(
-        item.get("state") in {"failed", "restarting"} for item in tasks.values()
+        item.get("state") in {"failed", "restarting", "degraded"} for item in tasks.values()
     )
     return {
         "status": "degraded" if degraded else "ok",

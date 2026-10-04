@@ -410,3 +410,44 @@ def test_retention_step_failure_does_not_stop_later_steps(monkeypatch):
     assert calls == ["first", "last"]
     details = background_tasks.task_health_snapshot()["retention-maintenance"]["details"]
     assert details == {"first_deleted": 1, "last_deleted": 3, "failed_steps": ["broken_deleted"]}
+
+
+def test_repeated_partial_retention_failure_degrades_health_and_alerts_once(monkeypatch):
+    import app.services.telegram_notifier as telegram_notifier
+    alerts, statuses = [], []
+    tick = 0
+
+    def flaky():
+        if tick in (1, 2, 3, 4, 6):
+            raise RuntimeError("private cleanup failure")
+        return 2
+
+    monkeypatch.setattr(retention_maintenance, "_cleanup_steps", lambda: (
+        ("first_deleted", lambda: 1),
+        ("chat_deletions_completed", flaky),
+    ))
+    monkeypatch.setattr(telegram_notifier, "send_critical_error_notification", alerts.append)
+
+    async def advance(seconds):
+        nonlocal tick
+        statuses.append(main.maintenance_health()["status"])
+        tick += 1
+        if tick == 7:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(retention_maintenance.asyncio, "sleep", advance)
+
+    async def exercise():
+        try:
+            await retention_maintenance.retention_maintenance_loop()
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(exercise())
+    assert statuses == ["ok", "degraded", "degraded", "degraded", "degraded", "ok", "degraded"]
+    assert len(alerts) == 1  # third failed tick in a row; the clean tick 5 resets
+    assert alerts[0]["type"] == "background_task_repeated_failure"
+    assert "failed_steps=chat_deletions_completed; failures=3" in alerts[0]["details"]
+    assert "private cleanup failure" not in str(alerts[0])
+    health = background_tasks.task_health_snapshot()[retention_maintenance.TASK_NAME]
+    assert health["consecutive_failures"] == 1 and health["details"]["first_deleted"] == 1
