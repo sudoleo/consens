@@ -590,7 +590,8 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   background: transparent;
   box-shadow: none;
   color: var(--ink);
-  padding: 6px 8px;
+  /* Right side stays free for the 22px delete X (layout.css). */
+  padding: 6px 34px 6px 8px;
 }
 
 .sidebar .bookmark:hover,
