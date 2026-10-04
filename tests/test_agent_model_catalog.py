@@ -13,7 +13,6 @@ from app.api.routers import agent
 from app.services.llm import agent_client, agent_model_metadata as metadata
 from test_agent_runs import api, store, AUTH, UID
 
-REAL_REFRESH = agent._refresh_model_configuration
 TERRA = {'id': 'openai/gpt-5.6-terra', 'pricing': {'prompt': '0.000002', 'completion': '0.000012'},
          'context_length': 1050000, 'top_provider': {'max_completion_tokens': 128000},
          'reasoning': {'supported_efforts': ['high', 'low', 'none'], 'mandatory': False}}
@@ -75,12 +74,14 @@ def test_admin_db_additions_order_removals_and_replay_without_a_code_allowlist(a
     database = Mock()
     database.collection.return_value.document.return_value = document
     monkeypatch.setattr(security, 'db_firestore', database)
-    monkeypatch.setattr(agent, '_refresh_model_configuration', REAL_REFRESH)
     catalog = {key: {**deepcopy(value), '_version': metadata.BASELINE['version']}
                for key, value in metadata.BASELINE['models'].items()}
     catalog[TERRA['id']] = {**metadata._normalize(TERRA), '_version': 'provider-test'}
     monkeypatch.setattr(metadata, 'snapshot', lambda: deepcopy(catalog))
     try:
+        # Requests no longer reload the catalog; the sync loop / admin save do,
+        # exactly once per published revision.
+        cfg.load_models_from_db(strict=True, persist_backfill=False)
         response = client.get('/agent/models', headers=AUTH)
         assert response.status_code == 200
         options = [m for m in response.json()['models'] if m['provider'] == 'openai']
@@ -101,6 +102,7 @@ def test_admin_db_additions_order_removals_and_replay_without_a_code_allowlist(a
         assert 'event: final' in result.text, result.text
         assert calls[0]['model'].model == TERRA['id']
         payload['openai'] = ['gpt-4o', 'future-missing']
+        cfg.load_models_from_db(strict=True, persist_backfill=False)
         fresh = client.get('/agent/models', headers=AUTH).json()
         assert [m['id'] for m in fresh['models'] if m['provider'] == 'openai'] == payload['openai']
         before = document.get.call_count
@@ -114,8 +116,29 @@ def test_admin_db_additions_order_removals_and_replay_without_a_code_allowlist(a
         cfg._restore_runtime_config(previous)
 
 
-def test_unavailable_admin_db_is_reported_without_falling_back_to_code_defaults(monkeypatch):
-    monkeypatch.setattr(cfg, 'load_models_from_db', Mock(side_effect=TimeoutError()))
-    with pytest.raises(agent.HTTPException) as exc:
-        REAL_REFRESH()
-    assert exc.value.status_code == 503
+def test_agent_requests_do_not_reload_the_model_configuration(api, monkeypatch):
+    client, _store, _calls = api
+    reload = Mock(side_effect=AssertionError('per-request reload'))
+    monkeypatch.setattr(cfg, 'load_models_from_db', reload)
+    assert client.get('/agent/models', headers=AUTH).status_code == 200
+    reload.assert_not_called()
+
+
+def test_rebuild_never_exposes_an_empty_model_catalog():
+    import threading
+    stop, seen_empty = threading.Event(), []
+
+    def rebuild():
+        while not stop.is_set():
+            cfg.rebuild_model_configs()
+
+    worker = threading.Thread(target=rebuild)
+    worker.start()
+    try:
+        for _ in range(20000):
+            if not cfg.MODEL_CONFIGS:
+                seen_empty.append(True)
+    finally:
+        stop.set()
+        worker.join()
+    assert not seen_empty

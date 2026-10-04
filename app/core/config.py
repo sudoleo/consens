@@ -868,10 +868,13 @@ def _provider_allowed_sets() -> dict[str, set]:
 
 
 def rebuild_model_configs():
-    MODEL_CONFIGS.clear()
+    # Requests read MODEL_CONFIGS without a lock. Build the new mapping aside
+    # and swap it in, so a reload never shows readers an empty or half-filled
+    # catalog.
+    fresh = {}
     for provider, models in _provider_allowed_sets().items():
         for model_id in models:
-            MODEL_CONFIGS[model_id] = ModelConfig(
+            fresh[model_id] = ModelConfig(
                 internal_id=model_id,
                 provider=provider,
                 api_model=openrouter_model_id(model_id, provider),
@@ -881,6 +884,9 @@ def rebuild_model_configs():
                 accepts_attachments=PROVIDERS[provider].model_accepts_attachments(model_id),
                 request_config=dict(MODEL_REQUEST_CONFIG.get(model_id, {})),
             )
+    MODEL_CONFIGS.update(fresh)
+    for model_id in [key for key in MODEL_CONFIGS if key not in fresh]:
+        del MODEL_CONFIGS[model_id]
 
 
 def virtual_model_ids() -> dict[str, str]:
@@ -1945,6 +1951,14 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             ALL_ALLOWED_MODELS = _all_allowed_models()
             rebuild_model_configs()
 
+            # Picker-Reihenfolge und Free-Defaults zuerst: die Preset-, Judge-
+            # und Watch-Normalisierung unten faellt auf sie zurueck. Kamen sie
+            # erst danach, uebernahm der erste Reload nach einer Admin-Aenderung
+            # noch die alte Reihenfolge (und z. B. ein Preset-Modell, das gar
+            # nicht verfuegbar ist); erst ein zweiter Reload korrigierte das.
+            apply_model_order({provider: data.get(provider) for provider in MODEL_ORDER_BY_PROVIDER})
+            apply_default_models(data.get("defaults"))
+
             # Preset-Model-Sets brauchen die finalen Provider-/Tier-Listen und
             # muessen vor der Consensus-Normalisierung aktiv sein, damit ihre
             # Consensus-Engines sicher im nativen Picker landen.
@@ -1974,10 +1988,6 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                     if alias not in ALLOWED_CONSENSUS_MODELS:
                         ALLOWED_CONSENSUS_MODELS.append(alias)
 
-            # Admin-gepflegte Picker-Reihenfolge (aus den geordneten Provider-Listen)
-            # und Free-Default je Provider uebernehmen.
-            apply_model_order({provider: data.get(provider) for provider in MODEL_ORDER_BY_PROVIDER})
-            apply_default_models(data.get("defaults"))
             apply_watch_models(data.get("watch_models"))
             apply_watch_consensus_models(data.get("watch_consensus_models"))
 

@@ -2182,10 +2182,11 @@ Bookmark-Eintrag noch einen Modellaufruf. Terminale Fehler liefern recoverable;
 ohne gespeicherte Antwort verschwindet der Link. Bei unbekanntem Transportstatus
 bleibt die reine Lese-Wiederherstellung möglich. /agent/models liefert
 die vollständigen Anbieterlisten samt Reihenfolge aus Firestore `app_config/models`,
-den konfigurierten Standard und `token_budget`. GET und neue POST-Läufe lesen die
-gemeinsame Konfiguration mit `load_models_from_db(strict=True, persist_backfill=False)`
-neu; sie schreiben keine Backfills. Bei Lesefehlern antworten sie mit 503.
-Replay/Recovery gespeicherter Antworten benötigt keinen erneuten Konfigurationsabruf.
+den konfigurierten Standard und `token_budget`. Seit 2026-10-04 lädt kein
+Request die Konfiguration mehr neu (vorher `load_models_from_db` bei jedem
+GET/POST: ein Firestore-Read pro Request und ein ungeschütztes Leeren/Neubefüllen
+der globalen Maps, während andere Requests sie lasen). Neue Revisionen kommen
+über den Admin-Save im eigenen Prozess und den 60-s-Task `model-configuration-sync`.
 Premium-Zuordnung und Presets sind keine zweite Allowlist. `provider` und
 `provider_label` ordnen jedes Modell seiner Registry-Familie zu.
 
@@ -5201,7 +5202,11 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   gespeicherte Revision (unter neuer Revisionsnummer) und nie eine inzwischen
   von einem anderen Prozess geschriebene. Jeder Prozess merkt sich die aktive
   Revision und prüft sie im Lifespan-Task `model-configuration-sync` alle 60 s
-  mit einem Read; bei neuer Revision lädt er vollständig neu. Grenze: ein
+  mit einem Read; bei neuer Revision lädt er vollständig neu. Ein einzelner
+  Reload muss dabei vollständig sein: `apply_model_order`/`apply_default_models`
+  laufen vor Preset-/Judge-/Watch-Normalisierung, die auf sie zurückfällt, und
+  `rebuild_model_configs` baut `MODEL_CONFIGS` daneben auf und tauscht dann ein
+  (nie leer für Leser). Grenze: ein
   einzelner Lauf liest weiter die prozessweiten Maps; eine Aktivierung während
   eines laufenden Requests ist nicht als Snapshot pro Lauf eingefroren.
   `consensus` steuert den App-Consensus-Picker;

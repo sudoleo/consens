@@ -212,7 +212,6 @@ def api(monkeypatch, store):
     monkeypatch.setattr(agent, "get_user_tier", lambda uid: "pro")
     monkeypatch.setattr(agent, "resolve_developer_api_keys", lambda: {"OpenRouter": "test"})
     monkeypatch.setattr(agent, "mock_llm_enabled", lambda: False)
-    monkeypatch.setattr(agent, '_refresh_model_configuration', lambda: None)
     calls = []
     def stream(self, **kwargs):
         calls.append(kwargs)
