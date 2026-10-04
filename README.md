@@ -61,9 +61,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/screenshot-differences.png" alt="A consensus answer with agreement score, the disputed claim, and which model families said what" width="900">
+  <img src="docs/assets/screenshot-agent.png" alt="Agent answer with a highlighted disputed claim and the models on each side of the disagreement" width="900">
   <br>
-  <sub>One answer, an agreement score, and the disputed claim with the models behind each position. Rendered with the built-in mock models (demo data).</sub>
+  <sub>One agent answer, the disputed claim highlighted, and which models stand on each side. Illustrative demo data, not live model output.</sub>
 </p>
 
 **consens.io** sends one question to models from nine independent providers,
