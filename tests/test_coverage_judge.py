@@ -266,15 +266,17 @@ class CoverageJudgePolicyTests(unittest.TestCase):
         Engine selbst eine Pro-Engine ist."""
         attempts = _coverage_attempts("OpenAI-Pro", ALL_KEYS)
         (provider, api_model, _), is_retry = attempts[0]
-        self.assertEqual(provider, "gemini")
+        self.assertEqual(provider, "openai")
         self.assertEqual(
-            api_model, cfg.openrouter_model_id(cfg.GEMINI_FLASH_MODEL, "gemini")
+            api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai")
         )
         self.assertFalse(is_retry)
 
-    def test_coverage_judge_avoids_the_consensus_family(self):
-        attempts = _coverage_attempts("Gemini", ALL_KEYS)
-        self.assertTrue(all(engine[0] != "gemini" for engine, _ in attempts))
+    def test_coverage_judge_starts_with_openai_for_every_engine(self):
+        # No cross-family constraint since 2026-10-04: OpenAI first, Gemini next.
+        for engine in ("Gemini", "OpenAI"):
+            attempts = _coverage_attempts(engine, ALL_KEYS)
+            self.assertEqual([e[0] for e, _ in attempts], ["openai", "openai", "gemini"])
 
     def test_invalid_engine_has_no_attempts(self):
         self.assertIsNone(_coverage_attempts("Nonexistent", ALL_KEYS))

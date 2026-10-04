@@ -546,9 +546,9 @@ _BASE_CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER)
 
 # Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
-# erste andere Familie; die gemeinsame OpenRouter-Verfügbarkeit wird davor geprüft.
-# OpenAI is preferred; OpenAI engines skip their own family and use Gemini.
-# Keep the remaining fallback order unchanged.
+# erste Familie mit verfuegbarem Key. OpenAI (Standard-Judge Luna) geht seit
+# 2026-10-04 immer vor, auch fuer OpenAI-Engines (kein Fremd-Familien-Zwang
+# mehr, siehe consensus_engine._judge_families).
 _JUDGE_FAMILY_PRIORITY_BASE = [
     "openai", "gemini", "deepseek", "grok", "anthropic", "mistral"
 ]
@@ -1359,15 +1359,14 @@ def get_chat_memory_model(provider: str) -> str:
 
 def apply_judge_families(overrides: dict | None) -> None:
     """Setzt das Mapping Engine-Familie -> bevorzugte Judge-Familie. Gueltig
-    sind nur bekannte Provider, die sich von der Engine-Familie unterscheiden
-    (Anti-Self-Judging); alles andere faellt auf Auto (Prioritaetsliste)
-    zurueck. Mutiert das dict in-place."""
+    sind bekannte Provider, auch die Engine-Familie selbst; alles andere
+    faellt auf Auto (Prioritaetsliste) zurueck. Mutiert das dict in-place."""
     data = overrides if isinstance(overrides, dict) else {}
     providers = set(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
     JUDGE_FAMILY_BY_ENGINE.clear()
     for engine_provider in providers:
         chosen = str(data.get(engine_provider) or "").strip()
-        if chosen in providers and chosen != engine_provider:
+        if chosen in providers:
             JUDGE_FAMILY_BY_ENGINE[engine_provider] = chosen
 
 

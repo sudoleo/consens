@@ -2522,10 +2522,9 @@ Der Toolcall prüft diesen exakten Text, keinen vom Modell frei behaupteten
 Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,
 Zitatprüfung und begrenzten Repairs. `chat_mode=true` hält beide Judges auf den
 Standardmodellen aus `app_config/models.judge_models`, unabhängig von der
-Premium-Einstufung des Chatmodells. Primär bleibt eine andere Familie bevorzugt
-(standardmäßig Luna, für OpenAI-Chats Gemini); nach dem begrenzten Retry folgt
-der Gemini-Standard-Judge (aktuell Gemini 3.5 Flash-Lite), auch bei einem
-Gemini-Chatmodell. Ist Gemini bereits primär, folgt der OpenAI-Standard-Judge.
+Premium-Einstufung des Chatmodells. Primär prüft seit 2026-10-04 immer der
+OpenAI-Standard-Judge (Luna), auch für OpenAI-Chats; nach dem begrenzten Retry
+folgt der Gemini-Standard-Judge (aktuell Gemini 3.5 Flash-Lite). Ist Gemini bereits primär, folgt der OpenAI-Standard-Judge.
 Pro-Judges und dritte Familien werden im Chat nicht als Fallback eingeplant;
 die niedrige Judge-Denkstufe und die bisherigen Consensus-Pläne bleiben erhalten.
 `_chat_judge_attempts` liefert denselben Plan an Differences und den parallel
@@ -3829,13 +3828,16 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   (`claims`) verlangt dieses Schema seit 2026-08-31 NICHT mehr: sie kommt aus
   dem Coverage-Judge (siehe unten). Alt-Payloads mit `claims` laufen weiter
   durch `_normalize_claims`.
-  Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist immer
-  eine ANDERE als die der gewählten Consensus-Engine (Self-Judging-Bias);
-  die Stufe folgt der Engine — Standard-Engine → Standard-Judge
+  Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist die
+  erste verfügbare der Prioritätsliste (OpenAI zuerst) — seit 2026-10-04
+  auch für Engines derselben Familie. Der frühere Fremd-Familien-Zwang schob
+  OpenAI-Läufe (Agent-Default Luna) auf Gemini Flash-Lite, das teurer und
+  deutlich schwächer ist; ein starker Judge wiegt bei der Belegprüfung mehr
+  als die Familienfremdheit (User-Entscheidung). Die Stufe folgt der Engine — Standard-Engine → Standard-Judge
   (`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), Pro-Engine → Pro-Judge über die
   Engine-Aliasse (`<Familie>-Pro`). Attempt-Plan: primärer Judge, Retry,
-  nächste Fremd-Familie (Pro fail-opent zuletzt auf einen Standard-Judge);
-  ohne Fremd-Key fail-open auf den eigenen Standard-Judge. Nicht
+  nächste Familie (Pro fail-opent zuletzt auf einen Standard-Judge); ohne
+  Key fail-open auf den Standard-Judge der Engine-Familie. Nicht
   wiederholbare Providerfehler (400/401/403/404) überspringen den identischen
   Retry und gehen direkt zur nächsten Familie; 429/5xx/Transportfehler sowie
   unparsbares JSON dürfen weiter retryen. Der tatsächlich
@@ -3870,7 +3872,7 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   seit 2026-08-31): belegt JEDEN nummerierten Konsens-Satz statt der "3-6
   zentralen". Läuft PARALLEL zum Differences-Judge in einem eigenen Thread
   (`_coverage_in_background`, Cancellation wird ausdrücklich mitgebunden), auf
-  einer Fremd-Familie in der STANDARD-Stufe — die Aufgabe ist kontrollierte
+  der ersten Prioritäts-Familie (OpenAI) in der STANDARD-Stufe — die Aufgabe ist kontrollierte
   Klassifikation, kein Denken. Der Zwang gegen stilles Überspringen steckt in
   drei Schichten: (a) das Structured-Output-Schema führt die Satz-IDs als Enum
   und JEDES Modell-Label als Pflicht-Property von `models`; (b) der Prompt
@@ -5331,9 +5333,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   der jeweiligen konfigurierten Providerliste; Judges laufen mit gekappter
   Denktiefe: OpenAI/Gemini `low`, Mistral wegen dessen API-Vertrag `none`).
   `judge_families` mappt Engine-Familie → bevorzugte Judge-Familie
-  (`apply_judge_families`; nie die eigene Familie, ohne Eintrag/Credential Auto
-  über `JUDGE_FAMILY_PRIORITY`). Auto priorisiert OpenAI, dann Gemini; für
-  OpenAI-Engines bleibt Gemini zuerst (keine Selbstprüfung). Danach folgen
+  (`apply_judge_families`; die eigene Familie ist erlaubt, ohne
+  Eintrag/Credential Auto über `JUDGE_FAMILY_PRIORITY`). Auto priorisiert
+  OpenAI, dann Gemini, für jede Engine-Familie. Danach folgen
   unverändert DeepSeek, Grok, Anthropic, Mistral, Kimi, GLM und Meta.
   Die Standard-/Pro-Modellzuordnung bleibt admin-konfiguriert. Differences
   und Coverage behalten ihre Retry-/Fallback-Pläne auch bei manueller

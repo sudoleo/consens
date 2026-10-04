@@ -1717,14 +1717,13 @@ def _translate_best_model(result: str, anon_map: dict) -> str:
 # damit dieser Verweis (und der Re-Import in resolve_engine) aktuell bleibt.
 # Die Judge-Stufe folgt der gewählten Consensus-Engine (Standard-Engine ->
 # Standard-Judge, Pro-Engine -> Pro-Judge über die bestehenden Engine-Aliasse);
-# die Judge-FAMILIE ist dabei immer eine andere als die der Engine, siehe
-# _resolve_differences_engine.
+# die Judge-FAMILIE folgt seit 2026-10-04 der Prioritaetsliste (OpenAI zuerst),
+# auch fuer Engines derselben Familie, siehe _judge_families.
 DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
 
 # Familien-Priorität für die Judge-Wahl: primärer Differences-Judge und
-# Fallback-Judge nehmen die erste Familie mit verfügbarem Key, die nicht die
-# der Consensus-Engine ist. Wird auch vom Consensus-Fallback (dritter Versuch
-# auf einem anderen Provider) genutzt. Das Admin-Mapping
+# Fallback-Judge nehmen die erste Familie mit verfügbarem Key. Wird auch vom
+# Consensus-Fallback (dritter Versuch auf einem ANDEREN Provider) genutzt. Das Admin-Mapping
 # cfg.JUDGE_FAMILY_BY_ENGINE kann je Engine-Familie eine bevorzugte
 # Judge-Familie VOR diese Priorität setzen (siehe _judge_families).
 _FALLBACK_JUDGE_PRIORITY = cfg.JUDGE_FAMILY_PRIORITY
@@ -1852,15 +1851,22 @@ def _judge_engine(provider: str, tier: str):
 
 
 def _judge_families(consensus_provider: str, api_keys: dict, count: int) -> list:
-    """Die ersten `count` Judge-Familien, die (a) nicht die Familie der
-    Consensus-Engine sind und (b) einen verfügbaren Key haben. Eine vom Admin
-    bevorzugte Judge-Familie (cfg.JUDGE_FAMILY_BY_ENGINE) kommt vor die
-    Prioritätsliste; ist ihr Key nicht verfügbar, greift Auto."""
+    """Die ersten `count` Judge-Familien mit verfügbarem Key, in der
+    Prioritätsliste (OpenAI zuerst). Eine vom Admin bevorzugte Judge-Familie
+    (cfg.JUDGE_FAMILY_BY_ENGINE) kommt davor; ist ihr Key nicht verfügbar,
+    greift Auto.
+
+    Die Engine-Familie wird seit 2026-10-04 NICHT mehr übersprungen: der
+    Fremd-Familien-Zwang war gut gemeint, schob aber OpenAI-Läufe (der
+    Agent-Default Luna) auf Gemini Flash-Lite, das teurer und deutlich
+    schwächer ist; die übrigen Familien sind langsam, teuer oder schwach.
+    Die Judges prüfen Belege gegen die Einzelantworten nach festem Schema;
+    ein stärkerer Judge wiegt hier mehr als die Familienfremdheit."""
     preferred = cfg.JUDGE_FAMILY_BY_ENGINE.get(consensus_provider)
     order = ([preferred] if preferred else []) + _FALLBACK_JUDGE_PRIORITY
     families = []
     for provider in order:
-        if provider == consensus_provider or provider in families:
+        if provider in families:
             continue
         if not _provider_key_available(provider, api_keys):
             continue
@@ -1873,14 +1879,10 @@ def _judge_families(consensus_provider: str, api_keys: dict, count: int) -> list
 def _resolve_differences_engine(differences_model: str, api_keys: dict):
     """Primärer Differences-Judge für die gewählte Consensus-Engine.
 
-    Die Judge-Familie ist immer eine ANDERE als die der Consensus-Engine:
-    der Judge bewertet die Konsensantwort und darf nicht das Modell sein,
-    das sie geschrieben hat (Self-Judging-Bias). Die frühere
-    Same-Family-Policy ist damit bewusst aufgegeben. Nur wenn keine fremde
-    Familie einen verfügbaren Key hat, fällt die Wahl fail-open auf den
-    Standard-Judge der eigenen Familie zurück (ein fehlender Fremd-Key darf
-    den Lauf nicht brechen; der Standard-Judge ist dann wenigstens nicht das
-    Pro-Modell, das die Konsensantwort geschrieben haben kann).
+    Die Judge-Familie ist die erste verfügbare der Prioritätsliste (OpenAI
+    zuerst), auch wenn die Engine derselben Familie angehört (siehe
+    _judge_families). Hat keine Familie einen Key, bleibt fail-open der
+    Standard-Judge der Engine-Familie.
 
     Gibt ((provider, api_model, model_ref), tier) zurück, None bei
     ungültiger Engine."""
@@ -1911,10 +1913,10 @@ def _fallback_judge_engine(exclude_provider: str, api_keys: dict):
 def _chat_judge_attempts(chat_model: str, api_keys: dict):
     """Chat uses configured standard judges, independent of the chat model's tier.
 
-    Prefer an independent family first. Availability then takes precedence:
-    Gemini's standard judge remains the fallback even for a Gemini chat. If
-    Gemini is already primary, use OpenAI's standard judge instead. Never
-    escalate to the Pro judge table or walk into a third model family.
+    The first family of the judge priority (OpenAI's standard judge, Luna)
+    goes first, also for an OpenAI chat. Gemini's standard judge is the
+    fallback; if Gemini is primary (admin preference), OpenAI's instead.
+    Never escalate to the Pro judge table or walk into a third model family.
     """
     resolved = _resolve_engine(chat_model)
     if resolved is None:
@@ -1935,11 +1937,10 @@ def _differences_attempts(differences_model: str, api_keys: dict, *, chat_mode: 
     """Attempt-Plan für den Differences-Judge. None bei ungültiger Engine.
 
     Einträge sind ((provider, api_model, model_ref), is_retry, tier):
-    primärer Judge (Fremd-Familie, Stufe der Engine), Retry, dann die nächste
-    Fremd-Familie in derselben Stufe. Die Pro-Stufe fail-opent zuletzt auf
-    einen Standard-Judge; gibt es keine zweite Fremd-Familie, ist der
-    Standard-Judge der eigenen Familie die letzte Stufe — Robustheit geht
-    als letztes Mittel vor Unabhängigkeit. Chat nutzt stattdessen den expliziten
+    primärer Judge (erste Prioritäts-Familie, Stufe der Engine), Retry, dann
+    die nächste Familie in derselben Stufe. Die Pro-Stufe fail-opent zuletzt
+    auf einen Standard-Judge; gibt es keine zweite Familie, ist der
+    Standard-Judge der Engine-Familie die letzte Stufe. Chat nutzt stattdessen den expliziten
     Standard-Plan aus _chat_judge_attempts."""
     if chat_mode:
         attempts = _chat_judge_attempts(differences_model, api_keys)
@@ -1964,7 +1965,8 @@ def _differences_attempts(differences_model: str, api_keys: dict, *, chat_mode: 
     else:
         if tier == "pro":
             attempts.append((_standard_judge_engine(families[0]), True, "standard"))
-        attempts.append((_standard_judge_engine(consensus_provider), True, "standard"))
+        if families[0] != consensus_provider or tier == "pro":
+            attempts.append((_standard_judge_engine(consensus_provider), True, "standard"))
     return attempts
 
 
@@ -2019,10 +2021,10 @@ COVERAGE_WINDOW = MAX_CONSENSUS_SENTENCES
 
 
 def _coverage_attempts(differences_model: str, api_keys: dict, *, chat_mode: bool = False):
-    """Attempt-Plan des Coverage-Judges: Fremd-Familie, Standard-Stufe.
+    """Attempt-Plan des Coverage-Judges: Prioritäts-Familie, Standard-Stufe.
 
     Einträge sind ((provider, api_model, model_ref), is_retry). Fail-open wie
-    beim Differences-Judge: ohne Fremd-Key bleibt der eigene Standard-Judge.
+    beim Differences-Judge: ohne Key bleibt der eigene Standard-Judge.
     Chat teilt seinen Standard-/Fallback-Plan mit dem Differences-Judge."""
     if chat_mode:
         return _chat_judge_attempts(differences_model, api_keys)

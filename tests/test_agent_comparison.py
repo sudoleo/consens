@@ -474,7 +474,8 @@ def test_gemini_chat_uses_standard_luna_then_flash_lite_for_both_judges(store, m
 
 @pytest.mark.parametrize("chat_model,primary,fallback", [
     ("gemini-3.1-pro-preview", "openai/gpt-5.6-luna", "google/gemini-3.5-flash-lite"),
-    ("gpt-5.4-mini", "google/gemini-3.5-flash-lite", "openai/gpt-5.6-luna"),
+    # Since 2026-10-04 an OpenAI chat is judged by Luna first as well.
+    ("gpt-5.4-mini", "openai/gpt-5.6-luna", "google/gemini-3.5-flash-lite"),
 ])
 def test_unavailable_chat_judges_stop_after_standard_fallback(store, monkeypatch, chat_model, primary, fallback):
     from app.core import config as cfg

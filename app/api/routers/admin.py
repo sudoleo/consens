@@ -1160,13 +1160,13 @@ def normalize_models_document(data: dict) -> dict:
         normalized[field] = clean_judges
 
     # Mapping Engine-Familie -> bevorzugte Judge-Familie: nur bekannte
-    # Provider, nie die eigene Familie (Anti-Self-Judging). Fehlende Eintraege
-    # bedeuten Auto (Prioritaetsliste).
+    # Provider (die eigene Familie ist seit 2026-10-04 erlaubt). Fehlende
+    # Eintraege bedeuten Auto (Prioritaetsliste).
     incoming_families = normalized.get("judge_families") or {}
     clean_families = {}
     for engine_provider in PROVIDER_KEYS:
         chosen = str(incoming_families.get(engine_provider) or "").strip()
-        if chosen in PROVIDER_KEYS and chosen != engine_provider:
+        if chosen in PROVIDER_KEYS:
             clean_families[engine_provider] = chosen
     normalized["judge_families"] = clean_families
     normalized["source_verification_model"] = cfg.normalize_source_verification_model(

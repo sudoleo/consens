@@ -116,9 +116,10 @@
             </div>
 
             <div class="admin-section">
-                <h3>Differences Judges</h3>
+                <h3>Judges (Differences, claim marks, Resolve)</h3>
                 <p class="section-hint">
-                    Judge models per provider family for the Differences engine and the Resolve round.
+                    Judge models per provider family for the Differences engine, the claim-coverage judge
+                    behind the inline claim marks, and the Resolve round.
                     Standard engines get the <strong>Standard</strong> judge, Pro engines the
                     <strong>Pro</strong> judge (always run at provider-compatible reduced effort).
                 </p>
@@ -128,9 +129,8 @@
 
                 <div class="judge-subhead">Judge assignment</div>
                 <p class="section-hint">
-                    Which family judges which Consensus engine. The judge family is always a different one
-                    than the engine's (anti self-judging). <strong>Auto</strong> picks the first family with
-                    an available API key from the priority order; a manual pick is preferred first and falls
+                    Which family judges which Consensus engine. <strong>Auto</strong> picks the first family with
+                    an available API key from the priority order (OpenAI first, also for OpenAI engines); a manual pick is preferred first and falls
                     back to Auto if its key is unavailable.
                 </p>
                 <div id="judgeFamiliesContainer">

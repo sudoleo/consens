@@ -1151,7 +1151,7 @@ function renderJudgeFamilies() {
         select.dataset.judgefamEngine = engine;
         select.setAttribute('aria-label', `Judge family for ${engine} engines`);
 
-        const autoOrder = priority.filter(p => p !== engine).join(' → ');
+        const autoOrder = priority.join(' → ');
         const autoOpt = document.createElement('option');
         autoOpt.value = '';
         autoOpt.textContent = `Auto — first available: ${autoOrder}`;
@@ -1159,7 +1159,6 @@ function renderJudgeFamilies() {
 
         const chosen = chosenNow[engine] || saved[engine] || '';
         providers.forEach(judgeFamily => {
-            if (judgeFamily === engine) return;
             const opt = document.createElement('option');
             opt.value = judgeFamily;
             opt.textContent = providerLabel(judgeFamily);

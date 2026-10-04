@@ -246,27 +246,26 @@ class ExistingModelFlowTests(unittest.TestCase):
         snapshot = cfg.get_judge_families()
         all_keys = {"OpenRouter": "key"}
         try:
-            # Auto prefers OpenAI; only its own engines start with Gemini.
+            # Auto prefers OpenAI for every engine, its own included
+            # (no cross-family constraint since 2026-10-04).
             cfg.apply_judge_families({})
             for provider in cfg.PROVIDERS:
                 families = consensus_engine._judge_families(provider, all_keys, count=len(cfg.PROVIDERS))
-                self.assertEqual(families[0], 'gemini' if provider == 'openai' else 'openai')
-                self.assertNotIn(provider, families)
-                self.assertEqual(len(families), len(cfg.PROVIDERS) - 1)
+                self.assertEqual(families[0], 'openai')
+                self.assertEqual(len(families), len(cfg.PROVIDERS))
             self.assertEqual(
                 consensus_engine._judge_families("openai", all_keys, count=2),
-                ["gemini", "deepseek"],
+                ["openai", "gemini"],
             )
             # Mapping bevorzugt die gewaehlte Familie vor der Prioritaet.
             cfg.apply_judge_families({"openai": "anthropic"})
             self.assertEqual(
                 consensus_engine._judge_families("openai", all_keys, count=2),
-                ["anthropic", "gemini"],
+                ["anthropic", "openai"],
             )
-            # The one OpenRouter key makes every configured model family available.
-            # Self-Judging und unbekannte Provider werden verworfen.
+            # The own family is a valid choice; unknown providers are dropped.
             cfg.apply_judge_families({"openai": "openai", "gemini": "nope"})
-            self.assertEqual(cfg.get_judge_families(), {})
+            self.assertEqual(cfg.get_judge_families(), {"openai": "openai"})
         finally:
             cfg.apply_judge_families(snapshot)
 

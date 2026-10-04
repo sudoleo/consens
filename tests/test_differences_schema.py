@@ -361,27 +361,24 @@ class QuoteVerificationTests(unittest.TestCase):
 
 
 class JudgePolicyTests(unittest.TestCase):
-    """Judge-Familie ist immer eine andere als die der Consensus-Engine;
-    die Judge-Stufe (standard/pro) folgt der gewählten Engine."""
+    """Judge-Familie folgt der Prioritaetsliste (OpenAI zuerst), seit
+    2026-10-04 auch fuer Engines derselben Familie; die Judge-Stufe
+    (standard/pro) folgt der gewählten Engine."""
 
     ALL_KEYS = {"OpenRouter": "sk-or"}
 
-    def test_judge_family_differs_from_consensus_family(self):
-        # OpenAI leads; its own engines still use an independent Gemini judge.
-        (provider, api_model, _), tier = _resolve_differences_engine("Gemini", self.ALL_KEYS)
-        self.assertEqual(provider, "openai")
-        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
-        self.assertEqual(tier, "standard")
+    def test_openai_judges_first_for_every_engine_family(self):
+        # OpenAI leads, also for its own engines (no cross-family constraint).
+        for engine in ("Gemini", "OpenAI"):
+            (provider, api_model, _), tier = _resolve_differences_engine(engine, self.ALL_KEYS)
+            self.assertEqual(provider, "openai")
+            self.assertEqual(api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
+            self.assertEqual(tier, "standard")
 
-        (provider, api_model, _), tier = _resolve_differences_engine("OpenAI", self.ALL_KEYS)
-        self.assertEqual(provider, "gemini")
-        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.GEMINI_FLASH_MODEL, "gemini"))
-        self.assertEqual(tier, "standard")
-
-    def test_pro_engine_gets_pro_judge_of_other_family(self):
+    def test_pro_engine_gets_openai_pro_judge(self):
         (provider, api_model, _), tier = _resolve_differences_engine("OpenAI-Pro", self.ALL_KEYS)
-        self.assertEqual(provider, "gemini")
-        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.GEMINI_PRO_MODEL, "gemini"))
+        self.assertEqual(provider, "openai")
+        self.assertEqual(api_model, "openai/gpt-5.5")
         self.assertEqual(tier, "pro")
 
         (provider, api_model, _), tier = _resolve_differences_engine("Gemini-Pro", self.ALL_KEYS)
@@ -407,9 +404,9 @@ class JudgePolicyTests(unittest.TestCase):
         (p1, _, _), retry1, tier1 = attempts[0]
         (p2, _, _), retry2, tier2 = attempts[1]
         (p3, _, _), retry3, tier3 = attempts[2]
-        self.assertEqual((p1, retry1, tier1), ("gemini", False, "standard"))
-        self.assertEqual((p2, retry2, tier2), ("gemini", True, "standard"))
-        self.assertEqual((p3, retry3, tier3), ("deepseek", True, "standard"))
+        self.assertEqual((p1, retry1, tier1), ("openai", False, "standard"))
+        self.assertEqual((p2, retry2, tier2), ("openai", True, "standard"))
+        self.assertEqual((p3, retry3, tier3), ("gemini", True, "standard"))
 
     def test_pro_attempts_fail_open_to_standard_judge(self):
         attempts = _differences_attempts("OpenAI-Pro", self.ALL_KEYS)
@@ -417,10 +414,10 @@ class JudgePolicyTests(unittest.TestCase):
         (p1, m1, _), _, tier1 = attempts[0]
         (p3, m3, _), _, tier3 = attempts[2]
         (p4, m4, _), _, tier4 = attempts[3]
-        self.assertEqual((p1, m1, tier1), ("gemini", cfg.openrouter_model_id(cfg.GEMINI_PRO_MODEL, "gemini"), "pro"))
-        self.assertEqual((p3, m3, tier3), ("deepseek", cfg.openrouter_model_id(cfg.DEEPSEEK_PRO_MODEL, "deepseek"), "pro"))
+        self.assertEqual((p1, m1, tier1), ("openai", "openai/gpt-5.5", "pro"))
+        self.assertEqual((p3, m3, tier3), ("gemini", cfg.openrouter_model_id(cfg.GEMINI_PRO_MODEL, "gemini"), "pro"))
         # Letzte Stufe: Standard-Judge der Fallback-Familie
-        self.assertEqual((p4, m4, tier4), ("deepseek", cfg.openrouter_model_id(cfg.DEFAULT_DEEPSEEK_MODEL, "deepseek"), "standard"))
+        self.assertEqual((p4, m4, tier4), ("gemini", cfg.openrouter_model_id(cfg.GEMINI_FLASH_MODEL, "gemini"), "standard"))
 
     def test_attempts_without_any_cross_family_key(self):
         attempts = _differences_attempts("OpenAI", {})
@@ -500,8 +497,8 @@ class JudgePolicyTests(unittest.TestCase):
         )
 
     def test_one_openrouter_key_makes_every_judge_family_available(self):
-        (provider, _, _), _tier = _resolve_differences_engine("OpenAI", self.ALL_KEYS)
-        self.assertEqual(provider, "gemini")
+        (provider, _, _), _tier = _resolve_differences_engine("Mistral", self.ALL_KEYS)
+        self.assertEqual(provider, "openai")
 
     def test_mistral_judge_uses_supported_none_effort(self):
         self.assertEqual(
@@ -570,8 +567,8 @@ class JudgeMetadataTests(unittest.TestCase):
         )
         self.assertIsNotNone(data)
         judge = data["judges"]["differences"]
-        self.assertEqual(judge["provider"], "Gemini")
-        self.assertEqual(judge["model"], cfg.openrouter_model_id(cfg.GEMINI_FLASH_MODEL, "gemini"))
+        self.assertEqual(judge["provider"], "OpenAI")
+        self.assertEqual(judge["model"], cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
         self.assertEqual(judge["tier"], "standard")
         # v3-Metadaten: erster Versuch traf, Dauer ist eine nichtnegative Zahl.
         self.assertEqual(judge["attempts"], 1)
@@ -582,7 +579,7 @@ class JudgeMetadataTests(unittest.TestCase):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
 
         def flaky(provider, *args, **kwargs):
-            if provider == "gemini":
+            if provider == "openai":
                 raise RuntimeError("503")
             return payload
 
@@ -590,7 +587,7 @@ class JudgeMetadataTests(unittest.TestCase):
             {"OpenRouter": "sk-or"}, flaky,
         )
         self.assertIsNotNone(data)
-        self.assertEqual(data["judges"]["differences"]["provider"], "DeepSeek")
+        self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
 
     def test_non_retryable_primary_error_skips_duplicate_call(self):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
@@ -598,7 +595,7 @@ class JudgeMetadataTests(unittest.TestCase):
 
         def invalid_key_then_fallback(provider, *args, **kwargs):
             providers.append(provider)
-            if provider == "gemini":
+            if provider == "openai":
                 raise RuntimeError("OpenRouter: 401 - invalid API key")
             return payload
 
@@ -607,8 +604,8 @@ class JudgeMetadataTests(unittest.TestCase):
             invalid_key_then_fallback,
         )
         self.assertIsNotNone(data)
-        self.assertEqual(providers, ["gemini", "deepseek"])
-        self.assertEqual(data["judges"]["differences"]["provider"], "DeepSeek")
+        self.assertEqual(providers, ["openai", "gemini"])
+        self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
         self.assertEqual(data["judges"]["differences"]["attempts"], 2)
 
     def test_stream_differences_reports_judge(self):
@@ -635,8 +632,8 @@ class JudgeMetadataTests(unittest.TestCase):
             ))
         final = events[-1]
         self.assertEqual(final["type"], "final")
-        self.assertEqual(final["data"]["judges"]["differences"]["provider"], "Gemini")
-        self.assertEqual(efforts, [("gemini", "low")])
+        self.assertEqual(final["data"]["judges"]["differences"]["provider"], "OpenAI")
+        self.assertEqual(efforts, [("openai", "low")])
 
 
 FOUR_MODELS = ["OpenAI", "Gemini", "Grok", "Mistral"]
