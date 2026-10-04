@@ -74,7 +74,7 @@
 
   /* Hover: the light climbs a little higher into the control. */
   .send-glow:not(:disabled):hover::before,
-  .lp-hero-prompt:hover .send-glow::before {
+  a.lp-hero-prompt:hover .send-glow::before {
     --glow-lift: 14%;
   }
 }

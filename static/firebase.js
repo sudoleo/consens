@@ -1449,8 +1449,21 @@ document.getElementById("authTopSignupBtn")?.addEventListener("click", event => 
 
 // Schließen des Modals
 document.getElementById("closeLoginModal").addEventListener("click", closeAuthModal);
+// The backdrop closes the dialog only for a deliberate click on it: the press
+// must start there too (a text selection dragged out of a field ends its click
+// on the backdrop), and nothing typed into the dialog may be lost that way.
+// The close button and Escape stay the explicit exits.
+let authBackdropPress = false;
+document.getElementById("loginModal")?.addEventListener("pointerdown", event => {
+  authBackdropPress = event.target === event.currentTarget;
+});
 document.getElementById("loginModal")?.addEventListener("click", event => {
-  if (event.target === event.currentTarget) closeAuthModal();
+  const pressedHere = authBackdropPress;
+  authBackdropPress = false;
+  if (event.target !== event.currentTarget || !pressedHere) return;
+  const typed = Array.from(event.currentTarget.querySelectorAll("input"))
+    .some(input => !["checkbox", "radio", "hidden"].includes(input.type) && input.value.trim());
+  if (!typed) closeAuthModal();
 });
 document.addEventListener("keydown", event => {
   const modal = document.getElementById("loginModal");

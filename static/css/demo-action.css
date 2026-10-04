@@ -50,20 +50,20 @@ button.demo-action {
 }
 
 .demo-action:hover,
-.lp-hero-prompt:hover .demo-action {
+a.lp-hero-prompt:hover .demo-action {
   opacity: 1;
   background: color-mix(in srgb, var(--ink) 88%, var(--ground));
 }
 
 /* A press gives way instead of moving: the control sinks into the field. */
 .demo-action:active,
-.lp-hero-prompt:active .demo-action {
+a.lp-hero-prompt:active .demo-action {
   background: color-mix(in srgb, var(--ink) 80%, var(--ground));
   transform: scale(0.97);
 }
 
 .demo-action:focus-visible,
-.lp-hero-prompt:focus-visible .demo-action {
+a.lp-hero-prompt:focus-visible .demo-action {
   outline: var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
@@ -78,5 +78,5 @@ button.demo-action {
   .demo-action,
   button.demo-action { transition: none; }
   .demo-action:active,
-  .lp-hero-prompt:active .demo-action { transform: none; }
+  a.lp-hero-prompt:active .demo-action { transform: none; }
 }

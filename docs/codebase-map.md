@@ -391,8 +391,12 @@ steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`).
 Die öffentliche Navigation hat bis 700 px ein Menü (`<details class="nav-menu">`
 in `partials/public_nav.html`, Stil in `static/css/public-nav.css`, importiert
 von `landing.css` und `public-pages.css`). Der Landing-Hero
-ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
-"Try the demo"-Button, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
+zeigt ein klickbares Input-Feld (Look des /app-Inputs, "Try the demo"-Button,
+Provider-Chips darunter). Seit 2026-10-04 öffnet ein Klick ins Feld die App
+(`#heroAskField`, Stretched-Link über `#heroField`, `/app?focus=1`), nur der
+Button `#heroDemoButton` startet die Demo (`/app?demo=1`). `?focus=1` setzt
+`app-init.js` den Cursor in `#questionInput`, sobald das Konto tippen darf
+(`updateQuestionInputAccess`); Gäste sehen das gesperrte Feld mit Login-Zeile;
 Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus
 `static/css/demo-action.css` (Import in `landing.css` und `static/style.css`):
 seit 2026-10-02 schlank: 36 px hoch wie der Senden-Kreis, Pille, 13 px/500,
@@ -1406,8 +1410,6 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Icon+Name, Skip und Status ueber einem durchgehenden Balken (Touch: 44 px
   Zeilen- und Skip-Hoehe). Reduced Motion stoppt Puls, Spinner, Sweeps,
   Lichtstreifen und Uebergaenge; Forced Colors blendet den Balkenschimmer aus.
-  `.run-model-track` teilt sich die Grundform mit `.agent-session-track` in
-  der Agent-Sidebar, die ihre 2-px-Schiene in `agent-chat.css` selbst setzt.
   Die Landingpage (Szene 02, `landing-scenes.js` + `.lp-run*` in
   `landing.css`) spiegelt diesen Aufbau mit denselben Schritten, Wörtern und
   Zustaenden.
@@ -1952,7 +1954,10 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   zurück): Vergleiche füllen 14–84 %, die Zeile „Answer check“ ist eine eigene
   letzte Strecke (88 %, fertig 100 %) statt ein weiteres Modell im Nenner, und
   `view.light` hält den Wert monoton (vorher sprang das Licht beim Start der
-  Judges zurück); ohne Vergleich gleitet es langsam. Die Linie sitzt
+  Judges zurück); ohne Vergleich ruht es am Anfang und atmet. Seit 2026-10-04
+  gezeichnet statt geleuchtet: 1-px-Strich in Tinte mit 28-px-Kopf in der
+  Hausfarbe (`--light`), kein Blur, kein Halo, kein Hin-und-her-Driften; die
+  Landing-Schiene (`.lp-scene-rail i::after`) ist identisch gezeichnet. Die Linie sitzt
   (`margin: -14px 0 13px`, Handy -18/17) optisch mittig zwischen der Grundlinie
   der Uhr und der ersten Fortschrittszeile. Beim ersten Markieren einer
   geprüften Antwort (`#agentAnswerBody.is-marks-revealing`) fängt
@@ -2772,15 +2777,14 @@ Die Leiste blendet sich mit kurzer Bewegung als Overlay ein; Chat und Composer
 behalten beim Öffnen und Schließen ihre Position und Breite. Reduced Motion
 deaktiviert die Einblendbewegung. Kompakte Einträge zeigen Modellname und Tokens
 in der ersten Zeile, darunter Aufgabe sowie Status/Laufzeit; lange Namen und
-Metadaten dürfen umbrechen. Während eines Modellaufrufs schimmert die Tokenzahl dezent:
-zunächst `Tokens pending`, dann tatsächlich empfangene Antwort-/sichtbare
-Reasoning-Zeichen (`chars`), bis der Provider Input+Output-Tokens meldet.
-Unter den Metadaten steht pro laufendem Modell ein dezenter 2-px-Ladebalken.
-`agent-session-track` nutzt den gemeinsamen `run-model-track` samt
-`runModelShimmer`-Animation und versetzten Startzeiten aus der Consensus-Pipeline.
-Der Balken zeigt Aktivität ohne geschätzte Prozentzahl, bleibt beim Wechsel zu
-gemessenen Tokens aktiv und verschwindet beim Streamende, Abschluss/Abbruch oder
-in gespeicherten Ansichten. Reduced Motion/Forced Colors deaktivieren den Schimmer.
+Metadaten dürfen umbrechen. Während eines Modellaufrufs zeigt die Tokenzahl
+(`.is-loading`, ohne Schimmer) zunächst `Tokens pending`, dann tatsächlich
+empfangene Antwort-/sichtbare Reasoning-Zeichen (`chars`), bis der Provider
+Input+Output-Tokens meldet. Seit 2026-10-04 bewegt sich pro Zeile nichts mehr:
+kein Ladebalken, kein Schimmer, der Lauf zeigt sich in „Working · 14s“ und der
+zählenden Zahl. Die Segmentleiste im Kopf füllt fertige Modelle in Tinte,
+laufende Segmente stehen im Halbton und atmen langsam (`agent-segment-breathe`,
+aus bei Reduced Motion/Forced Colors).
 `StreamProgress` in `agent_progress.py` liefert höchstens alle 500 ms numerische
 `delegation_progress`-SSE-Snapshots sowie Start/Ende. Diese flüchtigen Ereignisse
 halten nur den neuesten Zwischenstand pro Sitzung neben der bestehenden Queue,
@@ -4296,7 +4300,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Passwort heißt auch dann „E-mail or password is not correct“, wenn SDK 9.22
   es als `auth/internal-error` mit `INVALID_LOGIN_CREDENTIALS` meldet. Auf
   Touch-Geräten wird beim Öffnen kein Feld fokussiert (die Tastatur verdeckte
-  sonst Google). Demo-Ende („register“) und gesperrte Anhänge („login“) öffnen
+  sonst Google). Der Hintergrund schließt nur bei einem Klick, dessen Druck
+  dort begann (Markieren aus einem Feld heraus schloss ihn sonst), und nur,
+  solange nichts eingetippt ist; X und Escape schließen immer.
+  Demo-Ende („register“) und gesperrte Anhänge („login“) öffnen
   den Dialog über `window.App.openAuthModal(mode, trigger, source)`.
   **Google:** In In-App-Browsern (LinkedIn, Instagram, Facebook, TikTok,
   Snapchat, LINE, Android-WebView) startet kein Google-Login (Google verweigert

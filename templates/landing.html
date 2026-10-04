@@ -72,9 +72,10 @@
 
   <main>
     <!-- ====================================================== HERO -->
-    <!-- Demo-first hero: the input field IS the primary CTA. Guests cannot ask
-         a real question without an account, so the field starts the interactive
-         demo in /app (?demo=1 -> demo.js auto-runs the scripted flow). -->
+    <!-- The field is the primary CTA and behaves like one: a click on it opens
+         /app with the caret in the real composer (?focus=1). Only the demo
+         button starts the scripted demo (?demo=1 -> demo.js auto-runs it). The
+         field is a stretched link under the button, so the two never nest. -->
     <section class="lp-section lp-section--white lp-section--hero">
       <div class="lp-shell lp-hero lp-hero--demo">
         <!-- The page's h1 is its loudest line (Feinschliff 2026-10-02): a
@@ -88,26 +89,30 @@
         <h1 class="lp-hero-claim"><span>Six models answer.</span> <span>See where they disagree.</span></h1>
 
         <div class="lp-hero-composer lp-composer-preview">
-        <a id="heroDemoField" class="lp-prompt lp-hero-prompt" href="/app?demo=1"
-           data-umami-event="landing_hero_demo_start"
-           aria-label="Start the interactive demo: watch one question checked across six AI models">
+        <div id="heroField" class="lp-prompt lp-hero-prompt">
+          <a id="heroAskField" class="lp-hero-ask-link" href="/app?focus=1"
+             data-umami-event="landing_hero_open_app"
+             aria-label="Open the app and ask your own question">
           <!-- Every question here is one where a single confident answer is not
                enough: the models plausibly disagree AND being wrong costs the
                reader something. list[0] is what reduced-motion users see, and
                it is also the question the demo behind this field actually runs
                (static/demo.js), so the field and the demo tell one story. -->
           <span class="lp-prompt-text" data-type-loop="Can a heat pump heat our 1978 house with the original radiators?|Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?"></span>
+          </a>
           <span class="lp-hero-prompt-bar">
             <span class="lp-attach" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </span>
             <span class="lp-run-chip">{{ agent_label }}<span class="lp-run-chip-count">+6</span><i aria-hidden="true"></i></span>
-            <span class="lp-demo-btn demo-action send-glow">
+            <a id="heroDemoButton" class="lp-demo-btn demo-action send-glow" href="/app?demo=1"
+               data-umami-event="landing_hero_demo_start"
+               aria-label="Try the demo: watch one question checked across six AI models">
               <span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span>
               <span>Try the demo</span>
-            </span>
+            </a>
           </span>
-        </a>
+        </div>
         {% include "partials/composer_toolbar_mockup.html" %}
         </div>
       </div>
@@ -608,7 +613,7 @@
           <h2 class="lp-h2">Ask the agent. Keep watching the answer.</h2>
         </div>
         <div class="lp-hero-composer lp-final-composer lp-composer-preview lp-reveal">
-          <a class="lp-prompt lp-hero-prompt" href="/app" data-umami-event="landing_final_open_app"
+          <a class="lp-prompt lp-hero-prompt" href="/app?focus=1" data-umami-event="landing_final_open_app"
              aria-label="Open the app and ask the agent your own question">
             <span class="lp-prompt-text is-placeholder">What would you want a second opinion on?</span>
             <span class="lp-hero-prompt-bar">
@@ -724,10 +729,13 @@
         });
       });
 
-      // Demo field: the app skips its landing redirect and auto-starts the
-      // demo via the ?demo=1 parameter (handled in static/demo.js).
-      document.getElementById("heroDemoField")?.addEventListener("click", () => {
-        sessionStorage.setItem("skipLandingRedirect", "1");
+      // Hero field and demo button: the app skips its landing redirect; the
+      // field lands in the composer (?focus=1, app-init.js), the button
+      // auto-starts the demo (?demo=1, static/demo.js).
+      ["heroAskField", "heroDemoButton"].forEach(id => {
+        document.getElementById(id)?.addEventListener("click", () => {
+          sessionStorage.setItem("skipLandingRedirect", "1");
+        });
       });
 
       // Preserve app entry behaviour + analytics on the CTAs.

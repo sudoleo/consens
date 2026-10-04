@@ -587,13 +587,10 @@
         const usage = node('span', 'agent-session-tokens');
         heading.append(title, usage);
         meta.append(role, state);
-        const track = node('span', 'run-model-track agent-session-track');
-        track.setAttribute('aria-hidden', 'true');
-        track.append(node('i'));
         // The detail flows inside the one scrolling list; a second scroll
         // area beside it made two scrollbars and trapped the wheel.
         const body = node("div", "agent-session-detail");
-        info.append(heading, meta, track); summary.append(mark(agent), info); root.append(summary, body);
+        info.append(heading, meta); summary.append(mark(agent), info); root.append(summary, body);
         summary.setAttribute('aria-describedby', state.id);
         root.addEventListener("toggle", () => {
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
@@ -608,7 +605,7 @@
           else view.expanded.delete(agent.id);
           prefs(view);
         });
-        row = { root, summary, title, role, state, usage, track, body };
+        row = { root, summary, title, role, state, usage, body };
         sidebar._rows.set(agent.id, row); sidebar.querySelector(".agent-session-list").append(root);
       }
       row.root.dataset.status = agent.status;
@@ -630,8 +627,9 @@
       setText(row.usage, silent ? '' : chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading));
       row.usage.hidden = silent;
       setTitle(row.usage, chars ? 'Received answer and visible reasoning characters. Token usage has not yet been reported for this call.' : tokenDescription(usage));
+      // A live call shows itself in words ("Working · 14s") and a counting
+      // number, not in a travelling bar: the panel stays still while it works.
       row.usage.classList.toggle('is-loading', loading);
-      row.track.hidden = !loading;
       row.root.open = view.expanded.has(agent.id);
       if (row.root.open) { if (agent.kind !== "check") loadDetail(view, agent.id); renderDetail(row, view, agent); }
     }

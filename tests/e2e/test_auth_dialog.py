@@ -247,3 +247,59 @@ def test_phone_with_first_party_auth_domain_uses_the_redirect_and_resumes(browse
         assert page.evaluate("() => sessionStorage.getItem('consensio.googleRedirectPending')") is None
     finally:
         context.close()
+
+
+def test_backdrop_closes_only_on_a_deliberate_click_without_typed_input(browser, phase4_server):
+    context, page = _guest_page(browser, phase4_server)
+    try:
+        modal = page.locator("#loginModal")
+        page.click("#authTopLoginBtn")
+        expect(modal).to_be_visible()
+
+        # A text selection dragged out of the field ends on the backdrop: the
+        # click lands there, but the press began inside, so the dialog stays.
+        page.fill("#loginEmail", "someone@example.test")
+        field = page.locator("#loginEmail").bounding_box()
+        page.mouse.move(field["x"] + field["width"] - 8, field["y"] + field["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(6, 6, steps=6)
+        page.mouse.up()
+        expect(modal).to_be_visible()
+
+        # Something is typed: a plain click beside the dialog does not lose it.
+        page.mouse.click(6, 6)
+        expect(modal).to_be_visible()
+        expect(page.locator("#loginEmail")).to_have_value("someone@example.test")
+
+        # Empty dialog: the backdrop is an exit again, and so is the close button.
+        page.fill("#loginEmail", "")
+        page.mouse.click(6, 6)
+        expect(modal).to_be_hidden()
+        page.click("#authTopLoginBtn")
+        page.fill("#loginEmail", "someone@example.test")
+        page.click("#closeLoginModal")
+        expect(modal).to_be_hidden()
+    finally:
+        context.close()
+
+
+def test_landing_field_arrives_with_the_caret_in_the_composer(browser, phase4_server):
+    # Signed in: the caret is in the composer as soon as the account may type.
+    context, page = _real_firebase_page(browser, phase4_server, path="/app?focus=1")
+    try:
+        page.goto(phase4_server + "/app?focus=1", wait_until="domcontentloaded")
+        expect(page.locator("#questionInput")).to_be_enabled()
+        expect(page.locator("#questionInput")).to_be_focused()
+        assert "focus=" not in page.url
+    finally:
+        context.close()
+    # A guest cannot type yet: the plain app with its sign-in line, no demo.
+    context, page = _guest_page(browser, phase4_server, path="/app?focus=1")
+    try:
+        expect(page.locator("#questionInput")).to_be_disabled()
+        expect(page.locator("#questionInput")).to_have_attribute(
+            "placeholder", "Sign in to start asking questions for free.")
+        assert "focus=" not in page.url
+        expect(page.locator("#loginModal")).to_be_hidden()
+    finally:
+        context.close()

@@ -217,6 +217,21 @@
         const unverifiedQuestionPlaceholder =
           "Type your question — confirm your e-mail to run it";
 
+        // Landing field -> /app?focus=1: arrive with the caret in the composer.
+        // The parameter goes again at once, so a reload or bookmark is plain.
+        // The field only takes the caret once the account may type into it
+        // (updateQuestionInputAccess below); a guest sees the locked field and
+        // its sign-in line instead, which is the honest arrival.
+        let pendingComposerFocus = false;
+        try {
+          const url = new URL(window.location.href);
+          if (url.searchParams.get('focus') === '1') {
+            pendingComposerFocus = true;
+            url.searchParams.delete('focus');
+            window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+          }
+        } catch (e) { /* a missing History API only costs the caret */ }
+
         window.updateQuestionInputAccess = function () {
           const canAsk = window.userCanAskQuestions();
           const canType = window.userCanTypeQuestions();
@@ -243,6 +258,12 @@
                 ? unverifiedQuestionPlaceholder
                 : lockedQuestionPlaceholder;
             questionInput.setAttribute("aria-disabled", String(!canType));
+            if (pendingComposerFocus && canType) {
+              pendingComposerFocus = false;
+              questionInput.focus({ preventScroll: true });
+            } else if (pendingComposerFocus && window.__consensioAuthState?.known) {
+              pendingComposerFocus = false;
+            }
           }
 
           if (sendButton && !sendButton.classList.contains("is-cancel-action")) {

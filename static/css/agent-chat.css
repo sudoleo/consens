@@ -38,22 +38,23 @@
 .agent-sidebar-counts { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: var(--font-size-xs); color: var(--ink-3); }
 .agent-sidebar-progress { color: var(--ink-2); }
 .agent-sidebar-usage { font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* One segment per row, in ink only: filled = done, a sweep = running, a
-   dashed rail = out of the run. Colour belongs to the answer, not to this. */
+/* One segment per row, in ink only: filled = done, a half tone = running
+   (it breathes slowly, nothing travels), a dashed rail = out of the run.
+   Colour belongs to the answer, not to this. */
 .agent-sidebar-segments { display: flex; gap: 2px; margin-top: 9px; }
 .agent-sidebar-segments i {
   position: relative; flex: 1; height: 2px; border-radius: 1px; overflow: hidden;
   background: var(--line-soft); transition: background-color var(--dur-layer) var(--ease-standard);
 }
 .agent-sidebar-segments i[data-state="done"] { background: var(--ink-3); }
+.agent-sidebar-segments i[data-state="busy"] { background: color-mix(in srgb, var(--ink-3) 45%, var(--line-soft)); }
 .agent-sidebar-segments i[data-state="out"] {
   background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 16%, transparent) 0 4px, transparent 4px 7px);
 }
-.agent-sidebar-segments i[data-state="busy"]::after {
-  content: ""; position: absolute; inset: 0; width: 45%;
-  background: color-mix(in srgb, var(--ink-3) 80%, transparent); border-radius: inherit;
-  animation: runRowSweep 1.6s cubic-bezier(.45, 0, .35, 1) infinite;
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .agent-sidebar-segments i[data-state="busy"] { animation: agent-segment-breathe 2.8s ease-in-out infinite; }
 }
+@keyframes agent-segment-breathe { 50% { opacity: .55; } }
 .agent-sidebar-status:empty { display: none; }
 /* Error/settling notes: calm ink, not an alert. */
 .agent-sidebar-status { margin: 0 2px 12px; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.55; }
@@ -99,22 +100,9 @@
 .agent-session-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 3px 8px; font-size: var(--font-size-xs); color: var(--ink-3); }
 .agent-session-state { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .agent-session-tokens { flex-shrink: 0; font-size: var(--font-size-xs); font-weight: 400; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Share the Consensus track and shimmer; no percentage is implied for a live call. */
-/* It takes no room of its own, so a row keeps its height when its call ends. */
-.agent-session > summary { position: relative; }
-.agent-session-track { position: absolute; left: 36px; right: 10px; bottom: 3px; height: 2px; border-radius: 1px; background: transparent; overflow: hidden; }
-/* No rail under a live call (a full-width line read as a row divider): only
-   the short segment that travels while the call is open. */
-.agent-session-track i {
-  width: 22%; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--ink-3) 70%, transparent);
-  animation: runRowSweep 1.6s cubic-bezier(.45, 0, .35, 1) infinite; animation-delay: var(--model-shimmer-delay, 0s);
-}
-.agent-session-track:not([hidden]) i::after { content: none; }
-.agent-session-tokens.is-loading {
-  background-image: linear-gradient(105deg, var(--ink-3) 36%, var(--ink) 50%, var(--ink-3) 64%);
-  background-size: 250% 100%; background-clip: text; -webkit-background-clip: text;
-  color: transparent; animation: source-label-shine 2.2s linear infinite;
-}
+/* A live call reads as "Working · 14s" with a counting number beside it;
+   the row itself stays still. */
+.agent-session-tokens.is-loading { color: var(--ink-3); }
 .agent-session[data-status="question"] .agent-session-state { color: var(--ink); font-weight: 600; }
 /* Aligned with the model name above it; no scroll area of its own. */
 .agent-session-detail { padding: 2px 10px 14px 35px; overflow-wrap: anywhere; }
@@ -202,7 +190,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model, .agent-detail-skeleton span,
-  .agent-session[open] .agent-session-detail, .agent-sidebar-segments i::after { animation: none; transition: none; scroll-behavior: auto; }
+  .agent-session[open] .agent-session-detail { animation: none; transition: none; scroll-behavior: auto; }
   body.single-agent-active:not(.answer-reader-docked) .container, .agent-session > summary, .agent-session > summary::after, .agent-sidebar-segments i { transition: none; }
 }
 .agent-effort-control .model-picker-display-text::before { content: 'Reasoning · '; color: var(--ink-3); font-weight: 400; }
@@ -446,8 +434,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-insight-actions button:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
 .agent-activity-insight-actions button:focus-visible { outline: var(--focus-ring); outline-offset: 3px; border-radius: 2px; }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  .agent-session-track:not([hidden]) i { animation: none; width: 100%; opacity: .45; }
-  .agent-session-tokens.is-loading { animation: none; background: none; color: var(--ink-3); }
   .agent-activity-chevron { transition: none; }
 }
 @media (max-width: 700px) {
@@ -505,7 +491,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    and arrives at the agreement number when the answer has been checked. It
    appears nowhere else. While comparison models run, the light stands at the
    share of them that are done (agent-delegation.js sets --light-p); before
-   that it drifts slowly, because there is nothing yet to count. */
+   that it rests at the start and breathes, because there is nothing yet to
+   count. It is drawn, not lit: a 1px stroke that ends in the house colour,
+   no blur, no halo, and it only moves when the work does. */
 .agent-light {
   position: relative;
   height: 1px;
@@ -514,8 +502,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
      (the summary keeps a 36px target below its text, the line-height of the
      progress text adds its own leading above). */
   margin: -14px 0 13px;
-  /* A horizon that fades out to the right; no mask, so the light above it
-     can glow beyond the 1px line. */
+  /* A horizon that fades out to the right. */
   background: linear-gradient(90deg, var(--line-soft) 72%, transparent);
   opacity: 0;
   pointer-events: none;
@@ -530,35 +517,34 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-light::after {
   content: "";
   position: absolute;
-  top: 50%;
+  top: 0;
+  height: 1px;
 }
+/* The distance covered, in ink. */
 .agent-light::before {
   left: 0;
-  height: 1px;
   width: var(--light-p, 0%);
-  transform: translateY(-50%);
-  background: linear-gradient(90deg, transparent, var(--ink-3));
+  background: color-mix(in srgb, var(--ink-3) 70%, transparent);
   transition: width var(--dur-light) var(--ease-out);
 }
+/* Its leading edge, in the house colour: a short stroke that fades in
+   toward the front, so the light reads as the head of the line. */
 .agent-light::after {
   left: var(--light-p, 0%);
-  width: 64px;
-  height: 9px;
-  border-radius: 999px;
-  transform: translate(-88%, -50%);
-  background: radial-gradient(closest-side, var(--light-core), color-mix(in srgb, var(--light) 35%, transparent) 55%, transparent);
-  filter: blur(1.5px);
+  width: 28px;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--light));
   transition: left var(--dur-light) var(--ease-out);
 }
 #agentAnswerActivity:not(.has-light-progress) .agent-light::before { width: 0; }
+#agentAnswerActivity:not(.has-light-progress) .agent-light::after { left: 28px; }
 @media (prefers-reduced-motion: no-preference) {
   #agentAnswerActivity:not(.has-light-progress) .agent-activity.is-running + .agent-light::after {
-    animation: agent-light-drift 3.2s var(--ease-standard) infinite alternate;
+    animation: agent-light-rest 2.8s ease-in-out infinite;
   }
 }
-@keyframes agent-light-drift {
-  from { left: 10%; opacity: .55; }
-  to { left: 46%; opacity: 1; }
+@keyframes agent-light-rest {
+  50% { opacity: .35; }
 }
 /* Arrival: when the checked answer's marks stroke on, the agreement number
    catches the light once. */

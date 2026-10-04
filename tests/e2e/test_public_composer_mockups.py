@@ -39,7 +39,18 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         page.goto(phase4_server + '/', wait_until='networkidle')
         page.evaluate('() => document.fonts.ready')
         expect(page.locator('.lp-composer-tools')).to_have_count(2)
-        expect(page.locator('#heroDemoField')).to_have_attribute('href', '/app?demo=1')
+        # The field opens the app with the caret in the composer; only the demo
+        # button starts the demo, and it sits above the field's link.
+        expect(page.locator('#heroAskField')).to_have_attribute('href', '/app?focus=1')
+        expect(page.locator('#heroDemoButton')).to_have_attribute('href', '/app?demo=1')
+        demo_box = page.locator('#heroDemoButton').bounding_box()
+        hit = page.evaluate('([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.id',
+            [demo_box['x'] + demo_box['width'] / 2, demo_box['y'] + demo_box['height'] / 2])
+        assert hit == 'heroDemoButton'
+        field_box = page.locator('#heroField').bounding_box()
+        hit = page.evaluate('([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.id',
+            [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
+        assert hit == 'heroAskField'
         # The closing field repeats the hero without a tool lip.
         previews = page.locator('.lp-composer-preview:has(.lp-composer-tools)')
         for preview in previews.all():

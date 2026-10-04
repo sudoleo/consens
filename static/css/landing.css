@@ -375,16 +375,39 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-prompt.lp-hero-prompt:hover,
-.lp-prompt.lp-hero-prompt:focus-visible {
+.lp-prompt.lp-hero-prompt:focus-visible,
+.lp-prompt.lp-hero-prompt:has(.lp-hero-ask-link:focus-visible) {
   transform: translateY(-2px);
   /* Hover is the field lifting a little further off the section, plus the
      same hairline focus gets in /app — not a coloured frame and a glow. */
   box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
 }
 
-.lp-prompt.lp-hero-prompt:focus-visible {
+.lp-prompt.lp-hero-prompt:focus-visible,
+.lp-prompt.lp-hero-prompt:has(.lp-hero-ask-link:focus-visible) {
   outline: var(--focus-ring);
   outline-offset: 3px;
+}
+
+/* The hero field opens the app; its demo button is a second, separate link.
+   The field's link stretches over the whole surface and the button sits
+   above it, so a click anywhere but the button lands in the composer. */
+.lp-hero-ask-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  outline: none;
+}
+.lp-hero-ask-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.lp-hero-prompt-bar .lp-demo-btn {
+  position: relative;
+  z-index: 1;
+  text-decoration: none;
 }
 
 /* The field is a fixed object, not a box that grows with what is typed into
@@ -2926,7 +2949,7 @@ img { display: block; max-width: 100%; }
   margin: clamp(30px, 4.5vw, 46px) auto 0;
 }
 .lp-hero-composer .lp-prompt.lp-hero-prompt { width: 100%; margin: 0; }
-.lp-hero-composer .lp-prompt.lp-hero-prompt:is(:hover, :focus-visible) { transform: none; }
+.lp-hero-composer .lp-prompt.lp-hero-prompt:is(:hover, :focus-visible, :has(.lp-hero-ask-link:focus-visible)) { transform: none; }
 .lp-composer-tools {
   --lp-mode-active: var(--agree);
   position: relative;
@@ -3067,18 +3090,16 @@ main > .lp-scene-02::before { display: none; }
   }
   /* The light ends at the tip of the rail. Past it (it once sat 6px
      further), a full rail pushed it over the right edge of the page. */
+  /* Drawn like the app's light path (agent-chat.css): a 1px stroke that
+     ends in the house colour, no blur, no halo. */
   .lp-scene-rail i::after {
     content: "";
     position: absolute;
-    top: 50%;
+    top: 0;
     right: 0;
-    width: 64px;
-    height: 9px;
-    border-radius: 999px;
-    transform: translateY(-50%);
-    background: radial-gradient(closest-side, var(--light-core), color-mix(in srgb, var(--light) 35%, transparent) 55%, transparent);
-    filter: blur(1.5px);
-    opacity: .9;
+    width: 28px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--light));
   }
 }
 @media (min-width: 900px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) {
