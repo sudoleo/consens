@@ -58,8 +58,13 @@ describe("single-model agent chat", () => {
     const {window:w, document:d, dom} = boot();
     let release;
     w.fetch.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentComposerNotice" hidden><span id="agentComposerMessage"></span><button id="agentComposerAction" hidden></button></div>');
     w.App.runMode.set('agent');
+    w.App.agentChat.syncComposer();
     expect(w.App.agentChat.sendBlocker().message).toContain('Loading chat models');
+    // A short load never flashes the notice (it moved the centred composer).
+    expect(d.getElementById('agentComposerNotice').hidden).toBe(true);
+    await vi.waitFor(() => expect(d.getElementById('agentComposerNotice').hidden).toBe(false), { timeout: 3000 });
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     release({ok:false, json:async () => ({})});
     await vi.waitFor(() => expect(w.App.agentChat.sendBlocker().message).toContain('could not be loaded'));
@@ -1186,7 +1191,6 @@ describe("single-model agent chat", () => {
     const full = vi.fn((el, md) => { el.textContent = md; });
     w.injectMarkdown = full;
     w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
-    w.App.agentAnswerActions = { render: vi.fn() };
     const pickers = vi.fn();
     w.App.initCustomModelPicker = pickers;
     let handlers, resolve;
@@ -1197,7 +1201,7 @@ describe("single-model agent chat", () => {
     const run = w.App.runRegistry.visible();
     handlers.delta.append('First part.');
     w.App.agentChat.project(run);
-    pickers.mockClear(); full.mockClear(); w.App.agentReview.render.mockClear(); w.App.agentAnswerActions.render.mockClear();
+    pickers.mockClear(); full.mockClear(); w.App.agentReview.render.mockClear();
     for (const chunk of [' More.', ' Even more.', ' Last.']) {
       handlers.delta.append(chunk);
       w.App.agentChat.project(run);
@@ -1207,15 +1211,46 @@ describe("single-model agent chat", () => {
     expect(full).not.toHaveBeenCalled();
     expect(w.renderMarkdownStream).toHaveBeenLastCalledWith(d.getElementById('agentAnswerBody'), 'First part. More. Even more. Last.');
     expect(w.App.agentReview.render).not.toHaveBeenCalled();
-    expect(w.App.agentAnswerActions.render).not.toHaveBeenCalled();
     resolve({ ok: true, data: { response: 'Final answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
       turn: { id: 'b'.repeat(32), consensus: 'Final answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
     await pending;
     w.App.agentChat.project(run);
-    // The final answer is rendered once in full, and review/Copy appear with it.
+    // The final answer is rendered once in full, and the review appears with it.
     expect(full).toHaveBeenCalledWith(d.getElementById('agentAnswerBody'), 'Final answer.', []);
     expect(w.App.agentReview.render).toHaveBeenCalled();
-    expect(w.App.agentAnswerActions.render).toHaveBeenLastCalledWith(d.getElementById('agentAnswerBody'), expect.objectContaining({ running: false }));
+    dom.window.close();
+  });
+
+  it('keeps the marked answer DOM when the run ends with the text the review already rendered', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    const full = vi.fn((el, md) => { el.textContent = md; });
+    w.injectMarkdown = full;
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    handlers.delta.append('Final answer.');
+    w.App.agentChat.project(run);
+    // The live review rendered the fixed text in full and marked it.
+    const body = d.getElementById('agentAnswerBody');
+    const mark = d.createElement('span'); mark.className = 'cx-claim'; body.append(mark);
+    body._markSignature = 'checked';
+    const serial = body._agentRenderSerial;
+    full.mockClear();
+    resolve({ ok: true, data: { response: 'Final answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Final answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    w.App.agentChat.project(run);
+    expect(full).not.toHaveBeenCalled();
+    expect(body.querySelector('.cx-claim')).toBe(mark);
+    expect(body._agentRenderSerial).toBe(serial);
+    expect(body.dataset.renderMode).toBe('full');
     dom.window.close();
   });
 
@@ -1227,7 +1262,6 @@ describe("single-model agent chat", () => {
     w.resetMarkdownStream = vi.fn();
     w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
     w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
-    w.App.agentAnswerActions = { render: vi.fn() };
     let handlers, resolve;
     w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
     d.getElementById('questionInput').value = 'Question';

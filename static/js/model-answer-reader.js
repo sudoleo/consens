@@ -149,6 +149,10 @@
       select.before(wrapper); wrapper.append(button, menu);
       select.style.display = "none"; select.setAttribute("aria-hidden", "true"); select.tabIndex = -1;
       picker = { select, wrapper, button, menu }; pickers.set(select, picker);
+      // The picker sits inside a <label>. Choosing an option re-renders the
+      // menu and detaches the tapped item, so the label no longer sees an
+      // interactive child and "activates" the trigger: the menu reopened.
+      menu.addEventListener("click", event => event.preventDefault());
       button.addEventListener("click", () => {
         if (activePicker === picker) { closePicker(true); return; }
         closePicker(); activePicker = picker; menu.hidden = false;

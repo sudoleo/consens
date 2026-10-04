@@ -261,7 +261,10 @@ it('keeps a fully answered check to one line and the source report below the fin
   expect(order).toEqual(['agent-evidence-status', 'agent-evidence-differences', 'agent-evidence-footer']);
   const footer = panel.querySelector('.agent-evidence-footer');
   expect(footer.querySelector('.agent-source-check')).not.toBeNull();
-  expect(footer.textContent).toContain('Model agreement is not independent fact checking.');
+  // One quiet line at most: no standing disclaimers or context toggle.
+  expect(footer.textContent).not.toContain('Model agreement is not independent fact checking.');
+  expect(footer.querySelector('.agent-evidence-context')).toBeNull();
+  expect(w.App.sourceVerification.render.mock.calls[0][3]).toMatchObject({compact: true});
   dom.window.close();
 });
 
@@ -321,29 +324,6 @@ it('shows a model stopped mid-answer as a marked, readable incomplete answer, an
   expect(context.answers[0]).toMatchObject({status: 'complete', badge: 'Cut off'});
   const panel = context.renderPanel('differences');
   expect(panel.textContent).toContain('GPT Luna: stopped before it finished, it was still writing when the answer was checked.');
-  dom.window.close();
-});
-it('keeps Copy in the evidence row across re-renders and hands it back when the row goes away', async () => {
-  const {window: w, document: d, dom} = setup();
-  // Load the actions module into the same window.
-  const script = d.createElement('script');
-  script.textContent = (await import('node:fs')).readFileSync('static/js/agent-answer-actions.js', 'utf8');
-  d.body.append(script);
-  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
-  const review = snapshot();
-  w.App.agentReview.render(body, review);
-  w.App.agentAnswerActions.render(body, {key: 'k', text: 'Exact answer.'});
-  const host = body._agentReview;
-  const bar = d.querySelector('.agent-answer-actions');
-  expect(bar.parentElement).toBe(host);
-  review.checks[1].differences_data.differences = [{type: 'contradiction', claim: 'Changed'}];
-  w.App.agentReview.render(body, review);
-  expect(d.querySelectorAll('.agent-answer-actions')).toHaveLength(1);
-  expect(d.querySelector('.agent-answer-actions').parentElement).toBe(body._agentReview);
-  body.dataset.markdown = 'Plain answer.';
-  w.App.agentReview.render(body, null, {});
-  expect(body._agentReview).toBe(null);
-  expect(body.nextElementSibling).toBe(bar);
   dom.window.close();
 });
 it('strokes the marks on once, in reading order, when a live answer is first checked', () => {

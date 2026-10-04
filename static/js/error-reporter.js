@@ -214,6 +214,21 @@
     }
   }
 
+  // Errors that carry neither an Error object nor one of our own files can
+  // never point at a code location: cross-origin "Script error." (Google
+  // picker, Firebase, extensions) and the benign ResizeObserver loop notice.
+  // They only produced empty alerts.
+  function isUnattributableError(event) {
+    if (/^ResizeObserver loop/.test(String(event.message || ""))) return true;
+    if (event.error && typeof event.error === "object") return false;
+    try {
+      const url = new URL(event.filename || "", window.location.href);
+      return !event.filename || url.origin !== window.location.origin;
+    } catch (_) {
+      return true;
+    }
+  }
+
   window.addEventListener("error", function (event) {
     if (event.target && event.target !== window) {
       const resourceClass = criticalResourceClass(event.target);
@@ -227,6 +242,7 @@
       });
       return;
     }
+    if (isUnattributableError(event)) return;
     reportCriticalError({
       type: "unhandled_error",
       phase: "browser_runtime",

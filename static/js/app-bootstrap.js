@@ -38,6 +38,17 @@
     window.umami.track(eventName, safeData);
   };
 
+  // Agent hides the sidebar's Models row, but only knows it may after
+  // /user_status. A signed-in reload that ended in Agent hides it from the
+  // first paint (agent-chat.js keeps the hint and drops the class), so the
+  // bookmark list below does not jump up once auth resolves.
+  try {
+    if (localStorage.getItem("id_token") && localStorage.getItem("agentShellExpected") === "1") {
+      document.documentElement.classList.add("agent-shell-expected");
+      setTimeout(() => document.documentElement.classList.remove("agent-shell-expected"), 10000);
+    }
+  } catch (_) { /* storage unavailable */ }
+
   try {
     if (localStorage.getItem("agentModePanelCollapsed") === null) {
       localStorage.setItem("agentModePanelCollapsed", "false");

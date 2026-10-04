@@ -180,9 +180,9 @@ describe("selected RunContext projection", () => {
     expect(binding.isActive()).toBe(false);
     dom.window.close();
   });
-  it('gives an archived Agent turn one evidence row with Copy inside and no second Sources footer', () => {
+  it('gives an archived Agent turn one evidence row and no second Sources footer', () => {
     const {window, document, dom} = boot({realHistory: true});
-    for (const src of ['static/js/agent-review.js', 'static/js/agent-answer-actions.js']) {
+    for (const src of ['static/js/agent-review.js']) {
       const script = document.createElement('script');
       script.textContent = require('node:fs').readFileSync(src, 'utf8');
       document.body.append(script);
@@ -197,8 +197,8 @@ describe("selected RunContext projection", () => {
         checks: [{comparison_id: 'c1', basis_hash: 'b', answer_hash: 'h', status: 'succeeded', differences_data: {differences: []}}]}});
     const turn = document.querySelector('.thread-history-turn');
     const review = turn.querySelector('.agent-review');
-    expect(review.querySelector(':scope > .agent-answer-actions')).not.toBeNull();
-    expect(turn.querySelectorAll('.agent-answer-actions')).toHaveLength(1);
+    expect(review).not.toBeNull();
+    expect(turn.querySelectorAll('.agent-review')).toHaveLength(1);
     expect(turn.querySelector('.thread-history-footer').hidden).toBe(true);
     dom.window.close();
   });

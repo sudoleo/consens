@@ -128,8 +128,7 @@
     // usually before the answer is written; it stays below the answer.
     view.note.dataset.running = running ? 'true' : '';
     const review = body._agentReview?.parentNode && body._agentReview.parentNode === body.parentNode ? body._agentReview : null;
-    const actions = body.nextElementSibling?.classList?.contains('agent-answer-actions') ? body.nextElementSibling : null;
-    const anchor = review || actions || body;
+    const anchor = review || body;
     if (anchor.nextElementSibling !== view.note) anchor.after(view.note);
   }
 

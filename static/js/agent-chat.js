@@ -6,6 +6,11 @@
   let catalog = null;
   let catalogOwner = "";
   let catalogStatus = "idle";
+  // The model list usually arrives within a moment. Its "Loading…" notice
+  // only shows when the wait is noticeable: flashing it on every reload
+  // pushed the centred composer up and back down.
+  const LOADING_NOTICE_DELAY_MS = 1200;
+  let loadingNoticeSince = 0, loadingNoticeTimer = null;
   let loadGeneration = 0;
   let catalogUser = null, catalogAuthGeneration, budgetRefresh = null, budgetTimer = null;
   // Shell/run split: the composer shell renders only when one of its inputs
@@ -320,6 +325,11 @@
     const modeChanged = document.body.classList.contains("single-agent-active") !== (agent || demoView);
     document.body.classList.toggle("single-agent-active", agent || demoView);
     document.body.classList.toggle("agent-demo-active", demoView);
+    // First-paint hint for app-bootstrap.js, written once access is known.
+    const authState = window.__consensioAuthState;
+    const accessKnown = Boolean(App.agentAccess?.uid && App.agentAccess.uid === window.auth?.currentUser?.uid);
+    if (accessKnown) { try { localStorage.setItem("agentShellExpected", agent ? "1" : "0"); } catch (_) {} }
+    if (agent || accessKnown || (authState?.known && !authState.uid)) document.documentElement.classList.remove("agent-shell-expected");
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
     // Only the label follows the mode; the icon and the switch's thumb stay.
@@ -369,10 +379,6 @@
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
-      App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
-        key: `${basis.chatId}:${basis.turnId}`, text: basis.consensus || '',
-        running: basis.currentTurn?.status === 'pending',
-      });
       App.agentMemory?.render(document.getElementById('agentAnswerBody'), {
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
       });
@@ -390,6 +396,14 @@
   function renderAnswer(text, error, { streaming = false } = {}) {
     const body = document.getElementById("agentAnswerBody");
     const mode = streaming && window.renderMarkdownStream ? 'stream' : 'full';
+    // The run ends with the same text the review already rendered in full
+    // with its claim marks: switching to 'full' must keep that DOM. Rendering
+    // it again dropped every mark and rebuilt it, a visible flicker.
+    if (body && mode === 'full' && body.dataset.markdown === text && body.dataset.renderMode === 'stream'
+        && body._markSignature && body.querySelector('.cx-claim')) {
+      body.dataset.renderMode = mode;
+      window.resetMarkdownStream?.(body);
+    }
     if (body && (body.dataset.markdown !== text || body.dataset.renderMode !== mode)) {
       const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
       body.dataset.markdown = text;
@@ -541,9 +555,6 @@
       App.agentReview?.render(answerBody, live ? null : state.completedTurn?.agent_review || liveReview,
         { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
           key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });
-      App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
-        key: context.runId, text: state.text || state.streamText || '', running,
-      });
     }
     // Memory changes appear as soon as Agent made them, not only at the end.
     App.agentMemory?.render(answerBody, { key: context.runId, running,
@@ -643,7 +654,7 @@
   function sendBlocker() {
     if (!canUse()) return { message: 'Sign in to use Agent.' };
     if (catalogStatus === 'failed') return { message: 'Chat models could not be loaded. Retry to continue.' };
-    if (catalogStatus !== 'ready') return { message: 'Loading chat models… You can already write your message.' };
+    if (catalogStatus !== 'ready') return { message: 'Loading chat models… You can already write your message.', loading: true };
     if (!catalog.models.some(model => model.available !== false)) {
       return { message: 'No chat models are available right now. Try reloading the model list.', action: 'reload', label: 'Reload models' };
     }
@@ -729,7 +740,14 @@
     const notice = document.getElementById('agentComposerNotice');
     const message = document.getElementById('agentComposerMessage');
     const action = document.getElementById('agentComposerAction');
-    if (notice) notice.hidden = !blocker;
+    let quiet = false;
+    clearTimeout(loadingNoticeTimer);
+    if (blocker?.loading) {
+      if (!loadingNoticeSince) loadingNoticeSince = performance.now();
+      const wait = LOADING_NOTICE_DELAY_MS - (performance.now() - loadingNoticeSince);
+      if (wait > 0) { quiet = true; loadingNoticeTimer = setTimeout(syncComposer, wait); }
+    } else loadingNoticeSince = 0;
+    if (notice) notice.hidden = !blocker || quiet;
     if (message && message.textContent !== (blocker?.message || '')) message.textContent = blocker?.message || '';
     if (action) {
       action.hidden = !blocker?.action;

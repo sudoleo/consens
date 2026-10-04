@@ -1076,10 +1076,18 @@
     if (verification.job_id) { body.dataset.sourceCheckJob = verification.job_id; box.dataset.sourceCheckJob = verification.job_id; }
     box.dataset.sourcePending = String(isPending(verification));
     const summary = element('p', 'source-verification-status', status(verification)); summary.setAttribute('role', 'status');
-    box.append(summary, element('p', 'source-check-coverage', 'Checks factual disagreements using sources already supplied by the models. This is not a complete fact-check of the consensus.'));
+    box.append(summary);
+    // Compact (agent Differences panel): the status line alone. The cards
+    // above already carry each result, and "nothing to check" says nothing.
+    if (options.compact) {
+      box.hidden = verification.status === 'skipped' && !(verification.exclusions || []).length
+        && verification.reason_code !== 'disabled' && verification.reason_code !== 'contradiction_inputs_unavailable';
+    } else {
+      box.append(element('p', 'source-check-coverage', 'Checks factual disagreements using sources already supplied by the models. This is not a complete fact-check of the consensus.'));
+    }
     const modelNote = fallbackModelNote(verification);
     if (modelNote) box.append(modelNote);
-    if (cards) box.append(element('p', 'source-verification-explanation', 'Results and original evidence appear with each contradiction in Differences.'));
+    if (cards && !options.compact) box.append(element('p', 'source-verification-explanation', 'Results and original evidence appear with each contradiction in Differences.'));
     target.prepend(box);
     if (!cards && ((verification.findings || []).length || (verification.exclusions || []).length)) {
       cards = element('div', 'contradiction-source-differences');

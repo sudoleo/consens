@@ -149,13 +149,6 @@
     box.append(list);
     return box;
   }
-  // Copy and evidence share one row: the actions bar lives inside the host.
-  function keepActions(host, previous) {
-    const sibling = [host.previousElementSibling, host.nextElementSibling]
-      .find(el => el?.classList.contains('agent-answer-actions'));
-    const bar = previous || sibling;
-    if (bar) host.append(bar);
-  }
   function node(tag, cls, text) {
     const el = document.createElement(tag);
     if (cls) el.className = cls;
@@ -387,23 +380,19 @@
       window.linkifyAgentSources?.(body, turnSources);
       body._agentModels?.remove(); body._agentModels = null;
       if (!turnSources.length) {
-        // Copy lives inside the evidence row; hand it back to the answer first.
-        const bar = host?.querySelector(':scope > .agent-answer-actions');
-        if (bar) body.after(bar);
         host?.remove(); body._agentReview = null; return;
       }
       if (!host?.isConnected) { host = node('section', 'agent-review'); body.after(host); body._agentReview = host; }
       const signature = JSON.stringify([evidence.key, evidence.question, turnSources]);
       if (host.dataset.signature === signature) return;
       host.dataset.signature = signature; host._hasReview = false; host.hidden = false;
-      const actions = host.querySelector(':scope > .agent-answer-actions');
       const context = { key: `agent-sources:${evidence.key || body.id || evidence.question}`, question: evidence.question || 'Answer sources',
         answers: [], sections: ['sources'], renderPanel: () => sourcePanel(turnSources) };
       const nav = node('nav', 'consensus-footer-tabs agent-evidence-links');
       nav.setAttribute('aria-label', 'Explore answer evidence');
       const button = evidenceButton('sources', 'Sources', turnSources.length);
       button.addEventListener('click', () => App.answerReader?.openContext(context, {section: 'sources', trigger: button}));
-      nav.append(button); host.replaceChildren(nav); keepActions(host, actions); App.answerReader?.refreshContext(context); return;
+      nav.append(button); host.replaceChildren(nav); App.answerReader?.refreshContext(context); return;
     }
     if (!host?.isConnected) {
       host = node("section", "agent-review"); body.after(host); body._agentReview = host;
@@ -418,7 +407,6 @@
     }
     host.dataset.signature = signature;
     host._hasReview = true;
-    const actions = host.querySelector(':scope > .agent-answer-actions');
     host.replaceChildren();
     const issues = review.comparisons.flatMap(c => checkIssues(c, boundCheck(c)));
     const state = ['succeeded', 'partial'].includes(review.status) && !review.comparisons.every(boundCheck) ? 'required'
@@ -493,7 +481,7 @@
             const report = node('div', 'agent-source-check');
             footer.append(report);
             App.sourceVerification?.render(cards, report, verification, {
-              differencesData: check.differences_data, differenceCards: cards
+              differencesData: check.differences_data, differenceCards: cards, compact: true
             });
           } else if (typeof review.check_sources === 'boolean') {
             footer.append(node('p', 'agent-review-note', !review.check_sources ? 'Contradiction source checks were off for this message.'
@@ -501,12 +489,6 @@
               : 'Contradiction source checks pending.'));
           }
         }
-        footer.append(node("p", "agent-review-note", "Model agreement is not independent fact checking."));
-        const basis = node("details", "agent-evidence-context");
-        basis.append(node("summary", "", "Comparison context"));
-        if (comparison.reason) basis.append(node("p", "", comparison.reason));
-        if (comparison.context) basis.append(node("p", "", comparison.context));
-        footer.append(basis);
         if ((review.versions || []).length > 1) {
           const history = node("details", "agent-evidence-context"); history.append(node("summary", "", "Earlier answer version"));
           for (const prior of review.versions.slice(0, -1)) {
@@ -584,7 +566,6 @@
     // the stroke on instead of dropping every mark in at once.
     if (evidence.reveal || body._revealedMarks === review.answer_hash) revealMarks(body, review.answer_hash);
     summary.hidden = [...summary.children].every(child => child.hidden);
-    keepActions(host, actions);
     if (body.classList.contains('thread-history-answer-body')) {
       body._agentModels?.remove();
       const models = node('div', 'agent-inline-models agent-history-models');

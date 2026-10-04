@@ -787,6 +787,9 @@ body.comparison-layout-changing .input-section { transition: none; }
 .answer-reader-inspector .agent-evidence-footer .source-verification { margin: 0; padding: 0; border: 0; background: transparent; }
 .answer-reader-inspector .agent-evidence-footer .source-verification-status { margin: 0; font-size: var(--font-size-xs); font-weight: 400; color: var(--ink-2); }
 .answer-reader-inspector .agent-evidence-footer .source-check-coverage { margin: 2px 0 0; font-size: var(--font-size-xs); color: var(--ink-3); }
+/* A footer whose only content is a hidden source-check line ("nothing to
+   check") leaves no empty band below the findings. */
+.answer-reader-inspector .agent-evidence-footer:not(:has(> :not(.agent-source-check), .source-verification:not([hidden]))) { display: none; }
 /* Inside Differences, "results appear with each contradiction in Differences"
    points at the panel the reader is already in. */
 .answer-reader-inspector .agent-source-check .source-verification-explanation { display: none; }

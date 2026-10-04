@@ -129,6 +129,16 @@ describe('contradiction evidence presentation', () => {
     expect(document.querySelector('#consensusAnswerBody').textContent).toBe('Consensus stays unchanged.');
     expect(JSON.stringify(snapshot)).toBe(original);
   });
+  it('compact mode keeps only the status line and hides an empty check', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,status:'skipped',findings:[],scope:{contradictions:0}},{differencesData:{differences:[]},compact:true});
+    expect(document.querySelector('.source-verification-contradictions').hidden).toBe(true);
+    window.App.sourceVerification.renderCurrent(snapshot,{...options,compact:true});
+    const box=document.querySelector('.source-verification-contradictions');
+    expect(box.hidden).toBe(false);
+    expect(box.querySelector('.source-check-coverage')).toBeNull();
+    expect(box.querySelector('.source-verification-explanation')).toBeNull();
+  });
   it.each([
     [{status:'skipped',findings:[],scope:{contradictions:0}},'No checkable contradictions detected'],
     [{status:'disabled',findings:[],scope:{contradictions:0}},'Contradiction source checks disabled'],

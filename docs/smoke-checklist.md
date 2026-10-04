@@ -948,9 +948,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Während der Antwort bleibt Stop nutzbar und ein neuer Entwurf kann entstehen.
 - [ ] Ein Fehler/Stop vor dem Versand erhält Text und Zitat im Composer.
   Ein inzwischen neu geschriebener Entwurf oder anderer Chat bleibt unverändert.
-- [ ] „Copy answer“ kopiert die aktuelle, ältere und wiederhergestellte Antwort
-  ohne Prüf-/Statusanzeige. Erfolg und abgewiesener Clipboard-Zugriff sind sichtbar;
-  Tastaturfokus bleibt erhalten. Keine Kopieraktion während laufender Antwort.
+- [ ] Unter einer Agent-Antwort steht kein Copy-Button (Desktop und Handy).
+- [ ] Am Ende eines geprüften Laufs bleiben die Claim-Marken stehen (kein
+  erneutes Einblenden); Reload eines Agent-Chats: Bookmarks und Eingabefeld
+  springen nicht.
+- [ ] Handy, Antwortleser „Answers“: Modellauswahl schließt das Dropdown.
 - [ ] Folgefragen direkt im Composer; kein zusätzlicher „Follow up“-Button.
   Contradictions/Review, Answers und Sources haben dezente Icons, lesbare
   Anzahlen und öffnen weiterhin den passenden Antwortleser. Bei 320/390 px

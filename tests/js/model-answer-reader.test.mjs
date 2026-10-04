@@ -312,6 +312,21 @@ describe("model answer reader", () => {
     expect(ctx.document.querySelector(".answer-reader-body").textContent).toBe("Claude answer r1");
   });
 
+  it("closes the phone model picker after choosing a different model", () => {
+    const ctx = boot({desktop: false}); ctx.project(run()); ctx.reader.openLive();
+    const trigger = ctx.document.getElementById("answerReaderModelPicker");
+    const menu = ctx.document.getElementById("answerReaderModelOptions");
+    trigger.click();
+    expect(menu.hidden).toBe(false);
+    const other = [...menu.children].find(item => item.getAttribute("aria-selected") !== "true");
+    other.click();
+    // The tapped item is detached by the re-render; the surrounding <label>
+    // must not re-activate the trigger and reopen the menu.
+    expect(menu.hidden).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(ctx.document.getElementById("answerReaderModel").value).toBe(other.dataset.value);
+  });
+
   it("opens claim links in the correct archived model and restores focus on close", () => {
     const ctx = boot({desktop: false}); const saved = archive(ctx); ctx.project(run());
     expect(ctx.reader.canOpenStored(saved.node, "Claude")).toBe(true);

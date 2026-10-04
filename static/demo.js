@@ -780,7 +780,6 @@ function clearDemoAgentAnswer() {
   body.classList.remove("is-answer-checking", "is-answer-check-done");
   body.replaceChildren();
   window.App.agentReview?.render(body, null, { key: DEMO_AGENT_ID });
-  body.parentElement?.querySelector(".agent-answer-actions")?.remove();
   window.App.agentDelegation?.demo?.(null);
 }
 // The calls behind the turn, as agent-delegation.js shows a real one: the
@@ -941,7 +940,6 @@ async function runAgentDemoFlow() {
   }
   // Demo results are a local preview: no bookmark, no vote, no telemetry.
   App.agentReview?.render(body, review, { key: DEMO_AGENT_ID, question: DEMO_SCENARIO_PROMPT, reveal: true });
-  App.agentAnswerActions?.render(body, { key: DEMO_AGENT_ID, text: answerText, running: false });
   if (sendBtn) sendBtn.disabled = false;
   showPostDemoLoginPrompt();
 }

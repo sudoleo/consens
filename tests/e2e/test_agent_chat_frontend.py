@@ -321,15 +321,8 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         expect(page.locator('#questionInput')).to_have_attribute('placeholder', 'Ask a follow-up')
         expect(page.locator('#sendButton')).to_be_disabled()
-        context.grant_permissions(['clipboard-read', 'clipboard-write'])
-        copy = page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Copy answer')
-        assert copy.evaluate('el => getComputedStyle(el).backgroundImage') == 'none'
-        if width < 700:
-            assert copy.bounding_box()['height'] >= 44
-        copy.focus()
-        page.keyboard.press('Enter')
-        expect(page.locator('#agentAnswer .agent-copy-status')).to_have_text('Copied')
-        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[0]['consensus']
+        # Agent answers carry no Copy control (removed 2026-10-04).
+        expect(page.locator('#agentAnswer .agent-answer-actions')).to_have_count(0)
         expect(page.locator('#agentAnswer').get_by_role('button', name='Follow up')).to_have_count(0)
         page.locator('#questionInput').click()
         expect(page.locator('#questionInput')).to_be_focused()
@@ -357,13 +350,6 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#agentAnswerActivity")).to_contain_text("I am considering")
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute("open", "")
         expect(page.locator("#agentAnswerBody")).to_contain_text("Now explain the next step")
-        archived_copy = page.locator('#threadHistory .agent-answer-actions').get_by_role('button', name='Copy answer')
-        archived_copy.click()
-        expect(page.locator('#threadHistory .agent-copy-status')).to_have_text('Copied')
-        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[0]['consensus']
-        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Copy answer').click()
-        expect(page.locator('#agentAnswer .agent-copy-status')).to_have_text('Copied')
-        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[1]['consensus']
         assert len(calls) == 2
         assert calls[0]["chat_id"] == calls[1]["chat_id"]
         assert calls[0]["model_id"] == "gpt-5.6-sol" and calls[0]["reasoning_effort"] == "medium"
@@ -388,9 +374,6 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#agentReasoningEffort")).to_have_value("low")
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") == "true":
             page.locator("#sidebarToggleInner").click()
-        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Copy answer').click()
-        expect(page.locator('#agentAnswer .agent-copy-status')).to_have_text('Copied')
-        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[1]['consensus']
         page.locator("#agentAnswerActivity summary").click()
         expect(page.locator("#agentAnswerActivity .agent-activity-reasoning")).to_be_visible()
         expect(page.locator("#agentAnswerActivity .agent-usage")).to_contain_text("tokens")

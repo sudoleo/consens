@@ -234,26 +234,24 @@
 }
 #agentAnswerBody:empty { display: none; }
 .agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
-.agent-composer-notice[hidden], .agent-answer-actions[hidden], .agent-answer-actions [hidden], .agent-composer-notice [hidden] { display: none; }
+.agent-composer-notice[hidden], .agent-composer-notice [hidden] { display: none; }
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
+.agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
 /* What the source check made of the contradictions, on the link itself. */
 .agent-evidence-note { color: var(--ink-3); font-weight: 400; white-space: nowrap; }
 .agent-evidence-note::before { content: '·'; margin-right: 6px; }
-.agent-answer-actions button:hover, .agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
-.agent-answer-actions button[aria-disabled="true"] { cursor: default; opacity: .6; }
-.agent-answer-actions svg, .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.agent-answer-actions button:focus-visible, .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-.agent-copy-status { overflow-wrap: anywhere; }
-.agent-copy-buffer { position: fixed; top: 0; left: -9999px; }
+.agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
+.agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (pointer: coarse) {
-  .agent-answer-actions button, .agent-composer-notice button, .agent-evidence-links .agent-evidence-link { min-height: 44px; }
+  .agent-composer-notice button, .agent-evidence-links .agent-evidence-link { min-height: 44px; }
 }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
+/* Seeded before the first paint (app-bootstrap.js) until Agent is known. */
+html.agent-shell-expected :is(.models-section, .models-section + .sidebar-separator) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer, body:not(.single-agent-active) #agentReviewNotice { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
@@ -269,13 +267,11 @@ body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 .agent-reasoning-option { border-top: 1px solid var(--line) !important; margin-top: 6px; padding-top: 12px !important; }
 .agent-review { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 18px 0 8px; color: var(--ink-2); font-size: var(--font-size-xs); }
 .agent-review[hidden], .agent-review-summary[hidden], .agent-review-status[hidden] { display: none; }
-/* One quiet row: the agreement score first, the evidence links after it,
-   Copy as an icon at the end. The summary line and the claims fallback keep
-   their own full-width rows. */
-.agent-review > :not(.agent-evidence-links, .agent-answer-actions, .agent-agreement) { flex: 1 0 100%; }
+/* One quiet row: the agreement score first, the evidence links after it.
+   The summary line and the claims fallback keep their own full-width rows. */
+.agent-review > :not(.agent-evidence-links, .agent-agreement) { flex: 1 0 100%; }
 .agent-review > .agent-agreement { order: 1; }
 .agent-review > .agent-evidence-links { order: 2; margin-left: 0; }
-.agent-review > .agent-answer-actions { order: 3; margin: 0 0 0 auto; }
 /* The agreement score, discreet: row-sized type, only the number in the
    traffic-light ink, no meter, no tinted surface. Settings → Agreement score:
    "Summary only" swaps the number for the words, "Hidden" removes it. */
@@ -290,7 +286,6 @@ body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 body.agreement-score-hidden .agent-agreement-score { display: none; }
 body.agreement-score-hidden .agent-agreement-level { display: inline; }
 body.agreement-verdict-hidden .agent-agreement { display: none; }
-.agent-answer-actions:not(.agent-review > *) button:first-child { margin-left: -8px; }
 /* Key claims (claims no inline mark could hold) read before the buttons, as
    a quiet list: text first, its model ratio right behind it. */
 .agent-review > .consensus-claims-fallback { order: 0; margin: 0 0 10px; padding-top: 0; border-top: 0; }
@@ -305,9 +300,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-review-status:is([data-state="partial"], [data-state="failed"], [data-state="missing"])::before { background: var(--partial); }
 .agent-evidence-links { justify-content: flex-start; gap: 4px 12px; margin-left: -8px; }
 .agent-evidence-link .consensus-tab-label { white-space: nowrap; }
+/* Phones: the evidence links take a full-width row of their own, so the
+   divider after the score would point at nothing. */
+@media (max-width: 640px) {
+  .agent-review > .agent-agreement::after { content: none; }
+}
 @media (max-width: 540px) {
   .agent-review > .agent-evidence-grid { flex: 1 0 100%; }
-  .agent-review > .agent-answer-actions { order: 3; }
   .agent-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 4px; margin-left: 0; }
   /* A link with a source-check note is taller; all three keep one top and height. */
   .agent-evidence-grid .agent-evidence-link { align-content: start; }

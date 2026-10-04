@@ -151,6 +151,23 @@ describe("critical resource reporting", () => {
     dom.window.close();
   });
 
+  it("drops errors that cannot point at any code location", () => {
+    const { window, dom, reports } = boot();
+    for (const init of [
+      { message: "Script error.", filename: "" },
+      { message: "Uncaught Error", filename: "https://apis.google.com/js/api.js", lineno: 1, colno: 2 },
+      { message: "ResizeObserver loop completed with undelivered notifications.", filename: "" },
+    ]) {
+      window.dispatchEvent(new window.ErrorEvent("error", init));
+    }
+    expect(reports).toEqual([]);
+    window.dispatchEvent(new window.ErrorEvent("error", {
+      message: "private", error: new window.TypeError("private"), filename: "",
+    }));
+    expect(reports).toHaveLength(1);
+    dom.window.close();
+  });
+
   it("preserves distinct stream failure categories during deduplication", () => {
     const { window, dom, reports } = boot();
     for (const kind of ["stream_read_failed", "stream_handler_failed", "stream_read_failed"]) {

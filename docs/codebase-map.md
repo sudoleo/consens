@@ -662,6 +662,10 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Source-Maps auf und gibt die Message nur bei `TypeError`/`ReferenceError`/
   `RangeError`/`SyntaxError` entschärft weiter; Stacktexte, URLs und sonstige
   Meldungen bleiben draußen. Alte Clients bleiben kompatibel.
+  Seit 2026-10-04 meldet der Reporter `error`-Events ohne Error-Objekt und ohne
+  same-origin Datei gar nicht mehr (`isUnattributableError`: cross-origin
+  „Script error.“ von Google-Picker/Firebase/Erweiterungen, ResizeObserver-
+  Loop-Hinweis); sie ergaben nur leere Alerts ohne Ort.
   Vor dem Keepalive-Request begrenzt der Reporter Meldung/Details/Stack und die
   übrigen Felder auf die Intake-Limits; fehlende Fehlergründe erhalten einen
   gültigen Fallback. Synchrone Transportfehler und Promise-Rejections des
@@ -2736,7 +2740,6 @@ ein unveränderter leerer Composer; neuere Texte/Zitate/Anhänge bleiben erhalte
 Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
-`agent-answer-actions.js` läuft nach `agent-review.js` und vor `consensus-run.js`.
 `agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum und
 Agent freedom (`autonomy`: `guided`/`free`, Details in `docs/agent-mode.md`) der
 Einstellungen im Browser, gibt den Reiter `agentSettingsSection` über
@@ -2744,13 +2747,10 @@ Einstellungen im Browser, gibt den Reiter `agentSettingsSection` über
 `agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld
 `agent_preferences` von POST `/agent` (`AgentPreferences` in `agent_comparison.py`,
 Werte in `agent_settings.agent_preferences`).
-`App.agentAnswerActions.render` ergänzt aktuelle, wiederhergestellte und
-archivierte Agent-Antworten um „Copy answer“ aus dem kanonischen Markdown,
-ohne Activity, Prüfmarkierungen oder Bedienelemente. Während Streaming sind die
-Aktionen verborgen; gestoppte Teilantworten bleiben kopierbar. Stabile Buttons,
-lokales Statusfeedback und eine Projektionsrevision verhindern Fokusverlust und
-verspätete Copy-Rückmeldungen am falschen Turn. Folgefragen verwenden direkt den
-Composer, ohne zusätzliche Antwortaktion. `agent-review.js::evidenceButton`
+Agent-Antworten haben seit 2026-10-04 keinen eigenen Copy-Button mehr
+(`agent-answer-actions.js` entfernt, User-Vorgabe); kopiert wird per Auswahl
+oder im Antwortleser. Folgefragen verwenden direkt den Composer, ohne
+zusätzliche Antwortaktion. `agent-review.js::evidenceButton`
 gibt Contradictions/Review, Answers und Sources dieselbe dezente Icon-Gestaltung
 und lesbare ARIA-Namen samt Anzahl; der Antwortleser-Vertrag bleibt unverändert.
 Bis 540 px stehen die drei Vergleichsaktionen in gleich breiten Spalten mit
@@ -2934,14 +2934,16 @@ Checked` bzw. `· Partly checked`), hinter der ein `<details>` die fehlenden
 Modelle mit Grund, späte Antworten und kleinere Prüflücken auflistet. Nur
 entscheidende Lücken (`decisive`: keine Differences-/Coverage-Prüfung, zu wenige
 Antworten) stehen sichtbar darunter. Danach folgen die Karten; Quellenprüfbericht
-(`.agent-source-check`), Quellenprüf-Hinweise, „Model agreement is not
-independent fact checking.“ und die Kontext-Disclosures stehen in
-`.agent-evidence-footer` unter den Karten. `statusText` (`Comparison checked · N
+(`.agent-source-check`) und Quellenprüf-Hinweise stehen in
+`.agent-evidence-footer` unter den Karten. Seit 2026-10-04 übergibt
+`agent-review.js` `compact: true` an `sourceVerification.render`: nur die
+Statuszeile, ohne Abdeckungs-Disclaimer und Erklärsatz; „nichts prüfbar“
+(`skipped` ohne Ausschlüsse) bleibt ganz verborgen, ein dann leerer Footer
+per `:has()` ebenfalls. „Model agreement is not independent fact checking.“
+und „Comparison context“ sind dort entfallen (der Grund steht in den
+Aktivitätsdetails). `statusText` (`Comparison checked · N
 models without an answer`) bleibt nur für die Aktivitätsdetails.
-Copy und die Evidenz-Links teilen eine Zeile: `agent-answer-actions.js` hängt die
-Leiste in `.agent-review` (auch bei noch nicht eingehängten Verlaufs-Turns),
-`agent-review.js` erhält sie beim Neuaufbau. Key claims (Claims ohne Inline-Marke)
-stehen vor dieser Zeile. Archivierte Agent-Turns blenden den Consensus-Fuß
+Key claims (Claims ohne Inline-Marke) stehen vor der Evidenzzeile. Archivierte Agent-Turns blenden den Consensus-Fuß
 (`.thread-history-footer`) aus, weil `.agent-review` dieselben Links trägt.
 Schlägt ein Lauf erst nach einer vollständigen, geprüften Antwort fehl, zeigt die
 Kopfzeile `Thought for …` (dieselbe Regel wie `failureNote`).
@@ -6672,7 +6674,18 @@ billig, `render()` aus eigenen Aktionen erzwingt es. `project(context)` ruft
 `projectFrame()` einmal pro Run/Sicht (Titel, Frage, Anhänge, Verlauf, Listen)
 und danach nur noch den Lauf: Antwort, Aktivität, Delegation. Der
 Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
-(`agentReview.render`) und „Copy answer“ entstehen erst am Ende eines Laufs.
+(`agentReview.render`) entstehen erst am Ende eines Laufs. Endet der Lauf mit
+genau dem Text, den die Live-Prüfung schon vollständig samt Claim-Marken
+gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
+dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
+Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
+(`LOADING_NOTICE_DELAY_MS`); vorher schob ihr kurzes Aufblitzen den zentrierten
+Composer beim Reload hoch und wieder runter. Erstes Zeichnen: Endete die letzte
+angemeldete Sitzung in Agent (`localStorage.agentShellExpected`, geschrieben in
+`renderShellNow`, sobald `App.agentAccess` bekannt ist), setzt
+`app-bootstrap.js` `html.agent-shell-expected` und blendet die Models-Zeile der
+Sidebar sofort aus, bis `renderShellNow` übernimmt (Notbremse 10 s) — sonst
+rutschte die Bookmark-Liste nach `/user_status` hoch.
 Seit 2026-10-02 führt die Evidenzzeile `.agent-review` mit einem dezenten
 Agreement-Score (`.agent-agreement`, „72 /100 agreement“): Wert aus
 `check.differences_data.agreement` der gewählten Vergleichsbasis (wechselt mit
@@ -6680,8 +6693,7 @@ Agreement-Score (`.agent-agreement`, „72 /100 agreement“): Wert aus
 Ampelfarbe, kein Balken; ohne bewertbare Abdeckung (`coverage_status:
 insufficient`) oder bei nicht gebundenem Check keine Zahl. Settings → Agreement
 score gilt auch hier (`agreement-score-hidden` zeigt die Wörter,
-`agreement-verdict-hidden` blendet aus). „Copy answer“ ist seitdem ein reines
-Symbol am Zeilenende (Name per `aria-label`).
+`agreement-verdict-hidden` blendet aus).
 
 **Streaming-Markdown.** `markdown-stream.js::renderMarkdownStream(el, md)`
 zerlegt die wachsende Antwort an Leerzeilen außerhalb von Code-/Mathe-Blöcken in

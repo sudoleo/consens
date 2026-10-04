@@ -368,7 +368,6 @@
         }
         window.App.agentReview?.render(answerBody, turnData.agent_review,
           {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
-        window.App.agentAnswerActions?.render(answerBody, { key: turnId, text: turnData.consensus || '', running: turnData.status === 'pending' });
         window.App.agentMemory?.render(answerBody, { key: turnId, changes: turnData.agent_memory });
         // Documents and mail attachments of this turn stay with its answer;
         // agent-workspace.js fills the row from the chat's file list.
