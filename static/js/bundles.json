@@ -127,6 +127,7 @@
         "static/js/agent-review.js",
         "static/js/agent-preferences.js",
         "static/js/agent-answer-actions.js",
+        "static/js/agent-memory.js",
         "static/js/consensus-run.js",
         "static/js/agent-workspace.js",
         "static/js/agent-google.js",

@@ -59,11 +59,11 @@
           <li><strong>Attachments and generated documents:</strong> ordinary Consensus attachments are processed transiently. In Agent (Beta), private file bytes and generated DOCX/PDF files are retained for 30 days in private object storage; extraction, provenance and version records are stored in Firestore. You can remove files earlier or delete the chat/account. Relevant excerpts or supported visual content may be sent to the models used for your request. Quotations and summaries in saved chat answers remain until that chat is deleted.</li>
           <li><strong>Optional Google Calendar, Gmail and Google Drive sources:</strong> with your separate OAuth permission, Consens stores your Google account email, granted permissions and encrypted access/refresh credentials for Calendar and Gmail. You select calendars or relevant Gmail queries/messages for a message. Files you pick in Google's own Drive picker are read with a short-lived permission limited to those files (no stored Drive access) and are stored like any other file you attach. Before Google information enters a chat you affirmatively allow, once for that chat, that relevant Google information and stored chat context are sent to the chat's model endpoints, only with zero data retention and to endpoints that do not collect prompts; web search is off in such chats. There is no background calendar, inbox or Drive sync. By default Consens only reads Google data and never sends, changes or deletes anything in Google. Where an installation enables writing, creating or updating an event, including attendee notifications, or sending an email requires confirmation of its exact preview. Email drafts are stored in Consens, not in Gmail Drafts; previews include all recipients, content, original-message references and private attachments. Proposals, message-reference headers and action results are retained for 30 days; derived chat answers follow chat retention. Disconnect in the Agent Google controls to remove credentials immediately, and revoke access in your Google Account if provider revocation could not be confirmed. Deleting your chat removes its proposals, message references and private files; a content-free write-intent hash/status fence remains for up to 30 days to prevent duplicate unresolved operations. Deleting your account asks Google to revoke the stored access and removes connection credentials and all associated chat data.</li>
           <li><strong>Account data:</strong> if you sign up, your e-mail address and a user ID are processed via Google Firebase Authentication (including optional Google Sign-In) for access control, quota handling, and related usage features. Your tier and saved bookmarks (query, answers, sources, attachment metadata) are stored in Google Cloud Firestore until you delete them or your account.</li>
-          <li><strong>Your memory (optional profile and notes):</strong> in Settings you can write a short profile about yourself
+          <li><strong>Your memory (optional profile, notes and saved memories):</strong> in Settings you can write a short profile about yourself
             (who you are, what you work on, how you want answers written, constraints that always apply) and a longer
             manually maintained memory note. It is stored on
             your account in Google Cloud Firestore and is added to the instruction sent to every model you select for a
-            run, so those model providers receive it with each question. Nothing is derived, summarized, or rewritten automatically from your
+            run, so those model providers receive it with each question. Unless you switch on &ldquo;Let Agent update memory&rdquo; (below), nothing is derived, summarized, or rewritten automatically from your
             questions or from model answers. If you explicitly select a statement in an interactive question, Consensus, or model answer and submit
             a &ldquo;Remember&rdquo; or &ldquo;Correct memory&rdquo; action, we send the current Memory (up to your plan limit), the selected statement,
             your text, and the selected add-or-correct intent to the configured model through OpenRouter. It may return only one structured replace, append, or delete proposal;
@@ -71,7 +71,16 @@
             We store an idempotency record, persistent usage counters, and a copy of your previous Memory
             for Undo. Undo is available for a short time after the change; the copy of your previous Memory is deleted automatically 30 days after the change.
             A content-free record (status, revision numbers and request reference) remains until account deletion so that a repeated request is not applied twice. These records are never used for Watch, Publisher, or Topic runs and are deleted with your account.
-            Only text you enter in Memory settings or explicitly submit through Remember or Correct memory is stored and used. You can
+            Settings also holds a list of short <em>saved memories</em> that you can add, edit and delete yourself. Only if you switch on
+            &ldquo;Let Agent update memory&rdquo; (off by default) may the Agent model you use add, update or delete saved memories while it answers.
+            It may do so only on the basis of statements in your own messages in that chat: each change must quote your words, and our server
+            rejects changes whose quote is not found there, so content from web pages, files, emails or other tool results cannot be saved this way.
+            Agent is instructed not to keep special-category data unless you explicitly ask it to, and our server rejects text that looks like a
+            password, access key, card or bank account number. Every change is shown under the answer with Undo. For Undo we keep a record of
+            each change with the previous and the new text for at most 30 days (at most the last 50 changes); the chat in which a change was made
+            keeps a short summary of it until that chat is deleted. Saved memories are sent with your profile and note to the models of your runs
+            while Memory is on. Switching the option off stops new automatic changes; existing saved memories remain until you delete them.
+            Apart from that, only text you enter in Memory settings or explicitly submit through Remember or Correct memory is stored and used. You can
             edit it, pause it with a single switch, or clear it at any time; it is deleted with your account. Scheduled Watch reruns do not receive your Memory profile as a separate input, and published pages do not display it as a profile field. However, generated answers or questions can reflect personal details from Memory; review content before publishing it. Please do not enter special-category data (for example
             health, beliefs, or political opinions) or other people&rsquo;s personal data.</li>
           <li><strong>Abuse prevention and usage:</strong> IP-based rate limits and account-bound counters prevent overload and quota abuse. We store usage, tier, request-idempotency and vote records, but no IP-to-account registration mapping. Model-ranking votes are bound to your account internally; the public ranking contains aggregate model counts.</li>
@@ -307,7 +316,7 @@
         </ul>
         <p>
           You can delete your account yourself at any time in the app settings ("Delete account"). This removes
-          your authentication account, profile data, your memory profile and notes, bookmarks, watches, watch history, shared pages, pending share results,
+          your authentication account, profile data, your memory profile, notes and saved memories, bookmarks, watches, watch history, shared pages, pending share results,
           Telegram connection/delivery metadata, and
           entries you created in the feedback and Pro-interest lists. For anything else, contact us at the
           address above.
@@ -345,7 +354,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 29 September 2026" %}
+  {% set public_footer_note = "Last updated: 4 October 2026" %}
   {% include "partials/public_footer.html" %}
 
 </body>

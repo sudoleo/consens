@@ -470,9 +470,11 @@ def test_memory_is_the_first_settings_category():
     assert "Nothing is collected" in memory_panel
 
     # Vier kompakte About-you-Felder plus die grosse, nutzerkontrollierte Notebox.
-    # Automatische Ableitung bleibt ausgeschlossen; die expliziten Add-/Correct-
-    # Aktionen werden direkt am Feld erklaert.
-    assert "<ul" not in memory_panel
+    # Automatische Ableitung nur nach Opt-in; die expliziten Add-/Correct-
+    # Aktionen werden direkt am Feld erklaert. Die einzige Liste ist die der
+    # gespeicherten Erinnerungen -- keine Aufzaehlungswand als Erklaerung.
+    assert memory_panel.count("<ul") == 1 and '<ul id="memoryItemsList"' in memory_panel
+    assert 'id="memoryAutoSwitch"' in memory_panel
     assert memory_panel.count("<textarea") == 5
     assert 'id="memoryNotesInput" rows="12" maxlength="12000"' in memory_panel
     assert 'data-always-visible="true"' in memory_panel

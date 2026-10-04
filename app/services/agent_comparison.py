@@ -361,7 +361,8 @@ def comparison_selection(value=None):
 
 
 class ComparisonTools:
-    def __init__(self, loop, models, *, check_sources=False, source_limits=None, preferences=None):
+    def __init__(self, loop, models, *, check_sources=False, source_limits=None, preferences=None,
+                 memory_changes=False):
         self.loop, self.models = loop, models
         self.preferences = preferences or AgentPreferences()
         self.comparisons, self.versions = [], []
@@ -379,9 +380,14 @@ class ComparisonTools:
         # Text a model had written before it stopped or failed. Kept for the
         # reader, marked incomplete; never part of the synthesis or its check.
         self._partials = {}
-        compare = (ReadOnlyTool("compare_models", "Get independent answers from the families you choose (at least two) before synthesizing and checking the answer. Every substantive answer needs at least one comparison.", free_compare_args(models), self.compare)
+        arguments = free_compare_args(models) if self.free else CompareArgs
+        if memory_changes:
+            # Memory changes ride along on the call the orchestrator makes anyway.
+            from app.services.agent_memory import memory_field
+            arguments = create_model("MemoryCompareArgs", __base__=arguments, memory=memory_field())
+        compare = (ReadOnlyTool("compare_models", "Get independent answers from the families you choose (at least two) before synthesizing and checking the answer. Every substantive answer needs at least one comparison.", arguments, self.compare)
                    if self.free else
-                   ReadOnlyTool("compare_models", "Start the Consensus pipeline for every user question or task. Get independent answers from the selected models before synthesizing and checking the answer.", CompareArgs, self.compare))
+                   ReadOnlyTool("compare_models", "Start the Consensus pipeline for every user question or task. Get independent answers from the selected models before synthesizing and checking the answer.", arguments, self.compare))
         self.tools = [compare,
                       ReadOnlyTool("judge_answer", "Finish comparisons: the app first streams your complete answer in a dedicated tool-free step, then checks that exact visible text with Differences and Coverage judges. Do not write a preamble alongside this call.", JudgeArgs, self.judge)]
         self.contradictions = None
@@ -422,6 +428,12 @@ class ComparisonTools:
         system = (config["prompts"]["consensus"] + "\n\n" + SYNTHESIS_PROMPT + "\n\n"
                   + get_date_context(config["reference_timezone"])
                   + f"\nSelected model: {self.loop.model.label} ({self.loop.model.model}).")
+        memory = getattr(self.loop, "memory", None)
+        if memory is not None:
+            from app.services.agent_memory import synthesis_prompt
+            block = synthesis_prompt(memory.snapshot)
+            if block:
+                system += "\n\n" + block
         evidence = {"comparisons": [{
             "question": comparison["question"], "context": comparison["context"],
             "unavailable_answers": len(comparison["failed_models"]) + len(comparison.get("pending_models", [])),
@@ -552,7 +564,7 @@ class ComparisonTools:
             loop.store.protect_review(loop.uid, loop.chat_id, loop.turn_id, loop.run_token, future, cost=future * 10_000)
         if not loop.policy.account_budget_only and loop.costs.calls + len(asked) + 4 + 2 * len(self.comparisons) > loop.policy.max_calls:
             raise ValueError("Remaining calls are reserved for synthesis and judges")
-        comparison = {"id": uuid4().hex, **args.model_dump(exclude={"status_update", "models"}), "asked": asked,
+        comparison = {"id": uuid4().hex, **args.model_dump(exclude={"status_update", "models", "memory"}), "asked": asked,
                       "status": "running", "answers": [], "failed_models": []}
         self.comparisons.append(comparison)
         # New evidence invalidates even an unchanged synthesis's earlier check.

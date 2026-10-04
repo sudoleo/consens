@@ -296,6 +296,23 @@ _READABLE_FIELDS = {"text": "reasoning.text", "summary": "reasoning.summary"}
 _SIGNED_TEXT_FORMATS = {"google-gemini-v1", "anthropic-claude-v1"}
 
 
+def prompt_cache_control(model):
+    """Explicit prompt caching where a provider needs it.
+
+    OpenAI, DeepSeek, Gemini, Grok, Moonshot and Z.AI cache prefixes on their
+    own. Anthropic (and Qwen) only cache behind a ``cache_control`` marker;
+    OpenRouter's top-level form places the breakpoint on the last cacheable
+    block and moves it along as a turn's steps grow. Every Agent step re-sends
+    the system prompt, memory and history, so later steps and the next message
+    read them from cache (about a tenth of the input price) instead of paying
+    full price each time. The default five-minute lifetime matches chat pacing.
+    """
+    name = str(getattr(model, "model", "") or "")
+    if name.startswith(("anthropic/", "qwen/")):
+        return {"type": "ephemeral"}
+    return None
+
+
 def _continues(last, detail):
     """Whether a streamed fragment extends the previous reasoning block."""
     kind = detail["type"]
@@ -491,6 +508,9 @@ class AgentCompletion:
                 payload["parallel_tool_calls"] = False
         if native_searches:
             payload["max_tool_calls"] = native_searches
+        cache = prompt_cache_control(model)
+        if cache:
+            payload["cache_control"] = cache
         from app.services.llm.provider_runtime import ProviderProgressWatchdog, _bounded_env_float
         progress = ProviderProgressWatchdog(_bounded_env_float("AGENT_PROVIDER_STALL_SECONDS", 180, 30, 600))
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):

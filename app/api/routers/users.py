@@ -26,7 +26,7 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.account_deletion import FirestoreAccountDeletion
-from app.services import memory_edit, persistence_guard, user_memory
+from app.services import agent_memory, memory_edit, persistence_guard, user_memory
 from app.services.user_memory import FirestoreUserMemoryRepository
 
 router = APIRouter()
@@ -35,6 +35,7 @@ account_deletion = FirestoreAccountDeletion(db_firestore)
 user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
 memory_edit_repository = memory_edit.FirestoreMemoryEditRepository(db_firestore)
 memory_edit_service = memory_edit.MemoryEditService(memory_edit_repository)
+agent_memory_repository = agent_memory.FirestoreAgentMemoryRepository(db_firestore)
 
 
 class UsageRequest(BaseModel):
@@ -185,6 +186,8 @@ class UserMemoryRequest(BaseModel):
     # ``None`` unterscheidet alte Browser, die das additive Feld noch nicht
     # kennen, von einem bewussten Leeren durch die aktuelle UI (``""``).
     notes: Optional[str] = Field(default=None, max_length=30_000)
+    # "Let Agent update memory". ``None`` (older browsers) keeps the stored value.
+    auto_memory: Optional[bool] = None
     # Die Revision, die der Editor geladen hat (Compare-and-swap). Alte
     # Browser senden sie nicht: sie bekommen 409 mit Reload-Hinweis, statt
     # neuere Inhalte (anderer Tab, Remember/Correct, Undo) still zu
@@ -202,6 +205,23 @@ class UserMemoryEditRequest(BaseModel):
     # Das autoritative Limit kommt aus der Admin-Konfiguration; der groessere
     # Pydantic-Cap verhindert nur unbeschraenkte Request-Bodies.
     correction: str = Field(min_length=1, max_length=2_000)
+
+
+class MemoryItemChange(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    op: Literal["add", "update", "delete"]
+    id: str = Field(default="", max_length=16)
+    text: str = Field(default="", max_length=2_000)
+
+
+class MemoryItemsRequest(BaseModel):
+    """Changes the user makes to saved memories in Settings (compare-and-swap)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    changes: list[MemoryItemChange] = Field(min_length=1, max_length=agent_memory.MAX_USER_CHANGES_PER_REQUEST)
+    expected_revision: int = Field(ge=0, le=9_007_199_254_740_991)
 
 
 class UserMemoryUndoRequest(BaseModel):
@@ -230,13 +250,21 @@ def _memory_tier(uid: str) -> str:
         ) from None
 
 
-def _memory_response(profile: dict, *, tier, revision: int) -> dict:
+def _memory_items(uid: str) -> dict:
+    items, revision = agent_memory_repository.get(uid)
+    return {"items": [agent_memory.public_item(item) for item in items], "items_revision": int(revision)}
+
+
+def _memory_response(profile: dict, *, tier, revision: int, items: Optional[dict] = None) -> dict:
     notes_limit = cfg.get_memory_char_limit(tier)
     return {
         "status": "success",
         "memory": profile,
         "revision": int(revision),
+        **(items or {}),
         "limits": {
+            "items": agent_memory.MAX_ITEMS,
+            "item_chars": agent_memory.MAX_ITEM_CHARS,
             "field_chars": user_memory.MAX_FIELD_CHARS,
             "notes_chars": notes_limit,
             "profile_chars": notes_limit + (
@@ -255,10 +283,11 @@ def get_user_memory(request: Request):
         profile, revision = user_memory_repository.get_with_revision(
             uid, max_notes_chars=cfg.get_memory_char_limit(tier)
         )
+        items = _memory_items(uid)
     except Exception as exc:
         logging.error("user memory read failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory is temporarily unavailable.") from None
-    return _memory_response(profile, tier=tier, revision=revision)
+    return _memory_response(profile, tier=tier, revision=revision, items=items)
 
 
 @router.put("/api/my/memory")
@@ -317,6 +346,70 @@ _MEMORY_EDIT_HTTP_STATUS = {
     "lease_lost": 409,
     "revision_not_found": 404,
 }
+
+
+_AGENT_MEMORY_HTTP_STATUS = {
+    "revision_conflict": 409,
+    "undo_conflict": 409,
+    "not_found": 404,
+    "memory_full": 409,
+}
+
+
+def _raise_agent_memory_error(exc: agent_memory.AgentMemoryError):
+    detail = {"error_code": exc.code, "message": exc.message}
+    if exc.revision is not None:
+        detail["revision"] = exc.revision
+    raise HTTPException(status_code=_AGENT_MEMORY_HTTP_STATUS.get(exc.code, 422), detail=detail) from None
+
+
+def _items_write(uid: str, operation):
+    try:
+        result = operation()
+        return {"status": "success", **(result or {}), **_memory_items(uid)}
+    except agent_memory.AgentMemoryError as exc:
+        _raise_agent_memory_error(exc)
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=403, detail="This account is being deleted.") from None
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.error("saved memories write failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Memory could not be saved.") from None
+
+
+@router.post("/api/my/memory/items")
+@limiter.limit("30/minute")
+def change_memory_items(request: Request, payload: MemoryItemsRequest):
+    """Add, edit or delete saved memories by hand. Same rules as Agent, minus evidence."""
+    uid = _memory_uid(request)
+
+    def operation():
+        changes = [agent_memory.normalize_change(change.model_dump(), origin="user") for change in payload.changes]
+        result = agent_memory_repository.apply(
+            uid, changes, origin="user", expected_revision=payload.expected_revision)
+        return {"result": result.get("status")}
+
+    return _items_write(uid, operation)
+
+
+@router.delete("/api/my/memory/items")
+@limiter.limit("10/minute")
+def clear_memory_items(request: Request):
+    """Delete every saved memory and its Undo history."""
+    uid = _memory_uid(request)
+    return _items_write(uid, lambda: {"result": "cleared", "cleared_revision": agent_memory_repository.clear(uid)})
+
+
+@router.post("/api/my/memory/changes/{change_id}/undo")
+@limiter.limit("20/minute")
+def undo_memory_change(request: Request, change_id: str):
+    """Undo one change Agent (or the user) made, if nothing changed it since."""
+    uid = _memory_uid(request)
+    if not agent_memory.CHANGE_ID_RE.fullmatch(change_id):
+        raise HTTPException(status_code=404, detail={"error_code": "not_found",
+                                                     "message": "This memory change is no longer available."})
+    return _items_write(uid, lambda: {"result": agent_memory_repository.undo(uid, change_id)["status"]})
 
 
 def _raise_memory_edit_error(exc: memory_edit.MemoryEditError):

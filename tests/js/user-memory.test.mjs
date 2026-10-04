@@ -53,7 +53,7 @@ function boot() {
         // mit 422 ab. Genau dieses Verhalten bildet der Stub nach.
         if (options.method === "PUT") {
           const unknown = Object.keys(body).filter(
-            key => !["enabled", "role", "focus", "style", "constraints", "notes", "expected_revision"].includes(key)
+            key => !["enabled", "auto_memory", "role", "focus", "style", "constraints", "notes", "expected_revision"].includes(key)
           );
           if (unknown.length) {
             return {
@@ -111,7 +111,7 @@ describe("memory switch", () => {
     expect(put).toBeTruthy();
     expect(put.body.enabled).toBe(false);
     expect(Object.keys(put.body).sort()).toEqual(
-      ["constraints", "enabled", "expected_revision", "focus", "notes", "role", "style"]
+      ["auto_memory", "constraints", "enabled", "expected_revision", "focus", "notes", "role", "style"]
     );
     // The switch writes against the revision it loaded (compare-and-swap).
     expect(put.body.expected_revision).toBe(4);

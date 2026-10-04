@@ -561,3 +561,23 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @media (forced-colors: active) {
   .agent-light { display: none; }
 }
+
+/* "Memory updated" under an Agent answer: one quiet row like the review
+   line, the changes as a short list, Undo and Manage as text buttons. */
+.agent-memory-note { margin: 10px 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
+.agent-memory-note[hidden], .agent-memory-note [hidden] { display: none; }
+.agent-memory-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+.agent-memory-head svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.agent-memory-title { color: var(--ink-2); font-weight: 500; }
+.agent-memory-head button { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-memory-head button:hover { color: var(--ink); }
+.agent-memory-head button:disabled { cursor: default; opacity: .6; }
+.agent-memory-head button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.agent-memory-status { color: var(--ink-3); }
+.agent-memory-list { margin: 2px 0 0; padding: 0 0 0 25px; list-style: none; }
+.agent-memory-list li { overflow-wrap: anywhere; }
+.agent-memory-list li.is-undone { color: var(--ink-3); }
+.agent-memory-verb { color: var(--ink-2); }
+@media (pointer: coarse) {
+  .agent-memory-head button { min-height: 44px; }
+}

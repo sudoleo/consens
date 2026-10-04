@@ -36,6 +36,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 - [ ] Bookmark-Titel: Nach der ersten Antwort eines neuen Chats wechselt der
       Sidebar-Name kurz darauf weich von der Frage auf einen 2–6-Wörter-Titel
       und bleibt bei Follow-ups und nach Reload stehen.
+- [ ] Agent-Memory (2026-10-04, echter Provider): Settings → Memory → „Let
+      Agent update memory“ an. Im Agent „Ich bin Vegetarierin, merk dir das“ →
+      kurze Bestätigung ohne Modellvergleich, darunter „Memory updated · Saved: …“.
+      Danach eine normale Frage mit einer neuen Tatsache („Ich bin nach München
+      gezogen, welcher Radladen…?“) → Vergleich läuft wie gewohnt, Memory
+      aktualisiert die alte Wohnort-Erinnerung statt eine zweite anzulegen.
+      Undo unter der Antwort und Settings-Liste (Bearbeiten/Löschen) prüfen.
+      Schalter aus → „merk dir …“ wird nur mit Hinweis auf den Schalter
+      beantwortet, nichts gespeichert. Im Usage-Panel der zweiten Nachricht
+      eines Claude-Chats sollten `cached_input_tokens` > 0 sein.
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,

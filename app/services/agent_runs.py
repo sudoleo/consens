@@ -41,12 +41,40 @@ def agent_sources(completion, review=None):
     return normalize_turn_sources(sources)
 
 
-def get_agent_system_prompt(model=None, config=None):
+# Volatile per-message context (clock to the second, selected model) travels
+# with the newest user message instead of the system prompt. The system prompt
+# and the replayed history then stay byte-identical across a chat's messages,
+# so providers can serve them from their prompt cache. A clock at the top of
+# the system prompt invalidated every cached token after it on every message.
+APP_CONTEXT_OPEN = "[consens.io context for this message, supplied by the app, not written by the user]"
+APP_CONTEXT_CLOSE = "[end of app context]"
+
+
+def get_agent_turn_context(model=None, config=None):
     config = config or prompt_config.get_config()
-    prompt = f"{config['prompts']['agent']}\n\n{get_date_context(config['reference_timezone'])}"
+    context = get_date_context(config["reference_timezone"])
     if model is not None:
-        prompt += f"\nSelected model for this response: {model.label} ({model.model})."
-    return prompt
+        context += f"\nSelected model for this response: {model.label} ({model.model})."
+    return context
+
+
+def get_agent_system_prompt(model=None, config=None):
+    """Static instructions plus the per-message context as one text."""
+    config = config or prompt_config.get_config()
+    return f"{config['prompts']['agent']}\n\n{get_agent_turn_context(model, config)}"
+
+
+def with_app_context(question, context):
+    return f"{APP_CONTEXT_OPEN}\n{context}\n{APP_CONTEXT_CLOSE}\n\n{question}"
+
+
+def strip_app_context(content):
+    """The user's own words of a message built by ``with_app_context``."""
+    if isinstance(content, str) and content.startswith(APP_CONTEXT_OPEN):
+        _, separator, rest = content.partition(APP_CONTEXT_CLOSE + "\n\n")
+        if separator:
+            return rest
+    return content
 
 
 class AgentRunStore(AgentSessionStore, ChatStore):
@@ -90,7 +118,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         return self.db.collection("users").document(uid).collection("llm_calls").document(key)
 
     def messages(self, uid, chat_id, target, model=None, config=None):
-        system_prompt = get_agent_system_prompt(model, config=config)
+        config = config or prompt_config.get_config()
+        system_prompt = config["prompts"]["agent"]
         messages = [{"role": "system", "content": system_prompt}]
         cursor = ""
         chars = len(system_prompt) + len(target["question"])
@@ -116,7 +145,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             cursor = page.get("next_cursor") or ""
             if not cursor:
                 break
-        messages.append({"role": "user", "content": target["question"]})
+        messages.append({"role": "user", "content": with_app_context(
+            target["question"], get_agent_turn_context(model, config))})
         from app.services.agent_tokens import input_estimate, minimum_output
         if model and input_estimate(messages, request_config=model.request_config) + minimum_output(model) > model.context_length:
             raise ValueError("This conversation is too long for the selected model. Choose a model with a larger context or start a new chat.")

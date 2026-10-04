@@ -36,6 +36,7 @@ def _cleanup_steps():
     from app.services.google_connections import cleanup_google_data
     from app.services.chat_store import resume_chat_deletions
     from app.services.memory_edit import cleanup_memory_edit_records
+    from app.services.agent_memory import cleanup_memory_change_logs
     from app.services.notification_outbox import cleanup as cleanup_outbox
     return (
         ("expired_pending_deleted", cleanup_expired_pending),
@@ -47,6 +48,7 @@ def _cleanup_steps():
         ("google_records_deleted", cleanup_google_data),
         ("chat_deletions_completed", resume_chat_deletions),
         ("memory_edit_records", cleanup_memory_edit_records),
+        ("memory_change_logs", cleanup_memory_change_logs),
         ("notification_outbox_deleted", cleanup_outbox),
     )
 

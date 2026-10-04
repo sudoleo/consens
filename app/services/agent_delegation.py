@@ -104,12 +104,16 @@ class Worker:
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  check_sources=False, source_limits=None, file_context=None, google_selection=None, google_data_consent=False,
-                 agent_preferences=None, **kwargs):
+                 agent_preferences=None, memory=None, **kwargs):
         super().__init__(**kwargs)
         # Freeze the actual conversation before runtime instructions, tool
         # transcripts or private continuation data are appended to messages.
-        self.answer_conversation = [{"role": message["role"], "content": message["content"]}
+        # The answer step has its own clock; the app context block is not the user's text.
+        from app.services.agent_runs import strip_app_context
+        self.answer_conversation = [{"role": message["role"], "content": strip_app_context(message["content"])}
                                     for message in self.messages if message["role"] in {"user", "assistant"}]
+        from app.services.agent_memory import MemorySnapshot, MemoryTools
+        self.memory = MemoryTools(self, memory if memory is not None else MemorySnapshot())
         self.file_context = file_context
         self.documents = None
         self.google_evidence = []
@@ -155,7 +159,7 @@ class DelegationLoop(AgentLoop):
         if comparison_models is not None:
             from app.services.agent_comparison import ComparisonTools, PROMPT, preference_prompt
             self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
-                                              preferences=agent_preferences)
+                                              preferences=agent_preferences, memory_changes=self.memory.writable)
             self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences)
             if check_sources:
                 from app.services.agent_contradictions import PROMPT as SOURCE_PROMPT
@@ -204,6 +208,15 @@ class DelegationLoop(AgentLoop):
                  if writes_enabled() else
                  "Google is a read-only source here: you cannot send email, create Gmail drafts or change calendars. If the user asks for that, "
                  "write the proposed text or event details in your answer for them to use themselves, and say that Consens does not send or change anything in Google."))
+        # Memory closes the system prompt: everything above is as stable across a
+        # chat's messages as before, and a memory change re-caches only what follows.
+        from app.services.agent_memory import orchestrator_prompt
+        if self.comparison is not None:
+            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot)
+            memory_tools = self.memory.tools()
+            if memory_tools:
+                self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
+                                             argument_limit=max(self.registry.argument_limit, 24_000))
 
     def _check(self, cancellation=None):
         if self.watch_error:
@@ -412,7 +425,17 @@ class DelegationLoop(AgentLoop):
                     self.outgoing.put_nowait(self.activity({"step_id": value.step_id,
                         "id": f"{call['id']}/progress", "kind": "progress", "text": update}))
             publish("running")
+            # Memory changes riding along on compare_models: no extra model step.
+            # A refused change never stops the comparison; the model reads why.
+            memory_result = None
+            if registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory":
+                try:
+                    memory_result = self.memory.apply(args.memory)
+                except ValueError as exc:
+                    memory_result = {"error": str(exc)[:500]}
             result = tool.execute(args, cancellation=cancellation)
+            if memory_result is not None and isinstance(result, dict):
+                result = {**result, "memory": memory_result}
             status = "succeeded"
         except ProviderCancelled:
             status = "cancelled"
@@ -866,7 +889,9 @@ class DelegationLoop(AgentLoop):
         without any comparison would skip the two-family floor and the judges.
         Its direct text is not published yet; ask once to confirm or compare."""
         if (not self.comparison or not self.comparison.free or self.comparison.comparisons
-                or self.floor_reminded or value.tool_calls or not value.text.strip()):
+                or self.floor_reminded or value.tool_calls or not value.text.strip()
+                # A message that only asked to remember or forget something.
+                or self.memory.changed):
             return False
         self.floor_reminded = True
         self.messages.append({"role": "user", "content":
@@ -928,6 +953,8 @@ class DelegationLoop(AgentLoop):
         watcher.start()
         try:
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
+                if self.mock_answer is not None and self.answer_conversation:
+                    self.memory.mock_turn(self.answer_conversation[-1]["content"])
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
                 for index in steps:
                     self._check()

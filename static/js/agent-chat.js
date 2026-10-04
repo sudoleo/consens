@@ -373,6 +373,9 @@
         key: `${basis.chatId}:${basis.turnId}`, text: basis.consensus || '',
         running: basis.currentTurn?.status === 'pending',
       });
+      App.agentMemory?.render(document.getElementById('agentAnswerBody'), {
+        key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
+      });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -542,6 +545,9 @@
         key: context.runId, text: state.text || state.streamText || '', running,
       });
     }
+    // Memory changes appear as soon as Agent made them, not only at the end.
+    App.agentMemory?.render(answerBody, { key: context.runId, running,
+      changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
@@ -908,6 +914,11 @@
           const actions = 'actions' in keys || 'gmail_evidence' in keys;
           if (files || !actions) App.agentWorkspace?.refresh(context.metadata.chatId, true);
           if (actions || !files) App.agentGoogle?.refreshActions?.(context.metadata.chatId, true);
+        } },
+        memory: { receive(event) {
+          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+          context.metadata.agentMemory = App.agentMemory?.receive(context.metadata.agentMemory || [], event) || [];
+          registry.update(context.runId, () => {});
         } },
         review: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;

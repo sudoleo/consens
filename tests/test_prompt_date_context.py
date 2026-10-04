@@ -45,8 +45,11 @@ def test_agent_followup_refreshes_clock_and_model_without_rewriting_history(stor
     model = AgentModel()
     chat_id, first = pending(store)
     first_messages = store.messages(UID, chat_id, first, model=model)
-    assert "Tuesday, 2026-09-15" in first_messages[0]["content"]
-    assert "Selected model for this response: GPT-6 Luna" in first_messages[0]["content"]
+    # Clock and model travel with the newest message; the system prompt stays
+    # identical across messages so providers can cache it with the history.
+    assert "Current date" not in first_messages[0]["content"]
+    assert "Tuesday, 2026-09-15" in first_messages[-1]["content"]
+    assert "Selected model for this response: GPT-6 Luna" in first_messages[-1]["content"]
     answer = receipt()
     answer.text = "Today is September 15."
     assert store.claim(UID, chat_id, first["id"], model)
@@ -56,13 +59,15 @@ def test_agent_followup_refreshes_clock_and_model_without_rewriting_history(stor
     clock.instant = datetime(2026, 9, 15, 22, 1, tzinfo=timezone.utc)
     _, second = pending(store, chat_id=chat_id, request_id="two", question="And today?")
     messages = store.messages(UID, chat_id, second, model=resolve_agent_model("claude-haiku-4-5"))
-    assert "Wednesday, 2026-09-16" in messages[0]["content"]
-    assert "Reference time at request start: 00:01:00." in messages[0]["content"]
-    assert "Selected model for this response: Claude Haiku 4.5 (anthropic/claude-haiku-4.5)." in messages[0]["content"]
-    assert "DeepSeek" not in messages[0]["content"]
+    assert messages[0]["content"] == first_messages[0]["content"]
+    assert "Wednesday, 2026-09-16" in messages[-1]["content"]
+    assert "Reference time at request start: 00:01:00." in messages[-1]["content"]
+    assert "Selected model for this response: Claude Haiku 4.5 (anthropic/claude-haiku-4.5)." in messages[-1]["content"]
+    assert "DeepSeek" not in messages[-1]["content"]
     assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+    assert messages[1]["content"] == "Question one"
     assert messages[2]["content"] == "Today is September 15."
-    assert messages[3]["content"] == "And today?"
+    assert agent_runs.strip_app_context(messages[3]["content"]) == "And today?"
     # Consensus also builds fresh context rather than caching it at import time.
     assert "Wednesday, 2026-09-16" in base.get_system_prompt()
     assert "Wednesday, 2026-09-16" in consensus_engine._build_consensus_prompt("And today?", {"openai": "A"}, [])

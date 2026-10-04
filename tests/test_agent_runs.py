@@ -14,7 +14,7 @@ from app.core import config as cfg
 from app.api.routers import agent, chat_history
 from app.core.rate_limit import limiter, api_uid_limiter
 from app.services import persistence_guard
-from app.services.agent_runs import AgentRunStore
+from app.services.agent_runs import APP_CONTEXT_OPEN, AgentRunStore, strip_app_context
 from app.services.chat_store import ChatStore, TurnStatusConflict
 from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentModel, AgentCompletion, measured_usage
@@ -100,7 +100,11 @@ def test_followups_use_all_completed_messages_without_compression(store):
     _, second = pending(store, chat_id=chat_id, request_id="two", question="What next?")
     messages = store.messages(UID, chat_id, second)
     assert [message["role"] for message in messages] == ["system", "user", "assistant", "user"]
-    assert [message["content"] for message in messages[1:]] == ["Question one", "A helpful answer", "What next?"]
+    assert [message["content"] for message in messages[1:-1]] == ["Question one", "A helpful answer"]
+    # The newest message carries the app's per-message context ahead of the
+    # user's words; replayed history stays exactly what was said (cacheable).
+    assert strip_app_context(messages[-1]["content"]) == "What next?"
+    assert messages[-1]["content"].startswith(APP_CONTEXT_OPEN)
 
 
 def test_final_turn_keeps_search_sources_from_previous_steps(store):

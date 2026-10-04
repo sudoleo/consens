@@ -900,6 +900,118 @@
   color: var(--dispute);
 }
 
+/* Gespeicherte Einzel-Erinnerungen: eine flache Liste wie die Bookmarks,
+   Text zuerst, Herkunft und Datum leise darunter, Aktionen am Zeilenende. */
+.settings-memory-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-memory-items-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.settings-memory-items-list:empty {
+  display: none;
+}
+
+.settings-memory-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.settings-memory-item-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.settings-memory-item-text {
+  color: var(--text-color);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+  overflow-wrap: anywhere;
+}
+
+.settings-memory-item-meta {
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-micro);
+}
+
+.settings-memory-item .settings-inline-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+
+.settings-memory-item.is-editing input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-memory-items-empty {
+  margin: 0;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.settings-memory-items-empty[hidden],
+.settings-memory-items-footer [hidden] {
+  display: none;
+}
+
+.settings-memory-item-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-memory-item-add input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-memory-item-add .settings-inline-btn,
+.settings-memory-item .settings-inline-btn {
+  white-space: nowrap;
+}
+
+.settings-memory-item-add .settings-inline-btn {
+  flex: 0 0 auto;
+}
+
+.settings-memory-items-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.settings-memory-items-count {
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+#clearMemoryItemsBtn[data-confirm="true"] {
+  color: var(--dispute);
+}
+
+@media (pointer: coarse) {
+  .settings-memory-item .settings-inline-btn {
+    min-height: 44px;
+  }
+}
+
 /* Die Erklaerung liegt zugeklappt unter dem Panel: sie muss verfuegbar sein,
    aber sie darf nicht das Erste sein, was man liest. */
 .settings-note {

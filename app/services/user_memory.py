@@ -97,6 +97,9 @@ def empty_profile() -> dict:
     return {
         "schema_version": PROFILE_SCHEMA_VERSION,
         "enabled": True,
+        # Opt-in: Agent may save, update and delete individual memories
+        # (agent_memory.py). Off unless the user switches it on.
+        "auto_memory": False,
         **{field: "" for field in PROFILE_FIELDS},
     }
 
@@ -140,6 +143,7 @@ def sanitize_profile(value: object, *, max_notes_chars: int = MAX_NOTES_CHARS) -
     # Kein Feld gesetzt heisst nicht "aus": ein leeres Profil rendert ohnehin
     # nichts. ``enabled`` ist die bewusste Pause bei gefuelltem Profil.
     profile["enabled"] = raw.get("enabled") is not False
+    profile["auto_memory"] = raw.get("auto_memory") is True
     for field in SHORT_PROFILE_FIELDS:
         profile[field] = _clean_field(raw.get(field))
     profile[NOTES_FIELD] = _clean_notes(raw.get(NOTES_FIELD), max_notes_chars)
@@ -150,14 +154,17 @@ def profile_is_empty(profile: dict) -> bool:
     return not any(str(profile.get(field) or "").strip() for field in PROFILE_FIELDS)
 
 
-def render_profile(profile: object, *, max_notes_chars: int = MAX_NOTES_CHARS) -> str:
+def render_profile(profile: object, *, max_notes_chars: int = MAX_NOTES_CHARS, items=()) -> str:
     """Der Profilblock fuer den System-Prompt -- oder "" , wenn es keinen gibt.
 
     "" ist der Normalfall fuer alle, die nichts eingetragen oder das Profil
     pausiert haben. Ein leerer Rahmen waere teurer Ballast in sechs Prompts.
+    ``items`` sind die einzeln gespeicherten Erinnerungen (agent_memory.py);
+    sie stehen nach der Notiz, weil sie die neuere Information tragen.
     """
     clean = sanitize_profile(profile, max_notes_chars=max_notes_chars)
-    if clean["enabled"] is not True or profile_is_empty(clean):
+    items = [item for item in (items or ()) if isinstance(item, dict) and str(item.get("text") or "").strip()]
+    if clean["enabled"] is not True or (profile_is_empty(clean) and not items):
         return ""
 
     lines: list[str] = []
@@ -188,6 +195,10 @@ def render_profile(profile: object, *, max_notes_chars: int = MAX_NOTES_CHARS) -
             note_text = notes[:room].rstrip()
             lines.append(f"{heading}\n{note_text}")
             used += len(heading) + len(note_text) + 2
+    if items:
+        rendered = "\n".join(f"- {' '.join(str(item['text']).split())}" for item in items)
+        lines.append("SAVED MEMORIES (individual facts and preferences kept in the user's memory; "
+                     f"newer than the note above):\n{rendered}")
     if not lines:
         return ""
 
@@ -372,6 +383,15 @@ class FirestoreUserMemoryRepository:
             max(0, int(raw.get("revision") or 0)),
         )
 
+    def get_with_items(self, uid: str, *, max_notes_chars: int = MAX_NOTES_CHARS) -> tuple[dict, list]:
+        """Profil und einzeln gespeicherte Erinnerungen in einem Read-Roundtrip."""
+        from app.services.agent_memory import FirestoreAgentMemoryRepository
+
+        snapshot = FirestoreAgentMemoryRepository(self.db).snapshot(uid, max_notes_chars=max_notes_chars)
+        if not snapshot.available:
+            raise UserMemoryUnavailable("memory read failed")
+        return snapshot.profile, list(snapshot.items)
+
     def save(
         self,
         uid: str,
@@ -413,6 +433,9 @@ class FirestoreUserMemoryRepository:
         preserve_existing_notes = (
             NOTES_FIELD not in raw or raw.get(NOTES_FIELD) is None
         )
+        # Dasselbe fuer den spaeter ergaenzten Agent-Schalter: wer ihn nicht
+        # sendet (alter Browser, interner Aufrufer), aendert ihn nicht.
+        preserve_auto_memory = raw.get("auto_memory") is None
         written = datetime.now(timezone.utc) if now is None else now
         profile_ref = self._profile_ref(uid)
         saved: dict[str, dict] = {}
@@ -430,6 +453,8 @@ class FirestoreUserMemoryRepository:
                 raise MemoryRevisionConflict(current_revision)
             if preserve_existing_notes:
                 raw[NOTES_FIELD] = (previous or {}).get(NOTES_FIELD, "")
+            if preserve_auto_memory:
+                raw["auto_memory"] = (previous or {}).get("auto_memory") is True
             clean = sanitize_profile(raw, max_notes_chars=max_notes_chars)
             revision = current_revision + 1
             transaction.set(
@@ -496,6 +521,10 @@ def load_profile_text(
         return ""
 
     def load():
+        get_with_items = getattr(repository, "get_with_items", None)
+        if callable(get_with_items):
+            profile, items = get_with_items(uid, max_notes_chars=max_notes_chars)
+            return render_profile(profile, max_notes_chars=max_notes_chars, items=items)
         try:
             profile = repository.get(uid, max_notes_chars=max_notes_chars)
         except TypeError:

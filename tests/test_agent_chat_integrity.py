@@ -91,7 +91,7 @@ def test_interrupted_visible_answer_is_in_next_turn_context_without_private_fail
     assert messages[1]["role"] == "user" and messages[1]["content"] == "Question one"
     assert messages[2]["role"] == "assistant" and ANSWER in messages[2]["content"]
     assert "incomplete or unreviewed" in messages[2]["content"]
-    assert messages[-1]["content"] == "Explain point 2."
+    assert messages[-1]["content"].endswith("\n\nExplain point 2.")
 
 
 def test_failed_turn_without_an_answer_keeps_the_users_request(store):

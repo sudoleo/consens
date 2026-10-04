@@ -28,11 +28,17 @@
     loaded: false,
     loading: false,
     saving: false,
-    uid: null
+    uid: null,
+    items: [],          // gespeicherte Einzel-Erinnerungen (Agent oder Nutzer)
+    itemsRevision: null,
+    itemsBusy: false,
+    editingId: null,
+    confirmClear: false,
+    maxItems: 100
   };
 
   function emptyProfile() {
-    const profile = { enabled: true };
+    const profile = { enabled: true, auto_memory: false };
     FIELDS.forEach(field => { profile[field] = ""; });
     return profile;
   }
@@ -45,6 +51,15 @@
     return {
       section: document.getElementById("memorySettingsSection"),
       enabled: document.getElementById("memoryEnabledSwitch"),
+      auto: document.getElementById("memoryAutoSwitch"),
+      itemsList: document.getElementById("memoryItemsList"),
+      itemsEmpty: document.getElementById("memoryItemsEmpty"),
+      itemForm: document.getElementById("memoryItemAddForm"),
+      itemInput: document.getElementById("memoryItemInput"),
+      itemAdd: document.getElementById("memoryItemAddBtn"),
+      itemsCount: document.getElementById("memoryItemsCount"),
+      itemsClear: document.getElementById("clearMemoryItemsBtn"),
+      itemsStatus: document.getElementById("memoryItemsStatus"),
       saveBtn: document.getElementById("saveMemoryBtn"),
       clearBtn: document.getElementById("clearMemoryBtn"),
       status: document.getElementById("memoryStatus"),
@@ -97,13 +112,13 @@
     }
   }
 
-  async function api(method, body) {
+  async function api(method, body, path) {
     const user = currentUser();
     if (!user) throw new Error("Please log in first.");
     const uid = user.uid;
     const token = await user.getIdToken();
     if (window.auth?.currentUser?.uid !== uid) throw new Error("Authentication changed.");
-    const response = await fetch("/api/my/memory", {
+    const response = await fetch(path || "/api/my/memory", {
       method,
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: body ? JSON.stringify(body) : undefined
@@ -146,7 +161,7 @@
   // ungefiltert zurueckgeschickt werden -- genau das liess den Schalter mit 422
   // scheitern und die Checkbox zurueckspringen.
   function requestBody(profile) {
-    const body = { enabled: profile?.enabled !== false };
+    const body = { enabled: profile?.enabled !== false, auto_memory: profile?.auto_memory === true };
     FIELDS.forEach(field => {
       body[field] = typeof profile?.[field] === "string" ? profile[field] : "";
     });
@@ -158,7 +173,9 @@
 
   function readForm() {
     const { enabled, inputs } = els();
-    const profile = { enabled: enabled ? !!enabled.checked : true };
+    // Der Agent-Schalter speichert sofort; das Formular traegt nur den
+    // gespeicherten Stand weiter, nie einen halben Klick.
+    const profile = { enabled: enabled ? !!enabled.checked : true, auto_memory: state.saved?.auto_memory === true };
     FIELDS.forEach(field => {
       profile[field] = (inputs[field]?.value || "").trim();
     });
@@ -166,8 +183,9 @@
   }
 
   function writeForm(profile) {
-    const { enabled, inputs } = els();
+    const { enabled, auto, inputs } = els();
     if (enabled) enabled.checked = profile.enabled !== false;
+    if (auto) auto.checked = profile.auto_memory === true;
     FIELDS.forEach(field => {
       if (inputs[field]) inputs[field].value = profile[field] || "";
     });
@@ -206,6 +224,11 @@
 
     const disabled = !signedIn || state.loading || state.saving;
     if (enabled) enabled.disabled = disabled;
+    const { auto } = els();
+    // Ohne gelesenes Memory kann der Agent nichts abgleichen: der Schalter
+    // gilt nur, solange "Use my memory" an ist.
+    if (auto) auto.disabled = disabled || state.saved?.enabled === false;
+    syncItemControls();
     FIELDS.forEach(field => {
       if (inputs[field]) inputs[field].disabled = disabled;
     });
@@ -252,6 +275,7 @@
       state.uid = user.uid;
       state.loaded = true;
       writeForm(profile);
+      receiveItems(result);
       setStatus("", "");
     } catch (error) {
       setStatus(error.message || "Memory could not be loaded.", "error");
@@ -280,8 +304,9 @@
         // Nur der Schalter wurde geschrieben. Die Textfelder bleiben, wie der
         // Nutzer sie gerade hat -- ein Klick auf "Use my memory" darf einen
         // halb getippten Satz weder speichern noch wegwerfen.
-        const { enabled } = els();
+        const { enabled, auto } = els();
         if (enabled) enabled.checked = saved.enabled !== false;
+        if (auto) auto.checked = saved.auto_memory === true;
       }
       setStatus(successMessage, "ok");
       window.App?.trackAppEvent?.("app_memory_saved");
@@ -337,6 +362,208 @@
     if (!ok) enabled.checked = !wanted;
   }
 
+  async function toggleAuto() {
+    const { auto } = els();
+    if (!auto) return;
+    if (!currentUser()) {
+      auto.checked = !auto.checked;
+      setStatus("Please log in first.", "error");
+      return;
+    }
+    const wanted = auto.checked;
+    if (!state.loaded) {
+      await load();
+      auto.checked = wanted;
+    }
+    const next = { ...(state.saved || emptyProfile()), auto_memory: wanted };
+    const ok = await persist(
+      next,
+      wanted ? "Agent can now update your memory. Every change shows under its answer."
+        : "Agent no longer changes your memory. Saved memories stay until you delete them.",
+      { rewriteFields: false }
+    );
+    if (!ok) auto.checked = !wanted;
+    else window.App?.trackAppEvent?.(wanted ? "app_auto_memory_on" : "app_auto_memory_off");
+  }
+
+  // --- Gespeicherte Erinnerungen ---------------------------------------------
+  // Jede Aenderung geht sofort an den Server (Compare-and-swap auf die
+  // Listen-Revision). Hat ein Agent-Lauf dazwischen geschrieben, antwortet der
+  // Server 409; die Liste wird neu geladen statt still ueberschrieben.
+
+  function setItemsStatus(message, tone) {
+    const { itemsStatus } = els();
+    if (!itemsStatus) return;
+    itemsStatus.textContent = message || "";
+    itemsStatus.dataset.tone = tone || "";
+  }
+
+  function receiveItems(result) {
+    if (!Array.isArray(result?.items)) return;
+    state.items = result.items;
+    if (Number.isInteger(result.items_revision)) state.itemsRevision = result.items_revision;
+    if (Number.isInteger(result.limits?.items)) state.maxItems = result.limits.items;
+    const { itemInput } = els();
+    if (itemInput && Number.isInteger(result.limits?.item_chars)) itemInput.maxLength = result.limits.item_chars;
+    if (state.editingId && !state.items.some(item => item.id === state.editingId)) state.editingId = null;
+    renderItems();
+  }
+
+  function itemDate(item) {
+    const stamp = Date.parse(item.updated_at || item.created_at || "");
+    return Number.isFinite(stamp)
+      ? new Date(stamp).toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" })
+      : "";
+  }
+
+  function itemButton(label, handler, ariaLabel) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "settings-inline-btn";
+    button.textContent = label;
+    if (ariaLabel) button.setAttribute("aria-label", ariaLabel);
+    button.addEventListener("click", handler);
+    return button;
+  }
+
+  function renderItems() {
+    const { itemsList, itemsEmpty, itemsCount, itemInput } = els();
+    if (!itemsList) return;
+    itemsList.replaceChildren(...state.items.map(item => {
+      const row = document.createElement("li");
+      row.className = "settings-memory-item";
+      row.dataset.itemId = item.id;
+      if (state.editingId === item.id) {
+        row.classList.add("is-editing");
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = item.text;
+        input.maxLength = itemInput?.maxLength > 0 ? itemInput.maxLength : 300;
+        input.setAttribute("aria-label", "Edit memory");
+        input.addEventListener("keydown", event => {
+          if (event.key === "Enter") { event.preventDefault(); saveEdit(item, input.value); }
+          if (event.key === "Escape") { event.preventDefault(); state.editingId = null; renderItems(); }
+        });
+        row.append(input,
+          itemButton("Save", () => saveEdit(item, input.value)),
+          itemButton("Cancel", () => { state.editingId = null; renderItems(); }));
+        requestAnimationFrame(() => input.focus());
+        return row;
+      }
+      const body = document.createElement("div");
+      body.className = "settings-memory-item-body";
+      const text = document.createElement("span");
+      text.className = "settings-memory-item-text";
+      text.textContent = item.text;
+      const meta = document.createElement("small");
+      meta.className = "settings-memory-item-meta";
+      meta.textContent = [item.origin === "agent" ? "Saved by Agent" : "Added by you", itemDate(item)]
+        .filter(Boolean).join(" · ");
+      body.append(text, meta);
+      row.append(body,
+        itemButton("Edit", () => { state.editingId = item.id; renderItems(); }, `Edit memory: ${item.text}`),
+        itemButton("Delete", () => changeItems([{ op: "delete", id: item.id }], "Deleted."), `Delete memory: ${item.text}`));
+      return row;
+    }));
+    if (itemsEmpty) itemsEmpty.hidden = state.items.length > 0;
+    if (itemsCount) {
+      const near = state.items.length >= state.maxItems * 0.8;
+      itemsCount.textContent = state.items.length
+        ? `${state.items.length}${near ? ` of ${state.maxItems}` : ""} saved`
+        : "";
+    }
+    syncItemControls();
+  }
+
+  function syncItemControls() {
+    const { itemsList, itemInput, itemAdd, itemsClear } = els();
+    const disabled = !currentUser() || !state.loaded || state.itemsBusy;
+    if (itemInput) itemInput.disabled = disabled;
+    if (itemAdd) itemAdd.disabled = disabled;
+    if (itemsClear) {
+      itemsClear.hidden = !state.items.length;
+      itemsClear.disabled = disabled;
+      // Zwei Klicks statt eines Browser-Dialogs: der erste fragt, der zweite loescht.
+      itemsClear.textContent = state.confirmClear ? "Delete all saved memories?" : "Delete all";
+      itemsClear.dataset.confirm = state.confirmClear ? "true" : "";
+    }
+    itemsList?.querySelectorAll("button, input").forEach(control => { control.disabled = disabled; });
+  }
+
+  async function changeItems(changes, successMessage) {
+    if (!currentUser() || state.itemsBusy) return false;
+    state.itemsBusy = true;
+    setItemsStatus("Saving…", "muted");
+    syncItemControls();
+    try {
+      const result = await api("POST", { changes, expected_revision: state.itemsRevision ?? 0 }, "/api/my/memory/items");
+      state.editingId = null;
+      receiveItems(result);
+      setItemsStatus(successMessage, "ok");
+      return true;
+    } catch (error) {
+      if (error.status === 409 && error.code === "revision_conflict") {
+        await reloadItems();
+        setItemsStatus("Memory changed in the meantime. The list was reloaded; please try again.", "error");
+      } else {
+        setItemsStatus(error.message || "Memory could not be saved.", "error");
+      }
+      return false;
+    } finally {
+      state.itemsBusy = false;
+      syncItemControls();
+    }
+  }
+
+  function saveEdit(item, value) {
+    const text = String(value || "").trim();
+    if (!text) return changeItems([{ op: "delete", id: item.id }], "Deleted.");
+    if (text === item.text) {
+      state.editingId = null;
+      renderItems();
+      return Promise.resolve(true);
+    }
+    return changeItems([{ op: "update", id: item.id, text }], "Updated.");
+  }
+
+  async function addItem(event) {
+    event?.preventDefault();
+    const { itemInput } = els();
+    const text = (itemInput?.value || "").trim();
+    if (!text) return;
+    if (await changeItems([{ op: "add", text }], "Saved.")) itemInput.value = "";
+  }
+
+  async function clearItems() {
+    clearTimeout(state.confirmTimer);
+    if (!state.confirmClear) {
+      state.confirmClear = true;
+      syncItemControls();
+      state.confirmTimer = setTimeout(() => { state.confirmClear = false; syncItemControls(); }, 5000);
+      return;
+    }
+    state.confirmClear = false;
+    state.itemsBusy = true;
+    syncItemControls();
+    try {
+      receiveItems(await api("DELETE", null, "/api/my/memory/items"));
+      setItemsStatus("All saved memories deleted.", "ok");
+    } catch (error) {
+      setItemsStatus(error.message || "Memory could not be deleted.", "error");
+    } finally {
+      state.itemsBusy = false;
+      syncItemControls();
+    }
+  }
+
+  async function reloadItems() {
+    try {
+      receiveItems(await api("GET"));
+    } catch (error) {
+      setItemsStatus(error.message || "Memory could not be loaded.", "error");
+    }
+  }
+
   function clearFields() {
     const { inputs } = els();
     FIELDS.forEach(field => {
@@ -364,6 +591,14 @@
     saveBtn?.addEventListener("click", save);
     clearBtn?.addEventListener("click", clearFields);
     enabled?.addEventListener("change", toggleEnabled);
+    els().auto?.addEventListener("change", toggleAuto);
+    els().itemForm?.addEventListener("submit", addItem);
+    els().itemsClear?.addEventListener("click", clearItems);
+    // Undo unter einer Antwort: nur die Liste nachziehen. Ein ungespeicherter
+    // Entwurf in den Textfeldern bleibt unberuehrt.
+    window.addEventListener("consensio:memory-changed", () => {
+      if (state.loaded) reloadItems();
+    });
     FIELDS.forEach(field => {
       inputs[field]?.addEventListener("input", () => {
         updateCounts();
@@ -378,6 +613,10 @@
       state.saved = null;
       state.revision = null;
       state.uid = null;
+      state.items = [];
+      state.itemsRevision = null;
+      state.editingId = null;
+      renderItems();
       // Nur den Stand verwerfen, NICHT nachladen: dieses Ereignis feuert bei
       // jedem Seitenaufruf eines eingeloggten Kontos. Ein Fetch hier haette den
       // Read, den der Modal-Oeffner bewusst aufschiebt, an jeden Aufruf

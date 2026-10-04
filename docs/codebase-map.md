@@ -285,7 +285,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. `compare_models.memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -293,7 +293,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad (`PASSWORD_RESET`-Mail mit `continueUrl = {PUBLIC_SITE_URL}/app?setup=1`, damit Firebases „Passwort gespeichert“-Seite zurück in den vorausgefüllten Login führt; lehnt Firebase die Continue-URL mit 400 ab, geht dieselbe Mail ohne sie raus). Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `firebase_auth_proxy.py` | Same-Origin-Proxy für Firebases Sign-in-Helfer: `GET/HEAD/POST /__/auth/*` und `GET /__/firebase/init.json` werden transparent an `https://<FIREBASE_PROJECT_ID>.firebaseapp.com` (überschreibbar per `FIREBASE_AUTH_PROXY_UPSTREAM`) weitergereicht (Firebase „redirect best practices“, Proxy-Option). Weitergereicht werden nur Request-Zeile, Content-Negotiation-Header und der Handler-Body, nie Cookies/Authorization; zurück nur Inhalts-/Cache-Header, kein `Set-Cookie`. `CustomSecurityMiddleware` lässt auf diesen Pfaden die App-CSP weg und setzt `X-Frame-Options: SAMEORIGIN` (das `/__/auth/iframe` rahmt die App selbst). Wirksam erst, wenn `FIREBASE_AUTH_DOMAIN` den App-Host nennt (siehe §7). Ohne Projekt-ID 404, Upstream-Fehler neutral 502. |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `POST`/`DELETE /api/my/memory/items` und `POST /api/my/memory/changes/{change_id}/undo` (gespeicherte Einzel-Erinnerungen, siehe §3 „Agent-Memory“), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call, 6/min; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
@@ -1041,7 +1041,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Absatz + vier Aufzählungspunkte vor den Eingabefeldern — eine Textwand vor
   dem eigentlichen Formular. Die Zeichenzähler erscheinen erst ab 80 % der
   Feldgrenze (`data-near`), vier dauerhafte „0/250" wären vier Zahlen ohne
-  Aussage. Es gibt weiterhin **keine automatische Ableitung** aus Antworten;
+  Aussage. Ohne das Opt-in „Let Agent update memory“ (siehe „Agent-Memory“
+  unten) gibt es **keine automatische Ableitung** aus Antworten;
   Remember/Correct memory braucht eine markierte Aussage plus ausdrückliche
   Nutzereingabe. Den früheren Memory-Button neben **Senden** („Save to Memory
   instead of asking“, `#rememberDraftButton`) gibt es seit 2026-08-17 nicht mehr:
@@ -1075,8 +1076,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Profil-Schalter eine kurze Read-only-Grenze: Antwortmodelle dürfen weder
   behaupten noch andeuten, persönliche Informationen gespeichert, geändert
   oder für künftige Requests vorgemerkt zu haben. Dieselbe Negativregel steht
-  im Consensus-Prompt. Schreiben kann ausschließlich der explizite
-  Memory-Endpoint; Watch, Publisher und Topics bleiben weiterhin außerhalb.
+  im Consensus-Prompt. Schreiben können nur die expliziten Memory-Endpunkte
+  und — nach Opt-in — der Agent über `agent_memory.py`; die Antwortmodelle der
+  `/ask_*`-Läufe nie. Watch, Publisher und Topics bleiben weiterhin außerhalb.
   Speicher: `users/{uid}/memory/profile` (Schema v2; alte v1-Dokumente ohne
   `notes` bleiben kompatibel), Write transaktional hinter
   `persistence_guard`, Löschung über `_delete_user_subcollections` (die
@@ -1165,6 +1167,62 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   weder das Memory des neuen Kontos neu lädt noch dessen UI einen alten
   Undo-Hinweis zeigt. Tokenrefresh desselben Kontos bleibt unberührt. Memory-Inhalte erscheinen weder in Logs noch
   Metriken/Alerts. Watch, Publisher, Topics, Judge und Shares bleiben außerhalb.
+- **Agent-Memory (`app/services/agent_memory.py`, `agent-memory.js`, seit
+  2026-10-04)** — neben Profil und Notiz eine Liste kurzer Einzel-Erinnerungen
+  (`users/{uid}/memory/entries`, **ein** Dokument: `items[]` mit
+  `{id: m+6 hex, text ≤ 300, origin agent|user, created_at, updated_at}`,
+  höchstens 100; `revision`; Undo-Log `changes[]` mit Vorher/Nachher, höchstens
+  50 Einträge und 30 Tage, `changes_purge_at` für die stündliche Retention
+  `cleanup_memory_change_logs`). Der Agent **schreibt nur nach Opt-in**:
+  Settings → Memory → „Let Agent update memory“ (`auto_memory` im
+  Profil-Dokument, Default aus, nur wirksam bei `enabled`). Dann entscheidet der
+  Orchestrator selbst, was er speichert, ändert oder löscht — ohne zusätzlichen
+  Modellaufruf: Änderungen reiten als optionales Feld `memory` auf dem ohnehin
+  fälligen `compare_models`-Aufruf (`agent_comparison.py` baut das Schema per
+  `create_model`, die Ausführung in `DelegationLoop._execute`; ein abgelehnter
+  Memory-Teil bricht den Vergleich nie ab, das Ergebnis steht unter `memory`
+  im Tool-Result und nie im gespeicherten Vergleich). Eine Nachricht, die nur
+  ums Merken/Vergessen bittet, nutzt das Tool `update_memory` und antwortet
+  danach direkt; `_free_floor` lässt diese Direktantwort im freien Modus zu.
+  Serverseitige Verträge: (1) jede Agent-Änderung trägt `evidence`, ein
+  wörtliches Zitat, das in einer **Nutzer**-Nachricht des Chats vorkommen muss
+  (`evidence_matches`, normalisiert nur Groß-/Kleinschreibung, Leerraum,
+  typografische Anführungen) — Text aus Webseiten, Dateien, Mails oder
+  Tool-Ergebnissen kann so nicht ins Gedächtnis (Memory-Poisoning); (2)
+  `looks_like_secret` weist Keys, Passwörter, Karten- (Luhn) und IBAN-Nummern
+  für jede Herkunft ab; (3) `FirestoreAgentMemoryRepository.apply` prüft in
+  derselben Transaktion Tombstone, `auto_memory`/`enabled` und dass der Turn
+  noch `pending` ist, schreibt alles-oder-nichts, dedupliziert gleiche Texte
+  (No-op) und hängt eine Kurzfassung an `turn.agent_memory`
+  (`{change_id, op, item_id, text, undone}`, höchstens 12 je Turn, über
+  `chat_store`-Allowlist im Turn-View). Jede angewandte Änderung geht live als
+  SSE-Event `memory` (`{changes: [...]}`) an den Browser. Gelesen wird pro Turn
+  genau einmal (`snapshot`: Profil + Einträge in einem `get_all`, fail-open,
+  bewusst ohne prozessweiten Cache, damit gelöschte Erinnerungen sofort aus dem
+  nächsten Prompt verschwinden). Prompt: `orchestrator_prompt` hängt
+  Memory-Daten plus die passende Regel (schreiben / nur lesen / pausiert) **ans
+  Ende** des System-Prompts; `synthesis_prompt` gibt dem Antwortschritt dieselben
+  Daten ohne IDs und ohne Schreibregeln. Vergleichsmodelle sehen Memory nicht
+  pauschal: der Orchestrator gibt relevante Punkte im `compare_models`-Kontext
+  weiter (gegen den gemeinsamen Bias, siehe Deckel oben). `/ask_*` rendert die
+  Einträge über `render_profile(items=...)` nach der Notiz.
+  Endpunkte (users.py): `GET /api/my/memory` liefert zusätzlich `items`,
+  `items_revision` und `limits.items/item_chars`; `PUT` nimmt `auto_memory`
+  (fehlt das Feld, bleibt der gespeicherte Wert — alte Browser setzen ihn nicht
+  zurück); `POST /api/my/memory/items` (`changes` ≤ 20, `expected_revision`,
+  409 `revision_conflict` mit Revision), `DELETE /api/my/memory/items` (löscht
+  Einträge **und** Undo-Log), `POST /api/my/memory/changes/{id}/undo` (stellt
+  nur wieder her, solange jeder betroffene Eintrag exakt im Nachher-Zustand ist,
+  sonst 409 `undo_conflict`; idempotent; markiert `turn.agent_memory` als
+  `undone`). UI: `user-memory.js` zeigt Schalter `#memoryAutoSwitch` (gesperrt
+  bei pausiertem Memory, speichert sofort nur sich selbst), die Liste
+  `#memoryItemsSection` mit Bearbeiten/Löschen/Hinzufügen und zweistufigem
+  „Delete all“; `agent-memory.js` (`App.agentMemory.render/receive`) zeigt unter
+  Live-, wiedergeöffneten und Verlaufsantworten „Memory updated“ mit
+  Undo und „Manage memory“ (öffnet Settings, Memory ist der erste Reiter).
+  `consensio:memory-changed` lässt eine geladene Settings-Liste nachladen.
+  `MOCK_LLM`: eine Agent-Frage „Remember: <Fakt>“ speichert den Fakt, damit der
+  Ablauf ohne Provider im Browser prüfbar ist.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,stripMath,render}`.
@@ -2139,6 +2197,22 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 ## 4. Kern-Flows
 
 ### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
+
+**Prompt-Caching (seit 2026-10-04).** Der System-Prompt des Orchestrators ist
+über alle Nachrichten eines Chats byte-gleich: `AgentRunStore.messages` legt
+nur `prompts.agent` ins System; Uhrzeit (sekundengenau) und gewähltes Modell
+stehen als App-Kontextblock (`with_app_context`, Marker
+`APP_CONTEXT_OPEN/CLOSE`) **vor** der neuesten Nutzerfrage, die
+Verlaufsnachrichten bleiben wörtlich. Vorher stand die Uhrzeit oben im System
+und machte jeden Cache ab dort bei jeder Nachricht ungültig.
+`DelegationLoop` hängt danach (wie bisher) Orchestrator-/Vergleichsregeln an
+und zuletzt Memory, sodass eine Memory-Änderung nur ab dort neu cached.
+`answer_conversation` entfernt den App-Kontextblock (`strip_app_context`), der
+Antwortschritt hat seine eigene Uhr. `prompt_cache_control` setzt für
+`anthropic/`- und `qwen/`-Modelle OpenRouters automatisches
+`cache_control: {type: ephemeral}` (die übrigen Anbieter cachen Präfixe selbst);
+gemessene `cached_input_tokens`/`cache_write_tokens` laufen wie bisher über
+`measured_usage` in Kosten und Kontingent.
 
 **Zugang seit 2026-10-02: jedes angemeldete Konto.** `require_agent_access`
 verlangt nur noch eine UID (`/user_status` meldet `agent_access: true`); das
@@ -4910,6 +4984,7 @@ app/services/llm/
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
+  agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
@@ -5324,6 +5399,13 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   gelöscht; der Undo-Vorzustand darin verfällt nach 30 Tagen. Single-Field-
   Collection-Group-Indizes auf `memory.undo_expires_at` und `memory.lease_until`
   (`firestore.indexes.json`) tragen die Retention-Queries.
+- `users/{uid}/memory/entries` — gespeicherte Einzel-Erinnerungen (`items`,
+  `revision`, Undo-Log `changes`, `changes_purge_at`, siehe §3 „Agent-Memory“);
+  `users/{uid}/memory/profile` trägt zusätzlich `auto_memory`. `items` und
+  `changes` sind vom Indexing ausgenommen, `memory.changes_purge_at` hat einen
+  Collection-Group-Index für `cleanup_memory_change_logs` (stündlicher
+  Retention-Loop). Agent-Turns tragen `agent_memory` (Kurzfassung der
+  Änderungen); gelöscht mit Chat bzw. Konto.
 - `chat_deletion_jobs/{sha256(uid:chat)[:40]}` — dauerhafte, idempotente
   Einzelchat-Löschaufträge (`uid`, `chat_id`, `status`, `attempts`,
   `last_error`-Kategorie, `next_attempt_at`), angelegt atomar mit dem

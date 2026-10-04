@@ -1025,7 +1025,7 @@
             aria-labelledby="settingsMemoryTitle">
             <div class="settings-category-heading">
               <h3 id="settingsMemoryTitle">Memory</h3>
-              <p>What every model should remember about you. Add new memories or correct outdated ones explicitly.</p>
+              <p>What consens.io remembers about you across chats. You decide what goes in, and you can change or delete it any time.</p>
             </div>
             <div class="settings-group">
               <div class="settings-section">
@@ -1036,6 +1036,33 @@
                   </span>
                   <input type="checkbox" id="memoryEnabledSwitch">
                 </label>
+                <label for="memoryAutoSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Let Agent update memory</strong>
+                    <small>Agent saves, updates and forgets details you share in chats. Every change shows under its answer with Undo.</small>
+                  </span>
+                  <input type="checkbox" id="memoryAutoSwitch">
+                </label>
+              </div>
+
+              <div class="settings-section settings-memory-items" id="memoryItemsSection">
+                <div class="settings-memory-subheading">
+                  <h4>Saved memories</h4>
+                  <p>Short facts and preferences, saved by Agent or by you. They go with your questions while Memory is on.</p>
+                </div>
+                <ul id="memoryItemsList" class="settings-memory-items-list" aria-label="Saved memories"></ul>
+                <p id="memoryItemsEmpty" class="settings-memory-items-empty">Nothing saved yet.</p>
+                <form id="memoryItemAddForm" class="settings-memory-item-add" novalidate>
+                  <label class="visually-hidden" for="memoryItemInput">Add a memory</label>
+                  <input type="text" id="memoryItemInput" maxlength="300" autocomplete="off"
+                    placeholder="Add a memory, e.g. Prefers metric units.">
+                  <button type="submit" id="memoryItemAddBtn" class="settings-inline-btn">Add</button>
+                </form>
+                <div class="settings-memory-items-footer">
+                  <span id="memoryItemsCount" class="settings-memory-items-count"></span>
+                  <button type="button" id="clearMemoryItemsBtn" class="settings-inline-btn">Delete all</button>
+                  <span id="memoryItemsStatus" class="settings-memory-status" role="status" aria-live="polite"></span>
+                </div>
               </div>
 
               <div class="settings-section settings-memory-fields">
@@ -1072,12 +1099,12 @@
                 </div>
 
                 <div class="settings-memory-subheading settings-memory-subheading--notes">
-                  <h4>Saved memories</h4>
+                  <h4>Memory note</h4>
                   <p>Paste a longer memory summary or keep your own background note here. It is plain text;
                     Luna may add or patch one passage only when you explicitly submit a Remember or Correct memory action.</p>
                 </div>
                 <div class="settings-memory-field settings-memory-field--notes">
-                  <label class="settings-field-label" for="memoryNotesInput">Memory note</label>
+                  <label class="settings-field-label" for="memoryNotesInput">Note</label>
                   <textarea id="memoryNotesInput" rows="12" maxlength="12000" data-memory-field="notes"
                     placeholder="Paste your existing ChatGPT memory summary or write your own notes…"></textarea>
                   <span class="settings-memory-count" data-memory-count-for="memoryNotesInput"
@@ -1088,7 +1115,7 @@
 
                 <div class="settings-memory-actions">
                   <button id="saveMemoryBtn" class="btn save-prompt-btn" type="button">Save memory</button>
-                  <button id="clearMemoryBtn" class="settings-inline-btn" type="button">Clear all</button>
+                  <button id="clearMemoryBtn" class="settings-inline-btn" type="button">Clear fields</button>
                   <span id="memoryStatus" class="settings-memory-status" role="status" aria-live="polite"></span>
                 </div>
               </div>
@@ -1097,9 +1124,13 @@
             <details class="settings-note">
               <summary>How it works</summary>
               <p>It shapes <strong>how</strong> you are answered, never <strong>what</strong> is true — where
-                your profile and the evidence disagree, the evidence wins. Nothing is collected
-                automatically; only what you type here or explicitly submit through Remember or Correct memory is used. It is stored on your account, reaches every
+                your memory and the evidence disagree, the evidence wins. It is stored on your account, reaches every
                 device, and is deleted with your account. Watch reruns never use it.</p>
+              <p>Nothing is collected automatically unless you switch on <strong>Let Agent update memory</strong>.
+                Then Agent decides what is worth keeping from <strong>your own messages</strong> — never from web pages,
+                files or emails — and shows every change under its answer with Undo. It does not store passwords, keys or
+                account numbers, and saves health, beliefs or similar sensitive details only when you explicitly ask.
+                Switch it off and nothing new is saved; what was saved stays until you delete it here.</p>
               <p>The four About you fields are intentionally short. The server applies your plan’s limit (Free, Plus or Pro) to Saved memories,
                 but a long shared note can pull all six models towards the same framing and make the agreement score
                 look higher than it is. Please leave out health details, beliefs, or other people's personal data.</p>
