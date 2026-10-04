@@ -18,7 +18,7 @@ import threading
 
 CASES = {
     "WP-01": ("app.services.watch_service", "create_watch", [
-        ("if not bypass_active_limit and active_count >= cfg.get_watch_active_limit(tier):", "if False:")],
+        ("if active_count >= cfg.get_watch_active_limit(tier):", "if False:")],
         "test_phase2_transactions.py::test_two_workers_cannot_exceed_owner_watch_limit"),
     "WP-02": ("app.services.share_snapshots", "report_share", [
         ("count = old_count + 1 if isinstance(old_count, int) and old_count >= 0 else 1", "count = 1")],

@@ -237,7 +237,6 @@ class WatchCrudTests(unittest.TestCase):
             share_id=self.share_id,
             interval="weekly",
             tier="pro",
-            model_tier="free",
             db=self.db,
         )
         self.assertIn(created["id"], self.db.stores[watch_service.WATCHES_COLLECTION])
@@ -247,7 +246,6 @@ class WatchCrudTests(unittest.TestCase):
         # the watch-index area was acknowledged in an earlier pass.
         self.db.stores["users/u1/watch_state"].clear()
         self.db.stores["users/u1/watch_uniques"].clear()
-        self.db.stores[watch_service.RUNTIME_COLLECTION].clear()
         self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
             "status": "pending",
             "completed_areas": {"watch_indexes": True},
@@ -257,7 +255,6 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(self.db.stores[watch_service.WATCHES_COLLECTION], {})
         self.assertEqual(self.db.stores["users/u1/watch_state"], {})
         self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
-        self.assertEqual(self.db.stores[watch_service.RUNTIME_COLLECTION], {})
 
         # A repeated cleanup remains idempotent and cannot resurrect indexes.
         self.assertEqual(watch_service.delete_watches_for_owner("u1", db=self.db), 0)
@@ -270,12 +267,10 @@ class WatchCrudTests(unittest.TestCase):
             share_id=self.share_id,
             interval="weekly",
             tier="pro",
-            model_tier="free",
             db=self.db,
         )
         self.db.stores["users/u1/watch_state"].clear()
         self.db.stores["users/u1/watch_uniques"].clear()
-        self.db.stores[watch_service.RUNTIME_COLLECTION].clear()
         self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
             "status": "pending",
             "completed_areas": {"watch_indexes": True},
@@ -291,7 +286,6 @@ class WatchCrudTests(unittest.TestCase):
         self.assertNotIn(created["id"], self.db.stores[watch_service.WATCHES_COLLECTION])
         self.assertEqual(self.db.stores["users/u1/watch_state"], {})
         self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
-        self.assertEqual(self.db.stores[watch_service.RUNTIME_COLLECTION], {})
 
     def test_normal_delete_reseeds_missing_watch_indexes_for_counter_updates(self):
         created = watch_service.create_watch(
@@ -299,12 +293,10 @@ class WatchCrudTests(unittest.TestCase):
             share_id=self.share_id,
             interval="weekly",
             tier="pro",
-            model_tier="free",
             db=self.db,
         )
         self.db.stores["users/u1/watch_state"].clear()
         self.db.stores["users/u1/watch_uniques"].clear()
-        self.db.stores[watch_service.RUNTIME_COLLECTION].clear()
 
         watch_service.delete_watch("u1", created["id"], db=self.db)
 
@@ -312,12 +304,6 @@ class WatchCrudTests(unittest.TestCase):
             self.db.stores["users/u1/watch_state"]["quota"]["active_count"], 0
         )
         self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
-        self.assertEqual(
-            self.db.stores[watch_service.RUNTIME_COLLECTION][
-                watch_service.PUBLISHER_COUNTER_ID
-            ]["active_count"],
-            0,
-        )
 
     def test_watch_requires_one_notification_channel(self):
         with self.assertRaisesRegex(WatchError, "e-mail or Telegram"):
@@ -442,51 +428,74 @@ class WatchCrudTests(unittest.TestCase):
         with self.assertRaisesRegex(WatchError, "already watched"):
             watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", tier="pro", db=self.db)
 
-    def test_publisher_watch_is_free_pinned_and_idempotent(self):
-        self.db.stores["shares"][self.share_id]["publication_source"] = "scheduled_publisher"
+    def _legacy_publisher_watch(self):
+        """A watch as the retired Publisher left it: pinned to the Free tier."""
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", tier="pro",
-            model_tier="free", return_existing=True, db=self.db,
+            "u1", share_id=self.share_id, interval="weekly", tier="pro", db=self.db,
         )
-        repeated = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", tier="pro",
-            model_tier="free", return_existing=True, db=self.db,
-        )
+        stored = self.db.stores["watches"][created["id"]]
+        stored["model_tier"] = "free"
+        stored["publication_source"] = "scheduled_publisher"
+        return created["id"]
 
-        self.assertEqual(created["id"], repeated["id"])
-        self.assertEqual(created["model_tier"], "free")
-        # A Publisher watch pins the tier and the schedule, nothing else. It
-        # must not carry a provider filter of its own.
-        self.assertNotIn("excluded_providers", created)
-        self.assertNotIn(
-            "excluded_providers", self.db.stores["watches"][created["id"]]
+    def test_new_watches_are_never_pinned_to_the_free_tier(self):
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", tier="pro", db=self.db,
         )
-        self.assertEqual(self.db.stores["watches"][created["id"]]["model_tier"], "free")
+        self.assertEqual(created["model_tier"], "account")
+        stored = self.db.stores["watches"][created["id"]]
+        self.assertEqual(stored["model_tier"], "")
+        self.assertNotIn("publication_source", stored)
+        self.assertNotIn("publication_source", created)
+        with self.assertRaises(TypeError):
+            watch_service.create_watch(
+                "u1", share_id=self.share_id, interval="weekly", tier="pro",
+                model_tier="free", db=self.db,
+            )
+
+    def test_legacy_publisher_watch_stays_readable_and_manageable(self):
+        watch_id = self._legacy_publisher_watch()
+
+        listed = watch_service.list_watches_for_admin(db=self.db)
+        self.assertEqual(listed[0]["model_tier"], "free")
+        # Its schedule is no longer managed elsewhere: the owner can edit it.
+        updated = watch_service.update_watch(
+            "u1", watch_id, {"run_weekday": "friday", "run_time": "09:00",
+                             "timezone": "Europe/Berlin"}, True, db=self.db,
+        )
+        self.assertEqual(updated["run_weekday"], "friday")
+        watch_service.delete_watch("u1", watch_id, db=self.db)
         self.assertEqual(
-            self.db.stores["watches"][created["id"]]["publication_source"],
-            "scheduled_publisher",
+            self.db.stores["users/u1/watch_state"]["quota"]["active_count"], 0
+        )
+        # The retired Publisher capacity counter is never written again.
+        self.assertNotIn(
+            "publisher_capacity",
+            self.db.stores.get(watch_service.RUNTIME_COLLECTION, {}),
         )
 
-    def test_publisher_watch_resume_bypasses_owner_limit_but_keeps_counter(self):
+    def test_legacy_publisher_watch_resume_bypasses_owner_limit(self):
         cfg.apply_limits({**self.old_limits, "watch_pro_active_limit": 1})
-        created = watch_service.create_watch(
-            "u1",
-            share_id=self.share_id,
-            interval="weekly",
-            tier="pro",
-            model_tier="free",
-            bypass_active_limit=True,
-            db=self.db,
-        )
+        watch_id = self._legacy_publisher_watch()
         watch_service.update_watch(
-            "u1", created["id"], {"status": "paused"}, True, db=self.db
+            "u1", watch_id, {"status": "paused"}, True, db=self.db
         )
+        second_share_id = "B" * 16
+        self.db.stores["shares"][second_share_id] = share(slug="two")
+        watch_service.create_watch(
+            "u1", share_id=second_share_id, interval="weekly", tier="pro", db=self.db,
+        )
+
         resumed = watch_service.update_watch(
-            "u1", created["id"], {"status": "active"}, True, db=self.db
+            "u1", watch_id, {"status": "active"}, True, db=self.db
         )
         self.assertEqual(resumed["status"], "active")
         self.assertEqual(
-            self.db.stores["users/u1/watch_state"]["quota"]["active_count"], 1
+            self.db.stores["users/u1/watch_state"]["quota"]["active_count"], 2
+        )
+        self.assertNotIn(
+            "publisher_capacity",
+            self.db.stores.get(watch_service.RUNTIME_COLLECTION, {}),
         )
 
     def test_admin_can_list_and_queue_active_watch(self):

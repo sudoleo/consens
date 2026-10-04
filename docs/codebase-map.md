@@ -4504,11 +4504,14 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   (`watch_plus_active_limit`) und optional das tägliche Intervall
   (`watch_plus_daily_interval_allowed`), aber unveränderte Kosten pro Lauf.
   Die Legacy-Publisher-Watches (vom 2026-10-04 entfernten Scheduled Publisher
-  angelegt, laufen bis zur Pause im Admin weiter) tragen dagegen intern
+  angelegt, seit 2026-10-04 alle im Admin pausiert) tragen dagegen intern
   `model_tier=free`; der Scheduler behandelt sie unabhängig vom Owner-Tier
-  dauerhaft wie einen Free-Watch.
-  Als interner Content-Betrieb zählen sie nicht gegen das aktive persönliche
-  Watch-Limit der Admin-UID; das globale tägliche Watch-Run-Budget gilt weiter.
+  dauerhaft wie einen Free-Watch. Neue Watches setzen das Feld nie
+  (`create_watch` kennt kein `model_tier` mehr).
+  Ein Resume zählt nicht gegen das aktive persönliche Watch-Limit der
+  Admin-UID; das globale tägliche Watch-Run-Budget gilt weiter. Einen eigenen
+  Publisher-Kapazitätszähler gibt es nicht mehr, und ihr Zeitplan ist wie bei
+  jeder Watch über `update_watch` änderbar.
 
 ### Nutzergebundene Consensus-API (v1)
 - Admins stellen über `POST /api/admin/api-keys` einen gescopten Schlüssel für eine
@@ -4604,8 +4607,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   ist seit 2026-10-04 entfernt (Begründung in §4 „SEO-Puls“). Bestehende Shares
   behalten `publication_source=scheduled_publisher` nur noch als Daten; neue
   Shares bekommen das Feld nie. Die zugehörigen Weekly-Watches (`model_tier=free`)
-  laufen als Legacy weiter, bis sie im API-Tab pausiert werden; ihr globaler
-  Kapazitätszähler (`publisher_capacity`) bleibt bis dahin in `watch_service`.
+  sind seit 2026-10-04 im API-Tab pausiert und bleiben nur lesbar, fortsetzbar
+  und löschbar. Der globale Kapazitätszähler (`watch_runtime/publisher_capacity`,
+  `publisher_active_limit`, Fehlercode `publisher_capacity`) ist entfernt; ein
+  noch vorhandenes Zähler-Dokument in Prod ist verwaist und wird nie gelesen.
 
 ### Sharing
 - `og_image.share_card_png` bindet seinen Cache an alle gezeichneten Inhalte:
@@ -5356,9 +5361,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 - `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, `visibility`,
   Intervall, optionaler `run_weekday` für Weekly sowie lokale `run_time`
   (`HH:MM`) + IANA-`timezone`,
-  optional internes `model_tier=free` für die Legacy-Publisher-Watches,
-  denormalisierte `publication_source` für deren Kapazitätszähler
-  ohne N+1-Reads der Share-Dokumente,
+  `model_tier` (leer; nur die Legacy-Publisher-Watches tragen intern `free`,
+  ebenso ein altes, nicht mehr gelesenes `publication_source`),
   (das früher hier persistierte `excluded_providers` ist entfernt: es wurde
   nirgends angezeigt und hat still einen Provider aus jedem Publisher-Lauf
   genommen),
@@ -6098,9 +6102,7 @@ Query-first-Watches legen beim Erstellen nur eine nicht indexierte Share-Hülle
 mit Frage und `awaiting_first_watch_run=true` an. Share-Hülle, Watch,
 Owner-Zähler und Query-Uniqueness-Key entstehen gemeinsam; normale Share-Watches
 verwenden entsprechend einen Share-Uniqueness-Key. Altbestände initialisieren
-diese Indizes beim ersten Schreibzugriff. Auch die globale Kapazität der
-Legacy-Publisher-Watches (`model_tier=free`) wird innerhalb dieser Anlage-Transaktion statt über einen vorgelagerten Count
-durchgesetzt. Der erste planmäßige Watch-Lauf
+diese Indizes beim ersten Schreibzugriff. Der erste planmäßige Watch-Lauf
 gilt ausdrücklich als Baseline (kein Changes-only-Alert durch den vorher leeren
 Text), schreibt zugleich die erste immutable History-Version und füllt die
 Share-Baseline. Condition- und Every-run-Regeln dürfen beim ersten Lauf bereits

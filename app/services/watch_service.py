@@ -52,7 +52,6 @@ WATCH_EVENT_CONFIRMING = "watch.confirming"
 WATCH_EVENT_RUN_FAILED = "watch.run_failed"
 WATCH_STATE_COLLECTION = "watch_state"
 WATCH_UNIQUES_COLLECTION = "watch_uniques"
-PUBLISHER_COUNTER_ID = "publisher_capacity"
 
 
 def _where_equal(collection, field: str, value):
@@ -93,10 +92,6 @@ def _unique_ref(db, uid: str, uniqueness_key: str):
         db.collection("users").document(uid).collection(WATCH_UNIQUES_COLLECTION)
         .document(digest)
     )
-
-
-def _publisher_counter_ref(db):
-    return db.collection(RUNTIME_COLLECTION).document(PUBLISHER_COUNTER_ID)
 
 
 def _safe_count(value) -> int:
@@ -271,9 +266,6 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "question": str(share.get("question") or data.get("question") or "")[:200],
         "interval": data.get("interval") or "weekly",
         "model_tier": "free" if data.get("model_tier") == "free" else "account",
-        "publication_source": str(
-            data.get("publication_source") or share.get("publication_source") or ""
-        ),
         "run_weekday": str(data.get("run_weekday") or ""),
         "run_time": str(data.get("run_time") or ""),
         "timezone": str(data.get("timezone") or ""),
@@ -331,21 +323,13 @@ def _check_active_limit(uid: str, tier, db, *, excluding_id: str | None = None):
         raise WatchError("limit_reached", "Active watch limit reached.")
 
 
-def _ensure_watch_indexes(
-    uid: str,
-    uniqueness_key: str,
-    *,
-    db,
-    include_publisher: bool = False,
-):
+def _ensure_watch_indexes(uid: str, uniqueness_key: str, *, db):
     """Lazily seed counters/uniqueness for watches created before Phase 2."""
     owner_ref = _owner_state_ref(db, uid)
     unique_ref = _unique_ref(db, uid, uniqueness_key)
-    publisher_ref = _publisher_counter_ref(db)
     owner_exists = owner_ref.get().exists
     unique_exists = unique_ref.get().exists
-    publisher_exists = publisher_ref.get().exists if include_publisher else True
-    if owner_exists and unique_exists and publisher_exists:
+    if owner_exists and unique_exists:
         return
 
     owner_watches = list(
@@ -375,15 +359,6 @@ def _ensure_watch_indexes(
             ),
             None,
         )
-    publisher_active = 0
-    if include_publisher and not publisher_exists:
-        publisher_active = sum(
-            1
-            for snapshot in _where_equal(
-                db.collection(WATCHES_COLLECTION), "model_tier", "free"
-            ).stream()
-            if (snapshot.to_dict() or {}).get("status") == "active"
-        )
 
     def initialize(transaction):
         persistence_guard.ensure_account_write_allowed(
@@ -391,9 +366,6 @@ def _ensure_watch_indexes(
         )
         owner_snapshot = owner_ref.get(transaction=transaction)
         unique_snapshot = unique_ref.get(transaction=transaction)
-        publisher_snapshot = (
-            publisher_ref.get(transaction=transaction) if include_publisher else None
-        )
         if not owner_snapshot.exists:
             transaction.set(owner_ref, {
                 "schema_version": 1,
@@ -407,12 +379,6 @@ def _ensure_watch_indexes(
                 "share_id": str(existing_data.get("share_id") or ""),
                 "uniqueness_key": uniqueness_key,
             })
-        if include_publisher and publisher_snapshot is not None and not publisher_snapshot.exists:
-            transaction.set(publisher_ref, {
-                "schema_version": 1,
-                "active_count": publisher_active,
-                "updated_at": utcnow(),
-            })
 
     _run_transaction(db, initialize)
 
@@ -422,9 +388,7 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
                  condition="", visibility="public", run_time="", timezone_name="",
                  run_weekday="",
                  result_id=None,
-                 share_id=None, question=None, model_tier="", return_existing=False,
-                 bypass_active_limit=False,
-                 publisher_active_limit=None, db=None) -> dict:
+                 share_id=None, question=None, db=None) -> dict:
     db = db if db is not None else db_firestore
     interval = validate_interval(interval, tier)
     email_mode = validate_email_mode(email_mode)
@@ -439,9 +403,6 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
         visibility = share_snapshots.validate_share_visibility(visibility)
     except share_snapshots.ShareError as exc:
         raise WatchError(exc.code, exc.message) from exc
-    normalized_model_tier = str(model_tier or "").strip().lower()
-    if normalized_model_tier not in {"", "free"}:
-        raise WatchError("invalid_model_tier", "Only the Free Watch model tier can be pinned.")
     if question is not None and not isinstance(question, str):
         raise WatchError("invalid_question", "Question must be text.")
     sources = [bool(result_id), bool(share_id), bool(str(question or "").strip())]
@@ -489,12 +450,11 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
     doc = {
         "owner_uid": uid,
         "share_id": share_id,
-        # Denormalized so SEO/admin capacity checks do not have to fetch every
-        # referenced share. The share remains authoritative for all mutations.
-        "publication_source": str(share.get("publication_source") or "")[:40],
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
-        "model_tier": normalized_model_tier,
+        # Only the retired Publisher pinned "free"; it stays readable on those
+        # legacy watches, new ones always run on the owner's tier.
+        "model_tier": "",
         "run_weekday": run_weekday,
         "run_time": run_time,
         "timezone": timezone_name,
@@ -529,17 +489,10 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
     uniqueness_key = (
         f"question:{question_hash}" if created_query_share else f"share:{share_id}"
     )
-    include_publisher = normalized_model_tier == "free"
-    _ensure_watch_indexes(
-        uid,
-        uniqueness_key,
-        db=db,
-        include_publisher=include_publisher,
-    )
+    _ensure_watch_indexes(uid, uniqueness_key, db=db)
     watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)
     owner_ref = _owner_state_ref(db, uid)
     unique_ref = _unique_ref(db, uid, uniqueness_key)
-    publisher_ref = _publisher_counter_ref(db)
     query_share_ref = (
         db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
         if query_share_doc is not None else None
@@ -551,60 +504,21 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
         )
         owner_snapshot = owner_ref.get(transaction=transaction)
         unique_snapshot = unique_ref.get(transaction=transaction)
-        existing_ref = None
         existing_snapshot = None
         unique_data = unique_snapshot.to_dict() if unique_snapshot.exists else {}
         existing_id = str((unique_data or {}).get("watch_id") or "")
         if existing_id:
-            existing_ref = db.collection(WATCHES_COLLECTION).document(existing_id)
-            existing_snapshot = existing_ref.get(transaction=transaction)
-        publisher_snapshot = (
-            publisher_ref.get(transaction=transaction) if include_publisher else None
-        )
+            existing_snapshot = db.collection(WATCHES_COLLECTION).document(
+                existing_id
+            ).get(transaction=transaction)
 
         if existing_snapshot is not None and existing_snapshot.exists:
-            existing_data = existing_snapshot.to_dict() or {}
-            if return_existing and str(existing_data.get("share_id") or "") == share_id:
-                if normalized_model_tier == "free":
-                    managed_updates = {
-                        "model_tier": "free",
-                        "publication_source": str(
-                            share.get("publication_source") or ""
-                        )[:40],
-                        "interval": "weekly",
-                        "run_weekday": run_weekday,
-                        "run_time": run_time,
-                        "timezone": timezone_name,
-                    }
-                    if any(
-                        existing_data.get(key) != value
-                        for key, value in managed_updates.items()
-                    ):
-                        managed_updates["next_run_at"] = next_scheduled_run(
-                            "weekly", run_time, timezone_name, run_weekday, now=utcnow()
-                        )
-                        transaction.update(existing_ref, managed_updates)
-                        existing_data.update(managed_updates)
-                return existing_id, existing_data
             raise WatchError("already_exists", "This question is already watched.")
 
         owner_state = owner_snapshot.to_dict() if owner_snapshot.exists else {}
         active_count = _safe_count((owner_state or {}).get("active_count"))
-        if not bypass_active_limit and active_count >= cfg.get_watch_active_limit(tier):
+        if active_count >= cfg.get_watch_active_limit(tier):
             raise WatchError("limit_reached", "Active watch limit reached.")
-        publisher_count = 0
-        if include_publisher:
-            publisher_state = (
-                publisher_snapshot.to_dict() if publisher_snapshot and publisher_snapshot.exists else {}
-            )
-            publisher_count = _safe_count((publisher_state or {}).get("active_count"))
-            if (
-                publisher_active_limit is not None
-                and publisher_count >= int(publisher_active_limit)
-            ):
-                raise WatchError(
-                    "publisher_capacity", "Active Publisher Watch limit reached."
-                )
 
         if query_share_ref is not None:
             transaction.set(query_share_ref, query_share_doc)
@@ -619,12 +533,6 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
             "active_count": active_count + 1,
             "updated_at": now,
         })
-        if include_publisher:
-            transaction.set(publisher_ref, {
-                "schema_version": 1,
-                "active_count": publisher_count + 1,
-                "updated_at": now,
-            })
         return watch_id, doc
 
     stored_watch_id, stored_doc = _run_transaction(db, create)
@@ -884,16 +792,8 @@ def _apply_watch_updates(
     db,
 ) -> dict:
     initial_ref, initial = _owned_watch(uid, watch_id, db)
-    uniqueness_key = _watch_uniqueness_key(initial)
-    include_publisher = initial.get("model_tier") == "free"
-    _ensure_watch_indexes(
-        uid,
-        uniqueness_key,
-        db=db,
-        include_publisher=include_publisher,
-    )
+    _ensure_watch_indexes(uid, _watch_uniqueness_key(initial), db=db)
     owner_ref = _owner_state_ref(db, uid)
-    publisher_ref = _publisher_counter_ref(db)
 
     def mutate(transaction):
         persistence_guard.ensure_account_write_allowed(
@@ -901,9 +801,6 @@ def _apply_watch_updates(
         )
         watch_snapshot = initial_ref.get(transaction=transaction)
         owner_snapshot = owner_ref.get(transaction=transaction)
-        publisher_snapshot = (
-            publisher_ref.get(transaction=transaction) if include_publisher else None
-        )
         current = watch_snapshot.to_dict() if watch_snapshot.exists else None
         if not current or current.get("owner_uid") != uid:
             raise WatchError("not_found", "Watch not found.")
@@ -940,19 +837,6 @@ def _apply_watch_updates(
                 "active_count": max(0, active_count + delta),
                 "updated_at": utcnow(),
             })
-            if include_publisher:
-                publisher_state = (
-                    publisher_snapshot.to_dict()
-                    if publisher_snapshot and publisher_snapshot.exists else {}
-                )
-                publisher_count = _safe_count(
-                    (publisher_state or {}).get("active_count")
-                )
-                transaction.set(publisher_ref, {
-                    "schema_version": 1,
-                    "active_count": max(0, publisher_count + delta),
-                    "updated_at": utcnow(),
-                })
         return {**current, **committed}
 
     return _run_transaction(db, mutate)
@@ -969,13 +853,6 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
         raise WatchError(
             "invalid_request",
             "Only interval, status, alert rule, channels, condition, run day, run time, and timezone can be changed.",
-        )
-    if data.get("model_tier") == "free" and any(
-        key in changes for key in {"interval", "run_weekday", "run_time", "timezone"}
-    ):
-        raise WatchError(
-            "managed_watch",
-            "Scheduled Publisher Watch timing is managed from the Admin Publisher configuration.",
         )
     updates = {}
     now = utcnow()
@@ -1097,21 +974,14 @@ def _delete_watch_record(
     if expected_uid and uid != expected_uid:
         raise WatchError("forbidden", "You can only manage your own watches.")
     uniqueness_key = _watch_uniqueness_key(initial)
-    include_publisher = initial.get("model_tier") == "free"
     # Normal mutations lazily backfill legacy indexes. Account-deletion cleanup
     # must never do that: a retry can run after the watch-index area was already
     # acknowledged, and recreating those documents would leave personal data
     # behind a completed cleanup marker.
     if not allow_account_deletion:
-        _ensure_watch_indexes(
-            uid,
-            uniqueness_key,
-            db=db,
-            include_publisher=include_publisher,
-        )
+        _ensure_watch_indexes(uid, uniqueness_key, db=db)
     owner_ref = _owner_state_ref(db, uid)
     unique_ref = _unique_ref(db, uid, uniqueness_key)
-    publisher_ref = _publisher_counter_ref(db)
     share_id = str(initial.get("share_id") or "")
     share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
 
@@ -1123,9 +993,6 @@ def _delete_watch_record(
         watch_snapshot = watch_ref.get(transaction=transaction)
         owner_snapshot = owner_ref.get(transaction=transaction)
         unique_snapshot = unique_ref.get(transaction=transaction)
-        publisher_snapshot = (
-            publisher_ref.get(transaction=transaction) if include_publisher else None
-        )
         current = watch_snapshot.to_dict() if watch_snapshot.exists else None
         if not current:
             return False, False
@@ -1145,27 +1012,12 @@ def _delete_watch_record(
         unique_data = unique_snapshot.to_dict() if unique_snapshot.exists else {}
         if str((unique_data or {}).get("watch_id") or "") == watch_id:
             transaction.delete(unique_ref)
-        if was_active:
-            if owner_snapshot.exists:
-                transaction.set(owner_ref, {
-                    "schema_version": 1,
-                    "active_count": max(0, active_count - 1),
-                    "updated_at": utcnow(),
-                })
-            if (
-                include_publisher
-                and publisher_snapshot is not None
-                and publisher_snapshot.exists
-            ):
-                publisher_state = publisher_snapshot.to_dict()
-                publisher_count = _safe_count(
-                    (publisher_state or {}).get("active_count")
-                )
-                transaction.set(publisher_ref, {
-                    "schema_version": 1,
-                    "active_count": max(0, publisher_count - 1),
-                    "updated_at": utcnow(),
-                })
+        if was_active and owner_snapshot.exists:
+            transaction.set(owner_ref, {
+                "schema_version": 1,
+                "active_count": max(0, active_count - 1),
+                "updated_at": utcnow(),
+            })
         revoked = False
         if share_snapshot is not None and share_snapshot.exists:
             share = share_snapshot.to_dict() or {}
@@ -1843,16 +1695,9 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None,
     now = now or utcnow()
     ref = db.collection(WATCHES_COLLECTION).document(watch_id)
     uid = str(claimed.get("owner_uid") or "")
-    include_publisher = claimed.get("model_tier") == "free"
     if uid:
-        _ensure_watch_indexes(
-            uid,
-            _watch_uniqueness_key(claimed),
-            db=db,
-            include_publisher=include_publisher,
-        )
+        _ensure_watch_indexes(uid, _watch_uniqueness_key(claimed), db=db)
     owner_ref = _owner_state_ref(db, uid) if uid else None
-    publisher_ref = _publisher_counter_ref(db)
 
     def fail(transaction):
         if uid:
@@ -1860,9 +1705,6 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None,
         snapshot = ref.get(transaction=transaction)
         owner_snapshot = (
             owner_ref.get(transaction=transaction) if owner_ref is not None else None
-        )
-        publisher_snapshot = (
-            publisher_ref.get(transaction=transaction) if include_publisher else None
         )
         current = snapshot.to_dict() if snapshot.exists else None
         if (
@@ -1904,19 +1746,6 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None,
                 ),
                 "updated_at": now,
             })
-            if include_publisher:
-                publisher_state = (
-                    publisher_snapshot.to_dict()
-                    if publisher_snapshot and publisher_snapshot.exists else {}
-                )
-                transaction.set(publisher_ref, {
-                    "schema_version": 1,
-                    "active_count": max(
-                        0,
-                        _safe_count((publisher_state or {}).get("active_count")) - 1,
-                    ),
-                    "updated_at": now,
-                })
         return paused
 
     return _run_transaction(db, fail)
