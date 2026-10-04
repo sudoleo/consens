@@ -1200,9 +1200,11 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `undone`). UI: `user-memory.js` zeigt Schalter `#memoryAutoSwitch` (gesperrt
   bei pausiertem Memory, speichert sofort nur sich selbst), die Liste
   `#memoryItemsSection` mit Bearbeiten/Löschen/Hinzufügen und zweistufigem
-  „Delete all“; `agent-memory.js` (`App.agentMemory.render/receive`) zeigt unter
-  Live-, wiedergeöffneten und Verlaufsantworten „Memory updated“ mit
-  Undo und „Manage memory“ (öffnet Settings, Memory ist der erste Reiter).
+  „Delete all“; `agent-memory.js` (`App.agentMemory.render/receive`) zeigt
+  „Memory updated“ mit Undo und „Manage memory“ (öffnet Settings, Memory ist
+  der erste Reiter) nur WÄHREND des laufenden Agent-Laufs; `render` ohne
+  `running` (fertige, wiedergeöffnete, Verlaufsantwort) entfernt den Hinweis,
+  die Aktivitätszeile „Updated memory“ und Settings behalten den Nachweis.
   `consensio:memory-changed` lässt eine geladene Settings-Liste nachladen.
   `MOCK_LLM`: eine Agent-Frage „Remember: <Fakt>“ speichert den Fakt, damit der
   Ablauf ohne Provider im Browser prüfbar ist.
@@ -6232,9 +6234,14 @@ ersten Check statt eines leeren Consensus-Panels.
   markPendingCanceled/initAutoConsensusToggle`). Für Registry-Contexts delegiert
   sie Status, Synthese und Cancel an die explizite Run-ID; der Singleton-Pfad
   ist nur Legacy. Run-ID-Gating nicht umgehen, sonst rendern alte Läufe in neue.
-- **`window.App.watch.showFeatureNudge()`** wird nach einem erfolgreichen
-  Consensus-Final aufgerufen und zeigt den einmaligen, lokal dismissbaren
-  Consensus-Watch-Hinweis nur für eingeloggte Nutzer mit `result_id`;
+- **`window.App.watch.showFeatureNudge(source?)`** wird nach einem erfolgreichen
+  Consensus-Final (ohne Argument) und nach einem Agent-Lauf
+  (`agent-chat.js offerWatch`, `source = {eligible, question, anchor}`) aufgerufen
+  und zeigt den einmaligen, lokal dismissbaren Consensus-Watch-Hinweis nur für
+  eingeloggte Nutzer. Consensus startet die Watch per `result_id`, Agent per
+  `question` (Anker `#agentWatchAnchor`; geeignet nur: erste Nachricht des Chats
+  mit Quellen, weil eine Watch die nackte Frage neu stellt). Zähler (ab 3.
+  Lauf) und „dismissed“ sind modusübergreifend;
   `.resetAfterLogout()` leert und schließt die geladene Watch-Ansicht.
 - **`window.App.sharedModal.open(mode)` / `.close()`** koordinieren den gemeinsam
   genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,

@@ -1,6 +1,7 @@
-// "Memory updated" under an Agent answer: what Agent saved, changed or
-// forgot during that message, with Undo and a way into Settings > Memory.
-// Shared by live, reopened and history answers; the server is the only state.
+// "Memory updated" while an Agent run is working: what Agent saved, changed or
+// forgot during that message, with Undo and a way into Settings > Memory. It
+// disappears once the answer is final (render without `running`); the server is
+// the only state.
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -90,6 +91,12 @@
 
   function render(body, { key = '', changes = [], running = false } = {}) {
     if (!body) return;
+    // The note belongs to the working phase. The finished answer stays clean;
+    // the activity row ("Updated memory") and Settings > Memory keep the record.
+    if (!running) {
+      views.get(body)?.note.remove();
+      return;
+    }
     let view = views.get(body);
     if (!view) {
       const note = document.createElement('div');

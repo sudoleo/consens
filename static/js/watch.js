@@ -15,6 +15,7 @@
   ];
   let featureNudgeTimer = null;
   let featureNudgeAnchor = null;
+  let featureNudgeQuestion = "";
   let featureNudgePositionHandler = null;
   const watchState = window.App.watchState;
 
@@ -77,7 +78,8 @@
     nudge.classList.toggle("is-above", placeAbove);
     nudge.style.left = `${Math.round(left)}px`;
     nudge.style.top = `${Math.round(top)}px`;
-    nudge.style.visibility = "visible";
+    // An anchor in a hidden view (another mode took over) has no box.
+    nudge.style.visibility = anchor.getClientRects().length ? "visible" : "hidden";
   }
 
   function stopWatchFeatureNudgePositioning() {
@@ -110,6 +112,7 @@
       anchor.classList.remove("has-feature-nudge");
     }
     featureNudgeAnchor = null;
+    featureNudgeQuestion = "";
     try {
       localStorage.setItem(FEATURE_NUDGE_STORAGE_KEY, "true");
     } catch (_) {
@@ -122,7 +125,13 @@
     }
   }
 
-  function showWatchFeatureNudge() {
+  // Consensus haengt den Hinweis an den Watch-Knopf der Antwort und startet
+  // die Watch aus dem gespeicherten Ergebnis. Der Agent hat weder Knopf noch
+  // Ergebnis-Snapshot: er uebergibt `source` = { eligible, question, anchor },
+  // und die Watch entsteht aus der Frage selbst ("question first"; der Server
+  // fuehrt die erste Pruefung zum Termin aus). Zaehler und "nicht mehr zeigen"
+  // sind fuer beide Modi dieselben.
+  function showWatchFeatureNudge(source) {
     if (featureNudgeWasDismissed() || featureNudgeTimer
         || document.getElementById("watchFeatureNudge")) return;
     // Jeder abgeschlossene Lauf zaehlt -- auch der eines Gastes, damit der
@@ -130,14 +139,19 @@
     if (countFeatureNudgeRun() < FEATURE_NUDGE_MIN_RUNS) return;
     // Only promote an immediately usable action. Guests and failed snapshot
     // persistence keep the normal Watch button without a marketing nudge.
-    if (!window.auth?.currentUser || !window.lastShareResultId) return;
+    const questionSource = source && source.eligible && source.question && source.anchor
+      ? { question: String(source.question), anchor: source.anchor } : null;
+    if (source && !questionSource) return;
+    const usable = () => Boolean(window.auth?.currentUser)
+      && (questionSource ? questionSource.anchor.isConnected : Boolean(window.lastShareResultId));
+    if (!usable()) return;
 
     featureNudgeTimer = setTimeout(() => {
       featureNudgeTimer = null;
-      if (featureNudgeWasDismissed() || !window.auth?.currentUser
-          || !window.lastShareResultId) return;
-      const anchor = document.querySelector(".watch-feature-anchor");
+      if (featureNudgeWasDismissed() || !usable()) return;
+      const anchor = questionSource ? questionSource.anchor : document.querySelector(".watch-feature-anchor");
       if (!anchor || document.getElementById("watchFeatureNudge")) return;
+      featureNudgeQuestion = questionSource ? questionSource.question : "";
 
       const nudge = document.createElement("span");
       nudge.id = "watchFeatureNudge";
@@ -168,8 +182,10 @@
       });
       nudge.querySelector("#watchNudgeCustomize").addEventListener("click", event => {
         event.stopPropagation();
+        const question = featureNudgeQuestion;
         dismissWatchFeatureNudge("customize");
-        openWatchDialog("confirm");
+        if (question) openWatchDialog("create", { question });
+        else openWatchDialog("confirm");
       });
       anchor.classList.add("has-feature-nudge");
       document.body.appendChild(nudge);
@@ -206,10 +222,16 @@
     button.textContent = "Starting…";
     window.App?.trackAppEvent?.("app_watch_nudge_start_click");
     try {
-      const resultId = await (window.resolveCurrentShareResultId?.()
-        || Promise.resolve(window.lastShareResultId));
-      if (!resultId) throw new Error("This consensus is not saved yet.");
-      const payload = Object.assign(nudgeWatchDefaults(), { result_id: resultId });
+      let origin;
+      if (featureNudgeQuestion) {
+        origin = { question: featureNudgeQuestion };
+      } else {
+        const resultId = await (window.resolveCurrentShareResultId?.()
+          || Promise.resolve(window.lastShareResultId));
+        if (!resultId) throw new Error("This consensus is not saved yet.");
+        origin = { result_id: resultId };
+      }
+      const payload = Object.assign(nudgeWatchDefaults(), origin);
       const data = await api("POST", "/api/watch", payload);
       watchState.setLimits(null);
       window.App?.trackAppEvent?.("app_watch_created", {
@@ -224,8 +246,10 @@
       // (Limits, Upgrade, Telegram) als dieser Streifen.
       if (error.status === 429) {
         watchState.setLimits(null);
+        const question = featureNudgeQuestion;
         dismissWatchFeatureNudge("limit");
-        openWatchDialog("confirm");
+        if (question) openWatchDialog("create", { question });
+        else openWatchDialog("confirm");
         return;
       }
       popup("Watch could not be started: " + error.message);

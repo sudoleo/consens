@@ -200,7 +200,7 @@ describe("Memory updated under an answer", () => {
     const body = d.getElementById("answer");
     const changed = vi.fn();
     w.addEventListener("consensio:memory-changed", changed);
-    w.App.agentMemory.render(body, { key: "turn", changes: [
+    w.App.agentMemory.render(body, { key: "turn", running: true, changes: [
       { change_id: CHANGE, op: "update", item_id: "m1a2b3c", text: "Lives in Munich.", undone: false },
       { change_id: CHANGE, op: "add", item_id: "m4d5e6f", text: "Has a dog.", undone: false },
       { change_id: CHANGE, op: "noop", item_id: "m7a8b9c", text: "Ignored." },
@@ -216,16 +216,20 @@ describe("Memory updated under an answer", () => {
     expect(calls).toEqual([{ url: `/api/my/memory/changes/${CHANGE}/undo`, method: "POST" }]);
     expect(changed).toHaveBeenCalled();
     // A re-render from the (older) saved turn does not offer Undo again.
-    w.App.agentMemory.render(body, { key: "turn", changes: [
+    w.App.agentMemory.render(body, { key: "turn", running: true, changes: [
       { change_id: CHANGE, op: "add", item_id: "m4d5e6f", text: "Has a dog.", undone: false }] });
     expect([...note.querySelectorAll("button")].find(button => button.textContent === "Undo").hidden).toBe(true);
+    // The final answer carries no note.
+    w.App.agentMemory.render(body, { key: "turn", changes: [
+      { change_id: CHANGE, op: "add", item_id: "m4d5e6f", text: "Has a dog.", undone: false }] });
+    expect(body.nextElementSibling).toBeNull();
     dom.window.close();
   });
 
   it("stays hidden without changes and merges live events", () => {
     const { window: w, document: d, dom } = bootNote();
     const body = d.getElementById("answer");
-    w.App.agentMemory.render(body, { key: "turn", changes: [] });
+    w.App.agentMemory.render(body, { key: "turn", running: true, changes: [] });
     expect(body.nextElementSibling.hidden).toBe(true);
     const list = w.App.agentMemory.receive([], { changes: [{ change_id: CHANGE, op: "add", item_id: "m1a2b3c", text: "Likes tea." }] });
     w.App.agentMemory.receive(list, { changes: [{ change_id: CHANGE, op: "add", item_id: "m1a2b3c", text: "Likes tea." }] });

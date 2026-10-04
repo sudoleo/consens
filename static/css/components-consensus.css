@@ -1287,6 +1287,9 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   align-items: center;
 }
 
+/* Agent: Ankerpunkt am Ende der Antwort, ohne eigene Hoehe. */
+.watch-feature-anchor.agent-watch-anchor { display: block; height: 0; }
+
 /* Der Hinweis gehoert sichtbar zu seinem Knopf: solange er offen ist, liegt
    der Watch-Knopf auf der naechsthoeheren Flaeche. Das ersetzt den frueheren
    Pfeil, der ohnehin am `overflow` des Hinweises abgeschnitten wurde. */

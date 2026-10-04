@@ -601,6 +601,20 @@
       currentTurn: turn, historyTurns: context.historyTurns, title: context.bookmark.title,
     });
   }
+  // Agent has no Watch button: a finished answer may offer to keep itself
+  // current (watch.js owns the card, the counter and "dismissed"). Only a
+  // first message qualifies, because a watch re-asks the bare question, and
+  // only one built on sources, because those are what can change.
+  function offerWatch(context) {
+    if (!registry.isVisible(context.runId) || !registry.isAuthCurrent(context)) return;
+    const turn = context.consensus.completedTurn;
+    App.watch?.showFeatureNudge?.({
+      eligible: turn?.status !== "failed" && context.historyTurns.length === 0
+        && Array.isArray(turn?.sources) && turn.sources.length > 0,
+      question: context.question,
+      anchor: document.getElementById("agentWatchAnchor"),
+    });
+  }
   async function recoverAnswer(context) {
     if (!context || !registry.isAuthCurrent(context) || !['failed', 'canceled'].includes(context.status)
         || !context.metadata.requestSent || context.metadata.recoverable === false || context.metadata.recovering) return;
@@ -978,6 +992,7 @@
         throw Object.assign(new Error(apiError(data)), { failure: data, notDispatched: refused });
       }
       acceptAnswer(context, result.data);
+      offerWatch(context);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
       const failure = error.failure || {};

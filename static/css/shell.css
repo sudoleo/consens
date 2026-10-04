@@ -4659,3 +4659,19 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
   .sidebar.active #sidebarToggleInner svg line:nth-child(2) { opacity: 0; }
   .sidebar.active #sidebarToggleInner svg line:nth-child(3) { transform: rotate(-45deg) translateY(-6px); }
 }
+
+/* ---- Mobile menu: touch size and one left edge ----------------------------
+   The drawer is a phone surface: every control gets a 44px target, the legal
+   links stop being 19px strips, and the footer clears the home indicator. The
+   glyph sizes stay; only the hit areas and spacing change. */
+@media (max-width: 1099px) {
+  .sidebar { padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+  .sidebar-brand-row { min-height: 44px; }
+  #sidebarToggleInner.sidebar-toggle-square,
+  .sidebar-settings #editSystemPromptBtn { width: 44px; height: 44px; }
+  .sidebar-new-run { min-height: 44px; }
+  .sidebar-footer-meta { min-height: 44px; padding-left: 6px; gap: 4px; }
+  .sidebar-footer-meta > .sidebar-footer-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; }
+  .sidebar-footer-meta > .sidebar-footer-link:first-child { padding-left: 6px; margin-left: -6px; }
+  .sidebar-footer-meta .sidebar-footer-icon { width: 44px; height: 44px; }
+}

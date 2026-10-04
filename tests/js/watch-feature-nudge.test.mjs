@@ -61,6 +61,7 @@ function boot() {
   return {
     ...harness,
     run: () => run(harness),
+    fire: () => queued?.(),
     show: () => {
       run(harness);
       run(harness);
@@ -93,6 +94,40 @@ describe("watch feature nudge", () => {
     expect(document.querySelectorAll(".has-watch-feature-nudge").length).toBe(0);
     expect(nudge.style.top).not.toBe("");
     expect(nudge.style.left).not.toBe("");
+  });
+
+  it("bietet im Agent-Modus eine Watch aus der Frage an", async () => {
+    const { window, document, fire } = boot();
+    const anchor = document.createElement("div");
+    anchor.id = "agentWatchAnchor";
+    document.body.appendChild(anchor);
+    const source = { eligible: true, question: "Wann erscheint Version 3?", anchor };
+    window.App.watch.showFeatureNudge(source);
+    window.App.watch.showFeatureNudge(source);
+    fire();
+    expect(document.getElementById("watchFeatureNudge")).toBeNull();
+    window.App.watch.showFeatureNudge(source);
+    fire();
+    expect(document.getElementById("watchFeatureNudge")).not.toBeNull();
+    window.auth.currentUser.getIdToken = async () => "token";
+    window.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({
+      watch: { interval: "weekly", run_weekday: "monday", run_time: "09:00", timezone: "UTC" } }) }));
+    document.getElementById("watchNudgeStart").click();
+    await vi.waitFor(() => expect(window.fetch).toHaveBeenCalled());
+    const body = JSON.parse(window.fetch.mock.calls[0][1].body);
+    expect(body.question).toBe("Wann erscheint Version 3?");
+    expect(body.result_id).toBeUndefined();
+  });
+
+  it("zeigt im Agent-Modus nichts ohne Quellen oder bei Folgefragen", () => {
+    const { window, document, fire } = boot();
+    const anchor = document.createElement("div");
+    document.body.appendChild(anchor);
+    for (let i = 0; i < 3; i += 1) {
+      window.App.watch.showFeatureNudge({ eligible: false, question: "Frage zu Version 3?", anchor });
+    }
+    fire();
+    expect(document.getElementById("watchFeatureNudge")).toBeNull();
   });
 
   it("nimmt die Markierung beim Schliessen wieder zurueck", () => {

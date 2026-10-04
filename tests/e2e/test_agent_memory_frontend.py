@@ -113,24 +113,12 @@ def test_agent_memory_opt_in_note_undo_and_settings_list(browser, phase4_server,
         page.locator("#questionInput").fill("Remember: I prefer metric units.")
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
-        note = page.locator("#agentAnswer .agent-memory-note")
-        expect(note).to_be_visible()
-        expect(note).to_contain_text("Memory updated")
-        expect(note).to_contain_text("Saved: I prefer metric units.")
-        if width < 700:
-            assert note.get_by_role("button", name="Undo").bounding_box()["height"] >= 44
-        assert note.bounding_box()["x"] + note.bounding_box()["width"] <= width
-        _shot(page, f"memory-note-{width}-{'dark' if dark else 'light'}")
+        # The note is a working-phase hint; the final answer carries none.
+        expect(page.locator("#agentAnswer .agent-memory-note")).to_have_count(0)
 
-        note.get_by_role("button", name="Undo").click()
-        expect(note).to_contain_text("Memory change undone")
-        expect(note.get_by_role("button", name="Undo")).to_be_hidden()
-        assert len(undos) == 1
-
-        # Manage opens Settings > Memory with the current list.
-        note.get_by_role("button", name="Manage memory").click()
+        page.evaluate("() => document.getElementById('editSystemPromptBtn').click()")
         expect(page.locator("#systemPromptModal")).to_be_visible()
-        expect(page.locator("#memoryItemsEmpty")).to_be_visible()
+        expect(page.locator("#memoryItemsList")).to_contain_text("I prefer metric units.")
         page.locator("#memoryItemInput").fill("Works night shifts.")
         page.locator("#memoryItemAddBtn").click()
         expect(page.locator("#memoryItemsList")).to_contain_text("Works night shifts.")
