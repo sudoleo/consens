@@ -62,3 +62,14 @@ def test_bounded_buffer_preserves_data_before_terminal_errors(monkeypatch):
     assert next(downstream) == "second"
     with pytest.raises(ValueError, match="provider stopped"):
         next(downstream)
+
+
+def test_producer_thread_keeps_the_request_correlation_id():
+    from app.core.observability import correlation_id, correlation_scope
+
+    def source():
+        yield correlation_id()
+
+    with correlation_scope("req-stream-test"):
+        downstream = streaming.iter_sse_with_keepalive(source(), interval_seconds=.01)
+        assert list(downstream) == ["req-stream-test"]

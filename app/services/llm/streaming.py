@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextvars import copy_context
 import logging
 import queue
 import threading
@@ -136,8 +137,12 @@ def iter_sse_with_keepalive(
             finally:
                 stopped.set()
 
+    # The producer runs on its own thread; carry the request's ContextVars
+    # (correlation id for logs and alerts) over to it.
+    producer_context = copy_context()
     threading.Thread(
-        target=pump,
+        target=producer_context.run,
+        args=(pump,),
         daemon=True,
         name="sse-keepalive-pump",
     ).start()
