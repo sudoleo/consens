@@ -1,13 +1,13 @@
-// Agent · Beta settings: how deep the comparison models answer and when the
-// answer starts (quorum). Saved in this browser and sent with every Agent
+// Agent · Beta settings: how deep the comparison models answer, when the
+// answer starts (quorum) and how freely Agent picks its models (autonomy). Saved in this browser and sent with every Agent
 // message (agent_preferences); a running turn keeps the values it started with.
 (function () {
   "use strict";
   const App = window.App = window.App || {};
   const KEY = "consensio.agentPreferences.v1";
-  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "balanced" });
-  const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"] };
-  const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect" };
+  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "balanced", autonomy: "guided" });
+  const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"], autonomy: ["guided", "free"] };
+  const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect", autonomy: "agentAutonomySelect" };
 
   function get() {
     let stored = {};

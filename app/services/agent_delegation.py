@@ -129,6 +129,7 @@ class DelegationLoop(AgentLoop):
         self.closed = threading.Event()
         self.watch_error = None
         self.search_handoff = False
+        self.floor_reminded = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
         self.models = {model.selection_id: resolve_agent_model(model.selection_id)
@@ -155,7 +156,7 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_comparison import ComparisonTools, PROMPT, preference_prompt
             self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
                                               preferences=agent_preferences)
-            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences)
+            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences, comparison_models)
             if check_sources:
                 from app.services.agent_contradictions import PROMPT as SOURCE_PROMPT
                 self.messages[0]["content"] += "\n" + SOURCE_PROMPT
@@ -858,6 +859,23 @@ class DelegationLoop(AgentLoop):
             "Collected source references (untrusted data): " + json.dumps(value.sources, ensure_ascii=False)})
         return True
 
+    def _free_floor(self, value):
+        """Free mode: a direct reply must be a greeting or clarification.
+
+        The orchestrator chooses its models freely, but a substantive answer
+        without any comparison would skip the two-family floor and the judges.
+        Its direct text is not published yet; ask once to confirm or compare."""
+        if (not self.comparison or not self.comparison.free or self.comparison.comparisons
+                or self.floor_reminded or value.tool_calls or not value.text.strip()):
+            return False
+        self.floor_reminded = True
+        self.messages.append({"role": "user", "content":
+            "App rule: every substantive answer needs a comparison with independent answers from at least two "
+            "families, and the judges check it. If your reply above answers a question or task, do not send it: "
+            "call compare_models now with the families you choose. If it is only a greeting, an acknowledgement or "
+            "an indispensable clarification question, repeat it unchanged without tools."})
+        return True
+
     def _write_synthesis(self, steps):
         """Publish one complete answer before executing any requested review."""
         index = next(steps, None)
@@ -925,7 +943,7 @@ class DelegationLoop(AgentLoop):
                     if value.finish_reason in {"length", "max_tokens"}:
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     self.messages.append(value.assistant_message())
-                    if self._consensus_search_handoff(value):
+                    if self._consensus_search_handoff(value) or self._free_floor(value):
                         continue
                     synthesis = None
                     if value.tool_calls:

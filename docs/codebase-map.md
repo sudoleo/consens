@@ -2358,7 +2358,12 @@ sehen dieselbe isolierte Aufgabe, keinen Chatverlauf und keine Antworten anderer
 Vergleichsmodelle. Der Produktprompt verpflichtet das Chatmodell ausdrücklich,
 Bezüge wie „davon“ aufzulösen und relevante frühere Anforderungen in Frage/Kontext
 zu übernehmen; unabhängige Fragen brauchen keinen unnötigen Gesprächsrückblick.
-`ComparisonTools.compare` startet alle Vergleichsmodelle gleichzeitig in eigenen
+Im freien Modus (`AgentPreferences.autonomy == "free"`) wählt es zusätzlich pro
+Vergleich die Familien (`FreeCompareArgs.models`, mindestens zwei, serverseitig in
+`_choose`; gespeichert als `asked`), und `DelegationLoop._free_floor` schickt eine
+Direktantwort ohne Vergleich einmal zurück, damit jede Sachantwort auf zwei
+Familien und den Judges beruht.
+`ComparisonTools.compare` startet alle gefragten Vergleichsmodelle gleichzeitig in eigenen
 Threads (`compare_slots`, je Aufruf eine `ComparisonCancellation`) und wartet nur
 bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`).
 `_rebuild` normalisiert Quellen wie zuvor `fan_out_provider_answers` (das der
@@ -2650,7 +2655,8 @@ Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
 `agent-answer-actions.js` läuft nach `agent-review.js` und vor `consensus-run.js`.
-`agent-preferences.js` (nach `agent-review.js`) speichert Tiefe und Quorum der
+`agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum und
+Agent freedom (`autonomy`: `guided`/`free`, Details in `docs/agent-mode.md`) der
 Einstellungen im Browser, gibt den Reiter `agentSettingsSection` über
 `App.settingsTabs.setTabAvailable` nur bei `agentChat.canUse()` frei (Aufruf aus
 `agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld

@@ -18,7 +18,7 @@ from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
-from app.services.agent_comparison import AgentPreferences, comparison_selection
+from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
 from app.services.source_verification import Limits as SourceCheckLimits
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_policy import AgentPolicy, supports_delegation
@@ -224,7 +224,7 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
             if existing.get("agent_settings", {}).get("check_sources", False) != payload.check_sources:
                 raise TurnStatusConflict("Request identity conflicts with different contradiction settings")
-            if (existing.get("agent_settings", {}).get("agent_preferences") or AgentPreferences().model_dump()) \
+            if stored_preferences(existing.get("agent_settings", {}).get("agent_preferences")) \
                     != payload.agent_preferences.model_dump():
                 raise TurnStatusConflict("Request identity conflicts with different Agent settings")
             if payload.recover_only and existing["status"] == "pending":

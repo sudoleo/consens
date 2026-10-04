@@ -104,21 +104,50 @@ Vergleichsgrundlage eingeholt.
 ### Tiefe, Parallelität und Quorum
 
 Einstellungen → **Agent · Beta** (nur für Konten mit Agent-Zugang, gespeichert im
-Browser unter `consensio.agentPreferences.v1`) legt zwei Werte fest, die jede
+Browser unter `consensio.agentPreferences.v1`) legt drei Werte fest, die jede
 Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
 einfriert (Teil der Request-Identität bei Recovery): **Answer depth**
 (`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
 Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
 (`balanced` wie unten beschrieben, `fast` ab der Hälfte der Antworten mit 1,1-facher
-Nachfrist und mindestens einer Sekunde, `all` wartet auf jedes Modell). „Check
-contradictions“ bleibt im Reiter Runs und im Composer.
+Nachfrist und mindestens einer Sekunde, `all` wartet auf jedes Modell) und
+**Agent freedom** (`autonomy`, siehe unten). „Check contradictions“ bleibt im
+Reiter Runs und im Composer.
+
+### Agent freedom: geführt oder frei
+
+`guided` (Standard) ist der bisherige Ablauf: jeder Vergleich fragt alle gewählten
+Vergleichsmodelle. `free` (Opt-in) gibt dem Chatmodell als einziges Ziel die
+bestmögliche Antwort und lässt es den Weg wählen: `compare_models` bekommt das
+Feld `models` (`FreeCompareArgs`, Schlüssel aus der Compare-Auswahl, leer = alle),
+der Orchestrierungsprompt den Zusatz `FREE_PROMPT` samt verfügbarer Familien.
+Das Chatmodell entscheidet so pro Vergleich, welche Familien es fragt, und wie viele
+Runden es braucht (im Chat ohnehin nur durch das Tokenkonto begrenzt). Der Vergleich
+speichert die gefragten Familien als `asked`; Quorum, `failed_models`,
+`pending_models` und `status` beziehen sich auf sie statt auf die ganze Auswahl.
+
+Zwei Regeln setzt der Server durch, nicht der Prompt:
+
+- **Mindestens zwei Familien je Vergleich.** `ComparisonTools._choose` weist
+  weniger als zwei oder unbekannte Familien als Toolfehler zurück. Damit hat jeder
+  Vergleich etwas, das Differences und Coverage gegeneinander prüfen können.
+- **Keine ungeprüfte Sachantwort.** Antwortet das Chatmodell im freien Modus ohne
+  jeden Vergleich direkt, veröffentlicht der Server den Text nicht, sondern
+  verlangt einmal (`DelegationLoop._free_floor`) einen Vergleich oder die
+  Bestätigung, dass es nur ein Gruß, eine Quittung oder eine nötige Rückfrage ist.
+  Bestätigt es, gilt die Antwort wie im geführten Modus als direkte Antwort.
+
+Danach laufen Synthese und Judges unverändert; der Judge kommt in beiden Modi
+immer am Ende. Ältere Turns ohne `autonomy` gelten bei der Recovery-Identität als
+`guided` (`stored_preferences`).
 
 `compare_models` hat zwei Entscheidungsfelder. `depth` (Standard `full`) steuert
 die Längenvorgabe der Vergleichsmodelle: `quick` für kurze Sachfragen, kleine
 Folgefragen, Umformulierungen und Alltagsrat (etwa 1500 Zeichen, falls die Aufgabe
 nicht mehr braucht), `full` für Analysen, Entscheidungen, Gesundheit, Recht, Geld
-und ausführliche Ausgaben (keine Längenvorgabe). Alle gewählten Vergleichsmodelle
-antworten in beiden Stufen; die Auswahl im Compare-Picker wird nicht still verkleinert.
+und ausführliche Ausgaben (keine Längenvorgabe). Im geführten Modus antworten alle
+gewählten Vergleichsmodelle in beiden Stufen; die Auswahl im Compare-Picker wird nicht
+still verkleinert. Im freien Modus wählt das Chatmodell sie pro Vergleich (`models`).
 `next_step` ist Pflicht: `answer` beim letzten Vergleich lässt den Server direkt
 Synthese und Prüfung ausführen, ohne weitere Orchestrierungsrunde, die nur
 `judge_answer` aufrufen würde. `more_work` gilt, wenn noch ein Vergleich, ein

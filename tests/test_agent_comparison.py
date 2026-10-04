@@ -18,8 +18,9 @@ from test_agent_runs import UID, AUTH, api, pending, receipt, store
 
 class Script:
     def __init__(self, *, compares=1, revise=False, missing=False, fail_coverage=False, fail_model=False, length_model=None,
-                 direct=False, depth=None):
+                 direct=False, depth=None, pick=None):
         self.length_model = length_model
+        self.pick = pick
         self.direct, self.depth = direct, depth
         self.compares, self.revise, self.missing = compares, revise, missing
         self.fail_coverage, self.fail_model = fail_coverage, fail_model
@@ -45,7 +46,8 @@ class Script:
                             yield {"type": "delta", "text": self.text}
                         args = {"question": f"Evaluate option {index + 1}", "context": "Budget is 100. Source: https://example.org/report", "reason": "Compare trade-offs",
                                 "next_step": "answer" if script.direct and index == script.compares - 1 else "more_work",
-                                **({"depth": script.depth} if script.depth else {})}
+                                **({"depth": script.depth} if script.depth else {}),
+                                **({"models": script.pick} if script.pick is not None else {})}
                         action = "compare_models"
                     else:
                         self.text = "The first option costs 100."
@@ -940,3 +942,95 @@ def test_mock_runs_and_unchecked_answers_never_vote(store, monkeypatch):
     assert persistence_guard.agent_best_model_pick(review) == "Anthropic"
     review["checks"][1]["differences_data"]["best_model"] = "Not a model"
     assert persistence_guard.agent_best_model_pick(review) is None
+
+
+def test_free_mode_asks_only_the_families_the_agent_chose(store):
+    from app.services.agent_comparison import AgentPreferences
+    script = Script(direct=True, pick=["gemini", "anthropic"])
+    loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(autonomy="free"))
+    system = loop.messages[0]["content"]
+    assert "Agent freedom is FREE" in system and '"gemini"' in system
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    comparison = saved["agent_review"]["comparisons"][0]
+    assert comparison["asked"] == ["gemini", "anthropic"]
+    assert sorted(a["provider"] for a in comparison["answers"]) == ["anthropic", "gemini"]
+    assert comparison["status"] == "succeeded" and not comparison["failed_models"]
+    # The judges still check the answer, and only the chosen models answered.
+    assert saved["agent_review"]["status"] == "succeeded"
+    assert len(script.prompts) == 2
+
+
+def test_free_mode_keeps_the_two_family_floor(store):
+    from app.services.agent_comparison import AgentPreferences, CompareArgs, FreeCompareArgs
+    loop = make_loop(store, Script(), models=THREE, preferences=AgentPreferences(autonomy="free"))
+    base = {"question": "Q", "context": "", "reason": "R", "next_step": "answer"}
+    choose = loop.comparison._choose
+    assert sorted(choose(FreeCompareArgs(**base))) == ["anthropic", "gemini", "openai"]
+    assert list(choose(FreeCompareArgs(**base, models=["openai", "openai", "gemini"]))) == ["openai", "gemini"]
+    with pytest.raises(ValueError, match="at least two families"):
+        choose(FreeCompareArgs(**base, models=["openai"]))
+    with pytest.raises(ValueError, match="Unknown comparison families"):
+        choose(FreeCompareArgs(**base, models=["openai", "mistral"]))
+    assert loop.registry.tools["compare_models"].arguments is FreeCompareArgs
+    # Guided mode has no model choice at all: every comparison asks everyone.
+    guided = make_loop(store, Script(), models=THREE)
+    assert guided.registry.tools["compare_models"].arguments is CompareArgs
+    assert "models" not in CompareArgs.model_fields
+    assert "Agent freedom" not in guided.messages[0]["content"]
+
+
+class DirectFirst(Script):
+    """The orchestrator first replies without a tool; `repeat` replies again."""
+
+    def __init__(self, *, repeat=False, **kwargs):
+        super().__init__(direct=True, **kwargs)
+        self.repeat = repeat
+
+    def factory(self):
+        base = type(super().factory())
+        script = self
+        class Completion(base):
+            def stream(self, *, model, messages, **kwargs):
+                if self.step_id.startswith("completion:") and kwargs["tools"]:
+                    index = int(self.step_id.split(":")[-1])
+                    if index == 0 or (script.repeat and index == 1):
+                        script.calls.append((self.step_id, model.model))
+                        self.text, self.finish_reason = "Hello! How can I help?", "stop"
+                        yield {"type": "delta", "text": self.text}
+                        return
+                    self.step_id = f"completion:{index - 1}"
+                yield from super().stream(model=model, messages=messages, **kwargs)
+        return Completion()
+
+
+def test_free_mode_sends_a_direct_answer_back_through_a_comparison(store):
+    from app.services.agent_comparison import AgentPreferences
+    script = DirectFirst()
+    loop = make_loop(store, script, preferences=AgentPreferences(autonomy="free"))
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert sum("App rule: every substantive answer" in m["content"] for m in loop.messages if m["role"] == "user") == 1
+    assert saved["status"] == "completed"
+    assert saved["agent_review"]["status"] == "succeeded"
+    # The unchecked direct reply never reached the reader.
+    assert not any(e.get("type") == "delta" and "How can I help" in e.get("text", "") for e in events)
+
+
+def test_free_mode_accepts_a_confirmed_greeting_and_guided_mode_never_asks(store):
+    from app.services.agent_comparison import AgentPreferences
+    loop = make_loop(store, DirectFirst(repeat=True), preferences=AgentPreferences(autonomy="free"))
+    list(loop.run())
+    assert loop.completion.text == "Hello! How can I help?"
+    assert not loop.comparison.comparisons
+    guided = make_loop(store, DirectFirst(repeat=True))
+    list(guided.run())
+    assert guided.completion.text == "Hello! How can I help?"
+    assert not any("App rule" in m["content"] for m in guided.messages if m["role"] == "user")
+
+
+def test_settings_saved_before_the_freedom_field_still_match_on_recovery():
+    from app.services.agent_comparison import AgentPreferences, stored_preferences
+    assert stored_preferences({"depth": "auto", "quorum": "balanced"}) == AgentPreferences().model_dump()
+    assert stored_preferences(None) == AgentPreferences().model_dump()
+    assert stored_preferences({"depth": "full", "quorum": "all", "autonomy": "free"})["autonomy"] == "free"
