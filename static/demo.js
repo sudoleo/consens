@@ -1173,7 +1173,12 @@ function maybeAutoStartDemo() {
 }
 maybeAutoStartDemo();
 
-document.getElementById("postDemoLoginButton")?.addEventListener("click", () => {
+// Whoever just watched the demo is most likely new: open on "Sign up".
+document.getElementById("postDemoLoginButton")?.addEventListener("click", event => {
+  if (window.App?.openAuthModal) {
+    window.App.openAuthModal("register", event.currentTarget, "post_demo");
+    return;
+  }
   const modal = document.getElementById("loginModal");
   if (!modal) return;
 

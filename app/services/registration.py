@@ -18,6 +18,7 @@ from firebase_admin import auth
 import requests
 
 from app.core.observability import safe_exception
+from app.core.site import SITE_URL
 
 
 PASSWORD_SETUP_ENDPOINT = (
@@ -51,23 +52,47 @@ def find_or_provision_user(email: str):
         return auth.get_user_by_email(email), False
 
 
+def password_setup_continue_url() -> str:
+    """Where Firebase's "password saved" page sends the new user back to.
+
+    Without it that page was a dead end on consensai.firebaseapp.com and the
+    user had to find consens.io again on their own. /app?setup=1 opens the
+    login with the address already filled in.
+    """
+    return f"{SITE_URL}/app?setup=1"
+
+
+def _post_password_setup(api_key: str, payload: dict):
+    response = requests.post(
+        PASSWORD_SETUP_ENDPOINT,
+        params={"key": api_key},
+        json=payload,
+        timeout=(
+            PASSWORD_SETUP_CONNECT_TIMEOUT_SECONDS,
+            PASSWORD_SETUP_READ_TIMEOUT_SECONDS,
+        ),
+    )
+    response.raise_for_status()
+    return response
+
+
 def send_password_setup_email(email: str) -> None:
     """Ask Firebase to deliver its hosted password setup/reset e-mail."""
     api_key = os.environ.get("FIREBASE_API_KEY", "").strip()
     if not api_key:
         raise RegistrationUnavailable("Firebase password setup is not configured")
 
+    payload = {"requestType": "PASSWORD_RESET", "email": email}
     try:
-        response = requests.post(
-            PASSWORD_SETUP_ENDPOINT,
-            params={"key": api_key},
-            json={"requestType": "PASSWORD_RESET", "email": email},
-            timeout=(
-                PASSWORD_SETUP_CONNECT_TIMEOUT_SECONDS,
-                PASSWORD_SETUP_READ_TIMEOUT_SECONDS,
-            ),
-        )
-        response.raise_for_status()
+        try:
+            _post_password_setup(api_key, {**payload, "continueUrl": password_setup_continue_url()})
+        except requests.HTTPError as exc:
+            # A continue URL outside Firebase's authorized domains is rejected
+            # with 400. The way back is a convenience; the mail is not.
+            if getattr(exc.response, "status_code", None) != 400:
+                raise
+            logging.warning("Password setup continue URL rejected; sending without it")
+            _post_password_setup(api_key, payload)
     except Exception as exc:
         # Never include the address or the upstream response body in logs.
         raise RegistrationUnavailable(

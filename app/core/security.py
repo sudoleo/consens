@@ -158,6 +158,13 @@ class CustomSecurityMiddleware:
                 # (/s/{id}) sind Secret-URLs - ihr Pfad darf nie im
                 # Referer-Header eines ausgehenden Klicks landen.
                 headers[b"Referrer-Policy"] = b"strict-origin-when-cross-origin"
+                if path.startswith("/__/auth/") or path == "/__/firebase/init.json":
+                    # Firebase's own sign-in helpers (proxied in
+                    # firebase_auth_proxy.py) load Google's scripts under
+                    # their own rules, and /__/auth/iframe must be framable by
+                    # the app page that hands the result back.
+                    headers.pop(b"Content-Security-Policy", None)
+                    headers[b"X-Frame-Options"] = b"SAMEORIGIN"
                 if path == "/agent/google/callback":
                     headers[b"Content-Security-Policy"] = headers.pop(b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'")
                     headers.pop(b"referrer-policy", None)

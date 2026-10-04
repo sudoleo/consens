@@ -2209,13 +2209,18 @@ def test_template_visibility_classes_remain_overridable_by_ui_controls(
     try:
         page.click("#authTopSignupBtn")
         expect(page.locator("#loginModal")).to_be_visible()
-        expect(page.locator("#loginEmailConfirm")).to_be_visible()
+        expect(page.locator("#authTabRegister")).to_have_attribute("aria-selected", "true")
         expect(page.locator("#loginPassword")).to_be_hidden()
+        expect(page.locator("#forgotPasswordButton")).to_be_hidden()
         expect(page.locator("#confirmRegisterButton")).to_be_visible()
+        expect(page.locator("#singleMailNote")).to_be_visible()
 
-        page.click("#toggleRegister")
+        page.click("#authTabLogin")
         expect(page.locator("#loginPassword")).to_be_visible()
+        expect(page.locator("#forgotPasswordButton")).to_be_visible()
         expect(page.locator("#confirmRegisterButton")).to_be_hidden()
+        expect(page.locator("#singleMailNote")).to_be_hidden()
+        page.click("#closeLoginModal")
 
         page.evaluate("() => document.getElementById('editSystemPromptBtn').click()")
         expect(page.locator("#systemPromptModal")).to_be_visible()

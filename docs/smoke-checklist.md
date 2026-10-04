@@ -790,6 +790,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Legacy-Passwort erlaubt bei einer neuen Adresse keinen direkten Login;
       beide Fälle führen ausschließlich über den Link im Postfach.
 - [ ] Login (E-Mail + Google), Logout.
+- [ ] Login-Dialog auf echtem iPhone (Safari) und Android (Chrome): Öffnen
+      fokussiert kein Feld (Google bleibt sichtbar), Tabs Log in/Sign up,
+      „Los“ auf der Tastatur loggt ein, falsches Passwort zeigt „E-mail or
+      password is not correct“. Mit `FIREBASE_AUTH_DOMAIN=www.consens.io`:
+      Google läuft als Redirect, Kontoauswahl nennt consens.io, nach der
+      Rückkehr schließt der Dialog von selbst.
+- [ ] Aus der LinkedIn-App (In-App-Browser): Google zeigt den Hinweis „doesn’t
+      work inside the LinkedIn app“ mit „Copy link“ (Android zusätzlich „Open in
+      Chrome“); E-Mail-Login funktioniert dort weiter.
+- [ ] Sign-up mit Gmail-Adresse: „Open Gmail“, Resend-Cooldown, „Use a
+      different address“. Der Link in der Mail endet nach dem Passwort-Setzen
+      über „Continue“ auf `/app?setup=1` mit vorausgefülltem Login.
 - [ ] Nach Logout verschwinden Account-Label, Kontingent-Ring/-Panel, Usage-
       Zahlen, Watch-Kontingent und Bookmark-Inhalte sofort; Bookmarks und Suche
       sind als Gast nicht klick- bzw. fokussierbar. Auch eine vor dem Logout

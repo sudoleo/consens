@@ -474,6 +474,9 @@ onIdTokenChanged(auth, async (user) => {
     }
 
     hideEmailVerificationGate();
+    // Signed in (also on the way back from Google's redirect): the dialog
+    // has done its job.
+    closeAuthModal();
 
     if (previousAuthUid && previousAuthUid !== user.uid) {
       resetLoadedRunAfterLogout();
@@ -791,235 +794,597 @@ window.refreshUsageData = async function () {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Login / sign-up dialog (#loginModal in index.html, style in auth-modal.css)
+//
+// The dialog decides whether a newcomer stays. One form with two tabs (Log in
+// | Sign up), Google first, every action shows that it is working, errors sit
+// next to the control that caused them, and Enter submits.
+// ---------------------------------------------------------------------------
+
+const REMEMBERED_EMAIL_KEY = "consensio.authEmail";
+const GOOGLE_REDIRECT_KEY = "consensio.googleRedirectPending";
+// Same rule as RegisterRequest in app/api/routers/auth.py.
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
+const NETWORK_ERROR_MESSAGE = "Network error. Please check your internet connection and try again.";
+const WRONG_CREDENTIALS_MESSAGE =
+  "E-mail or password is not correct. Signed up with Google? Use “Continue with Google” above.";
+
+const AUTH_MODE_COPY = {
+  login: { title: "Log in to consens.io", lead: "Pick up where you left off." },
+  register: {
+    title: "Create your free account",
+    lead: "Ask once and see where leading AI models agree – and where they don’t.",
+  },
+};
+
 function mapFirebaseLoginError(error) {
-  // Sicherheitsfreundliche, generische Messages
-  switch (error.code) {
+  // SDK 9.22 predates Firebase's e-mail enumeration protection: a wrong
+  // password arrives as auth/internal-error carrying INVALID_LOGIN_CREDENTIALS
+  // and used to read "An error occurred" instead of "wrong password".
+  const message = String(error?.message || "");
+  switch (error?.code) {
     case "auth/user-not-found":
     case "auth/wrong-password":
+    case "auth/invalid-credential":
+    case "auth/invalid-login-credentials":
+      return WRONG_CREDENTIALS_MESSAGE;
     case "auth/invalid-email":
-      return "Login failed. Please check your e-mail and password.";
-
+      return "Please enter a valid e-mail address.";
+    case "auth/user-disabled":
+      return "This account is blocked. Write to contact@consens.io if this is a mistake.";
     case "auth/too-many-requests":
-      return "Too many login attempts. Please try again later.";
-
+      return "Too many login attempts. Please wait a few minutes or reset your password.";
     case "auth/network-request-failed":
-      return "Network error. Please check your internet connection and try again.";
-
+      return NETWORK_ERROR_MESSAGE;
     default:
+      if (/INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND/.test(message)) {
+        return WRONG_CREDENTIALS_MESSAGE;
+      }
       return "An error occurred while logging in. Please try again.";
   }
 }
 
 function mapPasswordResetError(error) {
-  switch (error.code) {
-    case "auth/user-not-found":
-      return "No account was found for this e-mail address.";
+  switch (error?.code) {
     case "auth/invalid-email":
+    case "auth/missing-email":
       return "Please enter a valid e-mail address.";
+    case "auth/too-many-requests":
+      return "Too many requests. Please wait a few minutes and try again.";
     case "auth/network-request-failed":
-      return "Network error. Please check your internet connection and try again.";
+      return NETWORK_ERROR_MESSAGE;
     default:
       return "An error occurred while resetting the password. Please try again.";
   }
 }
 
-// Login-Funktion
-document.getElementById("loginButton").addEventListener("click", () => {
-  const email = document.getElementById("loginEmail").value;
-  const password = document.getElementById("loginPassword").value;
-  trackAppEvent("auth_email_login_started");
-  
-  // Fehleranzeige erstmal leeren
-  loginErr.textContent = "";
+function mapGoogleSignInError(error) {
+  switch (error?.code) {
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+    case "auth/user-cancelled":
+      return "The Google window closed before sign-in finished. Please try again, or use your e-mail below.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google window. Allow pop-ups for consens.io and try again, or use your e-mail below.";
+    case "auth/web-storage-unsupported":
+    case "auth/operation-not-supported-in-this-environment":
+      return "This browser blocks what Google sign-in needs. Open consens.io in Safari or Chrome, or use your e-mail below.";
+    case "auth/user-disabled":
+      return "This account is blocked. Write to contact@consens.io if this is a mistake.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a few minutes and try again.";
+    case "auth/network-request-failed":
+      return NETWORK_ERROR_MESSAGE;
+    default:
+      return "Google sign-in didn’t work this time. Please try again, or use your e-mail below.";
+  }
+}
 
-  signInWithEmailAndPassword(auth, email, password)
-    .then(async (userCredential) => {
-      const user = userCredential.user;
-      if (user.emailVerified) {
-        // Login erfolgreich, Token speichern und Seite neu laden
-        const token = await user.getIdToken();
-        try { localStorage.setItem("id_token", token); } catch (_) {}
+// --- Environment --------------------------------------------------------
 
-        fetch("/confirm-registration", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id_token: token })
-        })
-          .catch(err => console.error("Confirm-Registration-Fehler:", err));
+function isCoarsePointer() {
+  return Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
+}
 
-        window.location.href = "/app";
-      } else {
-        // Unbestaetigt heisst nicht mehr "raus": das Modal geht zu, die App
-        // ist da, und der Streifen (onIdTokenChanged) erklaert den einen
-        // fehlenden Schritt inklusive Resend.
-        try { localStorage.removeItem("id_token"); } catch {}
-        closeAuthModal();
-      }
-      trackAppEvent("auth_email_login_result", { status: user.emailVerified ? "success" : "unverified" });
-    })
-    .catch((error) => {
-      // Statt error.message → gemappte, neutrale Meldung
-      const msg = mapFirebaseLoginError(error);
-      loginErr.textContent = msg;
-      trackAppEvent("auth_email_login_result", { status: "error" });
-    });
-});
+function isMobileBrowser() {
+  const ua = navigator.userAgent || "";
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
 
-// --- Minimal-invasive Register-/Login-Umschaltung + Registrierung ---
+// Google refuses OAuth inside embedded app browsers ("disallowed_useragent"),
+// and their pop-ups go nowhere. Visitors from a LinkedIn post land exactly
+// there, so they get a way out instead of a dead Google button.
+function inAppBrowserName() {
+  const ua = navigator.userAgent || "";
+  if (/LinkedInApp/i.test(ua)) return "LinkedIn";
+  if (/Instagram/i.test(ua)) return "Instagram";
+  if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return "Facebook";
+  if (/musical_ly|BytedanceWebview|TikTok/i.test(ua)) return "TikTok";
+  if (/Snapchat/i.test(ua)) return "Snapchat";
+  if (/\bLine\//.test(ua)) return "LINE";
+  if (/; wv\)/.test(ua)) return "app";
+  return "";
+}
+
+// Firebase's sign-in helpers are served from this very origin when
+// FIREBASE_AUTH_DOMAIN names this host (app/api/routers/firebase_auth_proxy.py).
+// Only then does the redirect flow survive Safari's storage partitioning, so
+// only then do phones get the redirect instead of a pop-up tab.
+function authDomainIsFirstParty() {
+  return String(window.FIREBASE_CONFIG?.authDomain || "") === window.location.host;
+}
+
+function prefersGoogleRedirect() {
+  return authDomainIsFirstParty() && isMobileBrowser();
+}
+
+function passwordSetupSettings() {
+  return { url: `${window.location.origin}/app?setup=1`, handleCodeInApp: false };
+}
+
+function rememberEmail(email) {
+  try { localStorage.setItem(REMEMBERED_EMAIL_KEY, email); } catch (_) {}
+}
+
+function rememberedEmail() {
+  try { return localStorage.getItem(REMEMBERED_EMAIL_KEY) || ""; } catch (_) { return ""; }
+}
+
+function forgetRememberedEmail() {
+  try { localStorage.removeItem(REMEMBERED_EMAIL_KEY); } catch (_) {}
+}
+
+// A fresh page starts the signed-in app from a clean slate (a guest's demo
+// run does not belong to the account) and keeps the page the user was on.
+function continueSignedIn() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("setup");
+  window.location.replace(url.pathname + url.search);
+}
+
+// --- Elements -----------------------------------------------------------
 
 const formEl = document.getElementById("loginForm");
 const titleEl = document.getElementById("authTitle");
+const leadEl = document.getElementById("authLead");
+const tabsEl = document.getElementById("authTabs");
+const tabLoginEl = document.getElementById("authTabLogin");
+const tabRegisterEl = document.getElementById("authTabRegister");
 const singleMailNoteEl = document.getElementById("singleMailNote");
 
 const emailEl = document.getElementById("loginEmail");
-const emailConfirmEl = document.getElementById("loginEmailConfirm");
 const passEl = document.getElementById("loginPassword");
-const passConfirmEl = document.getElementById("loginPasswordConfirm");
-
-const toggleRegisterBtn = document.getElementById("toggleRegister");
-const confirmRegisterBtn = document.getElementById("confirmRegisterButton");
+const passFieldEl = document.getElementById("loginPasswordField");
+const passRevealEl = document.getElementById("loginPasswordReveal");
+const forgotRowEl = document.getElementById("forgotPasswordRow");
+const forgotBtn = document.getElementById("forgotPasswordButton");
 
 const loginBtn = document.getElementById("loginButton");
-const registerErr = document.getElementById("registerError");
+const confirmRegisterBtn = document.getElementById("confirmRegisterButton");
+const loginNoticeEl = document.getElementById("loginNotice");
 const loginErr = document.getElementById("loginError");
+const registerErr = document.getElementById("registerError");
 
-const forgotBtn = document.getElementById("forgotPasswordButton");
+const googleBtn = document.getElementById("googleLoginButton");
+const googleLabelEl = document.getElementById("googleLoginLabel");
+const googleErr = document.getElementById("googleError");
+const inAppNoticeEl = document.getElementById("inAppBrowserNotice");
+const inAppNameEl = document.getElementById("inAppBrowserName");
+const inAppHintEl = document.getElementById("inAppBrowserHint");
+const inAppOpenEl = document.getElementById("inAppOpenBrowser");
+const inAppCopyEl = document.getElementById("inAppCopyLink");
+
 const registrationSuccessEl = document.getElementById("registrationSuccess");
 const registrationSuccessEmailEl = document.getElementById("registrationSuccessEmail");
+const registrationMailboxEl = document.getElementById("registrationMailboxLink");
+const registrationResendBtn = document.getElementById("registrationResendButton");
+const registrationChangeBtn = document.getElementById("registrationChangeButton");
+const registrationStatusEl = document.getElementById("registrationStatus");
 const registrationLoginBtn = document.getElementById("registrationLoginButton");
 
+let lastRegisteredEmail = "";
+let resendTimer = 0;
+
+// --- Small state helpers -----------------------------------------------
+
+function setButtonPending(button, isPending, pendingLabel) {
+  if (!button) return;
+  if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent.trim();
+  button.disabled = isPending;
+  button.setAttribute("aria-busy", String(isPending));
+  button.textContent = isPending ? pendingLabel : button.dataset.idleLabel;
+}
+
 function setRegisterPending(isPending) {
-  confirmRegisterBtn.disabled = isPending;
-  confirmRegisterBtn.setAttribute("aria-busy", String(isPending));
-  confirmRegisterBtn.textContent = isPending ? "Sending setup link…" : "Send setup link";
+  setButtonPending(confirmRegisterBtn, isPending, "Sending link…");
+}
+
+function setGooglePending(isPending, label = "Waiting for Google…") {
+  googleBtn.disabled = isPending;
+  googleBtn.setAttribute("aria-busy", String(isPending));
+  googleLabelEl.textContent = isPending ? label : "Continue with Google";
+}
+
+function clearAuthMessages() {
+  [loginErr, registerErr, googleErr, loginNoticeEl].forEach(node => { node.textContent = ""; });
+  emailEl.removeAttribute("aria-invalid");
+  passEl.removeAttribute("aria-invalid");
+}
+
+function showFieldError(target, field, message) {
+  target.textContent = message;
+  field.setAttribute("aria-invalid", "true");
+  field.focus();
+}
+
+function hidePassword() {
+  passEl.type = "password";
+  passRevealEl.textContent = "Show";
+  passRevealEl.setAttribute("aria-pressed", "false");
 }
 
 function setMode(mode) {
-  formEl.dataset.mode = mode;
+  const isRegister = mode === "register";
+  window.clearInterval(resendTimer);
+  formEl.dataset.mode = isRegister ? "register" : "login";
   formEl.hidden = false;
+  tabsEl.hidden = false;
   registrationSuccessEl.hidden = true;
   setRegisterPending(false);
+  setButtonPending(loginBtn, false);
+  hidePassword();
 
-  const isRegister = mode === "register";
-  // Titel & Hinweise
-  titleEl.textContent = isRegister ? "Create account" : "Log in to consens.io";
+  const copy = AUTH_MODE_COPY[formEl.dataset.mode];
+  titleEl.textContent = copy.title;
+  leadEl.textContent = copy.lead;
+  [[tabLoginEl, !isRegister], [tabRegisterEl, isRegister]].forEach(([tab, selected]) => {
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+
+  passFieldEl.hidden = isRegister;
+  forgotRowEl.hidden = isRegister;
   singleMailNoteEl.classList.toggle("u-display-none", !isRegister);
-
-  // Felder ein-/ausblenden
-  emailConfirmEl.classList.toggle("u-display-none", !isRegister);
-  passEl.classList.toggle("u-display-none", isRegister);
-  passConfirmEl.classList.add("u-display-none");
-
-  // Primär-Buttons
   confirmRegisterBtn.classList.toggle("u-display-none", !isRegister);
   loginBtn.classList.toggle("u-display-none", isRegister);
+  clearAuthMessages();
+}
 
-  // Forgot Password ausblenden im Register-Modus
-  forgotBtn?.classList.toggle("u-display-none", isRegister);
+function selectAuthTab(mode) {
+  if (formEl.dataset.mode === mode && !formEl.hidden) return;
+  setMode(mode);
+  trackAppEvent("auth_mode_changed", { mode });
+}
 
-  // Toggle-Text
-  toggleRegisterBtn.textContent = isRegister
-    ? "Back to login"
-    : "New here? Create account";
+tabLoginEl.addEventListener("click", () => selectAuthTab("login"));
+tabRegisterEl.addEventListener("click", () => selectAuthTab("register"));
+tabsEl.addEventListener("keydown", event => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const next = event.key === "ArrowLeft" || event.key === "Home" ? tabLoginEl : tabRegisterEl;
+  selectAuthTab(next === tabLoginEl ? "login" : "register");
+  next.focus();
+});
 
-  // Fehler leeren
-  registerErr.textContent = "";
-  loginErr.textContent = "";
+passRevealEl.addEventListener("click", () => {
+  const show = passEl.type === "password";
+  passEl.type = show ? "text" : "password";
+  passRevealEl.textContent = show ? "Hide" : "Show";
+  passRevealEl.setAttribute("aria-pressed", String(show));
+  passEl.focus();
+});
+
+// One form for both tabs: Enter and the mobile keyboard's "Go" submit it,
+// and the tab decides what that means.
+formEl.addEventListener("submit", event => {
+  event.preventDefault();
+  if (formEl.dataset.mode === "register") handleRegister();
+  else handleEmailLogin();
+});
+
+// --- Sign up: mailbox-only setup ----------------------------------------
+//
+// Existing and new addresses get the same answer and the same e-mail, so the
+// form never tells a stranger whether an address has an account.
+
+const MAILBOXES = [
+  [/^(gmail|googlemail)\.com$/, "Gmail", "https://mail.google.com/mail/u/0/#inbox"],
+  [/^(outlook|hotmail|live|msn)\.[a-z.]+$/, "Outlook", "https://outlook.live.com/mail/0/inbox"],
+  [/^(yahoo|ymail)\.[a-z.]+$/, "Yahoo Mail", "https://mail.yahoo.com/"],
+  [/^(icloud|me|mac)\.com$/, "iCloud Mail", "https://www.icloud.com/mail"],
+  [/^gmx\.[a-z.]+$/, "GMX", "https://www.gmx.net/"],
+  [/^web\.de$/, "WEB.DE", "https://web.de/"],
+  [/^t-online\.de$/, "Telekom Mail", "https://email.t-online.de/"],
+];
+
+function mailboxFor(email) {
+  const domain = String(email).split("@").pop().toLowerCase();
+  const hit = MAILBOXES.find(([pattern]) => pattern.test(domain));
+  return hit ? { name: hit[1], url: hit[2] } : null;
+}
+
+async function requestSetupLink(email) {
+  try {
+    const response = await fetch("/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.status === "check_inbox") return { ok: true };
+    if (response.status === 429) {
+      return { ok: false, message: "Too many attempts. Please wait a minute and try again." };
+    }
+    if (response.status === 422) {
+      return { ok: false, message: "Please check the e-mail address – it looks incomplete." };
+    }
+    return {
+      ok: false,
+      message: typeof data.detail === "string"
+        ? data.detail
+        : "We couldn't send the link right now. Please try again in a moment.",
+    };
+  } catch (error) {
+    console.error("Registration request failed:", error);
+    return { ok: false, message: "We couldn't create your account. Check your connection and try again." };
+  }
+}
+
+async function handleRegister() {
+  if (confirmRegisterBtn.disabled) return;
+  clearAuthMessages();
+  const email = (emailEl.value || "").trim();
+  if (!email) {
+    showFieldError(registerErr, emailEl, "Please enter your e-mail address.");
+    return;
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    showFieldError(registerErr, emailEl, "Please check the e-mail address – it looks incomplete.");
+    return;
+  }
+  trackAppEvent("auth_register_started");
+  setRegisterPending(true);
+  // Never try caller-chosen credentials here: that would reveal whether the
+  // backend had just created the account.
+  const result = await requestSetupLink(email);
+  setRegisterPending(false);
+  if (result.ok) {
+    rememberEmail(email);
+    showRegistrationSuccess(email);
+    trackAppEvent("auth_register_result", { status: "success" });
+  } else {
+    registerErr.textContent = result.message;
+    trackAppEvent("auth_register_result", { status: "error" });
+  }
+}
+
+function startResendCooldown(seconds) {
+  window.clearInterval(resendTimer);
+  let left = seconds;
+  const render = () => {
+    registrationResendBtn.disabled = left > 0;
+    registrationResendBtn.textContent = left > 0 ? `Send again in ${left} s` : "Send the link again";
+  };
+  render();
+  resendTimer = window.setInterval(() => {
+    left -= 1;
+    render();
+    if (left <= 0) window.clearInterval(resendTimer);
+  }, 1000);
 }
 
 function showRegistrationSuccess(email) {
+  lastRegisteredEmail = email;
   titleEl.textContent = "Check your inbox";
+  leadEl.textContent = "One step left to your account.";
   registrationSuccessEmailEl.textContent = email;
+  const mailbox = mailboxFor(email);
+  registrationMailboxEl.hidden = !mailbox;
+  if (mailbox) {
+    registrationMailboxEl.href = mailbox.url;
+    registrationMailboxEl.textContent = `Open ${mailbox.name}`;
+  }
+  registrationStatusEl.textContent = "";
   formEl.hidden = true;
+  tabsEl.hidden = true;
   registrationSuccessEl.hidden = false;
   passEl.value = "";
-  passConfirmEl.value = "";
-  registrationSuccessEl.focus();
+  startResendCooldown(30);
+  registrationSuccessEl.focus({ preventScroll: true });
 }
+
+registrationMailboxEl.addEventListener("click", () => {
+  trackAppEvent("auth_register_open_inbox", { provider: registrationMailboxEl.textContent.replace(/^Open /, "") });
+});
+
+registrationResendBtn.addEventListener("click", async () => {
+  if (!lastRegisteredEmail || registrationResendBtn.disabled) return;
+  registrationResendBtn.disabled = true;
+  registrationStatusEl.textContent = "Sending…";
+  const result = await requestSetupLink(lastRegisteredEmail);
+  registrationStatusEl.textContent = result.ok ? "Sent again. It can take a minute to arrive." : result.message;
+  startResendCooldown(result.ok ? 60 : 20);
+  trackAppEvent("auth_register_resend", { status: result.ok ? "success" : "error" });
+});
+
+registrationChangeBtn.addEventListener("click", () => {
+  setMode("register");
+  emailEl.value = lastRegisteredEmail;
+  emailEl.focus();
+  emailEl.select();
+});
 
 registrationLoginBtn.addEventListener("click", () => {
   setMode("login");
-  emailEl.focus();
+  if (lastRegisteredEmail) emailEl.value = lastRegisteredEmail;
+  (emailEl.value ? passEl : emailEl).focus();
 });
 
-toggleRegisterBtn.addEventListener("click", () => {
-  const current = formEl.dataset.mode === "register" ? "register" : "login";
-  setMode(current === "login" ? "register" : "login");
-  trackAppEvent("auth_mode_changed", { mode: current === "login" ? "register" : "login" });
-});
-
-// --- Registrierung (läuft NICHT über loginButton, sondern über confirmRegisterButton) ---
-confirmRegisterBtn.addEventListener("click", () => {
-  if (confirmRegisterBtn.disabled) return;
-  registerErr.textContent = "";
-  trackAppEvent("auth_register_started");
-
+function handleForgotPassword() {
+  clearAuthMessages();
   const email = (emailEl.value || "").trim();
-  const email2 = (emailConfirmEl.value || "").trim();
-  // Client-Side-Validierung
-  if (!email || !email2) {
-    registerErr.textContent = "Please enter your e-mail twice.";
-    return;
-  }
-  if (email !== email2) {
-    registerErr.textContent = "E-mail addresses do not match.";
-    return;
-  }
-  setRegisterPending(true);
-
-  // Request an Backend
-  fetch("/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: email })
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      if (data.status === "check_inbox") {
-        // Existing and new addresses follow the same mailbox-only setup path.
-        // Never try caller-chosen credentials here: that would reveal whether
-        // the backend had just created the account.
-        showRegistrationSuccess(email);
-        trackAppEvent("auth_register_result", { status: "success" });
-      } else if (data.detail || data.error) {
-        registerErr.textContent = data.detail || data.error;
-        setRegisterPending(false);
-        trackAppEvent("auth_register_result", { status: "error" });
-      } else {
-        registerErr.textContent = "Unexpected response from server.";
-        setRegisterPending(false);
-        trackAppEvent("auth_register_result", { status: "error" });
-      }
-    })
-    .catch((error) => {
-      console.error("Registration request failed:", error);
-      registerErr.textContent = "We couldn't create your account. Check your connection and try again.";
-      setRegisterPending(false);
-      trackAppEvent("auth_register_result", { status: "error" });
-    });
-});
-
-// Standard: beim Öffnen im Login-Modus
-setMode("login");
-
-document.getElementById("forgotPasswordButton").addEventListener("click", () => {
-  const email = document.getElementById("loginEmail").value;
   trackAppEvent("auth_password_reset_started");
-  if (!email) {
-    alert("Please enter your e-mail address to reset the password. Check your spam folder.");
+  if (!EMAIL_PATTERN.test(email)) {
+    showFieldError(loginErr, emailEl, "Enter your e-mail address above, then tap “Forgot password?” again.");
     return;
   }
-  sendPasswordResetEmail(auth, email)
-    .then(() => {
-      alert("An e-mail to reset your password has been sent to " + email);
-      trackAppEvent("auth_password_reset_result", { status: "success" });
+  const showSent = () => {
+    rememberEmail(email);
+    loginNoticeEl.textContent =
+      `If an account exists for ${email}, a link to set a new password is on its way. Check your spam folder too.`;
+    trackAppEvent("auth_password_reset_result", { status: "success" });
+  };
+  forgotBtn.disabled = true;
+  sendPasswordResetEmail(auth, email, passwordSetupSettings())
+    .catch(error => {
+      // The way back into the app is a convenience; the e-mail is not.
+      if (/continue-uri|unauthorized-domain/.test(error?.code || "")) return sendPasswordResetEmail(auth, email);
+      throw error;
     })
-    .catch((error) => {
-      const msg = mapPasswordResetError(error);
-      alert(msg);
+    .then(showSent)
+    .catch(error => {
+      // "No such account" gets the same answer as a sent link.
+      if (error?.code === "auth/user-not-found") {
+        showSent();
+        return;
+      }
+      loginErr.textContent = mapPasswordResetError(error);
       trackAppEvent("auth_password_reset_result", { status: "error" });
-    });
+    })
+    .finally(() => { forgotBtn.disabled = false; });
+}
+
+forgotBtn.addEventListener("click", handleForgotPassword);
+
+// --- Log in with e-mail ---------------------------------------------------
+
+async function handleEmailLogin() {
+  if (loginBtn.disabled) return;
+  clearAuthMessages();
+  const email = (emailEl.value || "").trim();
+  const password = passEl.value;
+  if (!email) {
+    showFieldError(loginErr, emailEl, "Please enter your e-mail address.");
+    return;
+  }
+  if (!password) {
+    showFieldError(loginErr, passEl, "Please enter your password.");
+    return;
+  }
+  trackAppEvent("auth_email_login_started");
+  setButtonPending(loginBtn, true, "Logging in…");
+  try {
+    const { user } = await signInWithEmailAndPassword(auth, email, password);
+    forgetRememberedEmail();
+    if (!user.emailVerified) {
+      // Unbestaetigt heisst nicht mehr "raus": das Modal geht zu, die App
+      // ist da, und der Streifen (onIdTokenChanged) erklaert den einen
+      // fehlenden Schritt inklusive Resend.
+      try { localStorage.removeItem("id_token"); } catch (_) {}
+      setButtonPending(loginBtn, false);
+      closeAuthModal();
+      trackAppEvent("auth_email_login_result", { status: "unverified" });
+      return;
+    }
+    const token = await user.getIdToken();
+    try { localStorage.setItem("id_token", token); } catch (_) {}
+    trackAppEvent("auth_email_login_result", { status: "success" });
+    continueSignedIn();
+  } catch (error) {
+    setButtonPending(loginBtn, false);
+    loginErr.textContent = mapFirebaseLoginError(error);
+    if (loginErr.textContent === WRONG_CREDENTIALS_MESSAGE) passEl.setAttribute("aria-invalid", "true");
+    trackAppEvent("auth_email_login_result", { status: "error" });
+  }
+}
+
+// --- Continue with Google -------------------------------------------------
+
+function syncInAppBrowserNotice(emphasize = false) {
+  const name = inAppBrowserName();
+  inAppNoticeEl.hidden = !name;
+  if (!name) return false;
+  inAppNameEl.textContent = name === "app" ? "this app" : `the ${name} app`;
+  const android = /Android/i.test(navigator.userAgent || "");
+  inAppOpenEl.hidden = !android;
+  if (android) {
+    inAppOpenEl.href = `intent://${window.location.host}${window.location.pathname}${window.location.search}`
+      + "#Intent;scheme=https;package=com.android.chrome;end";
+  }
+  inAppHintEl.textContent = android
+    ? "Open consens.io in Chrome, or use your e-mail below."
+    : "Use the app’s ••• menu and choose “Open in browser”, or use your e-mail below.";
+  inAppNoticeEl.classList.toggle("is-emphasized", emphasize);
+  return true;
+}
+
+inAppCopyEl.addEventListener("click", () => {
+  const link = `${window.location.origin}${window.location.pathname}`;
+  const done = label => {
+    inAppCopyEl.textContent = label;
+    window.setTimeout(() => { inAppCopyEl.textContent = "Copy link"; }, 2400);
+  };
+  trackAppEvent("auth_in_app_copy_link");
+  if (!navigator.clipboard?.writeText) {
+    done(link);
+    return;
+  }
+  navigator.clipboard.writeText(link).then(() => done("Link copied"), () => done(link));
 });
+
+function startGoogleRedirect() {
+  try { sessionStorage.setItem(GOOGLE_REDIRECT_KEY, "1"); } catch (_) {}
+  setGooglePending(true, "Opening Google…");
+  signInWithRedirect(auth, googleProvider).catch(error => {
+    try { sessionStorage.removeItem(GOOGLE_REDIRECT_KEY); } catch (_) {}
+    setGooglePending(false);
+    googleErr.textContent = mapGoogleSignInError(error);
+    trackAppEvent("auth_google_login_result", { status: "error", flow: "redirect", code: error?.code || "unknown" });
+  });
+}
+
+function handleGoogleSignIn() {
+  if (googleBtn.disabled) return;
+  clearAuthMessages();
+  const inApp = inAppBrowserName();
+  if (inApp) {
+    syncInAppBrowserNotice(true);
+    trackAppEvent("auth_google_login_blocked", { browser: inApp });
+    return;
+  }
+  if (prefersGoogleRedirect()) {
+    trackAppEvent("auth_google_login_started", { flow: "redirect" });
+    startGoogleRedirect();
+    return;
+  }
+  trackAppEvent("auth_google_login_started", { flow: "popup" });
+  setGooglePending(true);
+  // signInWithPopup runs synchronously inside the click: one await before it
+  // and Safari no longer counts the click and blocks the window.
+  signInWithPopup(auth, googleProvider)
+    .then(() => {
+      trackAppEvent("auth_google_login_result", { status: "success", flow: "popup" });
+      setGooglePending(true, "Signing you in…");
+      continueSignedIn();
+    })
+    .catch(error => {
+      if (error?.code === "auth/popup-blocked" && authDomainIsFirstParty()) {
+        trackAppEvent("auth_google_login_result", { status: "popup_blocked_redirect", flow: "popup" });
+        startGoogleRedirect();
+        return;
+      }
+      console.warn("Google sign-in failed:", error?.code || error);
+      setGooglePending(false);
+      googleErr.textContent = mapGoogleSignInError(error);
+      trackAppEvent("auth_google_login_result", { status: "error", flow: "popup", code: error?.code || "unknown" });
+    });
+}
+
+googleBtn.addEventListener("click", handleGoogleSignIn);
+
+// --- Opening and closing ----------------------------------------------------
 
 // Klick auf den Login-Bereich: Öffne das Modal, wenn nicht angemeldet.
 // Eingeloggt passiert hier bewusst NICHTS - das User-Icon öffnet sein eigenes
@@ -1041,9 +1406,12 @@ function showAuthModal(mode, trigger) {
   if (mode) setMode(mode);
   if (modal.style.display !== "block") authModalReturnFocus = trigger || document.activeElement;
   modal.style.display = "block";
-  const initialFocus = mode === "register"
-    ? document.getElementById("loginEmail")
-    : document.getElementById("loginEmail");
+  syncInAppBrowserNotice();
+  // On a phone a focused field opens the keyboard, which covers the Google
+  // button before the user has chosen a way in.
+  const initialFocus = isCoarsePointer()
+    ? document.getElementById("loginModalContent")
+    : emailEl;
   (initialFocus || document.getElementById("closeLoginModal"))?.focus({ preventScroll: true });
 }
 
@@ -1051,6 +1419,7 @@ function closeAuthModal() {
   const modal = document.getElementById("loginModal");
   if (!modal || modal.style.display !== "block") return;
   modal.style.display = "none";
+  hidePassword();
   if (authModalReturnFocus?.isConnected && typeof authModalReturnFocus.focus === "function") {
     authModalReturnFocus.focus({ preventScroll: true });
   }
@@ -1066,11 +1435,14 @@ document.getElementById("loginContainer").addEventListener("click", event => {
 
 // Auth-Buttons oben rechts (nur ausgeloggt sichtbar): öffnen das Modal direkt
 // im passenden Modus — "Sign up" landet ohne Umweg im Registrierungsformular.
-function openAuthModal(mode, trigger) {
+function openAuthModal(mode, trigger, source) {
   if (auth.currentUser) return;
   showAuthModal(mode, trigger);
-  trackAppEvent("auth_modal_open", { mode });
+  trackAppEvent("auth_modal_open", source ? { mode, source } : { mode });
 }
+
+// Demo end and the locked attachment menu open the same dialog.
+window.App.openAuthModal = openAuthModal;
 
 document.getElementById("authTopLoginBtn")?.addEventListener("click", event => openAuthModal("login", event.currentTarget));
 document.getElementById("authTopSignupBtn")?.addEventListener("click", event => openAuthModal("register", event.currentTarget));
@@ -1097,14 +1469,66 @@ document.addEventListener("keydown", event => {
   }
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
+  const outside = !focusable.includes(document.activeElement);
+  if (event.shiftKey && (document.activeElement === first || outside)) {
     event.preventDefault();
     last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
+  } else if (!event.shiftKey && (document.activeElement === last || outside)) {
     event.preventDefault();
     first.focus();
   }
 });
+
+// Standard: beim Öffnen im Login-Modus
+setMode("login");
+
+// --- Coming back ---------------------------------------------------------
+
+// Back from Google's redirect: the dialog shows that sign-in is finishing,
+// onIdTokenChanged takes over, and a failure lands next to the Google button.
+(function resumeGoogleRedirect() {
+  let pending = false;
+  try {
+    pending = sessionStorage.getItem(GOOGLE_REDIRECT_KEY) === "1";
+    sessionStorage.removeItem(GOOGLE_REDIRECT_KEY);
+  } catch (_) {}
+  if (!pending) return;
+  showAuthModal("login");
+  setGooglePending(true, "Signing you in…");
+  getRedirectResult(auth)
+    .then(result => {
+      setGooglePending(false);
+      if (!result?.user) return; // came back without choosing an account
+      trackAppEvent("auth_google_login_result", { status: "success", flow: "redirect" });
+      closeAuthModal();
+    })
+    .catch(error => {
+      setGooglePending(false);
+      googleErr.textContent = mapGoogleSignInError(error);
+      trackAppEvent("auth_google_login_result", { status: "error", flow: "redirect", code: error?.code || "unknown" });
+    });
+})();
+
+// Back from the password-setup e-mail (continueUrl /app?setup=1, see
+// app/services/registration.py): open the login with the address filled in.
+(function resumePasswordSetup() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("setup")) return;
+  url.searchParams.delete("setup");
+  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  let handled = false;
+  onAuthStateChanged(auth, user => {
+    if (handled) return;
+    handled = true;
+    if (user) return;
+    showAuthModal("login");
+    const email = rememberedEmail();
+    if (email && !emailEl.value) emailEl.value = email;
+    loginNoticeEl.textContent = "Your password is set. Log in to start.";
+    if (email && !isCoarsePointer()) passEl.focus({ preventScroll: true });
+    trackAppEvent("auth_setup_return");
+  });
+})();
 
 // --- Account löschen (DSGVO Art. 17) ---
 document.getElementById("deleteAccountBtn")?.addEventListener("click", async () => {
@@ -1149,54 +1573,6 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async () 
     alert("Account deletion failed. Please try again or contact us.");
   }
 });
-
-function isIOS() {
-  return /iP(ad|hone|od)/i.test(navigator.userAgent);
-}
-
-function handleGoogleSignIn() {
-  const loginErrorEl = document.getElementById("loginError");
-  if (loginErrorEl) loginErrorEl.textContent = "";
-  trackAppEvent("auth_google_login_started");
-
-  // GANZ WICHTIG: signInWithPopup wird direkt im Click-Handler aufgerufen,
-  // ohne vorherige await-/Promise-Ketten.
-  signInWithPopup(auth, googleProvider)
-    .then(result => {
-      trackAppEvent("auth_google_login_result", { status: "success" });
-      return afterGoogleLogin(result.user);
-    })
-    .catch(err => {
-      console.error("Google sign-in failed:", err);
-      trackAppEvent("auth_google_login_result", { status: "error" });
-
-      if (!loginErrorEl) return;
-
-      if (err.code === "auth/popup-blocked") {
-        // Erster Klick auf Safari kann trotzdem noch geblockt werden,
-        // aber wir geben einen klaren Hinweis.
-        loginErrorEl.textContent =
-          "Your browser blocked the Google login popup. Please allow pop-ups for consens.io and try again.";
-        return;
-      }
-
-      if (err.code === "auth/popup-closed-by-user") {
-        loginErrorEl.textContent =
-          "The login window was closed before completing the sign-in.";
-        return;
-      }
-
-      // statt err.message
-      loginErrorEl.textContent = "Google sign-in failed. Please try again later.";
-    });
-}
-
-document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
-
-async function afterGoogleLogin(user) {
-  // Jetzt *nach* erfolgreichem/versuchtem POST navigieren
-  location.replace("/app");
-}
 
 async function recordModelVote(model, type, resultId = window.lastShareResultId) {
   // Prüfe, ob der Nutzer eingeloggt ist.
@@ -2768,18 +3144,6 @@ async function deleteBookmark(bookmarkId) {
   return deletion;
 }
 window.deleteBookmark = deleteBookmark;
-
-// Passende Auth-Aktion per Enter auslösen – auch in den Bestätigungsfeldern.
-[emailEl, emailConfirmEl, passEl, passConfirmEl].forEach((field) => field.addEventListener("keydown", function(e) {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    if (formEl.dataset.mode === "register") {
-      confirmRegisterBtn.click();
-    } else {
-      loginBtn.click();
-    }
-  }
-}));
 
 function sendFeedback(message, email) {
   // Prüfe, ob der Nutzer eingeloggt ist

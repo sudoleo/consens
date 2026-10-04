@@ -1,0 +1,495 @@
+/* ==========================================================================
+   Login / sign-up dialog (#loginModal, logic in static/firebase.js)
+
+   The dialog decides whether a newcomer stays, so it has one job per
+   screen: Google first, e-mail second, one primary button. Log in and Sign
+   up are two tabs of the same form instead of a link at its foot. On a
+   phone nothing is focused on open, so the keyboard does not cover the
+   Google button before the user has chosen a way in.
+   Loaded after every component layer; nothing here needs !important.
+   ========================================================================== */
+
+#loginModal .auth-modal {
+  position: relative;
+  width: min(calc(100vw - 24px), 400px);
+  max-height: min(calc(100dvh - 24px), 720px);
+  margin: clamp(12px, 9vh, 88px) auto 24px;
+  padding: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--raise);
+  color: var(--ink);
+  box-shadow: var(--lift);
+  text-align: left;
+}
+
+#loginModal .auth-modal:focus { outline: none; }
+
+#loginModal .auth-modal .close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--font-size-xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+#loginModal .auth-modal .close:is(:hover, :focus-visible) {
+  background: var(--line-soft);
+  color: var(--ink);
+}
+
+/* --- Head --------------------------------------------------------------- */
+#loginModal .auth-head {
+  padding: 28px 28px 0;
+  text-align: center;
+}
+
+#loginModal .auth-mark {
+  display: block;
+  width: 38px;
+  height: auto;
+  margin: 0 auto 14px;
+  aspect-ratio: 279 / 200;
+  object-fit: contain;
+  filter: invert(1);
+}
+
+.dark-mode #loginModal .auth-mark { filter: none; }
+
+#loginModal .auth-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-align: center;
+}
+
+#loginModal .auth-lead {
+  margin: 6px auto 0;
+  max-width: 30ch;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+/* --- Log in / Sign up --------------------------------------------------- */
+#loginModal .auth-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 20px 28px 0;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--line-soft);
+}
+
+#loginModal .auth-tabs[hidden] { display: none; }
+
+#loginModal .auth-tab {
+  position: relative;
+  z-index: 1;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
+}
+
+#loginModal .auth-tab:hover { opacity: 1; color: var(--ink); }
+
+#loginModal .auth-tab[aria-selected="true"] {
+  background: var(--well);
+  color: var(--ink);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--line-soft);
+}
+
+/* --- Form ---------------------------------------------------------------- */
+#loginModal .auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 28px 24px;
+}
+
+#loginModal .auth-form[hidden] { display: none; }
+
+#loginModal .oauth-button {
+  width: 100%;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
+  user-select: none;
+}
+
+#loginModal .oauth-button img {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+#loginModal .oauth-button:is(:hover, :focus-visible):not(:disabled) {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+  background: color-mix(in srgb, var(--well) 92%, var(--ink) 8%);
+}
+
+#loginModal .oauth-button:disabled,
+#loginModal .auth-primary-action:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+#loginModal [aria-busy="true"] img { animation: auth-pulse 1.1s var(--ease-standard) infinite alternate; }
+
+@keyframes auth-pulse { from { opacity: 1; } to { opacity: 0.35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  #loginModal [aria-busy="true"] img { animation: none; }
+}
+
+/* In LinkedIn, Instagram & co. Google refuses to sign in at all. */
+#loginModal .auth-inapp {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+#loginModal .auth-inapp[hidden] { display: none; }
+#loginModal .auth-inapp strong { color: var(--ink); font-weight: var(--font-weight-semibold); }
+#loginModal .auth-inapp p { margin: 0; }
+#loginModal .auth-inapp.is-emphasized { border-color: color-mix(in srgb, var(--ink) 40%, transparent); }
+
+#loginModal .auth-inapp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#loginModal .auth-chip {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+#loginModal .auth-chip[hidden] { display: none; }
+#loginModal .auth-chip:is(:hover, :focus-visible) { opacity: 1; background: var(--line-soft); }
+
+#loginModal .oauth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1;
+}
+
+#loginModal .oauth-divider::before,
+#loginModal .oauth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+#loginModal .auth-email-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#loginModal .auth-form input[type="email"],
+#loginModal .auth-form input[type="password"],
+#loginModal .auth-form input[type="text"] {
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  color: var(--ink);
+  font: inherit;
+  /* 16px keeps iOS Safari from zooming into the field on focus. */
+  font-size: max(16px, var(--font-size-base));
+  transition: border-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
+}
+
+#loginModal .auth-form input::placeholder { color: var(--ink-3); }
+
+#loginModal .auth-form input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+  box-shadow: 0 0 0 3px var(--line-soft);
+}
+
+#loginModal .auth-form input[aria-invalid="true"] {
+  border-color: var(--clear-button-text);
+}
+
+#loginModal .auth-password {
+  position: relative;
+}
+
+#loginModal .auth-password[hidden] { display: none; }
+
+#loginModal .auth-password input { padding-right: 76px; }
+
+#loginModal .auth-reveal {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+#loginModal .auth-reveal:is(:hover, :focus-visible) { opacity: 1; background: var(--line-soft); color: var(--ink); }
+
+#loginModal .auth-forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+#loginModal .auth-forgot-row[hidden] { display: none; }
+
+#loginModal .auth-link {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+#loginModal .auth-link:is(:hover, :focus-visible) { opacity: 1; color: var(--ink); text-decoration-color: currentColor; }
+#loginModal .auth-link:disabled { color: var(--ink-3); cursor: default; text-decoration: none; }
+
+#loginModal .auth-primary-action {
+  width: 100%;
+  min-height: 48px;
+  margin: 4px 0 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--button-bg);
+  color: var(--button-text);
+  font: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity var(--dur-press) var(--ease-standard);
+}
+
+#loginModal a.auth-primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+#loginModal .auth-primary-action[hidden],
+#loginModal .auth-primary-action.u-display-none { display: none; }
+#loginModal .auth-primary-action:is(:hover, :focus-visible):not(:disabled) { opacity: 0.9; }
+
+#loginModal .error-message,
+#loginModal .auth-status {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  text-align: left;
+}
+
+#loginModal .error-message { color: var(--clear-button-text); }
+#loginModal .error-message:empty,
+#loginModal .auth-status:empty { display: none; }
+
+#loginModal .auth-status {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--agree) 12%, transparent);
+  color: var(--ink);
+}
+
+#loginModal .auth-note {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+}
+
+#loginModal .auth-note.u-display-none { display: none; }
+
+#loginModal .auth-legal {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  text-align: center;
+}
+
+#loginModal .auth-legal a,
+#loginModal .auth-footer-links a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 2px;
+}
+
+#loginModal .auth-legal a:hover,
+#loginModal .auth-footer-links a:hover { color: var(--ink); }
+
+#loginModal .auth-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+}
+
+/* --- Check your inbox ------------------------------------------------------ */
+#loginModal .auth-success {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 8px 28px 28px;
+  text-align: center;
+}
+
+#loginModal .auth-success[hidden] { display: none; }
+#loginModal .auth-success:focus { outline: none; }
+
+#loginModal .auth-success-icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin: 4px auto 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--agree) 14%, transparent);
+  color: var(--agree);
+}
+
+#loginModal .auth-success-icon svg { width: 26px; height: 26px; }
+
+#loginModal .auth-success p { margin: 0; }
+
+#loginModal .auth-success-lead {
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+}
+
+#loginModal .auth-success-email {
+  display: block;
+  margin-top: -6px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+#loginModal .auth-success-text {
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+#loginModal .auth-success-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+}
+
+#loginModal .auth-secondary-action {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+#loginModal .auth-secondary-action:is(:hover, :focus-visible) { opacity: 1; background: var(--line-soft); }
+
+@media (max-width: 480px) {
+  #loginModal .auth-modal { margin-top: 12px; }
+  #loginModal .auth-head { padding: 24px 20px 0; }
+  #loginModal .auth-tabs { margin-inline: 20px; }
+  #loginModal .auth-form { padding: 18px 20px 20px; }
+  #loginModal .auth-success { padding-inline: 20px; }
+}

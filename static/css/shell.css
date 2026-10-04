@@ -4257,15 +4257,6 @@ body .theme-toggle:is(:hover, :focus-visible) {
   background: var(--app-surface-hover) !important;
 }
 
-/* The OAuth control carries legacy important declarations of its own. */
-body #loginModalContent .oauth-button {
-  background: var(--app-surface) !important;
-  box-shadow: none;
-}
-body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) {
-  background: var(--app-surface-hover) !important;
-}
-
 /* The mode belongs to the composer, including its compact mobile state. */
 .chat-input-container {
   /* Keep the entire rounded edge above the animated toolbar. Open menus

@@ -600,47 +600,17 @@
 }
 
 @media (max-width: 640px) {
-  .auth-modal,
   .faq-modal {
     width: min(94vw, 420px);
     max-height: min(92dvh, 700px);
   }
 
-  .auth-brand,
   .faq-header {
     padding: 16px 48px 13px 18px;
   }
 
-  .auth-title {
-    margin: 20px 18px 14px !important;
-    font-size: var(--font-size-lg) !important;
-  }
-
-  .auth-form,
   .faq-body {
     padding-inline: 16px;
-  }
-
-  .auth-form {
-    gap: 14px;
-    padding-bottom: 18px;
-  }
-
-  #loginModalContent .oauth-button {
-    min-height: 48px;
-    padding: 12px 14px !important;
-    font-size: var(--font-size-base) !important;
-  }
-
-  .auth-form input[type="email"],
-  .auth-form input[type="password"] {
-    min-height: 42px;
-  }
-
-  .auth-secondary-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
   }
 
   .faq-item h3 {

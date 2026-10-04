@@ -424,7 +424,9 @@
       setMenuOpen(false);
       trackAppEvent("app_attachment_locked_click", { source: source });
       const modal = document.getElementById("loginModal");
-      if (modal) {
+      if (window.App?.openAuthModal) {
+        window.App.openAuthModal("login", null, "attachments");
+      } else if (modal) {
         modal.style.display = "block";
         trackAppEvent("auth_modal_open", { source: "attachments" });
         requestAnimationFrame(() => document.getElementById("loginEmail")?.focus());

@@ -791,98 +791,92 @@
        .container setzt container-type/isolation und wäre damit der Containing
        Block für position:fixed – das klemmt das Login-Modal in die App-Spalte. -->
 
-  <!-- Login Modal -->
+  <!-- Login Modal (logic: static/firebase.js, style: static/css/auth-modal.css) -->
   <div id="loginModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
-      <div class="modal-content auth-modal" id="loginModalContent">
+      <div class="modal-content auth-modal" id="loginModalContent" tabindex="-1">
         <button type="button" class="close" id="closeLoginModal" aria-label="Close login dialog">&times;</button>
 
-        <div class="auth-brand">
-          <img src="/static/favicon.png" alt="consens.io" />
-          <span>consens.io</span>
+        <div class="auth-head">
+          <img class="auth-mark" src="/static/favicon.png" alt="" width="38" height="27" />
+          <h2 id="authTitle" class="auth-title">Log in to consens.io</h2>
+          <p id="authLead" class="auth-lead">Pick up where you left off.</p>
         </div>
 
-        <h2 id="authTitle" class="auth-title">Log in to consens.io</h2>
+        <div id="authTabs" class="auth-tabs" role="tablist" aria-label="Log in or create an account">
+          <button type="button" role="tab" id="authTabLogin" class="auth-tab" aria-selected="true" aria-controls="loginForm">Log in</button>
+          <button type="button" role="tab" id="authTabRegister" class="auth-tab" aria-selected="false" aria-controls="loginForm" tabindex="-1">Sign up</button>
+        </div>
 
         <section id="registrationSuccess" class="auth-success" aria-live="polite" tabindex="-1" hidden>
-          <div class="auth-success-icon" aria-hidden="true">&#10003;</div>
-          <p class="auth-success-lead">We sent a secure account setup link to</p>
+          <div class="auth-success-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg>
+          </div>
+          <p class="auth-success-lead">We sent a link to</p>
           <strong id="registrationSuccessEmail" class="auth-success-email"></strong>
-          <ol class="auth-success-steps">
-            <li>Open the account setup e-mail.</li>
-            <li>Use the link to choose your password.</li>
-            <li>Come back here and log in.</li>
-          </ol>
-          <p class="auth-success-note">For privacy, this confirmation is identical for every address. It may take a minute to arrive; please also check your spam folder.</p>
-          <button type="button" id="registrationLoginButton" class="auth-primary-action">Continue to login</button>
+          <p class="auth-success-text">Open it and choose a password. The link brings you straight back here to log in.</p>
+          <a id="registrationMailboxLink" class="auth-primary-action" href="#" target="_blank" rel="noopener noreferrer" hidden>Open inbox</a>
+          <div class="auth-success-row">
+            <button type="button" id="registrationResendButton" class="auth-link">Send the link again</button>
+            <button type="button" id="registrationChangeButton" class="auth-link">Use a different address</button>
+          </div>
+          <p id="registrationStatus" class="auth-note" role="status" aria-live="polite"></p>
+          <p class="auth-note">Nothing after a minute? Check your spam folder. If you already have an account, the same link lets you set a new password.</p>
+          <button type="button" id="registrationLoginButton" class="auth-secondary-action">I've set my password &ndash; log in</button>
         </section>
 
-        <!-- Das Login-Formular hat autocomplete="on" -->
-        <form id="loginForm" class="auth-form" autocomplete="on" data-mode="login">
-
-          <!-- Google OAuth Button (primary) -->
-          <button type="button" id="googleLoginButton" class="oauth-button" aria-label="Continue with Google">
+        <form id="loginForm" class="auth-form" autocomplete="on" data-mode="login" novalidate>
+          <button type="button" id="googleLoginButton" class="oauth-button">
             <img src="/static/icons/google.png" alt="" width="20" height="20" />
-            <span>Continue with Google</span>
+            <span id="googleLoginLabel">Continue with Google</span>
           </button>
+          <div id="googleError" class="error-message" role="alert" aria-live="polite"></div>
 
-          <!-- Subtle divider -->
-          <div id="oauthDivider" class="oauth-divider"><span>or use e-mail</span></div>
-
-          <div class="auth-email-section">
-            <!-- Login / shared fields -->
-            <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username" />
-
-            <!-- Confirm email (register-only) -->
-            <input type="email" id="loginEmailConfirm" class="u-display-none" name="email_confirm" placeholder="Confirm Email"
-              autocomplete="username" />
-
-            <input type="password" id="loginPassword" name="password" placeholder="Password"
-              autocomplete="current-password" />
-
-            <!-- Confirm password (register-only) -->
-            <input type="password" id="loginPasswordConfirm" class="u-display-none" name="password_confirm" placeholder="Confirm Password"
-              autocomplete="new-password" />
-
-            <!-- Primary actions -->
-            <div class="auth-actions">
-              <button type="button" id="loginButton" class="auth-primary-action">Log in with e-mail</button>
-              <button type="button" id="confirmRegisterButton" class="auth-primary-action u-display-none">Send setup link</button>
-            </div>
-
-            <!-- Inline errors -->
-            <div id="loginError" class="error-message" role="alert" aria-live="polite"></div>
-            <div id="registerError" class="error-message" role="alert" aria-live="polite"></div>
-
-            <div id="singleMailNote" class="auth-note">
-              We will send a secure link to choose your password. No account status is revealed here.
-            </div>
-
-            <!-- Secondary row (links only) -->
-            <div class="auth-secondary-row">
-              <a href="#" id="forgotPasswordButton" class="secondary-link">Forgot Password?</a>
-              <button type="button" id="toggleRegister" class="link-btn secondary-link">
-                New here? Create account
-              </button>
+          <!-- Google refuses to sign in inside app browsers (LinkedIn, Instagram, ...). -->
+          <div id="inAppBrowserNotice" class="auth-inapp" role="note" hidden>
+            <p><strong>Google sign-in doesn&rsquo;t work inside <span id="inAppBrowserName">this app</span>.</strong>
+              <span id="inAppBrowserHint">Open consens.io in your browser (menu &rarr; &ldquo;Open in browser&rdquo;), or use your e-mail below.</span></p>
+            <div class="auth-inapp-actions">
+              <a id="inAppOpenBrowser" class="auth-chip" href="#" hidden>Open in Chrome</a>
+              <button type="button" id="inAppCopyLink" class="auth-chip">Copy link</button>
             </div>
           </div>
 
-          <div id="authConsentNote" class="auth-note u-display-block">
+          <div id="oauthDivider" class="oauth-divider"><span>or with e-mail</span></div>
+
+          <div class="auth-email-section">
+            <input type="email" id="loginEmail" name="email" placeholder="E-mail address" aria-label="E-mail address"
+              autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" />
+
+            <div id="loginPasswordField" class="auth-password">
+              <input type="password" id="loginPassword" name="password" placeholder="Password" aria-label="Password"
+                autocomplete="current-password" />
+              <button type="button" id="loginPasswordReveal" class="auth-reveal" aria-controls="loginPassword" aria-pressed="false">Show</button>
+            </div>
+            <div id="forgotPasswordRow" class="auth-forgot-row">
+              <button type="button" id="forgotPasswordButton" class="auth-link">Forgot password?</button>
+            </div>
+
+            <button type="submit" id="loginButton" class="auth-primary-action">Log in</button>
+            <button type="submit" id="confirmRegisterButton" class="auth-primary-action u-display-none">Create account</button>
+
+            <p id="loginNotice" class="auth-status" role="status" aria-live="polite"></p>
+            <div id="loginError" class="error-message" role="alert" aria-live="polite"></div>
+            <div id="registerError" class="error-message" role="alert" aria-live="polite"></div>
+
+            <p id="singleMailNote" class="auth-note u-display-none">No password needed yet &ndash; we&rsquo;ll e-mail you a link to set one.</p>
+          </div>
+
+          <p id="authConsentNote" class="auth-legal">
             By creating an account you agree to the
             <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a>.
             The <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Notice</a>
             explains automatic conversation storage and processing by AI and search services,
             including outside the EU/EEA. This notice is not a request for data-protection consent.
-          </div>
+          </p>
 
           <div class="auth-footer-links">
-            <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link"
-              title="Terms of Use" aria-label="Terms of Use">Terms</a>
-            <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link"
-              title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
-            <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
-              aria-label="Imprint">Imprint</a>
-            <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
-              aria-label="About">About</a>
+            <a href="/imprint" target="_blank" rel="noopener noreferrer">Imprint</a>
+            <a href="/about" target="_blank" rel="noopener noreferrer">About</a>
           </div>
         </form>
       </div>
