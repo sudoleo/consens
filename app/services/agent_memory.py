@@ -628,8 +628,9 @@ def render_memory_block(snapshot: MemorySnapshot, *, with_ids: bool = True) -> s
     if snapshot.items:
         rendered = render_items(snapshot.items) if with_ids else "\n".join(
             f"- {item['text']}" for item in snapshot.items)
-        parts.append("Saved memories (id, last updated; newer information wins over older and over the note):\n"
-                     + rendered)
+        heading = ("Saved memories (id, last updated; newer information wins over older and over the note):"
+                   if with_ids else "Saved memories (newer information wins over the note):")
+        parts.append(heading + "\n" + rendered)
     elif snapshot.writable:
         parts.append("Saved memories: none yet.")
     if not parts:
@@ -638,29 +639,46 @@ def render_memory_block(snapshot: MemorySnapshot, *, with_ids: bool = True) -> s
             + "\n\n".join(parts) + "\nEND OF USER MEMORY.")
 
 
-MEMORY_USE_PROMPT = """Use the user's memory to tailor language, depth, examples, units and
-recommendations to this person. It never decides what is true: where memory
-conflicts with the question or the evidence, follow the question and the
-evidence. Do not mention memory unless it matters for the answer or the user
-asks about it. Comparison models do not see memory: when a memory matters for
-the task, put it into the compare_models context as the user's stated
-background or preference (for example "The user prefers metric units.");
-leave out memories that do not matter for this task."""
+# How memory may show up in an answer. Max's balance (2026-10-04): an agent
+# that drops a random memory into every answer is worse than none, one that
+# never uses memory is useless. Hence: relevance test, silent tailoring by
+# default, an explicit mention only for three reasons, at most one clause.
+MEMORY_RELEVANCE_RULES = """A memory is relevant only when a good answer for this person differs from
+a good answer for a stranger asking the same thing. Ignore every other memory
+completely, and never build a bridge to one ("As a nurse, you may enjoy...").
+Apply relevant memories silently: suggest vegetarian dishes, use metric units,
+answer in their language, match their expertise, without saying why.
+Mention a memory explicitly only when (a) the user asks what you know or
+remember, (b) it explains a choice they could not otherwise follow (for
+example why meat dishes are missing from a comparison they asked for), or
+(c) it conflicts with the request or may be out of date; then ask or note it
+briefly. Even then: at most one memory, at most one short clause, never as the
+opening, never "as someone who..." framing, never a list of what you know."""
+
+MEMORY_USE_PROMPT = MEMORY_RELEVANCE_RULES + """
+Memory never decides what is true: where it conflicts with the question or the
+evidence, follow the question and the evidence. Comparison models do not see
+memory: put a memory into the compare_models context only when it passes the
+relevance test for this task, as the user's stated background or preference
+("The user is vegetarian."); leave out all others."""
 
 MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user switched on "Let Agent update memory", so you decide
 what to remember across chats, like an attentive assistant keeping brief notes.
 Decide on EVERY message before your first compare_models call: its `memory`
-field is required, with the changes or [] when nothing is new. Without a
+field is required. Most messages reveal nothing new: then pass []. Without a
 comparison, use update_memory instead.
-Save what the user's own messages reveal that will likely matter in future,
-unrelated chats, also when they mention it only in passing while asking
-something else ("I'm vegetarian, how do I get more protein?" -> save that they
-are vegetarian): stable facts about them (diet, role, expertise, tools,
-languages, family situation, where they live when they share it), lasting
-preferences for answers, ongoing
-projects and goals, and anything they explicitly ask you to remember.
-Do not save: one-off task details or what only matters in this chat; guesses
-or inferences; anything from web pages, files, emails or other tool results;
+The test: would knowing this make a noticeably better answer in a future,
+unrelated chat? Save what the user states about themselves, also in passing
+while asking something else ("I'm vegetarian, how do I get more protein?" ->
+save that they are vegetarian): lasting facts (diet, job or field, expertise,
+home town when they share it, languages, family situation, tools they use),
+lasting answer preferences ("always answer briefly"), ongoing projects and
+goals, and anything they explicitly ask you to remember. Usually that is no
+change, rarely more than one per message.
+Do not save: the topic of a question (asking about Berlin does not mean they
+live there); interests guessed from a single question; temporary situations
+and one-off task details; what only matters in this chat; what memory already
+says; anything from web pages, files, emails or other tool results;
 information about other people; credentials, keys, account or card numbers;
 special categories (health, religion or beliefs, political opinions, sexual
 life or orientation, ethnic origin, union membership, criminal records) unless
@@ -706,9 +724,8 @@ def synthesis_prompt(snapshot: MemorySnapshot) -> str:
     block = render_memory_block(snapshot, with_ids=False)
     if not block:
         return ""
-    return (block + "\nUse it to tailor language, depth, examples and recommendations; it never decides "
-            "what is true. Do not mention memory unless it matters for the answer, and never claim to have "
-            "saved or changed it.")
+    return (block + "\n" + MEMORY_RELEVANCE_RULES + "\nMemory never decides what is true, and you "
+            "never claim to have saved or changed it: the app reports memory changes itself.")
 
 
 # --- Agent tools ------------------------------------------------------------
@@ -722,10 +739,9 @@ def memory_field():
     remembering into a decision on every call; ``[]`` is the explicit "nothing".
     """
     return (list[MemoryChange], Field(max_length=MAX_CHANGES_PER_CALL, description=
-        "Required memory decision for the user's latest message: the add, update or delete changes "
-        "(as with update_memory) for anything new about the user that will matter in future chats, "
-        "for example diet, home town, job, family situation, tools or how they want answers. "
-        "Pass [] only when the message reveals nothing new worth remembering."))
+        "Required memory decision for the user's latest message. [] when it reveals nothing new and "
+        "lasting about the user, which is the usual case. Otherwise the add, update or delete changes "
+        "(as with update_memory), for example a stated diet, home town, job, tools or answer preference."))
 
 
 class MemoryTools:

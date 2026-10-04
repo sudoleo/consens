@@ -1204,7 +1204,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   nächsten Prompt verschwinden). Prompt: `orchestrator_prompt` hängt
   Memory-Daten plus die passende Regel (schreiben / nur lesen / pausiert) **ans
   Ende** des System-Prompts; `synthesis_prompt` gibt dem Antwortschritt dieselben
-  Daten ohne IDs und ohne Schreibregeln. Vergleichsmodelle sehen Memory nicht
+  Daten ohne IDs und ohne Schreibregeln. Balance (Max' Vorgabe):
+  `MEMORY_RELEVANCE_RULES` in Orchestrator **und** Antwortschritt — eine
+  Erinnerung zählt nur, wenn sie die Antwort gegenüber einem Fremden ändert,
+  wird still angewendet und nur aus drei Gründen ausgesprochen (Nachfrage,
+  sonst unverständliche Auswahl, Konflikt/veraltet), dann höchstens ein
+  Halbsatz; Schreiben nach dem Test „bessere Antwort in einem künftigen,
+  fremden Chat?“, `[]` ist der Normalfall. Vergleichsmodelle sehen Memory nicht
   pauschal: der Orchestrator gibt relevante Punkte im `compare_models`-Kontext
   weiter (gegen den gemeinsamen Bias, siehe Deckel oben). `/ask_*` rendert die
   Einträge über `render_profile(items=...)` nach der Notiz.

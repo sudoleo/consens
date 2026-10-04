@@ -228,6 +228,10 @@ def test_orchestrator_prompt_matches_the_users_switches():
     assert agent_memory.orchestrator_prompt(MemorySnapshot()) == agent_memory.MEMORY_PAUSED_PROMPT
     synthesis = agent_memory.synthesis_prompt(snapshot())
     assert "Prefers metric units." in synthesis and "m1a2b3c" not in synthesis and "update_memory" not in synthesis
+    # The step that writes the visible answer carries the full "use silently" rule.
+    assert agent_memory.MEMORY_RELEVANCE_RULES in synthesis and agent_memory.MEMORY_RELEVANCE_RULES in writable
+    assert "id, last updated" not in synthesis
+    assert "usual case" in str(agent_memory.memory_field()[1].description)
 
 
 def test_ask_profile_includes_saved_memories():
