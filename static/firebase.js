@@ -814,7 +814,7 @@ const AUTH_MODE_COPY = {
   login: { title: "Log in to consens.io", lead: "Pick up where you left off." },
   register: {
     title: "Create your free account",
-    lead: "Ask once and see where leading AI models agree – and where they don’t.",
+    lead: "Ask once and see where leading AI models agree and where they don’t.",
   },
 };
 
@@ -1118,7 +1118,7 @@ async function requestSetupLink(email) {
       return { ok: false, message: "Too many attempts. Please wait a minute and try again." };
     }
     if (response.status === 422) {
-      return { ok: false, message: "Please check the e-mail address – it looks incomplete." };
+      return { ok: false, message: "Please check the e-mail address. It looks incomplete." };
     }
     return {
       ok: false,
@@ -1141,7 +1141,7 @@ async function handleRegister() {
     return;
   }
   if (!EMAIL_PATTERN.test(email)) {
-    showFieldError(registerErr, emailEl, "Please check the e-mail address – it looks incomplete.");
+    showFieldError(registerErr, emailEl, "Please check the e-mail address. It looks incomplete.");
     return;
   }
   trackAppEvent("auth_register_started");
