@@ -1,53 +1,6 @@
-<h1>
-  <img src="static/favicon-square-dark.png#gh-light-mode-only" width="34" height="34" alt="consens.io">
-  <img src="static/favicon-square.png#gh-dark-mode-only" width="34" height="34" alt="consens.io">
-  consens.io
-</h1>
-
 <p align="center">
-  <strong>Ask several AI models at once. See where they agree, where they don't, and why.</strong>
+  <a href="https://consens.io"><img src="docs/assets/banner.png" alt="consens.io: Ask several AI models at once. See where they agree, where they don't, and why." width="100%"></a>
 </p>
-
-<table align="center">
-  <tr>
-    <td align="center" width="90">
-      <img src="static/icons/chatgpt.png" height="28" alt="OpenAI"><br>
-      <sub>OpenAI</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/claude.png" height="28" alt="Anthropic"><br>
-      <sub>Anthropic</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/gemini.png" height="28" alt="Gemini"><br>
-      <sub>Gemini</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/mistral.png" height="28" alt="Mistral AI"><br>
-      <sub>Mistral</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/deepseek.png" height="28" alt="DeepSeek"><br>
-      <sub>DeepSeek</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/grok.png" height="28" alt="xAI Grok"><br>
-      <sub>Grok</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/chat_icons/zai.svg" height="28" alt="GLM"><br>
-      <sub>GLM</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/chat_icons/kimi.svg" height="28" alt="Kimi"><br>
-      <sub>Kimi</sub>
-    </td>
-    <td align="center" width="90">
-      <img src="static/icons/chat_icons/meta.svg" height="28" alt="Meta Muse"><br>
-      <sub>Muse</sub>
-    </td>
-  </tr>
-</table>
 
 <p align="center">
   <a href="https://consens.io"><strong>consens.io</strong></a> ·
