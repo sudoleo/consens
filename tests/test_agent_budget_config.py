@@ -9,6 +9,14 @@ from app.core.rate_limit import limiter
 from app.services import agent_budget_config as budgets
 from test_prompt_config import Database
 
+# Captured at import, before conftest's autouse fixture lowers pro/admin to
+# the historic 250k Agent allowance for every test.
+PRODUCT_TIER_LIMITS = dict(budgets.DEFAULT_TIER_LIMITS)
+
+
+def test_product_tier_limits_are_the_real_defaults():
+    assert PRODUCT_TIER_LIMITS == {"free": 660_000, "plus": 1_650_000, "pro": 5_000_000, "admin": 5_000_000}
+
 
 def test_defaults_cover_every_tier_and_mode_and_ignore_the_legacy_agent_limit():
     config = budgets.snapshot({"daily_token_limit": 750000, "revision": 6})

@@ -289,7 +289,10 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#agentAnswer').get_by_role('button', name='Follow up')).to_have_count(0)
         assert evidence_links.first.evaluate('el => getComputedStyle(el).backgroundImage') == 'none'
         if width <= 540:
-            boxes = [control.bounding_box() for control in evidence_links.all()]
+            # Measure one layout frame: activity-height transitions can move the
+            # entire row between separate Playwright round trips.
+            boxes = evidence_links.evaluate_all(
+                'links => links.map(link => link.getBoundingClientRect().toJSON())')
             assert max(box['width'] for box in boxes) - min(box['width'] for box in boxes) <= 1
             assert max(round(box['y']) for box in boxes) - min(round(box['y']) for box in boxes) <= 1
             assert all(box['height'] >= 44 for box in boxes)
