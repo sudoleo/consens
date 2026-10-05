@@ -371,7 +371,10 @@ dem ersten Frame sichtbar, nur unterhalb der Falz startende (`.is-armed`)
 steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`).
 Die öffentliche Navigation hat bis 700 px ein Menü (`<details class="nav-menu">`
 in `partials/public_nav.html`, Stil in `static/css/public-nav.css`, importiert
-von `landing.css` und `public-pages.css`). Der Landing-Hero
+von `landing.css` und `public-pages.css`); ab derselben Breite verschwinden
+die Textlinks (eine Grenze für beide Seitenfamilien), und das Menü sitzt als
+umrandeter Rundknopf in CTA-Höhe rechts außen hinter dem CTA (`order: 1`).
+Der Landing-Hero
 zeigt ein klickbares Input-Feld (Look des /app-Inputs, "Try the demo"-Button,
 Provider-Chips darunter). Seit 2026-10-04 öffnet ein Klick ins Feld die App
 (`#heroAskField`, Stretched-Link über `#heroField`, `/app?focus=1`), nur der

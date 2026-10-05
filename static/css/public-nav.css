@@ -7,26 +7,35 @@
    ========================================================================== */
 .nav-menu { display: none; position: relative; }
 
+/* One breakpoint for both page families: where the menu mark appears, the
+   text links go. The mark sits at the outer edge, after the CTA, as a pair
+   with it (same height, tight gap) instead of floating in the gap between
+   brand and button. */
 @media (max-width: 700px) {
-  .nav-menu { display: block; }
+  .nav-menu { display: block; order: 1; }
+  .site-nav .nav-links { gap: 8px; }
+  .site-nav .nav-links > a:not(.nav-cta) { display: none; }
 }
 
 .nav-menu > summary {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  color: var(--ink-2);
+  background: var(--ground);
+  color: var(--ink);
   list-style: none;
   cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 .nav-menu > summary::-webkit-details-marker { display: none; }
 .nav-menu > summary:hover,
-.nav-menu[open] > summary { background: var(--raise); color: var(--ink); }
+.nav-menu[open] > summary { background: var(--raise); border-color: var(--line-strong, var(--line)); }
 .nav-menu > summary:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.nav-menu > summary svg { width: 18px; height: 18px; }
+.nav-menu > summary svg { width: 16px; height: 16px; }
 .nav-menu > summary line {
   transform-box: view-box;
   transform-origin: 12px 12px;
