@@ -124,7 +124,7 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         expect(card).to_contain_text('Decision brief')
         expect(card).to_contain_text('Version 2 · revised from version 1')
         expect(card).not_to_contain_text(DOC)
-        expect(page.locator('#agentAnswerResources')).to_contain_text('1 file was only partly readable')
+        expect(page.locator('#agentAnswerResources')).to_contain_text("couldn't be read")
         # The answer starts right away; the card follows it.
         body_box, card_box = page.locator('#agentAnswerBody').bounding_box(), card.bounding_box()
         assert card_box['y'] > body_box['y'] and body_box['y'] < 400

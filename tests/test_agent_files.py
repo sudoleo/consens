@@ -90,6 +90,8 @@ def test_images_are_capability_aware_and_private(setup, monkeypatch):
     files, chat = setup
     out = io.BytesIO(); Image.new('RGB', (100, 100)).save(out, 'PNG')
     meta = files.upload('owner', chat, {'name': 'photo.png', 'data': base64.b64encode(out.getvalue()).decode()})
+    # An image is complete for vision models: no "partly read" warning.
+    assert meta['status'] == 'ready' and not meta.get('warnings')
     ctx = FileContext(files, 'owner', chat, [meta['id']])
     monkeypatch.setattr('app.services.llm.agent_model_metadata.snapshot', lambda: {})
     plain = ctx.messages([], AgentModel())[-1]['content']
@@ -98,6 +100,15 @@ def test_images_are_capability_aware_and_private(setup, monkeypatch):
     visual = ctx.messages([], AgentModel())[-1]['content']
     assert visual[-1]['type'] == 'image_url'
     assert visual[-1]['image_url']['url'].startswith('data:image/png;base64,')
+
+
+def test_legacy_image_note_is_not_shown_as_a_partial_read():
+    from app.services.agent_files import public_file
+    old = {'id': 'f', 'name': 'a.png', 'mime': 'image/png', 'status': 'partial',
+           'warnings': ['Visual content is sent only to models with declared image support; no OCR text is available.']}
+    assert public_file(old)['warnings'] == [] and public_file(old)['status'] == 'ready'
+    pdf = {'id': 'g', 'name': 'a.pdf', 'mime': 'application/pdf', 'status': 'partial', 'warnings': ['Only the first 80 PDF pages were processed.']}
+    assert public_file(pdf)['status'] == 'partial' and public_file(pdf)['warnings']
 
 
 def test_cancelled_upload_and_concurrent_delete_do_not_leave_bytes(setup):

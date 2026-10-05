@@ -396,8 +396,9 @@
     const box = node('div', 'agent-resource-notice');
     box.append(icon('warning'));
     const text = node('div', 'agent-resource-notice-text');
-    text.append(node('strong', '', files.length === 1 ? '1 file was only partly readable' : `${files.length} files were only partly readable`));
-    for (const file of files) text.append(node('span', '', `${file.name}: ${file.warnings.join(' ')}`));
+    text.append(node('strong', '', files.length === 1 ? `Parts of ${files[0].name} couldn't be read`
+      : `Parts of ${files.length} files couldn't be read`));
+    for (const file of files) text.append(node('span', '', files.length === 1 ? file.warnings.join(' ') : `${file.name}: ${file.warnings.join(' ')}`));
     box.append(text);
     return box;
   }

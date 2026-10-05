@@ -512,7 +512,9 @@
       meta.appendChild(sizeEl);
       chip.appendChild(meta);
 
-      const warnings = Array.isArray(att.warnings) ? att.warnings.filter(Boolean) : [];
+      // Older image uploads carry a capability note, not a reading limit.
+      const warnings = Array.isArray(att.warnings)
+        ? att.warnings.filter(w => w && !String(w).startsWith("Visual content is sent only to models")) : [];
       if (readonly && warnings.length) {
         // Agent files that were only partly readable (scans, limits) say so
         // on the message they were sent with, not only in the files list.

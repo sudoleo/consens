@@ -106,7 +106,7 @@ describe('private Agent workspace', () => {
     await window.App.agentWorkspace.refresh(CHAT);
     expect(document.querySelector('img')).toBeNull();
     const notice = document.querySelector('#agentAnswerResources .agent-resource-notice');
-    expect(notice.textContent).toContain('1 file was only partly readable');
+    expect(notice.textContent).toContain("couldn't be read");
     expect(notice.textContent).toContain('OCR is not available');
     expect(notice.textContent).toContain('<img src=x onerror=alert(1)>.txt');
     dom.window.close();

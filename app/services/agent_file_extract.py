@@ -126,7 +126,9 @@ def extract(raw, mime):
         from PIL import Image
         with Image.open(io.BytesIO(raw)) as picture:
             picture.verify()
-        warnings.append("Visual content is sent only to models with declared image support; no OCR text is available.")
+        # Complete for every model that can see images. A model that cannot
+        # is told so in its own prompt (agent_files.FileContext.messages), so
+        # this is no reading limitation to show the user.
     else:
         lines = raw.decode("utf-8").splitlines()
         for offset in range(0, len(lines), 40):

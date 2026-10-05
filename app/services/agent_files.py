@@ -147,10 +147,20 @@ def extract_isolated(raw, mime):
     return agent_file_extract.run_isolated(raw, mime)
 
 
+# Images uploaded before 2026-10-05 carry this note as a "warning"; it was
+# never a reading limitation (see agent_file_extract), so it is not shown.
+LEGACY_IMAGE_NOTE = "Visual content is sent only to models with declared image support"
+
+
 def public_file(data):
-    return {key: data[key] for key in ("id", "name", "title", "mime", "size", "sha256", "status", "warnings",
+    file = {key: data[key] for key in ("id", "name", "title", "mime", "size", "sha256", "status", "warnings",
         "created_at", "expires_at", "kind", "document_id", "version", "parent_version", "turn_id", "source_file_ids",
         "origin", "origin_subject", "origin_from") if key in data}
+    if str(file.get("mime", "")).startswith("image/") and file.get("warnings"):
+        file["warnings"] = [w for w in file["warnings"] if not str(w).startswith(LEGACY_IMAGE_NOTE)]
+        if not file["warnings"] and file.get("status") == "partial":
+            file["status"] = "ready"
+    return file
 
 
 class AgentFiles:

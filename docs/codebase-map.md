@@ -6546,7 +6546,7 @@ Dateiliste unter der Antwort mehr:
   `actions`/`gmail_evidence`).
 - `#agentAnswerResources` (nach `#agentAnswerBody`, vor `#agentAnswerError`; wird
   angelegt, falls das Template es nicht enthält): Upload-Fortschritt pro Datei,
-  Hinweis „n file(s) were only partly readable“ für die mit dieser Nachricht
+  Hinweis „Parts of <Name> couldn't be read“ (mehrere: „Parts of n files …“) für die mit dieser Nachricht
   gesendeten Dateien (`agent_settings.file_ids`) und je `document_id` eine
   Dokumentkarte der angezeigten Turn (`turn_id`): Titel, aktuelle Version,
   DOCX/PDF-Download, Badge „New/Updated in this answer“, frühere Versionen
@@ -6571,7 +6571,9 @@ Dateiliste unter der Antwort mehr:
   (`App.attachments.markError(file, message)`), `context.metadata.uploadFailed`
   wird gesetzt und der Fehler lautet „Couldn't upload <Name>. <Grund>“.
   Nachrichten-Chips (`setThreadQuestionAttachments`) tragen optional `warnings`
-  und zeigen dann „Partly read“.
+  und zeigen dann „Partly read“. Bilder sind seit 2026-10-05 nie „partly read“:
+  für Vision-Modelle vollständig, Modelle ohne Bildverständnis bekommen eine eigene
+  Prompt-Zeile; `public_file` und der Chip filtern den alten Bild-Hinweis älterer Uploads.
 
 Bytes liegen im privaten GCS-Bucket `AGENT_FILES_BUCKET`; auf einem lokalen Checkout
 ohne Bucket automatisch unter `%LOCALAPPDATA%/consens/agent-files` (sonst
