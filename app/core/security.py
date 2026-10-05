@@ -179,6 +179,12 @@ class CustomSecurityMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+# The Firebase Admin key ships as a file next to the app (a Render secret file),
+# not as application-default credentials. Other Google clients that run with
+# the same identity (private file storage) load it from here.
+FIREBASE_ADMIN_KEY_FILE = "consensai-firebase-adminsdk-fbsvc-9064a77134.json"
+
+
 # Prevent initializing app multiple times if reloaded
 class _AnonymousTestCredential(credentials.Base):
     """Credential accepted by firebase-admin without any live ADC lookup."""
@@ -206,7 +212,7 @@ if not firebase_admin._apps:
             options={"projectId": "demo-consensio-unit"},
         )
     else:
-        cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
+        cred = credentials.Certificate(FIREBASE_ADMIN_KEY_FILE)
         firebase_admin.initialize_app(cred)
 
 db_firestore = firestore.client()

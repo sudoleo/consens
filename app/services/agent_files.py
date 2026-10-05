@@ -84,6 +84,20 @@ def storage_configured() -> bool:
 PDF_CONTEXT_HEADROOM = 32_000
 
 
+def _storage_client():
+    """Bucket client with the backend's own identity.
+
+    A deploy has no application-default credentials, only the Firebase Admin
+    key file, so ``storage.Client()`` alone finds no credentials there. An
+    explicit GOOGLE_APPLICATION_CREDENTIALS still wins.
+    """
+    from google.cloud import storage
+    from app.core.security import FIREBASE_ADMIN_KEY_FILE
+    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS") and Path(FIREBASE_ADMIN_KEY_FILE).is_file():
+        return storage.Client.from_service_account_json(FIREBASE_ADMIN_KEY_FILE)
+    return storage.Client()
+
+
 class PrivateObjects:
     def __init__(self):
         explicit = os.getenv("AGENT_FILES_LOCAL_DIR", "")
@@ -94,11 +108,10 @@ class PrivateObjects:
             self.root = Path(self.local).resolve()
             self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         else:
-            from google.cloud import storage
             bucket = os.getenv("AGENT_FILES_BUCKET", "")
             if not bucket:
                 raise StorageNotConfigured("Private file storage is not configured.")
-            self.bucket = storage.Client().bucket(bucket)
+            self.bucket = _storage_client().bucket(bucket)
 
     def put(self, key, raw, mime):
         if self.local:

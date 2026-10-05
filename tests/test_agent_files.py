@@ -369,6 +369,41 @@ def test_configured_bucket_wins_over_automatic_local_storage(tmp_path, monkeypat
     assert module._local_dir() == ''
 
 
+@pytest.mark.parametrize('explicit_adc', [False, True])
+def test_hosted_bucket_uses_the_admin_key_file_without_adc(tmp_path, monkeypatch, explicit_adc):
+    # Render has the Firebase Admin key as a file and no application-default
+    # credentials; a bare storage.Client() would fail there.
+    from google.cloud import storage
+    from app.core.security import FIREBASE_ADMIN_KEY_FILE
+    from app.services.agent_files import PrivateObjects
+    _local_machine(monkeypatch, tmp_path)
+    monkeypatch.setenv('RENDER_SERVICE_NAME', 'consens')
+    monkeypatch.setenv('AGENT_FILES_BUCKET', 'private-bucket')
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / FIREBASE_ADMIN_KEY_FILE).write_text('{}')
+    if explicit_adc:
+        monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', str(tmp_path / 'adc.json'))
+    else:
+        monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
+    made = []
+
+    class FakeClient:
+        def __init__(self, source='adc'):
+            made.append(source)
+
+        @classmethod
+        def from_service_account_json(cls, path):
+            return cls(source=path)
+
+        def bucket(self, name):
+            return ('bucket', name)
+
+    monkeypatch.setattr(storage, 'Client', FakeClient)
+    objects = PrivateObjects()
+    assert objects.bucket == ('bucket', 'private-bucket')
+    assert made == (['adc'] if explicit_adc else [FIREBASE_ADMIN_KEY_FILE])
+
+
 @pytest.mark.parametrize("tier,status", [("free", 200), ("plus", 200), ("pro", 200)])
 def test_uploads_are_open_to_every_tier_while_reading_stays_open(setup, monkeypatch, tier, status):
     from fastapi import FastAPI

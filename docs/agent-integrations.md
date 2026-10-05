@@ -55,8 +55,9 @@ in the same chat. Independent models and supporting agents can receive selected
 file evidence with source locators and explicit extraction/vision limitations.
 
 **Setup.** Set `AGENT_FILES_BUCKET` to a dedicated, private Google Cloud Storage
-bucket. Use application-default credentials with object read/create/delete rights
-only on that bucket; enable uniform bucket access and public access prevention.
+bucket. The backend uses the Firebase Admin service account key file for it (or
+`GOOGLE_APPLICATION_CREDENTIALS` when set); grant that service account object
+read/create/delete rights (e.g. Storage Object Admin) only on that bucket; enable uniform bucket access and public access prevention.
 Do not expose Firebase download tokens or signed public links. Configure a bucket
 lifecycle deletion rule after 30 days as a second bound on orphan object retention;
 disable object versioning and configure soft-delete retention according to the
