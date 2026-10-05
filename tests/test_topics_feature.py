@@ -1566,3 +1566,42 @@ def test_disagreement_leads_the_statement_list_and_is_labelled_as_its_own_kind(
     # Models on opposite sides of a dispute address it; they do not state it.
     assert "Addressed by 2 of 3 models" in page.text
     assert "Stated by 2 of 3 models" not in page.text
+
+
+def test_topic_judge_writes_english_statements_while_the_app_keeps_the_answer_language(monkeypatch):
+    """/topics/gemini-4-release-date led with a Portuguese label and
+    /topics/unsolved-math-problems-solved-by-ai with a "Whether ..." phrase:
+    the judge wrote claims in the language of the responses and as questions."""
+    from app.services import topic_pipeline
+    from app.services.llm import consensus_engine as engine
+
+    context = engine._build_judge_context(
+        {"openai": "Gemini 4 is in training.", "gemini": "O Gemini 4 está em pré-treinamento."},
+        "Gemini 4 is in training.",
+    )
+    app_prompt = engine._build_differences_prompt_from(context)
+    assert "in the same language as the model responses" in app_prompt
+    assert "never as a question" not in app_prompt
+    assert engine._differences_system_prompt() == engine.DIFFERENCES_SYSTEM_PROMPT
+
+    topic_prompt = engine._build_differences_prompt_from(
+        context, output_language="English", statement_claims=True)
+    assert '"claim", "stance", and "verify" in English, whatever language' in topic_prompt
+    assert "never as a question" in topic_prompt
+    assert "same language as the model responses" not in topic_prompt
+    assert "English" in engine._differences_system_prompt("English")
+
+    captured = {}
+
+    def pipeline(**kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop after the plan")
+
+    monkeypatch.setattr(topic_pipeline, "run_consensus_pipeline", pipeline)
+    monkeypatch.setattr(topic_pipeline.provider_transport, "provider_available", lambda *a: True)
+    with pytest.raises(RuntimeError, match="stop after the plan"):
+        topic_pipeline.execute_topic(
+            "Question?", "", model_overrides={"openai": "m-openai", "mistral": "m-mistral"})
+    judge = captured["judge"]
+    assert judge.func is engine.query_differences
+    assert judge.keywords == {"output_language": "English", "statement_claims": True}

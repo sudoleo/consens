@@ -964,7 +964,39 @@ def _build_judge_context(
     )
 
 
-def _build_differences_prompt_from(context: _JudgeContext) -> str:
+def _differences_language_rule(output_language: str = "", statement_claims: bool = False) -> str:
+    """The prompt rule for the language and form of claim/stance/verify.
+
+    The app answers in the user's language, so by default the judge writes in
+    the language of the responses. Public Topic pages are English, and their
+    claim labels become the page's statements: a label written in the language
+    of one model's answer ("Status de Pré-Treinamento: ...") or as a question
+    ("Whether AI has ...") cannot stand there."""
+    if output_language:
+        rule = (
+            f"- Write \"claim\", \"stance\", and \"verify\" in {output_language}, whatever "
+            "language the model responses use. \"quote\" stays verbatim in the "
+            "response's own language.\n"
+        )
+    else:
+        rule = "- Write \"claim\", \"stance\", and \"verify\" in the same language as the model responses.\n"
+    if statement_claims:
+        rule += (
+            "- Phrase \"claim\" as a plain declarative statement of the disputed point "
+            "(for example \"GPT-6 was released in September 2026\"), never as a question "
+            "or a \"Whether ...\" phrase.\n"
+        )
+    return rule
+
+
+def _differences_system_prompt(output_language: str = "") -> str:
+    if output_language:
+        return f"Write every text value in {output_language}; copy quotes verbatim."
+    return DIFFERENCES_SYSTEM_PROMPT
+
+
+def _build_differences_prompt_from(context: _JudgeContext, *, output_language: str = "",
+                                   statement_claims: bool = False) -> str:
     labels = list(context.labels)
     responses_text = context.responses_text
     numbered_answer = context.numbered_answer
@@ -1056,7 +1088,7 @@ def _build_differences_prompt_from(context: _JudgeContext) -> str:
         f"- Use only these model labels: {allowed_list}. Never invent other labels.\n"
         "- Ignore citation markers, source labels, URLs, and source-list noise unless they reveal a real factual "
         "disagreement.\n"
-        "- Write \"claim\", \"stance\", and \"verify\" in the same language as the model responses.\n"
+        + _differences_language_rule(output_language, statement_claims) +
         "- \"best_model\": the model whose answer is closest to the consensus answer.\n\n"
         "Numbered table cells are valid anchors too. Interpret short values using their "
         "column headers and row labels; attach a contradiction to the disputed cell.\n"
@@ -2382,6 +2414,8 @@ def query_differences(
     resolved_question: str = "",
     *,
     chat_mode: bool = False,
+    output_language: str = "",
+    statement_claims: bool = False,
 ) -> tuple:
     """
     Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
@@ -2392,6 +2426,9 @@ def query_differences(
     Im Beta-Chat verwenden beide Judges nur die konfigurierten Standardmodelle;
     der Gemini-Fallback darf dabei auch die Familie des Chatmodells sein.
     Parallel dazu belegt der Coverage-Judge jeden Satz der Konsensantwort.
+    `output_language`/`statement_claims` setzen Topics (englische öffentliche
+    Seiten): claim/stance/verify in dieser Sprache, claim als Aussage statt
+    Frage; die App lässt beides leer (Sprache der Antworten).
     Gibt (legacy_text, structured_data | None) zurück.
     """
     context = _build_judge_context(
@@ -2401,7 +2438,8 @@ def query_differences(
     if context is None:
         return "Error in comparison: no model responses available.", None
 
-    differences_prompt = _build_differences_prompt_from(context)
+    differences_prompt = _build_differences_prompt_from(
+        context, output_language=output_language, statement_claims=statement_claims)
     anon_map = context.anon_map
     answers_by_model = context.answers_by_model
     sentences = list(context.sentences)
@@ -2430,7 +2468,7 @@ def query_differences(
             try:
                 raw = _call_engine_text(
                     provider, api_model, model_ref, api_keys,
-                    system=DIFFERENCES_SYSTEM_PROMPT,
+                    system=_differences_system_prompt(output_language),
                     prompt=attempt_prompt,
                     max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
                     temperature=DIFFERENCES_TEMPERATURE,

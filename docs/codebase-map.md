@@ -4813,7 +4813,11 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Konsens-Satz (nicht bei Läufen mit weniger als drei Modellen), sonst kein
   Befund. Umstrittene Claims heißen in der Liste „Addressed by“ statt „Stated
   by“. Meta-/OG-Description und JSON-LD `description` kommen aus dem Befund;
-  das handgesetzte `seo.description` greift nur ohne Befund.
+  das handgesetzte `seo.description` greift nur ohne Befund. Neue Läufe
+  liefern die Labels gleich passend: `topic_pipeline.execute_topic` ruft den
+  Differences-Judge mit `output_language="English", statement_claims=True`
+  (claim/stance/verify englisch, claim als Aussage statt „Whether …“; Zitate
+  bleiben wörtlich). App, Watches und Agent behalten die Antwortsprache.
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
   teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs legen bei
   konfiguriertem SMTP je Follower ein Outbox-Item im selben Commit wie den Run an

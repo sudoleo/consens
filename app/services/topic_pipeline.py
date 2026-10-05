@@ -6,13 +6,14 @@ Watch executor or inherit Watch notification, baseline or quota behaviour.
 
 from __future__ import annotations
 
+import functools
 import logging
 
 from app.core.entitlements import TIER_FREE
 from app.core.observability import safe_exception
 from app.services import evidence_change, opinion_map, share_snapshots
 from app.services.consensus_pipeline import run_consensus_pipeline
-from app.services.llm.consensus_engine import query_claim_identity
+from app.services.llm.consensus_engine import query_claim_identity, query_differences
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.llm import provider_transport
 
@@ -80,6 +81,12 @@ def execute_topic(
         keys=keys,
         tier=tier,
         provider_order=provider_transport.PROVIDER_ORDER,
+        # Topic pages are public and English, and the judge's claim labels
+        # become their statements and finding: English, and statements rather
+        # than "Whether ..." questions, whatever language an answer came in.
+        judge=functools.partial(
+            query_differences, output_language="English", statement_claims=True,
+        ),
         log_context="Consensus Topic",
     )
     included = {item["provider"] for item in pipeline["model_answers"]}
