@@ -314,26 +314,6 @@ img { display: block; max-width: 100%; }
   margin-top: 32px;
 }
 
-.lp-hero-proof {
-  display: grid;
-  gap: 10px;
-  max-width: 440px;
-  margin-top: 30px;
-  padding-top: 18px;
-  border-top: 1px solid var(--hairline);
-}
-
-.lp-hero-proof span {
-  display: grid;
-  grid-template-columns: 108px minmax(0, 1fr);
-  gap: 12px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-}
-
-.lp-hero-proof strong { color: var(--text-primary); font-weight: var(--font-weight-semibold); }
-
 /* --------------------------------------------------------------------------
    Demo-first hero: a functional-looking input field, centred on an otherwise
    empty first screen. The whole field links into /app?demo=1 (demo.js
@@ -431,71 +411,6 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-hero-prompt-bar { gap: 8px; }
-
-/* The marks lose their pills here. A pill is a label, and nine labels under
-   the field are a paragraph the eye has to read; nine bare marks are a single
-   image that says "these nine answer" in one glance. The names stay in the
-   accessibility tree at every width, which is what the pills were carrying. */
-.lp-hero-models {
-  --mark-size: 22px;
-  justify-content: center;
-  align-items: center;
-  gap: clamp(12px, 1.6vw, 18px);
-  margin-top: clamp(18px, 2.4vw, 26px);
-}
-
-/* Both selectors carry .lp-chips: the shared chip rules further down the file
-   would otherwise win on equal specificity and put the pill back. */
-.lp-chips.lp-hero-models span {
-  /* A fixed square per mark, so the rhythm of the row comes from the boxes and
-     not from how wide each logo happens to draw itself. */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: calc(var(--mark-size) + 4px);
-  height: calc(var(--mark-size) + 4px);
-  gap: 0;
-  padding: 0;
-  background: none;
-}
-
-/* One material for all nine. Five of these assets are black glyphs and four
-   are full-colour logos, which is why the row read as a sticker sheet rather
-   than as one statement: nine different weights, nine different hues, on a
-   page that is otherwise monochrome. brightness(0) throws the colour away and
-   keeps the alpha silhouette, so every mark becomes the same ink; the opacity
-   puts the row a step behind the field it belongs to. Dark mode inverts the
-   same silhouettes instead of the old per-asset invert list. */
-.lp-chips.lp-hero-models img {
-  width: calc(var(--mark-size) * var(--mark-scale, 1));
-  height: calc(var(--mark-size) * var(--mark-scale, 1));
-  filter: brightness(0) opacity(0.58);
-}
-
-.dark-mode .lp-chips.lp-hero-models img {
-  filter: brightness(0) invert(1) opacity(0.66);
-}
-
-/* Equal boxes are not equal marks: a filled block carries more weight at the
-   same size than a hairline loop. These four are corrected by eye against the
-   ChatGPT ring, which is the row's reference. They are factors rather than
-   pixels, so one --mark-size below resizes the whole row and keeps the
-   balance. */
-.lp-chips.lp-hero-models img[src*="mistral"] { --mark-scale: 0.85; } /* solid block, 1.4:1 wide */
-.lp-chips.lp-hero-models img[src*="zai"] { --mark-scale: 0.86; }     /* heaviest glyph */
-.lp-chips.lp-hero-models img[src*="kimi"] { --mark-scale: 0.95; }    /* dense, two shapes */
-.lp-chips.lp-hero-models img[src*="meta.svg"] { --mark-scale: 1.14; }/* open stroke, low x-height */
-
-.lp-hero-models .lp-chip-name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  clip-path: inset(50%);
-}
 
 /* The h1, one voice below the display size it used to have. At --ink-2 and
    18px it was the quietest thing on a nearly empty screen and simply got
@@ -635,63 +550,6 @@ img { display: block; max-width: 100%; }
    The benchmark is the controlled proof; this is the product signal beside
    it. A tonal surface and hairline meters keep the ranking legible without
    turning the proof section into a sports scoreboard. */
-.lp-model-pulse {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: clamp(20px, 2.8vw, 30px);
-  border-radius: var(--radius-md);
-  background: var(--surface, var(--raise));
-}
-
-.lp-model-pulse-head .lp-eyebrow {
-  margin-bottom: 10px;
-}
-
-.lp-model-pulse-head h3 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--line-height-heading);
-}
-
-.lp-model-pulse-head > p:last-child {
-  margin: 9px 0 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-}
-
-.lp-model-pulse-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 22px;
-}
-
-.lp-model-pulse-row {
-  display: grid;
-  grid-template-columns: 22px 26px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  min-height: 42px;
-  padding: 5px 3px;
-}
-
-.lp-model-pulse-rank {
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-wide);
-}
-
-.lp-model-pulse-row:first-child .lp-model-pulse-rank {
-  color: var(--accent);
-}
 
 .lp-model-pulse-icon {
   display: grid;
@@ -706,121 +564,6 @@ img { display: block; max-width: 100%; }
   width: 15px;
   height: 15px;
   object-fit: contain;
-}
-
-.lp-model-pulse-copy {
-  min-width: 0;
-}
-
-.lp-model-pulse-name {
-  display: block;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lp-model-pulse-meter {
-  display: block;
-  height: 2px;
-  margin-top: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--line-soft);
-}
-
-.lp-model-pulse-meter i {
-  display: block;
-  width: max(4px, calc(var(--pulse-share, 0) * 1%));
-  height: 100%;
-  border-radius: inherit;
-  background: var(--ink-3);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform var(--dur-light) var(--ease-out);
-}
-
-.lp-model-pulse-row:first-child .lp-model-pulse-meter i {
-  background: var(--accent);
-}
-
-.lp-model-pulse-list.is-ready .lp-model-pulse-meter i {
-  transform: scaleX(1);
-}
-
-.lp-model-pulse-value {
-  color: var(--text-primary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.lp-model-pulse-value small {
-  margin-left: 3px;
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-medium);
-}
-
-.lp-model-pulse-foot {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  margin-top: auto;
-  padding-top: 18px;
-  border-top: 1px solid var(--line-soft);
-}
-
-.lp-model-pulse-foot p {
-  max-width: 32ch;
-  margin: 0;
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-ui);
-}
-
-.lp-model-pulse-foot a {
-  flex: none;
-  color: var(--text-primary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-}
-
-.lp-model-pulse-foot a:hover {
-  color: var(--accent);
-}
-
-/* Match the rank, provider mark, label and value of the final rows. */
-.lp-model-pulse-row.lp-model-pulse-skeleton { pointer-events: none; }
-.lp-model-pulse-skeleton .skeleton-rank { width: 14px; height: 10px; }
-.lp-model-pulse-skeleton .skeleton-mark { width: 100%; aspect-ratio: 1; border-radius: 50%; }
-.lp-model-pulse-skeleton .skeleton-label { width: 70%; max-width: 160px; height: 11px; }
-.lp-model-pulse-skeleton:nth-child(3n + 2) .skeleton-label { width: 54%; }
-.lp-model-pulse-skeleton:nth-child(3n) .skeleton-label { width: 82%; }
-.lp-model-pulse-skeleton .skeleton-value { width: 36px; height: 10px; }
-
-.lp-model-pulse-empty {
-  margin: 2px 0 20px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-@media (max-width: 560px) {
-  .lp-model-pulse-foot {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lp-model-pulse-meter i { transition: none; }
 }
 
 /* --- Live pulse beside the benchmark ---------------------------------------
@@ -1563,32 +1306,6 @@ img { display: block; max-width: 100%; }
   .lp-composer-text.is-typing::after { animation: none; }
 }
 
-/* --- Provider chips -------------------------------------------------------- */
-.lp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-
-.lp-chips span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 11px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--raise);
-  color: var(--ink-2);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-}
-
-.lp-chips img { width: 14px; height: 14px; object-fit: contain; }
-
-/* Monochrome provider marks are dark assets: invert them in dark mode so they
-   stay visible, matching benchmark.css. */
-.dark-mode .lp-chips img[src*="chatgpt"],
-.dark-mode .lp-chips img[src*="grok"],
-.dark-mode .lp-chips img[src*="kimi"],
-.dark-mode .lp-chips img[src*="meta.svg"],
-.dark-mode .lp-chips img[src*="zai"] { filter: invert(1); }
-
 /* --------------------------------------------------------------------------
    Scene 03 — Consensus + Differences, rebuilt to mirror the real /app
    -------------------------------------------------------------------------- */
@@ -1793,14 +1510,6 @@ img { display: block; max-width: 100%; }
 
 /* Inline action icons (share + citation), top-right of the consensus answer —
    dezente Ghost-Icon-Buttons, exakt wie in der /app. */
-.lp-consensus-actions {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
 .consensus-share-pill,
 .consensus-actions-toggle {
   display: inline-flex;
@@ -2208,13 +1917,6 @@ img { display: block; max-width: 100%; }
   font-style: italic;
   line-height: var(--line-height-ui);
   overflow-wrap: anywhere;
-}
-
-.diff-position-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin-top: 4px;
 }
 
 /* Compact jump buttons: neutral at rest, accent on interaction. The arrow
@@ -2838,15 +2540,9 @@ img { display: block; max-width: 100%; }
   .lp-hero.lp-hero--demo { padding-bottom: 32px; }
   .lp-hero-prompt.lp-prompt { margin-top: 30px; }
 
-  /* Nine marks have to stay one row here, or the "one image" they make falls
-     apart: 9 x 20px plus eight 10px gaps is 260px inside a 331px column. */
-  .lp-hero-models { --mark-size: 20px; gap: 10px; margin-top: 16px; }
-
   /* Only the narrowest phones need the last step: at 360px the row still has
      328px to sit in, below that it would break into a second, lopsided line. */
   @media (max-width: 360px) {
-    .lp-hero-models { --mark-size: 18px; gap: 8px; }
-
     /* Below this width the longest question in the loop needs a third line,
        and two reserved lines would let the field jump again. Measured, not
        guessed: at 360px and up all five questions fit in two. */
@@ -2972,7 +2668,6 @@ img { display: block; max-width: 100%; }
   transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
 }
 .lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
-.lp-composer-sources { color: var(--lp-mode-active); }
 .lp-composer-state { font-size: inherit; font-weight: var(--font-weight-regular); color: var(--ink-3); }
 .lp-composer-state.is-on { color: var(--lp-mode-active); }
 .lp-composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

@@ -59,18 +59,6 @@
 
 /* The login dialog lives in auth-modal.css. */
 
-.modal-content a.secondary-link,
-.modal-content button.link-btn {
-  color: var(--link-color) !important;
-  text-decoration: underline !important;
-  text-underline-offset: 2px;
-}
-
-.modal-content a.secondary-link:hover,
-.modal-content button.link-btn:hover {
-  color: var(--feedback-text-hover-color) !important;
-}
-
 .feedback-modal {
   position: relative;
   width: min(92vw, 440px);
@@ -673,13 +661,6 @@
   font-size: var(--font-size-xs);
   color: var(--sidebar-text-muted) !important;
   line-height: var(--line-height-ui);
-}
-
-.settings-divider {
-  border: 0;
-  border-top: 1px solid var(--sidebar-border);
-  margin: 18px 0;
-  opacity: 1;
 }
 
 .collapse-header {
@@ -1402,18 +1383,6 @@
   line-height: var(--line-height-ui);
 }
 
-.highlight-tech {
-  color: var(--accent);
-}
-
-/* Scrollt bei kleinen Viewports innerhalb des Modals, statt dass Zeilen
-   unten aus dem Popup ragen (der Header bleibt stehen). */
-.pricing-grid {
-  display: grid;
-  padding: 8px 20px 20px;
-  overflow-y: auto;
-  min-height: 0;
-}
 /* Der Panel-Body ist der scrollende Teil des Modals. Ohne min-height:0
    schneidet das overflow:hidden der .pro-modal-content auf kleinen
    Schirmen unten einfach ab — samt "Got it". */
@@ -1458,93 +1427,6 @@
   .pro-beta-actions {
     margin-top: 14px;
   }
-}
-
-.pro-request-status { min-height: 1.4em; margin: 13px 0 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
-.pro-request-status.is-pending { color: var(--sidebar-text-muted); }
-.pro-request-status.is-success { color: var(--agree); }
-.pro-request-status.is-error { color: var(--dispute); }
-.dark-mode .pro-request-status.is-success { color: var(--agree); }
-.dark-mode .pro-request-status.is-error { color: var(--dispute); }
-
-.pricing-header,
-.pricing-row,
-.pricing-footer {
-  display: grid;
-  grid-template-columns: minmax(140px, 1.2fr) minmax(96px, 0.8fr) minmax(120px, 0.95fr);
-  align-items: center;
-  column-gap: 12px;
-}
-
-.pricing-header {
-  padding: 12px 0 10px;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--sidebar-border);
-}
-
-.pricing-row {
-  min-height: 48px;
-  padding: 11px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
-}
-
-.pricing-footer {
-  padding: 18px 0 0;
-  align-items: start;
-}
-
-.col-feature {
-  color: var(--text-color);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-}
-
-.col-plan {
-  min-width: 0;
-  padding: 0 8px;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-  text-align: center;
-}
-
-.pricing-header .col-plan,
-.pricing-row .col-plan:nth-child(3),
-.pricing-footer .col-plan:nth-child(3) {
-  color: var(--text-color);
-}
-
-.pricing-row .col-plan:nth-child(3),
-.pricing-footer .col-plan:nth-child(3) {
-  padding-block: 7px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.col-plan.bold {
-  font-weight: var(--font-weight-bold);
-}
-
-.col-plan small {
-  display: block;
-  margin-top: 3px;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-heading);
-}
-
-.price-block {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 10px;
 }
 
 .price {
@@ -1649,7 +1531,6 @@
 }
 
 /* Share/Watch dialog; kept with the modal component instead of the template. */
-.skeleton-line-usage { width: 54px; }
 html.share-modal-open,
 html.share-modal-open body {
   overflow: hidden;
@@ -1730,7 +1611,6 @@ html.share-modal-open body {
 .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: var(--font-size-sm); }
 .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: var(--font-size-xs); }
-.watch-public-note { margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
 .watch-config-intro { color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted)); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
 .watch-config-field { min-width: 0; margin-top: 14px; }
 .watch-config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
@@ -1756,10 +1636,6 @@ html.share-modal-open body {
 .watch-field-error[hidden] { display: none; }
 .watch-weekday-wrap { margin-top: 10px; }
 .watch-weekday-wrap[hidden] { display: none; }
-#watchConditionWrap { margin-top: 12px; }
-.watch-condition-editor { flex: 1 1 100%; display: flex; align-items: flex-end; gap: 7px; }
-.watch-condition-editor[hidden] { display: none; }
-.watch-condition-editor .watch-condition-input { flex: 1; }
 .watch-data-note { margin: 6px 0 0 !important; color: var(--sidebar-text-muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
 .watch-config-assurance {
   display: flex; align-items: flex-start; gap: 8px; margin: 16px 0 0 !important;

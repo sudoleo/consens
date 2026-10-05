@@ -21,39 +21,6 @@
   filter: invert(1) brightness(0.92);
 }
 
-/* Dezenter Hinweis "kein Internetzugang" neben dem DeepSeek-Modellnamen.
-   Bewusst zurückhaltend (gedämpftes Bernstein, halbtransparent); voll
-   sichtbar erst bei Hover/Fokus, der Tooltip erklärt den Hinweis. */
-.no-web-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  margin-left: -2px;
-  color: var(--accent-tertiary);
-  opacity: 0.62;
-  cursor: help;
-  flex-shrink: 0;
-  transition: opacity var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard);
-}
-
-.no-web-indicator svg {
-  width: 13px;
-  height: 13px;
-  display: block;
-}
-
-.no-web-indicator:hover,
-.no-web-indicator:focus-visible {
-  opacity: 1;
-  outline: none;
-}
-
-.response-box.excluded .no-web-indicator {
-  display: none;
-}
-
 /* Dropdown-Pfeil neben dem Modellnamen: rahmenloser Ghost-Trigger */
 .model-picker-wrapper {
   position: relative;
@@ -670,11 +637,6 @@
     text-align: center;
   }
 
-
-  .consensus-label {
-    display: none;
-  }
-
   .consensus-model .select-wrapper select,
   .consensus-model .select-wrapper .model-picker-display {
     width: min(46vw, 185px);
@@ -717,48 +679,6 @@
 
   .pro-header {
     padding: 20px 48px 15px 18px;
-  }
-
-  .pricing-grid {
-    padding: 6px 14px 16px;
-  }
-
-  .pricing-header,
-  .pricing-row {
-    grid-template-columns: minmax(104px, 1.1fr) minmax(70px, 0.75fr) minmax(82px, 0.85fr);
-    column-gap: 6px;
-  }
-
-  .pricing-footer {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding-top: 16px;
-  }
-
-  .pricing-footer .col-feature {
-    display: none;
-  }
-
-  .pricing-footer .price-block {
-    width: 100%;
-  }
-
-  .pricing-footer .col-plan:nth-child(3) {
-    order: -1;
-  }
-
-  .col-feature,
-  .col-plan {
-    font-size: var(--font-size-xs);
-  }
-
-  .col-plan {
-    padding-inline: 4px;
-  }
-
-  .col-plan small {
-    font-size: var(--font-size-micro);
   }
 }
 

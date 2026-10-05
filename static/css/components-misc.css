@@ -157,58 +157,6 @@
   font-weight: var(--font-weight-medium);
 }
 
-.collapsible-content.collapsed {
-  max-height: 0;
-  opacity: 0;
-  padding: 0 8px;
-  margin-top: 0 !important;
-  padding-bottom: 0 !important;
-}
-
-.collapse-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-2xs);
-  opacity: 0.6;
-  cursor: pointer;
-  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
-  position: relative;
-  overflow: visible;
-}
-
-.collapse-btn:hover {
-  opacity: 0.9;
-  transform: translateY(0.5px);
-}
-
-.collapse-btn .arrow {
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-solid);
-  color: var(--text-color);
-  transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-press) var(--ease-standard);
-  position: relative;
-  z-index: 1;
-  margin-left: -5px;
-  margin-top: -2px;
-}
-
-.collapse-btn .arrow.rotated {
-  transform: rotate(-90deg);
-  opacity: 0.9;
-}
-
-header .sidebar-toggle.collapse-btn {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-}
-
 /* --------------------------------------------------------------------------
    Checkboxes
    -------------------------------------------------------------------------- */

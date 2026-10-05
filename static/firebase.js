@@ -179,21 +179,6 @@ function renderMarkdownSafe(md) {
   });
 }
 
-// Optional: Nach dem Einfügen alle Links "sicher" machen
-function enhanceLinks(rootEl) {
-  if (!rootEl) return;
-  rootEl.querySelectorAll("a[href]").forEach(a => {
-    a.setAttribute("target", "_blank");
-    a.setAttribute("rel", "noopener noreferrer");
-  });
-}
-
-// Convenience: Sicher einfügen + Links härten
-function injectHtmlSafe(containerEl, md) {
-  containerEl.innerHTML = renderMarkdownSafe(md);
-  enhanceLinks(containerEl);
-}
-
 // Kontostand: ein Tokenkonto pro Tag fuer alle Modi. Es lebt in
 // App.tokenBudget (token-budget.js); /user_status und /usage liefern es als
 // `token_budget`, genau wie jede Lauf-Antwort.

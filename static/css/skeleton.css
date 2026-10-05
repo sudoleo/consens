@@ -43,12 +43,6 @@
   border-radius: 50%;
 }
 
-.skeleton-line {
-  display: inline-block;
-  height: .72rem;
-  vertical-align: middle;
-}
-
 .skeleton-bookmark {
   display: flex;
   align-items: center;

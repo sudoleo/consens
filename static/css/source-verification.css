@@ -1,6 +1,5 @@
 .source-verification { display: block; color: var(--ink, #222428); font-size: var(--font-size-sm); margin: 0 0 1.25rem; line-height: 1.5; }
 .source-verification-status { display: flex; align-items: center; gap: .5rem; font-weight: 600; font-size: var(--font-size-base); margin: 0 0 .15rem; }
-.source-check-done { font-size: var(--font-size-sm); color: var(--muted, #697386); }
 .source-verification-explanation { color: var(--muted, #697386); font-size: var(--font-size-ui); margin: 0; }
 .source-check-coverage { color: var(--muted, #697386); font-size: var(--font-size-xs); margin: .25rem 0; }
 .source-check-diagnostics { font-size: var(--font-size-xs); color: var(--muted, #697386); margin: .25rem 0 .85rem; }
@@ -53,7 +52,6 @@
 .source-check-status-attention { color: var(--cx-warn-ink, #a66a14); }
 .source-check-link { display: inline-block; margin-top: .4rem; min-height: 30px; }
 .source-check-status { display: inline-flex; align-items: center; gap: .25rem; flex: 0 0 auto; font-size: var(--font-size-xs); color: var(--muted, #697386); white-space: nowrap; }
-.source-check-status-icon { font-size: var(--font-size-ui); }
 #consensusSourcesTab { column-gap: .4rem; flex-wrap: wrap; }
 #consensusSourcesTab .source-check-status { flex-shrink: 1; min-width: 0; white-space: normal; text-align: left; }
 #consensusSourcesTab .consensus-tab-count { margin-inline-start: .15rem; }

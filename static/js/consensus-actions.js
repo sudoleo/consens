@@ -190,7 +190,7 @@
       let mainText = "";
       if (mainPara) {
         const clone = mainPara.cloneNode(true);
-        clone.querySelectorAll(".claim-badge, .copy-btn, .response-code-copy").forEach(el => el.remove());
+        clone.querySelectorAll(".claim-badge, .copy-btn").forEach(el => el.remove());
         // Quellen-Pillen lesen sich im DOM als "uci.org+2". Im kopierten
         // Text stehen stattdessen die Domains in Klammern. Der Klon traegt
         // die Quellen nicht mit (JS-Eigenschaften), daher die Originale.

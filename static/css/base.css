@@ -55,7 +55,7 @@ pre {
   position: relative;
   background-color: var(--code-bg);
   color: var(--text-color);
-  padding: 12px 44px 12px 12px;
+  padding: 12px;
   border: 1px solid color-mix(in srgb, var(--input-border) 70%, transparent);
   border-radius: var(--radius-sm);
   overflow-x: auto;
@@ -74,48 +74,6 @@ pre {
   background: color-mix(in srgb, var(--text-color) 7%, transparent);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
-}
-
-/* Copy-Button in Codeblöcken: dezenter Icon-Button oben rechts, erscheint
-   voll erst beim Hover über dem Block (Desktop) bzw. ist auf Touch immer da. */
-pre .response-code-copy {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-2xs);
-  background: transparent;
-  color: var(--sidebar-text-muted);
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-}
-
-pre:hover .response-code-copy,
-pre .response-code-copy:focus-visible {
-  opacity: 1;
-}
-
-pre .response-code-copy:hover,
-pre .response-code-copy:focus-visible {
-  background: color-mix(in srgb, var(--text-color) 9%, transparent);
-  color: var(--text-color);
-  outline: none;
-}
-
-pre .response-code-copy.is-copied {
-  color: #2c7a2c;
-  opacity: 1;
-}
-
-.dark-mode pre .response-code-copy.is-copied {
-  color: #8ee6c8;
 }
 
 .hidden {

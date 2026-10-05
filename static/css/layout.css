@@ -43,24 +43,11 @@ body {
   }
 }
 
-.main-wrapper {
-  display: flex;
-  justify-content: center;
-  padding-top: 20px;
-  margin-left: 260px;
-  transition: margin-left var(--dur-layer) var(--ease-standard);
-  width: auto;
-}
-
-body:has(.sidebar.collapsed) .main-wrapper {
-  margin-left: 0 !important;
-}
-
 /* --------------------------------------------------------------------------
    Kopflose App: schwebende Navigation statt Topbar.
    .app-nav-float = Sidebar-Toggle + Mini-Brand oben links (fixed).
    Das Brand-Element erscheint nur bei geschlossener Sidebar; ist die Sidebar
-   offen, zeigt .sidebar-brand Logo + Namen im Sidebar-Kopf.
+   offen, zeigt .sidebar-brand-row Logo + Namen im Sidebar-Kopf.
    -------------------------------------------------------------------------- */
 .app-nav-float {
   position: fixed;
@@ -173,16 +160,6 @@ body:has(.sidebar.active) .brand-float {
   line-height: var(--line-height-solid);
   white-space: nowrap;
   font-feature-settings: "kern" 1;
-}
-
-/* Brand-Zeile im Sidebar-Kopf; rechts bleibt Platz für den fixierten Toggle. */
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex-shrink: 0;
-  padding: 4px 44px 0 8px;
-  min-height: 34px;
 }
 
 #logoLink {
@@ -832,36 +809,6 @@ body:has(.sidebar.active) .brand-float {
   transform: rotate(0deg); /* points right when collapsed */
 }
 
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-}
-
-.sidebar-header h2 {
-  flex-grow: 1;
-  text-align: left;
-  margin: 0;
-  font-size: var(--font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-  color: var(--sidebar-text-muted);
-  font-weight: var(--font-weight-semibold);
-}
-
-.sidebar-title {
-  margin-bottom: 15px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.sidebar-title h1 {
-  font-size: var(--font-size-lg);
-  margin: 5px 0;
-}
-
 /* Commit + GitHub-Mark als ein Ziel. Die Mark ist bewusst winzig und traegt
    currentColor, damit sie sich wie Text verhaelt und nicht wie ein Button. */
 .sidebar-footer-repo {
@@ -1118,56 +1065,6 @@ body:has(.sidebar.active) .brand-float {
 }
 #usageDisplay br { display: none; }
 
-.model-selection {
-  display: flex;
-  flex-direction: column;
-  flex-wrap: nowrap;
-  gap: 1px;
-  padding: 0;
-  margin-top: 2px;
-}
-.model-selection label {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  min-height: 30px;
-  padding: 5px 8px;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-  color: var(--text-color);
-  margin-bottom: 0;
-  box-sizing: border-box;
-}
-.model-selection label.is-unselected {
-  width: 100%;
-  min-height: 30px;
-  justify-content: flex-start;
-  color: var(--sidebar-text-muted);
-  font-weight: var(--font-weight-medium);
-  background: transparent;
-  opacity: 1;
-}
-.model-selection label.is-unselected input {
-  margin: 0;
-  flex: 0 0 auto;
-}
-.model-selection label:hover {
-  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
-}
-.model-selection input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  flex: 0 0 auto;
-  accent-color: var(--accent);
-}
-
 #bookmarksContainer {
   margin-top: 2px;
 }
@@ -1367,11 +1264,6 @@ body:has(.sidebar.active) .brand-float {
   .sidebar-pinned {
     margin-top: 16px;
     padding: 2px;
-  }
-
-  /* Overlay-Sidebar: Brand-Zeile beginnt rechts vom fixierten Toggle. */
-  .sidebar-brand {
-    padding: 4px 8px 0 48px;
   }
 
   .sidebar-content {

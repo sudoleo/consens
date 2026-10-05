@@ -208,7 +208,7 @@
       clone.hidden = false;
       clone.querySelectorAll("[id]").forEach(child => child.removeAttribute("id"));
       clone.querySelectorAll(
-        ".consensus-copy-icon-btn, .copy-btn, .response-code-copy"
+        ".consensus-copy-icon-btn, .copy-btn"
       ).forEach(child => child.remove());
       clone.querySelectorAll("button").forEach(button => {
         const replacement = document.createElement("span");

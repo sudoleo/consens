@@ -1036,7 +1036,6 @@ window.rewriteSourceTags = rewriteSourceTags;
 window.registerResponseSources = registerResponseSources;
 window.prepareResponseSources = prepareResponseSources;
 window.renderModelResponseWithSources = renderModelResponseWithSources;
-window.hideSourceTeaser = sourceTeaser.hide;
 window.App.sourceTeaser = sourceTeaser;
 // Copy paths (Copy consensus, citation) read pills through these helpers:
 // a pill's text in the DOM is "domain +2", which is no plain-text citation.

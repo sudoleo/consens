@@ -59,7 +59,6 @@ body.dark-mode {
 .popup,
 .attach-menu,
 .claim-popover,
-.model-picker-panel,
 #emailPopup,
 .attachment-viewer,
 .sidebar-quota {
@@ -71,7 +70,6 @@ body.dark-mode {
 .modal-content,
 .attach-menu,
 .claim-popover,
-.model-picker-panel,
 #emailPopup {
   background: var(--raise);
   backdrop-filter: none;
@@ -1027,7 +1025,6 @@ body:not(.dark-mode) .chat-input-container {
   .input-action-btn-primary { border: 1px solid ButtonText; }
 }
 
-.composer-foot,
 .feedback-line {
   color: var(--ink-3);
 }
@@ -2239,24 +2236,6 @@ body:not(.is-hero) .consensus-output {
   text-decoration-color: var(--ink-3);
 }
 
-.consensus-tab-chevron {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-  margin-right: -2px;
-  color: var(--ink-3);
-  transition: transform var(--dur-state) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-}
-
-.consensus-tab[aria-expanded="true"] .consensus-tab-chevron {
-  transform: rotate(180deg);
-  color: inherit;
-}
-
-.consensus-tab:hover .consensus-tab-chevron {
-  color: inherit;
-}
-
 .consensus-tab-count {
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-regular);
@@ -2380,7 +2359,6 @@ body.dark-mode .run-provenance {
 }
 
 .run-provenance .consensus-tab,
-.run-provenance .consensus-tab-chevron,
 .run-provenance .run-replay-btn,
 .run-provenance .consensus-footer-actions .consensus-share-pill,
 .run-provenance .consensus-footer-actions .consensus-actions-toggle {
@@ -2393,15 +2371,6 @@ body.dark-mode .run-provenance {
   border-radius: 3px;
 }
 
-.run-provenance-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.run-provenance-actions:empty,
-.run-provenance-actions[hidden],
 .run-replay-btn[hidden] {
   display: none;
 }
@@ -2539,16 +2508,11 @@ body.dark-mode .run-provenance {
     text-decoration: none;
   }
 
-  /* Auf dem Telefon sind die drei Flaechen ohnehin Knoepfe — der Chevron
-     nimmt dort nur Platz weg. Und drei Verben in einer 390px-Zeile brechen
-     jedes Label auf zwei Zeilen: hier steht das Substantiv allein
-     ("Differences" statt "Review differences"), der Knopf drumherum sagt
-     bereits, dass man ihn druecken kann. Der volle Text bleibt im DOM (und
-     damit fuer Screenreader und Tests) erhalten. */
-  .consensus-tab-chevron {
-    display: none;
-  }
-
+  /* Drei Verben in einer 390px-Zeile brechen jedes Label auf zwei Zeilen:
+     auf dem Telefon steht das Substantiv allein ("Differences" statt
+     "Review differences"), der Knopf drumherum sagt bereits, dass man ihn
+     druecken kann. Der volle Text bleibt im DOM (und damit fuer
+     Screenreader und Tests) erhalten. */
   .consensus-tab-label[data-short] {
     font-size: 0;
   }
@@ -2589,10 +2553,6 @@ body.dark-mode .run-provenance {
   }
 
   .consensus-footer-tabs .consensus-evidence-action:focus-visible { outline-offset: -2px; }
-
-  .run-provenance-actions {
-    margin-left: 0;
-  }
 }
 
 /* --------------------------------------------------------------------------
@@ -2875,14 +2835,6 @@ body:not(.is-hero) .consensus-section::before {
 
 .thread-ask[hidden] {
   display: none;
-}
-
-.thread-ask-label {
-  margin-bottom: 7px;
-  font-size: var(--font-size-micro);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--ink-3);
 }
 
 .thread-ask-text {
@@ -4163,12 +4115,12 @@ body #emailPopup,
 body :is(.modal-content, .auth-modal, .feedback-modal, .settings-modal-content,
   .faq-modal, .pro-modal-content, .popup, .attachment-viewer,
   .memory-edit-dialog, .memory-selection-menu, .memory-edit-toast,
-  .model-picker-menu, .model-picker-panel, .attach-menu, .sidebar-quota,
+  .model-picker-menu, .attach-menu, .sidebar-quota,
   .consensus-actions-menu),
 body.dark-mode :is(.modal-content, .auth-modal, .feedback-modal, .settings-modal-content,
   .faq-modal, .pro-modal-content, .popup, .attachment-viewer,
   .memory-edit-dialog, .memory-selection-menu, .memory-edit-toast,
-  .model-picker-menu, .model-picker-panel, .attach-menu, .sidebar-quota,
+  .model-picker-menu, .attach-menu, .sidebar-quota,
   .consensus-actions-menu) {
   background: var(--app-surface);
   box-shadow: var(--lift);

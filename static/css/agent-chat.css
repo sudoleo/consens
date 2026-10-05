@@ -247,16 +247,14 @@
 @media (pointer: coarse) {
   .agent-composer-notice button, .agent-evidence-links .agent-evidence-link { min-height: 44px; }
 }
-body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
-  #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
+body.single-agent-active :is(#consensusOutput, #consensusRun, .response-section,
+  #runProvenance, .consensus-footer-actions, #composerRunNotice,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
 /* Seeded before the first paint (app-bootstrap.js) until Agent is known. */
 html.agent-shell-expected :is(.models-section, .models-section + .sidebar-separator) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer, body:not(.single-agent-active) #agentReviewNotice { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
-body.single-agent-active #composerAgentToggle { cursor: default; }
-body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 .attach-menu :is(button, label)[hidden] { display: none; }
 .attach-menu-item:disabled { opacity: .5; cursor: default; }
 #agentReasoningMenuOption .attach-menu-toggle-icon { flex: 0 0 16px; }

@@ -92,17 +92,6 @@
           });
         }
 
-        function setSpinner(boxId) {
-          const box = document.getElementById(boxId);
-          if (!box || box.classList.contains("excluded") || box.style.display === "none") return;
-          const p = box.querySelector(".collapsible-content");
-          if (p) p.innerHTML = window.spinnerHTML;
-        }
-
-        function setSpinnersForActive() {
-          (window.App.modelPrefs || []).forEach(pref => setSpinner(pref.responseId));
-        }
-
         // Markdown-Rendering + SSE-Streaming-Helfer sind nach
         // static/js/markdown-stream.js ausgelagert (window.injectMarkdown,
         // window.createStreamRenderer, window.streamSSERequest). Lokale Aliase,
@@ -517,28 +506,6 @@
           const pref = (window.App.modelPrefs || [])
             .find(item => item.responseId === responseId);
           return pref ? document.getElementById(pref.checkId) : null;
-        }
-
-        // Funktion, um Response-Boxen komplett auszublenden oder einzublenden:
-        function setResponseBoxDisplay(id, displayValue) {
-          const el = document.getElementById(id);
-          if (el) {
-            el.style.display = displayValue;
-          }
-        }
-
-        // Funktion, um Buttons in den Response-Boxen zu deaktivieren/aktivieren:
-        function updateButtons(selector, disable) {
-          const btns = document.querySelectorAll(selector);
-          btns.forEach(btn => {
-            if (disable) {
-              btn.style.pointerEvents = "none";
-              btn.style.opacity = "0.5";
-            } else {
-              btn.style.pointerEvents = "";
-              btn.style.opacity = "";
-            }
-          });
         }
 
         // Beispiel für das Setzen des systemPrompt-Wertes, falls noch nicht gesetzt:
@@ -996,15 +963,6 @@
           });
         });
 
-        // Collapse/Expand einer Antwort-Box
-        window.toggleCollapse = function (responseId) {
-          const responseBox = document.getElementById(responseId);
-          const content = responseBox.querySelector(".collapsible-content");
-          const arrow = responseBox.querySelector(".collapse-btn .arrow");
-          if (content) content.classList.toggle("collapsed");
-          if (arrow) arrow.classList.toggle("rotated");
-        };
-
         // Exclude/Include einer Antwort-Box
         // ➜ steuert jetzt auch die Sidebar-Checkboxen / modelSelectionArea mit
         window.toggleExclude = function (responseId) {
@@ -1285,15 +1243,6 @@
             document.getElementById(key).value = stored;
           }
         });
-
-        function showDisclaimerPopup() {
-          const popup = document.getElementById('disclaimerPopup');
-          popup.classList.add('show');
-          // Popup nach 3 Sekunden wieder ausblenden
-          setTimeout(() => {
-            popup.classList.remove('show');
-          }, 5000);
-        }
 
         // Globale Variable, um die letzte verarbeitete Frage zu speichern.
         // Auf window gehoben: consensus-run.js (window.getConsensus) liest sie,
