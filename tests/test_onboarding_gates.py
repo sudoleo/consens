@@ -159,12 +159,12 @@ def test_watch_nudge_starts_a_watch_directly_and_says_when_it_writes():
     # erst erscheinen, wenn die Nutzung belegt ist -- nicht nach der ersten
     # Antwort.
     assert "const FEATURE_NUDGE_MIN_RUNS = 3;" in watch
-    gate = watch[watch.index("function showWatchFeatureNudge()"):]
+    gate = watch[watch.index("function showWatchFeatureNudge("):]
     gate = gate[:gate.index("featureNudgeTimer = setTimeout")]
     assert "countFeatureNudgeRun() < FEATURE_NUDGE_MIN_RUNS" in gate
     # Der Zaehler ueberlebt den Reload, sonst faengt jede Sitzung bei null an.
     counter = watch[watch.index("function countFeatureNudgeRun()"):]
-    counter = counter[:counter.index("function showWatchFeatureNudge()")]
+    counter = counter[:counter.index("function showWatchFeatureNudge(")]
     assert "localStorage.setItem(FEATURE_NUDGE_RUNS_STORAGE_KEY" in counter
 
     defaults = watch[watch.index("function nudgeWatchDefaults()"):]
