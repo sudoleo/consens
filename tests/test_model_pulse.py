@@ -78,6 +78,47 @@ def test_filters_period_mode_and_rival_with_head_to_head():
     assert rows["grok"]["h2h"] == {"wins": 0, "losses": 4}
 
 
+def test_judge_family_is_never_scored_in_its_own_run():
+    field = ["openai", "anthropic", "grok"]
+    # The judge's family is set aside; the pick counts among the others.
+    assert model_pulse.scored_field(field, "anthropic", "OpenAI") == (("anthropic", "grok"), "anthropic")
+    # A run the judge's own family won says nothing about the others.
+    assert model_pulse.scored_field(field, "openai", "openai") is None
+    # Not only the self-picks: dropping those alone would keep the judge
+    # family's losses and erase its wins.
+    assert model_pulse.scored_field(["openai", "grok"], "grok", "openai") is None
+    # A judge outside the field changes nothing.
+    assert model_pulse.scored_field(field, "openai", "Gemini") == (tuple(field), "openai")
+
+
+def test_votes_without_a_judge_set_aside_both_possible_judge_families():
+    field = ["openai", "anthropic", "gemini", "grok"]
+    assert model_pulse.scored_field(field, "grok", None) == (("anthropic", "grok"), "grok")
+    assert model_pulse.scored_field(field, "openai", None) is None
+    assert model_pulse.scored_field(field, "gemini", "") is None
+    assert model_pulse.scored_field(["openai", "gemini", "grok"], "grok", None) is None
+    # An unreadable judge label is unknown, not "no judge".
+    assert model_pulse.scored_field(field, "openai", "Not a model") is None
+
+
+def test_ledger_entry_applies_the_judge_rule():
+    base = {"vote_type": "BestModel", "created_at": NOW, "pulse_version": 1,
+            "participants": ["openai", "anthropic", "grok"]}
+    assert model_pulse._entry({**base, "picked": "openai", "judge": "openai"}) is None
+    assert model_pulse._entry({**base, "picked": "grok", "judge": "openai"}) == (
+        NOW, "consensus", ("anthropic", "grok"), "grok")
+    assert model_pulse._entry({**base, "picked": "grok", "judge": "gemini", "source": "agent"}) == (
+        NOW, "agent", ("openai", "anthropic", "grok"), "grok")
+    assert model_pulse.participation(["OpenAI", "Grok"], "Grok", judge="OpenAI")["judge"] == "openai"
+    assert "judge" not in model_pulse.participation(["OpenAI", "Grok"], "Grok")
+
+
+def test_judge_of_reads_the_judge_that_delivered():
+    assert model_pulse.judge_of({"judges": {"differences": {"provider": "OpenAI", "model": "gpt-6-luna"}}}) == "openai"
+    assert model_pulse.judge_of({"judges": {"coverage": {"provider": "Gemini"}}}) is None
+    assert model_pulse.judge_of(None) is None
+
+
 def test_unknown_filters_are_errors():
     for bad in ({"period": "1y"}, {"mode": "byok"}, {"sort": "name"}):
         with pytest.raises(ValueError):
@@ -118,7 +159,7 @@ class LedgerDb:
 def vote(minutes, picked="openai", **extra):
     return {"vote_type": "BestModel", "created_at": NOW + timedelta(minutes=minutes),
             "participants": ["openai", "grok"], "picked": picked, "pulse_version": 1,
-            "owner_hash": "never-kept", **extra}
+            "judge": "anthropic", "owner_hash": "never-kept", **extra}
 
 
 def test_ledger_loads_once_then_reads_only_new_votes(monkeypatch):
@@ -153,7 +194,9 @@ def test_consensus_vote_stores_who_was_in_the_run():
     result_id = "P" * 16
     db.data[("pending_results", result_id)] = {
         "owner_uid": "u1", "expires_at": NOW + timedelta(hours=1),
-        "differences_data": {"best_model": "Anthropic"}, "answer_provenance": "developer",
+        "differences_data": {"best_model": "Anthropic",
+                             "judges": {"differences": {"provider": "OpenAI", "model": "gpt-6-luna"}}},
+        "answer_provenance": "developer",
         "included_models": ["OpenAI: gpt-6-luna", "Anthropic Claude: claude-sonnet-5.5", "Grok: grok-4.7"],
     }
     assert persistence_guard.record_model_vote(
@@ -161,6 +204,7 @@ def test_consensus_vote_stores_who_was_in_the_run():
     stored = next(v for (kind, _), v in db.data.items() if kind == "model_votes")
     assert stored["participants"] == ["openai", "anthropic", "grok"]
     assert stored["picked"] == "anthropic" and stored["source"] == "consensus"
+    assert stored["judge"] == "openai"
 
 
 def test_agent_choice_names_the_widest_compared_field():
@@ -169,8 +213,12 @@ def test_agent_choice_names_the_widest_compared_field():
                               {"id": "b", "answers": [{"provider_label": "Gemini"}, {"provider_label": "Kimi"},
                                                       {"provider_label": "Anthropic"}]}],
               "checks": [{"comparison_id": "a", "status": "succeeded", "differences_data": {"best_model": "OpenAI"}},
-                         {"comparison_id": "b", "status": "succeeded", "differences_data": {"best_model": "Claude"}}]}
+                         {"comparison_id": "b", "status": "succeeded", "differences_data": {
+                             "best_model": "Claude", "judges": {"differences": {"provider": "OpenAI"}}}}]}
     assert persistence_guard.agent_best_model_choice(review) == ("Anthropic", ["Gemini", "Kimi", "Anthropic"])
+    # The judge of the same (widest) check goes with the pick.
+    assert persistence_guard.agent_best_model_details(review) == (
+        "Anthropic", ["Gemini", "Kimi", "Anthropic"], "openai")
 
 
 # ------------------------------------------------------------------ pages

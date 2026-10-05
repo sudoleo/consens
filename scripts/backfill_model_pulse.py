@@ -1,20 +1,24 @@
-"""Give older Model Pulse votes their run's participants.
+"""Give older Model Pulse votes their run's participants and judge.
 
-Votes before the rate (2026-10-03) stored only the pick. Where the run is
-still stored, its compared families can be reconstructed:
+Votes before the rate (2026-10-03) stored only the pick, and votes before
+2026-10-05 no judge family. Where the run is still stored, both can be
+reconstructed:
 
 * Consensus: the chat turn (or bookmark) that carries the vote's result_id
-  lists ``included_models``.
+  lists ``included_models``; its ``differences_data.judges.differences``
+  names the judge that delivered the pick.
 * Agent: the vote's result_id names chat and turn; the turn's saved
-  ``agent_review`` names the compared answers.
+  ``agent_review`` names the compared answers and, per check, the judge.
 
 A vote whose run is gone, or whose stored pick is not among the
 reconstructed families, stays without them: it keeps counting in the all-time
-pick tally but never enters a rate.
+pick tally but never enters a rate. A vote without a judge stays in the rate
+under the conservative rule of ``model_pulse.scored_field`` (OpenAI and
+Gemini set aside).
 
 Default is a dry run that only reads. ``--apply`` writes
-``participants``/``picked``/``pulse_version`` onto the matched votes
-(never touching any other field).
+``participants``/``picked``/``pulse_version`` and ``judge`` onto the matched
+votes (never touching any other field).
 
     venv\\Scripts\\python.exe scripts\\backfill_model_pulse.py
     venv\\Scripts\\python.exe scripts\\backfill_model_pulse.py --apply
@@ -38,14 +42,17 @@ def _hash(uid: str) -> str:
 
 
 def _owner_runs(db, uid: str):
-    """result_id -> participants, and (chat, turn) -> agent review, of one user."""
+    """result_id -> (participants, judge family), and (chat, turn) -> agent
+    review, of one user."""
     by_result, agent_turns = {}, {}
     user = db.collection("users").document(uid)
     for chat in user.collection("chats").list_documents():
         for turn in chat.collection("turns").stream():
             data = turn.to_dict() or {}
             if data.get("result_id") and data.get("included_models"):
-                by_result[str(data["result_id"])] = list(data["included_models"])
+                by_result[str(data["result_id"])] = (
+                    list(data["included_models"]),
+                    model_pulse.judge_of(data.get("differences_data")))
             if data.get("agent_review"):
                 agent_turns[(chat.id, turn.id)] = data["agent_review"]
     for bookmark in user.collection("bookmarks").stream():
@@ -53,7 +60,8 @@ def _owner_runs(db, uid: str):
         field = data.get("included_providers") or data.get("included_models") or []
         for key in ("share_result_id", "vote_subject_id"):
             if data.get(key) and field:
-                by_result.setdefault(str(data[key]), list(field))
+                by_result.setdefault(str(data[key]), (
+                    list(field), model_pulse.judge_of(data.get("differences_data"))))
     return by_result, agent_turns
 
 
@@ -66,7 +74,8 @@ def main(argv=None) -> int:
 
     votes = [v for v in db.collection(model_pulse.VOTES_COLLECTION).stream()
              if (v.to_dict() or {}).get("vote_type") == "BestModel"
-             and not (v.to_dict() or {}).get("pulse_version")]
+             and not ((v.to_dict() or {}).get("pulse_version")
+                      and (v.to_dict() or {}).get("judge"))]
     owners = {(v.to_dict() or {}).get("owner_hash") for v in votes}
     uid_by_hash = {}
     for user in db.collection("users").list_documents():
@@ -88,23 +97,34 @@ def main(argv=None) -> int:
             runs_cache[uid] = _owner_runs(db, uid)
         by_result, agent_turns = runs_cache[uid]
         result_id = str(data.get("result_id") or "")
-        field = []
+        field, judge = [], None
         if source == "agent":
             _, chat_id, turn_id = (result_id.split(":") + ["", "", ""])[:3]
             review = agent_turns.get((chat_id, turn_id))
-            field = persistence_guard.agent_best_model_choice(review)[1] if review else []
+            if review:
+                _, field, judge = persistence_guard.agent_best_model_details(review)
         else:
-            field = by_result.get(result_id) or by_result.get(str(data.get("vote_subject_id") or ""), [])
-        shape = model_pulse.participation(field, data.get("model"))
+            field, judge = (by_result.get(result_id)
+                            or by_result.get(str(data.get("vote_subject_id") or ""))
+                            or ([], None))
+        if data.get("pulse_version"):
+            # Already rated; only the judge is missing.
+            if judge:
+                outcome[f"{source}: judge restored"] += 1
+                updates.append((vote.reference, {"judge": judge}))
+            else:
+                outcome[f"{source}: judge unknown"] += 1
+            continue
+        shape = model_pulse.participation(field, data.get("model"), judge=judge)
         if not field:
             outcome[f"{source}: run gone"] += 1
         elif not shape:
             outcome[f"{source}: pick not in run"] += 1
         else:
-            outcome[f"{source}: matched"] += 1
+            outcome[f"{source}: matched" + ("" if judge else " (judge unknown)")] += 1
             updates.append((vote.reference, shape))
 
-    print(f"votes without participants: {len(votes)}")
+    print(f"votes without participants or judge: {len(votes)}")
     for key, count in sorted(outcome.items()):
         print(f"  {key}: {count}")
     if not args.apply:

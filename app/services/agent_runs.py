@@ -343,10 +343,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             # A checked Agent answer adds its judge's best-answer pick to the
             # Model Pulse, once per turn, like a Consensus run. Mock runs write
             # nothing: a local MOCK_LLM server talks to the real Firestore.
-            pick = vote_ref = None
+            pick = vote_ref = pick_judge = None
             pick_field = []
             if status == "succeeded" and not mock_llm_enabled():
-                pick, pick_field = persistence_guard.agent_best_model_choice(review)
+                pick, pick_field, pick_judge = persistence_guard.agent_best_model_details(review)
                 if pick:
                     vote_ref = persistence_guard.agent_vote_ref(self.db, uid=uid, chat_id=chat_id, turn_id=turn_id)
                     if vote_ref.get(transaction=tx).exists:
@@ -399,7 +399,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 tx.update(turn_ref, patch)
                 if pick:
                     persistence_guard.write_agent_vote(tx, self.db, vote_ref, uid=uid, chat_id=chat_id,
-                                                       turn_id=turn_id, model=pick, participants=pick_field)
+                                                       turn_id=turn_id, model=pick, participants=pick_field,
+                                                       judge=pick_judge)
                 if chat_data.get("agent_turn_id") == turn_id:
                     tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP})
             return True

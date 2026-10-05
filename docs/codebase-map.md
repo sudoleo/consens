@@ -157,7 +157,17 @@ und Cache: `app/services/model_pulse.py` (`build_view` rein; `PulseLedger`
 lädt einmal alle `model_votes` mit `pulse_version == 1`, liest danach höchstens
 1×/Minute nur Votes ab dem letzten Zeitstempel − 5 min nach und lädt alle 6 h
 voll neu, damit Kontolöschungen herausfallen; gehalten werden nur Zeit, Quelle,
-Teilnehmer, Pick — kein Owner). Server rendert die erste Ansicht (GET-Formular
+Teilnehmer, Pick — kein Owner). **Judge-Regel (seit 2026-10-05):** der Pick
+stammt vom Differences-Judge, und der ist seit fd4932b5 für jede Engine zuerst
+OpenAI. Eine Familie wird deshalb nie in einem Lauf gewertet, den ihre eigene
+Familie gejudged hat (`model_pulse.scored_field`): sie fällt aus dem Feld, ein
+Lauf, den sie selbst gewonnen hat, fällt ganz weg (nur die Selbst-Picks zu
+streichen hieße, ihre Siege zu löschen und ihre Niederlagen zu behalten).
+Votes tragen dafür `judge` (Familie aus `differences_data.judges.differences`,
+`model_pulse.judge_of`); Votes ohne `judge` setzen konservativ OpenAI UND
+Gemini beiseite (`UNKNOWN_JUDGE_FAMILIES`: jeder Judge-Plan bis dahin begann
+mit einer der beiden). Der Lifetime-Zähler `leaderboard/{family}` und
+`/api/model-leaderboard` zählen weiter roh. Server rendert die erste Ansicht (GET-Formular
 ohne JS), `model-pulse.js` holt Filterwechsel über `GET /api/model-pulse` und
 schreibt sie in die URL; Lesefehler → 503 + Retry-After statt Nullständen.
 Die Landing zeigt im Benchmark-Abschnitt (seit 03.10.2026 vor `#watch`) einen
@@ -5361,9 +5371,13 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   verglichenen Antworten: Consensus aus `pending.included_models`, Agent aus
   der breitesten Comparison), `picked` und `pulse_version: 1` — der Nenner der
   Model-Pulse-Rate (`model_pulse.participation`; weniger als zwei Familien oder
-  ein Pick außerhalb des Laufs → Felder entfallen). Ältere Votes ergänzt
+  ein Pick außerhalb des Laufs → Felder entfallen). Seit 2026-10-05 zusätzlich
+  `judge` (Familie des Judges, der den Pick geliefert hat; Consensus aus
+  `pending.differences_data.judges`, Agent aus dem Check der breitesten
+  Comparison, `persistence_guard.agent_best_model_details`). Ältere Votes ergänzt
   `scripts/backfill_model_pulse.py` (Dry-Run per Default, `--apply` schreibt nur
-  diese drei Felder), soweit Chat-Turn/Bookmark des Laufs noch existiert.
+  diese Felder bzw. bei schon bewerteten Votes nur `judge`), soweit
+  Chat-Turn/Bookmark des Laufs noch existiert.
 - `memory_edit_usage/{sha256(uid)}` und `global_usage/memory-edit-YYYY-MM-DD` —
   persistente per-User-/Minuten-/Tages- und globale Tagesreservierungen samt
   kurzem In-flight-Lease; keine Memory- oder Feedback-Inhalte. Idempotenz- und

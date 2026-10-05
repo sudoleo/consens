@@ -13,6 +13,20 @@ them stay in the all-time pick counter on ``leaderboard`` but cannot enter a
 rate. ``scripts/backfill_model_pulse.py`` reconstructs them where the run is
 still stored.
 
+The pick comes from the Differences judge, and since 2026-10-04 that judge
+is OpenAI's standard judge for every engine (before, OpenAI for every engine
+except OpenAI's own, then Gemini). The judge therefore often compares an
+answer from its own family. A family is never scored in a run its own family
+judged: its answer is set aside and the pick counts among the others; a run
+the judge's own family won says nothing about the others and is dropped
+(``scored_field``). Dropping only the self-picks would be wrong the other
+way round: it would erase the judge family's wins and keep its losses.
+Votes since 2026-10-05 store the judge family (``judge``); for older votes
+it is unknown, and every judge plan before then started with OpenAI or
+Gemini, so both are set aside (``UNKNOWN_JUDGE_FAMILIES``) until
+``scripts/backfill_model_pulse.py`` restores the real judge from the stored
+run.
+
 Reading: one process-wide ledger of the slim vote facts (time, source,
 participants, pick; no owner, no prompt). A refresh reads only votes newer
 than the last one seen, at most once a minute; a full reload every six hours
@@ -36,6 +50,11 @@ MIN_RUNS = 10
 PERIODS = {"7d": 7, "30d": 30, "90d": 90, "all": None}
 DEFAULT_PERIOD = "all"
 MODES = ("all", "consensus", "agent")
+# The families a vote without a stored judge may have been judged by: every
+# judge plan up to 2026-10-05 started with OpenAI, or with Gemini when OpenAI
+# was skipped (OpenAI engines before 2026-10-04) or failed. Conservative on
+# purpose: both are set aside rather than guessing which one judged.
+UNKNOWN_JUDGE_FAMILIES = ("openai", "gemini")
 SORTS = ("rate", "lift", "runs")
 
 FAMILY_NAMES = {
@@ -73,9 +92,13 @@ def family_key(value) -> str | None:
     return _KEY_BY_NAME.get(text)
 
 
-def participation(participants, picked) -> dict | None:
+def participation(participants, picked, judge=None) -> dict | None:
     """The fields a vote stores for the rate, or None when they would lie:
-    fewer than two compared families, or a pick outside the run."""
+    fewer than two compared families, or a pick outside the run.
+
+    ``judge`` is the family of the judge that made the pick (a label such as
+    "OpenAI" or a provider key). It is stored as found, even when it is one of
+    the participants; ``scored_field`` decides on read what that means."""
     families = sorted(
         {key for key in (family_key(item) for item in participants or []) if key},
         key=FAMILY_ORDER.get,
@@ -83,7 +106,38 @@ def participation(participants, picked) -> dict | None:
     pick = family_key(picked)
     if len(families) < 2 or pick not in families:
         return None
-    return {"participants": families, "picked": pick, "pulse_version": PULSE_VERSION}
+    shape = {"participants": families, "picked": pick, "pulse_version": PULSE_VERSION}
+    judge_key = family_key(judge)
+    if judge_key:
+        shape["judge"] = judge_key
+    return shape
+
+
+def judge_of(differences_data) -> str | None:
+    """The family of the judge that actually delivered a Differences result
+    (``differences_data["judges"]["differences"]["provider"]``), or None."""
+    judges = (differences_data or {}).get("judges") if isinstance(differences_data, dict) else None
+    entry = judges.get("differences") if isinstance(judges, dict) else None
+    return family_key(entry.get("provider")) if isinstance(entry, dict) else None
+
+
+def scored_field(participants, picked, judge=None):
+    """The (field, pick) a vote contributes to the rate, or None.
+
+    The judge's own family is set aside: it is not scored in a run it judged,
+    and a run it won itself is dropped, because who would have won without
+    it is unknown. Without a stored judge both families an older judge could
+    have come from are set aside. Fewer than two remaining families is no
+    comparison."""
+    judge_key = family_key(judge)
+    judges = {judge_key} if judge_key else set(UNKNOWN_JUDGE_FAMILIES)
+    pick = family_key(picked)
+    if not pick or pick in judges:
+        return None
+    field = tuple(key for key in participants or () if key not in judges)
+    if len(field) < 2 or pick not in field:
+        return None
+    return field, pick
 
 
 def consensus_participants(pending: dict) -> list[str]:
@@ -109,8 +163,11 @@ def _entry(data: dict):
     shape = participation(data.get("participants"), data.get("picked"))
     if not created or not shape or data.get("vote_type", "BestModel") != "BestModel":
         return None
-    return (created, "agent" if data.get("source") == "agent" else "consensus",
-            tuple(shape["participants"]), shape["picked"])
+    scored = scored_field(shape["participants"], shape["picked"], data.get("judge"))
+    if not scored:
+        return None
+    field, pick = scored
+    return (created, "agent" if data.get("source") == "agent" else "consensus", field, pick)
 
 
 class PulseLedger:
