@@ -2357,7 +2357,15 @@ POST /agent verwendet den bestehenden DelegationLoop mit `AgentPolicy.for_chat`.
 Such-, Nachrichten- und Dollarlimits durch das zentrale Tages-Tokenbudget. Im
 persistierten Policy-Snapshot stehen die nicht angewendeten Limits auf null.
 Der injizierte AnalysisBudget ist nur für diesen Lauf zeit-/aufrufunbegrenzt;
-Consensus und Legacy-Aufrufer behalten ihre eigenen Grenzen.
+Consensus und Legacy-Aufrufer behalten ihre eigenen Grenzen. Seit 2026-10-05
+begrenzen weiche Schutzgrenzen pro Turn (`AgentPolicy.turn_*`, gesetzt nur in
+`for_chat`, im Snapshot sichtbar) eine Schleife gültiger Aufrufe: 4 Vergleiche
+(der fünfte ist ein Tool-Fehler), 24 Orchestrierungsschritte, 15 min bis zum
+Wrap-up plus 5 min (`TURN_WRAP_UP_SECONDS`) bis zum harten Stopp in `_check`, und
+höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; `wait_agents`
+ausgenommen). Wrap-up = Synthese + Judges aus einem Vergleich mit ≥2 Antworten,
+sonst `AnalysisBudgetExceeded` mit gespeicherten Teilergebnissen. Details und
+Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt).
 Worker-Delegation bleibt separat durch delegation_config.enabled und die
 geprüfte Modell-/Reasoning-Kombination freigegeben. policy.delegation aktiviert
 hier auch ohne Worker-Freigabe das gemeinsame persistente Schrittjournal.
@@ -2605,8 +2613,10 @@ führt der Server nach der Synthese `judge_answer` und gegebenenfalls
 `check_contradictions` über dieselbe Tool-Registry aus. Abrechnung, Bindungen und
 bestehende Fallback-Judges bleiben identisch; zusätzliche Erinnerungsrunden sind
 nicht nötig. Drei aufeinanderfolgende Tool-Batches ohne einen gültig ausgeführten
-Toolcall brechen als Protokollstillstand ab; gültige Arbeit hat weiterhin kein
-pauschales Runden- oder Laufzeitlimit. Ungeprüfte Antworten werden nie erfolgreich
+Toolcall brechen als Protokollstillstand ab; gültige Arbeit begrenzen nur die
+weichen Schutzgrenzen pro Turn (4 Vergleiche, 24 Schritte, 15 min, keine
+identischen Wiederholungen; siehe oben bei `AgentPolicy.for_chat`), die nach
+Möglichkeit noch eine geprüfte Antwort liefern. Ungeprüfte Antworten werden nie erfolgreich
 abgeschlossen. Ohne Vergleich
 ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann
 zuerst mit compare_models eine Grundlage einholen.
@@ -3078,6 +3088,9 @@ nur wirksame Worker-Parallelitäts-/Nachrichtengrößen und verweist auf Limits 
 das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
 Produzenten pro Prozess (Default 16). Consensus behält seine Run-Limits.
+Ein einzelner Chat-Turn ist trotzdem nicht unbegrenzt: Vergleichs-, Schritt-,
+Zeit- und Wiederholungsgrenzen pro Turn (`AgentPolicy.turn_*`, oben bei
+`AgentPolicy.for_chat`) stoppen Schleifen gültiger Aufrufe vor dem Tageskonto.
 
 Agent nutzt den gemeinsamen `engines.web_search_tool`-Builder mit derselben
 Engine-Wahl wie Consensus (Details: [agent-mode.md](agent-mode.md), „Websuche“).

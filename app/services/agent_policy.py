@@ -1,5 +1,6 @@
 """Server-owned capabilities and shared limits, frozen once per Agent turn."""
 from dataclasses import asdict, dataclass, replace
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -21,14 +22,24 @@ class AgentPolicy:
     worker_calls: int = 8
     max_searches: int = 2
     account_budget_only: bool = False
+    # Soft per-turn guards of account mode (None = not applied). The token
+    # ledger stays the spending limit; these only stop a turn that loops
+    # without progress before it burns the whole daily account.
+    turn_comparisons: Optional[int] = None
+    turn_steps: Optional[int] = None
+    turn_seconds: Optional[int] = None
+    turn_identical_calls: Optional[int] = None
 
     @classmethod
     def for_chat(cls, config):
         # Chat has one spending limit: the atomic, account-wide token ledger.
         # Keep the bounded policy for legacy callers and the Consensus pipeline.
+        # Per turn: at most four comparisons, 24 orchestrator routing steps,
+        # 15 minutes until the wrap-up, and an identical tool call twice.
         return replace(cls.from_config({**config, "enabled": True}),
                        account_budget_only=True, context_chars=120_000,
-                       version="agent-account-budget-2026-09-19-v2")
+                       turn_comparisons=4, turn_steps=24, turn_seconds=900, turn_identical_calls=2,
+                       version="agent-account-budget-2026-10-05-v3")
 
     @classmethod
     def from_config(cls, config):
@@ -37,6 +48,11 @@ class AgentPolicy:
 
     def snapshot(self):
         data = asdict(self)
+        if not self.account_budget_only:
+            # Bounded runs have their own hard limits; their snapshot (also
+            # the "Shared run limits" prompt line) stays as before.
+            for key in ("turn_comparisons", "turn_steps", "turn_seconds", "turn_identical_calls"):
+                data.pop(key)
         if self.account_budget_only:
             for key in ("seconds", "max_calls", "max_tools", "max_tokens", "max_cost_nano_usd",
                         "worker_calls", "max_searches", "max_messages", "context_chars"):

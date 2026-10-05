@@ -444,9 +444,26 @@ im Chat. Reicht das Tagesbudget für einen nächsten Aufruf nicht, bleiben vorha
 Ergebnisse mit ihrem tatsächlichen, gegebenenfalls unvollständigen Prüfstatus erhalten.
 
 Das zentrale Tageskontingent ist die einzige Verbrauchsgrenze des Agent-Chats.
-Es gibt kein Laufzeit-, Runden-, Tool-, Such-, Nachrichten- oder Dollarbudget pro
-Lauf. Alte Admin-Werte dafür werden von `AgentPolicy.for_chat` nicht angewendet;
+Es gibt kein Tool-, Such-, Nachrichten- oder Dollarbudget pro Lauf. Alte
+Admin-Werte dafür werden von `AgentPolicy.for_chat` nicht angewendet;
 Legacy-/Evaluierungsaufrufe und die bestehende Consensus-Pipeline bleiben begrenzt.
+Seit 2026-10-05 gelten pro Nachricht weiche Schutzgrenzen (Konstanten in
+`AgentPolicy.for_chat`, nicht im Admin), damit eine Schleife gültiger Aufrufe
+nicht das ganze Tageskonto in einem Turn verbrennt (jeder Orchestrierungsschritt
+sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
+
+| Schutzgrenze pro Nachricht | Standard | Verhalten |
+|---|---|---|
+| Vergleiche (`turn_comparisons`) | 4 | Der fünfte `compare_models` liefert einen Tool-Fehler („call judge_answer now“), nichts Bezahltes startet; der vierte meldet „last comparison allowed“. |
+| Orchestrierungsschritte (`turn_steps`) | 24 | Vor dem 25. Routing-Schritt: Wrap-up (siehe unten). |
+| Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. |
+| Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (ohne `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
+
+Wrap-up: Gibt es einen Vergleich mit mindestens zwei Antworten (oder schon eine
+Synthese) und sind alle Worker geprüft, schreibt der Server die Synthese und
+startet die Judges wie im Normalpfad; der Turn endet regulär. Sonst endet er mit
+`AnalysisBudgetExceeded` (`run_limit`, „… The available results have been saved;
+send a follow-up message to continue.“); gespeicherte Vergleiche bleiben erhalten.
 Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 
 | Grenze | Standard |
@@ -469,7 +486,8 @@ Provider-Rechnung. Meldet der Provider höheren Verbrauch, wird er vollständig
 verbucht und weiterer Verbrauch blockiert. Unbekannte Nutzung ist kein Nullwert.
 Drei aufeinanderfolgende Tool-Batches ohne gültig ausgeführten Aufruf stoppen
 als Protokollstillstand, statt das Tageskontingent mit derselben ungültigen
-Anfrage aufzubrauchen. Gültige Arbeit erhält dadurch kein pauschales Rundenlimit.
+Anfrage aufzubrauchen. Gültige Arbeit begrenzen nur die Schutzgrenzen pro
+Nachricht oben.
 
 ## Recherche, Delegation und Providerprotokoll
 

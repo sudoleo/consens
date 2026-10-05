@@ -97,6 +97,11 @@ def quorum_size(total, depth, mode="balanced"):
     return max(2, total - 1) if depth == "full" else max(2, (total + 1) // 2)
 
 
+# Comparisons per message in bounded (legacy) runs; chat uses
+# AgentPolicy.turn_comparisons instead.
+BOUNDED_COMPARISONS = 3
+
+
 FREE_PROMPT = """
 Agent freedom is FREE for this message (user setting). Your goal is the best
 possible answer for the user, and you decide how to get there. Every
@@ -104,9 +109,9 @@ compare_models call asks only the families you list in `models`, at least two
 of the user's comparison models. Choose per call what the question needs: the
 families strongest for this kind of task, diverse perspectives where a point is
 contested or the stakes are high, fewer models for simple questions. You may run
-several comparisons, for example a focused subquestion to selected families when
-answers disagree, evidence is thin or one aspect needs depth, and a broader panel
-for decisions with real consequences. If a family fails and fewer than two
+several comparisons (at most {limit} for this message), for example a focused
+subquestion to selected families when answers disagree, evidence is thin or one
+aspect needs depth, and a broader panel for decisions with real consequences. If a family fails and fewer than two
 answers remain, ask other families instead of answering from one. Do not ask
 more models or rounds than improve the answer: every call spends the user's
 tokens. Fixed by the app, not by you: every substantive answer rests on at least
@@ -114,14 +119,14 @@ one comparison with independent answers from at least two families, and the
 judges always check the final answer."""
 
 
-def preference_prompt(preferences):
+def preference_prompt(preferences, max_comparisons=BOUNDED_COMPARISONS):
     """Tell the orchestrator about what the user fixed in Settings."""
     text = ""
     if preferences.depth != "auto":
         text += (f"\nThe user fixed the comparison depth to \"{preferences.depth}\" in Settings; "
                  "every comparison uses it whatever depth you pass.")
     if preferences.autonomy == "free":
-        text += FREE_PROMPT
+        text += FREE_PROMPT.format(limit=max_comparisons)
     return text
 
 
@@ -219,7 +224,9 @@ check happened unless it did, and be transparent about incomplete results.
 Agreement is NOT independent fact checking or a guarantee of truth.
 Cite supplied source URLs, never ambiguous [S#] markers.
 Resolve useful subquestions before writing the single synthesis. The account token
-budget is enforced before each paid call. There is no elapsed-time limit in chat.
+budget is enforced before each paid call. Each message also has a limit on
+comparisons, orchestration steps and time, and an identical repeated tool call is
+refused: plan the comparisons, and never repeat a call that already returned.
 
 Keep the waiting user informed through status_update on EVERY compare_models,
 judge_answer and check_contradictions call. Write one short paragraph of one or
@@ -554,8 +561,14 @@ class ComparisonTools:
             raise ValueError("Files are not available")
         if self.text:
             raise ValueError("The synthesis is already fixed. Finish its required checks without another comparison.")
-        if not loop.policy.account_budget_only and (len(self.comparisons) >= 3 or self.versions):
+        if not loop.policy.account_budget_only and (len(self.comparisons) >= BOUNDED_COMPARISONS or self.versions):
             raise ValueError("Complete all comparisons before writing the synthesis (maximum three).")
+        limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
+        if limit and len(self.comparisons) >= limit:
+            # Nothing paid starts; the existing comparisons carry the answer.
+            raise ValueError(f"This message already has its maximum of {limit} comparisons. Do not call "
+                             "compare_models again: call judge_answer now. The app writes the answer from the "
+                             "comparisons you already have and checks it.")
         asked = self._choose(args)
         # Guard future synthesis + both judges, in addition to per-call cost
         # and token admission. Holds belong to the durable producer, not tools.
@@ -652,10 +665,15 @@ class ComparisonTools:
             if cancellation.cancelled or loop.cancellation.cancelled:
                 comparison["status"] = "cancelled"
             self.checkpoint()
-        instruction = ("The app now writes your answer from these results and checks it. Do not call further tools."
-                       if self.ready_to_answer else
-                       "Complete any further comparisons, then call judge_answer without answer text. The app lets you "
-                       "stream the complete synthesis in a dedicated step before any judge starts.")
+        if self.ready_to_answer:
+            instruction = "The app now writes your answer from these results and checks it. Do not call further tools."
+        elif limit and len(self.comparisons) >= limit:
+            instruction = ("This was the last comparison allowed for this message. Complete any document or action "
+                           "preparation, then call judge_answer without answer text. The app lets you stream the "
+                           "complete synthesis in a dedicated step before any judge starts.")
+        else:
+            instruction = ("Complete any further comparisons, then call judge_answer without answer text. The app lets you "
+                           "stream the complete synthesis in a dedicated step before any judge starts.")
         # Routing needs the gist; the synthesis receives the complete answers.
         limit = loop.policy.result_chars
         routed = [{**a, "text": a["text"][:limit], **({"text_shortened_for_routing": True} if len(a["text"]) > limit else {})}

@@ -1,4 +1,6 @@
-"""Long Agent chats use the account ledger, without time/round cutoffs or paid retries."""
+"""Long Agent chats use the account ledger, without the old run cutoffs or paid retries.
+
+Account mode keeps only soft per-turn guards (tests/test_agent_turn_limits.py)."""
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
@@ -42,19 +44,21 @@ def clock(monkeypatch):
     return Clock
 
 
-def test_more_than_one_hundred_steps_and_seventeen_minutes_complete_with_live_lease(store, monkeypatch):
+def test_all_turn_steps_and_eighteen_minutes_complete_with_live_lease(store, monkeypatch):
     timer = clock(monkeypatch)
     started = timer.stamp
     searches = []
     class Completion(AgentCompletion):
         def stream(self, *, model, native_searches, **kwargs):
-            timer.stamp += timedelta(seconds=10)
+            timer.stamp += timedelta(seconds=45)
             store.check_delegation(UID, loop.chat_id, loop.turn_id, loop.run_token)
             loop.budget.consume()
             searches.append(native_searches)
             self.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, "cost": .1}, model)
             index = int(self.step_id.split(":")[-1])
-            if index < 101:
+            # The old admin max_calls=1 does not apply; the turn's own step
+            # cap (24) does, and identical polling is not a repeated request.
+            if index < loop.policy.turn_steps - 1:
                 self.tool_calls = [{"id": f"wait-{index}", "type": "function", "function": {
                     "name": "wait_agents", "arguments": '{"seconds":0}'}}]
                 self.finish_reason = "tool_calls"
@@ -67,14 +71,16 @@ def test_more_than_one_hundred_steps_and_seventeen_minutes_complete_with_live_le
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     root = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
     assert saved["status"] == "completed" and saved["consensus"] == "Finished after many rounds."
-    assert timer.stamp - started == timedelta(minutes=17)
-    assert root["step_states"]["completion:101"] == "succeeded"
+    # The lease clock is not the turn deadline (a monotonic clock, see
+    # tests/test_agent_turn_limits.py).
+    assert timer.stamp - started == timedelta(minutes=18)
+    assert root["step_states"]["completion:23"] == "succeeded"
     assert root["policy"]["seconds"] is None and root["policy"]["max_calls"] is None
-    assert loop.tools_used == 101 and loop.budget.calls == 102
+    assert loop.tools_used == 23 and loop.budget.calls == 24
     assert totals(store)["unsettled_calls"] == 0
     assert all(searches)  # Search remains available after the old two-search cap.
     quota = agent_quota.snapshot(store.db, UID)
-    assert quota["used"] == 102 * 120 and quota["reserved"] == 0
+    assert quota["used"] == 24 * 120 and quota["reserved"] == 0
 
 
 def test_daily_budget_still_stops_before_any_additional_paid_step_and_saves_reason(store):
@@ -139,15 +145,15 @@ def test_mid_answer_provider_timeout_preserves_text_and_safe_reason_in_history(s
 
 
 def test_many_comparisons_use_actual_call_reservations_without_fixed_review_hold(store):
-    script = Script(compares=5, revise=True)
+    script = Script(compares=4, revise=True)  # The per-turn maximum.
     loop = comparison_loop(store, script)
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
     loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 5
-    assert loop.comparison.judge_calls == 10  # Two judges per basis, one fixed synthesis.
+    assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 4
+    assert loop.comparison.judge_calls == 8  # Two judges per basis, one fixed synthesis.
     assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["review_hold"] == 0
 
 

@@ -9,7 +9,7 @@ import logging
 import queue
 import threading
 import time
-from itertools import count
+from itertools import chain, count
 from typing import Literal
 from uuid import uuid4
 
@@ -33,6 +33,20 @@ from app.services.llm.provider_runtime import (
 # Research before a comparison: the orchestrator searches once for every answer
 # model, so several rounds cost one search phase instead of six.
 ORCHESTRATOR_SEARCH_ROUNDS = 3
+
+# Account-mode turns (AgentPolicy.for_chat) have no run budget, only the daily
+# token ledger. Soft per-turn guards stop a loop of valid calls before it burns
+# the whole account: the wrap-up after turn_seconds gets this much extra time
+# for synthesis and judges, then the run stops hard (also mid-step).
+TURN_WRAP_UP_SECONDS = 300
+# Polling has no arguments that change; repeating it is waiting, not looping.
+REPEATABLE_TOOLS = frozenset({"wait_agents"})
+TURN_TIME_LIMIT = ("This response reached its time limit. "
+                   "The available results have been saved; send a follow-up message to continue.")
+TURN_STEP_LIMIT = ("This response reached its step limit without finishing. "
+                   "The available results have been saved; send a follow-up message to continue.")
+TURN_REPEAT_LIMIT = ("The model repeated the same tool request without progress. "
+                     "The available results have been saved; send a follow-up message to continue.")
 
 
 def smaller_search(searches):
@@ -136,6 +150,12 @@ class DelegationLoop(AgentLoop):
         self.floor_reminded = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
+        # Per-turn guards of account mode (see TURN_WRAP_UP_SECONDS); the
+        # clock is injectable for tests.
+        self.clock = time.monotonic
+        self.turn_started = self.clock()
+        self.routing_steps = 0
+        self.identical_calls = {}
         self.models = {model.selection_id: resolve_agent_model(model.selection_id)
                        for model, _ in agent_models() if supports_delegation(resolve_agent_model(model.selection_id))
                        and (worker_model_ids is None or model.selection_id in worker_model_ids)}
@@ -157,10 +177,11 @@ class DelegationLoop(AgentLoop):
         ], argument_limit=24_000)
         self.comparison = None
         if comparison_models is not None:
-            from app.services.agent_comparison import ComparisonTools, PROMPT, preference_prompt
+            from app.services.agent_comparison import BOUNDED_COMPARISONS, ComparisonTools, PROMPT, preference_prompt
             self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
                                               preferences=agent_preferences, memory_changes=self.memory.writable)
-            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences)
+            limit = self.policy.turn_comparisons if self.policy.account_budget_only else BOUNDED_COMPARISONS
+            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences, limit)
             if check_sources:
                 from app.services.agent_contradictions import PROMPT as SOURCE_PROMPT
                 self.messages[0]["content"] += "\n" + SOURCE_PROMPT
@@ -168,6 +189,9 @@ class DelegationLoop(AgentLoop):
                 self.messages[0]["content"] += "\nCheck contradictions is OFF. No original-source adjudication tool is authorized for this message. Model agreement is still checked by judge_answer."
             if not self.policy.account_budget_only:
                 self.messages[0]["content"] += "\nAt most three comparisons before the single checked answer per message."
+            elif limit:
+                self.messages[0]["content"] += (f"\nAt most {limit} comparisons per message before the single checked answer. "
+                    "Plan them: put related subquestions into one comparison instead of repeating similar ones.")
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
 
@@ -225,6 +249,48 @@ class DelegationLoop(AgentLoop):
         if cancellation:
             cancellation.raise_if_cancelled()
         self.budget.check()
+        if (self.policy.account_budget_only and self.policy.turn_seconds
+                and self._turn_elapsed() >= self.policy.turn_seconds + TURN_WRAP_UP_SECONDS):
+            # Hard stop, also inside a step; the watcher cancels running calls.
+            raise AnalysisBudgetExceeded(TURN_TIME_LIMIT)
+
+    def _turn_elapsed(self):
+        return self.clock() - self.turn_started
+
+    def _turn_limit(self):
+        """Soft per-turn limit before the next orchestrator step, if reached."""
+        policy = self.policy
+        if not policy.account_budget_only:
+            return None
+        if policy.turn_seconds and self._turn_elapsed() >= policy.turn_seconds:
+            return TURN_TIME_LIMIT
+        if policy.turn_steps and self.routing_steps >= policy.turn_steps:
+            return TURN_STEP_LIMIT
+        return None
+
+    def _identical_call(self, call):
+        """No-progress guard: the same tool with the same arguments.
+
+        Arguments compare as normalized JSON without the free-text
+        status_update. The first ``turn_identical_calls`` run normally, the next
+        identical one is refused with a tool error, and one more ends the turn.
+        """
+        limit = self.policy.turn_identical_calls if self.policy.account_budget_only else None
+        function = call.get("function") or {}
+        name = function.get("name")
+        if not limit or name in REPEATABLE_TOOLS:
+            return None
+        try:
+            args = json.loads(function.get("arguments") or "{}")
+        except (TypeError, ValueError):
+            return None  # Invalid JSON is the invalid-tool guard's case.
+        if isinstance(args, dict):
+            args = {key: value for key, value in args.items() if key != "status_update"}
+        key = f"{name}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
+        seen = self.identical_calls[key] = self.identical_calls.get(key, 0) + 1
+        if seen <= limit:
+            return None
+        return "refuse" if seen == limit + 1 else "stop"
 
     def _publish(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None):
         with self.condition:
@@ -957,6 +1023,24 @@ class DelegationLoop(AgentLoop):
         if not self.comparison.finalized:
             raise AnalysisBudgetExceeded("The answer check could not finish. The answer itself has been saved.")
 
+    def _wrap_up(self, reason, steps, value):
+        """A per-turn limit: answer and check from the evidence held, else stop.
+
+        Only a comparison with at least two answers (or an already fixed
+        synthesis) can carry a checked answer; everything else is a saved stop."""
+        comparison = self.comparison
+        usable = comparison and (comparison.text or any(len(c["answers"]) >= 2 for c in comparison.comparisons))
+        if not usable or not self._workers_ready():
+            raise AnalysisBudgetExceeded(reason)
+        logging.info("Agent turn limit reached; answering from existing comparisons")
+        if not comparison.text:
+            value = yield from self._write_synthesis(steps)
+            self.messages.append(value.assistant_message())
+        if not comparison.finalized:
+            yield from self._finish_review(value)
+        self.completion.text = comparison.text
+        self.completion.finish_reason = "stop"
+
     def run(self):
         status = "failed"
         watcher = threading.Thread(target=self._watch, name="agent-run-watch", daemon=True)
@@ -966,8 +1050,17 @@ class DelegationLoop(AgentLoop):
                 if self.mock_answer is not None and self.answer_conversation:
                     self.memory.mock_turn(self.answer_conversation[-1]["content"])
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
+                value = None
                 for index in steps:
                     self._check()
+                    limit = self._turn_limit()
+                    if limit:
+                        # The synthesis takes this unused step index: model
+                        # steps are claimed without gaps.
+                        yield from self._wrap_up(limit, chain([index], steps), value)
+                        status = "succeeded"
+                        break
+                    self.routing_steps += 1
                     incoming = self._mail()
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
@@ -985,7 +1078,20 @@ class DelegationLoop(AgentLoop):
                     synthesis = None
                     if value.tool_calls:
                         accepted_tool = last_accepted = False
+                        limit = None
                         for call in value.tool_calls:
+                            repeat = self._identical_call(call)
+                            if repeat == "stop":
+                                limit = TURN_REPEAT_LIMIT
+                                break
+                            if repeat == "refuse":
+                                name = call["function"]["name"]
+                                self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
+                                    "error": f"This identical {name} call already ran {self.policy.turn_identical_calls} "
+                                             "times in this message and is not run again. Its results are above: use them "
+                                             "and continue with a different step. Repeating it ends the response."})})
+                                last_accepted = False
+                                continue
                             # Earlier comparisons/reviews of workers in this batch
                             # must finish before the exact handoff to synthesis.
                             if (self.comparison and self.comparison.comparisons and not self.comparison.text
@@ -1008,6 +1114,10 @@ class DelegationLoop(AgentLoop):
                         yield from self._events()
                         if synthesis:
                             self.messages.append(synthesis.assistant_message())
+                        if limit:
+                            yield from self._wrap_up(limit, steps, synthesis or value)
+                            status = "succeeded"
+                            break
                         self.invalid_tool_rounds = 0 if accepted_tool else self.invalid_tool_rounds + 1
                         if self.invalid_tool_rounds >= 3:
                             raise AnalysisBudgetExceeded("The model repeated invalid tool requests without progress. The available results have been saved.")
