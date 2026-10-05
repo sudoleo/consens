@@ -372,8 +372,9 @@ steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`).
 Die öffentliche Navigation hat bis 700 px ein Menü (`<details class="nav-menu">`
 in `partials/public_nav.html`, Stil in `static/css/public-nav.css`, importiert
 von `landing.css` und `public-pages.css`); ab derselben Breite verschwinden
-die Textlinks (eine Grenze für beide Seitenfamilien), und das Menü sitzt als
-umrandeter Rundknopf in CTA-Höhe rechts außen hinter dem CTA (`order: 1`).
+die Textlinks (eine Grenze für beide Seitenfamilien). Das Menü ist ein
+rahmenloses Zwei-Strich-Zeichen rechts außen hinter dem CTA (`order: 1`),
+offen kreuzen sich die Striche zum X; der CTA bleibt die einzige Fläche.
 Der Landing-Hero
 zeigt ein klickbares Input-Feld (Look des /app-Inputs, "Try the demo"-Button,
 Provider-Chips darunter). Seit 2026-10-04 öffnet ein Klick ins Feld die App
@@ -795,7 +796,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   nativ deaktiviert.
 - **Ein einziger Sidebar-Toggle** — `.app-nav-float .sidebar-toggle` erscheint
   nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt rechts neben der
-  Wortmarke in `.sidebar-brand-row`.
+  Wortmarke in `.sidebar-brand-row`. Beide zeichnen dasselbe Panel-Icon (`.sidebar-panel-icon`,
+  Rechteck mit linker Schiene statt Burger, 20 px, flacher Hover).
   `shell.css` blendet den schwebenden per `body:not(:has(.sidebar.collapsed))`
   (Overlay ≤1099px: `body:has(.sidebar.active)`) aus. `app-init.js` bindet
   **alle** `.sidebar-toggle`-Buttons an denselben Handler; `updateToggleButton`

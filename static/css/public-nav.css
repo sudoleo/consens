@@ -8,42 +8,38 @@
 .nav-menu { display: none; position: relative; }
 
 /* One breakpoint for both page families: where the menu mark appears, the
-   text links go. The mark sits at the outer edge, after the CTA, as a pair
-   with it (same height, tight gap) instead of floating in the gap between
-   brand and button. */
+   text links go. The mark sits at the outer edge, after the CTA. */
 @media (max-width: 700px) {
   .nav-menu { display: block; order: 1; }
-  .site-nav .nav-links { gap: 8px; }
+  .site-nav .nav-links { gap: 6px; }
   .site-nav .nav-links > a:not(.nav-cta) { display: none; }
 }
 
+/* Two bare strokes, no frame and no fill: the CTA is the only shape in the
+   bar. A 40px hit area keeps it tappable; open, the strokes cross into an X. */
 .nav-menu > summary {
   display: grid;
   place-items: center;
-  box-sizing: border-box;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--ground);
+  width: 40px;
+  height: 40px;
+  margin-right: -8px;
   color: var(--ink);
   list-style: none;
   cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity var(--dur-press) var(--ease-standard);
 }
 .nav-menu > summary::-webkit-details-marker { display: none; }
-.nav-menu > summary:hover,
-.nav-menu[open] > summary { background: var(--raise); border-color: var(--line-strong, var(--line)); }
-.nav-menu > summary:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.nav-menu > summary svg { width: 16px; height: 16px; }
+.nav-menu > summary:hover { opacity: 0.64; }
+.nav-menu > summary:focus-visible { outline: var(--focus-ring); outline-offset: -4px; border-radius: var(--radius-sm); }
+.nav-menu > summary svg { width: 22px; height: 22px; }
 .nav-menu > summary line {
   transform-box: view-box;
   transform-origin: 12px 12px;
-  transition: transform var(--dur-layer) var(--ease-out), opacity var(--dur-state) var(--ease-standard);
+  transition: transform var(--dur-layer) var(--ease-out);
 }
-.nav-menu[open] > summary line:nth-child(1) { transform: rotate(45deg) translateY(5px); }
-.nav-menu[open] > summary line:nth-child(2) { opacity: 0; }
-.nav-menu[open] > summary line:nth-child(3) { transform: rotate(-45deg) translateY(-5px); }
+.nav-menu[open] > summary line:nth-child(1) { transform: rotate(45deg) translateY(3px); }
+.nav-menu[open] > summary line:nth-child(2) { transform: rotate(-45deg) translateY(-3px); }
 
 .nav-menu-panel {
   position: absolute;

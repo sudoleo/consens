@@ -265,9 +265,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .sidebar-toggle-square svg {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   display: block;
+  color: inherit;
 }
 
 /* Primary action of the whole sidebar: a real navigation row, not a control
