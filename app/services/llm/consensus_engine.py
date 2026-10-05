@@ -1894,8 +1894,8 @@ def _resolve_differences_engine(differences_model: str, api_keys: dict):
     if families:
         return _judge_engine(families[0], tier), tier
     logging.warning(
-        f"No cross-family judge key available for engine {differences_model}; "
-        "falling back to the same-family standard judge."
+        f"No judge key available for engine {differences_model}; "
+        "falling back to the engine family's standard judge."
     )
     return _standard_judge_engine(resolved[0]), "standard"
 
@@ -2387,8 +2387,8 @@ def query_differences(
     Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
     Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge;
-    der Judge ist standardmäßig eine andere Modellfamilie als die Consensus-Engine
-    (siehe _resolve_differences_engine) und wird in data["judges"] ausgewiesen.
+    der Judge folgt der Prioritätsliste (OpenAI zuerst, auch für Engines derselben
+    Familie; siehe _resolve_differences_engine) und wird in data["judges"] ausgewiesen.
     Im Beta-Chat verwenden beide Judges nur die konfigurierten Standardmodelle;
     der Gemini-Fallback darf dabei auch die Familie des Chatmodells sein.
     Parallel dazu belegt der Coverage-Judge jeden Satz der Konsensantwort.

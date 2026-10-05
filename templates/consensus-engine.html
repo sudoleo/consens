@@ -100,7 +100,7 @@
           <h1 class="lp-display">Consensus and Difference Engines explained.</h1>
           <p class="lp-lead">
             A clear look at how consens.io combines model answers, checks disagreements,
-            and keeps the judging layer independent.
+            and checks the result in a separate judge pass.
           </p>
           <div class="lp-hero-actions">
             <a id="ctaButton" href="/app" class="lp-btn lp-btn--primary">Try it in the app</a>
@@ -176,8 +176,8 @@
                   <span>Use the consensus answer plus included source answers, cap each answer for the judge pass, shuffle, and anonymize as Model A/B/C.</span>
                 </li>
                 <li>
-                  <b>Pick an independent judge</b>
-                  <span>The judge tier follows the selected Consensus Engine, but the family is preferably different to reduce self-judging bias.</span>
+                  <b>Pick the judge</b>
+                  <span>The judge tier follows the selected Consensus Engine; the family follows a fixed priority (OpenAI first, then Gemini), so it can be the engine's own.</span>
                 </li>
                 <li>
                   <b>Request strict JSON</b>
@@ -216,7 +216,7 @@
           <article class="ce-step" data-step="03">
             <span class="ce-step-number">03</span>
             <h3>Two separate judges check the consensus.</h3>
-            <p>The Differences Judge works out the substantive disagreements. In parallel, the Coverage Judge goes through the numbered sentences and records, for each one, which models support it, contradict it, or never addressed it. Both preferably run on a different model family than the synthesis engine.</p>
+            <p>The Differences Judge works out the substantive disagreements. In parallel, the Coverage Judge goes through the numbered sentences and records, for each one, which models support it, contradict it, or never addressed it. Both run as separate calls after the synthesis, and the judge model can come from the same family as the engine.</p>
           </article>
           <article class="ce-step" data-step="04">
             <span class="ce-step-number">04</span>
@@ -251,7 +251,7 @@
           <article class="lp-card ce-role-card">
             <p class="lp-eyebrow">Analysis layer</p>
             <h3>Two analysis judges, plus an optional source check</h3>
-            <p>The Differences Judge works out the contradictions; the Coverage Judge belongs to the same pass but has one narrow job, and therefore runs on a cheaper model: a verdict for every sentence, with none allowed to be skipped. For independence, consens.io prefers a different model family from the Consensus Engine for both.</p>
+            <p>The Differences Judge works out the contradictions; the Coverage Judge belongs to the same pass but has one narrow job, and therefore runs on a cheaper model: a verdict for every sentence, with none allowed to be skipped. Both follow the same judge priority, OpenAI first, then Gemini.</p>
             <p>In Consensus mode with Check contradictions on, an additional judge checks major factual disagreements against sources already supplied by both model positions. Results appear beside each contradiction, with original passages, source links and relevant dates and conditions. Background checks have explicit budgets; unavailable and omitted checks are identified. This is not a complete fact-check of the consensus. The answer, model positions and agreement score stay unchanged.</p>
           </article>
         </div>
@@ -284,8 +284,8 @@
           </article>
           <article class="ce-diff-stage" data-step="03">
             <span class="ce-step-number">03</span>
-            <h3>The judge is chosen independently.</h3>
-            <p>The judge tier follows the selected Consensus Engine. Standard consensus uses a standard judge; Pro consensus tries a Pro judge from another model family.</p>
+            <h3>How the judge is chosen.</h3>
+            <p>The judge tier follows the selected Consensus Engine: standard consensus uses a standard judge, Pro consensus tries a Pro judge. The family follows a fixed priority, OpenAI first, then Gemini, even when the engine belongs to the same family.</p>
             <p class="ce-tech-note">Fallback: primary judge, retry, then the next available family; Pro attempts can fail open to a standard judge.</p>
           </article>
           <article class="ce-diff-stage" data-step="04">
@@ -321,7 +321,7 @@
               </span>
               <span class="verdict-judge">
                 <span>Analysis by Gemini (Pro)</span>
-                <span class="verdict-judge-sub">independent of the consensus engine</span>
+                <span class="verdict-judge-sub">separate judge pass</span>
               </span>
             </div>
             <div class="ce-render-diff">
@@ -379,7 +379,7 @@
             </span>
             <span class="verdict-judge">
               <span>Analysis by Mistral</span>
-              <span class="verdict-judge-sub">independent of the consensus engine</span>
+              <span class="verdict-judge-sub">separate judge pass</span>
             </span>
           </div>
           <div class="ce-result-grid">
@@ -414,7 +414,7 @@
                       </div>
                     </details>
                   </div>
-                  <div class="ce-footnote">Analysis by a judge model, independent of the consensus engine where keys allow it.</div>
+                  <div class="ce-footnote">Analysis by a judge model, run as a separate pass after the consensus.</div>
                 </div>
               </details>
             </section>
@@ -478,11 +478,11 @@
           </article>
           <article>
             <h3>Can I choose the Consensus Engine?</h3>
-            <p>Yes. In the app you pick a preset (Daily, Balanced, or High Quality) or select a specific consensus model via Custom. If the resulting engine is a Pro engine, the differences analysis tries to use a Pro judge from another family.</p>
+            <p>Yes. In the app you pick a preset (Daily, Balanced, or High Quality) or select a specific consensus model via Custom. If the resulting engine is a Pro engine, the differences analysis tries to use a Pro judge.</p>
           </article>
           <article>
-            <h3>Why use a different judge family?</h3>
-            <p>If the same model family writes and judges the answer, it may be less likely to challenge its own framing. consens.io therefore prefers an independent family when available.</p>
+            <h3>Is the judge from a different model family?</h3>
+            <p>Not necessarily. The judge follows a fixed priority (OpenAI first, then Gemini), so it can share a family with the Consensus Engine or with one of the answers. It sees the answers anonymized and shuffled, its quotes are checked verbatim against them, and the agreement score is counted from its sentence-by-sentence verdicts rather than given as a grade.</p>
           </article>
           <article>
             <h3>What happens if the Differences JSON is malformed?</h3>

@@ -145,7 +145,7 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     page.evaluate("() => App.consensusPipeline.onDifferencesStart()")
     expect(page.locator('.run-step[data-step="differences"]')).to_have_attribute("data-status", "active")
     expect(page.locator("#runCompactLabel")).to_have_text("Checking for contradictions")
-    expect(page.locator("#runNoteText")).to_have_text("An uninvolved model compares all answers. It does not get a vote.")
+    expect(page.locator("#runNoteText")).to_have_text("A separate judge pass compares all answers. It adds no answer of its own.")
     page.evaluate("() => App.consensusPipeline.dismiss()")
     expect(page.locator("#consensusRun")).not_to_be_visible()
 

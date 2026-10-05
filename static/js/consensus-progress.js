@@ -50,9 +50,10 @@
     },
     differences: {
       compact: "Checking for contradictions",
-      // Not a step list: at this point the useful thing to say is who is
-      // doing the checking, because it is not one of the six.
-      note: "An uninvolved model compares all answers. It does not get a vote."
+      // Not a step list: at this point the useful thing to say is what the
+      // check is. The judge can share a family with one of the answers
+      // (OpenAI first since 2026-10-04), so the note claims no independence.
+      note: "A separate judge pass compares all answers. It adds no answer of its own."
     },
     done: { compact: "Done" }
   };

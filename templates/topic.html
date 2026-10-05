@@ -246,7 +246,7 @@
 
       <p class="topic-provenance-line">
         {{ scoreboard.model_count or "Several" }} AI models answered independently &middot;
-        cross-checked by a judge from another model family &middot;
+        cross-checked by a judge model &middot;
         every earlier check stays readable.
         <a href="/consensus-engine">How it works</a>
       </p>
@@ -542,7 +542,7 @@
                 {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
                 {% if scoreboard.version_count > 1 %}<li><b>{{ scoreboard.version_count }}</b> checks{% if scoreboard.tracked_since %} since {{ scoreboard.tracked_since }}{% endif %}</li>{% endif %}
               </ul>
-              <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered this question independently, a judge from a different model family cross-checked them, and every earlier version stays readable. <a href="/consensus-engine">How it works</a></p>
+              <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered this question independently, a judge model cross-checked them, and every earlier version stays readable. <a href="/consensus-engine">How it works</a></p>
 
               {% if history and history.points | length > 1 %}
               <div class="topic-history-block" id="agreement">

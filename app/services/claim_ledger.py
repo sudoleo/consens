@@ -7,7 +7,7 @@ buries the two or three moments that actually mattered.
 
 This module re-projects the stored runs onto the unit a reader cares about --
 the individual claim. Every run already carries a structured Position Map whose
-dimensions are the claims the cross-family judge extracted, so the ledger is
+dimensions are the claims the Differences judge extracted, so the ledger is
 *derived* from what is already saved: no additional model call, no migration,
 and an existing Topic gains its full claim history on the next page render.
 

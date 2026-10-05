@@ -521,7 +521,7 @@
         <h2 id="shareAboutHeading">About this {% if watch_page %}tracked question{% else %}consensus{% endif %}</h2>
         <p>
           {% if scoreboard and scoreboard.model_count %}{{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }}{% else %}Several AI models{% endif %}
-          answered this question independently{% if date_display %} on {{ date_display }}{% endif %}. A judge from a different model family
+          answered this question independently{% if date_display %} on {{ date_display }}{% endif %}. A judge model
           then cross-checked the answers, scored how far they agree and flagged where they differ.
           {%- if watch_page and watch_page.interval %} The question is re-checked {{ watch_page.interval }}{% if scoreboard and scoreboard.checks > 1 %} &mdash; this is check {{ scoreboard.checks }} since {{ scoreboard.tracked_since }}{% endif %}, and every earlier version stays on this page.{% endif %}
         </p>

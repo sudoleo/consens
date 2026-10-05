@@ -1023,21 +1023,22 @@
               detail.appendChild(coverageNote);
             }
 
-            // Transparenz: welche (unabhängige) Modellfamilie die Analyse
-            // geliefert hat. Als Nachsatz derselben Zeile statt als rechts
+            // Transparenz: welche Modellfamilie die Analyse geliefert hat
+            // (seit 2026-10-04 nicht mehr zwingend eine andere als die
+            // Engine). Als Nachsatz derselben Zeile statt als rechts
             // ausgerichteter Zweizeiler — eine Fußnote, die einen eigenen
             // Block bekommt, liest sich wie eine zweite Überschrift.
             if (judge && judge.provider) {
               const note = document.createElement("span");
               note.className = "verdict-judge";
-              note.title = "The differences analysis runs on a different model"
-                + " family than the consensus engine.";
+              note.title = "The differences analysis is a separate judge call that"
+                + " checks the consensus against every model answer.";
               const provider = document.createElement("span");
               provider.textContent = "analysis by " + judge.provider
                 + (judge.tier === "pro" ? " (Pro)" : "");
               const sub = document.createElement("span");
               sub.className = "verdict-judge-sub";
-              sub.textContent = "independent of the consensus engine";
+              sub.textContent = "separate judge pass";
               note.append(provider, sub);
               if (detail.childNodes.length) {
                 detail.appendChild(document.createTextNode(" · "));
