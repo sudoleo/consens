@@ -3521,15 +3521,6 @@ body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
   border: 0;
 }
 
-/* The Agent Mode panel is retired as a progress surface — the guided run
-   above the thread now narrates every run, Agent Mode included. Its one
-   still-useful control, "Show model answers", has moved into the provenance
-   line, so nothing is lost by taking the panel off screen. */
-body.agent-mode-enabled .agent-mode-panel,
-.agent-mode-panel {
-  display: none;
-}
-
 /* ---- Source pills ----------------------------------------------------------
    In chat prose (Consensus and Agent answers, saved turns, the key-claims
    list) a citation is a quiet pill on the text baseline: favicon + short

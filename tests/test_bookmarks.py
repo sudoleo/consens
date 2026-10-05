@@ -1183,9 +1183,10 @@ def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
     strip = 'document.body.classList.remove("direct-comparison-active");'
     assert strip not in agent
 
-    # Bei eingeschaltetem Agent Mode darf das Modell-Panel nicht ueber den
-    # wiederhergestellten Antworten auftauchen.
-    assert "body.direct-comparison-active .agent-mode-panel" in consensus_css
+    # Das fruehere Modell-Panel ist samt Markup entfernt; es kann nicht mehr
+    # ueber den wiederhergestellten Antworten auftauchen.
+    assert "agent-mode-panel" not in consensus_css
+    assert 'id="agentModePanel"' not in (root / "templates" / "index.html").read_text(encoding="utf-8")
 
 
 def test_bookmark_list_is_compact_and_cursor_paginated():

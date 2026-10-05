@@ -1374,9 +1374,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt. `setAgentModeStatus`
   verwaltet weiterhin jeden Modelllauf, reicht Statusereignisse aber nur im
   Agent Mode an die gefuehrte Consensus-Pipeline weiter.
-  Seit 2026-07-27 ist das Panel `#agentModePanel` als **Fortschrittsanzeige
-  stillgelegt** (in `shell.css` auf `display:none`): zwei Progress-UIs fuer
-  einen Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut.
+  Seit 2026-07-27 war das Panel `#agentModePanel` als **Fortschrittsanzeige
+  stillgelegt** (nur per CSS ausgeblendet): zwei Progress-UIs fuer einen
+  Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut. Seit
+  2026-10-05 sind Markup, Panel-CSS, der 1-Hz-Timer und das Chip-Rendering
+  ganz entfernt; `getActiveAgentModels()` speist nur noch
+  `answerReader.syncPreview`, `setAgentModeStatus` haelt Status und Body-Klassen.
   Agent Mode gruppiert Modelle, steuert Auto-Consensus und erklärt den Modus
   an der Composer-Leiste. Der session-lokale
   „Compare answers/Hide answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
@@ -4193,7 +4196,7 @@ Die Moduswahl steht im Abschnitt „Modus: Compare, Consensus, Agent". Compare u
 Consensus sind fuer alle Stufen frei; Agent erscheint nur mit Agent-Zugang.
 
 **Default fuer neue Nutzer**: `run-mode.js` setzt `DEFAULT_MODE` (consensus),
-`agent-mode.js` `agentModePanelCollapsed = "false"`, solange die Keys fehlen. Der
+solange der Key fehlt. Der
 Einstieg zeigt in Consensus den zentrierten Composer. In Compare
 zeigt `answerReader.syncPreview(enabled, models)` sofort das echte
 Direktvergleichsraster mit den aktuell ausgewaehlten Modellnamen und statischen

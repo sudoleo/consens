@@ -1,21 +1,22 @@
 // =====================================================================
 // agent-mode.js
-// Grouped model run panel (timer, status, answer previews) and the composer
-// controls for the next message. Which mode runs (Compare, Consensus, Agent)
-// is owned by run-mode.js; this module renders the one selector for it and
-// the tools that apply to the chosen mode. The "agent-mode" names here are
-// historical and describe the grouped run panel, not Agent (Beta).
-// State (Status/Timer) ist modul-privat; agentModeStatus wird extern via
+// Run status of the grouped model run (body classes, answer previews) and the
+// composer controls for the next message. Which mode runs (Compare,
+// Consensus, Agent) is owned by run-mode.js; this module renders the one
+// selector for it and the tools that apply to the chosen mode. The
+// "agent-mode" names here are historical and describe the grouped run, not
+// Agent (Beta). Das fruehere Modell-Panel (#agentModePanel mit Timer und
+// Modell-Chips) ist seit 2026-10-05 entfernt; der gefuehrte Lauf erzaehlt
+// jeden Lauf. Der Status ist modul-privat und wird extern via
 // window.isAgentModeRunning() gelesen.
 // Exporte: window.setAgentModeStatus, window.updateAgentModeUI,
 // window.projectAgentModeRun, window.isAgentModeRunning.
 // Abhaengigkeiten: window.App.{modelPrefs,
-// getModelOptionLabel,getSelectedModelCount,trackAppEvent,initCustomModelPicker},
+// getModelOptionLabel,trackAppEvent},
 // window.updateConsensusButtonAvailability.
 // =====================================================================
 
 (function () {
-  const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
   let checkSources = true;
   try { checkSources = localStorage.getItem("checkSources") !== "false"; } catch (_) {}
   // Preserve the preference, but direct comparisons have no judges.
@@ -35,20 +36,8 @@
     renderComposerMode();
   }
 
-  // Panel defaults to expanded so model names are visible at once. Applies
-  // only until the person collapses it; that choice is kept.
-  try {
-    if (localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === null) {
-      localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, "false");
-    }
-  } catch (e) { /* localStorage gesperrt: Default bleibt aus */ }
-
   let agentModeStatus = "idle";
-  let agentModeStatusMessage = "";
-  let agentModeTimerStartedAt = null;
-  let agentModeTimerElapsedMs = 0;
-  let agentModeTimerInterval = null;
-  // When a RunContext is selected, the panel is a projection of that frozen
+  // When a RunContext is selected, the run view is a projection of that frozen
   // run rather than a reflection of the controls that configure the next run.
   let projectedRunContext = null;
   // Session-only disclosure: every new grouped run starts in the clean view.
@@ -157,57 +146,9 @@
     answerPreviewResizeTimer = window.setTimeout(syncAnswerPreviews, 150);
   });
 
-  function isAgentPanelCollapsed() {
-    return localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === "true";
-  }
-
-  function formatAgentElapsed(ms) {
-    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-
-  function updateAgentModeTimerDisplay() {
-    const timerEl = document.getElementById("agentModeTimer");
-    if (!timerEl) return;
-    const elapsed = agentModeTimerStartedAt
-      ? Date.now() - agentModeTimerStartedAt
-      : agentModeTimerElapsedMs;
-    const isVisible = !!agentModeTimerStartedAt || agentModeTimerElapsedMs > 0;
-    timerEl.classList.toggle("is-visible", isVisible);
-    timerEl.textContent = `Elapsed ${formatAgentElapsed(elapsed)}`;
-  }
-
-  function startAgentModeTimer() {
-    if (agentModeTimerStartedAt) return;
-    agentModeTimerStartedAt = Date.now();
-    agentModeTimerElapsedMs = 0;
-    window.clearInterval(agentModeTimerInterval);
-    updateAgentModeTimerDisplay();
-    agentModeTimerInterval = window.setInterval(updateAgentModeTimerDisplay, 1000);
-  }
-
-  function stopAgentModeTimer() {
-    if (agentModeTimerStartedAt) {
-      agentModeTimerElapsedMs = Date.now() - agentModeTimerStartedAt;
-    }
-    agentModeTimerStartedAt = null;
-    window.clearInterval(agentModeTimerInterval);
-    agentModeTimerInterval = null;
-    updateAgentModeTimerDisplay();
-  }
-
-  function resetAgentModeTimer() {
-    agentModeTimerStartedAt = null;
-    agentModeTimerElapsedMs = 0;
-    window.clearInterval(agentModeTimerInterval);
-    agentModeTimerInterval = null;
-    updateAgentModeTimerDisplay();
-  }
-
   function getActiveAgentModels() {
-    // Only a projected run describes itself here. Without a run -- a saved
+    // The models the answer reader previews. Only a projected run describes
+    // itself here. Without a run -- a saved
     // bookmark was opened, or the view was cleared -- the chips come from the
     // controls again; reading `?.config?.agentMode !== false` off nothing was
     // true for null as well and threw on the very next line, which aborted
@@ -222,10 +163,7 @@
           label: pref.label,
           model: String(provider.modelLabel || provider.modelId || pref.label),
           responseState: String(result.status || "pending"),
-          hasAnswer: Boolean(String(result.text || result.streamText || "").trim()),
-          // A projected run is immutable. Render its frozen label instead of a
-          // picker wired to the controls for the next comparison.
-          frozenLabel: true
+          hasAnswer: Boolean(String(result.text || result.streamText || "").trim())
         };
       }).filter(Boolean);
     }
@@ -242,36 +180,9 @@
           label: pref.label,
           model: modelText,
           responseState: responseBox?.dataset?.responseState || "",
-          hasAnswer: Boolean(responseBox?.querySelector(".collapsible-content")?.textContent?.trim()),
-          frozenLabel: false
+          hasAnswer: Boolean(responseBox?.querySelector(".collapsible-content")?.textContent?.trim())
         };
       });
-  }
-
-  function syncAgentModePicker(agentSelect, pref) {
-    const sourceSelect = document.getElementById(pref.selectId);
-    const labelText = document.getElementById(pref.textId);
-    if (!sourceSelect || !agentSelect) return;
-
-    sourceSelect.value = agentSelect.value;
-    localStorage.setItem("pref_select_" + pref.key, agentSelect.value);
-    if (labelText) {
-      const selectedLabel = window.App.getModelOptionLabel(agentSelect.options[agentSelect.selectedIndex]) || agentSelect.value;
-      labelText.textContent = selectedLabel;
-      labelText.title = `Choose model: ${selectedLabel}`;
-    }
-    sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    updateAgentModeUI();
-  }
-
-  function getAgentModeStatusText(activeModels) {
-    const count = activeModels.length;
-    if (count === 0) return "No models selected.";
-    if (agentModeStatus === "running") return "Querying selected models in parallel.";
-    if (agentModeStatus === "complete") return "Model responses are ready for consensus.";
-    if (agentModeStatus === "canceled") return "Request canceled.";
-    if (agentModeStatus === "error") return agentModeStatusMessage || "The request could not be completed.";
-    return "Ready for a grouped model run.";
   }
 
   // The one mode selector (the first group in the (+) menu) and its mirror in
@@ -525,11 +436,6 @@
     const enabled = projectedRunContext
       ? projectedRunContext.config?.agentMode !== false
       : pipelineEnabled();
-    const panel = document.getElementById("agentModePanel");
-    const modelsEl = document.getElementById("agentModeModels");
-    const statusEl = document.getElementById("agentModeStatus");
-    const countEl = document.getElementById("agentModeCount");
-    const titleEl = document.getElementById("agentModeTitle");
     const answersRow = document.getElementById("agentModeAnswersRow");
     const answersToggle = document.getElementById("agentModeAnswersToggle");
     const activeModels = getActiveAgentModels();
@@ -583,89 +489,6 @@
     // The mode selector describes the NEXT message, `enabled` above the run
     // on screen. Controls follow the choice; view and body classes the run.
     renderComposerMode();
-    if (panel) panel.setAttribute("aria-hidden", String(!enabled));
-
-    // Eingeklappter Zustand: Panel wird zur Kompaktzeile (Titel, beantwortete
-    // Modelle, Laufzeit); Chips/Status sind per CSS ausgeblendet.
-    const collapsed = isAgentPanelCollapsed();
-    if (panel) panel.classList.toggle("is-collapsed", collapsed);
-    const collapseBtn = document.getElementById("agentModeCollapseBtn");
-    if (collapseBtn) {
-      collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-      collapseBtn.title = collapsed ? "Expand to configure models" : "Collapse models panel";
-      collapseBtn.setAttribute("aria-label", collapseBtn.title);
-    }
-    const answeredEl = document.getElementById("agentModeAnswered");
-    if (answeredEl) {
-      const answeredCount = activeModels.filter(m => m.responseState === "complete").length;
-      answeredEl.textContent = `${answeredCount}/${activeModels.length} answered`;
-      answeredEl.hidden = !collapsed;
-    }
-    const collapsedHintEl = document.getElementById("agentModeCollapsedHint");
-    if (collapsedHintEl) collapsedHintEl.hidden = !collapsed;
-
-    if (titleEl) {
-      titleEl.textContent = agentModeStatus === "running" ? "Models are working" : "Selected models";
-    }
-    if (countEl) {
-      countEl.textContent = `${activeModels.length} ${activeModels.length === 1 ? "model" : "models"}`;
-    }
-    if (statusEl) {
-      statusEl.textContent = getAgentModeStatusText(activeModels);
-    }
-    if (modelsEl) {
-      modelsEl.innerHTML = "";
-      activeModels.forEach(modelInfo => {
-        const chip = document.createElement("span");
-        chip.className = "agent-mode-chip";
-        chip.textContent = modelInfo.model
-          ? `${modelInfo.label} · ${modelInfo.model}`
-          : modelInfo.label;
-        chip.setAttribute("role", "group");
-        chip.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
-        chip.textContent = "";
-        chip.dataset.modelKey = modelInfo.pref.key;
-        if (modelInfo.responseState) {
-          chip.dataset.responseState = modelInfo.responseState;
-        }
-
-        const chipLabel = document.createElement("span");
-        chipLabel.className = "agent-mode-chip-label";
-        chipLabel.textContent = modelInfo.label;
-        chip.appendChild(chipLabel);
-
-        const sourceSelect = document.getElementById(modelInfo.pref.selectId);
-        if (sourceSelect && !modelInfo.frozenLabel) {
-          const picker = document.createElement("select");
-          picker.className = "agent-mode-picker";
-          picker.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
-          Array.from(sourceSelect.options).forEach(option => {
-            picker.appendChild(option.cloneNode(true));
-          });
-          picker.value = sourceSelect.value;
-          picker.addEventListener("change", function () {
-            syncAgentModePicker(this, modelInfo.pref);
-          });
-          chip.appendChild(picker);
-          window.App.initCustomModelPicker(picker);
-        } else if (modelInfo.model) {
-          const chipModel = document.createElement("span");
-          chipModel.className = "agent-mode-chip-model";
-          chipModel.textContent = modelInfo.model;
-          chip.appendChild(chipModel);
-        }
-
-        if (modelInfo.responseState === "complete") {
-          const done = document.createElement("span");
-          done.className = "agent-mode-chip-done";
-          done.setAttribute("aria-hidden", "true");
-          done.title = `${modelInfo.label} response complete`;
-          chip.appendChild(done);
-          chip.setAttribute("aria-label", `${modelInfo.label} response complete`);
-        }
-        modelsEl.appendChild(chip);
-      });
-    }
 
     // Nach dem Layout messen: die Boxen sind in genau diesem Aufruf sichtbar
     // geworden (agent-mode-show-answers), vorher ist ihre Hoehe 0.
@@ -695,7 +518,9 @@
     window.App.attachments?.refreshCompatibility?.();
   }
 
-  function setAgentModeStatus(status, message = "") {
+  // A second argument (an error message) is still passed by callers but no
+  // longer shown: the guided run reports failures itself.
+  function setAgentModeStatus(status) {
     if (status === "running") {
       if (agentModeStatus !== "running") {
         modelAnswersVisible = false;
@@ -704,19 +529,8 @@
         document.querySelectorAll(".response-box[data-answer-open]")
           .forEach(box => { delete box.dataset.answerOpen; });
       }
-      agentModeStatusMessage = "";
-      startAgentModeTimer();
-    } else if (status === "complete" || status === "canceled" || status === "error") {
-      stopAgentModeTimer();
     } else if (status === "idle") {
       modelAnswersVisible = false;
-      agentModeStatusMessage = "";
-      resetAgentModeTimer();
-    }
-    if (message) {
-      agentModeStatusMessage = message;
-    } else if (status !== "error") {
-      agentModeStatusMessage = "";
     }
     agentModeStatus = status;
     updateAgentModeUI();
@@ -735,14 +549,9 @@
   function projectAgentModeRun(context) {
     const switched = (projectedRunContext?.runId || null) !== (context?.runId || null);
     projectedRunContext = context || null;
-    window.clearInterval(agentModeTimerInterval);
-    agentModeTimerInterval = null;
 
     if (!context || context.config?.agentMode === false) {
       agentModeStatus = "idle";
-      agentModeStatusMessage = "";
-      agentModeTimerStartedAt = null;
-      agentModeTimerElapsedMs = 0;
       if (switched) modelAnswersVisible = false;
       updateAgentModeUI();
       return;
@@ -751,30 +560,12 @@
     if (switched) modelAnswersVisible = false;
     if (context.status === "failed") {
       agentModeStatus = "error";
-      agentModeStatusMessage = context.error?.message
-        || context.consensus?.error?.message
-        || "The run failed.";
     } else if (context.status === "canceled") {
       agentModeStatus = "canceled";
-      agentModeStatusMessage = "";
     } else if (context.status === "succeeded" || context.phase === "answers_ready") {
       agentModeStatus = "complete";
-      agentModeStatusMessage = "";
     } else {
       agentModeStatus = "running";
-      agentModeStatusMessage = "";
-    }
-
-    const startedAt = Number(context.startedAt || context.createdAt || Date.now());
-    if (agentModeStatus === "running") {
-      agentModeTimerStartedAt = startedAt;
-      agentModeTimerElapsedMs = 0;
-      updateAgentModeTimerDisplay();
-      agentModeTimerInterval = window.setInterval(updateAgentModeTimerDisplay, 1000);
-    } else {
-      agentModeTimerStartedAt = null;
-      agentModeTimerElapsedMs = Math.max(0, Number(context.finishedAt || Date.now()) - startedAt);
-      updateAgentModeTimerDisplay();
     }
     updateAgentModeUI();
   }
@@ -806,19 +597,6 @@
       });
     }
     return changed;
-  }
-
-  // Einklapp-Pfeil oben rechts im Panel (Zustand wird gemerkt).
-  const agentCollapseBtn = document.getElementById("agentModeCollapseBtn");
-  if (agentCollapseBtn) {
-    agentCollapseBtn.addEventListener("click", function () {
-      const next = !isAgentPanelCollapsed();
-      localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, String(next));
-      if (window.App && typeof window.App.trackAppEvent === "function") {
-        window.App.trackAppEvent("app_agent_mode_panel_toggled", { collapsed: next });
-      }
-      updateAgentModeUI();
-    });
   }
 
   const agentAnswersToggle = document.getElementById("agentModeAnswersToggle");

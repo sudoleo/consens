@@ -1690,14 +1690,9 @@ def test_claim_anchor_with_source_tag_still_marks_its_sentence(app_page):
 
 
 def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
-    """The compact mobile Agent Mode panel explains and toggles hidden answers."""
+    """On mobile the answers toggle explains and reveals hidden answers."""
     app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.evaluate(
-        """() => {
-          localStorage.setItem("agentModePanelCollapsed", "true");
-          window.App.runMode.set('consensus');
-        }"""
-    )
+    app_page.evaluate("() => window.App.runMode.set('consensus')")
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
 

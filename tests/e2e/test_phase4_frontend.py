@@ -900,8 +900,13 @@ def test_all_model_failures_end_in_error_without_consensus(browser, phase4_serve
         page.fill("#questionInput", "Why did every provider fail in this test?")
         page.evaluate("() => window.sendQuestion()")
 
-        expect(page.locator("#agentModeStatus")).to_have_text(
-            "All selected model requests failed.", timeout=30000
+        page.wait_for_function(
+            """() => {
+              const run = window.App.runRegistry.visible();
+              return run?.status === 'failed'
+                && run.error?.message === 'All selected model requests failed.';
+            }""",
+            timeout=30000,
         )
         assert consensus_requests == []
     finally:

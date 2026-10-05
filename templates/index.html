@@ -732,32 +732,6 @@
         <button id="agentRecover" type="button" class="thread-ask-more" hidden>Recover saved answer</button>
     </section>
     <div class="response-section" inert aria-hidden="true">
-      <div id="agentModePanel" class="agent-mode-panel" aria-live="polite" aria-hidden="true">
-        <div class="agent-mode-header">
-          <div class="agent-mode-heading">
-            <span class="agent-mode-kicker">Consensus</span>
-            <h2 id="agentModeTitle">Selected models</h2>
-            <span id="agentModeCollapsedHint" class="agent-mode-collapsed-hint" hidden>expand to configure</span>
-          </div>
-          <div class="agent-mode-metrics">
-            <div id="agentModeTimer" class="agent-mode-timer" aria-live="polite">Elapsed 00:00</div>
-            <span id="agentModeAnswered" class="agent-mode-answered" hidden>0/0 answered</span>
-            <span id="agentModeCount" class="agent-mode-count">0 models</span>
-            <button type="button" id="agentModeCollapseBtn" class="agent-mode-collapse-btn" aria-expanded="true" title="Collapse models panel" aria-label="Collapse models panel">
-              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5 6 4l3.5 3.5"/></svg>
-            </button>
-          </div>
-        </div>
-        <div id="agentModeModels" class="agent-mode-models"></div>
-        <div id="agentModeAnimation" class="agent-mode-animation" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div id="agentModeStatus" class="agent-mode-status">Ready for a grouped model run.</div>
-      </div>
-
       {% for family in model_families %}
       {% set default_model = default_models[family.provider] %}
       <div class="response-box" id="{{ family.responseId }}" data-model="{{ family.label }}" data-short-label="{{ family.shortLabel }}">

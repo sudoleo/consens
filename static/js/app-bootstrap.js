@@ -49,12 +49,6 @@
     }
   } catch (_) { /* storage unavailable */ }
 
-  try {
-    if (localStorage.getItem("agentModePanelCollapsed") === null) {
-      localStorage.setItem("agentModePanelCollapsed", "false");
-    }
-  } catch (_) { /* storage unavailable */ }
-
   document.addEventListener("DOMContentLoaded", () => {
     // The consensus view is painted before auth resolves; run-mode.js
     // (earlier in this bundle) owns the stored choice.
