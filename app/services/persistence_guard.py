@@ -378,11 +378,9 @@ def record_model_vote(
             "vote_type": vote_type,
             "source": "consensus",
             "created_at": now,
-            # Who was in the run (the denominator of the Model Pulse rate) and
-            # which family judged it (never scored in its own run).
+            # Who was in the run: the denominator of the Model Pulse rate.
             **(model_pulse.participation(
-                model_pulse.consensus_participants(pending), model,
-                judge=model_pulse.judge_of(pending.get("differences_data"))) or {}),
+                model_pulse.consensus_participants(pending), model) or {}),
         })
         if tx is None:
             leaderboard_ref.set({vote_type: firestore.Increment(1)}, merge=True)
@@ -393,10 +391,10 @@ def record_model_vote(
     return bool(_run_transaction(db, persist))
 
 
-def agent_best_model_details(review) -> tuple[str | None, list[str], str | None]:
+def agent_best_model_choice(review) -> tuple[str | None, list[str]]:
     """The comparison model whose answer the judge found closest to an Agent
     answer, as a Model Pulse family label, plus the families that judge
-    compared and the judge's family; (None, [], None) when there is no pick.
+    compared; (None, []) when there is no pick.
 
     Only a checked answer counts: the review succeeded or partly succeeded,
     and the pick comes from the check of the widest comparison (most answers)
@@ -404,12 +402,11 @@ def agent_best_model_details(review) -> tuple[str | None, list[str], str | None]
     Consensus run.
     """
     from app.core import config as cfg
-    from app.services import model_pulse
 
     if not isinstance(review, dict) or review.get("status") not in {"succeeded", "partial"}:
-        return None, [], None
+        return None, []
     comparisons = {c.get("id"): c.get("answers") or [] for c in review.get("comparisons") or []}
-    best, widest, field, judge = None, -1, [], None
+    best, widest, field = None, -1, []
     for check in review.get("checks") or []:
         data = check.get("differences_data") if check.get("status") in {"succeeded", "partial"} else None
         model = str((data or {}).get("best_model") or "").strip()
@@ -418,16 +415,10 @@ def agent_best_model_details(review) -> tuple[str | None, list[str], str | None]
             best, widest = model, len(answers)
             field = [str(a.get("provider_label") or a.get("provider") or "")
                      for a in answers if isinstance(a, dict)]
-            judge = model_pulse.judge_of(data)
     if not best:
-        return None, [], None
+        return None, []
     best = cfg.LEADERBOARD_MODEL_ALIASES.get(best, best)
-    return (best, field, judge) if best in cfg.VALID_LEADERBOARD_MODELS else (None, [], None)
-
-
-def agent_best_model_choice(review) -> tuple[str | None, list[str]]:
-    best, field, _judge = agent_best_model_details(review)
-    return best, field
+    return (best, field) if best in cfg.VALID_LEADERBOARD_MODELS else (None, [])
 
 
 def agent_best_model_pick(review) -> str | None:
@@ -441,7 +432,7 @@ def agent_vote_ref(db, *, uid: str, chat_id: str, turn_id: str):
 
 
 def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, model: str,
-                     participants=(), judge=None, now: datetime | None = None):
+                     participants=(), now: datetime | None = None):
     """Write an Agent turn's pick inside the caller's transaction. The caller
     has read ``vote_ref`` first (Firestore: reads before writes) and only
     calls this when it did not exist."""
@@ -456,7 +447,7 @@ def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, 
         "vote_type": "BestModel",
         "source": "agent",
         "created_at": now,
-        **(model_pulse.participation(participants, model, judge=judge) or {}),
+        **(model_pulse.participation(participants, model) or {}),
     })
     _set(tx, db.collection("leaderboard").document(model), {"BestModel": firestore.Increment(1)}, merge=True)
 
