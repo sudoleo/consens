@@ -1113,3 +1113,220 @@ def test_empty_question_without_chat_ids_keeps_the_legacy_error(chat_consensus_a
     assert response.status_code == 400
     assert isinstance(response.json()["detail"], str)
     assert store.failures == []
+
+
+# --- Abbruch nach der fertigen Antwort -------------------------------------
+# Der SSE-Pump schliesst die Quelle, wenn der Client geht oder 30 s nicht
+# liest (Handy-Tab im Hintergrund waehrend der Judges). Ab consensus.final
+# gehoert die Antwort dem Nutzer: der Abbruch persistiert den Lauf wie eine
+# gescheiterte Analyse, statt den Turn als "cancelled" zu beenden.
+
+
+def _open_consensus_stream(client, monkeypatch, payload):
+    """Run the handler, but drive its SSE source by hand to close it mid-run."""
+    from starlette.responses import PlainTextResponse
+
+    captured = {}
+
+    def capture(source):
+        captured["source"] = source
+        return PlainTextResponse("captured")
+
+    monkeypatch.setattr(chat_router, "keepalive_streaming_response", capture)
+    response = client.post("/consensus", headers=AUTH, json=payload)
+    assert response.status_code == 200, response.text
+    return captured["source"]
+
+
+def _read_until(source, event_name):
+    seen = []
+    for chunk in source:
+        name = re.match(r"event: ([\w.]+)", chunk)
+        seen.append(name.group(1) if name else chunk)
+        if seen[-1] == event_name:
+            return seen
+    raise AssertionError(f"{event_name} never arrived: {seen}")
+
+
+def _record_bookmarks(monkeypatch):
+    writes = []
+
+    def persist(uid, data, authoritative):
+        writes.append((uid, data, authoritative))
+        return {"id": data["bookmarkId"], "query": data["question"]}
+
+    monkeypatch.setattr(bookmarks_router, "persist_authoritative_consensus_bookmark", persist)
+    return writes
+
+
+def _record_pending_results(monkeypatch):
+    results = []
+
+    def persist(**kwargs):
+        results.append(kwargs)
+        return RESULT_ID
+
+    monkeypatch.setattr(chat_router, "persist_pending_result", persist)
+    return results
+
+
+def _no_server_alerts(monkeypatch):
+    monkeypatch.setattr(chat_router, "report_server_exception",
+                        lambda *a, **kw: pytest.fail("a closed stream is not a server error"))
+
+
+@pytest.mark.parametrize("closed_after", ["consensus.final", "differences.delta"])
+def test_disconnect_after_the_answer_persists_the_run_instead_of_failing_it(
+    chat_consensus_api, closed_after
+):
+    client, store, monkeypatch = chat_consensus_api
+    bookmarks = _record_bookmarks(monkeypatch)
+    pending = _record_pending_results(monkeypatch)
+    _no_server_alerts(monkeypatch)
+
+    def consensus_stream(*args, **kwargs):
+        yield {"type": "delta", "text": "Con"}
+        yield {"type": "final", "text": "Consensus"}
+
+    def differences_stream(*args, **kwargs):
+        yield {"type": "delta", "text": "{"}
+        yield {"type": "final", "text": "Differences", "data": {"agreement": {"score": 91}}}
+
+    monkeypatch.setattr(chat_router, "stream_consensus", consensus_stream)
+    monkeypatch.setattr(chat_router, "stream_differences", differences_stream)
+    source = _open_consensus_stream(
+        client, monkeypatch, _base_payload(stream=True, bookmarkId="stable_bookmark"))
+
+    _read_until(source, closed_after)
+    assert store.completions == []  # nothing is persisted while the run is live
+    source.close()
+
+    assert store.failures == []
+    assert len(store.completions) == 1
+    completed = store.completions[0][3]
+    assert completed["consensus"] == "Consensus"
+    assert completed["differences"] == ""
+    assert completed["differences_data"] is None
+    assert completed["result_id"] == RESULT_ID
+    # Dieselbe Marke wie eine gescheiterte Analyse: die UI kennt den Zustand.
+    assert completed["source_verification"]["reason_code"] == "differences_failed"
+    assert len(pending) == 1
+    assert pending[0]["consensus_md"] == "Consensus"
+    assert pending[0]["differences_data"] is None
+    assert len(bookmarks) == 1
+    _, bookmark_data, authoritative = bookmarks[0]
+    assert bookmark_data["resultId"] == RESULT_ID
+    assert (bookmark_data["chatId"], bookmark_data["turnId"]) == (CHAT_ID, TURN_ID)
+    assert authoritative["consensus"] == "Consensus"
+    assert authoritative["differences_data"] is None
+
+
+def test_disconnect_while_the_judge_runs_persists_without_an_alert(chat_consensus_api):
+    """Real order on disconnect: the pump cancels the provider call first
+    (ProviderCancelled inside the judge), then closes the generator."""
+    client, store, monkeypatch = chat_consensus_api
+    _no_server_alerts(monkeypatch)
+    monkeypatch.setattr(chat_router, "stream_consensus",
+                        lambda *a, **kw: iter([{"type": "final", "text": "Consensus"}]))
+
+    def cancelled_judge(*args, **kwargs):
+        raise chat_router.ProviderCancelled()
+        yield  # pragma: no cover - keeps this a generator
+
+    monkeypatch.setattr(chat_router, "stream_differences", cancelled_judge)
+    source = _open_consensus_stream(client, monkeypatch, _base_payload(stream=True))
+    _read_until(source, "differences.final")
+    source.close()
+
+    assert store.failures == []
+    assert len(store.completions) == 1
+    assert store.completions[0][3]["consensus"] == "Consensus"
+    assert store.completions[0][3]["differences_data"] is None
+    assert store.completions[0][3]["source_verification"]["reason_code"] == "differences_failed"
+
+
+def test_disconnect_after_a_settled_analysis_keeps_the_analysis(chat_consensus_api):
+    from app.services import source_check_jobs
+    client, store, monkeypatch = chat_consensus_api
+    snapshot = {"schema_version": 4, "check_type": "contradiction_evidence",
+                "job_id": "a" * 64, "status": "queued", "findings": []}
+    original = {"agreement": {"score": 88}}
+    monkeypatch.setattr(source_check_jobs, "submit_advisory", lambda **_: snapshot)
+    monkeypatch.setattr(chat_router, "stream_consensus",
+                        lambda *a, **kw: iter([{"type": "final", "text": "Consensus"}]))
+    monkeypatch.setattr(chat_router, "stream_differences", lambda *a, **kw: iter([
+        {"type": "final", "text": "Differences", "data": original}]))
+    source = _open_consensus_stream(client, monkeypatch, _base_payload(stream=True))
+    _read_until(source, "sources.final")
+    source.close()
+
+    assert store.failures == []
+    assert len(store.completions) == 1
+    completed = store.completions[0][3]
+    assert completed["differences_data"] == original
+    assert completed["differences"] == "Differences"
+    assert completed["source_verification"] == snapshot
+
+
+def test_disconnect_before_the_answer_still_cancels_the_turn(chat_consensus_api):
+    client, store, monkeypatch = chat_consensus_api
+    bookmarks = _record_bookmarks(monkeypatch)
+    pending = _record_pending_results(monkeypatch)
+
+    def consensus_stream(*args, **kwargs):
+        yield {"type": "delta", "text": "Con"}
+        yield {"type": "final", "text": "Consensus"}
+
+    monkeypatch.setattr(chat_router, "stream_consensus", consensus_stream)
+    monkeypatch.setattr(chat_router, "stream_differences",
+                        lambda *a, **kw: pytest.fail("judge must not start"))
+    source = _open_consensus_stream(
+        client, monkeypatch, _base_payload(stream=True, bookmarkId="stable_bookmark"))
+    _read_until(source, "consensus.delta")
+    source.close()
+
+    assert store.failures == [(UID, CHAT_ID, TURN_ID, "cancelled")]
+    assert store.completions == []
+    assert pending == []
+    assert bookmarks == []
+
+
+def test_disconnect_after_the_answer_books_the_run_exactly_once(chat_consensus_api):
+    from types import SimpleNamespace
+    from app.services.llm import usage_meter
+    from app.services.run_metering import OperationBooking
+
+    client, store, monkeypatch = chat_consensus_api
+
+    class Repo:
+        def __init__(self):
+            self.booked = []
+
+        def book_operation(self, uid, key, operation, *, measured, estimated, final=False):
+            self.booked.append((operation, measured, estimated, final))
+            return {"used": measured, "limit": 1000}
+
+    repo = Repo()
+    monkeypatch.setattr(chat_router, "build_engine_api_keys",
+                        lambda data, own: {"OpenRouter": "developer-key"})
+    monkeypatch.setattr(chat_router, "authorize_usage_operation", lambda *a, **kw: (
+        SimpleNamespace(status=SimpleNamespace(value="claimed")), None))
+    monkeypatch.setattr(
+        chat_router, "operation_booking",
+        lambda uid, data, operation, final=False: OperationBooking(
+            repo, uid, "run-key", operation, final=final),
+    )
+
+    def consensus_stream(*args, **kwargs):
+        usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3})
+        yield {"type": "final", "text": "Consensus"}
+
+    monkeypatch.setattr(chat_router, "stream_consensus", consensus_stream)
+    source = _open_consensus_stream(
+        client, monkeypatch, _base_payload(stream=True, useOwnKeys=False))
+    _read_until(source, "consensus.final")
+    source.close()
+
+    assert repo.booked == [("consensus", 10, 0, True)]
+    assert store.failures == []
+    assert len(store.completions) == 1

@@ -1825,6 +1825,43 @@ def consensus(request: Request, data: dict = Body(...)):
             )
         )
 
+    def persist_completed_run(
+        payload: dict,
+        consensus_text,
+        differences_text,
+        differences_data,
+    ) -> None:
+        """Persist one successful consensus: stats, share snapshot, chat turn
+        and sidebar bookmark, and report the outcome on ``payload``.
+
+        The only writer for a successful run: the JSON response, the streamed
+        final event and a stream the client left after the answer was ready
+        all go through here, so the three cannot drift apart.
+        """
+        record_run_stats(differences_data)
+        result_id = persist_share_result(consensus_text, differences_data, differences_text)
+        if result_id:
+            payload["result_id"] = result_id
+        chat_persisted = persist_chat_completion(
+            consensus_text,
+            differences_text,
+            differences_data,
+            result_id,
+        )
+        add_chat_result_fields(
+            payload,
+            persisted=chat_persisted,
+            state="completed" if chat_persisted else "pending",
+        )
+        add_bookmark_result_fields(
+            payload,
+            consensus_text,
+            differences_text,
+            differences_data,
+            result_id,
+            chat_persisted=chat_persisted,
+        )
+
     if stream_requested:
         extra_fields = {}
         if usage_result is not None:
@@ -1842,6 +1879,29 @@ def consensus(request: Request, data: dict = Body(...)):
             differences_text = ""
             differences_data = None
             stream_failed = False
+            # Ab der fertigen Konsensantwort gehoert der Lauf dem Nutzer: ein
+            # Abbruch danach (Tab im Hintergrund, Funkloch, 30-s-Rueckstau im
+            # SSE-Pump) persistiert die Antwort, statt den Turn scheitern zu
+            # lassen. analysis_settled sagt, ob differences_* und
+            # source_verification schon ihren endgueltigen Stand haben.
+            answer_committed = False
+            analysis_settled = False
+            differences_complete = False
+
+            def settle_failed_analysis():
+                # Ein Fehler oder Abbruch der Analyse kostet Marken und
+                # Widerspruchskarten, nie die Antwort. Derselbe Endstand fuer
+                # beide Wege, damit ein abgebrochener Lauf nach dem Reload wie
+                # eine gescheiterte Analyse aussieht (bekannter UI-Zustand).
+                nonlocal differences_text, differences_data, source_verification, analysis_settled
+                if not differences_complete:
+                    differences_text = ""
+                    differences_data = None
+                if check_sources:
+                    from app.services.consensus_pipeline import _differences_check_failed
+                    source_verification = _differences_check_failed(consensus_text)
+                analysis_settled = True
+
             # Reasoning-Marker der Engines gedrosselt weiterleiten (max. alle
             # 2 s, wie im /ask_*-Streaming): hält die Verbindung aktiv und
             # lässt das Frontend "Reasoning" statt eines stummen Spinners zeigen.
@@ -1895,11 +1955,14 @@ def consensus(request: Request, data: dict = Body(...)):
                     # Consensus completion is its own successful phase. Send
                     # the authoritative text before the slower Differences
                     # judge so a later mobile/network interruption cannot
-                    # erase an answer the user already received.
-                    yield sse_pack("consensus.final", {"text": consensus_text})
+                    # erase an answer the user already received: from here
+                    # on a closed stream persists the run (see GeneratorExit
+                    # below) instead of failing the turn.
                     if not check_sources:
                         from app.services.source_check_jobs import disabled_snapshot
                         source_verification = disabled_snapshot(consensus_text)
+                    answer_committed = True
+                    yield sse_pack("consensus.final", {"text": consensus_text})
                     last_reasoning_at = None
                     # Die Analyse hat ihren EIGENEN Fehlerrahmen. Sie laeuft
                     # erst, nachdem die Antwort den Nutzer erreicht hat -- ein
@@ -1954,32 +2017,51 @@ def consensus(request: Request, data: dict = Body(...)):
                             else:
                                 from app.services.consensus_pipeline import _differences_check_failed
                                 source_verification = _differences_check_failed(consensus_text)
+                        analysis_settled = True
+                        if check_sources:
                             yield sse_pack("sources.final", {"source_verification": source_verification})
                     except GeneratorExit:
                         raise
                     except Exception as exc:
-                        logging.error(
-                            "Differences analysis failed category=%s at=%s",
-                            safe_exception(exc), safe_traceback(exc),
-                        )
-                        report_server_exception(exc, where="chat.differences_stream")
-                        if not differences_complete:
-                            differences_text = ""
-                            differences_data = None
+                        if not isinstance(exc, ProviderCancelled):
+                            # Ein gegangener Client ist kein Serverfehler.
+                            logging.error(
+                                "Differences analysis failed category=%s at=%s",
+                                safe_exception(exc), safe_traceback(exc),
+                            )
+                            report_server_exception(exc, where="chat.differences_stream")
+                        analysis_failed_early = not differences_complete
+                        settle_failed_analysis()
+                        if analysis_failed_early:
                             yield sse_pack("differences.final", {
                                 "differences": "", "differences_data": None, "error": True,
                             })
                         if check_sources:
-                            from app.services.consensus_pipeline import _differences_check_failed
-                            source_verification = _differences_check_failed(consensus_text)
                             yield sse_pack("sources.final", {"source_verification": source_verification})
             except GeneratorExit:
-                consensus_state = completion.CANCELLED
-                _fail_chat_turn_best_effort(
-                    uid,
-                    validated_chat_turn_ids,
-                    error_code="cancelled",
-                )
+                if not answer_committed:
+                    consensus_state = completion.CANCELLED
+                    _fail_chat_turn_best_effort(
+                        uid,
+                        validated_chat_turn_ids,
+                        error_code="cancelled",
+                    )
+                    raise
+                # Die Antwort ist fertig, nur die Analyse wurde abgebrochen:
+                # wie eine gescheiterte Analyse persistieren. Kein yield mehr
+                # moeglich, die Writes sind synchron. Die Tokenbuchung
+                # schliesst metered_events danach genau einmal ab.
+                try:
+                    if not analysis_settled:
+                        settle_failed_analysis()
+                    persist_completed_run(
+                        {}, consensus_text, differences_text, differences_data,
+                    )
+                except Exception as exc:
+                    logging.error(
+                        "Interrupted consensus persistence failed category=%s",
+                        safe_exception(exc),
+                    )
                 raise
             except Exception as exc:
                 # Frames statt Message: die Kategorie allein liess einen
@@ -2011,43 +2093,20 @@ def consensus(request: Request, data: dict = Body(...)):
             incomplete = consensus_failed and consensus_state in completion.INCOMPLETE_STATES
             if incomplete:
                 payload.update(_incomplete_consensus_fields(consensus_state))
-            result_id = None
-            chat_persisted = False
-            chat_turn_state = "pending"
             if not stream_failed and not consensus_failed:
-                record_run_stats(differences_data)
-                result_id = persist_share_result(consensus_text, differences_data, differences_text)
-                if result_id:
-                    payload["result_id"] = result_id
-                chat_persisted = persist_chat_completion(
-                    consensus_text,
-                    differences_text,
-                    differences_data,
-                    result_id,
+                persist_completed_run(
+                    payload, consensus_text, differences_text, differences_data,
                 )
-                if chat_persisted:
-                    chat_turn_state = "completed"
             else:
                 failed = _fail_chat_turn_best_effort(
                     uid,
                     validated_chat_turn_ids,
                     error_code="consensus_incomplete" if incomplete else "consensus_failed",
                 )
-                if failed:
-                    chat_turn_state = "failed"
-            add_chat_result_fields(
-                payload,
-                persisted=chat_persisted,
-                state=chat_turn_state,
-            )
-            if not stream_failed and not consensus_failed:
-                add_bookmark_result_fields(
+                add_chat_result_fields(
                     payload,
-                    consensus_text,
-                    differences_text,
-                    differences_data,
-                    result_id,
-                    chat_persisted=chat_persisted,
+                    persisted=False,
+                    state="failed" if failed else "pending",
                 )
             payload.update(extra_fields)
             if booking is not None:
@@ -2121,43 +2180,18 @@ def consensus(request: Request, data: dict = Body(...)):
     }
     if incomplete:
         response.update(_incomplete_consensus_fields(completion.TOKEN_LIMIT))
-    chat_persisted = False
-    chat_turn_state = "pending"
-    result_id = None
     if not consensus_failed:
-        record_run_stats(differences_data)
-        result_id = persist_share_result(consensus_answer, differences_data, differences)
-        if result_id:
-            response["result_id"] = result_id
-        chat_persisted = persist_chat_completion(
-            consensus_answer,
-            differences,
-            differences_data,
-            result_id,
-        )
-        if chat_persisted:
-            chat_turn_state = "completed"
+        persist_completed_run(response, consensus_answer, differences, differences_data)
     else:
         failed = _fail_chat_turn_best_effort(
             uid,
             validated_chat_turn_ids,
             error_code="consensus_incomplete" if incomplete else "consensus_failed",
         )
-        if failed:
-            chat_turn_state = "failed"
-    add_chat_result_fields(
-        response,
-        persisted=chat_persisted,
-        state=chat_turn_state,
-    )
-    if not consensus_failed:
-        add_bookmark_result_fields(
+        add_chat_result_fields(
             response,
-            consensus_answer,
-            differences,
-            differences_data,
-            result_id,
-            chat_persisted=chat_persisted,
+            persisted=False,
+            state="failed" if failed else "pending",
         )
     if usage_result is not None:
         response.update(usage_response_fields(None, tier))

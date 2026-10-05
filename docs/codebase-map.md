@@ -3657,7 +3657,9 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   still neu berechnet.
 - Terminale Consensus-Fehler markieren den validierten pending Turn best effort
   mit einem allowgelisteten Code; zu wenige serverseitige Antworten verwenden
-  `insufficient_answers`, ein zuverlässig erkannter Stream-Abbruch `cancelled`.
+  `insufficient_answers`, ein zuverlässig erkannter Stream-Abbruch vor der
+  fertigen Synthese `cancelled` (danach wird der Turn `completed`, siehe
+  „Persistenzreihenfolge“ unter Consensus & Differences).
   Hat eine aktive Fortsetzung nach dem Fan-out weniger als zwei Antworten,
   sendet der Browser eine dispositionsbezogene `/consensus`-Anforderung. Der
   Server prüft und markiert den Turn noch vor aktueller Modell-/Tierprüfung,
@@ -3748,7 +3750,23 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   differences, differences_data, result_id?, …usage}`. Das Frontend sichert
   `consensus.final` sofort: ein späterer Judge-, Rendering- oder Mobilnetzabbruch
   darf die fertige Antwort nicht mehr durch den generischen Consensus-Fehler
-  ersetzen, sondern degradiert nur die Differences-Anzeige. Während Reasoning-Phasen
+  ersetzen, sondern degradiert nur die Differences-Anzeige. **Persistenz-
+  reihenfolge (seit 2026-10-05):** Alle Writes eines erfolgreichen Laufs
+  (Differences-Statistik, Share-`pending_result`, `complete_turn`,
+  Sidebar-Bookmark) laufen über EINE Funktion `persist_completed_run` im
+  Handler — JSON-Antwort, gestreamtes `final` und abgebrochener Stream teilen
+  sie. Normal persistiert der Stream nach den Judges und vor `final`. Schließt
+  der SSE-Pump die Quelle (Client weg, 30-s-Rückstau, z. B. Handy-Tab im
+  Hintergrund während der Judges) **nach** der fertigen Synthese
+  (`answer_committed`, gesetzt direkt vor `consensus.final`), persistiert der
+  `GeneratorExit`-Zweig den Lauf synchron als `completed`: noch nicht
+  abgeschlossene Analyse wie eine gescheiterte (`differences_data: null`,
+  `source_verification` `failed`/`differences_failed`, bekannter UI-Zustand),
+  eine bereits fertige Analyse unverändert. Reload bzw. Resubmit sieht dann den
+  Replay statt 409; die Tokenbuchung schließt `metered_events` danach genau
+  einmal ab. Nur ein Abbruch **vor** der fertigen Synthese markiert den Turn
+  `cancelled`. `ProviderCancelled` im Judge (Client weg) löst keinen
+  Server-Alert aus. Während Reasoning-Phasen
   tragen die Delta-Events gedrosselt `{reasoning: true}`; ein SSE-Wrapper sendet
   zusätzlich Kommentar-Keepalives, wenn eine Engine länger keine Bytes liefert.
   `differences_data` ist
