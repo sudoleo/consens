@@ -2996,7 +2996,10 @@ bei `estimated > 0`, je UID höchstens einmal pro Minute, in Unit/E2E/Mock aus)
 und ersetzt die Schätzung transaktional durch die gemessenen Tokens; der
 Belegstatus `pending → measured|final` ist der Exactly-once-Zaun. Nach sechs
 Versuchen oder 24 Stunden bleibt die Schätzung endgültig. Nachweislich nie
-gestartete Calls (`not_started`, `provider_rejection`) bleiben freie Nullmessungen.
+gestartete Calls (`not_started`, `provider_rejection`, `not_dispatched`) bleiben
+freie Nullmessungen; `not_dispatched` heißt: der Request kam nie beim Provider an
+(Verbindungsaufbau gescheitert oder Abbruch vor dem Senden, siehe
+`app/services/llm/provider_dispatch.py`).
 Eine ganztägige Sperre gibt es weiterhin nicht. `unknown` summiert
 die Reservierungsgrenzen solcher Belege, nicht deren tatsächlichen Verbrauch.
 `unknown_released` markiert die bereits freigegebenen Grenzen kumulativ.
@@ -4278,7 +4281,13 @@ Agent.
     Resolve) melden in denselben Meter. Fehlt die finale Usage (Abbruch,
     Timeout, Tab zu), gilt dieselbe begrenzte Schätzung wie bei Agent: 50 %
     der Call-Grenze (Input-Schätzung + Output-Cap); eine HTTP-Ablehnung kostet
-    nichts. Ohne gebundenen Meter (Watch, Topics, Agent-Client) sind alle Hooks
+    nichts, ebenso ein Request, der nachweislich nie beim Provider ankam
+    (`provider_dispatch.never_reached_provider`: DNS-/Verbindungs-/Connect-
+    Timeout-Fehler von requests/urllib3 und httpx sowie Abbruch/Budgetende,
+    die `_guard_provider_io` vor dem ersten Lauf des Sende-Tasks markiert).
+    Fehler beim Lesen der Antwort (ProtocolError, ChunkedEncodingError,
+    Read-Timeout, TLS) bleiben gestartet. Sonst bucht ein DNS-Ausfall jeden
+    Versuch der Retry-Pläne mit 50 %. Ohne gebundenen Meter (Watch, Topics, Agent-Client) sind alle Hooks
     No-ops. MOCK_LLM bucht kleine synthetische Messwerte. Nicht gemessen
     werden die beratende Consensus-Quellenprüfung (eigener Hintergrundjob mit
     eigenem Budget) und spätere Arbeit nach der Buchung einer Operation. Die
@@ -4936,6 +4945,7 @@ app/services/llm/
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung
   usage_meter.py             Token-Meter der Transportschicht (ContextVar; Usage je OpenRouter-Request, Schaetzung bei fehlender Usage)
+  provider_dispatch.py       Klassifikator "Request nie beim Provider angekommen" (Connect-Fehler, Abbruch vor Dispatch) -> kostenlos statt Schaetzung
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade

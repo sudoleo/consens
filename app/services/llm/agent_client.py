@@ -13,6 +13,7 @@ from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, tok
 from app.services.llm import agent_model_metadata
 
 from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, _ProviderHTTPStatusError, _ProviderResponseError, openrouter_headers
+from app.services.llm.provider_dispatch import never_reached_provider
 from app.services.llm.provider_runtime import (
     AnalysisBudget, bind_analysis_budget, cancellable_sse_lines, current_analysis_budget,
 )
@@ -352,14 +353,20 @@ class AgentCompletion:
         self._reasoning_text = ""
 
     def record_rejection(self, error, model):
-        # An HTTP admission rejection never opened an SSE generation. Timeouts,
-        # 5xx and errors inside an accepted stream can still have incurred usage.
+        # An HTTP admission rejection never opened an SSE generation, and a
+        # request that never connected (or was stopped before dispatch) never
+        # reached the provider. Timeouts, 5xx and errors inside an accepted
+        # stream can still have incurred usage.
+        if (self.usage is not None or self.generation_id or self.text
+                or self.reasoning_chars or self._tool_parts):
+            return
         if (isinstance(error, _ProviderHTTPStatusError)
-                and error.status_code in {400, 401, 402, 403, 404, 413, 422, 429}
-                and self.usage is None and not self.generation_id and not self.text
-                and not self.reasoning_chars and not self._tool_parts):
+                and error.status_code in {400, 401, 402, 403, 404, 413, 422, 429}):
             self.record_unstarted(model)
             self.usage["source"] = "provider_rejection"
+        elif never_reached_provider(error):
+            self.record_unstarted(model)
+            self.usage["source"] = "not_dispatched"
 
     def record_unstarted(self, model):
         self.usage = measured_usage({"prompt_tokens": 0, "completion_tokens": 0, "cost": 0,

@@ -13,7 +13,8 @@ A started call without final usage (stream cut, timeout, client gone) is
 charged the same bounded estimate as an Agent call: the provisional lower
 bound, but at least half of the call's bound (input estimate + output cap).
 A request the provider rejected with an HTTP status never started and costs
-nothing. Without a bound meter (Watch, Topics, Agent's own client) every hook
+nothing; so does one that provably never reached the provider (connect
+failure, cancellation before dispatch; see ``provider_dispatch``). Without a bound meter (Watch, Topics, Agent's own client) every hook
 is a no-op.
 
 Meters propagate like other contextvars: threads started through
@@ -83,7 +84,8 @@ class MeteredCall:
         self._meter._settle(self, started=True)
 
     def rejected(self) -> None:
-        """The provider refused the request before any work (HTTP status)."""
+        """No provider work: an HTTP status rejection or a request that
+        provably never reached the provider (``provider_dispatch``)."""
         self._meter._settle(self, started=False)
 
 

@@ -23,6 +23,7 @@ from app.services.llm.citations import (
     source_response,
 )
 from app.services.llm import completion, usage_meter
+from app.services.llm.provider_dispatch import never_reached_provider
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
     _ProviderHTTPStatusError,
@@ -266,6 +267,12 @@ def _iter_openrouter_chunks(*, api_key: str, payload: dict) -> Iterator[StreamEv
         yield from _metered_openrouter_chunks(api_key, request_payload, metered)
     except _ProviderHTTPStatusError:
         metered.rejected()
+        raise
+    except BaseException as exc:
+        # Connect failures and pre-dispatch stops never reached the provider;
+        # a cut or timed-out body settles as started in ``finally``.
+        if never_reached_provider(exc):
+            metered.rejected()
         raise
     finally:
         metered.finish()

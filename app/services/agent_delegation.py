@@ -667,8 +667,10 @@ class DelegationLoop(AgentLoop):
                     source.close()
             self._check(cancellation)
             status = "succeeded"
-        except (ProviderCancelled, GeneratorExit):
+        except (ProviderCancelled, GeneratorExit) as exc:
             status = "cancelled"
+            # Cancelled before the request was dispatched: free.
+            value.record_rejection(exc, model)
             raise
         except Exception as exc:
             value.record_rejection(exc, model)

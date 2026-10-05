@@ -28,6 +28,7 @@ from app.services.llm.attachments import (
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import coerce_text, parse_openrouter_response, result_text
 from app.services.llm import completion, usage_meter
+from app.services.llm.provider_dispatch import never_reached_provider
 from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT, managed_provider_resource
 
 logger = logging.getLogger(__name__)
@@ -293,8 +294,13 @@ def query_model(
         except _ProviderHTTPStatusError:
             metered.rejected()
             raise
-        except BaseException:
-            metered.finish()
+        except BaseException as exc:
+            # A connect failure never reached the provider; anything later
+            # (read timeout, cut body, cancellation) is a started call.
+            if never_reached_provider(exc):
+                metered.rejected()
+            else:
+                metered.finish()
             raise
         metered.finish(data.get("usage") if isinstance(data, dict) else None)
         if data.get("error"):

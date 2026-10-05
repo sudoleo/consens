@@ -290,16 +290,32 @@ class ProviderProgressWatchdog:
             raise TimeoutError("Provider stream made no progress")
 
 
-async def _guard_provider_io(awaitable, cancellation, budget, progress=None):
+async def _guard_provider_io(awaitable, cancellation, budget, progress=None, *, sends_request=False):
+    """Await provider I/O while honouring cancellation, deadline and progress.
+
+    With ``sends_request`` the awaitable is the one that opens the connection
+    and sends the request: a stop raised before its task ever ran is marked
+    as never dispatched, so the usage meter does not charge it.
+    """
+    from app.services.llm.provider_dispatch import mark_not_dispatched
+
     task = asyncio.ensure_future(awaitable)
+    task_ran = False
     try:
         while True:
-            if cancellation:
-                cancellation.raise_if_cancelled()
-            if budget:
-                budget.check()
-            if progress:
-                progress.check()
+            try:
+                if cancellation:
+                    cancellation.raise_if_cancelled()
+                if budget:
+                    budget.check()
+                if progress:
+                    progress.check()
+            except BaseException as exc:
+                # The task only runs once this coroutine yields to the loop.
+                if sends_request and not task_ran:
+                    mark_not_dispatched(exc)
+                raise
+            task_ran = True
             done, _ = await asyncio.wait({task}, timeout=0.05)
             if done:
                 return task.result()
@@ -325,7 +341,8 @@ def cancellable_post_json(url, *, json, headers):
 
     async def request():
         async with httpx.AsyncClient(timeout=httpx.Timeout(read, connect=connect)) as client:
-            response = await _guard_provider_io(client.post(url, json=json, headers=headers), cancellation, budget)
+            response = await _guard_provider_io(client.post(url, json=json, headers=headers), cancellation, budget,
+                                                sends_request=True)
             # Keep the existing content-free HTTP status contract.
             if response.status_code >= 400:
                 from app.services.llm.engines import _raise_provider_http_status
@@ -336,9 +353,14 @@ def cancellable_post_json(url, *, json, headers):
     except _ProviderHTTPStatusError:
         metered.rejected()
         raise
-    except BaseException:
-        # Timeout/cancellation after the request left: bounded estimate.
-        metered.finish()
+    except BaseException as exc:
+        from app.services.llm.provider_dispatch import never_reached_provider
+        # Connect failure or a stop before dispatch: nothing reached the
+        # provider. Timeout/cancellation after the request left: estimate.
+        if never_reached_provider(exc):
+            metered.rejected()
+        else:
+            metered.finish()
         raise
     metered.finish(data.get("usage") if isinstance(data, dict) else None)
     return data
@@ -359,19 +381,30 @@ def cancellable_sse_lines(url, *, json, headers, progress=None):
     A deadline/disconnect cancels header reads and idle body reads alike; no
     extra producer thread, abandoned request or hidden retry is introduced.
     """
+    from app.services.llm.provider_dispatch import mark_not_dispatched
+
     cancellation = current_provider_cancellation()
     budget = current_analysis_budget()
-    connect, read = analysis_http_timeout()
+    try:
+        # Runs on the first next(), after the caller started metering.
+        connect, read = analysis_http_timeout()
+    except BaseException as exc:
+        mark_not_dispatched(exc)
+        raise
     loop = asyncio.new_event_loop()
     client = httpx.AsyncClient(timeout=httpx.Timeout(read, connect=connect))
     response = None
 
-    def guarded(awaitable):
-        return _guard_provider_io(awaitable, cancellation, budget, progress)
+    def guarded(awaitable, *, sends_request=False):
+        return _guard_provider_io(awaitable, cancellation, budget, progress, sends_request=sends_request)
 
     try:
-        request = client.build_request("POST", url, json=json, headers=headers)
-        response = loop.run_until_complete(guarded(client.send(request, stream=True)))
+        try:
+            request = client.build_request("POST", url, json=json, headers=headers)
+        except BaseException as exc:
+            mark_not_dispatched(exc)
+            raise
+        response = loop.run_until_complete(guarded(client.send(request, stream=True), sends_request=True))
         if response.status_code >= 400:
             from app.services.llm.engines import _raise_provider_http_status
             body = None

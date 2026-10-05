@@ -113,8 +113,10 @@ class AgentLoop:
                                 provider_stream.close()
                         self.check(budget)
                         step_status = "succeeded"
-                    except (ProviderCancelled, GeneratorExit):
+                    except (ProviderCancelled, GeneratorExit) as exc:
                         step_status = "cancelled"
+                        # Cancelled before the request was dispatched: free.
+                        value.record_rejection(exc, self.model)
                         raise
                     except Exception as exc:
                         value.record_rejection(exc, self.model)
