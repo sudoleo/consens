@@ -280,6 +280,18 @@ def test_light_input_is_white_and_account_popup_uses_opaque_surfaces():
     assert "emailPopup.hidden = !isOpen" in firebase
 
 
+def test_account_menu_is_keyboard_operable():
+    firebase = read("static/firebase.js")
+
+    assert '<button type="button" id="emailIcon" class="email-icon" aria-haspopup="menu"' in firebase
+    for item in ("sharedLinksButton", "watchedLinksButton", "logoutButton"):
+        assert f'<button type="button" id="{item}" class="top-bar-about" role="menuitem"' in firebase
+    assert '${user.email}</span>' not in firebase
+    assert 'querySelector(".user-email-address").textContent = user.email' in firebase
+    assert 'e.key === "Escape"' in firebase
+    assert 'focus: "opener"' in firebase
+
+
 def test_chat_textarea_does_not_keep_the_generic_inset_frame():
     input_css = read("static/css/components-input.css")
     chat_rule = input_css.split(".chat-input-container .input-field {", 1)[1].split("}", 1)[0]

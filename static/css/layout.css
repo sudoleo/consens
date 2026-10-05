@@ -895,6 +895,10 @@ body:has(.sidebar.active) .brand-float {
   display: inline-block;
   width: 30px;
   height: 30px;
+  /* Seit 2026-10-05 ein echter <button>: dessen UA-Polster und -Rand weg. */
+  appearance: none;
+  margin: 0;
+  padding: 0;
   border-radius: 50%;
   /* Neutral since 2026-10-02: the initial is the account, not a brand
      surface. Plus and Pro still colour it (is-plus / is-pro below). */
@@ -916,6 +920,7 @@ body:has(.sidebar.active) .brand-float {
    deutlicherer Rand sagt beim Hovern, dass hier etwas aufgeht. */
 .email-icon:hover {
   border-color: color-mix(in srgb, var(--text-color) 30%, var(--sidebar-border));
+  opacity: 1;
 }
 
 .email-icon:active {
@@ -1000,6 +1005,11 @@ body:has(.sidebar.active) .brand-float {
 
 .email-popup .top-bar-about {
   align-self: stretch;
+  /* Menueeintraege sind <button>s: UA-Flaeche, -Rand und -Abstand weg. */
+  appearance: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
   padding: 8px 7px;
   border-radius: var(--radius-xs);
   cursor: pointer;

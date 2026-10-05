@@ -241,7 +241,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       eingeloggter Account (Name/Plan + Avatar) und Settings im Sidebar-Footer.
       Ausgeloggt stehen Login/Sign-up nur oben rechts; die Sidebar zeigt kein
       zweites Login-Feld. Das Account-Popup hat in Light und Dark einen
-      vollständig deckenden, gut lesbaren Hintergrund.
+      vollständig deckenden, gut lesbaren Hintergrund. Per Tastatur: Tab
+      erreicht den Avatar, Enter öffnet mit Fokus auf „Shared links“, Pfeile
+      wandern bis „Logout“, Escape schließt und fokussiert wieder den Avatar.
       Mit Agent Mode steht das Eingabefeld mit Begrüßung mittig und wechselt
       nach dem Senden in den geführten Thread. Ausschalten zeigt sofort das
       Vergleichsraster mit ausgewählten Modellen und ruhigen Platzhaltern;

@@ -2165,7 +2165,12 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   Liste. `/usage` synchronisiert neben dem Tokenkonto auch den Tierstatus und heilt
   so einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
   Sitzung; beim Start läuft es nur noch in diesem Fehlerfall. Der dynamische Account-Menü-Außenklick-Listener wird bei
-  jedem Token-Callback entfernt, bevor ein neuer gebunden wird.
+  jedem Token-Callback entfernt, bevor ein neuer gebunden wird. Das Account-Menü
+  besteht seit 2026-10-05 aus echten `<button>`s (Öffner `#emailIcon` mit
+  `aria-haspopup`/`aria-expanded`, Einträge `role="menuitem"`): Öffnen fokussiert
+  den ersten Eintrag, Pfeile/Home/End wandern, Escape schließt und gibt den Fokus
+  an den Öffner (`#emailIcon` oder `#accountIdentity`) zurück, Tab schließt.
+  Die Adresse wird per `textContent` gesetzt, nie ins Markup interpoliert.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`, im Agent-Modus
   `runAgentDemoFlow` auf der echten Agent-Oberfläche) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-

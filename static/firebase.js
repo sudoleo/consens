@@ -575,64 +575,120 @@ onIdTokenChanged(auth, async (user) => {
     if (authTopActions) authTopActions.hidden = true;
     if (loginContainer) loginContainer.hidden = false;
 
-    // 5) E‑Mail & Logout als Popup (öffnet aus der Sidebar-Fußzeile nach oben)
+    // 5) E‑Mail & Logout als Popup (öffnet aus der Sidebar-Fußzeile nach oben).
+    // Echte Buttons statt span/a ohne href: nur so sind Öffner und Einträge
+    // per Tab erreichbar — Logout gibt es nur hier.
     const emailInitial = user.email.charAt(0).toUpperCase();
     clearAccountMenuDocumentListener();
     loginContainer.innerHTML = `
       <div class="email-container">
-        <span id="emailIcon" class="email-icon" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-label="Open account menu">${emailInitial}</span>
-        <div id="emailPopup" class="email-popup" role="menu" hidden>
-          <div class="popup-content">
-            <span class="user-email">
-              <span class="user-email-address">${user.email}</span>
+        <button type="button" id="emailIcon" class="email-icon" aria-haspopup="menu" aria-expanded="false" aria-controls="emailPopup" aria-label="Open account menu"></button>
+        <div id="emailPopup" aria-label="Account" class="email-popup" role="menu" hidden>
+          <div class="popup-content" role="none">
+            <span class="user-email" role="none">
+              <span class="user-email-address"></span>
               <!-- Die Aufloesung zur Farbe am Kuerzel: hier steht der Name der
                    Stufe. user-tier.js fuellt und blendet ihn (Free: leer). -->
               <span id="accountTierLabel" class="pro-badge account-tier-label" hidden></span>
             </span>
-            <a id="sharedLinksButton" class="top-bar-about" role="menuitem">Shared links</a>
-            <a id="watchedLinksButton" class="top-bar-about" role="menuitem">Watched</a>
-            <a id="logoutButton" class="top-bar-about" role="menuitem">Logout</a>
+            <button type="button" id="sharedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Shared links</button>
+            <button type="button" id="watchedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Watched</button>
+            <button type="button" id="logoutButton" class="top-bar-about" role="menuitem" tabindex="-1">Logout</button>
           </div>
         </div>
       </div>
     `;
+    // Nutzerdaten nie in Markup interpolieren.
+    const emailIcon = document.getElementById("emailIcon");
+    const emailPopup = document.getElementById("emailPopup");
+    emailIcon.textContent = emailInitial;
+    emailPopup.querySelector(".user-email-address").textContent = user.email;
     // innerHTML hat #emailIcon gerade ersetzt: die Klasse, die die Kontostufe
     // traegt, ist mit dem alten Knoten weg und muss neu gesetzt werden.
     window.App?.accountTier?.render?.();
 
-    const emailIcon = document.getElementById("emailIcon");
-    const emailPopup = document.getElementById("emailPopup");
     // The address beside the initial opens the same menu (sidebar footer).
     const accountIdentity = document.getElementById("accountIdentity");
+    const logoutButton = document.getElementById("logoutButton");
+    const sharedLinksButton = document.getElementById("sharedLinksButton");
+    const watchedLinksButton = document.getElementById("watchedLinksButton");
+    const accountMenuItems = () => Array.from(emailPopup.querySelectorAll('[role="menuitem"]'));
+    // Wer das Menue geoeffnet hat, bekommt beim Schliessen per Escape den Fokus
+    // zurueck (Kuerzel oder die Adresse in der Fusszeile).
+    let accountMenuOpener = emailIcon;
+
+    function focusAccountMenuItem(index) {
+      const items = accountMenuItems();
+      if (!items.length) return;
+      items[(index + items.length) % items.length].focus();
+    }
+
+    function setAccountMenuOpen(isOpen, { opener = null, focus = null } = {}) {
+      if ((!emailPopup.hidden) !== isOpen) {
+        if (isOpen && opener) accountMenuOpener = opener;
+        emailPopup.hidden = !isOpen;
+        emailIcon.setAttribute("aria-expanded", String(isOpen));
+        if (accountIdentity) accountIdentity.setAttribute("aria-expanded", String(isOpen));
+        trackAppEvent("app_account_menu_toggled", { open: isOpen });
+      }
+      if (isOpen && focus === "first") focusAccountMenuItem(0);
+      if (isOpen && focus === "last") focusAccountMenuItem(-1);
+      if (!isOpen && focus === "opener") accountMenuOpener?.focus();
+    }
+
+    function toggleAccountMenu(opener) {
+      const willOpen = emailPopup.hidden;
+      setAccountMenuOpen(willOpen, { opener, focus: willOpen ? "first" : null });
+    }
+
+    function handleAccountOpenerKeydown(e, opener) {
+      if (e.key === "Escape" && !emailPopup.hidden) {
+        e.preventDefault();
+        setAccountMenuOpen(false, { focus: "opener" });
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setAccountMenuOpen(true, { opener, focus: e.key === "ArrowDown" ? "first" : "last" });
+      }
+    }
+
     if (accountIdentity) {
       accountIdentity.textContent = user.email;
       accountIdentity.title = user.email;
       accountIdentity.setAttribute("aria-label", `Account menu for ${user.email}`);
+      accountIdentity.setAttribute("aria-expanded", "false");
       accountIdentity.hidden = false;
-      accountIdentity.onclick = e => { e.stopPropagation(); emailIcon.click(); };
+      accountIdentity.onclick = e => { e.stopPropagation(); toggleAccountMenu(accountIdentity); };
+      accountIdentity.onkeydown = e => handleAccountOpenerKeydown(e, accountIdentity);
     }
     const accountPlanLine = document.getElementById("accountPlanLine");
     if (accountPlanLine) accountPlanLine.hidden = false;
-    const logoutButton = document.getElementById("logoutButton");
-    const sharedLinksButton = document.getElementById("sharedLinksButton");
-    const watchedLinksButton = document.getElementById("watchedLinksButton");
 
-    function setAccountMenuOpen(isOpen) {
-      if ((!emailPopup.hidden) === isOpen) return;
-      emailPopup.hidden = !isOpen;
-      emailIcon.setAttribute("aria-expanded", String(isOpen));
-      trackAppEvent("app_account_menu_toggled", { open: isOpen });
-    }
-
+    // Ein <button> loest Enter/Leertaste selbst als click aus.
     emailIcon.addEventListener("click", e => {
       e.stopPropagation();
-      setAccountMenuOpen(emailPopup.hidden);
+      toggleAccountMenu(emailIcon);
     });
-    emailIcon.addEventListener("keydown", e => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault();
-      e.stopPropagation();
-      setAccountMenuOpen(emailPopup.hidden);
+    emailIcon.addEventListener("keydown", e => handleAccountOpenerKeydown(e, emailIcon));
+
+    // Menue-Tastatur: Pfeile wandern (mit Umlauf), Home/End springen, Escape
+    // schliesst und gibt den Fokus zurueck, Tab verlaesst das Menue.
+    emailPopup.addEventListener("keydown", e => {
+      const items = accountMenuItems();
+      const index = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        focusAccountMenuItem(index < 0 ? (step > 0 ? 0 : -1) : index + step);
+      } else if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        focusAccountMenuItem(e.key === "Home" ? 0 : -1);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setAccountMenuOpen(false, { focus: "opener" });
+      } else if (e.key === "Tab") {
+        setAccountMenuOpen(false);
+      }
     });
 
     // Übersicht der geteilten Consensus-Links direkt aus dem User-Menü öffnen.
