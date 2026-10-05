@@ -133,7 +133,6 @@ class CustomSecurityMiddleware:
                     "https://cloud.umami.is "
                     "https://gateway.umami.is "
                     "https://api-gateway.umami.dev "
-                    "https://firestore.googleapis.com "
                     "https://*.firebaseio.com "
                     "https://identitytoolkit.googleapis.com "
                     "https://securetoken.googleapis.com "

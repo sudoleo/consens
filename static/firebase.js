@@ -1,5 +1,4 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import {
   GoogleAuthProvider,
@@ -32,7 +31,6 @@ if (!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey) {
 
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
 const app = initializeApp(window.FIREBASE_CONFIG);
-const db = getFirestore(app);
 
 // Initialisiere Auth
 const auth = getAuth(app);

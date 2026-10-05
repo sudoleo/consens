@@ -20,13 +20,8 @@ import pytest
 from playwright.sync_api import expect
 
 from app.core.e2e_profile import E2E_PROJECT_ID, assert_safe_e2e_environment
-from test_phase4_frontend import FIREBASE_APP_STUB, FIREBASE_AUTH_STUB, FIRESTORE_STUB
+from test_phase4_frontend import FIREBASE_APP_STUB, FIREBASE_AUTH_STUB
 
-FIRESTORE_GUARD = FIRESTORE_STUB
-for operation in ('setDoc', 'addDoc', 'deleteDoc', 'getDoc'):
-    FIRESTORE_GUARD = re.sub(r'export async function ' + operation + r'\(\) \{[^\n]*\}',
-        'export async function ' + operation + '() { throw new Error("Unexpected browser Firestore access"); }',
-        FIRESTORE_GUARD)
 
 
 @pytest.fixture(scope='module')
@@ -85,7 +80,7 @@ class Journey:
             " localStorage.setItem('runMode', 'consensus');"
             " localStorage.setItem('runModeDefault', 'agent-2026-10-02');"
             " sessionStorage.setItem('journeyRunModeSeeded', '1'); }")
-        for name, source in [('app', FIREBASE_APP_STUB), ('auth', FIREBASE_AUTH_STUB), ('firestore', FIRESTORE_GUARD)]:
+        for name, source in [('app', FIREBASE_APP_STUB), ('auth', FIREBASE_AUTH_STUB)]:
             self.context.route(f'https://www.gstatic.com/firebasejs/9.22.0/firebase-{name}.js',
                 lambda route, request, source=source: route.fulfill(content_type='application/javascript', body=source))
         self.context.route('https://cloud.umami.is/**', lambda r: r.fulfill(body='/* analytics disabled */'))

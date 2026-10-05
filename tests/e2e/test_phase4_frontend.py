@@ -20,16 +20,6 @@ FIREBASE_APP_STUB = """
 export function initializeApp(config) { return { config }; }
 """
 
-FIRESTORE_STUB = """
-export function getFirestore() { return {}; }
-export function doc() { return {}; }
-export async function setDoc() {}
-export async function getDoc() { return { exists: () => false, data: () => ({}) }; }
-export function increment(value) { return value; }
-export async function addDoc() { return {}; }
-export async function deleteDoc() {}
-"""
-
 FIREBASE_AUTH_STUB = """
 const callbacks = [];
 const auth = { currentUser: null };
@@ -169,10 +159,6 @@ def _real_firebase_page(
     context.route(
         "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js",
         lambda route: route.fulfill(content_type="application/javascript", body=FIREBASE_APP_STUB),
-    )
-    context.route(
-        "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js",
-        lambda route: route.fulfill(content_type="application/javascript", body=FIRESTORE_STUB),
     )
     context.route(
         "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js",

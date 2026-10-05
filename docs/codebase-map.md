@@ -5039,8 +5039,9 @@ Wichtige Verträge im Backend:
 `firestore.indexes.json`, Quellen der Wahrheit im Repo; Deployment per Firebase
 CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 - **Deny-all für alle Clients.** Kein Browser-Code spricht direkt mit Firestore —
-  `static/firebase.js` initialisiert zwar `getFirestore()`, benutzt die Variable
-  `db` aber nirgends. Sämtlicher Datenzugriff läuft über das Backend mit dem
+  `static/firebase.js` lädt seit 2026-10-05 nur noch App- und Auth-SDK (das
+  ungenutzte Firestore-SDK blockierte vorher den App-Start), und die CSP führt
+  `firestore.googleapis.com` nicht mehr eigens. Sämtlicher Datenzugriff läuft über das Backend mit dem
   Firebase-Admin-SDK, und das umgeht die Regeln vollständig.
 - **Schreibrechte auf `users/{uid}` dürfen NIE wieder geöffnet werden.**
   `app/core/security.py` liest Pro- (`tier`) und Admin-Status (`role`) aus genau
