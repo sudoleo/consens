@@ -15,6 +15,14 @@ module existed.
 
 A run may carry an editorial ``headline`` written by hand; when it does, it
 wins. Nothing writes that field today.
+
+A derived finding is only stated when it can carry the page (``_headline_ok``):
+the models state it the same way (a contested claim is a dispute, and its
+label is just the disputed point -- "GPT-6 Astra was released" while one of
+the models says there is no such release), at least ``MIN_HEADLINE_MODELS``
+models stand behind it, and it reads as an English statement rather than a
+question ("Whether AI has ...") or a label the judge wrote in the language of
+one model's answer. Otherwise the next valid claim is used, or no finding.
 """
 
 from __future__ import annotations
@@ -40,11 +48,36 @@ SETTLED_STREAK = 2
 # listed claims at all. Two restatements out of twenty is churn, not a record.
 SETTLED_SHARE = 3
 MIN_HEADLINE_WORDS = 6
+# Two models agreeing is a pair, not a panel; below this the page states no
+# derived finding (an editorial headline still wins).
+MIN_HEADLINE_MODELS = 3
 MIN_SUPPORT_WORDS = 5
 # How close a consensus sentence has to be to a clipped label to count as the
 # same statement, written out in full.
 RESTATE_OVERLAP = 0.4
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+# A label that opens like this names a question, not an answer.
+_QUESTION_OPENERS = frozenset({
+    "whether", "how", "what", "when", "which", "who", "whom", "whose", "why",
+    "does", "do", "did", "is", "are", "was", "were", "can", "could", "will",
+    "would", "should",
+})
+# Function words that only an English sentence uses, and the most frequent
+# ones of the languages a judge has written Topic labels in (pt/es/de/fr/it).
+# A label is English unless it carries more of the latter than the former.
+_ENGLISH_WORDS = frozenset({
+    "the", "is", "are", "was", "were", "has", "have", "had", "of", "to", "and",
+    "for", "that", "this", "not", "with", "by", "on", "it", "its", "will",
+    "be", "been", "from", "or", "at", "as", "any", "yet", "which", "than",
+})
+_FOREIGN_WORDS = frozenset({
+    "de", "que", "o", "os", "um", "uma", "para", "com", "não", "nao", "está",
+    "esta", "foi", "ao", "da", "dos", "das", "em", "el", "la", "los",
+    "las", "y", "es", "del", "por", "con", "se", "der", "die", "das", "und",
+    "ist", "nicht", "ein", "eine", "mit", "von", "zu", "auf", "le", "les",
+    "des", "est", "et", "une", "du", "pas", "il", "di", "che", "sono",
+})
 
 STATE_LABELS = {
     "moved": "The answer moved",
@@ -89,6 +122,31 @@ def _reads_as_a_sentence(label, *, min_words: int) -> bool:
     return len(text.split()) >= min_words
 
 
+def _is_question(label) -> bool:
+    text = str(label or "").strip()
+    if text.rstrip("\"'”’)]").endswith("?"):
+        return True
+    words = _WORD_RE.findall(text)
+    return bool(words) and words[0].lower() in _QUESTION_OPENERS
+
+
+def _reads_as_english(label) -> bool:
+    words = [word.lower() for word in _WORD_RE.findall(str(label or ""))]
+    english = sum(word in _ENGLISH_WORDS for word in words)
+    foreign = sum(word in _FOREIGN_WORDS for word in words)
+    return foreign <= english
+
+
+def _headline_ok(claim) -> bool:
+    """Whether a tracked claim may be stated as the finding (or under it)."""
+    if not claim or claim.get("contested"):
+        return False
+    if int(claim.get("model_count") or 0) < MIN_HEADLINE_MODELS:
+        return False
+    label = claim.get("label")
+    return not _is_question(label) and _reads_as_english(label)
+
+
 def _consensus_sentences(selected) -> list[str]:
     plain = markdown_to_plaintext((selected or {}).get("consensus_md"), limit=1200)
     return [part.strip() for part in _SENTENCE_SPLIT_RE.split(plain) if part.strip()]
@@ -121,9 +179,15 @@ def _headline_claim(ledger: dict):
     decides is how much of the record stands behind the statement.
 
     A contested claim is never the headline: the page cannot state as the
-    finding something the models do not state the same way.
+    finding something the models do not state the same way. That holds for a
+    claim that only just entered too: the ledger lists new claims together,
+    disputed or not, and a new dispute is exactly what must not lead.
     """
-    candidates = list(ledger.get("holding") or []) + list(ledger.get("new") or [])
+    candidates = [
+        claim for claim in
+        list(ledger.get("holding") or []) + list(ledger.get("new") or [])
+        if _headline_ok(claim)
+    ]
     if not candidates:
         return None
     return sorted(
@@ -153,7 +217,8 @@ def _headline_line(headline, ledger, selected) -> str:
     whole = [
         claim for claim in
         list(ledger.get("holding") or []) + list(ledger.get("new") or [])
-        if _reads_as_a_sentence(claim.get("label"), min_words=MIN_HEADLINE_WORDS)
+        if _headline_ok(claim)
+        and _reads_as_a_sentence(claim.get("label"), min_words=MIN_HEADLINE_WORDS)
     ]
     if whole:
         return _sentence(max(whole, key=lambda claim: int(claim.get("streak") or 0))["label"])
@@ -207,8 +272,12 @@ def build_finding(ledger, record, selected, *, lead_question: str = "") -> dict 
         # Manually seeded Topics carry no Position Map at all. The first
         # sentence of the consensus is a weaker finding than a tracked claim,
         # but it is still an answer, and an answer beats a score.
+        # A run with fewer than three models is not enough of a panel for
+        # that either; a run that does not list its models (seeded) is.
         plain = markdown_to_plaintext(selected.get("consensus_md"), limit=400)
         first = plain.split(". ")[0] if plain else ""
+        if _is_question(first) or 0 < len(selected.get("models") or []) < MIN_HEADLINE_MODELS:
+            first = ""
         line = _sentence(first)
         source = "consensus"
     if not line:
@@ -221,6 +290,8 @@ def build_finding(ledger, record, selected, *, lead_question: str = "") -> dict 
     )
     for claim in supporting:
         if claim is headline or len(support) >= MAX_SUPPORT:
+            continue
+        if not _headline_ok(claim):
             continue
         if not _reads_as_a_sentence(claim.get("label"), min_words=MIN_SUPPORT_WORDS):
             continue

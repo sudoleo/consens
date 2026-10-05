@@ -4803,6 +4803,17 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   `noindex` und werden wie die aktuelle Ansicht nur kurz gecacht (max-age 60,
   s-maxage 300), damit ein archiviertes Topic auch mit seinen Versionen
   verschwindet (Review R18).
+- Befund oben auf der Seite (`app/services/topic_finding.py`, abgeleitet aus
+  dem Claim Ledger, kein Modellaufruf): seit 2026-10-05 nur aus Claims, die
+  `_headline_ok` erfüllen — nicht umstritten (auch nicht unter „new“: das Ledger
+  listet neue Claims umstritten oder nicht gemeinsam, so wurde auf
+  gpt-6-release-date ein Streitpunkt „GPT-6 Astra released“ zum Befund),
+  mindestens `MIN_HEADLINE_MODELS` (3) Modelle, keine Frage/„Whether …“-Formel,
+  kein fremdsprachiges Label. Sonst der nächste gültige Claim, dann der erste
+  Konsens-Satz (nicht bei Läufen mit weniger als drei Modellen), sonst kein
+  Befund. Umstrittene Claims heißen in der Liste „Addressed by“ statt „Stated
+  by“. Meta-/OG-Description und JSON-LD `description` kommen aus dem Befund;
+  das handgesetzte `seo.description` greift nur ohne Befund.
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
   teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs legen bei
   konfiguriertem SMTP je Follower ein Outbox-Item im selben Commit wie den Run an

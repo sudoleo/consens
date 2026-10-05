@@ -3,7 +3,7 @@
 from app.services import topic_finding
 
 
-def claim(label, *, streak=5, models=2, run_models=2, contested=False,
+def claim(label, *, streak=5, models=4, run_models=4, contested=False,
           holding=True, is_new=False):
     return {
         "label": label,
@@ -54,7 +54,7 @@ def test_the_finding_is_the_claim_the_record_puts_first():
     assert found["line"] == "OpenAI has not announced a release date for GPT-6."
     assert found["source"] == "claim"
     assert found["state"] == "settled"
-    assert found["voice"] == "All 2 models say the same"
+    assert found["voice"] == "All 4 models say the same"
 
 
 def test_a_contested_claim_never_becomes_the_finding():
@@ -87,12 +87,12 @@ def test_a_check_that_moved_the_answer_outranks_every_other_state():
 
 def test_a_claim_only_some_models_state_says_so_in_the_finding():
     found = topic_finding.build_finding(
-        ledger(holding=[claim("No date is on record", models=2, run_models=3)]),
+        ledger(holding=[claim("No date is on record", models=3, run_models=4)]),
         record(),
         {},
     )
 
-    assert found["voice"] == "2 of 3 models state this"
+    assert found["voice"] == "3 of 4 models state this"
 
 
 def test_supporting_lines_never_repeat_the_finding_or_run_long():
@@ -246,3 +246,99 @@ def test_a_statement_that_ends_inside_a_quotation_keeps_one_full_stop():
     )
 
     assert found["line"].endswith("Gemini 4.\u201d")
+
+
+def test_a_new_dispute_never_leads_even_though_new_claims_are_listed_together():
+    """/topics/gpt-6-release-date, 2026-10-05: the ledger lists claims that
+    only just entered in one group, disputed or not, and the finding took
+    "OpenAI has officially announced and released a model named GPT-6
+    Astra" from it -- a disputed point (one model said there is no such
+    release) with every model that took any side counted as "stating" it."""
+    disputed = claim(
+        "OpenAI has officially announced and released a model named GPT-6 Astra",
+        streak=1, models=3, contested=True, is_new=True,
+    )
+    found = topic_finding.build_finding(
+        ledger(
+            new=[disputed],
+            holding=[claim("OpenAI has not published a release date for GPT-6", streak=1)],
+        ),
+        record(),
+        {"consensus_md": "I do not have confirmed OpenAI documentation of GPT-6."},
+    )
+
+    assert found["line"] == "OpenAI has not published a release date for GPT-6."
+    assert found["voice"] == "All 4 models say the same"
+
+    alone = topic_finding.build_finding(
+        ledger(new=[disputed]), record(),
+        {"consensus_md": "There is no confirmed GPT-6 release. More detail follows."},
+    )
+    assert alone["source"] == "consensus"
+    assert alone["line"] == "There is no confirmed GPT-6 release."
+    assert alone["voice"] == ""
+
+
+def test_a_disputed_claim_is_never_a_supporting_line():
+    found = topic_finding.build_finding(
+        ledger(
+            holding=[claim("OpenAI has not published a release date for GPT-6", streak=6)],
+            new=[claim("Official benchmark numbers and pricing are published",
+                       streak=1, contested=True, is_new=True)],
+        ),
+        record(),
+        {},
+    )
+
+    assert found["support"] == []
+
+
+def test_fewer_than_three_models_carry_no_derived_finding():
+    """/topics/gemini-4-release-date: "All 2 models" is a pair, not a panel."""
+    pair = claim("Google has confirmed that Gemini 4 is in training", models=2, run_models=2)
+    found = topic_finding.build_finding(
+        ledger(holding=[pair]), record(),
+        {"consensus_md": "Google has confirmed Gemini 4 is in training.",
+         "models": ["Gemini", "OpenAI"]},
+    )
+    assert found is None
+
+    # A wider claim further down the record still leads.
+    found = topic_finding.build_finding(
+        ledger(holding=[pair, claim("No release date for Gemini 4 is on record", streak=2, models=3)]),
+        record(), {},
+    )
+    assert found["line"] == "No release date for Gemini 4 is on record."
+
+
+def test_a_question_label_is_not_a_finding():
+    """/topics/unsolved-math-problems-solved-by-ai led with "Whether AI has
+    fully formalized Fermat's Last Theorem in Lean." -- the judge's name for
+    a disputed point, not a statement."""
+    found = topic_finding.build_finding(
+        ledger(holding=[
+            claim("Whether AI has fully formalized Fermat's Last Theorem in Lean", streak=9),
+            claim("Has AI solved the Navier-Stokes problem?", streak=8),
+            claim("AI has produced new results on some previously open problems", streak=3),
+        ]),
+        record(), {},
+    )
+
+    assert found["line"] == "AI has produced new results on some previously open problems."
+    assert topic_finding._is_question("When will GPT-6 ship")
+    assert not topic_finding._is_question("OpenAI has not announced GPT-6")
+
+
+def test_a_label_written_in_another_language_is_not_a_finding():
+    found = topic_finding.build_finding(
+        ledger(holding=[
+            claim("Status de Pr\u00e9-Treinamento: A Google confirmou que o Gemini 4 "
+                  "est\u00e1 em fase de pr\u00e9-treinamento", streak=6),
+            claim("Google has confirmed that Gemini 4 is in post-training", streak=3),
+        ]),
+        record(), {},
+    )
+
+    assert found["line"] == "Google has confirmed that Gemini 4 is in post-training."
+    assert topic_finding._reads_as_english("GPT-6 launched December 2026")
+    assert not topic_finding._reads_as_english("Die Ver\u00f6ffentlichung ist nicht best\u00e4tigt und das Datum fehlt")

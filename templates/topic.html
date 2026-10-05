@@ -78,10 +78,12 @@
   </summary>
   <div class="fact-body">
     <div class="fact-meta">
+      {#- A disputed claim is addressed, not stated: its models took different sides. -#}
+      {% set verb = "Addressed" if claim.contested else "Stated" %}
       {% if claim.partial %}
-      <span class="claim-flag is-partial">Stated by {{ claim.model_count }} of {{ claim.run_model_count }} models</span>
+      <span class="claim-flag is-partial">{{ verb }} by {{ claim.model_count }} of {{ claim.run_model_count }} models</span>
       {% elif claim.model_count %}
-      <span class="claim-flag is-full">Stated by all {{ claim.model_count }} models</span>
+      <span class="claim-flag is-full">{{ verb }} by all {{ claim.model_count }} models</span>
       {% endif %}
       {% if claim.holding %}
       <span class="claim-flag">Held {{ claim.streak }} of {{ checks }} checks</span>

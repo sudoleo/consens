@@ -492,7 +492,15 @@ async def topic_page(
             f"{scoreboard['model_count'] or 'several'} AI models, most recently "
             f"{selected['observed_at'][:10]}. {public_topic['lead_question']}"
         )[:300]
-    meta_description = seo.get("description") or default_description
+    # The page's own finding wins over the hand-set description: a stored
+    # description is written once and goes stale, while search snippets and
+    # the JSON-LD have to say what the page says now (gpt-6-release-date
+    # announced "not announced" in its snippet while the page led with a
+    # release). The hand-set text only fills in when there is no finding.
+    meta_description = (
+        default_description if finding
+        else seo.get("description") or default_description
+    )
     robots = "noindex, follow" if seo.get("noindex") or version else "index, follow"
     citations = [item["url"] for run in runs for item in run["evidence"]]
     jsonld = {

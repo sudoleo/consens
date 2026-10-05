@@ -1383,13 +1383,13 @@ def test_topic_page_leads_with_the_finding_and_folds_unchanged_checks(monkeypatc
                         {
                             "label": held if index else held + " so far",
                             "type": "claim",
-                            "positions": [{"stance": held, "models": ["OpenAI", "Gemini"]}],
+                            "positions": [{"stance": held, "models": ["OpenAI", "Gemini", "Anthropic"]}],
                         },
                         {
                             "label": "The GPT-5.6 family is the current frontier line",
                             "type": "claim",
                             "positions": [{
-                                "stance": "GPT-5.6 is current", "models": ["OpenAI", "Gemini"],
+                                "stance": "GPT-5.6 is current", "models": ["OpenAI", "Gemini", "Anthropic"],
                             }],
                         },
                     ],
@@ -1435,6 +1435,34 @@ def test_topic_page_leads_with_the_finding_and_folds_unchanged_checks(monkeypatc
     # Sources carry their place in the record.
     assert "Cited since Jul 24, 2026" in page.text
     assert "Sources that left the record" in page.text
+    # Snippet and JSON-LD say what the page says now; the hand-set SEO
+    # description of the Topic is stale by design and only a fallback.
+    line = page.text.split('class="topic-finding-line')[1].split(">", 1)[1].split("</h2>")[0]
+    assert line
+    assert f'<meta name="description" content="{line} Checked 5 times' in page.text
+    assert f'<meta property="og:description" content="{line}' in page.text
+    assert "Track the evidence and model consensus around GPT-6." not in page.text
+    assert f'"description": "{line}' in page.text
+
+
+def test_topic_meta_description_falls_back_to_the_hand_set_text_without_a_finding(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    # Two models are not enough of a panel for a derived finding.
+    topics.create_run(topic["id"], run_payload(
+        models=["OpenAI · GPT-5.4 mini", "Mistral · Mistral Small 4"],
+    ), actor_uid="admin", db=db, now=NOW)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+
+    page = TestClient(app).get("/topics/gpt-6")
+
+    assert page.status_code == 200
+    assert 'class="topic-finding-line' not in page.text
+    assert ('<meta name="description" content="Track the evidence and model consensus '
+            'around GPT-6.">') in page.text
 
 
 def test_public_topic_history_is_ssr_and_historical_version_is_noindex(monkeypatch):
@@ -1504,7 +1532,7 @@ def test_disagreement_leads_the_statement_list_and_is_labelled_as_its_own_kind(
                             "type": "claim",
                             "positions": [{
                                 "stance": "No date announced",
-                                "models": ["OpenAI", "Gemini"],
+                                "models": ["OpenAI", "Gemini", "Anthropic"],
                             }],
                         },
                     ],
@@ -1535,3 +1563,6 @@ def test_disagreement_leads_the_statement_list_and_is_labelled_as_its_own_kind(
     assert "OpenAI has not announced a release date." in page.text
     assert "The models disagree" in page.text
     assert "1 open disagreement" in page.text
+    # Models on opposite sides of a dispute address it; they do not state it.
+    assert "Addressed by 2 of 3 models" in page.text
+    assert "Stated by 2 of 3 models" not in page.text
