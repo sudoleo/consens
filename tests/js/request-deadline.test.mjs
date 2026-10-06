@@ -19,6 +19,16 @@ describe('Request deadlines', () => {
     expect(operation).not.toHaveBeenCalled();
     dom.window.close();
   });
+  it('asks onIdle before giving up: keep waiting, finish with its value, or fail with its error', async () => {
+    const { window: w, dom } = loadScripts(['static/js/request-deadline.js']);
+    let signal, calls = 0;
+    const value = await w.App.withRequestDeadline(s => { signal = s; return new Promise(() => {}); },
+      { timeoutMs: 5, onIdle: async () => (++calls < 3 ? undefined : 'saved') });
+    expect(value).toBe('saved'); expect(calls).toBe(3); expect(signal.aborted).toBe(true);
+    await expect(w.App.withRequestDeadline(() => new Promise(() => {}),
+      { timeoutMs: 5, onIdle: async () => { throw new Error('gone'); } })).rejects.toThrow('gone');
+    dom.window.close();
+  });
   it('renews streaming liveness and removes timers after completion', async () => {
     const { window: w, dom } = loadScripts(['static/js/request-deadline.js']);
     const timers = new Map(); let id = 0, touch;

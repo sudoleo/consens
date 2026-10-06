@@ -463,7 +463,7 @@
       : value.toLocaleString();
   }
   // Budget refusals carry a stable code; show a plain next step, not ledger terms.
-  function failureNotice(failure, review, text) {
+  function failureNotice(failure, review, text, { retry = true } = {}) {
     const code = failure?.code || failure?.error_code;
     if (code === 'agent_token_reservation') {
       const needs = compactTokens(failure.required_tokens), left = compactTokens(failure.available_tokens);
@@ -473,7 +473,11 @@
     }
     if (code === 'agent_tokens_exhausted') return { text: `You've used today's Agent tokens. They reset at ${resetTime()}.` };
     const note = App.agentReview?.failureNote?.(failure, review, text);
-    return { text: note ?? (failure?.error || failure?.message || '') };
+    // Any other stop (provider busy, timeout, lost connection) can be sent
+    // again as it was; a busy model can also be swapped first.
+    const actions = retry ? [['retry', 'Retry']] : [];
+    if (code === 'provider_rate_limited' || code === 'provider_unavailable') actions.push(['choose-model', 'Choose another model']);
+    return { text: note ?? (failure?.error || failure?.message || ''), actions };
   }
   // A brand-new chat has no files or actions until the run reports resources
   // or finishes; its first lists need no request.
@@ -524,8 +528,10 @@
     const state = context.consensus;
     const running = registry.isExecuting(context.runId);
     const failure = state.error || state.completedTurn?.agent_failure;
+    // A message refused before it started is back in the composer instead.
+    const retry = !running && context.metadata.requestSent && !context.metadata.restoreDraft;
     renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure,
-      state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "") : "",
+      state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "", { retry }) : "",
       { streaming: running && !state.text });
     App.agentActivity?.render(activityHost(context.runId), {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
@@ -745,7 +751,49 @@
     } else if (action === 'google-consent') App.agentGoogle?.consent?.(true);
     else if (action === 'google-open') App.agentGoogle?.open?.();
     else if (action === 'reload') { catalogStatus = 'idle'; render(); }
+    else if (action === 'retry') retryFailed();
     window.updateQuestionInputAccess?.();
+  }
+  // Retry sends the failed message again, as a new turn in the same chat,
+  // with its files and the model now selected (so a busy model can be swapped).
+  function retryFailed() {
+    const context = registry.visible();
+    if (context?.config.executionMode === 'agent' && ['failed', 'canceled'].includes(context.status)) {
+      return send(null, { retry: {
+        runId: context.runId, question: context.question, basis: context.basis,
+        chatId: context.metadata.requestSent ? context.metadata.chatId : null,
+        bookmarkId: context.metadata.requestSent ? context.bookmark.id : null,
+        fileIds: context.metadata.fileIds || [], attachmentMeta: context.attachmentMeta || [],
+        googleSelection: context.config.googleSelection || null, googleDataConsent: context.config.googleDataConsent === true,
+      } });
+    }
+    // A saved failed turn (reopened chat, or a run that ended with a saved
+    // failure) is retried as the next message of that chat.
+    if (context && registry.isExecuting(context.runId)) return;
+    const basis = registry.getSelectedConversationBasis();
+    const turn = basis?.currentTurn;
+    if (!basis?.chatId || turn?.status !== 'failed') return;
+    return send(null, { retry: {
+      question: basis.question, basis, chatId: basis.chatId, bookmarkId: basis.bookmarkId,
+      fileIds: turn.agent_settings?.file_ids || [], attachmentMeta: turn.attachments || [],
+      googleSelection: null, googleDataConsent: App.agentGoogle?.consent?.() === true,
+    } });
+  }
+  // No byte for 45 s does not prove that a run died: some networks (company
+  // proxies, virus scanners) hold an event stream back until it ends. Ask the
+  // server instead. A saved answer or failure ends the wait; a run that is
+  // still going keeps it open; twice no answer at all gives up.
+  async function checkStalledRun(context, body, headers, stall) {
+    if (!registry.isAuthCurrent(context)) return undefined;
+    let result = null;
+    try {
+      result = await App.withRequestDeadline(signal => window.streamSSERequest('/agent', { ...body, recover_only: true },
+        signal, {}, { headers }), { timeoutMs: 15000 });
+    } catch (_) { /* counted below */ }
+    if (result?.data?.turn) return result;
+    if (result?.data?.recovery_state === 'running') { stall.misses = 0; return undefined; }
+    if (++stall.misses >= 2) throw new Error('The connection is taking too long. Please try again.');
+    return undefined;
   }
   function syncComposer() {
     const agent = selectedMode() === 'agent';
@@ -813,12 +861,12 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
     App.composer?.expand?.();
   }
-  async function send(recovery = null) {
+  async function send(recovery = null, { retry = null } = {}) {
     if (recovery) return recoverAnswer(recovery);
     if (!canUse()) { App.showPopup?.("Sign in to use Agent."); return; }
     const input = document.getElementById("questionInput");
-    const draft = input?.value || "";
-    const question = recovery?.question || String(App.quote?.compose?.(draft) ?? draft).trim();
+    const draft = retry ? retry.question : input?.value || "";
+    const question = retry ? String(retry.question || "").trim() : String(App.quote?.compose?.(draft) ?? draft).trim();
     if (!question) return;
     const settings = recovery?.config.agentSettings || {
       ...selection(), reasoning_effort: document.getElementById("agentReasoningEffort")?.value || "default",
@@ -831,7 +879,7 @@
     if (!catalog || catalogStatus !== 'ready' || !catalog.models.some(model => model.id === settings.model_id && model.available !== false)) {
       App.showPopup?.("Choose an available agent model before sending."); return;
     }
-    const basis = recovery ? recovery.basis : registry.getSelectedConversationBasis();
+    const basis = retry ? retry.basis || null : registry.getSelectedConversationBasis();
     if (basis && (!basis.chatId || basis.continuationUnavailable)) {
       App.showPopup?.("Reopen this saved chat before continuing."); return;
     }
@@ -839,19 +887,28 @@
     try {
       context = registry.create({
         question, mode: "Agent", basis, followup: Boolean(basis),
-        attachments: window.getAttachmentsPayload?.() || [], attachmentMeta: App.attachments?.messageMeta?.() || [],
+        attachments: retry ? [] : window.getAttachmentsPayload?.() || [],
+        attachmentMeta: retry ? retry.attachmentMeta : App.attachments?.messageMeta?.() || [],
         requestIdentity: recovery?.requestIdentity,
-        bookmarkId: recovery?.bookmark.id || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
+        bookmarkId: retry?.bookmarkId || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
           deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
           agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "balanced", autonomy: "guided" },
-          googleSelection: App.agentGoogle?.selection() || null, googleDataConsent: App.agentGoogle?.consent() === true },
-        metadata: { draftQuestion: draft, quotedContext: App.quote?.text?.() || '',
+          googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
+          googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
+        metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
+          ...(retry ? { fileIds: retry.fileIds } : {}),
           agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
         usage: { status: "simulation", key: null },
       });
     } catch (error) { App.showPopup?.(error.message); return; }
+    if (retry?.runId) {
+      // The new run takes over the failed run's sidebar row.
+      const failed = registry.get(retry.runId);
+      if (failed) failed.bookmark.uiReady = true;
+      document.querySelector(`.bookmark.run-entry[data-run-id="${cssId(retry.runId)}"]`)?.remove();
+    }
     if (context.config.googleDataConsent) App.agentGoogle?.resetConsent();
     if (basis?.currentTurn) context.historyTurns.push(basis.currentTurn);
     context.controllers.query = new AbortController();
@@ -866,19 +923,19 @@
       restoreUnsentDraft(context);
     };
     registry.setStatus(context.runId, "running");
-    if (!recovery) {
+    if (!recovery && !retry) {
       App.clearQuestionDraft?.();
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
       App.quote?.clear?.();
     }
     App.composer?.collapse?.({ force: true });
-    if (!recovery) App.revealSentMessage?.();
+    if (!recovery && !retry) App.revealSentMessage?.();
     let timer, terminalBudget = false;
     try {
       const token = await App.withRequestDeadline(() => window.auth.currentUser.getIdToken(), { signal });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       const headers = { Authorization: `Bearer ${token}` };
-      let chatId = recovery?.metadata.chatId || basis?.chatId;
+      let chatId = recovery?.metadata.chatId || retry?.chatId || basis?.chatId;
       if (!chatId) {
         const { response, data } = await App.withRequestDeadline(async requestSignal => {
           const response = await fetch("/chats", {
@@ -893,13 +950,13 @@
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       context.metadata.chatId = chatId;
       if (context.attachments.length && !App.agentWorkspace) throw new Error("File uploads are unavailable. Reload and retry.");
-      await App.agentWorkspace?.upload(context, headers, signal);
+      if (!retry) await App.agentWorkspace?.upload(context, headers, signal);
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       context.metadata.requestSent = true;
       context.phase = "answers";
       context.consensus.status = "streaming";
       registry.update(context.runId, () => {});
-      const result = await App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", {
+      const body = {
         chat_id: chatId, question, client_request_id: context.requestIdentity,
         bookmark_id: context.bookmark.id,
         recover_only: Boolean(recovery),
@@ -911,7 +968,9 @@
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
-      }, requestSignal, {
+      };
+      const stall = { misses: 0 };
+      const result = await App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal, {
         accepted: { receive(event) {
           if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
             context.metadata.agentTurnId = event.turn_id;
@@ -970,7 +1029,7 @@
           context.consensus.streamText += text;
           if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
         } },
-      }, { headers, onProgress }), { signal, timeoutMs: 45000 });
+      }, { headers, onProgress }), { signal, timeoutMs: 45000, onIdle: () => checkStalledRun(context, body, headers, stall) });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       receiveBudget(result.data?.token_budget, context.auth.uid);
       terminalBudget = Boolean(result.data?.token_budget);

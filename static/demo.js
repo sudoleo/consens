@@ -954,13 +954,24 @@ document.getElementById("newRunButton")?.addEventListener("click", () => {
   if (sendBtn) sendBtn.disabled = false;
 });
 
+// demo.js loads before the app bundle. The landing-page auto-start can fire
+// before app-core.js has run on a slow connection, so wait for it first.
+function whenAppReady() {
+  if (window.App?.modelPrefs || document.readyState === "complete") return Promise.resolve();
+  return new Promise(resolve => {
+    document.addEventListener("DOMContentLoaded", resolve, { once: true });
+    window.addEventListener("load", resolve, { once: true });
+  });
+}
+
 async function runDemoFlow() {
+  await whenAppReady();
   // The demonstration always uses the complete Balanced lineup, not the
   // intersection of its fixture authors with a previous Daily/Custom choice.
   window.App.selectConsensusPreset?.('balanced');
   window.App.answerReader?.reset?.();
   const balanced = window.CONSENSUS_PRESETS?.find(preset => preset.id === 'balanced');
-  activeDemoModels = window.App.modelPrefs.filter(pref => balanced?.models?.[pref.provider]).map(pref => pref.key);
+  activeDemoModels = (window.App.modelPrefs || []).filter(pref => balanced?.models?.[pref.provider]).map(pref => pref.key);
   activeDemoData = buildDemoDataForModels(activeDemoModels);
   // Agent (the default, also for guests who come from the landing page)
   // plays an Agent turn; a chosen Compare or Consensus plays that mode.

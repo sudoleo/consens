@@ -283,6 +283,11 @@ describe("single-model agent chat", () => {
     d.querySelector('#questionInput').value = 'Question';
     const sending = w.App.agentChat.send();
     await vi.waitFor(() => expect(signal).toBeDefined());
+    // Before giving up, the server is asked twice; it knows no saved answer.
+    w.streamSSERequest.mockResolvedValue({ ok: false, status: 404, streamed: false,
+      data: { error: 'No saved answer is available for this request.', code: 'answer_unavailable', recoverable: false } });
+    const first = timeout; first();
+    await vi.waitFor(() => expect(timeout).not.toBe(first));
     timeout(); await sending;
     const run = w.App.runRegistry.visible();
     expect(signal.aborted).toBe(true);
@@ -292,6 +297,68 @@ describe("single-model agent chat", () => {
     expect(d.querySelector('#agentRecover').hidden).toBe(false);
     dom.window.close();
   });
+  it('keeps a silent stream open while the server reports the run still running and adopts its saved answer', async () => {
+    const {window:w,document:d,dom} = boot();
+    await selectAgent(w);
+    const originalTimer = w.setTimeout.bind(w);
+    let timeout, signal;
+    w.setTimeout = (fn, ms, ...args) => ms === 45000 ? (timeout = fn, 999) : originalTimer(fn, ms, ...args);
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming) => { signal = incoming; return new Promise(() => {}); });
+    d.querySelector('#questionInput').value = 'Question behind a buffering proxy';
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    const sent = w.streamSSERequest.mock.calls[0][1];
+    w.streamSSERequest.mockResolvedValueOnce({ ok: false, status: 409, streamed: false,
+      data: { error: 'This request is still running.', code: 'request_running', recoverable: true, recovery_state: 'running' } });
+    const first = timeout; first();
+    await vi.waitFor(() => expect(timeout).not.toBe(first));
+    expect(signal.aborted).toBe(false);
+    expect(w.App.runRegistry.visible().status).toBe('running');
+    w.streamSSERequest.mockResolvedValueOnce({ ok: true, status: 200, streamed: false, data: { response: 'Saved answer',
+      chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32), bookmark_meta: { id: 'saved' },
+      turn: { id: 'b'.repeat(32), question: sent.question, consensus: 'Saved answer', status: 'completed', execution_mode: 'agent' } } });
+    timeout(); await sending;
+    const checks = w.streamSSERequest.mock.calls.slice(1).map(call => call[1]);
+    expect(checks).toHaveLength(2);
+    // Same identity, no new paid call.
+    for (const check of checks) expect(check).toEqual({ ...sent, recover_only: true });
+    expect(signal.aborted).toBe(true);
+    expect(w.App.runRegistry.visible().status).toBe('succeeded');
+    expect(w.App.runRegistry.visible().consensus.text).toBe('Saved answer');
+    dom.window.close();
+  });
+
+  it('offers Retry after a failed run and sends the same message again in the same chat', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_u, _p, _s, handlers) => {
+      handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'c'.repeat(32) });
+      return { ok: false, status: 200, streamed: true, data: { error: 'This model is busy at its provider right now.',
+        code: 'provider_rate_limited', retry_after: 30, recoverable: false } };
+    });
+    d.getElementById('questionInput').value = 'Rate this site';
+    await w.App.agentChat.send();
+    const failed = w.App.runRegistry.visible();
+    expect(failed.status).toBe('failed');
+    failed.metadata.fileIds = ['f'.repeat(32)];
+    w.App.agentChat.project(failed);
+    const buttons = [...d.querySelectorAll('#agentAnswerErrorActions button')];
+    expect(buttons.map(b => b.textContent)).toEqual(['Retry', 'Choose another model']);
+    d.getElementById('questionInput').value = 'An unrelated draft';
+    buttons[0].click();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().status).toBe('succeeded'));
+    const [first, second] = w.streamSSERequest.mock.calls.map(call => call[1]);
+    expect(second).toMatchObject({ chat_id: first.chat_id, question: 'Rate this site', bookmark_id: first.bookmark_id,
+      file_ids: ['f'.repeat(32)], recover_only: false });
+    expect(second.client_request_id).not.toBe(first.client_request_id);
+    // One chat creation, the composer's own draft untouched, one sidebar row.
+    expect(w.fetch.mock.calls.filter(([url]) => url === '/chats')).toHaveLength(1);
+    expect(d.getElementById('questionInput').value).toBe('An unrelated draft');
+    expect(d.querySelector(`.bookmark.run-entry[data-run-id="${failed.runId}"]`)).toBeNull();
+    dom.window.close();
+  });
+
   it('explains allowance waiting outside the collapsed activity details', () => {
     const {window:w,document:d,dom} = boot();
     const host = d.querySelector('#agentAnswerActivity');

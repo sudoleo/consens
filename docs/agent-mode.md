@@ -418,6 +418,20 @@ Nach einem Transportabbruch bleibt eine reine Wiederherstellungsabfrage möglich
 Enthält das Fehlerereignis bereits einen gespeicherten Turn samt Bookmark,
 übernimmt die Oberfläche beides sofort und zeigt den Fehler weiterhin an.
 
+Unter jedem Abbruch nach dem Absenden (Provider busy, Timeout, verlorene
+Verbindung, gespeicherter Fehl-Turn) steht „Retry“: Es schickt dieselbe Frage
+mit denselben Dateien als neuen Turn in denselben Chat und denselben Bookmark,
+mit neuer Request-Identität und dem *jetzt* gewählten Modell. Bei
+`provider_rate_limited`/`provider_unavailable` steht daneben „Choose another
+model“. Budget-Absagen behalten ihre eigenen Aktionen; ein vor dem Start
+abgelehnter Text kommt wie bisher ins Eingabefeld zurück (kein Retry).
+
+Kommt 45 s lang kein Byte über den Stream, gibt der Browser nicht sofort auf:
+Manche Netze (Firmen-Proxys, Virenscanner) halten einen Event-Stream bis zum
+Ende zurück. Er fragt per `recover_only` mit derselben Identität nach. Ein
+gespeicherter Turn (fertig oder fehlgeschlagen) beendet das Warten,
+`recovery_state: running` hält den Stream offen, zweimal ohne Turn bricht ab.
+
 Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
 Tool-Aufrufe erhalten eine dezente Statuszeile. Thinking bleibt geschlossen.
 Die Agentenleiste öffnet sanft und zeigt gemessene Input+Output-Tokens statt

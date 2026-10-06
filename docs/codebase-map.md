@@ -2706,6 +2706,14 @@ Das Fehler-SSE kann `saved_answer` samt `bookmark_meta` enthalten: Die UI
 Ohne bestätigten Bookmark steuert `recovery_state` (`running`, `saved`,
 `unavailable`) die Wiederherstellungsaktion; unbekannter Zustand heißt
 „Check saved answer“, laufender Zustand „Check run status“.
+Stille im `/agent`-Stream (45 s ohne Byte) ruft `onIdle` von
+`App.withRequestDeadline` (`request-deadline.js`) auf: `checkStalledRun` in
+`agent-chat.js` fragt mit `recover_only` und derselben Identität nach; ein
+gespeicherter Turn beendet den Lauf, `running` wartet weiter, zweimal kein Turn
+bricht ab (Firmen-Proxys puffern SSE). Fehlerhinweise tragen die Aktion
+`retry` (`retryFailed` → `send(null, {retry})`): gleiche Frage, `file_ids`,
+`chat_id` und Bookmark, neue Request-Identität, aktuelles Modell; die Zeile des
+gescheiterten Laufs in der Sidebar wird übernommen.
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
 Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
 enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
