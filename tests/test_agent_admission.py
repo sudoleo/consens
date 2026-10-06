@@ -208,49 +208,34 @@ def test_consensus_default_overrides_legacy_prompt_and_disabled_workers_are_not_
     loop = make_loop(store, script)
     system = loop.messages[0]["content"]
     assert "consens.io Agent Beta" in system and "Send every user question" in system
-    assert "Web search may first clarify" in system and "indispensable" in system
+    assert "Do not research before the first comparison" in system and "indispensable" in system
     assert "Available worker models" not in system
     list(loop.run())
     assert all("consens.io's Consensus pipeline" in messages[0]["content"] for messages in script.prompts)
 
 
-def test_server_search_final_answer_resumes_consensus_without_repeating_search(store):
+def test_routing_never_searches_before_the_first_comparison(store):
+    """Shared findings would hand every answer model the same sources."""
     script = Script()
     base = type(script.factory())
     root_calls = []
-    class Researched(base):
+    class Recording(base):
         def stream(self, *, model, messages, **kwargs):
             if self.step_id.startswith('completion:'):
                 root_calls.append(kwargs['native_searches'])
-            if self.step_id == 'completion:0':
-                self.text, self.finish_reason = 'Research findings.', 'stop'
-                self.sources = [{'url': 'https://example.org/current', 'title': 'Current evidence'}]
-                self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 20}, model)
-                yield {'type': 'delta', 'text': self.text}
-                return
-            if self.step_id == 'completion:1':
-                assert kwargs['native_searches'] == 0
-                assert 'https://example.org/current' in messages[-1]['content']
-                self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 20}, model)
-                self.tool_calls = [{'id': 'compare', 'type': 'function', 'function': {'name': 'compare_models',
-                    'arguments': json.dumps({'question': 'Evaluate option', 'context': 'Research findings. https://example.org/current', 'reason': 'Answer the question', 'next_step': 'more_work'})}}]
-                self.finish_reason = 'tool_calls'
-                return
             yield from super().stream(model=model, messages=messages, **kwargs)
     loop = make_loop(store, script)
     loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Researched
+    loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Recording
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    # The first routing step researches (three rounds); after the handoff and
-    # once a comparison exists, routing searches at most once.
-    assert root_calls == [3, 0, 1, 0]
+    # After a comparison, routing may search once (to settle a conflict).
+    assert root_calls[0] == 0 and set(root_calls[1:]) <= {0, 1} and 1 in root_calls
     assert saved['status'] == 'completed' and saved['agent_review']['status'] == 'succeeded'
-    assert saved['consensus'] != 'Research findings.'
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 0
 
 
-def test_parallel_comparison_takes_a_smaller_search_instead_of_waiting(store):
+def test_parallel_comparison_keeps_its_search_instead_of_waiting(store):
     from app.services.agent_tools import search_tools
     entered, finish, waiting = threading.Event(), threading.Event(), threading.Event()
     searches = []
@@ -285,9 +270,10 @@ def test_parallel_comparison_takes_a_smaller_search_instead_of_waiting(store):
         assert entered.wait(5)
         second = pool.submit(call)
         try:
-            # The sibling starts at once, without search, while the first still runs.
+            # The sibling starts at once, with the same search, while the first
+            # still runs: comparison answers do not reserve their search tokens.
             second.result(timeout=5)
-            assert searches == [1, 0] and not waiting.is_set()
+            assert searches == [1, 1] and not waiting.is_set()
         finally:
             finish.set()
         first.result(timeout=5)

@@ -85,7 +85,7 @@ class AgentSessionStore:
             raise ValueError("Invalid agent identity")
         return self._turn_ref(uid, chat_id, turn_id).collection("agents").document(agent_id)
 
-    def _claim_delegated(self, uid, chat_id, turn_id, model, *, step, run_token, policy, reservation):
+    def _claim_delegated(self, uid, chat_id, turn_id, model, *, step, run_token, policy, reservation, overdraft=False):
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id, step)
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
@@ -160,7 +160,8 @@ class AgentSessionStore:
             spend = min(protected, tokens) if can_spend else 0
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
-            daily = agent_quota.reserve(daily, tokens - spend, limit=token_limit)
+            daily = agent_quota.reserve(daily, tokens - spend, limit=token_limit,
+                                        overdraft=overdraft and bool(limits.get("account_budget_only")))
             if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")

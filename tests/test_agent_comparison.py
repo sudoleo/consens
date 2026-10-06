@@ -300,10 +300,10 @@ def _search(kwargs):
     return next((t["parameters"] for t in kwargs.get("tools") or [] if t.get("type") == "openrouter:web_search"), None)
 
 
-# "full" answers get up to three rounds while the budget covers every asked
-# model at that depth (fewer rounds as it shrinks); "quick" answers search once.
+# "full" answers may search three rounds, "quick" answers once, whatever the
+# account's remaining budget: their search is booked, not reserved.
 @pytest.mark.parametrize("depth,limit,rounds", [("quick", 10_000_000, 1), ("full", 10_000_000, 3),
-                                                ("full", 250_000, 1), ("full", 1_000_000, 2)])
+                                                ("full", 250_000, 3), ("full", 60_000, 3)])
 def test_every_model_searches_with_one_configuration_and_judges_never_search(store, depth, limit, rounds):
     from app.services.llm.engines import web_search_tool
     script = Script(direct=True, depth=depth)
@@ -341,12 +341,54 @@ def test_every_model_searches_with_one_configuration_and_judges_never_search(sto
     assert all(tool["engine"] == "auto" for _, tool, _ in comparisons.values())
     told = "use web search once" if rounds == 1 else f"up to {rounds} search rounds"
     assert all("Current date:" in prompt and told in prompt for *_, prompt in comparisons.values())
-    # The orchestrator researches once for every answer model before comparing.
-    [(_, _, rounds, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
-    assert rounds == 3 and tool == expected("anthropic", 3)
+    # The orchestrator never researches before the first comparison: shared
+    # findings would hand every answer model the same sources.
+    [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
+    assert searched == 0 and tool is None
     assert all(rounds == 0 for kind, _, rounds, _, _ in seen if kind in {"judge", "answer"})
     assert any(kind == "judge" for kind, *_ in seen)
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_a_comparison_that_overdraws_the_day_still_reaches_its_checked_answer(store):
+    """Search is booked, not reserved: a "full" comparison keeps all its rounds
+    on a small allowance, and synthesis and judges finish beyond the limit.
+    The next message is refused instead."""
+    from app.services.llm.provider_runtime import AnalysisBudget
+    script = Script(direct=True, depth="full")
+    rounds, base = [], script.factory
+    def factory():
+        completion = base()
+        stream = completion.stream
+        def heavy(*, model, messages, **kwargs):
+            yield from stream(model=model, messages=messages, **kwargs)
+            if not completion.step_id.startswith("completion:") and not model.request_config.get("response_format"):
+                rounds.append(kwargs["native_searches"])
+                # Three rounds of search results, measured after the call.
+                completion.usage = measured_usage({"prompt_tokens": 40_000, "completion_tokens": 2_000}, model)
+        completion.stream = heavy
+        return completion
+    script.factory = factory
+    limit = 60_000
+    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
+    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4-flash"})
+    loop.policy = AgentPolicy.for_chat(loop.config)
+    loop.costs.policy = loop.policy
+    loop.budget = AnalysisBudget(unlimited=True)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert rounds == [3, 3]
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
+    ledger = agent_quota.snapshot(store.db, UID)
+    assert ledger["used"] > limit and ledger["reserved"] == 0
+    assert agent_quota.remaining_tokens(store.db, UID) == 0
+
+
+def test_overdraft_admits_a_reservation_beyond_the_limit_only_when_asked():
+    from app.services.agent_quota import AgentTokenBudgetExceeded, reserve
+    with pytest.raises(AgentTokenBudgetExceeded):
+        reserve({"used": 900}, 200, limit=1000)
+    assert reserve({"used": 900}, 200, limit=1000, overdraft=True)["reserved"] == 200
 
 
 def test_search_steps_down_by_rounds_and_reserves_one_bound_per_round():
@@ -363,6 +405,8 @@ def test_search_steps_down_by_rounds_and_reserves_one_bound_per_round():
         # Same bound for every family: one round adds at most its search input
         # (in its continuation) plus one more output segment.
         assert one - 2 * none <= SEARCH_INPUT_TOKENS
+        # Comparison answers reserve no search tokens: settlement books them.
+        assert costs.estimate(model, messages, native_searches=3, soft_search=True)[0] == none
     # Never the whole context window; a small window caps the search input instead.
     assert estimate(native, 1) < native.context_length // 2
     small = replace(native, context_length=20_000, max_output_tokens=4_000)
@@ -381,6 +425,9 @@ def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remain
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
             yield {"type": "delta", "text": self.text}
     loop = make_loop(store, Script())
+    # Without comparison tools the first step may search (with them it never
+    # does before the first comparison).
+    loop.comparison = None
     loop.factory = Completion
     loop.search_remaining = 1
     if context_room is not None:
@@ -747,7 +794,7 @@ def quick_quorum(monkeypatch):
 
 
 def test_answer_starts_at_quorum_and_a_late_answer_still_feeds_the_check(store, quick_quorum):
-    script = Straggler(release_on_answer=True)
+    script = Straggler(release_on_answer=True, depth="quick")
     loop = make_loop(store, script, models=THREE)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
@@ -763,7 +810,7 @@ def test_answer_starts_at_quorum_and_a_late_answer_still_feeds_the_check(store, 
 
 
 def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick_quorum):
-    script = Straggler(release_on_answer=False)
+    script = Straggler(release_on_answer=False, depth="quick")
     loop = make_loop(store, script, models=THREE)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
@@ -778,7 +825,7 @@ def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick
 
 
 def test_text_of_a_model_stopped_mid_answer_is_kept_as_incomplete_but_never_checked(store, quick_quorum):
-    script = Straggler(release_on_answer=False, partial="Gemini: the first half of an answer")
+    script = Straggler(release_on_answer=False, partial="Gemini: the first half of an answer", depth="quick")
     loop = make_loop(store, script, models=THREE)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
@@ -818,7 +865,7 @@ def test_partial_text_gives_way_before_the_review_exceeds_its_storage(store):
 
 def test_quorum_sizes():
     from app.services.agent_comparison import quorum_size
-    assert [quorum_size(n, "full") for n in (2, 3, 4, 6)] == [2, 2, 3, 5]
+    assert [quorum_size(n, "full") for n in (2, 3, 4, 6)] == [2, 3, 4, 6]
     assert [quorum_size(n, "quick") for n in (2, 3, 4, 6)] == [2, 2, 2, 3]
 
 
@@ -852,7 +899,7 @@ def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store, qui
                     yield from super().stream(model=model, messages=messages, **kwargs)
             return Completion()
 
-    script = Failing(release_on_answer=False)
+    script = Failing(release_on_answer=False, depth="quick")
     loop = make_loop(store, script, models=THREE)
     with pytest.raises(Exception):
         list(loop.run())
@@ -904,11 +951,24 @@ def test_waiting_for_every_model_puts_a_slow_answer_into_the_text(store, quick_q
     assert not any(a.get("late") for a in comparison["answers"])
 
 
+def test_thorough_questions_wait_for_the_slowest_model_by_default(store, quick_quorum):
+    """The most careful (slowest) model of a "full" comparison is never cut."""
+    import threading
+    script = Straggler(release_on_answer=False, depth="full")
+    threading.Timer(.4, script.release.set).start()
+    loop = make_loop(store, script, models=THREE)
+    list(loop.run())
+    comparison = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["comparisons"][0]
+    assert "second option is cheaper" in script.synthesis_evidence
+    assert sorted(comparison["synthesis_providers"]) == ["anthropic", "gemini", "openai"]
+    assert not any(a.get("late") for a in comparison["answers"])
+
+
 def test_quorum_modes():
     from app.services.agent_comparison import quorum_size
     assert [quorum_size(6, d, "all") for d in ("quick", "full")] == [6, 6]
     assert [quorum_size(6, d, "fast") for d in ("quick", "full")] == [3, 3]
-    assert [quorum_size(6, d, "balanced") for d in ("quick", "full")] == [3, 5]
+    assert [quorum_size(6, d, "balanced") for d in ("quick", "full")] == [3, 6]
 
 
 def _votes(store):

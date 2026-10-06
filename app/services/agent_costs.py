@@ -64,12 +64,12 @@ class RunCosts:
             self.cost -= reservation[1]
             self.calls -= 1
 
-    def reserve(self, model, messages, tools=(), *, native_searches=0):
+    def reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False):
         with self._lock:
-            return self._reserve(model, messages, tools, native_searches=native_searches)
+            return self._reserve(model, messages, tools, native_searches=native_searches, soft_search=soft_search)
 
-    def _reserve(self, model, messages, tools=(), *, native_searches=0):
-        tokens, cost = self.estimate(model, messages, tools, native_searches=native_searches)
+    def _reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False):
+        tokens, cost = self.estimate(model, messages, tools, native_searches=native_searches, soft_search=soft_search)
         if not self.policy.account_budget_only and (self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
                 or self.cost + cost > self.policy.max_cost_nano_usd):
             raise AnalysisBudgetExceeded("The agent's token or simulated cost budget was reached.")
@@ -78,7 +78,13 @@ class RunCosts:
         self.calls += 1
         return tokens, cost
 
-    def estimate(self, model, messages, tools=(), *, native_searches=0):
+    def estimate(self, model, messages, tools=(), *, native_searches=0, soft_search=False):
+        """Worst-case tokens and cost of one call.
+
+        ``soft_search`` (comparison answers): the search must still fit the
+        context window, but its tokens are not reserved; settlement books them
+        as measured. Otherwise a worst-case bound for several rounds and six
+        parallel answers exceeds a whole daily allowance."""
         from app.services.agent_tokens import input_estimate
         inputs = (input_estimate(messages, tools, model.request_config) if self.policy.account_budget_only
                   else input_bound(messages, tools))
@@ -90,6 +96,9 @@ class RunCosts:
             room = model.context_length - model.max_output_tokens - inputs
             if room <= 0:
                 raise AnalysisBudgetExceeded("The selected model's search context limit was reached.")
+            if soft_search:
+                tokens, cost = self.estimate(model, messages, tools)
+                return tokens, cost + native_searches * (search_cost_nanos(model) or 10_000_000)
             inputs += min(native_searches * SEARCH_INPUT_TOKENS, room)
         # Account conservatively for native model continuations hidden behind
         # the provider API. Do not advertise max_results as a native input cap.

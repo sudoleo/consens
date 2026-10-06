@@ -152,10 +152,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             raise ValueError("This conversation is too long for the selected model. Choose a model with a larger context or start a new chat.")
         return messages
 
-    def claim(self, uid, chat_id, turn_id, model: AgentModel, *, step="completion:0", run_token="", policy=None, reservation=None):
+    def claim(self, uid, chat_id, turn_id, model: AgentModel, *, step="completion:0", run_token="", policy=None, reservation=None,
+              overdraft=False):
         if reservation is not None:
             return self._claim_delegated(uid, chat_id, turn_id, model, step=step, run_token=run_token,
-                                         policy=policy, reservation=reservation)
+                                         policy=policy, reservation=reservation, overdraft=overdraft)
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id, step)
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         index = int(step.split(":")[1])

@@ -107,7 +107,8 @@ Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
 einfriert (Teil der Request-Identität bei Recovery): **Answer depth**
 (`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
 Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
-(`balanced` wie unten beschrieben, `fast` ab der Hälfte der Antworten mit 1,1-facher
+(`balanced` wie unten beschrieben, Label „Every model on thorough questions“,
+`fast` ab der Hälfte der Antworten mit 1,1-facher
 Nachfrist und mindestens einer Sekunde, `all` wartet auf jedes Modell) und
 **Agent freedom** (`autonomy`, siehe unten). „Check contradictions“ bleibt im
 Reiter Runs und im Composer.
@@ -176,10 +177,11 @@ und der Antwortschritt starten bei Konkurrenz mit einer kleineren, noch
 passenden Grenze (mindestens `MAX_TOKENS`), statt auf das Settlement anderer
 Aufrufe zu warten.
 
-Die Synthese wartet nicht auf das langsamste Modell. Sobald das Quorum vorliegt
-(`full`: alle bis auf eines, `quick`: die Hälfte, jeweils mindestens zwei),
-bekommen Nachzügler noch das 1,5-fache (`quick`: 1,25-fache) der Zeit bis zum
-Quorum, mindestens zwei Sekunden. Danach beginnt die Synthese mit den vorhandenen
+Bei `full` wartet die Synthese im Standard (`balanced`) seit 2026-10-06 auf
+jedes Modell: Das sorgfältigste Modell recherchiert oft am längsten und darf
+nicht wegfallen; wer schneller will, wählt `fast`. Bei `quick` gilt das Quorum
+(die Hälfte, mindestens zwei). Danach bekommen Nachzügler noch das 1,25-fache
+der Zeit bis zum Quorum, mindestens zwei Sekunden. Dann beginnt die Synthese mit den vorhandenen
 Antworten (`synthesis_providers`). Laufende Modelle stehen bis dahin als
 `pending_models` im Review. Eine Antwort, die während der Synthese eintrifft,
 wird mit `late: true` markiert: Sie gehört zur Prüfbasis von Differences und
@@ -531,25 +533,27 @@ sicher nur auf Exa; ob die eigene Suche der Anbieter sie beachtet, ist nicht gar
 **Wer wie oft sucht.** Das ist die einzige Stellschraube, und sie ist eine
 Produktentscheidung, keine Modell-Sonderlösung:
 
-- Vergleichsmodelle: `quick` eine Runde, `full` seit 2026-10-06 bis zu drei
-  (`FULL_SEARCH_ROUNDS`). Das ist ein Budget, keine Pflicht: Das Modell
-  entscheidet selbst, ob es nach der ersten Suche nachfasst (Lücken,
-  widersprüchliche oder dünne Belege). `ComparisonTools._search_rounds` legt
-  die Obergrenze pro Vergleich einheitlich für alle gefragten Modelle fest: 3,
-  solange ihre Reservierungen zusammen in den Vergleichsanteil
-  (`COMPARISON_BUDGET_SHARE`) des Resttagesbudgets passen, sonst 2, sonst 1.
-  Ohne diese Vorab-Entscheidung würde erst die Zulassung einzelne späte Modelle
-  abstufen, und gleiche Fragen bekämen ungleich tiefe Recherche. Faustwerte
-  mit sechs Modellen und frischem Tagesbudget: Free eine, Plus zwei, Pro drei
-  Runden; weniger Modelle (freier Agent) bekommen entsprechend mehr. Der
+- Vergleichsmodelle (seit 2026-10-06): `quick` eine Runde, `full` bis zu drei
+  (`SEARCH_ROUNDS`), für jedes Konto und jede Antwort eines Vergleichs gleich.
+  Das ist ein Budget, keine Pflicht: Das Modell entscheidet selbst, ob es nach
+  der ersten Suche nachfasst (Lücken, widersprüchliche oder dünne Belege). Der
   Vergleich speichert die Obergrenze als `search_rounds`. Der Prompt
   (`agent_comparison.comparison_system_prompt`) nennt das Datum und die
   Rundenzahl, verlangt bei zeitabhängigen Fakten eine Suche mit Monat und Jahr
   in der Anfrage und erklärt Angaben im `context` ohne Quelle für ungeprüft.
-- Orchestrator: vor dem ersten Vergleich bis zu drei Runden
-  (`ORCHESTRATOR_SEARCH_ROUNDS`); die Funde gehen mit URLs als `context` an alle
-  Vergleichsmodelle, eigene Erinnerung an Produkte, Versionen oder Preise nicht.
-  Danach höchstens eine Runde pro Schritt.
+  Eine kontingentabhängige Rundenzahl ist bewusst vertagt.
+- Orchestrator: sucht vor dem ersten Vergleich **nie** (Code, nicht nur
+  Prompt: `searches_enabled` ist bis dahin aus). Bis 2026-10-06 recherchierte er
+  vorab bis zu drei Runden und gab die Funde als `context` an alle
+  Vergleichsmodelle; damit standen alle sechs auf denselben Quellen, und die
+  unabhängigen Perspektiven, der eigentliche Wert von consens.io, gingen
+  verloren. Der `context` trägt nur, was Nutzer und Gespräch geliefert haben;
+  eigene Erinnerung an Produkte, Versionen oder Preise nicht. Nach einem
+  Vergleich darf er höchstens eine Runde pro Schritt suchen, etwa um einen
+  konkreten Widerspruch zu klären. Die frühere Rückführung nach einer
+  Server-Suchantwort (`_consensus_search_handoff`) ist damit entfallen. Ein
+  gespeicherter Admin-Prompt mit der alten Anweisung wird vom Tool-Protokoll
+  ausdrücklich überstimmt.
 - Judges und der Antwortschritt suchen nie.
 
 Ohne Datum und Suche hatten sich fünf Vergleichsmodelle auf denselben
@@ -558,14 +562,23 @@ Modelle) — ein Scheinkonsens, den die Prüfung nicht erkennen kann.
 
 **Reservierung.** Jede Suchrunde reserviert für jedes Modell gleich
 `agent_costs.SEARCH_INPUT_TOKENS` (32k), höchstens so viel, wie das
-Kontextfenster noch fasst. Grundlage, gemessen 2026-10-01 pro Runde: eigene
+Kontextfenster noch fasst. Ausnahme seit 2026-10-06: **Vergleichsantworten
+reservieren ihre Suche nicht** (`soft_search`); sie muss nur ins
+Kontextfenster passen, die Abrechnung bucht den gemessenen Verbrauch. Die
+Worst-Case-Schranke für drei Runden und sechs parallele Antworten (≈ 1,5 M
+Tokens) läge sonst über einem ganzen Free-Tag, und die Zulassung hätte die
+zuletzt gestarteten Modelle abgestuft. Damit ein Vergleich, der das Tageslimit
+dabei überzieht, nicht bezahlte Antworten verwirft, dürfen nach dem Start
+eines Vergleichs Orchestrator, Antwortschritt und Judges das Limit überziehen
+(`agent_quota.reserve(..., overdraft=True)`, nur im Kontomodus); die nächste
+Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Grundlage, gemessen 2026-10-01 pro Runde: eigene
 OpenAI-Suche bis ≈ 11k Tokens, Exa (5 × 2000 Zeichen) ≈ 2,5k, Anthropic ≈ 2k,
 Google ≈ 0 (pro Anfrage abgerechnet). Die Abrechnung bucht den echten Verbrauch;
 eine ungewöhnlich große Runde kann das Tageslimit deshalb leicht überschreiten
 (weiche Grenze, kein Abbruch). Die Suchgebühr kommt aus dem Katalogpreis des
 Modells, sonst gilt die Exa-Pauschale. Passt eine Reservierung nicht, stuft
-`smaller_search` ab (mehrere Runden → eine → keine); parallele
-Vergleichsantworten stufen ab, statt auf Geschwister zu warten.
+`smaller_search` ab (mehrere Runden → eine → keine); Vergleichsantworten nur,
+wenn das Kontextfenster die Suche nicht fasst.
 
 **Messung 2026-10-01** (echter Vergleichs-Prompt, ZDR, Exa gegen eigene Suche):
 Faktenfragen („neuestes Modell von X“, Preise) beantworteten Gemini 3.5

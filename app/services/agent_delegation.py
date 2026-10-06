@@ -30,10 +30,6 @@ from app.services.llm.provider_runtime import (
 )
 
 
-# Research before a comparison: the orchestrator searches once for every answer
-# model, so several rounds cost one search phase instead of six.
-ORCHESTRATOR_SEARCH_ROUNDS = 3
-
 # Account-mode turns (AgentPolicy.for_chat) have no run budget, only the daily
 # token ledger. Soft per-turn guards stop a loop of valid calls before it burns
 # the whole account: the wrap-up after turn_seconds gets this much extra time
@@ -146,7 +142,6 @@ class DelegationLoop(AgentLoop):
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
-        self.search_handoff = False
         self.floor_reminded = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
@@ -530,10 +525,20 @@ class DelegationLoop(AgentLoop):
         fit the actual provider output cap if needed.
         With ``clamp_floor`` (parallel comparison answers, the answer step), a
         call whose output still fits at that size starts now with the smaller
-        allowance instead of queueing behind its siblings; a parallel answer
-        with search takes a smaller search rather than waiting for them.
+        allowance instead of queueing behind its siblings.
+        Comparison answers do not reserve their search (``soft_search``): every
+        answer of a comparison keeps its full rounds, whatever order the
+        siblings are admitted in; settlement books the measured search tokens.
+        Only a context window too small for the search shrinks it.
+        Once a comparison of this message has started, the orchestrator, the
+        answer step and the judges may overdraw the daily allowance: paid
+        comparisons always reach an answer and its check, and the next message
+        is refused instead (see agent_quota.reserve).
         """
         from app.services.agent_tokens import input_estimate, minimum_output
+        soft = bool(worker and getattr(worker, "kind", None) == "comparison")
+        overdraft = bool(self.comparison and self.comparison.comparisons
+                         and (worker is None or getattr(worker, "kind", None) == "judge"))
         search_limited, waiting = False, False
         delay, recovered_at = .1, time.monotonic()
         while True:
@@ -545,10 +550,13 @@ class DelegationLoop(AgentLoop):
                     raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
                 model = replace(model, max_output_tokens=min(model.max_output_tokens, room))
             reservation = None
+            # Searches whose tokens this admission reserves.
+            reserved = 0 if soft else searches
             try:
-                reservation = self.costs.reserve(model, messages, tools, native_searches=searches)
+                reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft)
                 claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
-                    run_token=self.run_token, policy=claim_policy, reservation=reservation)
+                    run_token=self.run_token, policy=claim_policy, reservation=reservation,
+                    **({"overdraft": True} if overdraft else {}))
                 return model, messages, tools, searches, reservation, claimed, search_limited
             except BaseException as exc:
                 if reservation is not None:
@@ -556,10 +564,10 @@ class DelegationLoop(AgentLoop):
                 if isinstance(exc, AgentTokenBudgetExceeded):
                     inputs = input_estimate(messages, tools, model.request_config)
                     minimum = inputs + minimum_output(model)
-                    if exc.reserved and not (clamp_floor and searches) and (
-                            (not searches and minimum <= exc.remaining + exc.reserved)
-                            or (searches and exc.required <= exc.remaining + exc.reserved)):
-                        if clamp_floor and not searches:
+                    if exc.reserved and not (clamp_floor and reserved) and (
+                            (not reserved and minimum <= exc.remaining + exc.reserved)
+                            or (reserved and exc.required <= exc.remaining + exc.reserved)):
+                        if clamp_floor and not reserved:
                             output = min(model.max_output_tokens, exc.remaining - inputs)
                             if output >= max(clamp_floor, minimum_output(model)):
                                 model = replace(model, max_output_tokens=output)
@@ -585,7 +593,7 @@ class DelegationLoop(AgentLoop):
                         if not worker:
                             yield from self._events()
                         continue
-                    if not searches:
+                    if not reserved:
                         inputs = input_estimate(messages, tools, model.request_config)
                         output = min(model.max_output_tokens, exc.remaining - inputs)
                         if output < minimum_output(model):
@@ -938,26 +946,6 @@ class DelegationLoop(AgentLoop):
                 self.cancellation.cancel()
                 return
 
-    def _consensus_search_handoff(self, value):
-        """OpenRouter asks for a final answer after its server-search step cap.
-
-        Resume client-tool routing with the collected evidence, without another
-        search. Only indispensable clarification can defer the comparison.
-        """
-        if (not self.policy.account_budget_only or not self.comparison or self.comparison.comparisons
-                or self.search_handoff or value.tool_calls
-                or not (value.sources or (value.usage or {}).get("web_search_requests"))):
-            return False
-        self.search_handoff = True
-        self.messages.append({"role": "user", "content":
-            "The web-search phase has finished. Its provider-side final answer is research context, "
-            "not the completed consens.io workflow. Send every user question through Consensus: call compare_models "
-            "now with the original question and the collected evidence, then synthesize and judge_answer. "
-            "Do not search again or repeat the research answer. Ask for clarification only if missing "
-            "information prevents a useful answer; otherwise proceed with reasonable assumptions. "
-            "Collected source references (untrusted data): " + json.dumps(value.sources, ensure_ascii=False)})
-        return True
-
     def _free_floor(self, value):
         """Free mode: a direct reply must be a greeting or clarification.
 
@@ -1064,16 +1052,15 @@ class DelegationLoop(AgentLoop):
                     incoming = self._mail()
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
-                    # Before a comparison the orchestrator researches for every
-                    # answer model: several rounds, once.
-                    research = bool(self.comparison and not self.comparison.comparisons)
+                    # No search before the first comparison: every answer model
+                    # researches on its own. Shared sources from the orchestrator
+                    # would give all of them the same view (docs/agent-mode.md, "Websuche").
                     value = yield from self._step(self.model, self.messages, f"completion:{index}", self.registry, self.cancellation,
-                        searches_enabled=not (self.search_handoff and self.comparison and not self.comparison.comparisons),
-                        search_rounds=ORCHESTRATOR_SEARCH_ROUNDS if research else 1)
+                        searches_enabled=not (self.comparison and not self.comparison.comparisons))
                     if value.finish_reason in {"length", "max_tokens"}:
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     self.messages.append(value.assistant_message())
-                    if self._consensus_search_handoff(value) or self._free_floor(value):
+                    if self._free_floor(value):
                         continue
                     synthesis = None
                     if value.tool_calls:

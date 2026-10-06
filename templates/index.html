@@ -1184,11 +1184,11 @@
                 <label for="agentQuorumSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer start</strong>
-                    <small>When Agent writes the answer. Models that answer later still take part in the check, and are marked as such; waiting for every model is slowest.</small>
+                    <small>When Agent writes the answer. By default it waits for every model on thorough questions, so the most careful research is never cut, and starts short ones once most models answered. Models that answer later still take part in the check.</small>
                   </span>
                   <span class="settings-select">
                     <select id="agentQuorumSelect">
-                      <option value="balanced" selected>When most models answered</option>
+                      <option value="balanced" selected>Every model on thorough questions</option>
                       <option value="fast">As soon as half answered</option>
                       <option value="all">After every model</option>
                     </select>

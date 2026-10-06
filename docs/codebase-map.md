@@ -2426,11 +2426,9 @@ vor dem ersten Vergleich bleibt promptgesteuert, keine semantische Servergaranti
 Deaktivierte Worker
 liefern weder Worker-Katalog noch Delegationsprompt im Chatkontext. Auch
 Vergleichsmodelle, Judges und Worker erhalten eine knappe Rollen-/Produkterklärung.
-Beendet der Server-Suchloop einen Request mit recherchiertem Text ohne Client-Tool,
-führt `_consensus_search_handoff` einmalig in die Client-Tool-Orchestrierung zurück:
-Antwort und Quellen bleiben im Kontext, die nächste Runde bietet keine neue
-Suche an. So verdrängt OpenRouters Abschlussaufforderung am Suchlimit nicht den
-Consensus-Ablauf; ausdrückliche Direktantwort-Ausnahmen bleiben möglich.
+Vor dem ersten Vergleich bietet `run` dem Orchestrator keine Websuche an
+(seit 2026-10-06): Jedes Vergleichsmodell recherchiert selbst, gemeinsame Funde
+würden alle auf dieselben Quellen setzen.
 Das Modell entscheidet selbst,
 ob es die ganze Frage oder mehrere begründete Teilfragen vergleicht. Es
 liefert einen neutralen Auftrag mit nötigem Kontext; alle Vergleichsmodelle
@@ -2445,7 +2443,8 @@ Direktantwort ohne Vergleich einmal zurück, damit jede Sachantwort auf zwei
 Familien und den Judges beruht.
 `ComparisonTools.compare` startet alle gefragten Vergleichsmodelle gleichzeitig in eigenen
 Threads (`compare_slots`, je Aufruf eine `ComparisonCancellation`) und wartet nur
-bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`).
+bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`);
+`full` wartet im Standard `balanced` auf alle Modelle.
 `_rebuild` normalisiert Quellen wie zuvor `fan_out_provider_answers` (das der
 Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
 `late`. `freeze_for_synthesis` legt `synthesis_providers` fest,
@@ -2459,11 +2458,12 @@ Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und `partial: tr
 Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst diese Teiltexte weg. Vergleichsmodelle
 erhalten keine Delegations-/Vergleichstools, aber Websuche
 (`call(..., kind="comparison", search_rounds=…)` → `_step(searches_enabled=True)`;
-`quick` eine Runde, `full` bis zu drei je nach Resttagesbudget,
-`_search_rounds`, Details in agent-mode.md „Websuche") und mit
+`SEARCH_ROUNDS`: `quick` eine Runde, `full` bis zu drei, für alle Konten gleich;
+ihre Suche wird gebucht, nicht reserviert, `soft_search`) und mit
 `comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
-Orchestrator recherchiert vor dem ersten Vergleich bis zu drei Runden
-(`ORCHESTRATOR_SEARCH_ROUNDS`). Suchkonfiguration (`search_tools`: eine für alle
+Orchestrator sucht vor dem ersten Vergleich nie. Nach dem Start eines Vergleichs
+dürfen Orchestrator, Antwortschritt und Judges das Tageslimit überziehen
+(`_admit_chat_step` → `claim(overdraft=True)`). Suchkonfiguration (`search_tools`: eine für alle
 Modelle, Engine `auto`, nur Grok fest Exa), Reservierung
 (`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte stehen
 ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“. Die Output-Grenze ist die Completion-Grenze des
