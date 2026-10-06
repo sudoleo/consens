@@ -2921,6 +2921,42 @@ body:not(.is-hero) .consensus-section::before {
   outline-offset: -2px;
 }
 
+/* Ein gesendetes Bild zeigt sich selbst, klein, statt als "IMG"-Plakette
+   mit Dateiname (attachments.js, imageTile). Name und Groesse stehen im
+   Tooltip/Alt-Text und in der Vorschau. */
+.message-attachments .attachment-chip.is-image-tile {
+  padding: 0;
+  background: none;
+}
+
+.message-attachments .is-image-tile .attachment-chip-preview {
+  padding: 0;
+}
+
+.message-attachments .is-image-tile .attachment-chip-meta {
+  display: none;
+}
+
+.message-attachments .is-image-tile .attachment-chip-thumb {
+  display: block;
+  width: auto;
+  height: 96px;
+  max-width: 180px;
+  min-width: 48px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--raise);
+  object-fit: cover;
+}
+
+.message-attachments .is-image-tile.is-thumb-loading .attachment-chip-thumb {
+  width: 96px;
+}
+
+.message-attachments .is-image-tile .attachment-chip-preview:hover .attachment-chip-thumb {
+  border-color: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
 .thread-ask-more {
   display: none;
   margin-top: 5px;

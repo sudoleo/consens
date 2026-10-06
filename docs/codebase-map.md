@@ -769,6 +769,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   deshalb 20 px über den Rand); (3) Chips an der Nachricht
   (`.message-attachments`) liegen auf `--ground` statt im Well und heben
   deshalb in `shell.css` auf `--raise` — dieselbe Kachel, ein anderer Grund.
+  Bilder an der Nachricht zeigen sich seit 2026-10-06 selbst als kleine
+  Kachel (`.is-image-tile`, 96 px hoch) statt als „IMG“-Plakette:
+  `attachments.js` (`imageTile`) nimmt direkt nach dem Senden das Bild aus dem
+  Composer (`sentImages`, Schlüssel Name|Größe|Typ, gefüllt in `messageMeta`),
+  später die gespeicherte Agent-Datei (`openFile`, einmal pro Datei,
+  `storedImages`); fehlt beides, bleibt die Plakette.
   Entfernen (×) ist an beiden Stellen derselbe neutrale Knopf, nie rot: es ist
   kein Alarm. Der einzige Farbträger ist die DeepSeek-Notiz in der
   Ampel-Gelbstufe `--partial-bg` (vorher ein eigenes Amber `#f59e0b`).

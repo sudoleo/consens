@@ -453,6 +453,55 @@
       return Math.max(1, Math.round(bytes / 1024)) + " KB";
     }
 
+    // Bilder einer gesendeten Nachricht zeigen sich als kleine Kachel statt
+    // als "IMG"-Plakette. Die Nachricht traegt nur Metadaten: direkt nach dem
+    // Senden kommt das Bild aus dem Composer (sentImages, Schluessel aus Name,
+    // Groesse und Typ), spaeter aus der gespeicherten Agent-Datei (einmal pro
+    // Datei geladen, storedImages). Fehlt beides, bleibt die Plakette.
+    const sentImages = new Map();
+    const storedImages = new Map();
+    function imageKey(att) {
+      return [att.name, att.size || 0, att.mime].join("|");
+    }
+    function storedImage(fileId) {
+      if (!storedImages.has(fileId)) {
+        const load = window.App?.agentWorkspace?.openFile
+          ? window.App.agentWorkspace.openFile(fileId).then(function (file) {
+            if ((file.mime || file.blob.type || "").indexOf("image/") !== 0) throw new Error("Not an image");
+            return URL.createObjectURL(file.blob);
+          })
+          : Promise.reject(new Error("Files are not available"));
+        // A failed load (chat changed, file removed) may be retried later.
+        load.catch(function () { storedImages.delete(fileId); });
+        storedImages.set(fileId, load);
+      }
+      return storedImages.get(fileId);
+    }
+    function imageTile(chip, att, icon) {
+      const img = document.createElement("img");
+      img.className = "attachment-chip-thumb";
+      img.alt = att.name;
+      img.decoding = "async";
+      chip.classList.add("is-image-tile");
+      chip.title = att.name;
+      const fallback = function () {
+        chip.classList.remove("is-image-tile", "is-thumb-loading");
+        img.replaceWith(icon);
+      };
+      const known = sentImages.get(imageKey(att));
+      if (known) {
+        img.src = known;
+      } else {
+        chip.classList.add("is-thumb-loading");
+        storedImage(att.fileId).then(function (url) {
+          img.addEventListener("load", function () { chip.classList.remove("is-thumb-loading"); }, { once: true });
+          img.src = url;
+        }, fallback);
+      }
+      img.addEventListener("error", fallback, { once: true });
+      return img;
+    }
+
     // Baut den Chip einer Datei. `readonly` macht ihn zum reinen
     // Anzeigeelement: kein Viewer, kein Entfernen — so haengt er an einer
     // bereits gesendeten Nachricht, deren Datei es nicht mehr gibt.
@@ -474,7 +523,9 @@
         const icon = document.createElement("span");
         icon.className = "attachment-chip-icon";
         icon.textContent = chipIconLabel(att.mime);
-        chip.appendChild(icon);
+        const tile = readonly && !att.previewOnly && att.mime.indexOf("image/") === 0
+          && (att.fileId || sentImages.has(imageKey(att)));
+        chip.appendChild(tile ? imageTile(chip, att, icon) : icon);
       }
 
       const meta = document.createElement("span");
@@ -590,6 +641,7 @@
         .filter(function (att) { return !att.previewOnly && att.data; })
         .map(function (att) {
           const meta = { name: att.name, mime: att.mime, size: att.size || 0 };
+          if (att.mime.indexOf("image/") === 0) sentImages.set(imageKey(meta), "data:" + att.mime + ";base64," + att.data);
           if (isDriveFile(att)) meta.origin = { source: "google_drive" };
           return meta;
         });
