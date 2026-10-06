@@ -542,18 +542,22 @@ Produktentscheidung, keine Modell-Sonderlösung:
   Rundenzahl, verlangt bei zeitabhängigen Fakten eine Suche mit Monat und Jahr
   in der Anfrage und erklärt Angaben im `context` ohne Quelle für ungeprüft.
   Eine kontingentabhängige Rundenzahl ist bewusst vertagt.
-- Orchestrator: sucht vor dem ersten Vergleich **nie** (Code, nicht nur
-  Prompt: `searches_enabled` ist bis dahin aus). Bis 2026-10-06 recherchierte er
-  vorab bis zu drei Runden und gab die Funde als `context` an alle
-  Vergleichsmodelle; damit standen alle sechs auf denselben Quellen, und die
-  unabhängigen Perspektiven, der eigentliche Wert von consens.io, gingen
-  verloren. Der `context` trägt nur, was Nutzer und Gespräch geliefert haben;
-  eigene Erinnerung an Produkte, Versionen oder Preise nicht. Nach einem
-  Vergleich darf er höchstens eine Runde pro Schritt suchen, etwa um einen
-  konkreten Widerspruch zu klären. Die frühere Rückführung nach einer
-  Server-Suchantwort (`_consensus_search_handoff`) ist damit entfallen. Ein
-  gespeicherter Admin-Prompt mit der alten Anweisung wird vom Tool-Protokoll
-  ausdrücklich überstimmt.
+- Orchestrator: darf vor dem ersten Vergleich bis zu drei Runden suchen
+  (`ORCHESTRATOR_SEARCH_ROUNDS`), aber nur, um die Anfrage zu verstehen und eine
+  präzise Aufgabe zu formulieren (unbekannter Begriff, Produkt, Ereignis, was
+  der Nutzer meint). Seit 2026-10-06 behält er die Funde für sich: keine
+  Funde, keine Quellen-URLs, keine Vorgaben wie „verwende Quelle X“ im
+  `context`. Vorher gingen seine Funde an alle Vergleichsmodelle; damit standen
+  alle sechs auf denselben Quellen, und die unabhängigen Perspektiven, der
+  eigentliche Wert von consens.io, gingen verloren. Der `context` trägt nur,
+  was Nutzer und Gespräch geliefert haben; eigene Erinnerung an Produkte,
+  Versionen oder Preise nicht. Gegenseitig abgesichert: Der
+  Vergleichsmodell-Prompt nennt Quellen im `context` ausdrücklich Hinweise, nie
+  Pflicht. Endet die Server-Suche mit einer Rechercheantwort, führt
+  `_consensus_search_handoff` ohne Quellenliste zum Vergleich zurück. Nach
+  einem Vergleich höchstens eine Runde pro Schritt, etwa um einen konkreten
+  Widerspruch zu klären. Ein gespeicherter Admin-Prompt mit der alten
+  Anweisung wird vom Tool-Protokoll ausdrücklich überstimmt.
 - Judges und der Antwortschritt suchen nie.
 
 Ohne Datum und Suche hatten sich fünf Vergleichsmodelle auf denselben

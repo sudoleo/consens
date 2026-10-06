@@ -313,10 +313,11 @@ def test_deletion_between_steps_preserves_accounting_and_fences_next_call(store,
     assert not store.active_ref(UID).get().to_dict()["leases"]
 
 
-def test_native_endpoint_replay_uses_receipt_and_never_searches_before_a_comparison(api, monkeypatch):
+def test_native_endpoint_replay_uses_receipt_and_does_not_search_again(api, monkeypatch):
     client, store, _ = api
     monkeypatch.setattr(AgentCompletion, "stream", REAL_STREAM)
     requests, _, _ = transport(monkeypatch, [
+        [packet({"content": "Research findings"}, finish="stop", usage=usage(1))],
         [packet({"content": "Found answer"}, finish="stop", usage=usage(0))],
     ])
     chat = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]
@@ -325,9 +326,8 @@ def test_native_endpoint_replay_uses_receipt_and_never_searches_before_a_compari
     assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
     replay = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
     assert replay.status_code == 200 and replay.json()["response"] == "Found answer"
-    assert len(requests) == 1
-    # No shared research before the first comparison (docs/agent-mode.md, "Websuche").
-    assert not any(tool.get("type") == "openrouter:web_search" for tool in requests[0].get("tools", []))
+    assert len(requests) == 2
+    assert not any(tool.get("type") == "openrouter:web_search" for tool in requests[1].get("tools", []))
     assert replay.json()["turn"]["agent_settings"]["tools"] == ["web_search"]
     assert client.post("/agent", json={**payload, "tools": ["shell"]}, headers=AUTH).status_code == 422
 

@@ -341,10 +341,14 @@ def test_every_model_searches_with_one_configuration_and_judges_never_search(sto
     assert all(tool["engine"] == "auto" for _, tool, _ in comparisons.values())
     told = "use web search once" if rounds == 1 else f"up to {rounds} search rounds"
     assert all("Current date:" in prompt and told in prompt for *_, prompt in comparisons.values())
-    # The orchestrator never researches before the first comparison: shared
-    # findings would hand every answer model the same sources.
+    # The orchestrator may research to phrase the question (its findings stay
+    # with it); sources named in a context are only hints to the answer models.
     [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
-    assert searched == 0 and tool is None
+    # Its own research is optional: a tight budget shrinks it (unlike the
+    # answer models' rounds above).
+    own = 3 if limit >= 250_000 else 1
+    assert searched == own and tool == expected("anthropic", own)
+    assert all("hints, never a requirement" in prompt for *_, prompt in comparisons.values())
     assert all(rounds == 0 for kind, _, rounds, _, _ in seen if kind in {"judge", "answer"})
     assert any(kind == "judge" for kind, *_ in seen)
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
@@ -425,9 +429,6 @@ def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remain
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
             yield {"type": "delta", "text": self.text}
     loop = make_loop(store, Script())
-    # Without comparison tools the first step may search (with them it never
-    # does before the first comparison).
-    loop.comparison = None
     loop.factory = Completion
     loop.search_remaining = 1
     if context_room is not None:

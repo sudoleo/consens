@@ -30,6 +30,11 @@ from app.services.llm.provider_runtime import (
 )
 
 
+# Before a comparison the orchestrator may search to understand and phrase the
+# question. Its findings stay with it: every answer model researches on its own
+# (docs/agent-mode.md, "Websuche").
+ORCHESTRATOR_SEARCH_ROUNDS = 3
+
 # Account-mode turns (AgentPolicy.for_chat) have no run budget, only the daily
 # token ledger. Soft per-turn guards stop a loop of valid calls before it burns
 # the whole account: the wrap-up after turn_seconds gets this much extra time
@@ -142,6 +147,7 @@ class DelegationLoop(AgentLoop):
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
+        self.search_handoff = False
         self.floor_reminded = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
@@ -946,6 +952,27 @@ class DelegationLoop(AgentLoop):
                 self.cancellation.cancel()
                 return
 
+    def _consensus_search_handoff(self, value):
+        """OpenRouter asks for a final answer after its server-search step cap.
+
+        Resume client-tool routing without another search. The research only
+        sharpens the question; it never becomes the answer models' sources.
+        """
+        if (not self.policy.account_budget_only or not self.comparison or self.comparison.comparisons
+                or self.search_handoff or value.tool_calls
+                or not (value.sources or (value.usage or {}).get("web_search_requests"))):
+            return False
+        self.search_handoff = True
+        self.messages.append({"role": "user", "content":
+            "The web-search phase has finished. Its provider-side final answer is your own background, "
+            "not the completed consens.io workflow. Send every user question through Consensus: call compare_models "
+            "now, then synthesize and judge_answer. Use what you learned only to phrase a precise, neutral task. "
+            "Do not put your findings, source URLs or instructions about which sources to use into the context: "
+            "every answer model researches independently. Do not search again or repeat the research answer. "
+            "Ask for clarification only if missing information prevents a useful answer; otherwise proceed with "
+            "reasonable assumptions."})
+        return True
+
     def _free_floor(self, value):
         """Free mode: a direct reply must be a greeting or clarification.
 
@@ -1052,15 +1079,16 @@ class DelegationLoop(AgentLoop):
                     incoming = self._mail()
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
-                    # No search before the first comparison: every answer model
-                    # researches on its own. Shared sources from the orchestrator
-                    # would give all of them the same view (docs/agent-mode.md, "Websuche").
+                    # Before a comparison the orchestrator may research to
+                    # understand the question: several rounds, once.
+                    research = bool(self.comparison and not self.comparison.comparisons)
                     value = yield from self._step(self.model, self.messages, f"completion:{index}", self.registry, self.cancellation,
-                        searches_enabled=not (self.comparison and not self.comparison.comparisons))
+                        searches_enabled=not (self.search_handoff and research),
+                        search_rounds=ORCHESTRATOR_SEARCH_ROUNDS if research else 1)
                     if value.finish_reason in {"length", "max_tokens"}:
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     self.messages.append(value.assistant_message())
-                    if self._free_floor(value):
+                    if self._consensus_search_handoff(value) or self._free_floor(value):
                         continue
                     synthesis = None
                     if value.tool_calls:

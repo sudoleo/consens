@@ -2426,9 +2426,12 @@ vor dem ersten Vergleich bleibt promptgesteuert, keine semantische Servergaranti
 Deaktivierte Worker
 liefern weder Worker-Katalog noch Delegationsprompt im Chatkontext. Auch
 Vergleichsmodelle, Judges und Worker erhalten eine knappe Rollen-/Produkterklärung.
-Vor dem ersten Vergleich bietet `run` dem Orchestrator keine Websuche an
-(seit 2026-10-06): Jedes Vergleichsmodell recherchiert selbst, gemeinsame Funde
-würden alle auf dieselben Quellen setzen.
+Vor dem ersten Vergleich darf der Orchestrator bis zu drei Runden suchen
+(`ORCHESTRATOR_SEARCH_ROUNDS`), nur um die Frage zu verstehen und zu formulieren;
+seine Funde und Quellen gibt er nicht in den `context` (seit 2026-10-06), jedes
+Vergleichsmodell recherchiert selbst. Beendet der Server-Suchloop einen Request
+mit recherchiertem Text ohne Client-Tool, führt `_consensus_search_handoff`
+einmalig ohne Quellenliste in die Client-Tool-Orchestrierung zurück.
 Das Modell entscheidet selbst,
 ob es die ganze Frage oder mehrere begründete Teilfragen vergleicht. Es
 liefert einen neutralen Auftrag mit nötigem Kontext; alle Vergleichsmodelle
@@ -2461,7 +2464,7 @@ erhalten keine Delegations-/Vergleichstools, aber Websuche
 `SEARCH_ROUNDS`: `quick` eine Runde, `full` bis zu drei, für alle Konten gleich;
 ihre Suche wird gebucht, nicht reserviert, `soft_search`) und mit
 `comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
-Orchestrator sucht vor dem ersten Vergleich nie. Nach dem Start eines Vergleichs
+Orchestrator sucht vor dem ersten Vergleich nur für sich selbst. Nach dem Start eines Vergleichs
 dürfen Orchestrator, Antwortschritt und Judges das Tageslimit überziehen
 (`_admit_chat_step` → `claim(overdraft=True)`). Suchkonfiguration (`search_tools`: eine für alle
 Modelle, Engine `auto`, nur Grok fest Exa), Reservierung

@@ -16,7 +16,7 @@ Formulate a neutral, self-contained question or task for compare_models. Include
 
 Use the full question or focused subquestions when that improves the result. Every comparison model must receive the same task independently, without seeing the other models' answers.
 
-Do not research before the first comparison and do not pass your own findings into it: every comparison model searches the web on its own, so each perspective rests on its own research. Pass on only material the user or the conversation supplied. After comparisons, web search may settle a specific conflict between the answers. Neither web search nor delegated workers replace compare_models.
+Web search may help you understand the request and phrase a precise task before the comparison. Keep your findings to yourself: do not pass them, their sources or instructions about which sources to use into the comparison. Every comparison model searches the web on its own, so each perspective rests on its own research. Pass on only material the user or the conversation supplied. After comparisons, web search may settle a specific conflict between the answers. Neither web search nor delegated workers replace compare_models.
 
 BUILD THE ANSWER FROM THE RESULTS
 
