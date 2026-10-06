@@ -342,7 +342,9 @@
     if (manual) {
       render();
       const trigger = returnFocus?.isConnected ? returnFocus : inline?.querySelector(".agent-sidebar-toggle");
-      trigger?.focus();
+      // Focus returns without scrolling: the trigger sits at the top of the
+      // answer, and the reader may be far below it.
+      trigger?.focus({ preventScroll: true });
     }
   }
   function show(agentId, trigger) {
@@ -353,7 +355,7 @@
     current.manual = true;
     if (agentId) current.expanded.add(agentId);
     prefs(current); render();
-    (sidebar._rows.get(agentId)?.summary || sidebar.querySelector(".agent-sidebar-close")).focus();
+    (sidebar._rows.get(agentId)?.summary || sidebar.querySelector(".agent-sidebar-close")).focus({ preventScroll: true });
   }
   function renderDetail(row, view, agent) {
     if (agent.kind === 'check') {

@@ -238,6 +238,18 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         page.keyboard.press("Escape")
         expect(sidebar).not_to_be_visible()
         expect(page.locator(".agent-sidebar-toggle")).to_be_focused()
+        # Closing hands focus back to the toggle at the top of the answer
+        # without scrolling there: the reader stays where they were.
+        page.evaluate("() => { document.querySelector('.container').style.paddingBottom = '2400px'; }")
+        page.locator(".agent-sidebar-toggle").evaluate("el => el.click()")
+        expect(sidebar).to_be_visible()
+        page.evaluate("() => window.scrollTo({ top: 1200, behavior: 'instant' })")
+        reading = page.evaluate("() => window.scrollY")
+        assert reading > 600
+        page.locator(".agent-sidebar-close").evaluate("el => el.click()")
+        expect(sidebar).not_to_be_visible()
+        expect(page.locator(".agent-sidebar-toggle")).to_be_focused()
+        assert abs(page.evaluate("() => window.scrollY") - reading) <= 2
         page.evaluate("async () => { await window.__switchE2EUser('account-b'); }")
         expect(sidebar).not_to_be_visible()
         assert not errors
