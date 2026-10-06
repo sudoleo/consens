@@ -300,8 +300,11 @@ def _search(kwargs):
     return next((t["parameters"] for t in kwargs.get("tools") or [] if t.get("type") == "openrouter:web_search"), None)
 
 
-@pytest.mark.parametrize("depth,limit", [("quick", 10_000_000), ("full", 10_000_000), ("full", 250_000)])
-def test_every_model_searches_with_one_configuration_and_judges_never_search(store, depth, limit):
+# "full" answers get up to three rounds while the budget covers every asked
+# model at that depth (fewer rounds as it shrinks); "quick" answers search once.
+@pytest.mark.parametrize("depth,limit,rounds", [("quick", 10_000_000, 1), ("full", 10_000_000, 3),
+                                                ("full", 250_000, 1), ("full", 1_000_000, 2)])
+def test_every_model_searches_with_one_configuration_and_judges_never_search(store, depth, limit, rounds):
     from app.services.llm.engines import web_search_tool
     script = Script(direct=True, depth=depth)
     seen = []
@@ -331,11 +334,13 @@ def test_every_model_searches_with_one_configuration_and_judges_never_search(sto
     comparisons = {model: (rounds, tool, prompt) for kind, model, rounds, tool, prompt in seen if kind == "comparison"}
     assert set(comparisons) == {"anthropic/claude-haiku-4.5", "deepseek/deepseek-v4-flash"}
     # The same configuration as Consensus whatever the depth: OpenRouter picks
-    # the publisher's own search or Exa (engine "auto").
-    assert comparisons["anthropic/claude-haiku-4.5"][:2] == (1, expected("anthropic", 1))
-    assert comparisons["deepseek/deepseek-v4-flash"][:2] == (1, expected("deepseek", 1))
+    # the publisher's own search or Exa (engine "auto"). Every answer of one
+    # comparison searches equally deep.
+    assert comparisons["anthropic/claude-haiku-4.5"][:2] == (rounds, expected("anthropic", rounds))
+    assert comparisons["deepseek/deepseek-v4-flash"][:2] == (rounds, expected("deepseek", rounds))
     assert all(tool["engine"] == "auto" for _, tool, _ in comparisons.values())
-    assert all("Current date:" in prompt and "use web search once" in prompt for *_, prompt in comparisons.values())
+    told = "use web search once" if rounds == 1 else f"up to {rounds} search rounds"
+    assert all("Current date:" in prompt and told in prompt for *_, prompt in comparisons.values())
     # The orchestrator researches once for every answer model before comparing.
     [(_, _, rounds, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
     assert rounds == 3 and tool == expected("anthropic", 3)

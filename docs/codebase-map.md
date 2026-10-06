@@ -2457,8 +2457,10 @@ gestopptes oder mitten im Stream ausgefallenes Modell bis dahin geschrieben hat
 `answers`/`basis_hash`, Judges oder dem Tool-Ergebnis an den Orchestrator.
 Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und `partial: true`.
 Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst diese Teiltexte weg. Vergleichsmodelle
-erhalten keine Delegations-/Vergleichstools, aber eine Suchrunde
-(`call(..., kind="comparison")` → `_step(searches_enabled=True)`) und mit
+erhalten keine Delegations-/Vergleichstools, aber Websuche
+(`call(..., kind="comparison", search_rounds=…)` → `_step(searches_enabled=True)`;
+`quick` eine Runde, `full` bis zu drei je nach Resttagesbudget,
+`_search_rounds`, Details in agent-mode.md „Websuche") und mit
 `comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
 Orchestrator recherchiert vor dem ersten Vergleich bis zu drei Runden
 (`ORCHESTRATOR_SEARCH_ROUNDS`). Suchkonfiguration (`search_tools`: eine für alle

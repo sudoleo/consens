@@ -531,10 +531,21 @@ sicher nur auf Exa; ob die eigene Suche der Anbieter sie beachtet, ist nicht gar
 **Wer wie oft sucht.** Das ist die einzige Stellschraube, und sie ist eine
 Produktentscheidung, keine Modell-Sonderlösung:
 
-- Vergleichsmodelle: eine Runde, unabhängig von `quick`/`full`. Ihr Prompt
-  (`agent_comparison.comparison_system_prompt`) nennt das Datum, verlangt bei
-  zeitabhängigen Fakten eine Suche mit Monat und Jahr in der Anfrage und
-  erklärt Angaben im `context` ohne Quelle für ungeprüft.
+- Vergleichsmodelle: `quick` eine Runde, `full` seit 2026-10-06 bis zu drei
+  (`FULL_SEARCH_ROUNDS`). Das ist ein Budget, keine Pflicht: Das Modell
+  entscheidet selbst, ob es nach der ersten Suche nachfasst (Lücken,
+  widersprüchliche oder dünne Belege). `ComparisonTools._search_rounds` legt
+  die Obergrenze pro Vergleich einheitlich für alle gefragten Modelle fest: 3,
+  solange ihre Reservierungen zusammen in den Vergleichsanteil
+  (`COMPARISON_BUDGET_SHARE`) des Resttagesbudgets passen, sonst 2, sonst 1.
+  Ohne diese Vorab-Entscheidung würde erst die Zulassung einzelne späte Modelle
+  abstufen, und gleiche Fragen bekämen ungleich tiefe Recherche. Faustwerte
+  mit sechs Modellen und frischem Tagesbudget: Free eine, Plus zwei, Pro drei
+  Runden; weniger Modelle (freier Agent) bekommen entsprechend mehr. Der
+  Vergleich speichert die Obergrenze als `search_rounds`. Der Prompt
+  (`agent_comparison.comparison_system_prompt`) nennt das Datum und die
+  Rundenzahl, verlangt bei zeitabhängigen Fakten eine Suche mit Monat und Jahr
+  in der Anfrage und erklärt Angaben im `context` ohne Quelle für ungeprüft.
 - Orchestrator: vor dem ersten Vergleich bis zu drei Runden
   (`ORCHESTRATOR_SEARCH_ROUNDS`); die Funde gehen mit URLs als `context` an alle
   Vergleichsmodelle, eigene Erinnerung an Produkte, Versionen oder Preise nicht.
