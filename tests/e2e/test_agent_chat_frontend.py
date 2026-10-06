@@ -796,7 +796,14 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
 
 @pytest.mark.parametrize("width", [1280, 320])
 def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, width):
-    context, page = _real_firebase_page(browser, phase4_server)
+    # The stale preference is saved before the app starts, as on an earlier
+    # visit. Planting it later raced the model catalog: Agent is the default
+    # mode, so the catalog may already be checked before the write, and
+    # App.agentChat.render() skips a shell whose inputs did not change.
+    stale = json.dumps({"model_id": "removed-model", "reasoning_effort": "ultra"})
+    context, page = _real_firebase_page(
+        browser, phase4_server,
+        init_script=f"localStorage.setItem('agent_settings_account-a', {json.dumps(stale)});")
     try:
         page.set_viewport_size({"width": width, "height": 900})
         page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
@@ -815,7 +822,6 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
             route.fulfill(content_type="text/event-stream", body="event: final\ndata: " + json.dumps(final) + "\n\n")
         page.route("**/agent", respond)
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
-        page.evaluate("() => localStorage.setItem(`agent_settings_${auth.currentUser.uid}`, JSON.stringify({model_id:'removed-model',reasoning_effort:'ultra'}))")
         _choose_mode(page, "agent")
         expect(page.locator("#agentModelDropdown")).to_have_value(CATALOG["default_model_id"])
         page.evaluate("() => { App.agentChat.render(); App.agentChat.render(); }")

@@ -216,6 +216,11 @@
   .chat-input-container .demo-chip-label-short { display: none; }
   /* Round like (+) and Send, not a narrow oval around the mark. */
   .chat-input-container .demo-chip.demo-action { width: 36px; min-width: 36px; padding: 0; justify-content: center; }
+  /* The default model's name ("DeepSeek V4.1 Flash") and its comparison
+     count stay whole at 320px: the row and the chip give up a little air,
+     (+) and Send keep their size. */
+  .chat-input-container { column-gap: 4px; }
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { gap: 6px; padding-inline: 6px; }
 }
 
 /* ---- Phones in a thread: collapsed to (+), the field and Send ------------
