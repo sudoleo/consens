@@ -2240,7 +2240,10 @@ Tageskonto begrenzt Agent pro Stufe. Pro bleiben die Premium-Modelle:
 Vergleichsmodell aus `cfg.PREMIUM_MODELS` für Free/Plus mit 403 ab (ein
 ausgefallener Tarif-/Rollendienst liefert sicher 503), `/agent/models` markiert
 sie mit `premium`, und `agent-chat.js` zeigt sie mit Pro-Badge, aber gesperrt
-(`locked()`/`selectable()`). Ausnahme seit 2026-10-07: das Standard-Chatmodell
+(`locked()`/`selectable()`). Ebenso seit 2026-10-07 die Denkstufen High, Extra
+high und Max (`PRO_REASONING_EFFORTS`, `require_reasoning_access` → 403 für
+Free/Plus; `agent-chat.js` `effortLocked()` zeigt sie gesperrt mit Pro-Badge und
+fällt bei gespeicherter Wahl auf Auto zurück). Ausnahme seit 2026-10-07: das Standard-Chatmodell
 (`default_agent_model_id()`, derzeit Claude Sonnet 5.5) ist als Chatmodell für
 jede Stufe frei; `/agent/models` meldet es mit `premium: false` und
 `early_access: true`, der Picker zeigt ein neutrales „Early access“-Badge

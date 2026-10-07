@@ -454,6 +454,18 @@ def test_invalid_selections_do_not_start_or_lock_a_turn(api, selection):
     assert not calls
 
 
+def test_high_reasoning_levels_are_pro(api, monkeypatch):
+    client, store, calls = api
+    monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "first", "bookmark_id": "bm1",
+        "model_id": "gpt-5.6-luna", "reasoning_effort": "high"}
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert response.status_code == 403 and "Pro" in response.json()["detail"]
+    assert store.get_chat(UID, chat_id)["turn_count"] == 0 and not calls
+    assert "event: final" in client.post("/agent", json={**payload, "reasoning_effort": "low"}, headers=AUTH).text
+
+
 @pytest.mark.parametrize("model_id", ["gpt-5.6-luna", "gpt-5.6-sol"])
 def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch, model_id):
     client, store, calls = api

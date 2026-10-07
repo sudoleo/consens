@@ -58,13 +58,19 @@
   function selectable(model) {
     return Boolean(model) && model.available !== false && !locked(model);
   }
+  // High, Extra high and Max are Pro (the server refuses them as well).
+  const PRO_EFFORTS = new Set(["high", "xhigh", "max"]);
+  function effortLocked(value) {
+    return PRO_EFFORTS.has(value) && window.App?.state?.get?.("isUserPro") !== true;
+  }
   function selection() {
     const preferred = preferredSelection() || {};
     const available = catalog?.models.filter(selectable);
     const model = available?.find(item => item.id === preferred.model_id)
       || available?.find(item => item.id === catalog.default_model_id) || available?.[0];
     return model ? { model_id: model.id,
-      reasoning_effort: model.reasoning_efforts.includes(preferred.reasoning_effort) ? preferred.reasoning_effort : "default" } : preferred;
+      reasoning_effort: model.reasoning_efforts.includes(preferred.reasoning_effort) && !effortLocked(preferred.reasoning_effort)
+        ? preferred.reasoning_effort : "default" } : preferred;
   }
   function rememberSelection(value) {
     selections.set(selectionKey(), value);
@@ -198,7 +204,7 @@
     select.disabled = !ready || running || !catalog.models.some(selectable);
     const model = catalog?.models.find(item => item.id === select.value);
     const efforts = model?.reasoning_efforts || ["default"];
-    const effortSignature = JSON.stringify([model?.id, efforts]);
+    const effortSignature = JSON.stringify([model?.id, efforts, efforts.map(effortLocked)]);
     if (effort.dataset.options !== effortSignature) {
       effort.replaceChildren(...efforts.map(value => {
         const option = document.createElement("option");
@@ -207,11 +213,13 @@
         option.textContent = label;
         option.dataset.modelLabel = label;
         option.dataset.description = description;
+        option.disabled = effortLocked(value);
+        if (option.disabled) option.dataset.modelBadge = "Pro";
         return option;
       }));
       effort.dataset.options = effortSignature;
     }
-    effort.value = efforts.includes(current.reasoning_effort) ? current.reasoning_effort : "default";
+    effort.value = efforts.includes(current.reasoning_effort) && !effortLocked(current.reasoning_effort) ? current.reasoning_effort : "default";
     effort.disabled = !ready || running || efforts.length < 2;
     effort.dataset.available = String(ready && model?.reasoning_available);
     effort.parentElement.hidden = true;

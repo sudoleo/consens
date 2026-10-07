@@ -601,6 +601,8 @@ describe("single-model agent chat", () => {
 
   it("uses the same keyboard picker for effort and returns focus after choosing", async () => {
     const { window, document, dom } = boot();
+    // High, Extra high and Max are Pro.
+    window.App.state = { ...(window.App.state || {}), get: key => key === "isUserPro" };
     await selectAgent(window);
     const trigger = document.querySelector(".agent-model-picker .model-picker-display");
     trigger.focus();
@@ -613,6 +615,13 @@ describe("single-model agent chat", () => {
     expect(document.getElementById("agentReasoningEffort").value).toBe("max");
     expect(document.activeElement).toBe(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    // Without Pro the high levels stay listed, locked, and a stored choice falls back to Auto.
+    window.App.state.get = () => false;
+    window.App.agentChat.render();
+    expect(document.getElementById("agentReasoningEffort").value).toBe("default");
+    const max = [...document.getElementById("agentReasoningEffort").options].find(option => option.value === "max");
+    expect(max.disabled).toBe(true);
+    expect(max.dataset.modelBadge).toBe("Pro");
     trigger.click();
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     trigger.click();

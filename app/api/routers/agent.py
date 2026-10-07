@@ -75,6 +75,16 @@ def require_model_access(uid, model_ids):
         raise HTTPException(status_code=403, detail=f"{labels} is available on Pro. Choose another model.")
 
 
+# The expensive reasoning levels are Pro (Max, 2026-10-07): they multiply the
+# chat model's thinking tokens, and Auto already uses the model's own default.
+PRO_REASONING_EFFORTS = frozenset({"high", "xhigh", "max"})
+
+
+def require_reasoning_access(uid, reasoning_effort):
+    if reasoning_effort in PRO_REASONING_EFFORTS and not _premium_allowed(uid):
+        raise HTTPException(status_code=403, detail="High reasoning levels are available on Pro. Choose Auto or a lower level.")
+
+
 def _memory_snapshot(uid):
     """The user's memory for one turn: one batched read, fail-open.
 
@@ -268,6 +278,7 @@ def run_agent(request: Request, payload: AgentRequest):
         # model as a comparison model still needs Pro.
         chat_model = [] if model.selection_id == default_agent_model_id() else [model.selection_id]
         require_model_access(uid, [*chat_model, *(payload.comparison_models or {}).values()])
+        require_reasoning_access(uid, payload.reasoning_effort)
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
