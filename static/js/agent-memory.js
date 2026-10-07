@@ -153,5 +153,92 @@
     return list;
   }
 
-  App.agentMemory = { render, receive };
+  // A quiet hint for accounts that have not let Agent update memory yet: from
+  // the second finished answer in this browser, under at most three answers,
+  // until switched on or dismissed. One click turns on "Use my memory" and
+  // "Let Agent update memory"; it stays opt-in. Whether the turn could write
+  // comes from its own settings (agent_settings.memory.auto), so no extra read.
+  const HINT_KEY = 'consensio.memoryHint.v1';
+  const HINT_FROM_ANSWER = 2;
+  const HINT_MAX_SHOWN = 3;
+  const hints = new WeakMap();
+  const counted = new Set();
+  function hintState() {
+    try { return { answers: 0, shown: 0, off: false, ...JSON.parse(localStorage.getItem(HINT_KEY) || '{}') }; }
+    catch (_) { return { answers: 0, shown: 0, off: true }; }
+  }
+  function saveHintState(value) {
+    try { localStorage.setItem(HINT_KEY, JSON.stringify(value)); } catch (_) { /* hint just reappears */ }
+  }
+  function dismissNudge() {
+    saveHintState({ ...hintState(), off: true });
+  }
+
+  function nudge(body, { key = '', finished = false, memory = null } = {}) {
+    if (!body) return;
+    let view = hints.get(body);
+    if (view && view.key !== key) { view.note.remove(); hints.delete(body); view = null; }
+    if (view) { place(body, view.note); return; }
+    if (!finished || !memory || memory.auto !== false || !key) return;
+    let state = hintState();
+    if (!counted.has(key)) {
+      counted.add(key);
+      state = { ...state, answers: state.answers + 1 };
+      saveHintState(state);
+    }
+    if (state.off || state.answers < HINT_FROM_ANSWER || state.shown >= HINT_MAX_SHOWN) return;
+    saveHintState({ ...state, shown: state.shown + 1 });
+    window.App?.trackAppEvent?.('app_memory_hint', { action: 'shown' });
+
+    const note = document.createElement('div');
+    note.className = 'agent-memory-note agent-memory-hint';
+    const head = document.createElement('div');
+    head.className = 'agent-memory-head';
+    const text = document.createElement('span');
+    text.textContent = 'Agent can remember details you share, like your diet or your job, and use them in later chats.';
+    const on = document.createElement('button');
+    on.type = 'button';
+    on.textContent = 'Turn on';
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.textContent = 'Not now';
+    const status = document.createElement('span');
+    status.className = 'agent-memory-status';
+    status.setAttribute('role', 'status');
+    head.append(icon(), text, on, later, status);
+    note.append(head);
+    view = { note, key };
+    hints.set(body, view);
+    later.addEventListener('click', () => {
+      dismissNudge();
+      window.App?.trackAppEvent?.('app_memory_hint', { action: 'dismissed' });
+      note.remove(); hints.delete(body);
+    });
+    on.addEventListener('click', async () => {
+      on.disabled = later.disabled = true;
+      status.textContent = 'Turning on…';
+      const ok = await window.App?.userMemory?.enableAgentMemory?.();
+      if (!ok) {
+        on.disabled = later.disabled = false;
+        status.textContent = 'Could not turn it on. You can do it in Settings › Memory.';
+        return;
+      }
+      dismissNudge();
+      text.textContent = 'Memory is on. Agent saves what you share, and every change shows under its answer with Undo.';
+      const manage = document.createElement('button');
+      manage.type = 'button';
+      manage.textContent = 'Manage memory';
+      manage.addEventListener('click', openSettings);
+      status.textContent = '';
+      on.replaceWith(manage); later.remove();
+    });
+    place(body, note);
+  }
+  function place(body, note) {
+    const review = body._agentReview?.parentNode && body._agentReview.parentNode === body.parentNode ? body._agentReview : null;
+    const anchor = review || body;
+    if (anchor.nextElementSibling !== note) anchor.after(note);
+  }
+
+  App.agentMemory = { render, receive, nudge, dismissNudge };
 })();

@@ -381,6 +381,7 @@
       App.agentMemory?.render(document.getElementById('agentAnswerBody'), {
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
       });
+      App.agentMemory?.nudge(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}` });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -564,6 +565,8 @@
     // Memory changes appear as soon as Agent made them, not only at the end.
     App.agentMemory?.render(answerBody, { key: context.runId, running,
       changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });
+    App.agentMemory?.nudge(answerBody, { key: context.runId,
+      finished: !running && state.completedTurn?.status === 'completed', memory: state.completedTurn?.agent_settings?.memory });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
@@ -638,7 +641,7 @@
           reasoning_effort: settings.reasoning_effort || 'default',
           comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
           check_sources: context.config.checkSources === true,
-          agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "balanced", autonomy: "guided" },
+          agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
@@ -893,7 +896,7 @@
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
           deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
-          agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "balanced", autonomy: "guided" },
+          agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "all", autonomy: "guided" },
           googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
           googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
         metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
@@ -964,7 +967,7 @@
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: comparisonModels,
         check_sources: context.config.checkSources === true,
-        agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "balanced", autonomy: "guided" },
+        agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,

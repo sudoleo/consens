@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from app.services import agent_quota, agent_budget_config
-from app.services.agent_comparison import comparison_selection, review_is_bound, review_issues
+from app.services.agent_comparison import AgentPreferences, comparison_selection, review_is_bound, review_issues
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
@@ -623,7 +623,7 @@ def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
     assert agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict() == before
     assert client.post("/agent", json={**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}, headers=AUTH).status_code == 409
     # Settings are part of the request identity; the defaults equal "not sent".
-    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "auto", "quorum": "balanced"}}, headers=AUTH).status_code == 200
+    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "auto", "quorum": "all"}}, headers=AUTH).status_code == 200
     assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "full", "quorum": "all"}}, headers=AUTH).status_code == 409
     assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "deep"}}, headers=AUTH).status_code == 422
 
@@ -799,7 +799,7 @@ def quick_quorum(monkeypatch):
 
 def test_answer_starts_at_quorum_and_a_late_answer_stays_out_of_the_check(store, quick_quorum):
     script = Straggler(release_on_answer=True, depth="quick")
-    loop = make_loop(store, script, models=THREE)
+    loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="balanced"))
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     review = saved["agent_review"]
@@ -817,7 +817,7 @@ def test_answer_starts_at_quorum_and_a_late_answer_stays_out_of_the_check(store,
 
 def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick_quorum):
     script = Straggler(release_on_answer=False, depth="quick")
-    loop = make_loop(store, script, models=THREE)
+    loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="balanced"))
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     review = saved["agent_review"]
@@ -832,7 +832,7 @@ def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick
 
 def test_text_of_a_model_stopped_mid_answer_is_kept_as_incomplete_but_never_checked(store, quick_quorum):
     script = Straggler(release_on_answer=False, partial="Gemini: the first half of an answer", depth="quick")
-    loop = make_loop(store, script, models=THREE)
+    loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="balanced"))
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     review = saved["agent_review"]
@@ -906,7 +906,7 @@ def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store, qui
             return Completion()
 
     script = Failing(release_on_answer=False, depth="quick")
-    loop = make_loop(store, script, models=THREE)
+    loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="balanced"))
     with pytest.raises(Exception):
         list(loop.run())
     comparison = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["comparisons"][0]
@@ -953,6 +953,18 @@ def test_waiting_for_every_model_puts_a_slow_answer_into_the_text(store, quick_q
     list(loop.run())
     comparison = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["comparisons"][0]
     assert "second option is cheaper" in script.synthesis_evidence
+    assert sorted(comparison["synthesis_providers"]) == ["anthropic", "gemini", "openai"]
+    assert not any(a.get("late") for a in comparison["answers"])
+
+
+def test_quick_questions_also_wait_for_the_slowest_model_by_default(store, quick_quorum):
+    """Default "all" since 2026-10-07: a late answer would miss the check."""
+    import threading
+    script = Straggler(release_on_answer=False, depth="quick")
+    threading.Timer(.4, script.release.set).start()
+    loop = make_loop(store, script, models=THREE)
+    list(loop.run())
+    comparison = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["comparisons"][0]
     assert sorted(comparison["synthesis_providers"]) == ["anthropic", "gemini", "openai"]
     assert not any(a.get("late") for a in comparison["answers"])
 
@@ -1113,7 +1125,8 @@ def test_free_mode_accepts_a_confirmed_greeting_and_guided_mode_never_asks(store
 
 def test_settings_saved_before_the_freedom_field_still_match_on_recovery():
     from app.services.agent_comparison import AgentPreferences, stored_preferences
-    assert stored_preferences({"depth": "auto", "quorum": "balanced"}) == AgentPreferences().model_dump()
+    assert stored_preferences({"depth": "auto", "quorum": "all"}) == AgentPreferences().model_dump()
+    assert stored_preferences({"depth": "auto"})["quorum"] == "all"
     assert stored_preferences(None) == AgentPreferences().model_dump()
     assert stored_preferences({"depth": "full", "quorum": "all", "autonomy": "free"})["autonomy"] == "free"
 

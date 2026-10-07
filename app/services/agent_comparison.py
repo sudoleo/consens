@@ -38,16 +38,18 @@ REVIEW_ANSWER_CHARS = 300_000
 CHARS_PER_TOKEN = 4
 # Quorum: once enough answers are in, stragglers get this multiple of the
 # time the quorum took (at least MIN_GRACE_SECONDS more) before the synthesis
-# starts without them. They can still reach the check (see finish_comparisons).
+# starts without them. Answers that arrive after that stay visible as late
+# answers but are neither in the answer nor in its check (judge()).
 QUORUM_GRACE = {"quick": 1.25, "full": 1.5}
 # Search rounds per comparison answer, at most; each model decides how many it
 # needs. The same for every account and every answer of a comparison: their
 # search is booked by measured usage, not reserved (see docs/agent-mode.md, "Websuche").
 SEARCH_ROUNDS = {"quick": 1, "full": 3}
 MIN_GRACE_SECONDS = 2.0
-# User setting "When the answer starts" (quorum): "balanced" is the default
-# above; "fast" starts from half the answers with a short grace; "all" waits
-# for every model like before quorums existed.
+# User setting "Answer start" (quorum). Default since 2026-10-07 "all": wait
+# for every model, because a late answer no longer reaches the check (Max).
+# "balanced" waits for every model only on thorough questions and starts short
+# ones once most answered; "fast" starts from half the answers with a short grace.
 FAST_GRACE = 1.1
 FAST_MIN_GRACE_SECONDS = 1.0
 
@@ -56,7 +58,7 @@ class AgentPreferences(BaseModel):
     """Per-user Agent Beta settings, frozen with the turn."""
     model_config = ConfigDict(extra="forbid", strict=True)
     depth: Literal["auto", "quick", "full"] = "auto"
-    quorum: Literal["balanced", "fast", "all"] = "balanced"
+    quorum: Literal["balanced", "fast", "all"] = "all"
     # guided: every comparison asks all selected models. free: the orchestrator
     # picks the models of each comparison, at least two families (server rule).
     autonomy: Literal["guided", "free"] = "guided"
@@ -681,8 +683,9 @@ class ComparisonTools:
     def finish_comparisons(self):
         """Before the judges: stop stragglers, fix the final evidence basis.
 
-        Answers that arrived after the synthesis started are part of the check;
-        models still writing now are stopped and reported as missing."""
+        Answers that arrived after the synthesis started stay visible as late
+        answers, outside the check; models still writing now are stopped and
+        reported as missing."""
         changed = False
         for comparison in self.comparisons:
             cid = comparison["id"]

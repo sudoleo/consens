@@ -360,6 +360,7 @@
       { rewriteFields: false }
     );
     if (!ok) enabled.checked = !wanted;
+    else if (!wanted) window.App?.agentMemory?.dismissNudge?.();
   }
 
   async function toggleAuto() {
@@ -384,6 +385,21 @@
     );
     if (!ok) auto.checked = !wanted;
     else window.App?.trackAppEvent?.(wanted ? "app_auto_memory_on" : "app_auto_memory_off");
+    // Settled in Settings either way: no more hint under answers.
+    if (ok) window.App?.agentMemory?.dismissNudge?.();
+  }
+
+  // The hint under an Agent answer (agent-memory.js): "Use my memory" and
+  // "Let Agent update memory" in one step, without touching the text fields.
+  async function enableAgentMemory() {
+    if (!currentUser()) return false;
+    if (!state.loaded) await load();
+    if (!state.loaded) return false;
+    const next = { ...(state.saved || emptyProfile()), enabled: true, auto_memory: true };
+    const ok = await persist(next, "Agent can now update your memory. Every change shows under its answer.",
+      { rewriteFields: false });
+    if (ok) window.App?.trackAppEvent?.("app_auto_memory_on", { source: "hint" });
+    return ok;
   }
 
   // --- Gespeicherte Erinnerungen ---------------------------------------------
@@ -646,5 +662,5 @@
   }
 
   window.App = window.App || {};
-  window.App.userMemory = { load, save, isDirty };
+  window.App.userMemory = { load, save, isDirty, enableAgentMemory };
 })();

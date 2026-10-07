@@ -49,6 +49,9 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   (wie viele Claims im Text verankert wurden). Feuert bei jedem Anzeigen,
   auch beim Öffnen eines Bookmarks — keine Nutzungszahl.
 - `app_new_comparison`: Klick auf „New comparison“.
+- `app_memory_hint` (`action`: shown, dismissed) und `app_auto_memory_on`
+  (`source: hint` beim Einschalten aus dem Hinweis unter einer Agent-Antwort,
+  ohne `source` aus Settings): wie viele den Gedächtnis-Hinweis sehen und annehmen.
 - `auth_*`: jeder einzelne Anmeldeversuch mit Ergebnis und Fehlercode.
 - `landing_*`, `benchmark_*`, `pulse_*`, `consensus_engine_*`, `hub_*`,
   `share_*`, `topic_open`: die einzelnen Knöpfe der öffentlichen Seiten.

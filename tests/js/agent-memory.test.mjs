@@ -32,7 +32,7 @@ async function settle() {
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 
-function bootSettings() {
+function bootSettings(scripts = ["static/js/user-memory.js"], extraBody = "") {
   const server = {
     profile: { schema_version: 2, enabled: true, auto_memory: false, role: "Nurse", focus: "", style: "", constraints: "", notes: "" },
     revision: 3,
@@ -40,8 +40,8 @@ function bootSettings() {
     itemsRevision: 7,
     calls: [],
   };
-  const { window, document, dom } = loadScripts(["static/js/user-memory.js"], {
-    body: SETTINGS,
+  const { window, document, dom } = loadScripts(scripts, {
+    body: SETTINGS + extraBody,
     before(win) {
       win.auth = { currentUser: { uid: "uid-1", getIdToken: async () => "token" } };
       win.fetch = async (url, options = {}) => {
@@ -112,6 +112,68 @@ describe("Settings: Let Agent update memory", () => {
     ctx.server.profile = { ...ctx.server.profile, enabled: false };
     await open(ctx);
     expect(ctx.document.getElementById("memoryAutoSwitch").disabled).toBe(true);
+    ctx.dom.window.close();
+  });
+});
+
+describe("Hint under an Agent answer", () => {
+  const ANSWER = '<div><div id="agentAnswerBody"></div></div>';
+  const off = { used: false, auto: false };
+  function boot() {
+    const ctx = bootSettings(["static/js/user-memory.js", "static/js/agent-memory.js"], ANSWER);
+    ctx.window.App.trackAppEvent = vi.fn();
+    ctx.body = ctx.document.getElementById("agentAnswerBody");
+    ctx.hint = () => ctx.document.querySelector(".agent-memory-hint");
+    return ctx;
+  }
+
+  it("starts at the second finished answer, never while running or with memory updates on", () => {
+    const ctx = boot();
+    const { nudge } = ctx.window.App.agentMemory;
+    nudge(ctx.body, { key: "run-1", finished: true, memory: off });
+    expect(ctx.hint()).toBeNull();
+    nudge(ctx.body, { key: "run-2", finished: false, memory: off });
+    expect(ctx.hint()).toBeNull();
+    nudge(ctx.body, { key: "run-3", finished: true, memory: { used: true, auto: true } });
+    expect(ctx.hint()).toBeNull();
+    nudge(ctx.body, { key: "run-4", finished: true, memory: off });
+    expect(ctx.hint().textContent).toContain("Agent can remember details you share");
+    // A re-render of the same answer keeps it; another answer clears it.
+    nudge(ctx.body, { key: "run-4", finished: true, memory: off });
+    expect(ctx.document.querySelectorAll(".agent-memory-hint")).toHaveLength(1);
+    nudge(ctx.body, { key: "saved:turn" });
+    expect(ctx.hint()).toBeNull();
+    ctx.dom.window.close();
+  });
+
+  it("shows at most three times and never again after Not now", () => {
+    const ctx = boot();
+    const { nudge } = ctx.window.App.agentMemory;
+    for (let i = 1; i <= 6; i += 1) nudge(ctx.body, { key: `run-${i}`, finished: true, memory: off });
+    const state = JSON.parse(ctx.window.localStorage.getItem("consensio.memoryHint.v1"));
+    expect(state.shown).toBe(3);
+    ctx.window.localStorage.setItem("consensio.memoryHint.v1", JSON.stringify({ answers: 5, shown: 0, off: false }));
+    nudge(ctx.body, { key: "run-7", finished: true, memory: off });
+    [...ctx.hint().querySelectorAll("button")].find(b => b.textContent === "Not now").click();
+    expect(ctx.hint()).toBeNull();
+    nudge(ctx.body, { key: "run-8", finished: true, memory: off });
+    expect(ctx.hint()).toBeNull();
+    ctx.dom.window.close();
+  });
+
+  it("Turn on switches on memory and Agent updates in one save, keeping the profile", async () => {
+    const ctx = boot();
+    ctx.server.profile = { ...ctx.server.profile, enabled: false };
+    ctx.window.localStorage.setItem("consensio.memoryHint.v1", JSON.stringify({ answers: 3, shown: 0, off: false }));
+    ctx.window.App.agentMemory.nudge(ctx.body, { key: "run-9", finished: true, memory: off });
+    [...ctx.hint().querySelectorAll("button")].find(b => b.textContent === "Turn on").click();
+    await vi.waitFor(() => expect(ctx.hint().textContent).toMatch(/Memory is on|Could not/));
+    const put = ctx.server.calls.find(call => call.method === "PUT");
+    expect(put.body).toMatchObject({ enabled: true, auto_memory: true, role: "Nurse" });
+    expect(ctx.hint().textContent).toContain("Memory is on");
+    expect([...ctx.hint().querySelectorAll("button")].map(b => b.textContent)).toEqual(["Manage memory"]);
+    expect(JSON.parse(ctx.window.localStorage.getItem("consensio.memoryHint.v1")).off).toBe(true);
+    expect(ctx.window.App.trackAppEvent).toHaveBeenCalledWith("app_auto_memory_on", { source: "hint" });
     ctx.dom.window.close();
   });
 });

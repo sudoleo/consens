@@ -112,14 +112,18 @@ Vergleichsgrundlage eingeholt.
 ### Tiefe, Parallelität und Quorum
 
 Einstellungen → **Agent · Beta** (nur für Konten mit Agent-Zugang, gespeichert im
-Browser unter `consensio.agentPreferences.v1`) legt drei Werte fest, die jede
+Browser unter `consensio.agentPreferences.v2`, nur ausdrücklich gewählte Werte;
+v1 speicherte bei jeder Änderung alle Felder, beim Umzug fallen deren alte
+Standardwerte weg) legt drei Werte fest, die jede
 Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
 einfriert (Teil der Request-Identität bei Recovery): **Answer depth**
 (`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
 Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
-(`balanced` wie unten beschrieben, Label „Every model on thorough questions“,
+(Standard seit 2026-10-07 `all`, „After every model“: wartet auf jedes Modell,
+weil eine späte Antwort weder in den Text noch in die Prüfung kommt;
+`balanced` wie unten beschrieben, Label „Every model on thorough questions“;
 `fast` ab der Hälfte der Antworten mit 1,1-facher
-Nachfrist und mindestens einer Sekunde, `all` wartet auf jedes Modell) und
+Nachfrist und mindestens einer Sekunde) und
 **Agent freedom** (`autonomy`, siehe unten). „Check contradictions“ bleibt im
 Reiter Runs und im Composer.
 
@@ -187,7 +191,8 @@ und der Antwortschritt starten bei Konkurrenz mit einer kleineren, noch
 passenden Grenze (mindestens `MAX_TOKENS`), statt auf das Settlement anderer
 Aufrufe zu warten.
 
-Bei `full` wartet die Synthese im Standard (`balanced`) seit 2026-10-06 auf
+Im Standard `all` (seit 2026-10-07) wartet die Synthese immer auf jedes Modell.
+Mit `balanced` wartet sie seit 2026-10-06 bei `full` auf
 jedes Modell: Das sorgfältigste Modell recherchiert oft am längsten und darf
 nicht wegfallen; wer schneller will, wählt `fast`. Bei `quick` gilt das Quorum
 (die Hälfte, mindestens zwei). Danach bekommen Nachzügler noch das 1,25-fache

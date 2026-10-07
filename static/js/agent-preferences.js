@@ -4,24 +4,45 @@
 (function () {
   "use strict";
   const App = window.App = window.App || {};
-  const KEY = "consensio.agentPreferences.v1";
-  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "balanced", autonomy: "guided" });
+  // v2 stores only what the user chose, so a later change of a default
+  // reaches everyone who never touched that setting. v1 stored every field
+  // whenever one changed; its values equal to the old defaults are dropped.
+  const KEY = "consensio.agentPreferences.v2";
+  const LEGACY_KEY = "consensio.agentPreferences.v1";
+  const LEGACY_DEFAULTS = { depth: "auto", quorum: "balanced", autonomy: "guided" };
+  // quorum "all" since 2026-10-07: a model that answers after the answer has
+  // started no longer reaches its check.
+  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "all", autonomy: "guided" });
   const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"], autonomy: ["guided", "free"] };
   const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect", autonomy: "agentAutonomySelect" };
 
+  function stored() {
+    try {
+      const current = localStorage.getItem(KEY);
+      if (current !== null) return JSON.parse(current) || {};
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || "{}") || {};
+      const chosen = {};
+      for (const field of Object.keys(CHOICES)) {
+        if (CHOICES[field].includes(legacy[field]) && legacy[field] !== LEGACY_DEFAULTS[field]) chosen[field] = legacy[field];
+      }
+      localStorage.setItem(KEY, JSON.stringify(chosen));
+      localStorage.removeItem(LEGACY_KEY);
+      return chosen;
+    } catch (_) { return {}; }
+  }
+
   function get() {
-    let stored = {};
-    try { stored = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (_) { stored = {}; }
+    const saved = stored();
     const value = { ...DEFAULTS };
     for (const field of Object.keys(CHOICES)) {
-      if (CHOICES[field].includes(stored[field])) value[field] = stored[field];
+      if (CHOICES[field].includes(saved[field])) value[field] = saved[field];
     }
     return value;
   }
 
   function set(field, choice) {
     if (!CHOICES[field]?.includes(choice)) return;
-    const value = { ...get(), [field]: choice };
+    const value = { ...stored(), [field]: choice };
     try { localStorage.setItem(KEY, JSON.stringify(value)); } catch (_) { /* Session keeps the control value. */ }
   }
 

@@ -1224,6 +1224,15 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   der erste Reiter) nur WÄHREND des laufenden Agent-Laufs; `render` ohne
   `running` (fertige, wiedergeöffnete, Verlaufsantwort) entfernt den Hinweis,
   die Aktivitätszeile „Updated memory“ und Settings behalten den Nachweis.
+  Seit 2026-10-07 zeigt `App.agentMemory.nudge` Konten ohne „Let Agent update
+  memory“ (`agent_settings.memory.auto === false` des fertigen Live-Turns, kein
+  Extra-Read) ab der zweiten fertigen Agent-Antwort in diesem Browser unter
+  höchstens drei Antworten eine Zeile mit „Turn on“/„Not now“
+  (`localStorage` `consensio.memoryHint.v1`: answers/shown/off). „Turn on“
+  schaltet über `App.userMemory.enableAgentMemory()` „Use my memory“ und „Let
+  Agent update memory“ in einem PUT ein (Profiltexte bleiben); „Not now“ und
+  jedes Speichern der Schalter in Settings beenden den Hinweis
+  (`dismissNudge`). Wiedergeöffnete Antworten zeigen ihn nicht.
   `consensio:memory-changed` lässt eine geladene Settings-Liste nachladen.
   `MOCK_LLM`: eine Agent-Frage „Remember: <Fakt>“ speichert den Fakt, damit der
   Ablauf ohne Provider im Browser prüfbar ist.
@@ -2449,7 +2458,9 @@ Familien und den Judges beruht.
 `ComparisonTools.compare` startet alle gefragten Vergleichsmodelle gleichzeitig in eigenen
 Threads (`compare_slots`, je Aufruf eine `ComparisonCancellation`) und wartet nur
 bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`);
-`full` wartet im Standard `balanced` auf alle Modelle.
+Standard ist seit 2026-10-07 `all` (jedes Modell, auch bei `quick`), weil eine
+späte Antwort nicht mehr in die Prüfung kommt; `balanced` wartet nur bei `full`
+auf alle.
 `_rebuild` normalisiert Quellen wie zuvor `fan_out_provider_answers` (das der
 Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
 `late`. `judge()` prüft seit 2026-10-07 nur Antworten ohne `late`.

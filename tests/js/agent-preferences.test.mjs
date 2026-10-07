@@ -20,21 +20,39 @@ function boot(allowed) {
 
 it("saves every choice, restores them and ignores unknown stored values", () => {
   const { window: w, document: d } = boot(true);
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "balanced", autonomy: "guided" });
+  // Since 2026-10-07 the answer waits for every model by default.
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "guided" });
   const depth = d.getElementById("agentDepthSelect");
   depth.value = "full"; depth.dispatchEvent(new w.Event("change"));
+  // Only the explicit choice is stored, so a later default still applies.
+  expect(JSON.parse(w.localStorage.getItem("consensio.agentPreferences.v2"))).toEqual({ depth: "full" });
   const quorum = d.getElementById("agentQuorumSelect");
-  quorum.value = "all"; quorum.dispatchEvent(new w.Event("change"));
+  quorum.value = "fast"; quorum.dispatchEvent(new w.Event("change"));
   const autonomy = d.getElementById("agentAutonomySelect");
   autonomy.value = "free"; autonomy.dispatchEvent(new w.Event("change"));
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "full", quorum: "all", autonomy: "free" });
-  // Values saved before the freedom setting existed fall back to guided.
-  w.localStorage.setItem("consensio.agentPreferences.v1", JSON.stringify({ depth: "deep", quorum: "fast" }));
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "full", quorum: "fast", autonomy: "free" });
+  // Unknown stored values fall back to the defaults.
+  w.localStorage.setItem("consensio.agentPreferences.v2", JSON.stringify({ depth: "deep", quorum: "fast" }));
   w.App.agentPreferences.sync();
   expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "fast", autonomy: "guided" });
   expect(depth.value).toBe("auto");
   expect(quorum.value).toBe("fast");
   expect(autonomy.value).toBe("guided");
+});
+
+it("moves v1 settings over without pinning the old defaults", () => {
+  const { window: w } = boot(true);
+  // v1 stored every field whenever one changed: "balanced" there was the
+  // default of that time, not a choice; "free" was chosen.
+  w.localStorage.removeItem("consensio.agentPreferences.v2");
+  w.localStorage.setItem("consensio.agentPreferences.v1", JSON.stringify({ depth: "auto", quorum: "balanced", autonomy: "free" }));
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "free" });
+  expect(w.localStorage.getItem("consensio.agentPreferences.v1")).toBe(null);
+  expect(JSON.parse(w.localStorage.getItem("consensio.agentPreferences.v2"))).toEqual({ autonomy: "free" });
+  // A real v1 choice of a faster start survives.
+  w.localStorage.removeItem("consensio.agentPreferences.v2");
+  w.localStorage.setItem("consensio.agentPreferences.v1", JSON.stringify({ depth: "auto", quorum: "fast", autonomy: "guided" }));
+  expect(w.App.agentPreferences.get().quorum).toBe("fast");
 });
 
 it("offers the settings tab only to accounts with Agent Beta", () => {
