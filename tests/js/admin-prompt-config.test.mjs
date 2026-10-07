@@ -8,8 +8,11 @@ import { createAdminClient } from '../../static/js/admin-api.js';
 const template = readFileSync(path.join(ROOT, 'templates/admin.html'), 'utf8')
     .replace('{% include "partials/admin_prompt_config.html" %}', readFileSync(path.join(ROOT, 'templates/partials/admin_prompt_config.html'), 'utf8'));
 const source = readFileSync(path.join(ROOT, 'static/js/admin-prompt-config.js'), 'utf8');
-const config = { revision: 4, reference_timezone: 'Europe/Berlin', prompts: { agent: 'Agent instructions', answers: 'Answer instructions', consensus: 'Synthesis instructions' } };
-const defaults = { reference_timezone: 'Europe/Berlin', prompts: { agent: 'Default agent', answers: 'Default answers', consensus: 'Default synthesis' } };
+const config = { revision: 4, reference_timezone: 'Europe/Berlin' };
+const catalog = [
+    { key: 'agent', label: 'Agent: steering instructions', used_for: 'Selected Agent model.', source: 'prompt_defaults.py:AGENT_SYSTEM_PROMPT', text: 'Agent <script>literal</script> instructions' },
+    { key: 'answers', label: 'Consensus mode: individual answers', used_for: 'Each answering model.', source: 'prompt_defaults.py:ANSWER_SYSTEM_PROMPT', text: 'Answer instructions' },
+];
 
 function boot(request) {
     const dom = new JSDOM(template, { runScripts: 'outside-only', url: 'https://consens.io/admin#configuration' });
@@ -25,7 +28,7 @@ function change(window, id, value) {
 function submit(window) {
     window.document.getElementById('promptConfigForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 }
-function loaded() { return { config: structuredClone(config), defaults, max_prompt_chars: 10000, cache_seconds: 30 }; }
+function loaded() { return { config: structuredClone(config), defaults: config, prompts_readonly: catalog, cache_seconds: 30 }; }
 
 describe('Admin prompt configuration', () => {
     it('shows the real main error envelope while retaining a conflicting draft without a second write', async () => {
@@ -35,11 +38,11 @@ describe('Admin prompt configuration', () => {
         const { window, doc, panel } = boot(createAdminClient({ currentUser: { getIdToken: async () => 'test-token' } }));
         try {
             await panel.setUser('admin');
-            change(window, 'prompt-agent', 'My unsaved draft');
+            change(window, 'promptReferenceTimezone', 'UTC');
             submit(window);
             await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('Configuration changed in another session.'));
             expect(doc.getElementById('promptConfigStatus').textContent).not.toContain('[object Object]');
-            expect(doc.getElementById('prompt-agent').value).toBe('My unsaved draft');
+            expect(doc.getElementById('promptReferenceTimezone').value).toBe('UTC');
             expect(doc.getElementById('promptConfigDirty').hidden).toBe(false);
             expect(fetch.mock.calls.filter(([, options]) => options.method === 'PUT')).toHaveLength(1);
         } finally { fetch.mockRestore(); window.close(); }
@@ -61,24 +64,31 @@ describe('Admin prompt configuration', () => {
         expect(request.mock.calls[1][2].config.delegation).toEqual({ ...delegation, max_parallel: 3 });
         window.close();
     });
-    it('loads, edits, saves exactly one config with its revision, and restores defaults as a draft', async () => {
+    it('shows the code prompts read-only and never sends them', async () => {
         const request = vi.fn(async (method, _path, body) => method === 'GET' ? loaded() : { config: { ...body.config, revision: 5 } });
         const { window, doc, panel } = boot(request);
         await panel.setUser('admin');
         expect(doc.getElementById('savePromptConfigBtn').disabled).toBe(true);
-        change(window, 'prompt-agent', '<script>literal prompt</script>');
-        expect(doc.getElementById('promptConfigDirty').hidden).toBe(false);
+        const entries = doc.querySelectorAll('#promptCatalog > details');
+        expect([...entries].map(entry => entry.dataset.promptKey)).toEqual(['agent', 'answers']);
+        expect(entries[0].open).toBe(false);
+        expect(entries[0].querySelector('summary').textContent).toBe('Agent: steering instructions');
+        expect(entries[0].textContent).toContain('Selected Agent model.');
+        expect(entries[0].textContent).toContain('prompt_defaults.py:AGENT_SYSTEM_PROMPT');
+        const text = doc.getElementById('prompt-agent');
+        expect(text.tagName).toBe('PRE');
+        expect(text.textContent).toBe(catalog[0].text);
         expect(doc.querySelector('#tab-configuration script')).toBeNull();
+        expect(doc.querySelectorAll('#tab-configuration textarea, [data-reset-prompt]')).toHaveLength(0);
+        change(window, 'promptReferenceTimezone', 'UTC');
+        expect(doc.getElementById('promptConfigDirty').hidden).toBe(false);
         submit(window);
         expect(doc.getElementById('promptConfigFields').disabled).toBe(true);
         await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('Saved.'));
         expect(request.mock.calls[1]).toEqual(['PUT', '/api/admin/prompt-config', { revision: 4, config: {
-            reference_timezone: 'Europe/Berlin', prompts: { ...config.prompts, agent: '<script>literal prompt</script>' },
+            reference_timezone: 'UTC',
         } }]);
         expect(doc.getElementById('promptConfigDirty').hidden).toBe(true);
-        doc.querySelector('[data-reset-prompt="agent"]').click();
-        expect(doc.getElementById('prompt-agent').value).toBe(defaults.prompts.agent);
-        expect(doc.getElementById('promptConfigDirty').hidden).toBe(false);
         expect(request).toHaveBeenCalledTimes(2);
         window.close();
     });
@@ -87,13 +97,13 @@ describe('Admin prompt configuration', () => {
         const request = vi.fn(async method => { if (method === 'PUT') throw new Error('Configuration changed in another session.'); return loaded(); });
         const { window, doc, panel } = boot(request);
         await panel.setUser('admin');
-        change(window, 'prompt-agent', 'My unsaved draft');
+        change(window, 'promptReferenceTimezone', 'UTC');
         submit(window);
         await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('another session'));
-        expect(doc.getElementById('prompt-agent').value).toBe('My unsaved draft');
+        expect(doc.getElementById('promptReferenceTimezone').value).toBe('UTC');
         expect(doc.getElementById('promptConfigDirty').hidden).toBe(false);
         doc.getElementById('reloadPromptConfigBtn').click();
-        await vi.waitFor(() => expect(doc.getElementById('prompt-agent').value).toBe(config.prompts.agent));
+        await vi.waitFor(() => expect(doc.getElementById('promptReferenceTimezone').value).toBe(config.reference_timezone));
         expect(doc.getElementById('promptConfigDirty').hidden).toBe(true);
         window.close();
     });
@@ -109,18 +119,22 @@ describe('Admin prompt configuration', () => {
         panel.setUser(null);
         resolve(loaded());
         await pending;
-        expect(doc.getElementById('prompt-agent').value).toBe('');
+        expect(doc.getElementById('promptReferenceTimezone').value).toBe('');
+        expect(doc.getElementById('promptCatalog').children).toHaveLength(0);
         expect(doc.getElementById('promptConfigFields').disabled).toBe(true);
         window.close();
     });
 
-    it('opens a collapsed editor when its required prompt is empty', async () => {
-        const request = vi.fn(async () => loaded());
+    it('opens the collapsed delegation section when a setting is invalid', async () => {
+        const delegation = { enabled: false, max_parallel: 2, max_agents: 4 };
+        const request = vi.fn(async () => ({ ...loaded(), config: { ...config, delegation },
+            delegation_limits: { max_parallel: [1, 4], max_agents: [1, 8] } }));
         const { window, doc, panel } = boot(request);
         await panel.setUser('admin');
-        change(window, 'prompt-consensus', '');
+        expect(doc.getElementById('delegationConfig').closest('details').open).toBe(false);
+        change(window, 'delegation-max_parallel', '99');
         submit(window);
-        expect(doc.getElementById('prompt-consensus').closest('details').open).toBe(true);
+        expect(doc.getElementById('delegationConfig').closest('details').open).toBe(true);
         expect(request).toHaveBeenCalledTimes(1);
         window.close();
     });

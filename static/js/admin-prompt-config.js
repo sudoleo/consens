@@ -7,20 +7,45 @@ export function createPromptConfigPanel(request) {
     const save = document.getElementById('savePromptConfigBtn');
     const reload = document.getElementById('reloadPromptConfigBtn');
     const zone = document.getElementById('promptReferenceTimezone');
-    const keys = ['agent', 'answers', 'consensus'];
-    const inputs = Object.fromEntries(keys.map(key => [key, document.getElementById(`prompt-${key}`)]));
     const delegation = document.getElementById('delegationConfig');
+    const catalog = document.getElementById('promptCatalog');
     const delegationInputs = new Map();
-    let user = null, generation = 0, saved = null, defaults = null, busy = false, cacheSeconds = 30;
+    let user = null, generation = 0, saved = null, busy = false, cacheSeconds = 30;
 
+    // System prompts are code-owned: the admin only edits timezone and
+    // delegation settings; prompts are rendered read-only from the catalog.
     function draft() {
-        return { reference_timezone: zone.value.trim(), prompts: Object.fromEntries(keys.map(key => [key, inputs[key].value])),
+        return { reference_timezone: zone.value.trim(),
             ...(saved?.delegation ? { delegation: Object.fromEntries([...delegationInputs].map(([key, input]) =>
-                [key, input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value])) } : {}) };
+                [key, input.type === 'checkbox' ? input.checked : Number(input.value)])) } : {}) };
     }
     function dirty() {
-        return saved && (zone.value.trim() !== saved.reference_timezone || keys.some(key => inputs[key].value !== saved.prompts[key])
+        return saved && (zone.value.trim() !== saved.reference_timezone
             || (saved.delegation && JSON.stringify(draft().delegation) !== JSON.stringify(saved.delegation)));
+    }
+    function renderCatalog(entries) {
+        catalog.replaceChildren(...(entries || []).map(entry => {
+            const details = document.createElement('details');
+            details.className = 'prompt-config-editor prompt-catalog-entry';
+            details.dataset.promptKey = entry.key;
+            const summary = document.createElement('summary');
+            summary.textContent = entry.label;
+            const usedFor = document.createElement('p');
+            usedFor.className = 'section-hint';
+            usedFor.textContent = entry.used_for;
+            const source = document.createElement('p');
+            source.className = 'prompt-catalog-source';
+            const code = document.createElement('code');
+            code.textContent = entry.source;
+            source.append('Source: ', code);
+            const text = document.createElement('pre');
+            text.className = 'prompt-catalog-text';
+            text.id = `prompt-${entry.key}`;
+            text.tabIndex = 0;
+            text.textContent = entry.text;
+            details.append(summary, usedFor, source, text);
+            return details;
+        }));
     }
     function message(text, error = false) {
         status.textContent = text;
@@ -36,7 +61,6 @@ export function createPromptConfigPanel(request) {
     function display(config) {
         saved = config;
         zone.value = config.reference_timezone;
-        keys.forEach(key => { inputs[key].value = config.prompts[key]; });
         delegationInputs.forEach((input, key) => {
             if (input.type === 'checkbox') input.checked = config.delegation?.[key] === true;
             else input.value = config.delegation?.[key] ?? '';
@@ -53,7 +77,6 @@ export function createPromptConfigPanel(request) {
         try {
             const result = await request('GET', '/api/admin/prompt-config');
             if (token !== generation) return;
-            defaults = result.defaults;
             cacheSeconds = result.cache_seconds;
             delegationInputs.clear(); delegation.replaceChildren();
             delegation.hidden = !result.config.delegation;
@@ -67,10 +90,12 @@ export function createPromptConfigPanel(request) {
                 seconds: 'Run duration (seconds)', max_tokens: 'Shared token budget', max_cost_nano_usd: 'Shared cost budget (nanodollars; 1 USD = 1,000,000,000)',
                 max_agents: 'Unreviewed workers at once', max_parallel: 'Workers running at once', max_messages: 'Messages per run',
                 context_chars: 'Context per session (characters)', message_chars: 'Message length (characters)', worker_calls: 'Model calls per worker',
-                max_searches: 'Web searches per run', orchestrator_prompt: 'Orchestrator instructions', worker_prompt: 'Worker instructions' };
+                max_searches: 'Web searches per run' };
             for (const [key, value] of Object.entries(result.config.delegation || {})) {
+                // Prompt texts are shown in the read-only catalog, never as inputs.
+                if (typeof value !== 'boolean' && typeof value !== 'number') continue;
                 const label = document.createElement('label'); label.htmlFor = `delegation-${key}`; label.textContent = labels[key] || key;
-                const input = document.createElement(typeof value === 'string' ? 'textarea' : 'input'); input.id = label.htmlFor;
+                const input = document.createElement('input'); input.id = label.htmlFor;
                 // Preserve old configuration for legacy/evaluation callers, but
                 // don't offer ineffective run caps as Agent Chat settings.
                 label.hidden = input.hidden = legacyLimits.has(key);
@@ -79,10 +104,10 @@ export function createPromptConfigPanel(request) {
                     input.type = 'number'; input.step = '1'; input.required = true;
                     const limits = result.delegation_limits?.[key];
                     if (limits) { input.min = limits[0]; input.max = limits[1]; }
-                } else { input.rows = 8; input.required = true; input.maxLength = result.max_prompt_chars; }
+                }
                 delegationInputs.set(key, input); delegation.append(label, input);
             }
-            keys.forEach(key => { inputs[key].maxLength = result.max_prompt_chars; });
+            renderCatalog(result.prompts_readonly);
             display(result.config);
             message('');
         } catch (error) {
@@ -94,7 +119,7 @@ export function createPromptConfigPanel(request) {
     async function submit(event) {
         event.preventDefault();
         if (!saved || !user || busy) return;
-        keys.forEach(key => { if (!inputs[key].checkValidity()) inputs[key].closest('details').open = true; });
+        if ([...delegationInputs.values()].some(input => !input.checkValidity())) delegation.closest('details').open = true;
         if (!form.reportValidity()) return;
         const token = generation;
         const payload = { revision: saved.revision, config: draft() };
@@ -113,13 +138,6 @@ export function createPromptConfigPanel(request) {
     form.addEventListener('submit', submit);
     form.addEventListener('input', () => { message(''); sync(); });
     reload.addEventListener('click', load);
-    panel.querySelectorAll('[data-reset-prompt]').forEach(button => {
-        button.addEventListener('click', () => {
-            if (!defaults || busy) return;
-            inputs[button.dataset.resetPrompt].value = defaults.prompts[button.dataset.resetPrompt];
-            message('Default restored in the draft. Save to apply.'); sync();
-        });
-    });
     window.addEventListener('beforeunload', event => {
         if (!dirty()) return;
         event.preventDefault(); event.returnValue = '';
@@ -129,11 +147,11 @@ export function createPromptConfigPanel(request) {
         setUser(uid) {
             generation++;
             user = uid;
-            saved = defaults = null;
+            saved = null;
             busy = false;
             zone.value = '';
             delegationInputs.clear(); delegation.replaceChildren(); delegation.hidden = true;
-            keys.forEach(key => { inputs[key].value = ''; });
+            catalog.replaceChildren();
             meta.textContent = '';
             message(uid ? '' : 'Log in as an admin to edit configuration.');
             sync();

@@ -27,8 +27,9 @@ Consensus-Funktion bleibt unberührt.
   `static/css/agent-chat.css`: SSE-Aktivität, sichtbares Reasoning, Kosten und
   gespeicherte Turns. Anzeige bisher flach, höchstens 64 Ereigniseinträge.
   Modell-Icons und Composer-Picker sind vorhanden; eine Agenten-Seitenleiste fehlt.
-- `/admin#configuration`, `prompt_config.py`: DB-gestützte Prompts und Zeitzone mit
-  Revisionen. Neue Orchestrator-/Worker-Anweisungen und Delegationsregeln dort einordnen.
+- `/admin#configuration`, `prompt_config.py`: Zeitzone und Delegationsregeln mit
+  Revisionen. Orchestrator-/Worker-Anweisungen liegen seit 2026-10-07 nur im Code
+  (`agent_delegation_config.py`) und werden im Admin schreibgeschützt angezeigt.
 
 ## Verhalten und Kommunikation
 

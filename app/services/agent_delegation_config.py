@@ -1,4 +1,7 @@
-"""Versioned defaults and strict admin limits for a single delegation level."""
+"""Versioned defaults and strict admin limits for a single delegation level.
+
+The orchestrator/worker instructions are code-owned: admins edit only the
+settings below, and :func:`validate` always attaches the prompts from code."""
 from copy import deepcopy
 
 ORCHESTRATOR_PROMPT = """You own the final answer in consens.io. Follow the supplied Consensus workflow for user questions.
@@ -42,23 +45,41 @@ LIMITS = {
     "context_chars": (2000, 120_000), "message_chars": (256, 8000),
     "worker_calls": (1, 16), "max_searches": (0, 8),
 }
-DEFAULTS = {
+SETTINGS_DEFAULTS = {
     # Live evaluation did not meet the spec's cost/quality release gate.
     "enabled": False, "max_calls": 32, "max_tools": 48, "seconds": 300,
     "max_tokens": 4_000_000, "max_cost_nano_usd": 3_000_000_000,
     "max_agents": 4, "max_parallel": 2, "max_messages": 64,
     "context_chars": 48_000, "message_chars": 4000, "worker_calls": 8,
-    "max_searches": 2, "orchestrator_prompt": ORCHESTRATOR_PROMPT,
-    "worker_prompt": WORKER_PROMPT,
+    "max_searches": 2,
 }
+PROMPTS = {"orchestrator_prompt": ORCHESTRATOR_PROMPT, "worker_prompt": WORKER_PROMPT}
+# Runtime shape consumed by the delegation loop: settings plus code prompts.
+DEFAULTS = {**SETTINGS_DEFAULTS, **PROMPTS}
 
 
 def defaults():
     return deepcopy(DEFAULTS)
 
 
+def settings_defaults():
+    return deepcopy(SETTINGS_DEFAULTS)
+
+
+def settings_only(value):
+    """The admin-editable part of a delegation config (prompt texts removed)."""
+    return {key: deepcopy(item) for key, item in value.items() if key not in PROMPTS}
+
+
 def validate(value):
-    if not isinstance(value, dict) or set(value) != set(DEFAULTS):
+    """Validate the editable settings and attach the prompts from code.
+
+    Prompt texts in ``value`` (legacy documents or old admin clients) are
+    ignored, never stored or used."""
+    if not isinstance(value, dict):
+        raise ValueError("Provide all delegation settings.")
+    value = settings_only(value)
+    if set(value) != set(SETTINGS_DEFAULTS):
         raise ValueError("Provide all delegation settings.")
     if type(value["enabled"]) is not bool:
         raise ValueError("Delegation enabled must be a boolean.")
@@ -67,10 +88,4 @@ def validate(value):
             raise ValueError(f"Delegation {key} must be between {low} and {high}.")
     if value["max_parallel"] > value["max_agents"]:
         raise ValueError("Parallel agents cannot exceed the agent limit.")
-    for key in ("orchestrator_prompt", "worker_prompt"):
-        text = value[key]
-        if (not isinstance(text, str) or not text.strip() or len(text) > 10_000
-                or len(text.encode("utf-8")) > 28_000
-                or any(ord(c) < 32 and c not in "\n\r\t" for c in text)):
-            raise ValueError(f"Invalid delegation {key}.")
-    return deepcopy(value)
+    return {**value, **PROMPTS}

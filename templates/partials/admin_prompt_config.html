@@ -1,7 +1,7 @@
         <section id="tab-configuration" class="admin-tab-panel prompt-config-panel" role="tabpanel" hidden>
             <form id="promptConfigForm" novalidate>
                 <div class="admin-savebar prompt-config-savebar">
-                    <h2>Prompt configuration</h2>
+                    <h2>Prompts &amp; settings</h2>
                     <span id="promptConfigDirty" class="admin-chip" hidden>Unsaved changes</span>
                     <button id="reloadPromptConfigBtn" type="button" class="admin-btn secondary" disabled title="Discard the draft and load the saved configuration">Reload saved</button>
                     <button id="savePromptConfigBtn" type="submit" class="admin-btn" disabled>Save configuration</button>
@@ -16,33 +16,16 @@
                         <input id="promptReferenceTimezone" type="text" maxlength="64" required placeholder="Europe/Berlin" list="promptTimezones" autocomplete="off">
                         <datalist id="promptTimezones"><option value="Europe/Berlin"><option value="UTC"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Asia/Tokyo"></datalist>
                     </div>
-                    <div class="admin-section">
-                        <h3>System prompts</h3>
-                        <p class="section-hint">Changes apply to new requests. Conversation history, current date and available tools are supplied automatically. Personal instructions override the default for individual Consensus answers.</p>
-                        <details class="prompt-config-editor" open>
-                            <summary>Agent chat</summary>
-                            <label for="prompt-agent">Instructions for the selected chat model</label>
-                            <textarea id="prompt-agent" rows="11" required spellcheck="false"></textarea>
-                            <button type="button" class="admin-btn secondary" data-reset-prompt="agent">Restore app default</button>
-                        </details>
-                        <details class="prompt-config-editor">
-                            <summary>Consensus: individual answers</summary>
-                            <label for="prompt-answers">Default instructions for each answering model</label>
-                            <textarea id="prompt-answers" rows="8" required spellcheck="false"></textarea>
-                            <button type="button" class="admin-btn secondary" data-reset-prompt="answers">Restore app default</button>
-                        </details>
-                        <details class="prompt-config-editor">
-                            <summary>Consensus: final answer</summary>
-                            <label for="prompt-consensus">Instructions for combining the model responses</label>
-                            <textarea id="prompt-consensus" rows="16" required spellcheck="false"></textarea>
-                            <button type="button" class="admin-btn secondary" data-reset-prompt="consensus">Restore app default</button>
-                        </details>
-                    </div>
                     <details class="admin-section prompt-config-editor">
                         <summary>Agent delegation</summary>
-                        <p class="section-hint">Off by default: the current quality and total-cost comparison did not meet the savings criterion. Enable for selected use. Limits and instructions are frozen for each new run; costs include the orchestrator, workers, search and rework.</p>
+                        <p class="section-hint">Off by default: the current quality and total-cost comparison did not meet the savings criterion. Enable for selected use. Settings are frozen for each new run; costs include the orchestrator, workers, search and rework.</p>
                         <div id="delegationConfig" class="delegation-config" hidden></div>
                     </details>
                 </fieldset>
             </form>
+            <div class="admin-section prompt-catalog">
+                <h3>System prompts</h3>
+                <p class="section-hint">Read-only. Prompts are maintained in code; changes ship with a deploy. Conversation history, current date and available tools are supplied automatically at request time.</p>
+                <div id="promptCatalog" class="prompt-catalog-list"></div>
+            </div>
         </section>

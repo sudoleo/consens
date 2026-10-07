@@ -1,4 +1,4 @@
-"""Prompt revisions are atomic across independent workers in real Firestore."""
+"""Prompt-config (timezone/delegation) revisions are atomic across independent workers in real Firestore."""
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import uuid
@@ -6,7 +6,9 @@ import uuid
 from google.cloud import firestore
 
 from app.core.e2e_profile import E2E_PROJECT_ID, assert_safe_e2e_environment
-from app.services.prompt_config import PromptConfigConflict, PromptConfigStore, defaults
+from app.services.prompt_config import PromptConfigConflict, PromptConfigStore, defaults, editable
+
+ZONES = {"editor-a": "UTC", "editor-b": "Asia/Tokyo"}
 
 
 def test_prompt_configuration_conflict_and_history_are_atomic():
@@ -24,7 +26,7 @@ def test_prompt_configuration_conflict_and_history_are_atomic():
         store = IsolatedStore(db)
         assert store.read()["revision"] == 0
         config = defaults()
-        config["prompts"]["agent"] = editor
+        config["reference_timezone"] = ZONES[editor]
         gate.wait(timeout=10)
         try:
             return store.save(config, expected_revision=0, updated_by=editor)
@@ -37,18 +39,19 @@ def test_prompt_configuration_conflict_and_history_are_atomic():
         winners = [result for result in results if result]
         assert len(winners) == 1
         saved = ref.get().to_dict()
-        assert saved == winners[0]
-        assert saved["prompts"]["agent"] == saved["updated_by"]
+        assert saved == editable(winners[0])
+        assert "prompts" not in saved  # Prompts are code-owned and never stored.
+        assert saved["reference_timezone"] == ZONES[saved["updated_by"]]
         history = list(ref.collection("revisions").stream())
         assert len(history) == 1
         assert history[0].id == "000000000001" and history[0].to_dict() == saved
         other_worker = IsolatedStore(db)
-        assert other_worker.read() == saved
+        assert editable(other_worker.read()) == saved
         restored = other_worker.save(defaults(), expected_revision=1, updated_by="editor-c")
         assert restored["revision"] == 2
         assert ref.collection("revisions").document("000000000001").get().to_dict() == saved
-        assert ref.collection("revisions").document("000000000002").get().to_dict() == restored
-        assert IsolatedStore(db).read() == restored
+        assert ref.collection("revisions").document("000000000002").get().to_dict() == editable(restored)
+        assert editable(IsolatedStore(db).read()) == editable(restored)
     finally:
         for revision in ref.collection("revisions").stream():
             revision.reference.delete()

@@ -2085,8 +2085,10 @@ Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` enthält
 die vormals template-lokalen Styles, `static/js/admin.js` Auth, Rendering und
 Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
 `static/js/admin-prompt-config.js` besitzt den separaten Configuration-Tab:
-Laden/Speichern, Änderungsanzeige, Zurücksetzen einzelner Prompts auf App-Defaults
-und Schutz vor verspäteten Antworten eines vorherigen Login-Zustands.
+Laden/Speichern von Zeitzone und Delegations-Einstellungen, Änderungsanzeige,
+schreibgeschützte Anzeige der Systemprompts (`#promptCatalog`, je Eintrag ein
+`<details>` mit `<pre id="prompt-{key}">` aus `prompts_readonly`) und Schutz vor
+verspäteten Antworten eines vorherigen Login-Zustands.
 `admin.html` bleibt Markup und trägt nur deklarative `data-*`-Konfiguration.
 Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_config.html`.
 
@@ -5001,8 +5003,9 @@ app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
   chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
 app/services/
-  prompt_config.py           DB-Konfiguration der Systemprompts, Validierung, Transaktionsrevisionen und 30-s-Cache
-  prompt_defaults.py         Versionierte Ausgangstexte für Agent, Einzelantworten und Synthese
+  prompt_config.py           DB-Einstellungen (Zeitzone, Delegation) mit Code-Prompts, Validierung, Transaktionsrevisionen und 30-s-Cache
+  prompt_catalog.py          Schreibgeschützter Katalog aller Systemprompts aus dem Code für den Admin
+  prompt_defaults.py         Code-eigene Systemprompts für Agent, Einzelantworten und Synthese
 app/services/llm/
   provider_runtime.py        Zentrale Timeout-/Retry-Policy + Stream-Cancellation
   provider_transport.py      Kanonischer Provider-Fan-out, Labels, Key-/Transport-Dispatch
@@ -5280,31 +5283,45 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `accepted → reserved → running → succeeded|failed`; zusätzlich
   `accepted → failed` (`reservation_expired`) und nach Owner-Löschung der
   inhaltsfreie Tombstone `succeeded|failed → deleted` bis zum Retention-Ablauf.
-- `app_config/prompts` — globale Prompt-Konfiguration aus `prompt_config.py`:
-  `prompts.agent`, `prompts.answers`, `prompts.consensus`, `reference_timezone`,
-  `delegation` (aktiviert, Rollenprompts, Laufzeit-/Kontext-/Nachrichten-/Parallelitäts-
-  und Budgetlimits; Defaults/Migration in `agent_delegation_config.py`),
-  ganzzahlige `revision`, UTC-`updated_at` und Admin-UID bzw. Wartungskennung `updated_by`.
-  `GET /api/admin/prompt-config` (Router `admin.py`) liest frisch und liefert
-  zusätzlich Defaults und Limits; es erzeugt keinen Datensatz.
-  `PUT /api/admin/prompt-config` verlangt `revision` plus vollständige `config`,
-  validiert IANA-Zeitzone und exakt drei nichtleere Texte (je höchstens 10.000
-  Zeichen / 28.000 UTF-8-Bytes, keine Steuerzeichen außer Tab/Zeilenumbrüchen).
-  Die Grenzen lassen Platz für den Datumsblock beim `/prepare`→`/ask_*`-Roundtrip
-  mit dessen 12.000-Zeichen-/32.000-Byte-Limit.
+- `app_config/prompts` — globale Laufzeit-Einstellungen aus `prompt_config.py`
+  (Dokumentname historisch): `reference_timezone`, `delegation` (aktiviert,
+  Laufzeit-/Kontext-/Nachrichten-/Parallelitäts- und Budgetlimits; Defaults in
+  `agent_delegation_config.py`), ganzzahlige `revision`, UTC-`updated_at` und
+  Admin-UID bzw. Wartungskennung `updated_by`.
+  **Systemprompts sind seit 2026-10-07 code-eigen und im Admin nur lesbar:**
+  `get_config()` behält seine Form (`prompts.agent|answers|consensus`,
+  `delegation.orchestrator_prompt|worker_prompt`), setzt die Texte aber immer aus
+  `prompt_defaults.DEFAULT_PROMPTS` bzw. `agent_delegation_config.PROMPTS`.
+  Prompttexte in älteren Dokumenten werden beim Lesen ignoriert (das Dokument lädt
+  weiter fehlerfrei) und beim nächsten Speichern entfernt; neue Revisionen
+  enthalten keine Prompttexte. Prompt-Änderungen gehen nur über Code + Deploy.
+  `GET /api/admin/prompt-config` (Router `admin.py`) liest frisch und liefert die
+  editierbare Sicht (`config`/`defaults` ohne Prompttexte), Limits sowie
+  `prompts_readonly` aus `prompt_catalog.prompt_catalog()`; es erzeugt keinen Datensatz.
+  `PUT /api/admin/prompt-config` verlangt `revision` plus `config` mit
+  `reference_timezone` und optional vollständigen `delegation`-Einstellungen
+  (fehlt `delegation`, bleibt die gespeicherte erhalten). Von Alt-Clients
+  mitgeschickte `prompts` bzw. Delegations-Prompttexte werden verworfen.
   Beide Endpoints prüfen widerrufbare Auth-Tokens und `is_user_admin`.
   Eine Firestore-Transaktion prüft die erwartete Revision und schreibt aktive
   Konfiguration sowie vollständigen Audit-Snapshot unter
   `app_config/prompts/revisions/{revision:012d}` gemeinsam. Konflikte liefern 409;
   der Browser bewahrt den Entwurf. Unveränderte bereits gespeicherte Werte
-  erzeugen keine neue Revision. Runtime-Reads sind pro Worker 30 Sekunden
+  erzeugen keine neue Revision (außer ein Altdokument trägt noch Prompttexte).
+  Runtime-Reads sind pro Worker 30 Sekunden
   gecacht; bei Lesefehlern bleibt der letzte gültige Stand oder der App-Default
   aktiv. Admin-Lese-/Schreibfehler liefern 503 und keine vorgetäuschte Speicherung.
-  `prompt_defaults.py` ist der versionierte Fallback und die Quelle für Reset.
-  Freitext wird als Text behandelt, nicht als interpolierte Vorlage. Datum,
-  Modellidentität, Verlauf, Quellen-/Antwort-Scaffolding und Tooldefinitionen
-  werden weiterhin im Code zusammengesetzt. Eigene Nutzer-Prompts haben für
-  Einzelantworten Vorrang. Judge-/Resolve-/Spezialprompts bleiben im Code.
+  `MAX_PROMPT_CHARS`/`MAX_PROMPT_BYTES` (10.000 Zeichen / 28.000 UTF-8-Bytes)
+  bleiben als Obergrenze der Code-Prompts (Test), damit der Datumsblock beim
+  `/prepare`→`/ask_*`-Roundtrip mit dessen 12.000-Zeichen-/32.000-Byte-Limit passt.
+  `prompt_catalog.py` listet die angezeigten Prompts als eine Liste
+  `{key, label, used_for, source, text}` (Agent-Steuerung, Pipeline-Protokoll,
+  Antwortschritt, Vergleichsmodelle mit Datums-Platzhalter für Tiefe „full“,
+  Consensus-Einzelantworten/-Endantwort, Delegation Orchestrator/Worker); neue
+  Prompts = ein Eintrag in `_ENTRIES`. Datum, Modellidentität, Verlauf,
+  Quellen-/Antwort-Scaffolding und Tooldefinitionen werden im Code zusammengesetzt.
+  Eigene Nutzer-Prompts haben für Einzelantworten Vorrang. Judge-/Resolve-/
+  Spezialprompts bleiben im Code.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`,
   `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`,

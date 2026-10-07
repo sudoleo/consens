@@ -268,8 +268,10 @@ def test_maximum_admin_prompt_survives_prepare_to_ask_round_trip(monkeypatch, an
     from app.services import prompt_config
 
     config = prompt_config.defaults()
+    # Prompts are code-owned; this pins the largest size they may grow to.
+    assert len(answer_prompt) <= prompt_config.MAX_PROMPT_CHARS
+    assert len(answer_prompt.encode("utf-8")) <= prompt_config.MAX_PROMPT_BYTES
     config["prompts"]["answers"] = answer_prompt
-    config = prompt_config.validate_config(config)
     monkeypatch.setattr(prompt_config, "get_config", lambda: config)
     captured = {}
 

@@ -120,8 +120,11 @@ Owner-/Pro-/Admin-geschützte Endpoints mit `private, no-store`:
   Auftrag und paginierte Nachrichten, maximal 50 je Request.
 - `POST /agent/chats/{chat}/turns/{turn}/stop`: persistentes Abbruchsignal.
 
-`/admin#configuration` verwaltet Delegationsregeln, beide Rollenprompts und Limits
-im bestehenden revisionsgesicherten Dokument `app_config/prompts.delegation`.
+`/admin#configuration` verwaltet Delegationsregeln und Limits im bestehenden
+revisionsgesicherten Dokument `app_config/prompts.delegation`. Die beiden
+Rollenprompts (`ORCHESTRATOR_PROMPT`, `WORKER_PROMPT` in
+`agent_delegation_config.py`) sind seit 2026-10-07 code-eigen: der Admin zeigt sie
+nur schreibgeschützt, gespeicherte Alttexte werden ignoriert.
 Ältere Dokumente erhalten Defaults; ältere Save-Clients erhalten bereits gespeicherte
 Delegationseinstellungen. Bestehende Turns bleiben unverändert lesbar.
 
