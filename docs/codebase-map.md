@@ -2557,7 +2557,12 @@ laufenden Coverage-Judge. Seit 2026-10-07 ruft der Agent `query_differences(...,
 passes=2)`: ein zweiter, unabhängiger Differences-Lauf startet parallel
 (`_in_background`, gleicher Kontext/Cancellation/Budget wie der Coverage-Thread),
 `merge_difference_passes` hängt nur seine neuen Funde an (gleich = Zitat in
-Zitat oder gleicher Konsens-Satz mit gleichen Modellen), der Score wird danach
+Zitat, gleicher Claim oder gleicher Konsens-Satz, verglichen nur mit Funden des
+ersten Laufs; seit der Messung vom 2026-10-07 ohne die frühere Bedingung
+„gleiche Modelle“: 79 bewertete Lauf-Paare, Duplikate 14 → 5, kein echter Fund
+verloren; die Zusatzfunde des zweiten Laufs sind zu ~64 % echt, gegenüber
+~82 % in einem einzelnen Lauf, und senken den Score im Mittel um 5–11 Punkte),
+der Score wird danach
 in `_apply_coverage` neu berechnet; `judges.differences` trägt `passes` und
 `second_pass_added`. Judge-Audit (20 Fragen, 230 blind bewertete Funde): ein
 Luna-Lauf fand 60–68 % der echten Streitpunkte, zwei zusammen 78 %, Median

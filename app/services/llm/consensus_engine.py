@@ -2410,15 +2410,13 @@ def _difference_quotes(item: dict) -> set:
     return quotes
 
 
-def _difference_models(item: dict) -> frozenset:
-    return frozenset(model for position in item.get("positions") or []
-                     for model in position.get("models") or [])
-
-
 def _same_difference(a: dict, b: dict) -> bool:
     """Two judge passes describe the same disagreement when they cite the same
-    passage of a response (verbatim quotes, one inside the other) or hang on the
-    same consensus sentence with the same models on the sides."""
+    passage of a response (verbatim quotes, one inside the other), state the
+    same claim, or hang on the same consensus sentence. The sides do not have
+    to match: two passes group the same models differently (measured on 79
+    labelled pass pairs, 2026-10-07: requiring the same models kept 14
+    duplicates, without it 5, and no real finding was lost)."""
     quotes_a, quotes_b = _difference_quotes(a), _difference_quotes(b)
     if any(x in y or y in x for x in quotes_a for y in quotes_b):
         return True
@@ -2426,7 +2424,7 @@ def _same_difference(a: dict, b: dict) -> bool:
     if claim(a) and claim(a) == claim(b):
         return True
     anchor = lambda item: re.sub(r"[\W_]+", " ", str(item.get("consensus_anchor") or "").lower()).strip()
-    return bool(anchor(a)) and anchor(a) == anchor(b) and _difference_models(a) == _difference_models(b)
+    return bool(anchor(a)) and anchor(a) == anchor(b)
 
 
 # Once the first pass has a result, the second gets this much more time (at
@@ -2446,11 +2444,14 @@ def merge_difference_passes(primary: dict, secondary: dict) -> int:
     A single pass finds about two thirds of the real disagreements, two passes
     together about four fifths (judge audit 2026-10-07). The primary pass keeps
     its wording, best model and metadata; the score is recomputed by the
-    caller (_apply_coverage)."""
-    merged = list(primary.get("differences") or [])
+    caller (_apply_coverage). Only the primary pass's findings count as
+    known: two findings of the second pass on the same sentence are distinct
+    by that pass's own judgement."""
+    known = list(primary.get("differences") or [])
+    merged = list(known)
     added = 0
     for item in secondary.get("differences") or []:
-        if any(_same_difference(item, known) for known in merged):
+        if any(_same_difference(item, k) for k in known):
             continue
         merged.append(item)
         added += 1

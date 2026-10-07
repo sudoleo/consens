@@ -31,14 +31,20 @@ class MergeDifferencePassesTests(unittest.TestCase):
         self.assertEqual(merge_difference_passes(first, second), 1)
         self.assertEqual([item["claim"] for item in first["differences"]], ["Capital", "Rainfall"])
 
-    def test_same_sentence_counts_once_only_with_the_same_models(self):
-        same = difference("A", "short", "quote", anchor="Prices rose in 2026.")
-        first = {"differences": [same]}
-        duplicate = difference("B", "other words", "elsewhere", anchor="Prices rose in 2026.")
-        other_sides = difference("C", "other words", "elsewhere", anchor="Prices rose in 2026.",
+    def test_same_sentence_counts_once_even_with_other_sides(self):
+        # Two passes group the same models differently; that is still one
+        # disagreement (measured on labelled pass pairs, 2026-10-07).
+        first = {"differences": [difference("A", "short", "quote", anchor="Prices rose in 2026.")]}
+        other_sides = difference("B", "other words", "elsewhere", anchor="Prices rose in 2026.",
                                  models=(("Grok",), ("Mistral",)))
-        self.assertEqual(merge_difference_passes(first, {"differences": [duplicate, other_sides]}), 1)
-        self.assertEqual([item["claim"] for item in first["differences"]], ["A", "C"])
+        self.assertEqual(merge_difference_passes(first, {"differences": [other_sides]}), 0)
+        self.assertEqual([item["claim"] for item in first["differences"]], ["A"])
+
+    def test_second_pass_findings_on_one_new_sentence_all_count(self):
+        first = {"differences": [difference("A", "short", "quote", anchor="Prices rose in 2026.")]}
+        one = difference("B", "the rate", "is high", anchor="Rates and fees fell.")
+        two = difference("C", "the fees", "are low", anchor="Rates and fees fell.")
+        self.assertEqual(merge_difference_passes(first, {"differences": [one, two]}), 2)
 
 
 class ParallelPassTests(unittest.TestCase):
