@@ -39,7 +39,8 @@
     try {
       const keep = new URLSearchParams();
       new URLSearchParams(window.location.search).forEach((value, key) => {
-        if (CAMPAIGN_PARAM.test(key)) keep.append(key, String(value).slice(0, 80));
+        // A forwarded link may carry an address in ?ref=; never keep one.
+        if (CAMPAIGN_PARAM.test(key) && !String(value).includes("@")) keep.append(key, String(value).slice(0, 80));
       });
       const query = keep.toString();
       if (query && payload && typeof payload.url === "string" && payload.url.indexOf("?") === -1) {

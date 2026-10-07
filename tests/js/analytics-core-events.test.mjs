@@ -49,6 +49,12 @@ describe('consensioBeforeSend', () => {
     expect(payload.url).toBe('https://consens.io/s/x?utm_source=linkedin&ref=hn');
   });
 
+  it('never keeps an address that a forwarded link carries in a campaign tag', () => {
+    const { w } = page('https://consens.io/?ref=someone%40example.com&utm_source=newsletter');
+    expect(w.consensioBeforeSend('event', { url: 'https://consens.io/' }).url)
+      .toBe('https://consens.io/?utm_source=newsletter');
+  });
+
   it('leaves a URL without campaign tags alone', () => {
     const { w } = page('https://consens.io/topic-follow/confirm?token=secret');
     expect(w.consensioBeforeSend('event', { url: 'https://consens.io/topic-follow/confirm' }).url)

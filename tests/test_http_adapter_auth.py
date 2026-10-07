@@ -104,6 +104,8 @@ def test_user_status_uses_real_tier_and_role_payload(
         data["resolve"],
     ) == (tier, is_pro, agent, True, resolve)  # attachments: every tier since 2026-10-02
     assert data["uid"] == "owner" and data["token_budget"]["used"] == 0
+    # The browser leaves analytics for operators (analytics-opt-out.js excludeOperator).
+    assert data["is_admin"] is (role == "admin")
 
 
 @pytest.mark.parametrize(

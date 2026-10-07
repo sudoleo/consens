@@ -1365,9 +1365,14 @@ describe("single-model agent chat", () => {
       data: { detail: 'This chat contains Google information. Allow sharing it for this message.' } }));
     d.body.insertAdjacentHTML('beforeend', '<div id="bookmarksContainer"></div>');
     d.getElementById('questionInput').value = 'Follow-up with Google data';
+    w.App.trackAsk = vi.fn();
+    w.App.trackAnswer = vi.fn();
     await w.App.agentChat.send();
     const run = w.App.runRegistry.visible();
     w.App.agentChat.project(run); w.App.agentChat.render();
+    // Analytics: the sent "ask" ends as a failed "answer", like a refused pipeline run.
+    expect(w.App.trackAsk).toHaveBeenCalledTimes(1);
+    expect(w.App.trackAnswer).toHaveBeenCalledWith(run, 'failed');
     expect(d.getElementById('questionInput').value).toBe('Follow-up with Google data');
     expect(run.metadata.requestSent).toBe(false);
     expect(run.metadata.recoverable).toBe(false);

@@ -1147,8 +1147,10 @@
           trigger,
           included_models: successfulAnswers
         });
-        window.App.trackAnswer?.(context, data.error ? "partial" : "ok");
       }
+      // A run recovered after a broken stream (chat_replayed) still ends here:
+      // its "ask" was sent, so it counts once (trackAnswer deduplicates).
+      window.App.trackAnswer?.(context, data.error ? "partial" : "ok");
       return data;
     } catch (error) {
       if (isAbortError(error) || !registry.isExecuting(context.runId)) return null;

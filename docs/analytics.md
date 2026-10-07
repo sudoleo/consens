@@ -22,6 +22,10 @@ Diese sechs reichen für fast jede Frage. Sie haben in jedem Modus dieselbe Form
 Der Weg zur ersten Frage als Umami-Funnel:
 `/` (Seite) → `open_app` → `signup` → `ask`.
 Erfolgsquote eines Modus: `answer` mit `status=ok` ÷ `ask` mit demselben `mode`.
+Ein vom Nutzer abgebrochener Lauf sendet `ask`, aber kein `answer`; ein vom
+Server abgelehnter (Kontingent, belegter Dienst) endet in beiden Modi mit
+`answer` `status=failed`. Ein nach abgerissenem Stream wiederhergestellter Lauf
+zählt normal mit `ok`/`partial`.
 
 `signup` per E-Mail zählt die angeforderte Einrichtungs-Mail (das Backend
 verrät aus Datenschutzgründen nicht, ob die Adresse schon ein Konto hatte).
@@ -33,7 +37,9 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
 
 - `app_query_started` / `app_query_completed` / `app_query_blocked` /
   `app_query_canceled`: nur die alten Pipeline-Läufe (Consensus/Vergleich),
-  **nie der Agent**. `app_query_completed` fehlt, wenn Consensus automatisch
+  nicht der Agent. Ausnahme: `app_query_canceled` feuert auch, wenn ein
+  Agent-Lauf über den Senden-/Stopp-Knopf abgebrochen wird (gemeinsamer
+  Knopf in `query-send.js`). `app_query_completed` fehlt, wenn Consensus automatisch
   startet — dafür gibt es `app_consensus_completed`. Ersetzt durch `ask`/`answer`.
 - `app_consensus_started` / `app_consensus_completed`: der Consensus-Schritt
   einer Pipeline (auch manuell nachgestartet).

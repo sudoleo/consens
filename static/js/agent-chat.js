@@ -1064,6 +1064,9 @@
       context.consensus.status = "error";
       context.consensus.error = { message: error.message, code,
         required_tokens: failure.required_tokens, available_tokens: failure.available_tokens };
+      // "ask" went out with the POST; a refusal still ends that run as
+      // failed, like a refused pipeline run (query-send.js finishFailed).
+      const asked = context.metadata.requestSent === true;
       if (error.notDispatched || !context.metadata.requestSent) {
         // Never offer "Check saved answer" or keep a Failed sidebar row for a
         // message that the server refused before starting it.
@@ -1077,7 +1080,7 @@
         context.metadata.restoreDraft = true;
       }
       context.bookmark.status = "failed";
-      if (context.metadata.requestSent) App.trackAnswer?.(context, "failed");
+      if (asked) App.trackAnswer?.(context, "failed");
       registry.setStatus(context.runId, "failed", { message: error.message });
       if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     } finally {

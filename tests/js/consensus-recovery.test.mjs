@@ -8,7 +8,7 @@ function boot(kind = 'stream_read_failed', { followup = false } = {}) {
     before(window) {
       window.auth = { currentUser: user };
       window.App = {
-        authState: { generation: 1, snapshot: () => ({ uid: user.uid, generation: 1 }) }, trackAppEvent: vi.fn(), reportCriticalError: vi.fn(),
+        authState: { generation: 1, snapshot: () => ({ uid: user.uid, generation: 1 }) }, trackAppEvent: vi.fn(), trackAnswer: vi.fn(), reportCriticalError: vi.fn(),
         modelPrefs: [{ key: 'OpenAI' }, { key: 'Gemini' }]
       };
       window.streamSSERequest = vi.fn(async (_url, _payload, _signal, handlers) => {
@@ -69,6 +69,8 @@ describe('consensus transport recovery', () => {
     expect(window.saveBookmarkConsensus).not.toHaveBeenCalled();
     expect(window.App.reportCriticalError).not.toHaveBeenCalled();
     expect(window.App.trackAppEvent).not.toHaveBeenCalledWith('app_consensus_completed', expect.anything());
+    // The run's "ask" went out, so its recovered answer still counts once.
+    expect(window.App.trackAnswer).toHaveBeenCalledWith(context, 'ok');
     dom.window.close();
   });
 
