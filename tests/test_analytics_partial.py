@@ -69,3 +69,18 @@ def test_partial_ships_the_self_exclusion_switch():
     assert partial.index("analytics-opt-out.js") < partial.index("cloud.umami.is"), (
         "Das Opt-out muss vor dem Tracker laufen, sonst geht der erste Pageview raus."
     )
+
+
+def test_partial_routes_every_send_through_the_before_send_guard():
+    # Bot filter and campaign tags live in consensioBeforeSend (docs/analytics.md).
+    partial = (TEMPLATES / PARTIAL).read_text(encoding="utf-8")
+    script_tag = next(
+        line for line in partial.splitlines() if "cloud.umami.is/script.js" in line
+    )
+    opt_out = (ROOT / "static" / "js" / "analytics-opt-out.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-before-send="consensioBeforeSend"' in script_tag
+    assert 'data-exclude-search="true"' in script_tag
+    assert "window.consensioBeforeSend" in opt_out

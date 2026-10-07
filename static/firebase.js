@@ -42,6 +42,22 @@ function trackAppEvent(eventName, eventData = {}) {
   }
 }
 
+// Core events (docs/analytics.md): "signup" for a new account, "login" for
+// a returning one. Google tells the two apart; the auth_* events stay as
+// the detailed record of each attempt.
+// A first Google sign-in creates the account, so both timestamps match.
+// (Read from metadata rather than getAdditionalUserInfo: the test doubles of
+// the auth module export only what the app already imports.)
+function trackGoogleSignIn(result) {
+  let isNew = false;
+  try {
+    const meta = result?.user?.metadata || {};
+    const created = Date.parse(meta.creationTime), last = Date.parse(meta.lastSignInTime);
+    isNew = Number.isFinite(created) && Number.isFinite(last) && Math.abs(last - created) < 60000;
+  } catch (_) {}
+  trackAppEvent(isNew ? "signup" : "login", { method: "google" });
+}
+
 // Der Bestaetigungslink soll nicht in einer Firebase-Sackgasse enden, sondern
 // zurueck in die App fuehren — dort steht die getippte Frage noch im Feld.
 function verificationEmailSettings() {
@@ -325,6 +341,8 @@ async function checkUserStatusOnLoad(user, token, generation) {
       if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
       loaded = true;
+      // The operator's own browsers leave the Umami numbers (docs/analytics.md).
+      if (data.is_admin === true) window.consensioAnalytics?.excludeOperator?.();
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
       window.App.state.set("isUserPro", data.is_pro, "userTier");
       window.App.tokenBudget?.apply?.(data.token_budget, { uid: user.uid, authoritative: true });
@@ -614,7 +632,6 @@ onIdTokenChanged(auth, async (user) => {
         emailPopup.hidden = !isOpen;
         emailIcon.setAttribute("aria-expanded", String(isOpen));
         if (accountIdentity) accountIdentity.setAttribute("aria-expanded", String(isOpen));
-        trackAppEvent("app_account_menu_toggled", { open: isOpen });
       }
       if (isOpen && focus === "first") focusAccountMenuItem(0);
       if (isOpen && focus === "last") focusAccountMenuItem(-1);
@@ -1193,6 +1210,7 @@ async function handleRegister() {
     rememberEmail(email);
     showRegistrationSuccess(email);
     trackAppEvent("auth_register_result", { status: "success" });
+    trackAppEvent("signup", { method: "email" });
   } else {
     registerErr.textContent = result.message;
     trackAppEvent("auth_register_result", { status: "error" });
@@ -1330,6 +1348,7 @@ async function handleEmailLogin() {
     const token = await user.getIdToken();
     try { localStorage.setItem("id_token", token); } catch (_) {}
     trackAppEvent("auth_email_login_result", { status: "success" });
+    trackAppEvent("login", { method: "email" });
     continueSignedIn();
   } catch (error) {
     setButtonPending(loginBtn, false);
@@ -1403,8 +1422,9 @@ function handleGoogleSignIn() {
   // signInWithPopup runs synchronously inside the click: one await before it
   // and Safari no longer counts the click and blocks the window.
   signInWithPopup(auth, googleProvider)
-    .then(() => {
+    .then(result => {
       trackAppEvent("auth_google_login_result", { status: "success", flow: "popup" });
+      trackGoogleSignIn(result);
       setGooglePending(true, "Signing you in…");
       continueSignedIn();
     })
@@ -1552,6 +1572,7 @@ setMode("login");
       setGooglePending(false);
       if (!result?.user) return; // came back without choosing an account
       trackAppEvent("auth_google_login_result", { status: "success", flow: "redirect" });
+      trackGoogleSignIn(result);
       closeAuthModal();
     })
     .catch(error => {
@@ -2094,7 +2115,6 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
             bookmarkDetailCache.clear();
             bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
           }
-          trackAppEvent("app_bookmark_saved", { type: "model", mode });
       }
 
     } catch (error) {
@@ -2220,7 +2240,6 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
           bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
         }
       }
-      trackAppEvent("app_bookmark_saved", { type: "consensus" });
     } catch (error) {
       console.error("Error in saveBookmarkConsensus:", error);
       if (boundRunId) {
@@ -2244,10 +2263,6 @@ window.acceptPersistedConsensusBookmark = function (bookmarkMeta, conversation =
     requestUid
   });
   if (!runId) window.App.bookmarkSession?.restore?.(bookmarkMeta.id);
-  trackAppEvent("app_bookmark_saved", {
-    type: "consensus",
-    source: "consensus_final"
-  });
   return true;
 };
 

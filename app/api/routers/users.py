@@ -97,6 +97,9 @@ def get_user_status(request: Request):
             "resolve": entitlements.resolve,
             # One daily token account for every mode (Agent and pipeline).
             "token_budget": _token_budget(uid, tier),
+            # Only the operator's own browsers switch analytics off with it
+            # (analytics-opt-out.js); same cached flags as the tier above.
+            "is_admin": is_user_admin(uid),
         }
 
     except HTTPException:

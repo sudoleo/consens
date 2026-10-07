@@ -327,7 +327,14 @@ liegt seit 2026-07-31 ebenfalls zentral in `templates/partials/analytics.html`
 `?notrack=1` mit; die Admin-Templates tracken gar nicht mehr. Seit 2026-08-07
 begrenzt `data-domains="consens.io,www.consens.io"` das Tracking auf die
 Live-Domain — lokale Server (jeder uvicorn-Port) und Preview-Deploys senden
-gar nichts mehr; neue Domains muessen dort eingetragen werden. Die vier Informationsseiten beschreiben automatische
+gar nichts mehr; neue Domains muessen dort eingetragen werden. Seit 2026-10-07
+ruft der Tracker vor jedem Send `consensioBeforeSend` (`analytics-opt-out.js`):
+Webdriver/Headless senden nichts, `utm_*`/`ref` kommen trotz
+`data-exclude-search` zurueck; `/user_status` liefert `is_admin`, worauf die App
+den Betreiber-Browser ausschliesst. Die Kern-Events `open_app`, `signup`,
+`login`, `ask`, `answer` (Helfer `App.trackAsk`/`App.trackAnswer` in
+`app-core.js`, gleich fuer Agent und Pipeline) und die Bedeutung aller
+Event-Namen stehen in [`docs/analytics.md`](analytics.md). Die vier Informationsseiten beschreiben automatische
 Chat-/Bookmark-Speicherung, zusätzliche KI-/Suchaufrufe und tatsächliche Retention;
 Betreiberangaben werden als direkt lesbares HTML ausgegeben. Offene rechtliche
 Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre

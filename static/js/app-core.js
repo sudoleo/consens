@@ -21,6 +21,36 @@
     }
   }
 
+  // Core events (docs/analytics.md): one "ask" per sent question and one
+  // "answer" per run, with the same shape in every mode. The older
+  // app_query_*/app_consensus_* events keep firing as the detailed record.
+  function analyticsMode(context) {
+    const config = context?.config || {};
+    if (config.executionMode === "agent") return "agent";
+    return config.autoConsensus ? "consensus" : "compare";
+  }
+
+  function trackAsk(context) {
+    if (!context) return;
+    const config = context.config || {};
+    trackAppEvent("ask", {
+      mode: analyticsMode(context),
+      follow_up: Boolean(context.conversationLockKey),
+      files: (context.attachments?.length || context.attachmentMeta?.length || 0) > 0,
+      reasoning: config.executionMode === "agent"
+        ? (config.agentSettings?.reasoning_effort || "default") !== "default"
+        : config.deepSearch === true
+    });
+  }
+
+  // status: "ok" | "partial" | "failed". The first terminal state of a run
+  // counts; a manual Consensus on an already answered run adds nothing.
+  function trackAnswer(context, status) {
+    if (!context?.metadata || context.metadata.answerTracked) return;
+    context.metadata.answerTracked = true;
+    trackAppEvent("answer", { mode: analyticsMode(context), status });
+  }
+
   function getSelectedModelCount() {
     return modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked).length;
   }
@@ -448,6 +478,8 @@
     getThreadAttachments,
     consensusBodyEl,
     trackAppEvent,
+    trackAsk,
+    trackAnswer,
     showPopup,
     exitHeroMode,
     enterDirectComparisonView,

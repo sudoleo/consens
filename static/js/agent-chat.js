@@ -953,6 +953,7 @@
       if (!retry) await App.agentWorkspace?.upload(context, headers, signal);
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       context.metadata.requestSent = true;
+      if (!recovery) App.trackAsk?.(context);
       context.phase = "answers";
       context.consensus.status = "streaming";
       registry.update(context.runId, () => {});
@@ -1040,6 +1041,7 @@
         // A failed run can still have an authoritative saved partial answer.
         // Keep its error/review state while adopting the durable bookmark now.
         acceptAnswer(context, result.data.saved_answer);
+        App.trackAnswer?.(context, "partial");
         return;
       }
       if (!result.ok || result.data?.error || !result.data?.turn) {
@@ -1051,6 +1053,7 @@
         throw Object.assign(new Error(apiError(data)), { failure: data, notDispatched: refused });
       }
       acceptAnswer(context, result.data);
+      App.trackAnswer?.(context, "ok");
       offerWatch(context);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
@@ -1072,6 +1075,7 @@
         context.metadata.restoreDraft = true;
       }
       context.bookmark.status = "failed";
+      if (context.metadata.requestSent) App.trackAnswer?.(context, "failed");
       registry.setStatus(context.runId, "failed", { message: error.message });
       if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     } finally {

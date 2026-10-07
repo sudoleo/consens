@@ -1009,6 +1009,7 @@
           window.App.usageLimit.show({ data: limitDetail, source: "consensus", phase: "consensus" });
         }
         trackAppEvent("app_consensus_completed", { status: "error", trigger, included_models: successfulAnswers });
+        window.App.trackAnswer?.(context, "failed");
         return data;
       }
 
@@ -1146,6 +1147,7 @@
           trigger,
           included_models: successfulAnswers
         });
+        window.App.trackAnswer?.(context, data.error ? "partial" : "ok");
       }
       return data;
     } catch (error) {
@@ -1172,6 +1174,7 @@
         trigger,
         included_models: successfulAnswers
       });
+      window.App.trackAnswer?.(context, context.consensus.text ? "partial" : "failed");
       return null;
     } finally {
       context.controllers.consensus = null;

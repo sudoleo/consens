@@ -120,7 +120,6 @@
             const newTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
             localStorage.setItem("theme", newTheme);
             applyTheme(newTheme);
-            trackAppEvent("app_theme_changed", { theme: newTheme });
           });
         });
 
@@ -635,7 +634,6 @@
             );
           }
           updateToggleButton();
-          trackAppEvent("app_sidebar_toggle", { open: !sidebar.classList.contains("collapsed") });
         }
 
         // "New comparison" detaches the main view from the selected run. Any
@@ -1127,7 +1125,6 @@
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
           if (isCollapsed) setBookmarkSearchOpen(false, { clear: true });
           localStorage.setItem("bookmarks_collapsed", String(isCollapsed));
-          trackAppEvent("app_sidebar_section_toggled", { section: "bookmarks", open: !isCollapsed });
         };
 
         function restoreBookmarksState() {

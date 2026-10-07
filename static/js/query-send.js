@@ -432,6 +432,7 @@
     clearSensitiveRunData(context);
     registry.setStatus(context.runId, "failed", context.error);
     trackAppEvent("app_query_completed", { status: "error", selected_models: context.progress.totalModels });
+    window.App.trackAnswer?.(context, "failed");
   }
 
   async function executeRun(context) {
@@ -579,6 +580,7 @@
       clearSensitiveRunData(context);
       registry.setStatus(context.runId, "succeeded");
       trackAppEvent("app_query_completed", { status: "success", selected_models: context.progress.totalModels });
+      window.App.trackAnswer?.(context, "ok");
     } catch (error) {
       if (isAbortError(error) || !registry.isExecuting(context.runId)) return;
       context.chatSession?.markPendingUncertain?.();
@@ -816,6 +818,7 @@
       agent_mode: context.config.agentMode,
       auto_consensus: context.config.autoConsensus
     });
+    window.App.trackAsk?.(context);
     await executeRun(context);
   };
 

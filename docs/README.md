@@ -23,7 +23,7 @@ Most documents are written in German (internal working notes). Start here.
 
 ## Operations
 
-[error-alerts.md](error-alerts.md) · [db-read-optimizations.md](db-read-optimizations.md) ·
+[analytics.md](analytics.md) · [error-alerts.md](error-alerts.md) · [db-read-optimizations.md](db-read-optimizations.md) ·
 [google-integrations-setup.md](google-integrations-setup.md) ·
 [seo-share-indexing-process.md](seo-share-indexing-process.md)
 
