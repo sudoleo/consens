@@ -26,12 +26,19 @@
     const usage = metered.length ? { input_tokens: metered.reduce((n, a) => n + a.usage.input_tokens, 0),
       output_tokens: metered.reduce((n, a) => n + a.usage.output_tokens, 0),
       complete: metered.every(a => a.usage.complete !== false) } : null;
-    // Attempts of one check run one after another; the checks run side by side.
-    const duration = Math.max(...titles.map(title => judges.filter(a => a.title === title)
-      .reduce((ms, a) => ms + elapsed(view, a), 0)));
+    // Attempts of one check run one after another, its passes and Coverage
+    // windows side by side, and the checks run side by side: a check lasts
+    // from its first start to its last end (summing only without start times).
+    const duration = Math.max(...titles.map(title => span(view, judges.filter(a => a.title === title))));
     return { id: CHECK_ID, kind: "check", title: "Answer check", status, usage, duration_ms: duration,
       progress_text: busy.find(agent => agent.progress_text)?.progress_text || "",
       missing: status === "failed" ? titles.filter(title => !done.has(title)).map(title => checkNames[title] || "answer") : [] };
+  }
+  function span(view, agents) {
+    const starts = agents.map(agent => Date.parse(agent.created_at));
+    if (starts.some(start => !Number.isFinite(start))) return agents.reduce((ms, a) => ms + elapsed(view, a), 0);
+    const ends = agents.map((agent, index) => starts[index] + elapsed(view, agent));
+    return Math.max(...ends) - Math.min(...starts);
   }
   function rowsFor(view) {
     const check = checkRow(view);

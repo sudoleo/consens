@@ -40,6 +40,7 @@ from app.services.llm.consensus_parsing import (
 from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
 from app.services.llm.provider_runtime import (
     AnalysisBudgetExceeded,
+    ProviderCancellation,
     ProviderCancelled,
     analysis_budgeted,
     bind_analysis_budget,
@@ -2408,8 +2409,22 @@ def _same_difference(a: dict, b: dict) -> bool:
     quotes_a, quotes_b = _difference_quotes(a), _difference_quotes(b)
     if any(x in y or y in x for x in quotes_a for y in quotes_b):
         return True
+    claim = lambda item: re.sub(r"[\W_]+", " ", str(item.get("claim") or "").lower()).strip()
+    if claim(a) and claim(a) == claim(b):
+        return True
     anchor = lambda item: re.sub(r"[\W_]+", " ", str(item.get("consensus_anchor") or "").lower()).strip()
     return bool(anchor(a)) and anchor(a) == anchor(b) and _difference_models(a) == _difference_models(b)
+
+
+# Once the first pass has a result, the second gets this much more time (at
+# least the minimum, half the first pass's duration, at most the maximum).
+# A second pass stuck in a slow retry must not hold the answer check.
+SECOND_PASS_GRACE_MIN_SECONDS = 8.0
+SECOND_PASS_GRACE_MAX_SECONDS = 30.0
+
+
+def _second_pass_grace(first_pass_seconds: float) -> float:
+    return min(SECOND_PASS_GRACE_MAX_SECONDS, max(SECOND_PASS_GRACE_MIN_SECONDS, 0.5 * max(0.0, first_pass_seconds)))
 
 
 def merge_difference_passes(primary: dict, secondary: dict) -> int:
@@ -2430,10 +2445,11 @@ def merge_difference_passes(primary: dict, secondary: dict) -> int:
     return added
 
 
-def _in_background(work, name: str):
-    """Runs work() in its own thread with the caller's cancellation, analysis
-    budget and context (judge transport) bound; returns (pool, future)."""
-    cancellation = current_provider_cancellation()
+def _in_background(work, name: str, *, cancellation=None):
+    """Runs work() in its own thread with the caller's analysis budget and
+    context (judge transport) bound, and with `cancellation` or else the
+    caller's cancellation; returns (pool, future)."""
+    cancellation = cancellation or current_provider_cancellation()
     budget = current_analysis_budget()
 
     def _work():
@@ -2547,6 +2563,11 @@ def query_differences(
     Gibt (legacy_text, structured_data | None) zurück.
     """
     passes = 2 if passes and int(passes) > 1 else 1
+    budget = current_analysis_budget()
+    if passes > 1 and budget is not None and math.isfinite(budget.max_calls) and budget.max_calls - budget.calls < 4:
+        # A bounded run keeps its remaining calls for the first pass, its
+        # retry and Coverage; the extra pass is an addition, never a cost.
+        passes = 1
     # Claims appear next to the answer the user reads, so they take its
     # language; a detected language is named explicitly (see _answer_language).
     output_language = output_language or _answer_language(consensus_answer)
@@ -2571,6 +2592,8 @@ def query_differences(
         context, api_keys, differences_model, chat_mode=chat_mode
     )
     second_pool = second_future = None
+    second_cancellation = None
+    unlink_second = lambda: None
 
     def run_pass(plan=attempts):
         """One differences judge with retry and fallback: (data, legacy_text,
@@ -2647,16 +2670,33 @@ def query_differences(
             # judge never runs twice.
             primary = attempts[0][0] if attempts else None
             second_plan = [attempt for attempt in attempts if attempt[0] == primary]
-            second_pool, second_future = _in_background(lambda: run_pass(second_plan), "differences-pass")
+            # Its own cancellation, linked to the caller's: a user stop still
+            # ends it, and a second pass past its grace time ends alone.
+            second_cancellation = ProviderCancellation()
+            parent = current_provider_cancellation()
+            if parent is not None:
+                unlink_second = parent.register(second_cancellation)
+            second_pool, second_future = _in_background(
+                lambda: run_pass(second_plan), "differences-pass", cancellation=second_cancellation)
+        first_started = time.monotonic()
         data, legacy_text, prose_fallback, last_error = run_pass()
         if second_future is not None:
+            if data is not None and not second_future.done():
+                try:
+                    second_future.result(timeout=_second_pass_grace(time.monotonic() - first_started))
+                except Exception:
+                    # Timed out (or failed): stop it and answer with the first pass.
+                    second_cancellation.cancel()
             extra = _collect_background(second_future, "Second differences pass")
             if extra and extra[0] is not None:
                 if data is None:
                     data, legacy_text = extra[0], extra[1]
+                    data["judges"]["differences"].update(passes=2, second_pass_added=0, first_pass_failed=True)
                 else:
                     added = merge_difference_passes(data, extra[0])
                     data["judges"]["differences"].update(passes=2, second_pass_added=added)
+            elif data is not None:
+                data["judges"]["differences"].update(passes=1, second_pass_failed=True)
         if data is not None:
             coverage_result, coverage_meta = _collect_coverage(
                 coverage_pool, coverage_future
@@ -2677,9 +2717,14 @@ def query_differences(
         # Nebenlaeufer-Thread nicht verwaisen.
         from app.services.llm.task_transport import task_transport
         wait = task_transport.get() is not None
+        if second_future is not None and not second_future.done():
+            # The run ended without its result (error or cancellation): stop
+            # it before waiting for the thread, so nothing outlives the check.
+            second_cancellation.cancel()
         coverage_pool.shutdown(wait=wait)
         if second_pool is not None:
             second_pool.shutdown(wait=wait)
+        unlink_second()
 
 
 CHANGE_CAUSES = ("new_evidence", "evidence_missing", "reassessment", "none")
@@ -3100,7 +3145,8 @@ def stream_differences(
         yield {"type": "final", "text": "Error in comparison: no model responses available.", "data": None}
         return
 
-    differences_prompt = _build_differences_prompt_from(context)
+    output_language = _answer_language(consensus_answer)
+    differences_prompt = _build_differences_prompt_from(context, output_language=output_language)
     anon_map = context.anon_map
     answers_by_model = context.answers_by_model
     sentences = list(context.sentences)
@@ -3134,7 +3180,7 @@ def stream_differences(
             try:
                 for event in _stream_engine_text(
                     provider, api_model, model_ref, api_keys,
-                    system=DIFFERENCES_SYSTEM_PROMPT,
+                    system=_differences_system_prompt(output_language),
                     prompt=attempt_prompt,
                     max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
                     temperature=DIFFERENCES_TEMPERATURE,

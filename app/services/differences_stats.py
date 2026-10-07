@@ -144,7 +144,9 @@ def build_differences_stats_doc(
                     "model": str(entry.get("model") or "")[:80],
                     "tier": str(entry.get("tier") or "")[:20],
                 }
-                for numeric_key in ("attempts", "duration_ms"):
+                # passes/second_pass_added (since 2026-10-07): how often the
+                # Agent's second differences pass ran and what it added.
+                for numeric_key in ("attempts", "duration_ms", "passes", "second_pass_added"):
                     try:
                         value = int(entry.get(numeric_key))
                     except (TypeError, ValueError):

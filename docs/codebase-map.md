@@ -2567,7 +2567,19 @@ Zitat oder gleicher Konsens-Satz mit gleichen Modellen), der Score wird danach
 in `_apply_coverage` neu berechnet; `judges.differences` trägt `passes` und
 `second_pass_added`. Judge-Audit (20 Fragen, 230 blind bewertete Funde): ein
 Luna-Lauf fand 60–68 % der echten Streitpunkte, zwei zusammen 78 %, Median
-+1,6 s. Fällt ein Lauf aus, trägt der andere. Der zweite Lauf versucht nur den primären Judge (Luna) samt Retry; fällt Luna aus, weicht allein der erste Lauf auf Gemini aus, der teurere Fallback läuft also nie doppelt. Ebenfalls seit 2026-10-07 nennt
++1,6 s. Fällt ein Lauf aus, trägt der andere. Der zweite Lauf versucht nur den primären Judge (Luna) samt Retry; fällt Luna aus, weicht allein der erste Lauf auf Gemini aus, der teurere Fallback läuft also nie doppelt. Der zweite Lauf hat eine eigene, an die Turn-Cancellation gekoppelte
+`ProviderCancellation` (Nutzer-Stopp beendet beide); `judge_transport` reicht
+die Cancellation des Threads an `ComparisonTools.call` weiter. Liegt der erste
+Lauf vor, bekommt der zweite nur noch eine Nachfrist
+(`_second_pass_grace`: halbe Dauer des ersten, 8–30 s) und wird danach
+abgebrochen (`judges.differences.second_pass_failed`); endet der erste Lauf mit
+einem Fehler, wird der zweite vor dem Warten auf den Thread gestoppt. Bei
+endlichem Aufrufbudget mit weniger als vier freien Aufrufen bleibt es bei
+einem Lauf. `JUDGE_PARALLEL` ist 7 (zwei Differences-Läufe plus bis zu vier
+Coverage-Fenster). Die „Answer check“-Zeile (`agent-delegation.js`, `span`)
+misst eine Prüfung vom ersten Start bis zum letzten Ende statt die Dauer
+paralleler Läufe zu addieren; `differences_stats` behält `passes` und
+`second_pass_added`. Ebenfalls seit 2026-10-07 nennt
 `query_differences` dem Judge die Sprache der Konsensantwort ausdrücklich
 (`_answer_language`, Funktionswörter für EN/DE/FR/ES/IT/PT/NL, sonst leer und
 die allgemeine Regel): Luna schrieb Funde sonst teils spanisch/französisch

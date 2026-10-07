@@ -18,7 +18,7 @@ from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_provider_limits import ModelOutputLimit
 from app.services.llm.agent_client import metered_model
 from app.services.llm.provider_runtime import (bind_analysis_budget, bind_provider_cancellation, ProviderCancelled,
-                                               ProviderCancellation)
+                                               ProviderCancellation, current_provider_cancellation)
 from app.services.llm import provider_transport as transport
 from app.services.llm.task_transport import bind_task_transport
 from app.services.source_catalog import normalize_provider_answers
@@ -67,8 +67,9 @@ def stored_preferences(value):
     return AgentPreferences.model_validate(value or {}).model_dump()
 
 
-# Differences and Coverage (in windows) for up to three comparisons.
-JUDGE_PARALLEL = 6
+# Per check: two differences passes and up to four Coverage windows
+# (CHAT_MAX_CONSENSUS_SENTENCES / COVERAGE_WINDOW), plus one slot of headroom.
+JUDGE_PARALLEL = 7
 DEPTH_GUIDANCE = {
     "quick": " Answer briefly: the direct answer and the key reasons, in about 1500 characters, "
              "unless the task clearly needs more.",
@@ -732,7 +733,10 @@ class ComparisonTools:
         value = self.call(replace(model, request_config=config), [
             {"role": "system", "content": "You are a judge in consens.io's Consensus pipeline, checking a synthesis against independent model answers.\n" + kwargs["system"]},
             {"role": "user", "content": kwargs["prompt"]}],
-            title="Coverage judge" if "precise classifier" in kwargs["system"] else "Differences judge", kind="judge")
+            title="Coverage judge" if "precise classifier" in kwargs["system"] else "Differences judge", kind="judge",
+            # The thread's cancellation: the second differences pass has its
+            # own (linked to the turn's), so a late pass can stop alone.
+            cancellation=current_provider_cancellation())
         return value.text
 
     def judge(self, args, *, cancellation):
