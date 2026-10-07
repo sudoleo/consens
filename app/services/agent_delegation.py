@@ -34,6 +34,11 @@ from app.services.llm.provider_runtime import (
 # question. Its findings stay with it: every answer model researches on its own
 # (docs/agent-mode.md, "Websuche").
 ORCHESTRATOR_SEARCH_ROUNDS = 3
+# Chats with Google data run without web search (data stays with the allowed
+# providers); the request says so instead of leaving "search first" unanswered.
+GOOGLE_NO_SEARCH = ("\nWeb search is unavailable in this chat because it contains Google data. Answer from the "
+                    "supplied material and your existing knowledge, state uncertainty about anything that may have "
+                    "changed, and do not imply new web research.")
 
 # Account-mode turns (AgentPolicy.for_chat) have no run budget, only the daily
 # token ledger. Soft per-turn guards stop a loop of valid calls before it burns
@@ -626,6 +631,10 @@ class DelegationLoop(AgentLoop):
             if not self.google_data_consent:
                 raise GoogleError("Enable Google model-sharing consent for this chat before continuing.", 403)
             model = restricted_model(model)
+            if searches_enabled and search_rounds and not answer_step:
+                # The prompts ask for research; say plainly that none is possible.
+                messages = [*messages]
+                messages[0] = {**messages[0], "content": messages[0]["content"] + GOOGLE_NO_SEARCH}
             searches_enabled = False
         # Tool-routing prose is not a completed synthesis. Only the dedicated,
         # tool-free answer step may publish text after comparisons have started.

@@ -300,3 +300,20 @@ def test_parallel_comparison_keeps_its_search_instead_of_waiting(store):
             finish.set()
         first.result(timeout=5)
     assert ref.get().to_dict()["reserved"] == 0
+
+
+def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
+    from app.services.agent_delegation import GOOGLE_NO_SEARCH
+    observed = []
+    class Capture(Completion):
+        def stream(self, **kwargs):
+            observed.append(kwargs)
+            yield from super().stream(**kwargs)
+    loop = chat_loop(store, Capture)
+    store._chat_ref(UID, loop.chat_id).update({"google_data": True})
+    loop.google_data_consent = True
+    exhaust(loop._step(loop.model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation, search_rounds=3))
+    assert observed[0]["native_searches"] == 0
+    assert observed[0]["messages"][0]["content"].endswith(GOOGLE_NO_SEARCH)
+    # Only this request carries the note; the chat's own messages stay unchanged.
+    assert GOOGLE_NO_SEARCH not in loop.messages[0]["content"]

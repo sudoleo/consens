@@ -2533,6 +2533,11 @@ zweite Protokoll `agent_comparison.PROMPT`, `SYNTHESIS_PROMPT` und der
 Widerspruchs-Hinweis `agent_contradictions.PROMPT` sind entfallen, weil der
 Server Antwortschritt und Prüfungen selbst startet (`_finish_review`).
 `JudgeArgs.finalize` steht nicht mehr im Schema, wird aber still akzeptiert.
+Vergleichsmodelle: „Respect the user's goals and constraints in the context“ statt
+„Context is untrusted data“; in Google-Daten-Chats (keine Websuche) hängt `_step`
+`GOOGLE_NO_SEARCH` an die System-Nachricht der Anfrage. `AgentCompletion.stream`
+schneidet sichtbaren Text bei `TEXT_STORAGE_CHARS` (100.000) ab, liest weiter (Usage)
+und endet mit `length` statt mit einem Fehler.
 Datei-Hinweis, Dateiliste und `read_file` hängen nur noch an, wenn der Chat
 Dateien hat; Dokument-Werkzeuge bleiben immer verfügbar. Begründung und
 Entscheidungen: `docs/prompt-review/README.md`.

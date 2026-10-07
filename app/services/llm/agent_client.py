@@ -111,6 +111,10 @@ _CATALOG = agent_model_metadata.BASELINE
 # model's own completion limit (bounded here and by its context window).
 ANSWER_OUTPUT_CEILING = 32_768  # about 130 kB of text; the saved turn is limited
 ANSWER_OUTPUT_FALLBACK = 32_768
+# Visible text one model call may keep (the saved turn and review are bounded).
+# Longer output is cut here and finishes as "length", like a token limit, so a
+# long answer is kept as truncated instead of failing the whole step.
+TEXT_STORAGE_CHARS = 100_000
 
 
 def answer_output_limit(model):
@@ -538,6 +542,7 @@ class AgentCompletion:
                 headers=openrouter_headers(api_key),
                 progress=progress,
             )
+            text_capped = False
             try:
                 for _, encoded in _sse_pairs(lines):
                     if len(encoded) > 256_000:
@@ -619,15 +624,21 @@ class AgentCompletion:
                         self._annotations((choice.get("message") or {}).get("annotations"))
                         yield from self.reasoning_events(delta)
                         chunk = delta.get("content")
-                        if isinstance(chunk, str) and chunk:
+                        if isinstance(chunk, str) and chunk and len(self.text) >= TEXT_STORAGE_CHARS:
+                            # Beyond the storage limit: keep reading so usage and
+                            # cost still arrive, but end the answer as truncated.
+                            text_capped = True
+                        elif isinstance(chunk, str) and chunk:
                             if not self.text:
                                 yield self.event("status", "responding", status="responding")
+                            if len(self.text) + len(chunk) > TEXT_STORAGE_CHARS:
+                                chunk, text_capped = chunk[:TEXT_STORAGE_CHARS - len(self.text)], True
                             self.text += chunk
-                            if len(self.text) > 100_000:
-                                raise ValueError("Agent response exceeds storage limit")
                             yield {"type": "delta", "text": chunk}
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
+                if text_capped and self.finish_reason == "stop":
+                    self.finish_reason = "length"
                 if self.finish_reason == "tool_calls" and allow_tool_calls:
                     self.tool_calls = [self._tool_parts[i] for i in sorted(self._tool_parts)]
                     if not self.tool_calls or any(not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", call["id"]) for call in self.tool_calls):

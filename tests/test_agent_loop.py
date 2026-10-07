@@ -418,3 +418,17 @@ def test_search_and_token_usage_in_separate_chunks_are_merged_once(store, monkey
     list(loop.run())
     assert loop.completion.usage["complete"] is True
     assert totals(store)["estimated_cost_nano_usd"] == 10_200_000
+
+
+def test_text_beyond_the_storage_limit_is_kept_as_truncated_instead_of_failing(monkeypatch):
+    part = "x" * 60_000
+    transport(monkeypatch, [[packet({"content": part}), packet({"content": part}),
+                             packet({"content": "tail"}, finish="stop", usage=usage())]])
+    completion = AgentCompletion()
+    deltas = [e for e in completion.stream(model=resolve_agent_model(), messages=[{"role": "user", "content": "Q"}],
+                                           api_key="key") if e.get("type") == "delta"]
+    assert len(completion.text) == agent_client.TEXT_STORAGE_CHARS
+    assert "".join(e["text"] for e in deltas) == completion.text
+    # Ends like a token limit, and the usage after the cut still arrives.
+    assert completion.finish_reason == "length"
+    assert completion.usage["output_tokens"] == 20
