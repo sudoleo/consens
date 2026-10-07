@@ -80,7 +80,7 @@ class AuthSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
         provision.assert_called_once_with("new@example.test")
-        deliver.assert_called_once_with("new@example.test")
+        deliver.assert_called_once_with("new@example.test", setup=True)
         notify.assert_called_once_with("email/password", "new-owner")
 
     def test_existing_email_registration_does_not_notify(self):
@@ -89,7 +89,13 @@ class AuthSessionTests(unittest.TestCase):
             patch.object(
                 auth_router,
                 "find_or_provision_user",
-                return_value=(SimpleNamespace(uid="existing-owner"), False),
+                return_value=(
+                    SimpleNamespace(
+                        uid="existing-owner",
+                        user_metadata=SimpleNamespace(last_sign_in_timestamp=1),
+                    ),
+                    False,
+                ),
             ),
             patch.object(auth_router, "deliver_password_setup_email") as deliver,
             patch.object(
@@ -104,8 +110,27 @@ class AuthSessionTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
-        deliver.assert_called_once_with("existing@example.test")
+        deliver.assert_called_once_with("existing@example.test", setup=False)
         notify.assert_not_called()
+
+    def test_resend_before_first_login_sends_the_setup_mail_again(self):
+        never_signed_in = SimpleNamespace(
+            uid="pending-owner",
+            user_metadata=SimpleNamespace(last_sign_in_timestamp=None),
+        )
+        with (
+            patch.object(auth_router, "is_password_setup_configured", return_value=True),
+            patch.object(
+                auth_router,
+                "find_or_provision_user",
+                return_value=(never_signed_in, False),
+            ),
+            patch.object(auth_router, "deliver_password_setup_email") as deliver,
+            patch.object(auth_router, "send_new_user_registration_notification"),
+        ):
+            self.client.post("/register", json={"email": "pending@example.test"})
+
+        deliver.assert_called_once_with("pending@example.test", setup=True)
 
     def test_new_and_existing_registration_responses_are_identical(self):
         new_user = SimpleNamespace(uid="new-owner", email="same@example.test")

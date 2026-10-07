@@ -45,6 +45,7 @@ def test_password_setup_request_is_bounded_and_does_not_log_email(
     monkeypatch, caplog
 ):
     monkeypatch.setenv("FIREBASE_API_KEY", "test-key")
+    monkeypatch.setattr(registration.mailer, "is_configured", lambda: False)
     secret_email = "private@example.test"
     with patch.object(
         registration.requests,
@@ -103,3 +104,75 @@ def test_password_setup_upstream_outage_is_not_retried(monkeypatch):
             registration.send_password_setup_email("new@example.test")
 
     assert post.call_count == 1
+
+
+def test_signup_mail_is_our_own_setup_mail_not_a_password_reset(monkeypatch):
+    """Firebase's template says "Reset your password"; sign-ups get ours."""
+    sent = []
+    monkeypatch.setattr(registration.mailer, "is_configured", lambda: True)
+    monkeypatch.setattr(registration.mailer, "deliver_now", lambda message: sent.append(message) or True)
+    with (
+        patch.object(
+            registration.auth, "generate_password_reset_link", return_value="https://reset.example.test/x"
+        ) as generate,
+        patch.object(registration.requests, "post") as firebase_mail,
+    ):
+        assert registration.deliver_password_setup_email("new@example.test", setup=True) is True
+
+    firebase_mail.assert_not_called()
+    settings = generate.call_args.kwargs["action_code_settings"]
+    assert settings.url == f"{registration.SITE_URL}/app?setup=1"
+    message = sent[0]
+    assert message["To"] == "new@example.test"
+    assert "reset" not in message["Subject"].lower()
+    assert "https://reset.example.test/x" in message.get_body(("plain",)).get_content()
+
+
+def test_existing_account_gets_a_login_mail_with_an_optional_reset(monkeypatch):
+    sent = []
+    monkeypatch.setattr(registration.mailer, "is_configured", lambda: True)
+    monkeypatch.setattr(registration.mailer, "deliver_now", lambda message: sent.append(message) or True)
+    with patch.object(
+        registration.auth, "generate_password_reset_link", return_value="https://reset.example.test/x"
+    ):
+        registration.deliver_password_setup_email("old@example.test", setup=False)
+
+    plain = sent[0].get_body(("plain",)).get_content()
+    assert sent[0]["Subject"] == "You already have a consens.io account"
+    assert f"{registration.SITE_URL}/app?setup=1" in plain
+    assert "https://reset.example.test/x" in plain
+
+
+def test_own_mail_failure_falls_back_to_firebase_mail(monkeypatch):
+    monkeypatch.setenv("FIREBASE_API_KEY", "test-key")
+    monkeypatch.setattr(registration.mailer, "is_configured", lambda: True)
+    monkeypatch.setattr(registration.mailer, "deliver_now", lambda message: False)
+    with (
+        patch.object(
+            registration.auth, "generate_password_reset_link", return_value="https://reset.example.test/x"
+        ),
+        patch.object(registration.requests, "post") as firebase_mail,
+    ):
+        assert registration.deliver_password_setup_email("new@example.test") is True
+
+    assert firebase_mail.call_args.kwargs["json"]["requestType"] == "PASSWORD_RESET"
+
+
+def test_unconfigured_smtp_keeps_the_firebase_mail(monkeypatch):
+    monkeypatch.setenv("FIREBASE_API_KEY", "test-key")
+    monkeypatch.setattr(registration.mailer, "is_configured", lambda: False)
+    with (
+        patch.object(registration.auth, "generate_password_reset_link") as generate,
+        patch.object(registration.requests, "post") as firebase_mail,
+    ):
+        registration.deliver_password_setup_email("new@example.test")
+
+    generate.assert_not_called()
+    firebase_mail.assert_called_once()
+
+
+def test_needs_password_setup_until_first_sign_in():
+    never = SimpleNamespace(user_metadata=SimpleNamespace(last_sign_in_timestamp=None))
+    once = SimpleNamespace(user_metadata=SimpleNamespace(last_sign_in_timestamp=1700000000000))
+    assert registration.needs_password_setup(never) is True
+    assert registration.needs_password_setup(once) is False

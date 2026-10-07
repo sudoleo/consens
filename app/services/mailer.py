@@ -726,6 +726,71 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
     return _base_message(recipient, subject, plain, html_body)
 
 
+def build_account_setup_message(*, recipient: str, setup_url: str) -> EmailMessage:
+    """Sign-up mail: choose a password. Replaces Firebase's "Reset your
+    password" template, which this project cannot edit."""
+    plain = (
+        "Welcome to consens.io!\n\n"
+        "One step left: choose a password for your account.\n"
+        f"{setup_url}\n\n"
+        "The next page is our login provider's standard page and is titled\n"
+        "\"Reset your password\" - that's the right place. Afterwards you are\n"
+        "taken straight back to consens.io.\n\n"
+        "The link works for one hour. Didn't sign up? Just ignore this e-mail.\n"
+    )
+    body = (
+        f'<p style="margin:14px 0 0;color:{INK_SOFT}">Thanks for signing up. Choose a '
+        "password and you're in.</p>"
+        + _button_html(setup_url, "Choose my password")
+        + f'<p style="margin:18px 0 0;font-size:14px;color:{MUTED}">The next page is our '
+        "login provider's standard page and is titled “Reset your password” – that's "
+        "the right place. Afterwards you are taken straight back to consens.io.</p>"
+    )
+    html_body = _shell_html(
+        eyebrow="consens.io",
+        heading="One step left: choose your password",
+        preheader="Choose a password and you're in.",
+        body=body,
+        footer="The link works for one hour. Didn't sign up? Just ignore this e-mail.",
+    )
+    return _base_message(recipient, "Finish setting up your consens.io account", plain, html_body)
+
+
+def build_existing_account_message(*, recipient: str, login_url: str,
+                                   reset_url: str) -> EmailMessage:
+    """Sign-up with an address that already has an account. The sign-up form
+    answers identically either way; only the mailbox owner learns this."""
+    plain = (
+        "Someone - probably you - just signed up on consens.io with this address,\n"
+        "but it already has an account.\n\n"
+        f"Log in as usual (with Google or your password): {login_url}\n\n"
+        f"Forgot your password? Set a new one (link works for one hour):\n{reset_url}\n\n"
+        "Didn't do this? Just ignore this e-mail - nothing has changed.\n"
+    )
+    body = (
+        f'<p style="margin:14px 0 0;color:{INK_SOFT}">Someone – probably you – just signed '
+        "up with this address, but it already has an account. Log in as usual, with "
+        "Google or your password.</p>"
+        + _button_html(login_url, "Log in")
+        + f'<p style="margin:18px 0 0;font-size:14px;color:{MUTED}">Forgot your password? '
+        f'<a href="{html.escape(reset_url)}" style="color:{INK}">Set a new one</a> '
+        "(link works for one hour).</p>"
+    )
+    html_body = _shell_html(
+        eyebrow="consens.io",
+        heading="You already have an account",
+        preheader="Log in as usual – or set a new password.",
+        body=body,
+        footer="Didn't do this? Just ignore this e-mail – nothing has changed.",
+    )
+    return _base_message(recipient, "You already have a consens.io account", plain, html_body)
+
+
+def deliver_now(message: EmailMessage) -> bool:
+    """Synchronous delivery for callers already off the event loop."""
+    return _deliver(message)
+
+
 def build_test_message(*, recipient: str) -> EmailMessage:
     """Small delivery probe used only by the authenticated admin endpoint."""
     sent_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

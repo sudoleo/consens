@@ -16,6 +16,7 @@ from app.services.registration import (
     deliver_password_setup_email,
     find_or_provision_user,
     is_password_setup_configured,
+    needs_password_setup,
 )
 from app.services.telegram_notifier import send_new_user_registration_notification
 
@@ -90,7 +91,11 @@ async def register_user(
         # new addresses then take the exact same mailbox-only setup path, so an
         # anonymous caller cannot distinguish them with a follow-up login.
         user, created = await asyncio.to_thread(find_or_provision_user, email)
-        background_tasks.add_task(deliver_password_setup_email, email)
+        background_tasks.add_task(
+            deliver_password_setup_email,
+            email,
+            setup=created or needs_password_setup(user),
+        )
         if created:
             background_tasks.add_task(
                 send_new_user_registration_notification,

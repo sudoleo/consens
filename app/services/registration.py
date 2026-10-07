@@ -19,6 +19,7 @@ import requests
 
 from app.core.observability import safe_exception
 from app.core.site import SITE_URL
+from app.services import mailer
 
 
 PASSWORD_SETUP_ENDPOINT = (
@@ -100,9 +101,53 @@ def send_password_setup_email(email: str) -> None:
         ) from exc
 
 
-def deliver_password_setup_email(email: str) -> bool:
+def needs_password_setup(user) -> bool:
+    """True until the account has signed in once.
+
+    "Send the link again" hits /register with an address that already exists;
+    it must get the setup mail again, not "you already have an account".
+    """
+    metadata = getattr(user, "user_metadata", None)
+    return not getattr(metadata, "last_sign_in_timestamp", None)
+
+
+def _password_reset_link(email: str) -> str:
+    settings = auth.ActionCodeSettings(url=password_setup_continue_url())
+    try:
+        return auth.generate_password_reset_link(email, action_code_settings=settings)
+    except Exception:
+        # Same convenience rule as the REST path: the way back is optional.
+        return auth.generate_password_reset_link(email)
+
+
+def send_own_setup_email(email: str, *, setup: bool) -> bool:
+    """Our own wording via SMTP; False means "use Firebase's mail instead".
+
+    Firebase's "Reset your password" template cannot be edited for this
+    project, and a sign-up that arrives as a password reset reads like a
+    mistake. The link itself still comes from Firebase.
+    """
+    if not mailer.is_configured():
+        return False
+    try:
+        link = _password_reset_link(email)
+    except Exception as exc:
+        logging.warning("Own setup mail: link generation failed (%s)", safe_exception(exc))
+        return False
+    if setup:
+        message = mailer.build_account_setup_message(recipient=email, setup_url=link)
+    else:
+        message = mailer.build_existing_account_message(
+            recipient=email, login_url=password_setup_continue_url(), reset_url=link,
+        )
+    return mailer.deliver_now(message)
+
+
+def deliver_password_setup_email(email: str, *, setup: bool = True) -> bool:
     """Background-task wrapper that keeps logs content-free."""
     try:
+        if send_own_setup_email(email, setup=setup):
+            return True
         send_password_setup_email(email)
         return True
     except Exception as exc:
