@@ -194,8 +194,10 @@ nicht wegfallen; wer schneller will, wählt `fast`. Bei `quick` gilt das Quorum
 der Zeit bis zum Quorum, mindestens zwei Sekunden. Dann beginnt die Synthese mit den vorhandenen
 Antworten (`synthesis_providers`). Laufende Modelle stehen bis dahin als
 `pending_models` im Review. Eine Antwort, die während der Synthese eintrifft,
-wird mit `late: true` markiert: Sie gehört zur Prüfbasis von Differences und
-Coverage, nie zum Antworttext. Wer beim Start der Judges noch schreibt, wird
+wird mit `late: true` markiert: Seit 2026-10-07 gehört sie weder zum
+Antworttext noch zur Prüfbasis von Differences und Coverage (der Text konnte sie
+nicht kennen; sonst entstünde „not addressed“-Rauschen) und steht nur unter
+Answers. Wer beim Start der Judges noch schreibt, wird
 gestoppt und als fehlend mit `late_cutoff` geführt; die Prüfung nutzt die
 übrigen Antworten. Der Antworttext bleibt in jedem Fall unverändert. Was ein so
 gestopptes (oder mitten in der Antwort ausgefallenes) Modell schon geschrieben

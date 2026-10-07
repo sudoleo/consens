@@ -754,6 +754,7 @@ class Straggler(Script):
         self.release_on_answer = release_on_answer
         self.partial = partial
         self.synthesis_evidence = None
+        self.judge_prompts = []
 
     def factory(self):
         from app.services.llm.provider_runtime import current_provider_cancellation
@@ -761,6 +762,8 @@ class Straggler(Script):
         script = self
         class Completion(base):
             def stream(self, *, model, messages, **kwargs):
+                if model.request_config.get("response_format"):
+                    script.judge_prompts.append(json.dumps(messages))
                 if self.step_id.startswith("completion:") and not kwargs["tools"]:
                     script.synthesis_evidence = json.dumps(messages)
                     if script.release_on_answer:
@@ -794,7 +797,7 @@ def quick_quorum(monkeypatch):
     monkeypatch.setattr(agent_comparison, "QUORUM_GRACE", {"quick": 1.0, "full": 1.0})
 
 
-def test_answer_starts_at_quorum_and_a_late_answer_still_feeds_the_check(store, quick_quorum):
+def test_answer_starts_at_quorum_and_a_late_answer_stays_out_of_the_check(store, quick_quorum):
     script = Straggler(release_on_answer=True, depth="quick")
     loop = make_loop(store, script, models=THREE)
     list(loop.run())
@@ -805,6 +808,8 @@ def test_answer_starts_at_quorum_and_a_late_answer_still_feeds_the_check(store, 
     assert sorted(comparison["synthesis_providers"]) == ["anthropic", "openai"]
     late = [a["provider"] for a in comparison["answers"] if a.get("late")]
     assert late == ["gemini"] and len(comparison["answers"]) == 3
+    # The text never saw the late answer, so the judges do not check it against it.
+    assert script.judge_prompts and not any("second option is cheaper" in p for p in script.judge_prompts)
     assert comparison["status"] == "succeeded" and not comparison["failed_models"]
     assert review["status"] == "succeeded" and review_is_bound(review, saved["consensus"])
     assert "pending_models" not in comparison
@@ -1111,3 +1116,23 @@ def test_settings_saved_before_the_freedom_field_still_match_on_recovery():
     assert stored_preferences({"depth": "auto", "quorum": "balanced"}) == AgentPreferences().model_dump()
     assert stored_preferences(None) == AgentPreferences().model_dump()
     assert stored_preferences({"depth": "full", "quorum": "all", "autonomy": "free"})["autonomy"] == "free"
+
+
+@pytest.mark.parametrize("provider,api_model,model_ref,sent", [
+    ("openai", "openai/gpt-5.6-luna", "gpt-5.6-luna", False),
+    ("gemini", "google/gemini-3.5-flash-lite", "gemini-3.5-flash-lite", False),
+    ("anthropic", "anthropic/claude-haiku-4.5", "claude-haiku-4-5", True)])
+def test_judge_temperature_follows_the_consensus_rule_for_reasoning_models(store, provider, api_model, model_ref, sent):
+    from types import SimpleNamespace
+    loop = make_loop(store, Script())
+    seen = []
+    loop.comparison.call = lambda model, messages, **kwargs: (seen.append(model.request_config), SimpleNamespace(text="{}"))[1]
+    loop.comparison.judge_transport(provider, api_model, model_ref, system="", prompt="p", max_tokens=1000,
+                                    temperature=0.2, json_mode=True, effort="low", json_schema={"type": "object"})
+    assert ("temperature" in seen[0]) is sent
+
+
+def test_newer_openai_generations_count_as_reasoning_models_for_temperature():
+    from app.services.llm.consensus_engine import _effective_temperature
+    assert _effective_temperature("openai", "openai/gpt-6-luna", 0.2) is None
+    assert _effective_temperature("openai", "openai/gpt-4o", 0.2) == 0.2

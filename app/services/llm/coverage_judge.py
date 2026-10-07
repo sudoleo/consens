@@ -243,7 +243,7 @@ def build_coverage_prompt(
         "Binding list of sentence ids (one entry each, in this order):\n"
         + json.dumps(id_list, ensure_ascii=False)
         + "\n\nConsensus answer (sentences numbered):\n" + numbered_answer + "\n\n"
-        "Model responses:\n" + responses_text + "\n"
+        "Model responses (one <response> block per model):\n" + responses_text + "\n"
     )
 
 

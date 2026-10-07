@@ -719,7 +719,8 @@ class ComparisonTools:
                 logging.warning("Agent comparison could not save its final evidence state")
 
     def judge_transport(self, provider, api_model, model_ref, **kwargs):
-        from app.services.llm.consensus_engine import _engine_request_config, _structured_response_format
+        from app.services.llm.consensus_engine import (_effective_temperature, _engine_request_config,
+                                                        _structured_response_format)
         with self.lock:
             self.judge_calls += 1
             # Three calls per check (two differences passes, coverage) plus
@@ -729,8 +730,11 @@ class ComparisonTools:
         model = metered_model(model_ref, max_tokens=kwargs["max_tokens"])
         config = _engine_request_config(provider, api_model, model_ref, effort=kwargs["effort"])
         config["response_format"] = _structured_response_format(kwargs["json_mode"], kwargs["json_schema"])
-        if kwargs["temperature"] is not None:
-            config["temperature"] = kwargs["temperature"]
+        # Same rule as the Consensus path: reasoning models (OpenAI gpt-5+/o,
+        # Gemini, Mistral reasoning) reject or ignore a sampling temperature.
+        temperature = _effective_temperature(provider, api_model, kwargs["temperature"])
+        if temperature is not None:
+            config["temperature"] = temperature
         value = self.call(replace(model, request_config=config), [
             {"role": "system", "content": "You are a judge in consens.io's Consensus pipeline, checking a synthesis against independent model answers.\n" + kwargs["system"]},
             {"role": "user", "content": kwargs["prompt"]}],
@@ -761,7 +765,11 @@ class ComparisonTools:
                 check = {"comparison_id": comparison["id"], "basis_hash": comparison.get("basis_hash"),
                          "answer_hash": answer_hash(self.text), "status": "failed", "differences_data": None}
                 self.review["checks"].append(check)
-                if len(comparison["answers"]) < 2:
+                # Answers that arrived after the synthesis started were never
+                # part of it; checking the text against them only adds noise
+                # ("not addressed"). They stay visible as late answers.
+                checked = [a for a in comparison["answers"] if not a.get("late")]
+                if len(checked) < 2:
                     check["issues"] = review_issues(comparison, None)
                     continue
                 with bind_task_transport(self.judge_transport):
@@ -770,7 +778,7 @@ class ComparisonTools:
                         # Configured chat defaults may be newer than the answer
                         # picker. The family alias selects only judge policy.
                         reference = cfg.provider_label(search_family(loop.model))
-                    _, data = query_differences({cfg.provider_label(a["provider"]): a["text"] for a in comparison["answers"]},
+                    _, data = query_differences({cfg.provider_label(a["provider"]): a["text"] for a in checked},
                         self.text, {"OpenRouter": loop.api_key}, differences_model=reference,
                         resolved_question=comparison["question"], chat_mode=True, passes=DIFFERENCES_PASSES)
                 loop._check(cancellation)

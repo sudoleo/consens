@@ -2470,7 +2470,12 @@ bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`);
 `full` wartet im Standard `balanced` auf alle Modelle.
 `_rebuild` normalisiert Quellen wie zuvor `fan_out_provider_answers` (das der
 Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
-`late`. `freeze_for_synthesis` legt `synthesis_providers` fest,
+`late`. `judge()` prüft seit 2026-10-07 nur Antworten ohne `late`.
+`judge_transport` filtert die Judge-Temperatur wie der Consensus-Pfad
+(`_effective_temperature`, OpenAI gpt-5 und neuer, Gemini, Mistral-Reasoning).
+Die Judges sehen jede Antwort als `<response label="Model A">…</response>`-Block
+(`_response_block`), nicht mehr als `- Model A:`-Zeile.
+`freeze_for_synthesis` legt `synthesis_providers` fest,
 `finish_comparisons` stoppt vor den Judges verbliebene Nachzügler (`late_cutoff`)
 und fixiert `basis_hash`; `close` beendet sie am Laufende (`stopped`). Was ein
 gestopptes oder mitten im Stream ausgefallenes Modell bis dahin geschrieben hat

@@ -372,7 +372,7 @@ class CoverageIntegrationTests(unittest.TestCase):
             if '"counter_quotes"' in prompt:
                 labels = [
                     label for label in ("Model A", "Model B", "Model C")
-                    if f"- {label}:" in prompt
+                    if f'<response label="{label}">' in prompt
                 ]
                 sentences = []
                 for index, key in enumerate(

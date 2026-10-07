@@ -135,9 +135,9 @@
     for (const model of unavailable) details.push(model.partial_text
       ? `${model.label}: stopped before it finished, ${failureReason(model.failure)}. Its partial answer is under Answers, not in the check.`
       : `${model.label}: no answer, ${failureReason(model.failure)}.`);
-    // Arrived after the answer was written: part of the check, not of the text.
+    // Arrived after the answer was written: shown, but neither in the text nor in its check.
     const late = check ? answers.filter(a => a.late).map(a => a.model?.label || a.provider_label || a.provider) : [];
-    if (late.length) details.push(`${late.join(', ')} answered after the answer was written. ${late.length === 1 ? 'Its answer is' : 'Their answers are'} part of the check, not of the answer text.`);
+    if (late.length) details.push(`${late.join(', ')} answered after the answer was written. ${late.length === 1 ? 'Its answer is' : 'Their answers are'} under Answers, not part of the answer or its check.`);
     if (check) for (const issue of issues) {
       if (issue.code !== 'models_unavailable' && !decisive.has(issue.code)) details.push(issueText(issue) + '.');
     }

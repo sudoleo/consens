@@ -379,3 +379,29 @@ umgesetzt 2026-10-07:
    unvollständig behalten (Backlog A8).
 
 **Max' Entscheidung:** nichts zu entscheiden („go“).
+
+---
+
+## Station 4 — Judges (Differences + Coverage)
+
+**Quelle:** `consensus_engine.py` (Differences, `_build_judge_context`),
+`coverage_judge.py`, Hülle `agent_comparison.judge_transport`. Rohtext Anhang B,
+Abschnitte 3–5. Seit 2026-10-07 (andere Sitzung) zwei parallele
+Differences-Durchläufe mit Luna und Funde in der Sprache der Antwort.
+
+**Umgesetzt 2026-10-07 (Technik):**
+1. Judge-Temperatur wird wie im Consensus-Pfad für Reasoning-Modelle weggelassen
+   (Luna/GPT-6, Gemini, Mistral-Reasoning) — vorher ungefiltert gesendet.
+2. Differences-Prompt passt zum Strict-Schema: „severity“ bei emphasis =
+   „minor“ (wird ignoriert), „verify“ leerer String statt „optional“.
+3. Modellantworten als `<response label="…">`-Blöcke statt `- Model A:`-Zeilen
+   (keine Verwechslung mit Listen, Schutz gegen eingeschleuste Zeilen).
+4. Coverage ohne Datumskontext bleibt bewusst: er prüft nur „sagt ein Modell
+   dasselbe“, nicht „ist es wahr“.
+
+**Max' Entscheidungen (2026-10-07):**
+- A ja: Nachzügler-Antworten zählen nicht mehr in der Prüfung, nur Anzeige
+  „answered after the answer was written … not part of the answer or its check“.
+- B ja: Recherche-Quellen des Agenten gehen vorerst nicht an die Judges; Sätze
+  daraus stehen ehrlich als „von keinem Modell gestützt“. Erst messen, wie oft
+  der Agent nach dem Vergleich nachrecherchiert (revidiert A5).
