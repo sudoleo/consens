@@ -2547,7 +2547,19 @@ folgt der Gemini-Standard-Judge (aktuell Gemini 3.5 Flash-Lite). Ist Gemini bere
 Pro-Judges und dritte Familien werden im Chat nicht als Fallback eingeplant;
 die niedrige Judge-Denkstufe und die bisherigen Consensus-Pläne bleiben erhalten.
 `_chat_judge_attempts` liefert denselben Plan an Differences und den parallel
-laufenden Coverage-Judge. Die echten Agent-Tests simulieren Luna-Ausfälle,
+laufenden Coverage-Judge. Seit 2026-10-07 ruft der Agent `query_differences(...,
+passes=2)`: ein zweiter, unabhängiger Differences-Lauf startet parallel
+(`_in_background`, gleicher Kontext/Cancellation/Budget wie der Coverage-Thread),
+`merge_difference_passes` hängt nur seine neuen Funde an (gleich = Zitat in
+Zitat oder gleicher Konsens-Satz mit gleichen Modellen), der Score wird danach
+in `_apply_coverage` neu berechnet; `judges.differences` trägt `passes` und
+`second_pass_added`. Judge-Audit (20 Fragen, 230 blind bewertete Funde): ein
+Luna-Lauf fand 60–68 % der echten Streitpunkte, zwei zusammen 78 %, Median
++1,6 s. Fällt ein Lauf aus, trägt der andere. Ebenfalls seit 2026-10-07 nennt
+`query_differences` dem Judge die Sprache der Konsensantwort ausdrücklich
+(`_answer_language`, Funktionswörter für EN/DE/FR/ES/IT/PT/NL, sonst leer und
+die allgemeine Regel): Luna schrieb Funde sonst teils spanisch/französisch
+unter englischen Antworten. Die echten Agent-Tests simulieren Luna-Ausfälle,
 leere Antworten und Cooldowns mit Standard- und Pro-Gemini-Chatmodellen.
 llm/task_transport.py injiziert nur den gemessenen Providertransport via
 ContextVar; der Coverage-Thread übernimmt den Kontext. Außerhalb dieser Bindung

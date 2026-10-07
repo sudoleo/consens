@@ -111,6 +111,11 @@ def quorum_size(total, depth, mode="balanced"):
 # Comparisons per message in bounded (legacy) runs; chat uses
 # AgentPolicy.turn_comparisons instead.
 BOUNDED_COMPARISONS = 3
+# Two independent differences passes per check, run in parallel and merged
+# (consensus_engine.merge_difference_passes): one GPT-6 Luna pass found about
+# two thirds of the real disagreements, two passes about four fifths, for one
+# more cheap judge call and ~1.5 s (judge audit 2026-10-07).
+DIFFERENCES_PASSES = 2
 
 
 FREE_PROMPT = """
@@ -839,7 +844,9 @@ class ComparisonTools:
         from app.services.llm.consensus_engine import _engine_request_config, _structured_response_format
         with self.lock:
             self.judge_calls += 1
-            if not self.loop.policy.account_budget_only and self.judge_calls > 18:
+            # Three calls per check (two differences passes, coverage) plus
+            # their retries for the bounded three comparisons.
+            if not self.loop.policy.account_budget_only and self.judge_calls > 27:
                 raise ValueError("Judge attempt limit reached")
         model = metered_model(model_ref, max_tokens=kwargs["max_tokens"])
         config = _engine_request_config(provider, api_model, model_ref, effort=kwargs["effort"])
@@ -884,7 +891,7 @@ class ComparisonTools:
                         reference = cfg.provider_label(search_family(loop.model))
                     _, data = query_differences({cfg.provider_label(a["provider"]): a["text"] for a in comparison["answers"]},
                         self.text, {"OpenRouter": loop.api_key}, differences_model=reference,
-                        resolved_question=comparison["question"], chat_mode=True)
+                        resolved_question=comparison["question"], chat_mode=True, passes=DIFFERENCES_PASSES)
                 loop._check(cancellation)
                 if isinstance(data, dict):
                     check["differences_data"] = data

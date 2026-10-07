@@ -979,7 +979,11 @@ def _differences_language_rule(output_language: str = "", statement_claims: bool
             "response's own language.\n"
         )
     else:
-        rule = "- Write \"claim\", \"stance\", and \"verify\" in the same language as the model responses.\n"
+        rule = (
+            "- Write \"claim\", \"stance\", and \"verify\" in the language of the consensus "
+            "answer, even where a model response uses another language. \"quote\" stays "
+            "verbatim in the response's own language.\n"
+        )
     if statement_claims:
         rule += (
             "- Phrase \"claim\" as a plain declarative statement of the disputed point "
@@ -987,6 +991,31 @@ def _differences_language_rule(output_language: str = "", statement_claims: bool
             "or a \"Whether ...\" phrase.\n"
         )
     return rule
+
+
+_LANGUAGE_MARKERS = {
+    "English": {"the", "and", "is", "are", "of", "to", "that", "with", "for", "not", "this", "it", "be", "or", "on"},
+    "German": {"der", "die", "das", "und", "ist", "nicht", "mit", "für", "ein", "eine", "auf", "sich", "den", "auch", "oder"},
+    "French": {"le", "la", "les", "et", "est", "des", "une", "pour", "pas", "que", "dans", "sur", "avec", "du", "ce"},
+    "Spanish": {"el", "la", "los", "las", "y", "es", "que", "una", "para", "con", "por", "del", "no", "se", "como"},
+    "Italian": {"il", "che", "di", "è", "per", "una", "non", "gli", "con", "della", "sono", "del", "le", "più", "anche"},
+    "Portuguese": {"o", "que", "não", "uma", "para", "com", "os", "do", "da", "em", "é", "as", "mais", "ao", "pelo"},
+    "Dutch": {"de", "het", "een", "en", "is", "van", "niet", "dat", "op", "voor", "met", "zijn", "ook", "maar", "bij"},
+}
+
+
+def _answer_language(text: str) -> str:
+    """Language of the consensus answer from common function words, or "" when
+    unclear. The judge then gets it by name: GPT-6 Luna ignored "the language
+    of the consensus answer" and wrote Spanish or French claims under English
+    answers (judge audit 2026-10-07), while a named language holds (Topics)."""
+    words = re.findall(r"[^\W\d_]+", str(text or "").lower())[:600]
+    if not words:
+        return ""
+    counts = {name: sum(1 for word in words if word in markers) for name, markers in _LANGUAGE_MARKERS.items()}
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    (best, top), (_, second) = ranked[0], ranked[1]
+    return best if top >= 8 and top >= 2 * second else ""
 
 
 def _differences_system_prompt(output_language: str = "") -> str:
@@ -1760,7 +1789,11 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
 # Judge-Familie VOR diese Priorität setzen (siehe _judge_families).
 _FALLBACK_JUDGE_PRIORITY = cfg.JUDGE_FAMILY_PRIORITY
 
-DIFFERENCES_SYSTEM_PROMPT = "Answer in the exact same language as the Model responses."
+# The reader sees claim/stance/verify next to the consensus answer, so they
+# follow its language. "Same language as the Model responses" was ambiguous
+# when responses mixed languages, and GPT-6 Luna wrote some claims in Spanish
+# under English questions (judge audit 2026-10-07).
+DIFFERENCES_SYSTEM_PROMPT = "Write every text value in the language of the consensus answer; copy quotes verbatim."
 DIFFERENCES_TEMPERATURE = 0.2
 DIFFERENCES_RETRY_SUFFIX = (
     "\n\nIMPORTANT: Return exactly ONE complete, syntactically valid JSON object "
@@ -2354,6 +2387,71 @@ def _apply_coverage(data: dict, coverage_result, coverage_meta, context, consens
         return None
 
 
+def _difference_quotes(item: dict) -> set:
+    quotes = set()
+    for position in item.get("positions") or []:
+        quote = re.sub(r"[\W_]+", " ", str(position.get("quote") or "").lower()).strip()
+        if len(quote) >= 12:
+            quotes.add(quote)
+    return quotes
+
+
+def _difference_models(item: dict) -> frozenset:
+    return frozenset(model for position in item.get("positions") or []
+                     for model in position.get("models") or [])
+
+
+def _same_difference(a: dict, b: dict) -> bool:
+    """Two judge passes describe the same disagreement when they cite the same
+    passage of a response (verbatim quotes, one inside the other) or hang on the
+    same consensus sentence with the same models on the sides."""
+    quotes_a, quotes_b = _difference_quotes(a), _difference_quotes(b)
+    if any(x in y or y in x for x in quotes_a for y in quotes_b):
+        return True
+    anchor = lambda item: re.sub(r"[\W_]+", " ", str(item.get("consensus_anchor") or "").lower()).strip()
+    return bool(anchor(a)) and anchor(a) == anchor(b) and _difference_models(a) == _difference_models(b)
+
+
+def merge_difference_passes(primary: dict, secondary: dict) -> int:
+    """Adds the disagreements only the second judge pass found; returns how many.
+
+    A single pass finds about two thirds of the real disagreements, two passes
+    together about four fifths (judge audit 2026-10-07). The primary pass keeps
+    its wording, best model and metadata; the score is recomputed by the
+    caller (_apply_coverage)."""
+    merged = list(primary.get("differences") or [])
+    added = 0
+    for item in secondary.get("differences") or []:
+        if any(_same_difference(item, known) for known in merged):
+            continue
+        merged.append(item)
+        added += 1
+    primary["differences"] = merged
+    return added
+
+
+def _in_background(work, name: str):
+    """Runs work() in its own thread with the caller's cancellation, analysis
+    budget and context (judge transport) bound; returns (pool, future)."""
+    cancellation = current_provider_cancellation()
+    budget = current_analysis_budget()
+
+    def _work():
+        with bind_analysis_budget(budget):
+            if cancellation is None:
+                return work()
+            with bind_provider_cancellation(cancellation):
+                return work()
+
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=name)
+    try:
+        from contextvars import copy_context
+        return pool, pool.submit(copy_context().run, _work)
+    except Exception:
+        pool.shutdown(wait=False)
+        raise
+
+
 def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: bool = False):
     """Startet den Coverage-Judge im Nebenläufer und gibt (pool, future).
 
@@ -2381,6 +2479,18 @@ def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: 
     except Exception:
         pool.shutdown(wait=False)
         raise
+
+
+def _collect_background(future, what: str):
+    """Result of a background judge pass, or None; a failure there never
+    breaks the run."""
+    try:
+        budget = current_analysis_budget()
+        timeout = max(0.05, budget.deadline - time.monotonic()) + 0.2 if budget and math.isfinite(budget.deadline) else None
+        return future.result(timeout=timeout)
+    except Exception as exc:
+        logging.warning("%s failed category=%s", what, safe_exception(exc))
+        return None
 
 
 def _collect_coverage(pool, future):
@@ -2416,6 +2526,7 @@ def query_differences(
     chat_mode: bool = False,
     output_language: str = "",
     statement_claims: bool = False,
+    passes: int = 1,
 ) -> tuple:
     """
     Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
@@ -2429,8 +2540,16 @@ def query_differences(
     `output_language`/`statement_claims` setzen Topics (englische öffentliche
     Seiten): claim/stance/verify in dieser Sprache, claim als Aussage statt
     Frage; die App lässt beides leer (Sprache der Antworten).
+    `passes=2` (Agent) laesst denselben Differences-Judge ein zweites Mal
+    parallel laufen und fuehrt die Funde zusammen (merge_difference_passes):
+    ein Lauf findet rund zwei Drittel der echten Streitpunkte, zwei rund vier
+    Fuenftel (Judge-Audit 2026-10-07).
     Gibt (legacy_text, structured_data | None) zurück.
     """
+    passes = 2 if passes and int(passes) > 1 else 1
+    # Claims appear next to the answer the user reads, so they take its
+    # language; a detected language is named explicitly (see _answer_language).
+    output_language = output_language or _answer_language(consensus_answer)
     context = _build_judge_context(
         answers, consensus_answer, excluded_models, resolved_question,
         sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES if chat_mode else MAX_CONSENSUS_SENTENCES,
@@ -2451,7 +2570,11 @@ def query_differences(
     coverage_pool, coverage_future = _coverage_in_background(
         context, api_keys, differences_model, chat_mode=chat_mode
     )
-    try:
+    second_pool = second_future = None
+
+    def run_pass():
+        """One differences judge with retry and fallback: (data, legacy_text,
+        prose_fallback, last_error); data is None when every attempt failed."""
         prose_fallback = None
         last_error = "empty result from differences engine."
         skip_retries_for = set()
@@ -2505,13 +2628,7 @@ def query_differences(
                     provider, api_model, judge_tier,
                     attempts=attempt_no, duration_ms=int((time.monotonic() - judge_started) * 1000),
                 )}
-                coverage_result, coverage_meta = _collect_coverage(
-                    coverage_pool, coverage_future
-                )
-                covered_text = _apply_coverage(
-                    data, coverage_result, coverage_meta, context, consensus_answer
-                )
-                return covered_text or legacy_text, data
+                return data, legacy_text, None, last_error
             if prose_fallback is None and legacy_text and not _looks_like_json(raw):
                 prose_fallback = legacy_text
             last_error = "unparsable output from differences engine."
@@ -2519,6 +2636,30 @@ def query_differences(
                 f"Differences output unparsable on {provider}/{api_model} "
                 f"(attempt {attempt_no}, {duration_ms} ms)"
             )
+        return None, None, prose_fallback, last_error
+
+    try:
+        if passes > 1:
+            # A second, independent pass in parallel: same prompt, same judge.
+            # It costs one more judge call but almost no wall-clock time.
+            second_pool, second_future = _in_background(run_pass, "differences-pass")
+        data, legacy_text, prose_fallback, last_error = run_pass()
+        if second_future is not None:
+            extra = _collect_background(second_future, "Second differences pass")
+            if extra and extra[0] is not None:
+                if data is None:
+                    data, legacy_text = extra[0], extra[1]
+                else:
+                    added = merge_difference_passes(data, extra[0])
+                    data["judges"]["differences"].update(passes=2, second_pass_added=added)
+        if data is not None:
+            coverage_result, coverage_meta = _collect_coverage(
+                coverage_pool, coverage_future
+            )
+            covered_text = _apply_coverage(
+                data, coverage_result, coverage_meta, context, consensus_answer
+            )
+            return covered_text or legacy_text, data
 
         # Der Differences-Judge ist durchgefallen; der Coverage-Lauf wird trotzdem
         # eingesammelt, damit sein Thread nicht verwaist weiterlaeuft.
@@ -2530,7 +2671,10 @@ def query_differences(
         # Auch bei einem Abbruch mitten in der Attempt-Schleife darf der
         # Nebenlaeufer-Thread nicht verwaisen.
         from app.services.llm.task_transport import task_transport
-        coverage_pool.shutdown(wait=task_transport.get() is not None)
+        wait = task_transport.get() is not None
+        coverage_pool.shutdown(wait=wait)
+        if second_pool is not None:
+            second_pool.shutdown(wait=wait)
 
 
 CHANGE_CAUSES = ("new_evidence", "evidence_missing", "reassessment", "none")

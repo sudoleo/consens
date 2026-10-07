@@ -33,6 +33,16 @@ def deepseek_default_agent(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _single_differences_pass(monkeypatch):
+    """Agent judge tests pin exact call sequences (fallback order, cooldowns,
+    call counts) written for one differences pass. Production runs two in
+    parallel (agent_comparison.DIFFERENCES_PASSES); tests that cover the second
+    pass set it back to 2 themselves."""
+    from app.services import agent_comparison
+    monkeypatch.setattr(agent_comparison, "DIFFERENCES_PASSES", 1)
+
+
+@pytest.fixture(autouse=True)
 def _no_local_google_configuration(monkeypatch):
     """A local .env may switch Google on for manual testing; the suite starts
     without it, and Google tests configure exactly what they exercise."""

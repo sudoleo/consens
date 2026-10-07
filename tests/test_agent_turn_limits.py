@@ -192,3 +192,15 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     reordered = {"id": "d", "type": "function", "function": {"name": "read_file", "arguments": '{"a":2,"b":1}'}}
     assert [loop._identical_call(c) for c in (other, reordered, other, reordered)] == [None, None, "refuse", "stop"]
     assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents"}
+
+
+def test_each_check_runs_two_differences_passes_in_production(store, monkeypatch):
+    from app.services import agent_comparison
+    monkeypatch.setattr(agent_comparison, "DIFFERENCES_PASSES", 2)
+    script = Script(compares=6)
+    loop = chat_loop(store, script)
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 4
+    # Per check: two differences passes and one coverage judge.
+    assert loop.comparison.judge_calls == 12

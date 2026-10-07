@@ -1580,7 +1580,7 @@ def test_topic_judge_writes_english_statements_while_the_app_keeps_the_answer_la
         "Gemini 4 is in training.",
     )
     app_prompt = engine._build_differences_prompt_from(context)
-    assert "in the same language as the model responses" in app_prompt
+    assert "in the language of the consensus answer" in app_prompt
     assert "never as a question" not in app_prompt
     assert engine._differences_system_prompt() == engine.DIFFERENCES_SYSTEM_PROMPT
 
@@ -1588,7 +1588,7 @@ def test_topic_judge_writes_english_statements_while_the_app_keeps_the_answer_la
         context, output_language="English", statement_claims=True)
     assert '"claim", "stance", and "verify" in English, whatever language' in topic_prompt
     assert "never as a question" in topic_prompt
-    assert "same language as the model responses" not in topic_prompt
+    assert "language of the consensus answer" not in topic_prompt
     assert "English" in engine._differences_system_prompt("English")
 
     captured = {}
