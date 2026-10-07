@@ -919,7 +919,8 @@ class _JudgeContext:
     truncated_answers: int = 0
 
 
-_RESPONSE_TAG = re.compile(r"</?response\b", re.IGNORECASE)
+# Also "< /response>" or "</ Response>": a judge would read those as a tag too.
+_RESPONSE_TAG = re.compile(r"<\s*/?\s*response\b", re.IGNORECASE)
 
 
 def _response_block(label: str, text: str) -> str:
