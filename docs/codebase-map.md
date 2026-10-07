@@ -2488,7 +2488,17 @@ Nach den Vergleichen fordert das Chatmodell mit `judge_answer` die Antwortphase
 an; nach `compare_models(next_step="answer")` erkennt `DelegationLoop._answer_ready`
 das Ende der Vergleiche und springt ohne weitere Orchestrierungsrunde direkt in
 Schreibschritt und `_finish_review`. Der Schreibschritt nutzt
-`answer_output_limit` (Completion-Grenze des Chatmodells). `_admit_chat_step`
+`answer_output_limit` (Completion-Grenze des Chatmodells; denkende Modelle
+bekommen seit 2026-10-07 `ANSWER_REASONING_HEADROOM` obendrauf, weil Reasoning
+im selben Budget zählt und adaptives Denken bei Claude weder Effort noch
+`reasoning.max_tokens` einhält). Endet der Schreibschritt mit `length` ohne
+jeden Text (`_thought_only`), wirft `AgentCompletion.stream` `ModelOutputLimit`
+(Code `output_limit`, nicht mehr `provider_error`); `_step` wertet das im
+Schreibschritt als erledigten, bezahlten Schritt, und `_write_synthesis`
+schreibt die Antwort genau einmal neu mit `lighter_reasoning` (leichteste
+erlaubte Stufe: low → minimal → none, Fortschrittszeile `completion:N/retry`).
+Ohne leichtere Stufe oder bei erneutem Leerlauf endet der Turn mit
+`output_limit`. `_admit_chat_step`
 kürzt für Vergleichsantworten und Antwortschritt bei Konkurrenz die Output-Grenze
 (`clamp_floor`), statt zu warten. Die Judges indexieren im Chat bis zu
 `CHAT_MAX_CONSENSUS_SENTENCES` Sätze; `_run_coverage_windows` teilt Coverage in
@@ -2536,10 +2546,14 @@ Quellen und die zuletzt mit `review_agent` angenommenen Worker-Ergebnisse.
 Fallback gelangt der Ersatztext statt des verworfenen Ergebnisses in die Synthese.
 Agent-Systemprompt, Tool-Replay, Status-/Routingfelder und private
 Reasoning-Fortsetzungen gelangen nicht in diesen Schreibkontext. Die originale
-Tool-Konversation bleibt für die Orchestrierung unverändert. Für den isolierten
-Schreibschritt setzt eine Modellkopie `reasoning.exclude=true` und entfernt
-`reasoning.summary`, ohne Effort oder Tokenbudget zu ändern. Provider-Reasoning
-wird weiterhin nicht in Antwort, Live-Status oder Verlauf projiziert. Die eigentliche
+Tool-Konversation bleibt für die Orchestrierung unverändert. Seit 2026-10-07
+streamt der Schreibschritt sein Reasoning wieder (vorher `reasoning.exclude=true`):
+minutenlanges stilles Denken wirkte wie ein hängender Lauf. `_step` verdichtet es
+mit `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)` zu
+kurzen wörtlichen Auszügen in EINER Fortschrittszeile `completion:N/thinking`
+(kind `progress`, alle 3 s ersetzt). In Antwort und Kontext gelangt es nicht:
+ohne Tool-Aufrufe sammelt der Schritt keine Fortsetzungsdaten
+(`_preserve_reasoning`). Die eigentliche
 Synthese wird für Folgeschritte nach den Tool-Ergebnissen in den Kontext aufgenommen.
 Der Toolcall prüft diesen exakten Text, keinen vom Modell frei behaupteten
 Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,

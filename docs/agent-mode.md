@@ -224,8 +224,14 @@ verlauf sowie Vergleichsantworten, Quellen und zuletzt geprüfte Worker-Ergebnis
 oder deren geprüften Ersatztext. Überarbeitung entzieht alten Ergebnissen die
 Freigabe. Er erhält keine internen Toolgespräche,
 Statusfelder oder Reasoning-Fortsetzungen. Die Agent-Anweisungen steuern weiterhin
-die Orchestrierung. Die Reasoning-Ausgabe des Providers wird für den Schreibschritt
-unterdrückt; Modell und gewählte Denkstufe bleiben erhalten. Der sichtbare Antwort-
+die Orchestrierung. Modell und gewählte Denkstufe bleiben erhalten. Seit 2026-10-07
+zeigt der Schreibschritt während des Denkens kurze Auszüge aus dem Provider-
+Reasoning als eine laufend ersetzte Fortschrittszeile (sonst wirkten Minuten bei
+hoher Denkstufe wie ein hängender Lauf); in Antwort und Kontext gelangt davon
+nichts. Denkende Modelle bekommen zusätzlichen Platz im Ausgabebudget. Verbraucht
+ein Modell trotzdem alles fürs Denken, ohne ein Wort zu schreiben, schreibt die
+App die Antwort einmal mit der leichtesten Denkstufe neu; scheitert auch das,
+meldet sie `output_limit` statt eines Provider-Fehlers. Der sichtbare Antwort-
 text wird nicht nachträglich durch Stichwortfilter verändert.
 Beendet das Modell die Orchestrierung ohne nötigen Prüfaufruf, führt der Server
 die bestehenden Prüf-Tools einschließlich ihrer Fallback-Judges selbst aus.

@@ -203,3 +203,19 @@ def test_worker_rework_adds_settled_usage_once_and_coalesces_without_filling_eve
     assert len(events) == 2 and events[0] == {"type": "delegation"}
     assert events[1]["streaming"] is False and not loop.live_progress
     assert len(worker.usages) == 2 and loop.costs.calls == 0
+
+
+def test_answer_step_progress_keeps_updating_past_the_kept_window_at_its_pace():
+    now = [0.0]
+    progress = ReasoningProgress(unlimited=True, min_seconds=3, clock=lambda: now[0])
+    published = []
+    for i in range(60):
+        now[0] += 1
+        value = progress.update(event(f"\n\nWeighing gap number {i} against the evidence. " + "detail " * 60))
+        if value:
+            published.append((now[0], value["text"]))
+    # Far beyond the 8000 characters kept and the 7 updates of a worker.
+    assert len(published) > 7 and len(progress.text) <= 8000
+    # The newest excerpt is at most one pacing interval behind.
+    assert any(f"gap number {i}" in published[-1][1] for i in (57, 58, 59))
+    assert all(b[0] - a[0] >= 3 for a, b in zip(published, published[1:]))

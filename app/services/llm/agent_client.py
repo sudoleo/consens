@@ -9,6 +9,7 @@ import re
 from urllib.parse import urlsplit
 
 from app.core import config as cfg
+from app.services.agent_provider_limits import ModelOutputLimit
 from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
 from app.services.llm import agent_model_metadata
 
@@ -111,6 +112,14 @@ _CATALOG = agent_model_metadata.BASELINE
 # model's own completion limit (bounded here and by its context window).
 ANSWER_OUTPUT_CEILING = 32_768  # about 130 kB of text; the saved turn is limited
 ANSWER_OUTPUT_FALLBACK = 32_768
+# Reasoning counts against the same completion allowance. Adaptive thinking
+# (Claude) ignores effort and explicit thinking budgets alike and can spend the
+# whole allowance before writing a word (2026-10-07: Sonnet 5.5 at "max" used
+# all 32,768 tokens; at "high" all 8,000 in a probe). So a reasoning answer
+# step gets this much room on top of its text allowance.
+ANSWER_REASONING_HEADROOM = 32_768
+# Lightest reasoning for the one retry after a thought-only answer step.
+RETRY_EFFORTS = ("low", "minimal", "none")
 # Visible text one model call may keep (the saved turn and review are bounded).
 # Longer output is cut here and finishes as "length", like a token limit, so a
 # long answer is kept as truncated instead of failing the whole step.
@@ -123,8 +132,29 @@ def answer_output_limit(model):
         metadata = agent_model_metadata.snapshot().get(model.model) or {}
     except Exception:
         metadata = {}
-    limit = (metadata.get("top_provider") or {}).get("max_completion_tokens") or ANSWER_OUTPUT_FALLBACK
-    return max(model.max_output_tokens, min(int(limit), ANSWER_OUTPUT_CEILING))
+    limit = int((metadata.get("top_provider") or {}).get("max_completion_tokens") or ANSWER_OUTPUT_FALLBACK)
+    allowance = ANSWER_OUTPUT_CEILING
+    if metadata.get("reasoning") and (model.request_config.get("reasoning") or {}).get("effort") != "none":
+        allowance += ANSWER_REASONING_HEADROOM
+    return max(model.max_output_tokens, min(limit, allowance))
+
+
+def lighter_reasoning(model):
+    """The model at its lightest reasoning, or None when that changes nothing.
+
+    For the single retry after an answer step that only reasoned: the
+    comparison answers are already paid for, so the user still gets an answer."""
+    try:
+        metadata = agent_model_metadata.snapshot().get(model.model) or {}
+    except Exception:
+        metadata = {}
+    if not metadata.get("reasoning"):
+        return None
+    choices = _choices(model, metadata)
+    effort = next((effort for effort in RETRY_EFFORTS if effort in choices), None)
+    if effort is None or effort == (model.request_config.get("reasoning") or {}).get("effort"):
+        return None
+    return _resolve_effort(model, metadata, effort)
 _EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 
@@ -643,6 +673,11 @@ class AgentCompletion:
                     self.tool_calls = [self._tool_parts[i] for i in sorted(self._tool_parts)]
                     if not self.tool_calls or any(not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", call["id"]) for call in self.tool_calls):
                         raise ValueError("Invalid completed tool call")
+                elif (not self._tool_parts and self.finish_reason in {"length", "max_tokens"}
+                      and not self.text.strip()):
+                    # The whole allowance went into reasoning. Not a provider
+                    # fault: the same request would fail the same way again.
+                    raise ModelOutputLimit()
                 elif self._tool_parts or self.finish_reason not in {"stop", "length"} or not self.text.strip():
                     raise RuntimeError("Agent stream ended without a completed answer")
             finally:

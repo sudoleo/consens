@@ -21,9 +21,9 @@ from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
 from app.services.agent_policy import supports_delegation
-from app.services.agent_provider_limits import AgentRunInterrupted, agent_failure, provider_cooldowns
+from app.services.agent_provider_limits import AgentRunInterrupted, ModelOutputLimit, agent_failure, provider_cooldowns
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
-from app.services.llm.agent_client import AgentCompletion, agent_models, answer_output_limit, resolve_agent_model
+from app.services.llm.agent_client import AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, resolve_agent_model
 from app.services.llm.provider_runtime import (
     AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled,
     bind_analysis_budget, bind_provider_cancellation,
@@ -45,6 +45,8 @@ GOOGLE_NO_SEARCH = ("\nWeb search is unavailable in this chat because it contain
 # the whole account: the wrap-up after turn_seconds gets this much extra time
 # for synthesis and judges, then the run stops hard (also mid-step).
 TURN_WRAP_UP_SECONDS = 300
+# Pace of the reasoning excerpts the answer step shows while it thinks.
+THINKING_UPDATE_SECONDS = 3
 # Polling has no arguments that change; repeating it is waiting, not looping.
 REPEATABLE_TOOLS = frozenset({"wait_agents"})
 TURN_TIME_LIMIT = ("This response reached its time limit. "
@@ -58,6 +60,11 @@ TURN_REPEAT_LIMIT = ("The model repeated the same tool request without progress.
 def smaller_search(searches):
     """Next search tier down: several rounds -> one -> none."""
     return 1 if searches > 1 else 0
+
+
+def _thought_only(value):
+    """The answer step ended at its token limit before writing any text."""
+    return value.finish_reason in {"length", "max_tokens"} and not value.text.strip() and not value.tool_calls
 
 
 class StrictArgs(BaseModel):
@@ -667,6 +674,7 @@ class DelegationLoop(AgentLoop):
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         value.tool_call_limit = 4
         worker_progress = ReasoningProgress() if worker else None
+        thinking = ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS) if answer_step and not worker else None
         stream_progress = StreamProgress(worker.stream_chars) if worker else None
         status = "failed"
         search_limited = False
@@ -746,9 +754,16 @@ class DelegationLoop(AgentLoop):
                                     continue
                                 # Chat progress is explicitly written for the user in
                                 # tool arguments. Provider reasoning remains continuation
-                                # data, never a substitute for a status update.
+                                # data, never a substitute for a status update...
                                 if self.comparison and event["kind"] == "reasoning":
-                                    continue
+                                    # ...except in the answer step: there is no tool call
+                                    # left, and minutes of silent thinking look like a
+                                    # stalled run. Short verbatim excerpts, one updated line.
+                                    compact = thinking.update(event) if thinking else None
+                                    if not compact:
+                                        continue
+                                    event = {"step_id": step, "id": "thinking", "kind": "progress",
+                                             "text": compact["text"]}
                                 event = self.activity(event)
                             if event and event["type"] == "delta" and not publish_text:
                                 # Neither planning nor follow-up checks may replace
@@ -756,6 +771,12 @@ class DelegationLoop(AgentLoop):
                                 continue
                             if event:
                                 yield event
+                except ModelOutputLimit:
+                    # A thought-only answer is a completed, paid step without
+                    # text; _write_synthesis decides on its one retry. A failed
+                    # step would also block the next step's claim.
+                    if not answer_step:
+                        raise
                 finally:
                     source.close()
             self._check(cancellation)
@@ -1012,13 +1033,29 @@ class DelegationLoop(AgentLoop):
         if index is None:
             raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
         messages = self.comparison.synthesis_messages(self.answer_conversation)
+        # Reasoning stays visible: _step shows excerpts while the model thinks
+        # (minutes at high effort). It never enters the context, because the
+        # tool-free answer step keeps no continuation data (_preserve_reasoning).
         model = replace(self.model, max_output_tokens=answer_output_limit(self.model))
-        if model.request_config.get("reasoning"):
-            reasoning = {**model.request_config["reasoning"], "exclude": True}
-            reasoning.pop("summary", None)
-            model = replace(model, request_config={**model.request_config, "reasoning": reasoning})
         value = yield from self._step(model, messages, f"completion:{index}", ToolRegistry(),
                                       self.cancellation, searches_enabled=False, answer_step=True)
+        if _thought_only(value):
+            # The model spent the whole allowance on reasoning. The same request
+            # would fail again; one retry with the lightest reasoning still turns
+            # the paid comparisons into an answer.
+            lighter = lighter_reasoning(model)
+            index = next(steps, None) if lighter else None
+            if index is None:
+                raise ModelOutputLimit()
+            logging.warning("Agent answer step reasoned through its allowance model=%s effort=%s retry_effort=%s",
+                            model.model, model.reasoning_effort, lighter.reasoning_effort)
+            yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
+                                 "text": "The model used its whole output allowance on reasoning before writing. "
+                                         "Writing the answer again with lighter reasoning."})
+            value = yield from self._step(lighter, messages, f"completion:{index}", ToolRegistry(),
+                                          self.cancellation, searches_enabled=False, answer_step=True)
+            if _thought_only(value):
+                raise ModelOutputLimit()
         if value.finish_reason in {"length", "max_tokens"}:
             raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
         if value.finish_reason != "stop" or value.tool_calls or not value.text.strip():

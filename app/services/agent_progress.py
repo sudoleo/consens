@@ -43,10 +43,15 @@ class StreamProgress:
 
 
 class ReasoningProgress:
-    def __init__(self):
+    def __init__(self, *, unlimited=False, min_seconds=0.0, clock=time.monotonic):
+        # unlimited: a long answer step keeps showing signs of life for its
+        # whole duration, paced by min_seconds instead of a fixed count.
+        self.unlimited, self.min_seconds, self.clock = unlimited, min_seconds, clock
         self.text = ""
         self.summary = ""
+        self.received_chars = 0
         self.published_chars = 0
+        self.published_at = None
         self.updates = 0
         self.source = "excerpt"
 
@@ -57,12 +62,18 @@ class ReasoningProgress:
         if self.source == "provider_summary" and source != self.source:
             return None
         if source != self.source:
-            self.text, self.summary, self.published_chars = "", "", 0
+            self.text, self.summary, self.received_chars, self.published_chars = "", "", 0, 0
         self.source = source
-        self.text = (self.text + str(event.get("text", "")))[-8000:]
+        chunk = str(event.get("text", ""))
+        self.text = (self.text + chunk)[-8000:]
+        # Growth is counted on everything received: the kept window stops
+        # growing at 8000 characters and would otherwise freeze all updates.
+        self.received_chars += len(chunk)
         # Reserve the final update for a native summary that may arrive late.
-        limit = 8 if source == "provider_summary" else 7
-        if self.updates >= limit or (self.summary and len(self.text) - self.published_chars < 400):
+        limit = None if self.unlimited else 8 if source == "provider_summary" else 7
+        if ((limit is not None and self.updates >= limit)
+                or (self.summary and self.received_chars - self.published_chars < 400)
+                or (self.published_at is not None and self.clock() - self.published_at < self.min_seconds)):
             return None
         paragraphs = re.split(r"\n\s*\n", self.text)
         excerpts = []
@@ -83,6 +94,6 @@ class ReasoningProgress:
         summary = "\n".join(excerpts[-3:])
         if not summary or summary == self.summary:
             return None
-        self.summary, self.published_chars = summary, len(self.text)
+        self.summary, self.published_chars, self.published_at = summary, self.received_chars, self.clock()
         self.updates += 1
         return {"text": summary, "format": "summary", "summary_source": self.source, "append": False}
