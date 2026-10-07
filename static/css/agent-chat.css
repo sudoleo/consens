@@ -490,10 +490,19 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    model's answer is in. The icons are the progress: no separate line
    between the summary and the live text, and no ring around the icons.
    When the answer has been checked, the agreement number catches the light
-   once (below). */
-.agent-model-stack .agent-inline-model > * { transition: opacity var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard); }
+   once (below). The grey sits on the button, not the image (as in the
+   composer): dark mode inverts the black logos on the image itself
+   (components-model-picker.css), and a filter there would replace that and
+   leave them black on the dark ground. */
+#agentAnswerActivity .agent-model-stack .agent-inline-model {
+  transition: background-color var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard);
+}
+.agent-model-stack .agent-inline-model > * { transition: opacity var(--dur-state) var(--ease-standard); }
+.agent-activity.is-running .agent-model-stack .agent-inline-model:is([data-status="waiting"], [data-status="working"], [data-status="question"], [data-status="rework"], [data-status="failed"], [data-status="stopped"]) {
+  filter: grayscale(1);
+}
 .agent-activity.is-running .agent-model-stack .agent-inline-model:is([data-status="waiting"], [data-status="working"], [data-status="question"], [data-status="rework"], [data-status="failed"], [data-status="stopped"]) > * {
-  opacity: .4; filter: grayscale(1);
+  opacity: .4;
 }
 @media (prefers-reduced-motion: no-preference) {
   .agent-activity.is-running .agent-model-stack .agent-inline-model:is([data-status="waiting"], [data-status="working"], [data-status="question"], [data-status="rework"]) > * {
