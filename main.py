@@ -11,8 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
-# Init Environment
-load_dotenv()
+# Init Environment (a unit-test process, also one a test spawns, never reads the local .env)
+if os.environ.get("UNIT_TEST_MODE") != "1":
+    load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 from app.core.observability import (

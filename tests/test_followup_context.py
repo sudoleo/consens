@@ -25,6 +25,8 @@ from usage_test_support import make_usage_repository
 @pytest.fixture(autouse=True)
 def reset_rate_limiter(monkeypatch):
     limiter.reset()
+    # Signed-in runs without an own key go through the server's developer key.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-server-key")
     repository, _ = make_usage_repository()
     monkeypatch.setattr(chat_router, "run_usage_repository", repository)
     monkeypatch.setattr(

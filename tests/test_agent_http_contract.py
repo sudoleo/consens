@@ -177,6 +177,7 @@ def test_actual_agent_capacity_through_main_preserves_retry_header(
     http_adapter, monkeypatch
 ):
     h = http_adapter
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-server-key")
     monkeypatch.setattr(agent, "db_firestore", h.db)
     h.db.collection("users").document("owner").set({"tier": "pro"})
     store = AgentRunStore(h.db)

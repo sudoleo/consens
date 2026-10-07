@@ -13,7 +13,9 @@ from app.core.entitlements import (
     normalize_tier,
 )
 
-load_dotenv()
+# A unit-test process, also one a test spawns, never reads the local .env.
+if os.environ.get("UNIT_TEST_MODE") != "1":
+    load_dotenv()
 
 
 @dataclass(frozen=True)

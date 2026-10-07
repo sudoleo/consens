@@ -461,9 +461,16 @@ Lokale Socket-/TLS-Tests (`test_local_transport.py`) benötigen Loopback-Sockets
 aber keine externen Provider. Wartungsskript-/CLI-Tests sperren Netzwerkzugriffe
 in ihren Subprozessen und verwenden ausschließlich synthetische Daten.
 
-Tests dürfen weiterhin nicht still von der lokalen `.env` abhängen; nötige
-Environment-Variablen im Test selbst setzen (`monkeypatch.setenv`) statt sie
-vorauszusetzen.
+Tests dürfen nicht still von der lokalen `.env` abhängen, und `tests/conftest.py`
+erzwingt das: Unter `UNIT_TEST_MODE=1` lesen `main.py` und `app/core/config.py`
+keine `.env` (auch nicht in Subprozessen, die ein Test startet), `load_dotenv`
+ist für den Testprozess stillgelegt (Skripte, die es beim Import aufrufen), und
+jeder in `.env.example` dokumentierte Schlüssel startet ungesetzt, auch wenn
+Shell oder CI ihn exportieren. Ohne diese Sperre fand `load_dotenv()` die `.env`
+des Haupt-Checkouts sogar aus `.claude/worktrees/…` heraus. Nötige Werte, etwa
+`OPENROUTER_API_KEY` für den serverbezahlten Pfad, setzt der Test selbst
+(`monkeypatch.setenv`). Neue Konfigurationsschlüssel gehören deshalb in
+`.env.example`.
 
 Für manuelle Frontend-QA bleibt [`smoke-checklist.md`](smoke-checklist.md)
 verbindlich.

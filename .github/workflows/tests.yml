@@ -42,7 +42,6 @@ jobs:
     env:
       UNIT_TEST_MODE: "1"
       PYTHONUTF8: "1"
-      OPENROUTER_API_KEY: ci-dummy-key
     steps:
       - uses: actions/checkout@v4
         with:

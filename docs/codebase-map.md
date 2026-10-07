@@ -214,7 +214,7 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 ## 2. Einstiegspunkte / Routing / Templates
 
-**`main.py`** ist der App-Entry: lädt `.env`, fügt das vor dem
+**`main.py`** ist der App-Entry: lädt `.env` (nicht unter `UNIT_TEST_MODE=1`), fügt das vor dem
 Framework-Parsing greifende `RequestBodyLimitMiddleware`,
 `CustomSecurityMiddleware` (CSP etc.), `CorrelationMiddleware` + slowapi-Limiter
 hinzu, mountet

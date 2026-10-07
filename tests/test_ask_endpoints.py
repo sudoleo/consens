@@ -293,7 +293,8 @@ def _ledger(repository, uid):
     return repository._db.documents.get(("users", uid, "chat_state", "agent_tokens_" + period)) or {}
 
 
-def test_usage_limit_blocks_developer_key_path(reset_rate_limiter):
+def test_usage_limit_blocks_developer_key_path(reset_rate_limiter, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-server-key")
     client = make_client()
     uid = "uid-limit-reached"
     # The day's tokens are spent: a run that skipped /prepare is not admitted.

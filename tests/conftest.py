@@ -1,6 +1,29 @@
 import os
+import sys
+from pathlib import Path
 
 import pytest
+
+
+def _isolate_from_local_configuration():
+    """The unit suite must pass identically with and without a local .env.
+
+    load_dotenv() searches upward from the calling file, so even a worktree
+    under .claude/worktrees/ silently picked up the main checkout's .env. No
+    test may read it (also not through a script that loads it on import), and
+    every key documented in .env.example starts unset, whatever the shell or
+    CI exports. Tests that need a value set it themselves via monkeypatch."""
+    if "app.core.config" in sys.modules or "main" in sys.modules:
+        raise RuntimeError("tests/conftest.py must isolate the environment before the app is imported")
+    import dotenv
+
+    dotenv.load_dotenv = lambda *args, **kwargs: False
+    example = Path(__file__).resolve().parent.parent / ".env.example"
+    for line in example.read_text(encoding="utf-8").splitlines():
+        key, separator, _ = line.strip().partition("=")
+        if separator and not key.startswith("#") and key != "UNIT_TEST_MODE":
+            os.environ.pop(key, None)
+
 
 # Die Playwright-E2E-Suite (tests/e2e/) braucht einen Chromium-Browser und
 # startet einen eigenen uvicorn-Server; sie darf die schnelle Backend-Baseline
@@ -11,6 +34,7 @@ if os.environ.get("RUN_E2E") != "1":
     # on a clean CI checkout without the gitignored production credential.
     os.environ.setdefault("UNIT_TEST_MODE", "1")
     collect_ignore = ["e2e"]
+    _isolate_from_local_configuration()
 
 
 @pytest.fixture(autouse=True)
