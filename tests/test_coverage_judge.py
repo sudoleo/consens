@@ -268,7 +268,7 @@ class CoverageJudgePolicyTests(unittest.TestCase):
         (provider, api_model, _), is_retry = attempts[0]
         self.assertEqual(provider, "openai")
         self.assertEqual(
-            api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai")
+            api_model, cfg.openrouter_model_id(cfg.OPENAI_LUNA_MODEL, "openai")
         )
         self.assertFalse(is_retry)
 

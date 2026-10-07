@@ -372,7 +372,7 @@ class JudgePolicyTests(unittest.TestCase):
         for engine in ("Gemini", "OpenAI"):
             (provider, api_model, _), tier = _resolve_differences_engine(engine, self.ALL_KEYS)
             self.assertEqual(provider, "openai")
-            self.assertEqual(api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
+            self.assertEqual(api_model, cfg.openrouter_model_id(cfg.OPENAI_LUNA_MODEL, "openai"))
             self.assertEqual(tier, "standard")
 
     def test_pro_engine_gets_openai_pro_judge(self):
@@ -391,7 +391,7 @@ class JudgePolicyTests(unittest.TestCase):
             "OpenAI-Pro", {}
         )
         self.assertEqual(provider, "openai")
-        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
+        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.OPENAI_LUNA_MODEL, "openai"))
         self.assertEqual(tier, "standard")
 
     def test_invalid_engine_returns_none(self):
@@ -424,7 +424,7 @@ class JudgePolicyTests(unittest.TestCase):
         self.assertEqual(len(attempts), 2)
         for (provider, api_model, _), _, tier in attempts:
             self.assertEqual((provider, api_model, tier), (
-                "openai", cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"), "standard"
+                "openai", cfg.openrouter_model_id(cfg.OPENAI_LUNA_MODEL, "openai"), "standard"
             ))
 
     def test_differences_judge_uses_openrouter_json_schema(self):
@@ -568,7 +568,7 @@ class JudgeMetadataTests(unittest.TestCase):
         self.assertIsNotNone(data)
         judge = data["judges"]["differences"]
         self.assertEqual(judge["provider"], "OpenAI")
-        self.assertEqual(judge["model"], cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
+        self.assertEqual(judge["model"], cfg.openrouter_model_id(cfg.OPENAI_LUNA_MODEL, "openai"))
         self.assertEqual(judge["tier"], "standard")
         # v3-Metadaten: erster Versuch traf, Dauer ist eine nichtnegative Zahl.
         self.assertEqual(judge["attempts"], 1)

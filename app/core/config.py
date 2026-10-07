@@ -401,7 +401,9 @@ MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
 # "judge_models") umstellbar; ungueltige Werte fallen je Provider auf die
 # Basis zurueck (siehe apply_judge_models). WICHTIG: das dict wird in-place
 # mutiert, damit Modul-Aliasse (consensus_engine, resolve_engine) live bleiben.
-_BASE_DIFFERENCES_JUDGE_BY_PROVIDER = dict(DEFAULT_MODEL_BY_PROVIDER)
+# OpenAI-Standard-Judge ist Luna (Max-Entscheidung 2026-10-04/07), nicht das
+# guenstige Basis-Antwortmodell.
+_BASE_DIFFERENCES_JUDGE_BY_PROVIDER = {**DEFAULT_MODEL_BY_PROVIDER, "openai": OPENAI_LUNA_MODEL}
 DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 
 # Anzeige-Reihenfolge der Familien-Aliasse im Consensus-Picker. Familien ohne
@@ -540,7 +542,7 @@ PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 # "chat_memory_models") umstellbar. Basis sind bewusst die guenstigen
 # Standardmodelle: die Aufgabe ist strukturierte Extraktion nach JSON-Schema,
 # kein Denken. Wie die Judge-Dicts in-place mutiert.
-_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
+_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER = dict(DEFAULT_MODEL_BY_PROVIDER)
 CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER)
 
 # Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
@@ -1231,8 +1233,8 @@ def apply_judge_models(overrides: dict | None) -> None:
             chosen = next(
                 (
                     candidate for candidate in (
-                        FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
                         base,
+                        FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
                         *get_ordered_models(provider),
                     )
                     if candidate in allowed
