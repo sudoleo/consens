@@ -55,6 +55,14 @@ describe('consensioBeforeSend', () => {
       .toBe('https://consens.io/?utm_source=newsletter');
   });
 
+  it('never sends the question that titles the app tab', () => {
+    const app = page('https://consens.io/app');
+    expect(app.w.consensioBeforeSend('event', { url: 'https://consens.io/app', title: 'Is my rash serious? | consens.io' }).title)
+      .toBe('consens.io app');
+    const landing = page('https://consens.io/');
+    expect(landing.w.consensioBeforeSend('event', { url: 'https://consens.io/', title: 'consens.io' }).title).toBe('consens.io');
+  });
+
   it('leaves a URL without campaign tags alone', () => {
     const { w } = page('https://consens.io/topic-follow/confirm?token=secret');
     expect(w.consensioBeforeSend('event', { url: 'https://consens.io/topic-follow/confirm' }).url)

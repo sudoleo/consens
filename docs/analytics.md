@@ -4,7 +4,9 @@ Stand 2026-10-07. Tracking-Code: `templates/partials/analytics.html` (Snippet,
 Website-ID) und `static/js/analytics-opt-out.js` (Selbst-Ausschluss,
 Bot-Filter, Kampagnen-Parameter, `open_app`). App-Events laufen über
 `window.trackUmamiEvent` (`static/js/app-bootstrap.js`), das Schlüssel wie
-`question`/`email` und Werte mit `@` verwirft — Fragetexte gehen nie an Umami.
+`question`/`email` und Werte mit `@` verwirft. Unter `/app` ersetzt
+`consensioBeforeSend` den Seitentitel (dort steht die Frage, `setAppTitle`)
+durch „consens.io app“ — Fragetexte gehen nie an Umami.
 
 ## Die Kern-Events (für Auswertungen und Funnels)
 

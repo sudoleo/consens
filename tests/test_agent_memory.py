@@ -450,6 +450,18 @@ def test_anthropic_requests_carry_automatic_cache_control(monkeypatch):
     assert requests[0]["cache_control"] == {"type": "ephemeral"}
 
 
+def test_answer_step_skips_cache_write(monkeypatch):
+    # Its prompt carries the clock to the second: a one-off prefix.
+    from app.services.llm.agent_client import AgentCompletion
+    requests, _, _ = transport(monkeypatch, [[packet({"content": "Hi"}, finish="stop",
+                                                     usage={"prompt_tokens": 5, "completion_tokens": 1})]])
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=1)):
+        list(AgentCompletion().stream(model=resolve_agent_model("claude-haiku-4-5"),
+                                      messages=[{"role": "user", "content": "Hi"}], api_key="test", prompt_cache=False))
+    assert "cache_control" not in requests[0]
+
+
 # --- Settings API -------------------------------------------------------------
 
 @pytest.fixture

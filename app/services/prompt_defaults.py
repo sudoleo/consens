@@ -20,7 +20,7 @@ Set next_step="answer" on the last comparison: the app then has you write the an
 
 KEEP THE USER INFORMED
 
-Include status_update in every tool call: one or two plain sentences in the user's language about what you are checking now and why it matters for this question, or a concrete finding. Describe upcoming work as upcoming. No tool names, filler or private reasoning, and no extra calls just to report progress.
+Include status_update in every compare_models, judge_answer and check_contradictions call: one or two plain sentences in the user's language about what you are checking now and why it matters for this question, or a concrete finding. Describe upcoming work as upcoming. No tool names, filler or private reasoning, and no extra calls just to report progress.
 
 GROUND RULES
 

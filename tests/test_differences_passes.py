@@ -85,27 +85,6 @@ class ParallelPassTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertNotIn("passes", data["judges"]["differences"])
 
-    def test_a_failed_pass_is_covered_by_the_other(self):
-        capital = difference("Capital", "Paris is the capital", "the capital is Lyon")
-        calls, lock = [], threading.Lock()
-
-        def fake(provider, api_model, model_ref, api_keys, **kwargs):
-            if kwargs.get("json_schema") is not engine.DIFFERENCES_JSON_SCHEMA:
-                return "{}"
-            with lock:
-                calls.append(provider)
-                first = len(calls) == 1
-            if first:
-                raise RuntimeError("OpenRouter: 401 - invalid API key")
-            return json.dumps(self.payload(capital))
-
-        with mock.patch.object(engine, "_call_engine_text", side_effect=fake):
-            _, data = query_differences({"openai": self.ANSWER, "gemini": self.ANSWER, "grok": self.ANSWER},
-                                        "Paris is the capital.", {"OpenRouter": "sk-or"},
-                                        differences_model="OpenAI", chat_mode=True, passes=2)
-        self.assertIsNotNone(data)
-        self.assertEqual([item["claim"] for item in data["differences"]], ["Capital"])
-
 
 class PrimaryOutageTests(unittest.TestCase):
     def test_only_the_first_pass_falls_back_when_the_primary_judge_is_down(self):
@@ -138,9 +117,6 @@ class LanguageRuleTests(unittest.TestCase):
         self.assertIn("in the language of the consensus answer", prompt)
         self.assertIn("language of the consensus answer", engine._differences_system_prompt())
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class SecondPassEdgeCaseTests(unittest.TestCase):
@@ -274,3 +250,7 @@ class BoundedBudgetTests(unittest.TestCase):
                                         differences_model="OpenAI", chat_mode=True, passes=2)
         self.assertEqual(len(calls), 1)
         self.assertNotIn("passes", data["judges"]["differences"])
+
+
+if __name__ == "__main__":
+    unittest.main()

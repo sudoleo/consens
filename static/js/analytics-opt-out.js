@@ -48,6 +48,9 @@
         payload.url = hash === -1 ? `${payload.url}?${query}` : `${payload.url.slice(0, hash)}?${query}${payload.url.slice(hash)}`;
       }
     } catch (_) { /* keep the stripped URL */ }
+    // In the app the tab title is the user's question (setAppTitle); it must
+    // never reach Umami.
+    if (payload && /^\/app(\/|$)/.test(window.location.pathname)) payload.title = "consens.io app";
     return payload;
   };
 

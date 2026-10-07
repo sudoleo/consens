@@ -772,7 +772,9 @@ class ComparisonTools:
                 if len(checked) < 2:
                     check["issues"] = review_issues(comparison, None)
                     continue
-                with bind_task_transport(self.judge_transport):
+                # judge_answer runs in a tool thread without the turn's
+                # cancellation; bind it so a Stop also ends running judge calls.
+                with bind_task_transport(self.judge_transport), bind_provider_cancellation(cancellation):
                     reference = loop.model.selection_id
                     if _resolve_engine(reference) is None:
                         # Configured chat defaults may be newer than the answer

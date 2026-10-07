@@ -506,7 +506,7 @@ class AgentCompletion:
                 self.sources.append({"url": url, "title": title[:200] if isinstance(title, str) else parsed.hostname})
 
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
-               native_searches=0, allow_tool_calls=False):
+               native_searches=0, allow_tool_calls=False, prompt_cache=True):
         payload = {
             "model": model.model, "messages": messages,
             "max_tokens": model.max_output_tokens,
@@ -531,7 +531,7 @@ class AgentCompletion:
                 payload["parallel_tool_calls"] = False
         if native_searches:
             payload["max_tool_calls"] = native_searches
-        cache = prompt_cache_control(model)
+        cache = prompt_cache_control(model) if prompt_cache else None
         if cache:
             payload["cache_control"] = cache
         from app.services.llm.provider_runtime import ProviderProgressWatchdog, _bounded_env_float

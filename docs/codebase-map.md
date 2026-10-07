@@ -2225,7 +2225,8 @@ und zuletzt Memory, sodass eine Memory-Änderung nur ab dort neu cached.
 Antwortschritt hat seine eigene Uhr. `prompt_cache_control` setzt für
 `anthropic/`- und `qwen/`-Modelle OpenRouters automatisches
 `cache_control: {type: ephemeral}` (die übrigen Anbieter cachen Präfixe selbst);
-gemessene `cached_input_tokens`/`cache_write_tokens` laufen wie bisher über
+der Antwortschritt nicht (`prompt_cache=False`): seine Uhr macht das Präfix
+einmalig, ein Cache-Write brächte nur den Aufschlag. Gemessene `cached_input_tokens`/`cache_write_tokens` laufen wie bisher über
 `measured_usage` in Kosten und Kontingent.
 
 **Zugang seit 2026-10-02: jedes angemeldete Konto.** `require_agent_access`
@@ -2527,7 +2528,7 @@ Vergleichsmodelle: „Respect the user's goals and constraints in the context“
 schneidet sichtbaren Text bei `TEXT_STORAGE_CHARS` (100.000) ab, liest weiter (Usage)
 und endet mit `length` statt mit einem Fehler.
 Datei-Hinweis, Dateiliste und `read_file` hängen nur noch an, wenn der Chat
-Dateien hat; Dokument-Werkzeuge bleiben immer verfügbar. Begründung und
+Dateien hat oder eine Gmail-Auswahl im Turn Anhänge importieren kann; Dokument-Werkzeuge bleiben immer verfügbar. Begründung und
 Entscheidungen: `docs/prompt-review/README.md`.
 Der tatsächliche Nutzer-/Antwortverlauf wird beim Start vor allen Laufzeit-
 Ergänzungen gesichert. Hinzu kommen ausschließlich Vergleichsfragen/-kontext,

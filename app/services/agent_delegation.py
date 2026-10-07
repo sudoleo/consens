@@ -202,9 +202,10 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_files import UNTRUSTED
             catalog = [{k: f[k] for k in ("id", "name", "mime", "status", "document_id", "version") if k in f}
                        for f in self.file_context.catalog()]
-            # File instructions and read_file only when the chat has files;
-            # documents can be requested in any chat.
-            if catalog:
+            # File instructions and read_file only when the chat has files or
+            # can gain them this turn (Gmail attachment import); documents can
+            # be requested in any chat.
+            if catalog or (google_selection is not None and google_selection.gmail):
                 self.messages[0]["content"] += "\n" + UNTRUSTED + "\nFiles available in this chat: " + json.dumps(catalog)
                 self.registry = ToolRegistry([*self.registry.tools.values(), *self.file_context.tools()], argument_limit=24_000)
             from app.services.agent_documents import DocumentTools
@@ -724,7 +725,10 @@ class DelegationLoop(AgentLoop):
                 self._check(cancellation)
                 provider_attempted = True
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
-                                      native_searches=searches, allow_tool_calls=not answer_step)
+                                      native_searches=searches, allow_tool_calls=not answer_step,
+                                      # The answer step's prompt carries the clock to the second and
+                                      # runs once per turn: a cache write would only add its surcharge.
+                                      prompt_cache=not answer_step)
                 try:
                     for event in source:
                         self._check(cancellation)

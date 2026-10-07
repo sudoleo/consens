@@ -88,7 +88,7 @@ def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, 
             yield from stream(**kwargs)
             if value.step_id.startswith("completion:") and value.tool_calls:
                 from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
-                assert "Include status_update in every tool call" in AGENT_SYSTEM_PROMPT
+                assert "Include status_update in every compare_models, judge_answer and check_contradictions call" in AGENT_SYSTEM_PROMPT
                 for call in value.tool_calls:
                     args = json.loads(call["function"]["arguments"])
                     args["status_update"] = updates[int(value.step_id.split(":")[-1])]

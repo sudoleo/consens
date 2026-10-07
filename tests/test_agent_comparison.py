@@ -1136,3 +1136,20 @@ def test_newer_openai_generations_count_as_reasoning_models_for_temperature():
     from app.services.llm.consensus_engine import _effective_temperature
     assert _effective_temperature("openai", "openai/gpt-6-luna", 0.2) is None
     assert _effective_temperature("openai", "openai/gpt-4o", 0.2) == 0.2
+
+
+def test_judge_calls_follow_the_turns_stop(store, monkeypatch):
+    # judge_answer runs in a tool thread; a Stop must reach its provider calls.
+    from app.services.llm import consensus_engine
+    from app.services.llm.provider_runtime import current_provider_cancellation
+    seen = []
+    original = consensus_engine.query_differences
+
+    def spy(*args, **kwargs):
+        seen.append(current_provider_cancellation())
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(consensus_engine, "query_differences", spy)
+    loop = make_loop(store, Script())
+    list(loop.run())
+    assert seen and all(c is loop.cancellation for c in seen)
