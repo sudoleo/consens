@@ -62,6 +62,30 @@ class ReadOnlyTool:
                 "parameters": self.arguments.model_json_schema()}}
 
 
+def _decode_stringified(arguments, value, unique):
+    """Claude sometimes sends an array or object argument as its JSON text
+    ("memory": "[]"). Strict validation rejected the whole call, and the model
+    repeated it until the turn ended (2026-10-07). A string that decodes to
+    the declared container type is taken as that container; anything else is
+    left for validation to reject."""
+    properties = arguments.model_json_schema().get("properties", {})
+    decoded = dict(value)
+    for key, item in value.items():
+        if not isinstance(item, str) or key not in properties:
+            continue
+        spec = properties[key]
+        types = {spec.get("type"), *(option.get("type") for option in spec.get("anyOf", []))}
+        if not types & {"array", "object"}:
+            continue
+        try:
+            parsed = json.loads(item, object_pairs_hook=unique)
+        except ValueError:
+            continue
+        if ("array" in types and isinstance(parsed, list)) or ("object" in types and isinstance(parsed, dict)):
+            decoded[key] = parsed
+    return decoded
+
+
 class ToolRegistry:
     def __init__(self, tools=(), *, argument_limit=2048):
         self.default_argument_limit = argument_limit
@@ -88,7 +112,10 @@ class ToolRegistry:
                     raise ValueError("Duplicate tool argument")
                 value[key] = item
             return value
-        arguments = tool.arguments.model_validate(json.loads(raw, object_pairs_hook=unique))
+        value = json.loads(raw, object_pairs_hook=unique)
+        if isinstance(value, dict):
+            value = _decode_stringified(tool.arguments, value, unique)
+        arguments = tool.arguments.model_validate(value)
         return tool, arguments
 
     def result(self, tool, arguments, *, cancellation, limit):

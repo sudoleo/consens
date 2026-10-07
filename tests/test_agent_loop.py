@@ -432,3 +432,26 @@ def test_text_beyond_the_storage_limit_is_kept_as_truncated_instead_of_failing(m
     # Ends like a token limit, and the usage after the cut still arrives.
     assert completion.finish_reason == "length"
     assert completion.usage["output_tokens"] == 20
+
+
+def test_a_container_argument_sent_as_json_text_is_decoded():
+    # Claude Sonnet sent compare_models' memory as "[]": strict validation
+    # rejected every call and the turn ended (2026-10-07).
+    from app.services.agent_comparison import CompareArgs
+    from app.services.agent_memory import memory_field
+    from pydantic import create_model
+    args = create_model("MemoryCompareArgs", __base__=CompareArgs, memory=memory_field())
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", args, lambda a, **kw: {})], argument_limit=24_000)
+    def call(memory):
+        return {"function": {"name": "compare_models", "arguments": json.dumps(
+            {"question": "Q", "context": "", "reason": "R", "next_step": "answer", "memory": memory})}}
+    assert registry.validate(call("[]"))[1].memory == []
+    change = '[{"op": "add", "text": "Lives in Berlin.", "evidence": "I live in Berlin"}]'
+    assert registry.validate(call(change))[1].memory[0].text == "Lives in Berlin."
+    for bad in ("nothing", '{"op": "add"}', "[1, 2"):
+        with pytest.raises(ValueError):
+            registry.validate(call(bad))
+    # A text field keeps text that happens to look like JSON.
+    plain = {"function": {"name": "compare_models", "arguments": json.dumps(
+        {"question": "[]", "context": "", "reason": "R", "next_step": "answer", "memory": []})}}
+    assert registry.validate(plain)[1].question == "[]"

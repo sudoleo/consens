@@ -2411,7 +2411,10 @@ werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikatio
 stehen in [agent-delegation.md](agent-delegation.md).
 
 **Vergleich und Prüfung.** agent_comparison.py registriert compare_models und
-judge_answer mit strikten Pydantic-Argumenten. Seit 2026-10-07 steuert allein
+judge_answer mit strikten Pydantic-Argumenten. `ToolRegistry.validate` nimmt ein
+Array-/Objekt-Argument, das als JSON-Text kommt (Sonnet schickte `"memory": "[]"`
+und scheiterte dreimal an der Validierung), als den deklarierten Container
+(`_decode_stringified`); alles andere lehnt die Validierung ab. Seit 2026-10-07 steuert allein
 der Code-Prompt `prompt_defaults.AGENT_SYSTEM_PROMPT` (gespeicherte Admin-Prompts
 wirken nicht mehr): jede Nachricht mit einer Aufgabe geht durch `compare_models`,
 auch Folgefragen, Produktfragen und Textumformung/Übersetzung; direkt beantwortet
