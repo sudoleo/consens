@@ -405,3 +405,36 @@ Differences-Durchläufe mit Luna und Funde in der Sprache der Antwort.
 - B ja: Recherche-Quellen des Agenten gehen vorerst nicht an die Judges; Sätze
   daraus stehen ehrlich als „von keinem Modell gestützt“. Erst messen, wie oft
   der Agent nach dem Vergleich nachrecherchiert (revidiert A5).
+
+---
+
+## Station 5 — Widerspruchsprüfung (check_contradictions)
+
+**Quelle:** `contradiction_verification.py:SYSTEM` (jetzt `contradiction-evidence-v5`),
+Request `source_verification.py`, Rohtext Anhang C, Abschnitt 1. Läuft nach der
+Antwort im Hintergrund, nur schwere, prüfbare Widersprüche, Originalquellen.
+
+**Umgesetzt 2026-10-07 (Technik):**
+1. Die Prüfung bekommt die Originalfrage des Nutzers als `question` und die
+   Vergleichsaufgabe des Agenten als `resolved_question` (vorher nur letztere).
+2. Prompt-Beispiel nennt Quellen-IDs im echten Format (`D0123…`) statt `S1`.
+3. Gemini/OpenAI-Modelle bekommen die Judge-Denkstufe (`low`), damit Nachdenken
+   die 3 000 Ausgabe-Tokens nicht aufbraucht.
+
+## Station 6 — Memory, Titel, Rest
+
+**Quelle:** `agent_memory.py`, `user_memory.py`, `chat_titles.py`,
+`resolve_engine.py`. Rohtext Anhang C, Abschnitte 3–6, 11.
+
+**Umgesetzt 2026-10-07 (Technik):**
+1. Memory-Beleg: mindestens 12 Zeichen wörtlich aus einer Nutzernachricht
+   (kürzer nur als ganze Nachricht); vorher reichten 3 Zeichen wie „ich“.
+2. `END OF USER MEMORY` / `USER MEMORY` / `SAVED MEMORIES` (Großschreibung) werden
+   in Memory-Texten neutralisiert, damit kein Eintrag den Block schließt.
+3. Resolve-Prompt markiert seine Eingaben als untrusted data.
+4. Titel-Prompt „at most 50 characters“ bei Code-Grenze 60 bleibt bewusst so
+   (Ziel 50, harte Grenze 60).
+5. Toter Source-Check v3 → Backlog A18.
+
+**Max' Entscheidung:** nichts zu entscheiden („ja mach“). Das Review ist damit
+komplett.

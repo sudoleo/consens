@@ -297,3 +297,15 @@ def test_deleted_chat_returns_the_jobs_unspent_reservation(store, queue):
     assert queue.jobs() == [] and queue.judged == []
     with pytest.raises(Exception):
         queue.repo.get(job_id)
+
+
+def test_check_gets_the_users_question_and_the_comparison_task_as_its_resolved_form(store, queue, monkeypatch):
+    seen = []
+    original = jobs.submit_source_check
+    def capture(**kwargs):
+        seen.append(kwargs)
+        return original(**kwargs)
+    monkeypatch.setattr(jobs, "submit_source_check", capture)
+    loop, _, _ = run(store, queue)
+    user = next(m["content"] for m in reversed(loop.answer_conversation) if m["role"] == "user")
+    assert seen and seen[0]["question"] == user and seen[0]["resolved_question"] == "Price?"

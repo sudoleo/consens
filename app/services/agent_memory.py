@@ -53,7 +53,7 @@ MAX_CHANGES_PER_TURN = 12
 MAX_USER_CHANGES_PER_REQUEST = 20
 CHANGE_LOG_LIMIT = 50
 CHANGE_RETENTION_DAYS = 30
-MIN_EVIDENCE_CHARS = 3
+MIN_EVIDENCE_CHARS = 12
 MAX_EVIDENCE_CHARS = 400
 RETENTION_PAGE_SIZE = 200
 
@@ -140,11 +140,17 @@ def evidence_matches(evidence: str, user_messages) -> bool:
 
     Case, whitespace, typographic quotes and surrounding punctuation are
     forgiven; words are not. Quotes spanning two messages do not count.
+    A quote shorter than MIN_EVIDENCE_CHARS counts only as a whole message:
+    a fragment such as "ich" or "the" would match almost any conversation and
+    let text from a web page or file reach memory.
     """
     quote = _normalize(evidence).strip(" .,;:!?\"'()[]")
-    if len(quote) < MIN_EVIDENCE_CHARS:
+    if not quote:
         return False
-    return any(quote in _normalize(message) for message in user_messages if isinstance(message, str))
+    messages = [_normalize(message) for message in user_messages if isinstance(message, str)]
+    if len(quote) < MIN_EVIDENCE_CHARS:
+        return any(quote == message.strip(" .,;:!?\"'()[]") for message in messages)
+    return any(quote in message for message in messages)
 
 
 def validate_text(text: object) -> str:

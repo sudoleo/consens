@@ -251,7 +251,9 @@ def test_truncated_provider_response_retains_only_complete_validated_pairs(monke
     assert result['runtime']['error_code'] == 'output_limit'
     assert len(requests) == 1
     assert requests[0]['model'] == sv.cfg.get_source_verification_model()
-    assert 'reasoning' not in requests[0]
+    # The default Gemini judge gets the judges' low effort, so thinking cannot
+    # use up the 3000 output tokens meant for the JSON.
+    assert requests[0]['reasoning'] == {'effort': 'low'}
 
 
 def test_invalid_or_empty_cutoff_response_is_not_repaired():

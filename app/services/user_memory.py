@@ -68,7 +68,10 @@ MAX_PROFILE_CHARS = 13_200
 # schadet nur seinem eigenen Lauf -- aber es waere ein stiller Defekt, der
 # aussieht wie ein Modellfehler.
 _FRAME_MARKER_RE = re.compile(
-    r"(?:END\s+)?(?:AUTHORITATIVE\s+CHAT\s+CONTEXT|OF\s+USER\s+PROFILE|ABOUT\s+THE\s+USER)",
+    r"(?:END\s+)?(?:AUTHORITATIVE\s+CHAT\s+CONTEXT|OF\s+USER\s+PROFILE|ABOUT\s+THE\s+USER)"
+    # The Agent memory block (agent_memory.render_memory_block) is framed in
+    # capitals; only those exact markers go, ordinary wording stays.
+    r"|(?-i:(?:END\s+OF\s+)?USER\s+MEMORY|SAVED\s+MEMORIES)",
     re.IGNORECASE,
 )
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")

@@ -57,9 +57,15 @@ class ContradictionChecks:
         sources = [*loop.completion.sources]
         for event in loop.completion.activity:
             sources.extend(event.get("sources") or [])
+        # The user's own words are the question; the comparison task (written by
+        # the orchestrator, self-contained) is its resolved form, as in Consensus.
+        conversation = getattr(loop, "answer_conversation", None) or []
+        user_question = next((m["content"] for m in reversed(conversation) if m.get("role") == "user"
+                              and isinstance(m.get("content"), str) and m["content"].strip()), "")
         # The job's run is the comparison; its parent is the chat, so deleting
         # the chat also stops and deletes its pending checks.
-        return submit_advisory(question=comparison["question"], consensus=owner.text, sources=sources,
+        return submit_advisory(question=user_question or comparison["question"],
+            resolved_question=comparison["question"] if user_question else "", consensus=owner.text, sources=sources,
             keys={"OpenRouter": loop.api_key}, differences_data=check["differences_data"],
             model_answers={a["provider_label"]: a["text"] for a in comparison["answers"]},
             model_sources={a["provider_label"]: a["sources"] for a in comparison["answers"]},

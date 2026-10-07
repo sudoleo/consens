@@ -1182,7 +1182,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Serverseitige Verträge: (1) jede Agent-Änderung trägt `evidence`, ein
   wörtliches Zitat, das in einer **Nutzer**-Nachricht des Chats vorkommen muss
   (`evidence_matches`, normalisiert nur Groß-/Kleinschreibung, Leerraum,
-  typografische Anführungen) — Text aus Webseiten, Dateien, Mails oder
+  typografische Anführungen; seit 2026-10-07 mindestens `MIN_EVIDENCE_CHARS` = 12
+  Zeichen, kürzere Zitate nur als ganze Nachricht) — Text aus Webseiten, Dateien, Mails oder
   Tool-Ergebnissen kann so nicht ins Gedächtnis (Memory-Poisoning); (2)
   `looks_like_secret` weist Keys, Passwörter, Karten- (Luhn) und IBAN-Nummern
   für jede Herkunft ab; (3) `FirestoreAgentMemoryRepository.apply` prüft in

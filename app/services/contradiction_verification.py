@@ -17,11 +17,11 @@ from app.services.source_documents import select_passages, fetch_failure_code
 from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget, raise_if_provider_cancelled
 
 MODE = 'contradiction_evidence'
-PROMPT_VERSION = 'contradiction-evidence-v4'
+PROMPT_VERSION = 'contradiction-evidence-v5'
 _INPUT_ERRORS = {'missing_checkability', 'invalid_consensus_anchor', 'unverified_model_positions'}
 SYSTEM = '''Adjudicate the supplied factual disputes using only supplied original source passages.
 Return JSON {"findings":[{"contradiction_id":"", "verdict":"supports_position|conditions_explain|sources_conflict|insufficient_evidence",
-"supported_position_id":null, "reason":"", "evidence":[{"source_id":"S1","position_id":"P1","quote":"",
+"supported_position_id":null, "reason":"", "evidence":[{"source_id":"D0123456789abcdef","position_id":"P1","quote":"",
 "date":"","scope":"","limitations":""}]}]}.
 supports_position: documentary evidence establishes a named position (set supported_position_id).
 conditions_explain: different dates, populations, definitions, circumstances or scope explain the apparent disagreement.

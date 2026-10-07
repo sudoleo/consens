@@ -7,9 +7,9 @@ consensus_engine), damit SSE-Packing, JSON-Parsing, Anchor-/Quote-
 Verifikation und Agreement-Score im Test echt durchlaufen.
 
 Fixture-Vertrag (wichtig fuer die Zitat-Verifikation in consensus_engine):
-- Jede Modellantwort ist EINE Zeile (der Differences-Prompt listet Antworten
-  zeilenweise als "- Model X: ...", mehrzeilige Antworten wuerden das
-  Label-Parsing des Mocks brechen).
+- Die Judge-Prompts fassen jede Modellantwort in einen Block
+  <response label="Model X">...</response> (_response_block); der Mock liest
+  Labels und Text aus diesen Bloecken.
 - Alle Antworten ausser Grok enthalten SHARED_FACT woertlich; Grok enthaelt
   DISSENT_FACT. Quotes im Mock-Differences-JSON sind Substrings dieser Saetze,
   sonst leert _verify_differences_data sie.
@@ -113,7 +113,7 @@ def _mock_labels(prompt: str):
     der Mock ermittelt das dissentierende Label daher aus dem Prompt selbst:
     es ist die Antwortzeile, die den DISSENT_FACT-Marker "1887" enthaelt.
     """
-    labeled = re.findall(r"^- (Model [A-Z]): (.*)$", prompt, flags=re.MULTILINE)
+    labeled = re.findall(r'<response label="(Model [A-Z])">\n(.*?)\n</response>', prompt, flags=re.DOTALL)
     labels = [label for label, _ in labeled]
     dissent_label = next((label for label, text in labeled if "1887" in text), None)
     return labels, dissent_label

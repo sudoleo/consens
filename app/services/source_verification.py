@@ -288,7 +288,16 @@ def _judge_sources_once(payload, keys, limits):
         from app.services.contradiction_verification import SYSTEM as contradiction_system
         system = contradiction_system
     # This classifier needs little reasoning; reserve the output budget for JSON.
-    reasoning = {'reasoning': {'effort': 'minimal'}} if model == 'openai/gpt-5-mini' else {}
+    # Gemini/OpenAI reasoning models get the judges' low effort (gpt-5-mini keeps
+    # its tested minimal); others send no reasoning field, as before.
+    if model == 'openai/gpt-5-mini':
+        reasoning = {'reasoning': {'effort': 'minimal'}}
+    elif model.startswith(('google/', 'openai/')):
+        from app.core import config as cfg
+        provider = 'gemini' if model.startswith('google/') else 'openai'
+        reasoning = {'reasoning': {'effort': cfg.judge_reasoning_effort(provider)}}
+    else:
+        reasoning = {}
     result = cancellable_post_json(OPENROUTER_CHAT_COMPLETIONS_URL,
         headers=openrouter_headers(key), json={
             'model': model,
