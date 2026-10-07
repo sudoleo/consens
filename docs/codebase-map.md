@@ -2555,7 +2555,7 @@ Zitat oder gleicher Konsens-Satz mit gleichen Modellen), der Score wird danach
 in `_apply_coverage` neu berechnet; `judges.differences` trägt `passes` und
 `second_pass_added`. Judge-Audit (20 Fragen, 230 blind bewertete Funde): ein
 Luna-Lauf fand 60–68 % der echten Streitpunkte, zwei zusammen 78 %, Median
-+1,6 s. Fällt ein Lauf aus, trägt der andere. Ebenfalls seit 2026-10-07 nennt
++1,6 s. Fällt ein Lauf aus, trägt der andere. Der zweite Lauf versucht nur den primären Judge (Luna) samt Retry; fällt Luna aus, weicht allein der erste Lauf auf Gemini aus, der teurere Fallback läuft also nie doppelt. Ebenfalls seit 2026-10-07 nennt
 `query_differences` dem Judge die Sprache der Konsensantwort ausdrücklich
 (`_answer_language`, Funktionswörter für EN/DE/FR/ES/IT/PT/NL, sonst leer und
 die allgemeine Regel): Luna schrieb Funde sonst teils spanisch/französisch

@@ -2572,7 +2572,7 @@ def query_differences(
     )
     second_pool = second_future = None
 
-    def run_pass():
+    def run_pass(plan=attempts):
         """One differences judge with retry and fallback: (data, legacy_text,
         prose_fallback, last_error); data is None when every attempt failed."""
         prose_fallback = None
@@ -2580,7 +2580,7 @@ def query_differences(
         skip_retries_for = set()
         executed_attempts = 0
         judge_started = time.monotonic()
-        for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+        for (provider, api_model, model_ref), is_retry, judge_tier in plan:
             attempt_key = (provider, api_model, judge_tier)
             if is_retry and attempt_key in skip_retries_for:
                 continue
@@ -2641,8 +2641,13 @@ def query_differences(
     try:
         if passes > 1:
             # A second, independent pass in parallel: same prompt, same judge.
-            # It costs one more judge call but almost no wall-clock time.
-            second_pool, second_future = _in_background(run_pass, "differences-pass")
+            # It costs one more judge call but almost no wall-clock time. It
+            # only tries the primary judge (Luna) with its retry: when that is
+            # down, the first pass alone falls back, so the pricier fallback
+            # judge never runs twice.
+            primary = attempts[0][0] if attempts else None
+            second_plan = [attempt for attempt in attempts if attempt[0] == primary]
+            second_pool, second_future = _in_background(lambda: run_pass(second_plan), "differences-pass")
         data, legacy_text, prose_fallback, last_error = run_pass()
         if second_future is not None:
             extra = _collect_background(second_future, "Second differences pass")

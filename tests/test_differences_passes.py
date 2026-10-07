@@ -106,6 +106,30 @@ class ParallelPassTests(unittest.TestCase):
         self.assertEqual([item["claim"] for item in data["differences"]], ["Capital"])
 
 
+class PrimaryOutageTests(unittest.TestCase):
+    def test_only_the_first_pass_falls_back_when_the_primary_judge_is_down(self):
+        capital = difference("Capital", "Paris is the capital", "the capital is Lyon")
+        calls, lock = [], threading.Lock()
+
+        def fake(provider, api_model, model_ref, api_keys, **kwargs):
+            if kwargs.get("json_schema") is not engine.DIFFERENCES_JSON_SCHEMA:
+                return "{}"
+            with lock:
+                calls.append(provider)
+            if provider == "openai":
+                raise RuntimeError("503 service unavailable")
+            return json.dumps(ParallelPassTests.payload(capital))
+
+        answer = ParallelPassTests.ANSWER
+        with mock.patch.object(engine, "_call_engine_text", side_effect=fake):
+            _, data = query_differences({"openai": answer, "gemini": answer, "grok": answer},
+                                        "Paris is the capital.", {"OpenRouter": "sk-or"},
+                                        differences_model="OpenAI", chat_mode=True, passes=2)
+        # Both passes try Luna (failed calls are not billed); only one falls back.
+        self.assertEqual(calls.count("gemini"), 1)
+        self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
+
+
 class LanguageRuleTests(unittest.TestCase):
     def test_judge_writes_in_the_language_of_the_consensus_answer(self):
         context = engine._build_judge_context({"openai": "Uno.", "gemini": "Eins."}, "One.")
