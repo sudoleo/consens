@@ -247,7 +247,10 @@ def test_source_check_is_queued_once_even_when_model_requests_more_rounds(store,
     assert review_is_bound(saved["agent_review"], saved["consensus"])
     assert len(saved["agent_review"]["versions"]) == 1
     assert saved['consensus'] == CONSENSUS
-    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == 4
+    # Compare, judge_answer, the answer step; the app then queues the source
+    # check itself, so the model gets no further steering step to ask again.
+    assert [step for step, _ in script.calls if step.startswith('completion:')] == [
+        'completion:0', 'completion:1', 'completion:2']
 
 
 def test_resubmitting_the_same_comparison_reuses_its_job_and_reservation(store, queue):
@@ -309,3 +312,16 @@ def test_check_gets_the_users_question_and_the_comparison_task_as_its_resolved_f
     loop, _, _ = run(store, queue)
     user = next(m["content"] for m in reversed(loop.answer_conversation) if m["role"] == "user")
     assert seen and seen[0]["question"] == user and seen[0]["resolved_question"] == "Price?"
+
+
+def test_late_answers_stay_out_of_the_source_check_like_out_of_the_judges(store, queue, monkeypatch):
+    loop, _, _ = run(store, queue)
+    seen = []
+    monkeypatch.setattr(jobs, "submit_advisory", lambda **kwargs: seen.append(kwargs) or {"status": "queued"})
+    comparison = copy.deepcopy(loop.comparison.comparisons[0])
+    late = {**comparison["answers"][0], "provider_label": "Late model", "text": "Arrived later.",
+            "sources": [{"id": "S9", "url": "https://late.example/doc"}], "late": True}
+    comparison["answers"].append(late)
+    loop.comparison.contradictions.submit(comparison, loop.comparison.review["checks"][0])
+    assert "Late model" not in seen[0]["model_answers"] and "Late model" not in seen[0]["model_sources"]
+    assert set(seen[0]["model_answers"]) == {a["provider_label"] for a in comparison["answers"][:-1]}

@@ -2410,40 +2410,22 @@ werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikatio
 stehen in [agent-delegation.md](agent-delegation.md).
 
 **Vergleich und Prüfung.** agent_comparison.py registriert compare_models und
-judge_answer mit strikten Pydantic-Argumenten. Der abschließend injizierte
-Produktprompt erklärt consens.io und setzt für jede Nutzerfrage und jeden
-Bearbeitungsauftrag `compare_models → Synthese →
-judge_answer` voraus; eingeschaltete Widerspruchsprüfung folgt wie bisher.
-Der Agent wartet vor einer inhaltlichen Antwort auf `compare_models` und nutzt
-die Ergebnisse samt Belegen als Grundlage. Eine vorab geschriebene eigene Antwort
-mit bloßer nachträglicher Bestätigung ist ausgeschlossen. Der Admin-Agent-Prompt
-und sein versionierter Default in `prompt_defaults.py` übernehmen die eigenständige
-Abwägung des Consensus-Syntheseprompts: alle Beiträge berücksichtigen, Begründung,
-Belege und Aktualität statt Modellidentität oder Stimmen zählen, wichtige
-Unsicherheit sachlich erklären. Eigene Erinnerung ersetzt weder Vergleich noch
-fehlende Belege. `finalized=true` ist ein Protokollabschluss, kein Erfolgsbeleg für
-alle Teilprüfungen. Der ergänzende Produktprompt hält diese Regeln ebenfalls fest.
-Die Agent-Synthese behält die eigene beratende Stimme, übernimmt aber keine
-Ich-Präferenzen, Erlebnisse oder Identität eines Vergleichsmodells. Empfehlungen
-nennen die maßgeblichen Nutzerkriterien; belegte Aussagen und daraus abgeleitete
-Abwägung bleiben unterscheidbar. Reichweite, Zeitraum und Einschränkungen werden
-erhalten, qualifizierte Vorteile nicht in unbelegte Gesamtsieger/Superlative
-verstärkt. Eigenständig bestreitbare Aussagen stehen in getrennten, konkreten
-Sätzen, mit zugehörigen Bedingungen. Das erleichtert die bestehende satzweise
-Coverage-Prüfung, ohne deren Regeln oder Widerspruchsmarkierungen zu verändern.
-Die Anleitung gilt auch bei älteren gespeicherten Agent-Prompts; sie verlangt
-weder Rollenabgabe noch künstliche Einstimmigkeit oder das Verbergen von Differenzen.
-Websuche darf die Anfrage und aktuelle Belege zuerst konkretisieren. Direkte
-Antworten sind nur für reine Begrüßungen/Bestätigungen ohne Frage oder Auftrag
-und unvermeidbare Rückfragen vorgesehen. Einfache, subjektive und Folgefragen,
-Produktfragen sowie Textumformung/Übersetzung durchlaufen ebenfalls die Pipeline.
-Bei sinnvoll lösbaren Unklarheiten mit begründeten Annahmen weiterarbeiten.
-Das Modell vertritt consens.io hilfreich und korrekt in der Nutzersprache,
-erklärt den Produktzweck bei Bedarf und behauptet weder nicht erfolgte Prüfungen
-noch garantierte Wahrheit.
-Diese Regel konkretisiert auch ältere gespeicherte Admin-Prompts; kein zweiter
-LLM-Router und keine sprachabhängige Keyword-Klassifikation. Die Entscheidung
-vor dem ersten Vergleich bleibt promptgesteuert, keine semantische Servergarantie.
+judge_answer mit strikten Pydantic-Argumenten. Seit 2026-10-07 steuert allein
+der Code-Prompt `prompt_defaults.AGENT_SYSTEM_PROMPT` (gespeicherte Admin-Prompts
+wirken nicht mehr): jede Nachricht mit einer Aufgabe geht durch `compare_models`,
+auch Folgefragen, Produktfragen und Textumformung/Übersetzung; direkt beantwortet
+werden nur Nachrichten ohne Aufgabe (Gruß, Dank), wirklich nötige Rückfragen und
+Memory-Bitten nach den Memory-Regeln. Sonst mit begründeten Annahmen
+weiterarbeiten. Die Schreibregeln (Journalist, Treue zur Substanz, eigene
+Beraterstimme, keine Superlative, Uneinigkeit nur wo sie die Entscheidung ändert)
+stehen im Antwort-Prompt `AGENT_ANSWER_PROMPT`, weil die sichtbare Antwort im
+eigenen Schritt entsteht (unten). Antwortschritt, Judges und eine eingeschaltete
+Widerspruchsprüfung startet der Server selbst (`_write_synthesis`,
+`_finish_review`); ist die Antwort fixiert, bekommt der Agent keinen weiteren
+Steuerschritt mehr, nur um `check_contradictions` aufzurufen. `finalized=true`
+ist ein Protokollabschluss, kein Erfolgsbeleg für alle Teilprüfungen. Die
+Entscheidung vor dem ersten Vergleich bleibt promptgesteuert: kein zweiter
+LLM-Router, keine sprachabhängige Keyword-Klassifikation.
 Deaktivierte Worker
 liefern weder Worker-Katalog noch Delegationsprompt im Chatkontext. Auch
 Vergleichsmodelle, Judges und Worker erhalten eine knappe Rollen-/Produkterklärung.

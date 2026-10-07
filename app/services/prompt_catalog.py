@@ -39,8 +39,8 @@ _ENTRIES = (
     ("agent", "Agent: steering instructions",
      "System prompt of the user's selected Agent model while it steers the run (comparisons, depth, memory, "
      "tools). At runtime the comparison settings, the per-message comparison limit and the file, document, "
-     "Google and memory instructions are appended; date, reference time and selected model travel with each "
-     "user message.",
+     "Google and memory instructions are appended (in chats with Google data also a no-web-search note); date, "
+     "reference time and selected model travel with the latest user message.",
      "prompt_defaults.py:AGENT_SYSTEM_PROMPT", lambda: _defaults("agent")),
     ("agent_answer", "Agent: answer step",
      "System prompt of the step that writes the answer the user reads (same model, no tools, fresh context). "
@@ -50,7 +50,7 @@ _ENTRIES = (
     ("comparison", "Agent: comparison models",
      "System prompt of each independent comparison model, shown for depth \"full\" (3 search rounds). "
      "Quick depth allows one search round and adds brief-answer guidance instead. The date line is "
-     "filled in per request.",
+     "filled in per request; in chats with Google data a no-web-search note is appended.",
      "agent_comparison.py:comparison_system_prompt()", _comparison),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "

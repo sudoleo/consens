@@ -62,13 +62,16 @@ class ContradictionChecks:
         conversation = getattr(loop, "answer_conversation", None) or []
         user_question = next((m["content"] for m in reversed(conversation) if m.get("role") == "user"
                               and isinstance(m.get("content"), str) and m["content"].strip()), "")
+        # Late answers (arrived while the answer was written) are neither in the
+        # text nor in its differences check, so the source check skips them too.
+        checked = [a for a in comparison["answers"] if not a.get("late")]
         # The job's run is the comparison; its parent is the chat, so deleting
         # the chat also stops and deletes its pending checks.
         return submit_advisory(question=user_question or comparison["question"],
             resolved_question=comparison["question"] if user_question else "", consensus=owner.text, sources=sources,
             keys={"OpenRouter": loop.api_key}, differences_data=check["differences_data"],
-            model_answers={a["provider_label"]: a["text"] for a in comparison["answers"]},
-            model_sources={a["provider_label"]: a["sources"] for a in comparison["answers"]},
+            model_answers={a["provider_label"]: a["text"] for a in checked},
+            model_sources={a["provider_label"]: a["sources"] for a in checked},
             limits=self.limits, binding={"basis_hash": comparison.get("basis_hash")}, metering=self.metering(),
             context={"uid": loop.uid, "run_key": comparison["id"], "own_keys": False, "origin": "interactive",
                      "references": [f"users/{loop.uid}/chats/{loop.chat_id}"]})

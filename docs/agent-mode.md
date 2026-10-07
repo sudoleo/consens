@@ -217,8 +217,9 @@ Differences und Coverage genau den bereits sichtbaren Text. Eine Einleitung nebe
 einem verfrühten Judge-Aufruf zählt nicht als Antwort. Der Schreibschritt wird wie
 jeder Modellaufruf abgerechnet. Bei Abbruch oder Tokenlimit bleibt der Teiltext
 ungeprüft erhalten; die Judges starten nicht.
-Der Schreibschritt verwendet die konfigurierten Consensus-Anweisungen mit der
-eigenen beratenden Stimme des Chatmodells. Er erhält den tatsächlichen Gesprächs-
+Der Schreibschritt verwendet seit 2026-10-07 den eigenen Antwort-Prompt
+`prompt_defaults.AGENT_ANSWER_PROMPT` (vorher Consensus-Prompt plus
+`SYNTHESIS_PROMPT`) mit der eigenen beratenden Stimme des Chatmodells. Er erhält den tatsächlichen Gesprächs-
 verlauf sowie Vergleichsantworten, Quellen und zuletzt geprüfte Worker-Ergebnisse
 oder deren geprüften Ersatztext. Überarbeitung entzieht alten Ergebnissen die
 Freigabe. Er erhält keine internen Toolgespräche,
@@ -238,14 +239,17 @@ wie bisher gespeichert und ungeprüft lesbar.
 
 Differences und Coverage verwenden im Beta-Chat ausschließlich die
 Standard-Judges aus `app_config/models.judge_models`, auch bei einem teuren
-Chatmodell. Zuerst wird eine andere Modellfamilie gewählt (standardmäßig Luna,
-bei OpenAI-Chats Gemini). Nach dem begrenzten Retry folgt der konfigurierte
+Chatmodell. Seit 2026-10-04 gilt die Prioritätsliste ohne Fremd-Familien-Zwang
+(standardmäßig Luna, auch bei OpenAI-Chats); seit 2026-10-07 laufen zwei
+Differences-Durchläufe mit Luna parallel, ihre Funde werden zusammengeführt.
+Nach dem begrenzten Retry folgt der konfigurierte
 Gemini-Standard-Judge, aktuell Gemini 3.5 Flash-Lite, ausdrücklich auch bei
 Gemini als Chatmodell. Ist Gemini bereits der primäre Judge, übernimmt der
 OpenAI-Standard-Judge. Beide Prüfungen behalten die niedrige Judge-Denkstufe;
 die Pro-Tabelle und weitere Modellfamilien werden nicht als Ausweichstufen genutzt.
 
-Bei eingeschaltetem „Check contradictions“ folgt das Tool `check_contradictions`.
+Bei eingeschaltetem „Check contradictions“ folgt `check_contradictions`; der
+Server ruft es nach `judge_answer` selbst auf (`_finish_review`).
 Es verwendet den bestehenden Contradiction Judge für große, faktisch prüfbare
 Widersprüche und bereits vorhandene Originalquellen. Seit 2026-10-03 läuft die
 Prüfung als Hintergrundjob in derselben Queue wie in Consensus
@@ -259,9 +263,9 @@ Konto nicht, wird nicht geprüft (`token_budget_exhausted`).
 Ohne passende Widersprüche wird die Quellenprüfung ohne Job, Abrufe oder
 bezahlten Quellen-Judge übersprungen. Ausgeschaltet ist das Tool nicht verfügbar;
 Differences und Coverage bleiben Bestandteil jedes Modellvergleichs.
-`judge_answer(finalize=true)` beendet bei eingeschalteter Quellenprüfung erst
-nach dem Einreihen; das Modell erhält `check_contradictions` als nächsten
-Tool-Schritt und sieht selbst keine Quellenurteile. Fehlerhafte oder fehlende
+Bei eingeschalteter Quellenprüfung endet der Turn erst nach dem Einreihen. Seit
+2026-10-07 bekommt das Modell nach der fixierten Antwort keinen weiteren
+Steuerschritt dafür; es sieht selbst keine Quellenurteile. Fehlerhafte oder fehlende
 Belege bleiben ausdrücklich ungeprüft. Ergebnisse und Originalbelege stehen
 direkt an den Widerspruchskarten und als kurze Notiz am Contradictions-Link
 („checking sources“ → „1 settled by sources“), auch im gespeicherten Verlauf.
@@ -568,8 +572,8 @@ Produktentscheidung, keine Modell-Sonderlösung:
   Pflicht. Endet die Server-Suche mit einer Rechercheantwort, führt
   `_consensus_search_handoff` ohne Quellenliste zum Vergleich zurück. Nach
   einem Vergleich höchstens eine Runde pro Schritt, etwa um einen konkreten
-  Widerspruch zu klären. Ein gespeicherter Admin-Prompt mit der alten
-  Anweisung wird vom Tool-Protokoll ausdrücklich überstimmt.
+  Widerspruch zu klären. Seit 2026-10-07 kommen alle Prompts aus dem Code;
+  ein gespeicherter Admin-Prompt mit der alten Anweisung wirkt nicht mehr.
 - Judges und der Antwortschritt suchen nie.
 
 Ohne Datum und Suche hatten sich fünf Vergleichsmodelle auf denselben
@@ -639,8 +643,8 @@ servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 
 Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
 consens.io. Jede Nutzerfrage und jeder Bearbeitungsauftrag geht durch
-`compare_models → eigene Synthese → judge_answer`, ergänzt um
-`check_contradictions`, wenn aktiviert. Websuche darf vorher aktuelle Fakten oder
+`compare_models`; Antwortschritt, `judge_answer` und (wenn aktiviert)
+`check_contradictions` startet danach der Server. Websuche darf vorher aktuelle Fakten oder
 die Fragestellung klären; jedes Vergleichsmodell kennt das Datum und sucht bei
 zeitabhängigen Fakten selbst einmal (siehe „Websuche“). Das gilt auch für einfache, subjektive und Folgefragen,
 Fragen zu consens.io sowie Textumformung/Übersetzung. Nur reine Begrüßungen und
@@ -651,8 +655,9 @@ Diese Entscheidung bleibt promptgesteuert; ein zweiter Router oder eine
 sprachabhängige Keyword-Klassifikation erzwingt den Vergleich nicht.
 Das Chatmodell soll consens.io hilfreich, klar und korrekt in der Nutzersprache
 vertreten, den Produktzweck erklären können und keine nicht erfolgten Prüfungen
-oder garantierte Wahrheit behaupten. Alte allgemeine Hinweise auf direkte Antworten
-in gespeicherten Admin-Prompts werden durch diese konkrete Produktregel präzisiert.
+oder garantierte Wahrheit behaupten (Antwort-Prompt `AGENT_ANSWER_PROMPT`).
+Seit 2026-10-07 kommen die Prompts nur noch aus dem Code; gespeicherte
+Admin-Prompts wirken nicht mehr.
 Liefert der Provider am Suchlimit eine Antwort ohne Vergleichs-Toolcall, folgt
 einmalig eine Orchestrierungsrunde mit den gesammelten Quellen und ohne neue
 Websuche. Sie führt die Recherche zurück in den Consensus-Ablauf; nur eine

@@ -514,3 +514,11 @@ def test_agent_memory_frame_markers_cannot_close_the_block_early():
     assert "END OF USER MEMORY" not in text
     # Ordinary wording in lower case stays.
     assert "Saved memories" in text
+
+
+def test_the_model_is_told_the_evidence_rule_it_is_checked_against():
+    # A shorter quote is refused; the orchestrator must know before it decides,
+    # because a memory change riding on the last comparison gets no second try.
+    rule = f"{agent_memory.MIN_EVIDENCE_CHARS} characters"
+    assert rule in agent_memory.MEMORY_WRITE_PROMPT
+    assert rule in agent_memory.MemoryChange.model_fields["evidence"].description

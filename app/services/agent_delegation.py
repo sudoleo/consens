@@ -974,8 +974,9 @@ class DelegationLoop(AgentLoop):
         self.search_handoff = True
         self.messages.append({"role": "user", "content":
             "The web-search phase has finished. Its provider-side final answer is your own background, "
-            "not the completed consens.io workflow. Send every user question through Consensus: call compare_models "
-            "now, then synthesize and judge_answer. Use what you learned only to phrase a precise, neutral task. "
+            "not the completed consens.io workflow. Every task goes through a comparison: call compare_models "
+            "now; the app then has you write the answer and checks it. Use what you learned only to phrase a "
+            "precise, neutral task. "
             "Do not put your findings, source URLs or instructions about which sources to use into the context: "
             "every answer model researches independently. Do not search again or repeat the research answer. "
             "Ask for clarification only if missing information prevents a useful answer; otherwise proceed with "
@@ -1145,7 +1146,11 @@ class DelegationLoop(AgentLoop):
                         self.invalid_tool_rounds = 0 if accepted_tool else self.invalid_tool_rounds + 1
                         if self.invalid_tool_rounds >= 3:
                             raise AnalysisBudgetExceeded("The model repeated invalid tool requests without progress. The available results have been saved.")
-                        if not (self.comparison and self.comparison.finalized) and not self._answer_ready(value, last_accepted):
+                        # Once the answer is fixed only its checks remain, and the
+                        # app runs them itself (_finish_review): no further
+                        # steering step just to call check_contradictions.
+                        if (not (self.comparison and (self.comparison.finalized or self.comparison.text))
+                                and not self._answer_ready(value, last_accepted)):
                             continue
                     if self.comparison and self.comparison.finalized and self._workers_ready():
                         # All accepted results are already in the synthesis.
