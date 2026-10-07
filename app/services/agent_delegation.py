@@ -178,16 +178,13 @@ class DelegationLoop(AgentLoop):
         ], argument_limit=24_000)
         self.comparison = None
         if comparison_models is not None:
-            from app.services.agent_comparison import BOUNDED_COMPARISONS, ComparisonTools, PROMPT, preference_prompt
+            from app.services.agent_comparison import BOUNDED_COMPARISONS, ComparisonTools, preference_prompt
             self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
                                               preferences=agent_preferences, memory_changes=self.memory.writable)
             limit = self.policy.turn_comparisons if self.policy.account_budget_only else BOUNDED_COMPARISONS
-            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences, limit)
-            if check_sources:
-                from app.services.agent_contradictions import PROMPT as SOURCE_PROMPT
-                self.messages[0]["content"] += "\n" + SOURCE_PROMPT
-            else:
-                self.messages[0]["content"] += "\nCheck contradictions is OFF. No original-source adjudication tool is authorized for this message. Model agreement is still checked by judge_answer."
+            # The steering prompt (messages[0]) carries the workflow. The app writes
+            # the answer in its own step and runs every check itself (_finish_review).
+            self.messages[0]["content"] += preference_prompt(self.comparison.preferences, limit)
             if not self.policy.account_budget_only:
                 self.messages[0]["content"] += "\nAt most three comparisons before the single checked answer per message."
             elif limit:
@@ -200,8 +197,11 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_files import UNTRUSTED
             catalog = [{k: f[k] for k in ("id", "name", "mime", "status", "document_id", "version") if k in f}
                        for f in self.file_context.catalog()]
-            self.messages[0]["content"] += "\n" + UNTRUSTED + "\nFiles available in this chat: " + json.dumps(catalog)
-            self.registry = ToolRegistry([*self.registry.tools.values(), *self.file_context.tools()], argument_limit=24_000)
+            # File instructions and read_file only when the chat has files;
+            # documents can be requested in any chat.
+            if catalog:
+                self.messages[0]["content"] += "\n" + UNTRUSTED + "\nFiles available in this chat: " + json.dumps(catalog)
+                self.registry = ToolRegistry([*self.registry.tools.values(), *self.file_context.tools()], argument_limit=24_000)
             from app.services.agent_documents import DocumentTools
             self.documents = DocumentTools(self)
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.documents.tools()], argument_limit=24_000)

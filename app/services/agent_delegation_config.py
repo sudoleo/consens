@@ -5,7 +5,7 @@ settings below, and :func:`validate` always attaches the prompts from code."""
 from copy import deepcopy
 
 ORCHESTRATOR_PROMPT = """You own the final answer in consens.io. Follow the supplied Consensus workflow for user questions.
-Answer greetings and pure text transformations directly. Delegate only
+Answer greetings directly. Delegate only
 independent, bounded work when its benefit outweighs coordination, extra context,
 latency and the TOTAL cost of all calls. For a panel comparison use compare_models, not start_agent.
 Use start_agent with a goal, selected context, constraints, expected output and

@@ -19,14 +19,9 @@ def _defaults(key):
     return DEFAULT_PROMPTS[key]
 
 
-def _agent_protocol():
-    from app.services.agent_comparison import PROMPT
-    return PROMPT
-
-
 def _agent_answer():
-    from app.services.agent_comparison import SYNTHESIS_PROMPT
-    return _defaults("consensus") + "\n\n" + SYNTHESIS_PROMPT
+    from app.services.prompt_defaults import AGENT_ANSWER_PROMPT
+    return AGENT_ANSWER_PROMPT
 
 
 def _comparison():
@@ -42,19 +37,16 @@ def _delegation(name):
 # (key, label, used_for, source, text factory) in display order.
 _ENTRIES = (
     ("agent", "Agent: steering instructions",
-     "System prompt of the user's selected Agent model (orchestrator). Date, reference time and selected "
-     "model travel with each user message as app context, not in this prompt.",
+     "System prompt of the user's selected Agent model while it steers the run (comparisons, depth, memory, "
+     "tools). At runtime the comparison settings, the per-message comparison limit and the file, document, "
+     "Google and memory instructions are appended; date, reference time and selected model travel with each "
+     "user message.",
      "prompt_defaults.py:AGENT_SYSTEM_PROMPT", lambda: _defaults("agent")),
-    ("agent_protocol", "Agent: pipeline protocol (appended)",
-     "Appended to the Agent steering instructions whenever comparison tools are available. At runtime the "
-     "comparison preferences, the Check contradictions ON/OFF block and the per-message comparison limit "
-     "follow it.",
-     "agent_comparison.py:PROMPT", _agent_protocol),
     ("agent_answer", "Agent: answer step",
-     "System prompt of the final, checked Agent answer: the Consensus final-answer prompt followed by the "
-     "synthesis instructions. At runtime the date context, selected model, memory block (if enabled) and "
-     "the evidence message are appended.",
-     "prompt_defaults.py:CONSENSUS_SYSTEM_PROMPT + agent_comparison.py:SYNTHESIS_PROMPT", _agent_answer),
+     "System prompt of the step that writes the answer the user reads (same model, no tools, fresh context). "
+     "At runtime the date context, selected model and memory block (if enabled) are appended; the "
+     "conversation and the evidence message (comparison answers with sources) follow.",
+     "prompt_defaults.py:AGENT_ANSWER_PROMPT", _agent_answer),
     ("comparison", "Agent: comparison models",
      "System prompt of each independent comparison model, shown for depth \"full\" (3 search rounds). "
      "Quick depth allows one search round and adds brief-answer guidance instead. The date line is "

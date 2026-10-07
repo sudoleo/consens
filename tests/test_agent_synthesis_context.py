@@ -15,7 +15,8 @@ from test_agent_runs import UID, store
 @pytest.mark.parametrize("compares,fail_model", [(1, False), (2, False), (1, True)])
 def test_synthesis_receives_original_conversation_and_evidence_without_tool_protocol(store, monkeypatch, compares, fail_model):
     config = prompt_config.defaults()
-    config["prompts"]["consensus"] = "Use the configured editorial style."
+    # The Consensus-mode prompt no longer shapes the Agent answer.
+    config["prompts"]["consensus"] = "CONSENSUS_MODE_ONLY_STYLE"
     monkeypatch.setattr(prompt_config, "get_config", lambda: config)
     history = [{"role": "system", "content": "INTERNAL_ROUTING_PROMPT"},
                {"role": "user", "content": "Please preserve literal code and my budget of 100."},
@@ -45,7 +46,9 @@ def test_synthesis_receives_original_conversation_and_evidence_without_tool_prot
     assert len(captured) == 1
     messages = captured[0]
     assert messages[1:-1] == history[1:]
-    assert "Use the configured editorial style." in messages[0]["content"]
+    from app.services.prompt_defaults import AGENT_ANSWER_PROMPT
+    assert messages[0]["content"].startswith(AGENT_ANSWER_PROMPT)
+    assert "CONSENSUS_MODE_ONLY_STYLE" not in messages[0]["content"]
     for message in messages:
         assert set(message) == {"role", "content"}
         assert message["role"] in {"system", "user", "assistant"}

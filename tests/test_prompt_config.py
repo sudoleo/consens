@@ -167,16 +167,16 @@ def test_legacy_clients_cannot_store_prompts_and_saving_cleans_old_documents(cli
 
 def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services import agent_comparison
+    from app.services.prompt_defaults import AGENT_ANSWER_PROMPT
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "agent_protocol", "agent_answer", "comparison", "answers", "consensus",
+        "agent", "agent_answer", "comparison", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
     texts = {entry["key"]: entry["text"] for entry in entries}
     assert texts["agent"] == AGENT_SYSTEM_PROMPT
-    assert texts["agent_protocol"] == agent_comparison.PROMPT
-    assert texts["agent_answer"] == CONSENSUS_SYSTEM_PROMPT + "\n\n" + agent_comparison.SYNTHESIS_PROMPT
+    assert texts["agent_answer"] == AGENT_ANSWER_PROMPT
     assert texts["answers"] == ANSWER_SYSTEM_PROMPT and texts["consensus"] == CONSENSUS_SYSTEM_PROMPT
     assert texts["delegation_orchestrator"] == agent_delegation_config.ORCHESTRATOR_PROMPT
     assert texts["delegation_worker"] == agent_delegation_config.WORKER_PROMPT

@@ -12,18 +12,6 @@ from app.services.agent_tools import ReadOnlyTool
 from app.services.source_verification import Limits
 
 
-PROMPT = """Check contradictions is ON for this message. After judge_answer,
-call check_contradictions. It queues the factual disagreements for a check
-against existing original sources, which runs after the answer is delivered and
-shows next to the contradictions. You never see its verdicts in this run, so do
-not claim any source settled a disagreement. It does not change the synthesis or
-model agreement. Queuing the check finishes the run with the exact fixed answer.
-It never allows a revision or a second review round, including when
-finalize=false is supplied. No eligible disagreements means a skipped source
-check, not a verified answer. Do not claim missing, failed or inconclusive
-evidence proves either position.
-"""
-
 # A queued or running job is a valid end of the turn: its reference is bound
 # and the worker settles it. Terminal snapshots come from skipped plans,
 # admission failures and jobs that already finished (idempotent re-submits).

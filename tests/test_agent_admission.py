@@ -207,8 +207,12 @@ def test_consensus_default_overrides_legacy_prompt_and_disabled_workers_are_not_
     script = Script()
     loop = make_loop(store, script)
     system = loop.messages[0]["content"]
-    assert "consens.io Agent Beta" in system and "Send every user question" in system
-    assert "Your findings stay with you" in system and "indispensable" in system
+    # The workflow lives in the code-owned steering prompt; the loop appends no
+    # second protocol and no worker catalog while delegation is off.
+    from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
+    assert "every message with a task goes through a comparison" in AGENT_SYSTEM_PROMPT
+    assert "Do not pass on what answers it" in AGENT_SYSTEM_PROMPT
+    assert "orchestrator in consens.io Agent Beta" not in system and "judge_answer once" not in system
     assert "Available worker models" not in system
     list(loop.run())
     assert all("consens.io's Consensus pipeline" in messages[0]["content"] for messages in script.prompts)

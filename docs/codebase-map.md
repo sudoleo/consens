@@ -2522,8 +2522,20 @@ als Antwort veröffentlicht; Nutzerfrage, Fehler und Abrechnung bleiben gespeich
 Erst nach vollständigem, nicht leerem `stop` des Schreibschritts wird der sichtbare Text
 festgeschrieben und der angeforderte Judge ausgeführt. Bei Abbruch/Tokenlimit
 bleibt nur die ungeprüfte Teilantwort erhalten, ohne gestartete Judges.
-`ComparisonTools.synthesis_messages` verwendet die konfigurierten Consensus-
-Anweisungen, ergänzende Regeln für die beratende Stimme, Datum und Modellidentität.
+`ComparisonTools.synthesis_messages` verwendet seit 2026-10-07 den eigenen
+Antwort-Prompt `prompt_defaults.AGENT_ANSWER_PROMPT` (Journalist, Treue zur
+Substanz, Uneinigkeit nur wo sie die Entscheidung ändert, Format/Quellen) plus
+Datum und Modellidentität; der Consensus-Modus-Prompt wirkt hier nicht mehr.
+**Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
+Steuer-Prompt (Vergleichspflicht, Aufgabe formulieren: „was die Frage festlegt,
+nicht was sie beantwortet“, Suche, Tiefe, next_step, status_update); das frühere
+zweite Protokoll `agent_comparison.PROMPT`, `SYNTHESIS_PROMPT` und der
+Widerspruchs-Hinweis `agent_contradictions.PROMPT` sind entfallen, weil der
+Server Antwortschritt und Prüfungen selbst startet (`_finish_review`).
+`JudgeArgs.finalize` steht nicht mehr im Schema, wird aber still akzeptiert.
+Datei-Hinweis, Dateiliste und `read_file` hängen nur noch an, wenn der Chat
+Dateien hat; Dokument-Werkzeuge bleiben immer verfügbar. Begründung und
+Entscheidungen: `docs/prompt-review/README.md`.
 Der tatsächliche Nutzer-/Antwortverlauf wird beim Start vor allen Laufzeit-
 Ergänzungen gesichert. Hinzu kommen ausschließlich Vergleichsfragen/-kontext,
 Antworttexte mit Quellen, Anzahl fehlender Antworten, normalisierte Recherche-
@@ -5327,8 +5339,7 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   bleiben als Obergrenze der Code-Prompts (Test), damit der Datumsblock beim
   `/prepare`→`/ask_*`-Roundtrip mit dessen 12.000-Zeichen-/32.000-Byte-Limit passt.
   `prompt_catalog.py` listet die angezeigten Prompts als eine Liste
-  `{key, label, used_for, source, text}` (Agent-Steuerung, Pipeline-Protokoll,
-  Antwortschritt, Vergleichsmodelle mit Datums-Platzhalter für Tiefe „full“,
+  `{key, label, used_for, source, text}` (Agent-Steuerung, Agent-Antwortschritt, Vergleichsmodelle mit Datums-Platzhalter für Tiefe „full“,
   Consensus-Einzelantworten/-Endantwort, Delegation Orchestrator/Worker); neue
   Prompts = ein Eintrag in `_ENTRIES`. Datum, Modellidentität, Verlauf,
   Quellen-/Antwort-Scaffolding und Tooldefinitionen werden im Code zusammengesetzt.
