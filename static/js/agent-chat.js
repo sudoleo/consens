@@ -243,9 +243,6 @@
       App.agentActivity?.dispose(host);
       host.replaceChildren();
       delete host._agentActivity;
-      // A new turn starts its light path from the beginning.
-      host.classList.remove("has-light-progress");
-      host.style.removeProperty("--light-p");
       host.dataset.turn = key;
     }
     return host;

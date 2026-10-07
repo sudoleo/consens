@@ -484,66 +484,24 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
 
-/* ---- The light path ---------------------------------------------------------
-   The house light (send-glow.css) leaves the send control with the question,
-   travels along one hairline under the live activity while the agent works,
-   and arrives at the agreement number when the answer has been checked. It
-   appears nowhere else. While comparison models run, the light stands at the
-   share of them that are done (agent-delegation.js sets --light-p); before
-   that it rests at the start and breathes, because there is nothing yet to
-   count. It is drawn, not lit: a 1px stroke that ends in the house colour,
-   no blur, no halo, and it only moves when the work does. */
-.agent-light {
-  position: relative;
-  height: 1px;
-  /* Net zero height: it sits in the gap the activity already leaves, at the
-     optical middle between the clock's baseline and the first progress line
-     (the summary keeps a 36px target below its text, the line-height of the
-     progress text adds its own leading above). */
-  margin: -14px 0 13px;
-  /* A horizon that fades out to the right. */
-  background: linear-gradient(90deg, var(--line-soft) 72%, transparent);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--dur-layer) var(--ease-standard);
+/* ---- Progress at the models ------------------------------------------------
+   While the agent works, each comparison model's icon in the summary row
+   waits muted and gently pulses; it takes its own colour the moment that
+   model's answer is in. The icons are the progress: no separate line
+   between the summary and the live text, and no ring around the icons.
+   When the answer has been checked, the agreement number catches the light
+   once (below). */
+.agent-model-stack .agent-inline-model > * { transition: opacity var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard); }
+.agent-activity.is-running .agent-model-stack .agent-inline-model:is([data-status="waiting"], [data-status="working"], [data-status="question"], [data-status="rework"], [data-status="failed"], [data-status="stopped"]) > * {
+  opacity: .4; filter: grayscale(1);
 }
-@media (max-width: 700px) {
-  /* The taller touch target (44px) leaves 4px more under the clock. */
-  .agent-light { margin: -18px 0 17px; }
-}
-.agent-activity.is-running + .agent-light { opacity: 1; }
-.agent-light::before,
-.agent-light::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  height: 1px;
-}
-/* The distance covered, in ink. */
-.agent-light::before {
-  left: 0;
-  width: var(--light-p, 0%);
-  background: color-mix(in srgb, var(--ink-3) 70%, transparent);
-  transition: width var(--dur-light) var(--ease-out);
-}
-/* Its leading edge, in the house colour: a short stroke that fades in
-   toward the front, so the light reads as the head of the line. */
-.agent-light::after {
-  left: var(--light-p, 0%);
-  width: 28px;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, var(--light));
-  transition: left var(--dur-light) var(--ease-out);
-}
-#agentAnswerActivity:not(.has-light-progress) .agent-light::before { width: 0; }
-#agentAnswerActivity:not(.has-light-progress) .agent-light::after { left: 28px; }
 @media (prefers-reduced-motion: no-preference) {
-  #agentAnswerActivity:not(.has-light-progress) .agent-activity.is-running + .agent-light::after {
-    animation: agent-light-rest 2.8s ease-in-out infinite;
+  .agent-activity.is-running .agent-model-stack .agent-inline-model:is([data-status="waiting"], [data-status="working"], [data-status="question"], [data-status="rework"]) > * {
+    animation: agent-model-wait 1.8s ease-in-out infinite;
   }
 }
-@keyframes agent-light-rest {
-  50% { opacity: .35; }
+@keyframes agent-model-wait {
+  50% { opacity: .7; }
 }
 /* Arrival: when the checked answer's marks stroke on, the agreement number
    catches the light once. */
@@ -556,9 +514,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   0% { text-shadow: 0 0 0 transparent; }
   35% { text-shadow: 0 0 12px color-mix(in srgb, var(--light) 70%, transparent), 0 0 2px color-mix(in srgb, var(--light) 50%, transparent); }
   100% { text-shadow: 0 0 0 transparent; }
-}
-@media (forced-colors: active) {
-  .agent-light { display: none; }
 }
 
 /* "Memory updated" under an Agent answer: one quiet row like the review

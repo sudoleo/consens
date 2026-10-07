@@ -285,13 +285,10 @@
       history.inert = true;
       history.append(runDetails, content, insights, note, usageEl);
       details.append(summary, history);
-      // The house light travels along this hairline while the agent works
-      // (agent-chat.css, "The light path"); agent-delegation.js moves it with
-      // the comparison models that are done.
-      const light = document.createElement('div'); light.className = 'agent-light';
-      light.setAttribute('aria-hidden', 'true');
-      host.replaceChildren(details, light, preview);
-      host._agentActivity = { details, summary, history, title, runDetails, insights, content, note, usageEl, preview, light, nodes: new Map(), previewNodes: new Map() };
+      // Progress shows at the model icons in the summary (agent-chat.css,
+      // "Progress at the models"), not on a line of its own.
+      host.replaceChildren(details, preview);
+      host._agentActivity = { details, summary, history, title, runDetails, insights, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
       summary.addEventListener('click', event => {
         event.preventDefault();
         const view = host._agentActivity;

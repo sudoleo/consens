@@ -2009,26 +2009,21 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
   schon vor dem Verlassen fertig war, wird nicht gemeldet.
 - **Der Lichtweg (Agent, seit 2026-10-02)** — das Hauslicht aus
-  `send-glow.css` hat genau drei Orte: der Senden-Knopf, eine Haarlinie
-  `.agent-light` unter der laufenden Aktivitätszeile (`agent-activity.js` legt
-  sie zwischen `details.agent-activity` und `.agent-progress` an, sichtbar nur
-  bei `.agent-activity.is-running`) und die Agreement-Zahl. Auf der Linie steht
-  das Licht beim Anteil fertiger Vergleichsmodelle (`agent-delegation.js`
-  `renderOverview` setzt `--light-p` und `.has-light-progress` auf
-  `#agentAnswerActivity`, `agent-chat.js` setzt beides bei einem neuen Turn
-  zurück): Vergleiche füllen 14–84 %, die Zeile „Answer check“ ist eine eigene
-  letzte Strecke (88 %, fertig 100 %) statt ein weiteres Modell im Nenner, und
-  `view.light` hält den Wert monoton (vorher sprang das Licht beim Start der
-  Judges zurück); ohne Vergleich ruht es am Anfang und atmet. Seit 2026-10-04
-  gezeichnet statt geleuchtet: 1-px-Strich in Tinte mit 28-px-Kopf in der
-  Hausfarbe (`--light`), kein Blur, kein Halo, kein Hin-und-her-Driften; die
-  Landing-Schiene (`.lp-scene-rail i::after`) ist identisch gezeichnet. Die Linie sitzt
-  (`margin: -14px 0 13px`, Handy -18/17) optisch mittig zwischen der Grundlinie
-  der Uhr und der ersten Fortschrittszeile. Beim ersten Markieren einer
-  geprüften Antwort (`#agentAnswerBody.is-marks-revealing`) fängt
-  `.agent-agreement-num` das Licht einmal ein. Reduzierte Bewegung: kein
-  Gleiten, kein Aufleuchten. Alles Drückbare gibt beim Druck auf 97 % nach
-  (`base.css`, Spezifität 0, eigene Transforms gewinnen).
+  `send-glow.css` sitzt am Senden-Knopf und an der Agreement-Zahl: beim ersten
+  Markieren einer geprüften Antwort (`#agentAnswerBody.is-marks-revealing`)
+  fängt `.agent-agreement-num` das Licht einmal ein. Den Fortschritt der
+  Vergleichsmodelle zeigen seit 2026-10-07 die Modell-Icons in der
+  Aktivitätszeile selbst (Max-Entscheidung, statt der früheren Haarlinie
+  `.agent-light` zwischen Zeile und Live-Text, die den Abstand eng machte):
+  unter `.agent-activity.is-running` ist ein Icon mit `data-status`
+  waiting/working/question/rework blass und grau und pulsiert sanft
+  (`agent-model-wait`), failed/stopped bleibt blass; `completed` blendet in
+  die eigene Farbe über. Kein Rahmen um die Icons (Max). Den Status setzt
+  `agent-delegation.js` schon immer auf die `.agent-inline-model`-Buttons.
+  Die Landing-Schiene (`.lp-scene-rail`) zeichnet weiter die alte Linie.
+  Reduzierte Bewegung: kein Pulsieren, kein Aufleuchten. Alles Drückbare gibt
+  beim Druck auf 97 % nach (`base.css`, Spezifität 0, eigene Transforms
+  gewinnen).
 - **`composer-collapse.js`** — der Composer klappt auf dem Handy (bis 1099 px,
   `COLLAPSE_QUERY` muss zur Grenze in `composer.css` passen) in jedem Modus auf
   (+), Feld und Senden ein: beim Absenden (`window.App.composer.collapse()` aus

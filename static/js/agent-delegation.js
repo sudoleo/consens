@@ -456,22 +456,6 @@
   function renderOverview(view, rows) {
     const done = rows.filter(agent => settled.has(agent.status)).length;
     const out = rows.filter(agent => ended.has(agent.status)).length;
-    // The light under the live activity line advances with the models that
-    // are done; before the first comparison starts it drifts (agent-chat.css).
-    // The answer check is its own last stretch, not one more model: counted
-    // in, its row arriving would pull the light back from where it stood.
-    // It never moves backwards within a turn.
-    const activity = document.getElementById("agentAnswerActivity");
-    if (activity) {
-      const work = rows.filter(agent => agent.kind !== "check");
-      const check = rows.find(agent => agent.kind === "check");
-      const workDone = work.filter(agent => settled.has(agent.status)).length;
-      const share = !work.length ? 0
-        : check ? (settled.has(check.status) ? 100 : 88) : 14 + (workDone / work.length) * 70;
-      view.light = Math.max(view.light || 0, Math.round(share));
-      activity.classList.toggle("has-light-progress", work.length > 0);
-      activity.style.setProperty("--light-p", work.length ? `${view.light}%` : "0%");
-    }
     setText(sidebar.querySelector(".agent-sidebar-progress"),
       `${done} of ${rows.length} done${out ? ` · ${out} without result` : ""}`);
     const segments = sidebar.querySelector(".agent-sidebar-segments");

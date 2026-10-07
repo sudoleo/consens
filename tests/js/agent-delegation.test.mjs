@@ -453,22 +453,23 @@ describe("Agent sidebar", () => {
     expect(segments[1].dataset.state).toBe("done");
     dom.window.close();
   });
-  it("moves the light forward only, with the answer check as its own last stretch", () => {
-    const answer = (id, seq, status) => ({ ...agent(seq, status, id), kind: "comparison", title: "Independent answer" });
+  it("shows progress at the model icons instead of a separate light line", () => {
+    const answer = (id, seq, status) => ({ ...agent(seq, status, id), kind: "comparison", title: "Independent answer",
+      model: { model: `test/${id[0]}`, label: id[0] } });
     const judge = (seq, status) => ({ ...agent(seq, status, "f".repeat(32)), kind: "judge", title: "Coverage judge" });
     const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [], status: "running" }) }));
-    const light = () => d.getElementById("agentAnswerActivity").style.getPropertyValue("--light-p");
+    d.getElementById("agentAnswerActivity").innerHTML = '<details class="agent-activity is-running"><summary></summary></details>';
     receive(w, answer("a".repeat(32), 1, "completed"));
     receive(w, answer("b".repeat(32), 1, "working"));
-    w.App.agentDelegation.project({ chatId, turnId, running: true });
-    expect(light()).toBe("49%");
-    receive(w, answer("b".repeat(32), 2, "completed"));
-    expect(light()).toBe("84%");
-    // The judge row arriving used to pull the light back to 2 of 3 rows.
     receive(w, judge(1, "working"));
-    expect(light()).toBe("88%");
-    receive(w, judge(2, "completed"));
-    expect(light()).toBe("100%");
+    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    const states = () => [...d.querySelectorAll(".agent-activity summary .agent-inline-model")].map(b => b.dataset.status);
+    // One icon per comparison model, judges stay out; agent-chat.css reads the state.
+    expect(states()).toEqual(["completed", "working"]);
+    receive(w, answer("b".repeat(32), 2, "completed"));
+    expect(states()).toEqual(["completed", "completed"]);
+    expect(d.getElementById("agentAnswerActivity").style.getPropertyValue("--light-p")).toBe("");
+    expect(d.querySelector(".agent-light")).toBeNull();
     dom.window.close();
   });
   it("projects a local demo turn without requests and releases it again", async () => {
