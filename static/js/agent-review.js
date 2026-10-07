@@ -313,8 +313,14 @@
     body.classList.add('is-marks-revealing');
     clearTimeout(body._revealTimer);
     body._revealTimer = setTimeout(() => {
+      // The stroke ends in the mark's own colour. Handing over to the plain
+      // background must not run the marks' hover transition: every mark
+      // blinked out and faded in again at once, like a second, faster reveal.
+      body.classList.add('is-marks-settling');
       body.classList.remove('is-marks-revealing');
       for (const el of body.querySelectorAll('[style*="--cx-reveal-delay"]')) el.style.removeProperty('--cx-reveal-delay');
+      void body.offsetWidth;
+      body.classList.remove('is-marks-settling');
     }, Math.max(0, body._revealTotal - elapsed));
   }
   // A contradiction source check settles after its turn: the turn ends with a

@@ -478,6 +478,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     animation: agent-mark-badge .34s ease-out var(--cx-reveal-delay, 0ms) backwards;
   }
 }
+/* The hand-over from the stroke to the plain mark colour (agent-review.js). */
+#agentAnswerBody.is-marks-settling .cx-claim { transition: none; }
 @keyframes agent-answer-sheen-in { from { opacity: 0; } }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }

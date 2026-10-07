@@ -362,6 +362,9 @@ it('strokes the marks on once, in reading order, when a live answer is first che
   expect(body.classList.contains('is-marks-revealing')).toBe(true);
   vi.runAllTimers();
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  // The hand-over to the plain mark colour runs without a transition and
+  // leaves no switch behind.
+  expect(body.classList.contains('is-marks-settling')).toBe(false);
   expect(body.querySelector('.cx-claim').getAttribute('style') || '').not.toContain('--cx-reveal-delay');
   // After the reveal a re-rendered answer shows its marks at once.
   now = 9000; body._agentRenderSerial = 2;
