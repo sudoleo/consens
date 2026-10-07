@@ -50,12 +50,22 @@ Premium-Zuordnung filtern diese Liste nicht zusätzlich. Vor einer neuen Nachric
 wird die Konfiguration ebenfalls gelesen; gespeicherte Antworten lassen sich
 ohne diesen Abruf wiederherstellen. Beide Abrufe schreiben nichts in die DB.
 IDs, Labels und Routing kommen aus cfg.MODEL_CONFIGS; AGENT_MODEL ergänzt den
-Standard (seit 2026-10-04 openai/gpt-6-luna, das günstige Basismodell; vorher
-deepseek/deepseek-v4.1-flash). Der Standard trägt die Registry-ID wie alle
+Standard (seit 2026-10-07 anthropic/claude-sonnet-5.5; davor seit 2026-10-04
+openai/gpt-6-luna, davor deepseek/deepseek-v4.1-flash). Grund: Blindtest mit
+20 Fragen und 60 echten Agent-Läufen, gleiche Vergleichsmodelle und gleicher
+Judge, nur das Schreibmodell getauscht. Luna wurde in 0 von 40 blinden
+Rankings Erster, Sonnet am häufigsten und fand doppelt so viele schwere
+Widersprüche (Kosten pro Frage etwa 0,11 $ → 0,23 $). GPT-6.1 Sol lag beim
+Durchschnitt vorn, wurde unter ZDR aber bei 13 von 33 Aufrufen vom Anbieter
+abgewiesen. Das Standardmodell ist für jede Stufe frei, auch wenn es sonst
+Premium ist: `agent_model_options()` setzt dort `premium: false` und
+`early_access: true` (Badge „Early access“ im Picker, neutral statt Gold), und
+`/agent` nimmt es aus `require_model_access` aus. Als Vergleichsmodell bleibt
+dasselbe Modell Pro. Der Standard trägt die Registry-ID wie alle
 anderen Modelle (einmal in der Liste); die OpenRouter-ID wird für ältere Clients
 weiter aufgelöst. Er steht im eingebauten Katalog `agent_model_catalog.json`,
 damit der Agent auch ohne Live-Katalog startet; die Landing-Mockups zeigen sein
-Label (`agent_model_label()`). Hilfsagenten (Delegation) hat Luna nicht geprüft;
+Label (`agent_model_label()`). Hilfsagenten (Delegation) sind mit dem neuen Standard nicht geprüft;
 die Delegation ist ohnehin standardmäßig aus.
 
 Preise, Kontextgrenzen und Reasoning-Stufen werden aus dem öffentlichen

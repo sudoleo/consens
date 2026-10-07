@@ -49,6 +49,13 @@ def pending(store, *, uid=UID, chat_id=None, request_id="one", question="Questio
     return chat_id, turn
 
 
+# Receipts are priced with fixed (GPT-6 Luna) prices, so these ledger tests do
+# not change whenever the default chat model does.
+PRICED = AgentModel(model="openai/gpt-6-luna", label="GPT-6 Luna", selection_id="gpt-6-luna",
+                    input_usd_per_million="0.10", output_usd_per_million="0.50",
+                    cache_read_usd_per_million="0.01", cache_write_usd_per_million="")
+
+
 def receipt(*, measured=True):
     completion = AgentCompletion()
     completion.text = "A helpful answer"
@@ -56,7 +63,7 @@ def receipt(*, measured=True):
     completion.generation_id = "generation-test"
     completion.usage = measured_usage({"prompt_tokens": 1000, "completion_tokens": 100,
         "prompt_tokens_details": {"cached_tokens": 200},
-        "completion_tokens_details": {"reasoning_tokens": 50}}, AgentModel()) if measured else None
+        "completion_tokens_details": {"reasoning_tokens": 50}}, PRICED) if measured else None
     return completion
 
 

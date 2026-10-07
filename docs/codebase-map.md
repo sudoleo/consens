@@ -2232,7 +2232,12 @@ Tageskonto begrenzt Agent pro Stufe. Pro bleiben die Premium-Modelle:
 Vergleichsmodell aus `cfg.PREMIUM_MODELS` für Free/Plus mit 403 ab (ein
 ausgefallener Tarif-/Rollendienst liefert sicher 503), `/agent/models` markiert
 sie mit `premium`, und `agent-chat.js` zeigt sie mit Pro-Badge, aber gesperrt
-(`locked()`/`selectable()`). Uploads (`POST /agent/chats/{chat}/files`) folgen
+(`locked()`/`selectable()`). Ausnahme seit 2026-10-07: das Standard-Chatmodell
+(`default_agent_model_id()`, derzeit Claude Sonnet 5.5) ist als Chatmodell für
+jede Stufe frei; `/agent/models` meldet es mit `premium: false` und
+`early_access: true`, der Picker zeigt ein neutrales „Early access“-Badge
+(`.pro-badge.is-neutral`). Als Vergleichsmodell bleibt es Pro. Begründung und
+Blindtest in `docs/agent-mode.md`. Uploads (`POST /agent/chats/{chat}/files`) folgen
 der Anhangregel ab Plus (`require_uploads`); Liste, Download und Löschen
 bleiben offen, weil Agent Dokumente für jedes Konto in denselben Speicher schreibt. Detail und Turn-Stop laufen owner- und
 turngebunden über den echten Store. Beide Antworten sind `private, no-store`;

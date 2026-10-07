@@ -173,6 +173,8 @@
         option.dataset.modelLabel = model.label;
         option.disabled = model.available === false || locked(model);
         if (model.premium) option.dataset.modelBadge = "Pro";
+        // The default chat model is free for every tier (agent_model_options).
+        else if (model.early_access) option.dataset.modelBadge = "Early access";
         if (model.unavailable_reason) option.dataset.description = model.unavailable_reason;
         if (grouped) {
           const key = model.provider || 'other';

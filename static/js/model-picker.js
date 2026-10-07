@@ -1075,7 +1075,8 @@
 
       badges.forEach(badgeText => {
         const badge = document.createElement("span");
-        badge.className = "pro-badge model-picker-pro-badge";
+        // Gold stays the colour of Pro; any other badge ("Early access") is neutral.
+        badge.className = `pro-badge model-picker-pro-badge${badgeText.toLowerCase() === "pro" ? "" : " is-neutral"}`;
         badge.textContent = badgeText;
         item.appendChild(badge);
       });

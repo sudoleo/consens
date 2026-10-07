@@ -49,7 +49,7 @@ def test_agent_followup_refreshes_clock_and_model_without_rewriting_history(stor
     # identical across messages so providers can cache it with the history.
     assert "Current date" not in first_messages[0]["content"]
     assert "Tuesday, 2026-09-15" in first_messages[-1]["content"]
-    assert "Selected model for this response: GPT-6 Luna" in first_messages[-1]["content"]
+    assert "Selected model for this response: Claude Sonnet 5.5" in first_messages[-1]["content"]
     answer = receipt()
     answer.text = "Today is September 15."
     assert store.claim(UID, chat_id, first["id"], model)

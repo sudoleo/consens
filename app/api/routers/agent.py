@@ -28,7 +28,7 @@ from app.services.agent_provider_limits import AgentProviderCooldown, agent_fail
 from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
-from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, resolve_agent_model
+from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, default_agent_model_id, resolve_agent_model
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
 from app.services.llm.streaming import iter_sse_with_keepalive, sse_pack, SSE_HEADERS
@@ -263,8 +263,11 @@ def run_agent(request: Request, payload: AgentRequest):
             model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
-        # None means the preset default, which is never a premium model.
-        require_model_access(uid, [model.selection_id, *(payload.comparison_models or {}).values()])
+        # None means the preset default, which is never a premium model. The
+        # default chat model is open to every tier ("Early access"); the same
+        # model as a comparison model still needs Pro.
+        chat_model = [] if model.selection_id == default_agent_model_id() else [model.selection_id]
+        require_model_access(uid, [*chat_model, *(payload.comparison_models or {}).values()])
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")

@@ -28,7 +28,7 @@ def _no_real_telegram_alerts(monkeypatch):
 def deepseek_default_agent(monkeypatch):
     """Agent mechanics tests (costs, replay, ordering) were written against
     DeepSeek V4.1 Flash as the chat model and keep it pinned; the real default
-    (GPT-6 Luna since 2026-10-04) has its own test in test_agent_runs.py."""
+    (Claude Sonnet 5.5 since 2026-10-07) has its own test in test_agent_default_model.py."""
     monkeypatch.setenv("AGENT_MODEL", "deepseek/deepseek-v4.1-flash")
 
 

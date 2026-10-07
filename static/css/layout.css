@@ -213,7 +213,8 @@ body:has(.sidebar.active) .brand-float {
 
 /* Plus ist die Stufe zwischen Free und Pro und bleibt deshalb neutral: Gold
    ist die Farbe der teuren Modelle, und die hat Plus gerade nicht. */
-.pro-badge.is-plus {
+.pro-badge.is-plus,
+.pro-badge.is-neutral {
   border-color: var(--line);
   background: var(--well);
   color: var(--ink-2);

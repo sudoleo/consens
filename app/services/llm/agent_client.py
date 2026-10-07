@@ -22,22 +22,25 @@ from app.services.llm.streaming import _sse_pairs
 
 @dataclass(frozen=True)
 class AgentModel:
-    # The Agent's default chat model: the cheap base model of the catalogue
-    # (since 2026-10-04 GPT-6 Luna, before DeepSeek V4.1 Flash).
-    model: str = "openai/gpt-6-luna"
-    label: str = "GPT-6 Luna"
+    # The Agent's default chat model, open to every tier as "Early access"
+    # (agent_model_options). Since 2026-10-07 Claude Sonnet 5.5: in a blind
+    # test of 20 questions it was ranked first most often and surfaced twice
+    # as many contradictions as GPT-6 Luna (before: GPT-6 Luna since
+    # 2026-10-04, DeepSeek V4.1 Flash before that).
+    model: str = "anthropic/claude-sonnet-5.5"
+    label: str = "Claude Sonnet 5.5"
     max_output_tokens: int = 4096
     # USD / million tokens. A versioned simulation, not an invoice.
-    input_usd_per_million: str = "0.10"
-    output_usd_per_million: str = "0.50"
-    cache_read_usd_per_million: str = "0.01"
-    cache_write_usd_per_million: str = ""
+    input_usd_per_million: str = "2.00"
+    output_usd_per_million: str = "10.00"
+    cache_read_usd_per_million: str = "0.20"
+    cache_write_usd_per_million: str = "2.50"
     web_search_usd_per_request: str | None = None
-    pricing_version: str = "openrouter-2026-10-03"
-    selection_id: str = "gpt-6-luna"
+    pricing_version: str = "openrouter-2026-10-07"
+    selection_id: str = "claude-sonnet-5.5"
     reasoning_effort: str = "default"
     request_config: dict = field(default_factory=dict)
-    context_length: int = 1_048_576
+    context_length: int = 1_000_000
 
     def snapshot(self):
         return asdict(self)
@@ -96,6 +99,11 @@ def agent_model(*, _metadata=None) -> AgentModel:
     return AgentModel(**values, selection_id=entry.internal_id if entry else values["model"], context_length=metadata["context_length"],
                       web_search_usd_per_request=defaults.web_search_usd_per_request,
                       request_config=dict(entry.request_config or {}) if entry else {})
+
+
+def default_agent_model_id() -> str:
+    """Registry ID of the default chat model (AGENT_MODEL or the code default)."""
+    return agent_model().selection_id
 
 
 _CATALOG = agent_model_metadata.BASELINE
@@ -171,6 +179,7 @@ def agent_model_options():
     options = [
         {"id": model.selection_id, "label": model.label, **_provider_options(model),
          "available": True, "premium": model.selection_id in cfg.PREMIUM_MODELS,
+         "early_access": False,
          "reasoning_efforts": _choices(model, metadata),
          "default_reasoning": model.request_config.get("reasoning", metadata.get("reasoning") or {}),
          "reasoning_available": bool(metadata.get("reasoning")),
@@ -182,6 +191,9 @@ def agent_model_options():
     ]
     available = {item['id']: item for item in options}
     default = options[0]
+    # The default chat model is free for every tier even when it is a premium
+    # model elsewhere (as a comparison model it stays Pro): "Early access".
+    default.update(premium=False, early_access=True)
     # An invalid or temporarily unresolved admin entry stays visible, with a
     # reason, instead of silently disappearing or inheriting made-up prices.
     models = [default]
