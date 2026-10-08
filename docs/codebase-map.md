@@ -5794,12 +5794,14 @@ liest beide Modelle Bilder (`PROVIDER_IMAGE_SUPPORT`), steht aber bewusst nicht
 in `PROVIDER_PDF_SUPPORT`: nur Muse Spark 1.3 verarbeitet PDFs nativ, das freie
 Muse Glimmer 30B nicht — die Familie bekommt deshalb den Text-Fallback.
 
-**Betriebsvoraussetzung Meta:** `meta/muse-spark-1.3` ist bei OpenRouter
-attestierungspflichtig und antwortet ohne die einmalige 18+-Bestätigung des
-Kontos mit `403 … missing_attestation_types: [age_18plus]`
-(https://openrouter.ai/settings/preferences). `meta/muse-glimmer-30b` läuft
-ohne diese Bestätigung. Beide Modelle erfüllen `provider: {"zdr": true}`;
-Muse denkt zwingend, deshalb steht `reasoning.effort` fest auf `low` und ein
+**Meta nur mit Glimmer (seit 2026-10-08):** `meta/muse-spark-1.3` ist
+nicht wählbar. Sein einziger OpenRouter-Endpunkt („Meta“) steht nicht in
+`GET /api/v1/endpoints/zdr`, und ohne die 18+-Bestätigung des Kontos antwortet
+er vorher schon mit `403 … age_18plus`. Spark steht deshalb in
+`ZDR_UNAVAILABLE_MODEL_IDS`; die Familie hat kein wählbares Pro-Modell und
+keinen Alias `Meta-Pro`, der Pro-Judge fällt auf Glimmer zurück
+(`_BASE_PRO_JUDGE_BY_PROVIDER`). `meta/muse-glimmer-30b` läuft unter ZDR
+(Phala/DeepInfra/Together). Muse denkt zwingend, deshalb steht `reasoning.effort` fest auf `low` und ein
 zu kleines `max_tokens` liefert nur Reasoning-Tokens und ein leeres Final
 (siehe `_responses_empty_result`). Der Contributor-Tarif
 `meta/muse-spark-1.3-contributor` ist bewusst nicht aufgenommen: Meta darf
@@ -5844,6 +5846,22 @@ entfernt. Gemini
   direkte Modell-ID. Gemini-Payloads senden modellgenerationsunabhängig keine
   optionale `temperature`, damit neue Admin-IDs nicht an geänderten
   Sampling-Schemas scheitern. Bekannte tote Preview-IDs bleiben Tombstones.
+
+**Nur ZDR-fähige Modelle sind wählbar (seit 2026-10-08):** Jeder Modellaufruf
+sendet `provider.zdr=true`; ein Modell ohne ZDR-Endpunkt scheitert bei
+OpenRouter mit `404 No endpoints found matching your data policy`.
+`cfg.ZDR_UNAVAILABLE_MODEL_IDS` (`gpt-3.5-turbo`, `chat-latest`,
+`gemini-3.1-flash-lite-preview`, `muse-spark-1.3`) fließt in
+`REMOVED_MODEL_IDS`: der Firestore-Load entfernt sie aus Providerlisten und
+Premium, gespeicherte Free-Defaults/Presets/Judges/Chat-Memory/Watches fallen
+auf das Familien-Default zurück, `_consensus_engine_available` verwirft
+Familien-Aliasse auf ein stillgelegtes Modell, und `/agent/models` listet sie
+nicht. Eine im Browser gespeicherte Auswahl findet keine Option mehr
+(`setPickerToValue` bzw. `agent-chat.js selection()`) und bleibt beim
+gerenderten Default; `/ask_*` lehnt die alte ID mit 400 ab.
+`tests/test_zdr_unavailable_models.py` hält das fest. Prüfung neuer Modelle:
+`GET https://openrouter.ai/api/v1/endpoints/zdr` (kostenlos) plus ein echter
+Aufruf mit `provider: {"zdr": true}`.
 
 Admin-Modellkonfig (`/admin`, `app_config/models` in Firestore): Provider-Listen sind
 geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`, im Admin

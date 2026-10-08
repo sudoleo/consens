@@ -502,7 +502,6 @@ class ModelConfigurationTests(unittest.TestCase):
                 cfg.DEFAULT_GEMINI_MODEL,
                 cfg.KIMI_PRO_MODEL,
                 cfg.GLM_PRO_MODEL,
-                cfg.MUSE_PRO_MODEL,
             }),
         )
 
@@ -549,15 +548,14 @@ class ModelConfigurationTests(unittest.TestCase):
             "meta", question="q", system_prompt="s",
             model_override=cfg.MUSE_BASE_MODEL, max_output_tokens=123,
         )
-        pro = build_provider_payload(
-            "meta", question="q", system_prompt="s",
-            model_override=cfg.MUSE_PRO_MODEL, max_output_tokens=123,
-        )
-
         self.assertEqual(base["api_model"], "meta/muse-glimmer-30b")
         self.assertEqual(base["payload"]["reasoning"], {"effort": "low"})
-        self.assertEqual(pro["api_model"], "meta/muse-spark-1.3")
-        self.assertEqual(pro["payload"]["reasoning"], {"effort": "low"})
+        # Muse Spark ist unter ZDR nicht bedienbar und damit nicht waehlbar;
+        # seine Request-Policy bleibt fuer eine spaetere Wiederaufnahme stehen.
+        self.assertNotIn(cfg.MUSE_PRO_MODEL, cfg.MODEL_CONFIGS)
+        self.assertEqual(
+            cfg.MODEL_REQUEST_CONFIG[cfg.MUSE_PRO_MODEL], {"reasoning": {"effort": "low"}},
+        )
 
     def test_kimi_search_keeps_moonshot_zdr_route_and_model_reasoning(self):
         for model, deep, thinking in (

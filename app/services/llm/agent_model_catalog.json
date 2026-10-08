@@ -303,36 +303,6 @@
         "is_moderated": false
       }
     },
-    "google/gemini-3.1-flash-lite-preview": {
-      "pricing": {
-        "prompt": "0.00000025",
-        "completion": "0.0000015",
-        "image": "0.00000025",
-        "audio": "0.0000005",
-        "input_audio_cache": "0.00000005",
-        "web_search": "0.014",
-        "internal_reasoning": "0.0000015",
-        "input_cache_read": "0.000000025",
-        "input_cache_write": "0.0000000833333333333333"
-      },
-      "reasoning": {
-        "mandatory": false,
-        "default_enabled": true,
-        "supported_efforts": [
-          "high",
-          "medium",
-          "low",
-          "minimal"
-        ],
-        "default_effort": "minimal"
-      },
-      "context_length": 1048576,
-      "top_provider": {
-        "context_length": 1048576,
-        "max_completion_tokens": 65536,
-        "is_moderated": false
-      }
-    },
     "google/gemini-3.1-pro-preview": {
       "pricing": {
         "prompt": "0.000002",

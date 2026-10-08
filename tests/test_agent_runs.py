@@ -418,7 +418,12 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     assert set(models) == expected | {"deepseek/deepseek-v4.1-flash"}
     assert len(response.json()["models"]) == len(models)
     assert {item['provider'] for item in models.values()} == set(cfg.PROVIDERS)
+    # Unter ZDR nicht bedienbare Modelle (z. B. Muse Spark) bietet Agent nicht an.
+    pro_models = {p.pro_model for p in cfg.PROVIDERS.values()} - cfg.ZDR_UNAVAILABLE_MODEL_IDS
+    assert not set(models) & cfg.ZDR_UNAVAILABLE_MODEL_IDS
     for provider in cfg.PROVIDERS.values():
+        if provider.pro_model not in pro_models:
+            continue
         assert models[provider.pro_model]['provider'] == provider.key
         assert models[provider.pro_model]['provider_label'] == provider.label
     assert all("web_search" in item["tools_by_effort"]["default"] for item in models.values() if item['available'])
@@ -428,7 +433,7 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
         'openai': cfg.OPENAI_SOL_MODEL, 'deepseek': cfg.DEEPSEEK_PRO_MODEL}})
     trimmed_preset_models = {item['id'] for item in client.get('/agent/models', headers=AUTH).json()['models']}
     assert cfg.PREMIUM_MODELS <= trimmed_preset_models
-    assert {p.pro_model for p in cfg.PROVIDERS.values()} <= trimmed_preset_models
+    assert pro_models <= trimmed_preset_models
     # Every account sees the catalog; premium models carry their flag.
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
     listed = client.get("/agent/models", headers=AUTH)
@@ -554,7 +559,7 @@ def test_agent_history_never_queries_empty_model_answers(store, monkeypatch):
     assert len(store.list_turns(UID, chat_id)["turns"]) == 1
 
 
-@pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3", "openai/gpt-3.5-turbo"])
+@pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3", "openai/gpt-4o"])
 def test_configured_default_uses_its_own_prices_context_and_routing(monkeypatch, model_id):
     from app.core import config as cfg
     from decimal import Decimal

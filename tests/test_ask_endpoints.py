@@ -211,7 +211,7 @@ def test_glm_attachment_support_depends_on_the_selected_model():
     assert run.call_count == 2
 
 
-def test_ask_muse_serves_the_meta_family_and_gates_its_pro_model():
+def test_ask_muse_serves_the_meta_family_and_refuses_the_zdr_less_spark():
     """Die Route heisst nach dem Produkt, die Familie nach dem Anbieter."""
     client = make_client()
     p1, p2 = auth_patches(tier="plus")
@@ -227,7 +227,10 @@ def test_ask_muse_serves_the_meta_family_and_gates_its_pro_model():
                 "attachments": [PNG_ATTACHMENT],
             },
         )
-        premium = client.post(
+        # Ein noch im Browser gespeichertes Muse Spark wird abgelehnt statt
+        # bei OpenRouter an der ZDR-Regel zu scheitern; der Picker faellt auf
+        # das gerenderte Familien-Default zurueck.
+        stale = client.post(
             "/ask_muse",
             headers=AUTH_HEADER,
             json={"question": "hello", "model": cfg.MUSE_PRO_MODEL},
@@ -237,7 +240,8 @@ def test_ask_muse_serves_the_meta_family_and_gates_its_pro_model():
     assert run.call_args.args[0].key == "meta"
     # Glimmer liest Bilder, ist also kein Anhang-Sonderfall wie DeepSeek.
     assert len(run.call_args.kwargs["attachments"]) == 1
-    assert premium.status_code == 403
+    assert stale.status_code == 400
+    assert run.call_count == 1
 
 
 def test_megabyte_style_one_word_question_is_rejected_before_provider_work():

@@ -73,8 +73,18 @@ class RegistryCoverageTests(unittest.TestCase):
         for provider in cfg.PROVIDERS.values():
             with self.subTest(provider=provider.key):
                 self.assertIn(provider.base_model, provider.models)
-                self.assertIn(provider.pro_model, provider.models)
                 self.assertNotIn(provider.base_model, cfg.PREMIUM_MODELS)
+                if provider.pro_model in cfg.ZDR_UNAVAILABLE_MODEL_IDS:
+                    # Ohne ZDR-Endpunkt (Meta: Muse Spark) gibt es kein
+                    # waehlbares Pro-Modell und keinen "<Familie>-Pro"-Alias.
+                    self.assertNotIn(provider.pro_model, provider.models)
+                    self.assertNotIn(provider.pro_model, cfg.PREMIUM_MODELS)
+                    self.assertNotIn(f"{provider.label}-Pro", cfg.ALLOWED_CONSENSUS_MODELS)
+                    self.assertEqual(
+                        cfg.PRO_JUDGE_MODEL_BY_PROVIDER[provider.key], provider.base_model
+                    )
+                    continue
+                self.assertIn(provider.pro_model, provider.models)
                 self.assertIn(provider.pro_model, cfg.PREMIUM_MODELS)
 
     def test_model_configs_resolve_every_allowed_model(self):
@@ -115,8 +125,12 @@ class RegistryCoverageTests(unittest.TestCase):
         # Der billige Contributor-Tarif darf nie erlaubt sein: dort fliessen
         # Prompts in Metas Produkte, was der ZDR-Zusage widerspricht.
         self.assertNotIn("muse-spark-1.3-contributor", meta.models)
+        # Muse Spark hat bei OpenRouter keinen ZDR-Endpunkt (nur "Meta") und
+        # ist deshalb nicht waehlbar; die Policy bleibt fuer spaeter stehen.
+        self.assertIn(cfg.MUSE_PRO_MODEL, cfg.ZDR_UNAVAILABLE_MODEL_IDS)
+        self.assertNotIn(cfg.MUSE_PRO_MODEL, meta.models)
         self.assertEqual(
-            cfg.MODEL_CONFIGS[cfg.MUSE_PRO_MODEL].request_config,
+            cfg.MODEL_REQUEST_CONFIG[cfg.MUSE_PRO_MODEL],
             {"reasoning": {"effort": "low"}},
         )
         self.assertTrue(cfg.MODEL_CONFIGS[cfg.MUSE_BASE_MODEL].accepts_attachments)
