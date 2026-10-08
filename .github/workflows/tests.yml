@@ -57,6 +57,19 @@ jobs:
       - run: python -m pip install -r requirements-test.txt
       - name: All backend regressions (empty discovery fails)
         run: python -m pytest tests -q --junitxml=test-results/backend.xml
+      # Job logs need a GitHub login; annotations do not. Failed tests show up
+      # there, so a failure can be read (and fixed) without signing in.
+      - name: Failed tests as annotations
+        if: failure()
+        run: |
+          python - <<'EOF'
+          import xml.etree.ElementTree as ET
+          for case in ET.parse("test-results/backend.xml").iter("testcase"):
+              for problem in [*case.iter("failure"), *case.iter("error")]:
+                  text = (problem.get("message") or "") + "\n" + (problem.text or "")[-1500:]
+                  text = text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+                  print(f"::error title={case.get('classname')}::{case.get('name')}%0A{text}")
+          EOF
       - uses: actions/upload-artifact@v4
         if: always()
         with:
