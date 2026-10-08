@@ -175,6 +175,21 @@ GLM_PRO_MODEL = "glm-5.3"
 MUSE_BASE_MODEL = "muse-glimmer-30b"
 MUSE_PRO_MODEL = "muse-spark-1.3"
 
+# Modelle, die OpenRouter unter unserer Pflicht-Regel provider.zdr=true nicht
+# bedienen kann: kein Endpunkt steht in GET /api/v1/endpoints/zdr, jeder
+# Aufruf endet mit 404 "No endpoints found matching your data policy" (bzw.
+# bei Muse Spark vorher mit 403 wegen der fehlenden 18+-Bestaetigung; sein
+# einziger Endpunkt "Meta" ist aber ebenfalls kein ZDR-Endpunkt). Live-Probe
+# 2026-10-08. Sie zaehlen als Tombstones (REMOVED_MODEL_IDS): nicht waehlbar,
+# auch wenn die Firestore-Modellliste sie noch fuehrt. Erst wieder aufnehmen,
+# wenn die ZDR-Liste einen Endpunkt zeigt und ein echter Aufruf antwortet.
+ZDR_UNAVAILABLE_MODEL_IDS = frozenset({
+    "gpt-3.5-turbo",                  # nur OpenAI direkt, kein Azure-Endpunkt
+    "chat-latest",                    # nur OpenAI direkt, nicht im Katalog
+    "gemini-3.1-flash-lite-preview",  # nur Google AI Studio (kein ZDR)
+    MUSE_PRO_MODEL,                   # nur Meta (kein ZDR, dazu 18+-Pflicht)
+})
+
 # ---------------------------------------------------------------------------
 # Provider-Registry: die eine Quelle fuer alles, was je Modellfamilie gilt.
 # Eine neue Familie ist ein Eintrag hier plus ihre Modelle in der Admin-DB --
@@ -272,7 +287,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         _provider(
             "openai", "OpenAI", "openai/", DEFAULT_OPENAI_MODEL, OPENAI_PRO_MODEL,
             {
-                "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
+                "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o",
                 "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
                 OPENAI_PRO_MODEL, DEFAULT_OPENAI_MODEL,
                 OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL,
@@ -295,7 +310,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
             "gemini", "Gemini", "google/", DEFAULT_GEMINI_MODEL, GEMINI_PRO_MODEL,
             {
                 GEMINI_FLASH_MODEL, GEMINI_36_FLASH_MODEL, "gemini-3.1-flash-lite",
-                "gemini-3.1-flash-lite-preview", "gemini-2.5-flash",
+                "gemini-2.5-flash",
                 GEMINI_35_FLASH_MODEL,
                 GEMINI_PRO_MODEL, "gemini-2.5-pro",
             },
@@ -430,7 +445,10 @@ DEFAULT_CONSENSUS_MODELS = [
     GEMINI_36_FLASH_MODEL,
     OPENAI_LUNA_MODEL,
     *(provider.label for provider in _consensus_alias_providers()),
-    *(f"{provider.label}-Pro" for provider in _consensus_alias_providers()),
+    *(
+        f"{provider.label}-Pro" for provider in _consensus_alias_providers()
+        if provider.pro_model not in ZDR_UNAVAILABLE_MODEL_IDS
+    ),
 ]
 
 ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
@@ -533,7 +551,12 @@ CONSENSUS_ENGINE_ALIASES = {
 # "judge_models_pro") umstellbar. Wie DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
 # in-place mutiert (Modul-Aliasse bleiben live).
 _BASE_PRO_JUDGE_BY_PROVIDER = {
-    provider.key: provider.pro_model for provider in PROVIDERS.values()
+    # Ohne ZDR-faehiges Pro-Modell (Meta) urteilt das Basis-Modell der Familie.
+    provider.key: (
+        provider.base_model if provider.pro_model in ZDR_UNAVAILABLE_MODEL_IDS
+        else provider.pro_model
+    )
+    for provider in PROVIDERS.values()
 }
 PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 
@@ -640,6 +663,8 @@ REMOVED_MODEL_IDS = {
     "gemini-3-pro-preview",
     "grok-4.3-frontier-low",
     "grok-4.3-low-reasoning",
+    # Unter ZDR nicht bedienbar (siehe ZDR_UNAVAILABLE_MODEL_IDS).
+    *ZDR_UNAVAILABLE_MODEL_IDS,
 }
 
 
@@ -1167,6 +1192,18 @@ def _normalize_preset_answers(
     return clean
 
 
+def _consensus_engine_available(model_id: str | None) -> bool:
+    """Waehlbare Consensus-Engine: bekannter Alias oder konfigurierte Modell-ID.
+
+    Ein Familien-Alias auf ein stillgelegtes Modell (z. B. "Meta-Pro" auf das
+    unter ZDR nicht bedienbare Muse Spark) ist nicht waehlbar."""
+    alias = CONSENSUS_ENGINE_ALIASES.get(str(model_id or ""))
+    if alias and alias[1] in REMOVED_MODEL_IDS:
+        return False
+    config = get_consensus_model_config(model_id)
+    return bool(config and config.provider)
+
+
 def apply_consensus_preset_models(config: dict | None) -> None:
     """Validiert und aktiviert die Firestore-Model-Sets. Fast/Balanced duerfen
     keine Pro-Modelle enthalten; High Quality (ID: thorough) ist durch
@@ -1181,8 +1218,7 @@ def apply_consensus_preset_models(config: dict | None) -> None:
         clean_answers = _normalize_preset_answers(preset_id, supplied)
 
         consensus = canonical_model_id(supplied.get("consensus"))
-        consensus_config = get_consensus_model_config(consensus)
-        if not consensus_config or not consensus_config.provider:
+        if not _consensus_engine_available(consensus):
             consensus = canonical_model_id(base["consensus"])
         if not pro_only and is_premium_consensus_model(consensus):
             consensus = "Gemini"
@@ -1201,10 +1237,7 @@ def normalize_consensus_models(models) -> list[str]:
         incoming = list(DEFAULT_CONSENSUS_MODELS)
     allowed = []
     for model in incoming:
-        if model in allowed:
-            continue
-        config = get_consensus_model_config(model)
-        if config and config.provider:
+        if model not in allowed and _consensus_engine_available(model):
             allowed.append(model)
     # Auch die Admin-konfigurierten Preset-Engines muessen im nativen Select
     # vorhanden sein; die sichtbare Preset-Ebene setzt genau diese Werte.
