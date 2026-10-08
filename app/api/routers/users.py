@@ -369,7 +369,6 @@ def _raise_agent_memory_error(exc: agent_memory.AgentMemoryError):
 def _items_write(uid: str, operation):
     try:
         result = operation()
-        return {"status": "success", **(result or {}), **_memory_items(uid)}
     except agent_memory.AgentMemoryError as exc:
         _raise_agent_memory_error(exc)
     except persistence_guard.AccountDeletionInProgress:
@@ -379,6 +378,15 @@ def _items_write(uid: str, operation):
     except Exception as exc:
         logging.error("saved memories write failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory could not be saved.") from None
+    # The write is committed. A failed follow-up read must not report the
+    # save as failed (the user would retry an applied change): answer success
+    # without the list and let the browser reload it (`items_stale`).
+    try:
+        listing = _memory_items(uid)
+    except Exception as exc:
+        logging.warning("saved memories reread failed category=%s", safe_exception(exc))
+        return {"status": "success", **(result or {}), "items_stale": True}
+    return {"status": "success", **(result or {}), **listing}
 
 
 @router.post("/api/my/memory/items")

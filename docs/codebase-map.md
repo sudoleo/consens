@@ -1078,7 +1078,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Subcollection `memory` steht dort — fehlt sie, überlebt das Profil das
   gelöschte Konto). `sanitize_profile` ebnet Whitespace ein, kappt je Feld und
   entfernt Prompt-Rahmenmarken (sonst könnte ein Feld den Chat-Kontext-Rahmen
-  vorzeitig schließen). `load_profile_text` ist fail-open: ein nicht lesbares
+  vorzeitig schließen; seit 2026-10-08 nur die exakten Großbuchstaben-Marken
+  wie `ABOUT THE USER`/`END OF USER PROFILE` — vorher fraß die
+  case-insensitive Suche normale Sätze wie „about the user settings“). `load_profile_text` ist fail-open: ein nicht lesbares
   Profil loggt und lässt den Lauf ohne Profil weiterlaufen. Die vier Kurzfelder
   werden whitespace-normalisiert; `notes` bewahrt Absatz-/Listenstruktur.
   Endpunkte `GET`/`PUT /api/my/memory` (users.py). `GET` liefert zusätzlich
@@ -1176,27 +1178,57 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `create_model`, die Ausführung in `DelegationLoop._execute`; ein abgelehnter
   Memory-Teil bricht den Vergleich nie ab, das Ergebnis steht unter `memory`
   im Tool-Result und nie im gespeicherten Vergleich; gespeicherte wie abgelehnte
-  Versuche landen inhaltsfrei als Tool-Eintrag `update_memory` in `agent_activity`). Eine Nachricht, die nur
+  Versuche landen inhaltsfrei als Tool-Eintrag `update_memory` in `agent_activity`,
+  Ablehnungen mit Grundcode `reason` wie `evidence_not_found`, `invalid_id`,
+  `text_too_long`, `unavailable` — nie mit Evidence oder Memory-Text; das gilt
+  seit 2026-10-08 auch für ein abgelehntes eigenständiges `update_memory`).
+  Seit 2026-10-08 ist `MemoryChange` bewusst **nachsichtig** (alle Felder
+  optional/nullable, keine Schema-Längen, unbekannte Felder ignoriert, kein
+  `maxItems` auf `memory`): `id: null` beim Hinzufügen, ein zu langer Text
+  oder sechs Änderungen ließen vorher den ganzen `compare_models`-Aufruf an der
+  Schemaprüfung scheitern (drei abgelehnte Runden beenden den Turn). Alle
+  Regeln prüft jetzt `MemoryTools.apply`/`normalize_change` und meldet sie als
+  normale Memory-Ablehnung (`MemoryRefused`, ein `ValueError` mit `code`).
+  Dort endet auch jeder Speicherfehler (Firestore, Contention): geloggt wird
+  nur die Kategorie, das Modell liest „Memory could not be saved right now.
+  Nothing was saved.“ — vorher schlug der ganze Agent-Turn mit der
+  irreführenden Provider-Meldung fehl. Eine Nachricht, die nur
   ums Merken/Vergessen bittet, nutzt das Tool `update_memory` und antwortet
   danach direkt; `_free_floor` lässt diese Direktantwort im freien Modus zu.
   Serverseitige Verträge: (1) jede Agent-Änderung trägt `evidence`, ein
   wörtliches Zitat, das in einer **Nutzer**-Nachricht des Chats vorkommen muss
   (`evidence_matches`, normalisiert nur Groß-/Kleinschreibung, Leerraum,
   typografische Anführungen; seit 2026-10-07 mindestens `MIN_EVIDENCE_CHARS` = 12
-  Zeichen, kürzere Zitate nur als ganze Nachricht) — Text aus Webseiten, Dateien, Mails oder
-  Tool-Ergebnissen kann so nicht ins Gedächtnis (Memory-Poisoning); (2)
+  Zeichen, kürzere Zitate nur als ganze Nachricht). Seit 2026-10-08 zählt ein
+  per „Ask about this“ zitierter Antwortabsatz nicht als Nutzerwort:
+  `user_words` schneidet ihn genau in dem Format ab, das `composer-quote.js`
+  anhängt (gemeinsamer Vertrag `tests/fixtures/composer_quote_format.json`,
+  in Python und vitest geprüft; eine reine „Please comment on this
+  passage…“-Nachricht fällt ganz weg; die Modelle sehen die Frage
+  unverändert). Die Garantie ist genau: der Server belegt, dass der Nutzer die
+  zitierten Worte geschrieben hat, nicht, dass der Memory-Text dasselbe sagt
+  (Wortüberlappung würde sprachübergreifende Saves fälschlich ablehnen).
+  Text aus Webseiten, Dateien, Mails oder Tool-Ergebnissen kommt also nicht
+  mit seinem eigenen Zitat ins Gedächtnis; ein davon gelenkter Orchestrator
+  könnte aber eine umformulierte Erinnerung mit passenden Nutzerworten
+  belegen — Settings › Memory (Bearbeiten, Löschen, Undo) ist der Rückhalt (Memory-Poisoning); (2)
   `looks_like_secret` weist Keys, Passwörter, Karten- (Luhn) und IBAN-Nummern
   für jede Herkunft ab; (3) `FirestoreAgentMemoryRepository.apply` prüft in
   derselben Transaktion Tombstone, `auto_memory`/`enabled` und dass der Turn
   noch `pending` ist, schreibt alles-oder-nichts, dedupliziert gleiche Texte
   (No-op) und hängt eine Kurzfassung an `turn.agent_memory`
-  (`{change_id, op, item_id, text, undone}`, höchstens 12 je Turn, über
-  `chat_store`-Allowlist im Turn-View). Jede angewandte Änderung geht live als
-  SSE-Event `memory` (`{changes: [...]}`) an den Browser. Gelesen wird pro Turn
+  (`{change_id, op, item_id, undone}`, höchstens 12 je Turn, über
+  `chat_store`-Allowlist im Turn-View; seit 2026-10-08 **ohne** `text`, damit
+  eine später gelöschte Erinnerung nicht in jedem Chat weiterlebt — der
+  Hinweis zeigt nur während des Laufs und bekommt die Texte aus dem
+  SSE-Event, Undo braucht nur `change_id`). Jede angewandte Änderung geht live als
+  SSE-Event `memory` (`{changes: [...]}`, mit Text) an den Browser. Gelesen wird pro Turn
   genau einmal (`snapshot`: Profil + Einträge in einem `get_all`, fail-open,
   bewusst ohne prozessweiten Cache, damit gelöschte Erinnerungen sofort aus dem
   nächsten Prompt verschwinden). Prompt: `orchestrator_prompt` hängt
-  Memory-Daten plus die passende Regel (schreiben / nur lesen / pausiert) **ans
+  Memory-Daten plus die passende Regel (schreiben / nur lesen / pausiert /
+  seit 2026-10-08 getrennt: nicht lesbar = `MEMORY_UNAVAILABLE_PROMPT`, statt
+  einem eingeschalteten Nutzer „pausiert“ zu melden) **ans
   Ende** des System-Prompts; `synthesis_prompt` gibt dem Antwortschritt dieselben
   Daten ohne IDs und ohne Schreibregeln. Balance (Max' Vorgabe):
   `MEMORY_RELEVANCE_RULES` in Orchestrator **und** Antwortschritt — eine
@@ -1207,12 +1239,19 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   fremden Chat?“, `[]` ist der Normalfall. Vergleichsmodelle sehen Memory nicht
   pauschal: der Orchestrator gibt relevante Punkte im `compare_models`-Kontext
   weiter (gegen den gemeinsamen Bias, siehe Deckel oben). `/ask_*` rendert die
-  Einträge über `render_profile(items=...)` nach der Notiz.
+  Einträge über `render_profile(items=...)` nach der Notiz — seit 2026-10-08
+  innerhalb des dokumentierten Deckels (`MAX_PROFILE_CHARS` +
+  Stufen-Notizgrenze): höchstens `MAX_ITEMS_PROMPT_CHARS` = 3.000 Zeichen,
+  neueste zuerst, vor der Notiz reserviert (vorher bis 100 × 300 Zeichen
+  zusätzlich an alle sechs Modelle).
   Endpunkte (users.py): `GET /api/my/memory` liefert zusätzlich `items`,
   `items_revision` und `limits.items/item_chars`; `PUT` nimmt `auto_memory`
   (fehlt das Feld, bleibt der gespeicherte Wert — alte Browser setzen ihn nicht
   zurück); `POST /api/my/memory/items` (`changes` ≤ 20, `expected_revision`,
-  409 `revision_conflict` mit Revision), `DELETE /api/my/memory/items` (löscht
+  409 `revision_conflict` mit Revision; scheitert nach dem Schreiben nur das
+  erneute Lesen der Liste, antworten alle drei Schreib-Endpunkte trotzdem
+  `success` mit `items_stale: true` statt 503, und der Browser lädt die Liste
+  separat nach), `DELETE /api/my/memory/items` (löscht
   Einträge **und** Undo-Log), `POST /api/my/memory/changes/{id}/undo` (stellt
   nur wieder her, solange jeder betroffene Eintrag exakt im Nachher-Zustand ist,
   sonst 409 `undo_conflict`; idempotent; markiert `turn.agent_memory` als
@@ -1225,14 +1264,24 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `running` (fertige, wiedergeöffnete, Verlaufsantwort) entfernt den Hinweis,
   die Aktivitätszeile „Updated memory“ und Settings behalten den Nachweis.
   Seit 2026-10-07 zeigt `App.agentMemory.nudge` Konten ohne „Let Agent update
-  memory“ (`agent_settings.memory.auto === false` des fertigen Live-Turns, kein
-  Extra-Read) ab der zweiten fertigen Agent-Antwort in diesem Browser unter
+  memory“ ab der zweiten fertigen Agent-Antwort in diesem Browser unter
   höchstens drei Antworten eine Zeile mit „Turn on“/„Not now“
-  (`localStorage` `consensio.memoryHint.v1`: answers/shown/off). „Turn on“
-  schaltet über `App.userMemory.enableAgentMemory()` „Use my memory“ und „Let
-  Agent update memory“ in einem PUT ein (Profiltexte bleiben); „Not now“ und
+  (`localStorage` `consensio.memoryHint.v1`: answers/shown/off). Seit
+  2026-10-08 entscheidet nur `agent_settings.memory.hint === true` des fertigen
+  Live-Turns (kein Extra-Read; `MemorySnapshot.settings()`: Memory lesbar,
+  nicht pausiert, Opt-in aus). `auto === false` allein reichte vorher und
+  traf auch bewusst pausierte Konten und Turns mit fehlgeschlagenem Read;
+  ältere Turns ohne Marke zeigen nichts. „Turn on“ lädt über
+  `App.userMemory.enableAgentMemory()` zuerst frisch (`load(true)`, ein
+  ungespeicherter Entwurf bleibt) und setzt nur „Let Agent update memory“;
+  ein pausiertes Memory schaltet es nie mehr still wieder ein (Profiltexte
+  bleiben). Settings lädt beim Öffnen jedes Mal frisch (`load(true,
+  {keepDraft})`), damit Schalter und Revision aus einem anderen Tab nicht
+  veralten. „Not now“ und
   jedes Speichern der Schalter in Settings beenden den Hinweis
-  (`dismissNudge`). Wiedergeöffnete Antworten zeigen ihn nicht.
+  (`dismissNudge`). Wiedergeöffnete Antworten zeigen ihn nicht. Die Texte
+  versprechen kein dauerhaftes Undo unter der Antwort mehr, sondern verweisen
+  auf Settings › Memory.
   `consensio:memory-changed` lässt eine geladene Settings-Liste nachladen.
   `MOCK_LLM`: eine Agent-Frage „Remember: <Fakt>“ speichert den Fakt, damit der
   Ablauf ohne Provider im Browser prüfbar ist.
@@ -5513,8 +5562,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `users/{uid}/memory/profile` trägt zusätzlich `auto_memory`. `items` und
   `changes` sind vom Indexing ausgenommen, `memory.changes_purge_at` hat einen
   Collection-Group-Index für `cleanup_memory_change_logs` (stündlicher
-  Retention-Loop). Agent-Turns tragen `agent_memory` (Kurzfassung der
-  Änderungen); gelöscht mit Chat bzw. Konto.
+  Retention-Loop). Agent-Turns tragen `agent_memory` (welche Erinnerung
+  geändert wurde: `change_id`, `op`, `item_id`, `undone`, seit 2026-10-08 ohne
+  Text); gelöscht mit Chat bzw. Konto.
 - `chat_deletion_jobs/{sha256(uid:chat)[:40]}` — dauerhafte, idempotente
   Einzelchat-Löschaufträge (`uid`, `chat_id`, `status`, `attempts`,
   `last_error`-Kategorie, `next_attempt_at`), angelegt atomar mit dem

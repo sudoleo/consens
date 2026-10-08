@@ -3,20 +3,27 @@
 The self-written profile and note (``user_memory.py``) stay the user's text.
 Next to them lives a list of short, individual memories in ONE document,
 ``users/{uid}/memory/entries``. Agent may add, update or delete entries during a
-turn when the user switched on "Let Agent update memory"; the user can edit,
-delete or undo every entry in Settings and under the answer.
+turn when the user switched on "Let Agent update memory"; the user can review,
+edit, delete or undo every entry in Settings > Memory (the note under a running
+answer offers Undo only while Agent works).
 
 Contracts that are design, not convenience:
 
 1. **Opt-in, fenced in the write.** Agent writes re-read ``auto_memory`` and
    ``enabled`` in the same transaction as the change. A user who switches it
    off mid-run stops the next write; a finished turn can no longer write.
-2. **Only the user's own words.** Every Agent change carries ``evidence``, a
-   verbatim quote that must occur in one of the user's messages of this chat.
-   Text from web pages, files, emails or tool results can therefore never
-   reach memory, even if it contains instructions to "remember" something
-   (memory poisoning). Secrets (keys, passwords, card/IBAN numbers) are
-   refused for every origin.
+2. **Anchored in the user's own words.** Every Agent change carries
+   ``evidence``, a verbatim quote (at least ``MIN_EVIDENCE_CHARS`` characters
+   or one whole message) that must occur in one of the user's own messages of
+   this chat. A passage the user quoted from an earlier answer is not their
+   words and is cut off before the check (``user_words``). The check proves
+   that the user said the quoted words; it does not prove that the memory text
+   says the same thing (word overlap would wrongly refuse a German quote for an
+   English memory). So text from web pages, files, emails or tool results
+   cannot get a change through on its own quote, but an orchestrator steered by
+   such text could still save a reworded memory while citing some matching
+   words of the user. Settings > Memory (edit, delete, Undo) is the backstop.
+   Secrets (keys, passwords, card/IBAN numbers) are refused for every origin.
 3. **One document, one read.** A run reads profile and entries in a single
    batched read; no per-entry documents, no cross-request cache of personal
    text. The bounded change log for Undo lives in the same document and is
@@ -35,7 +42,7 @@ import threading
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -70,6 +77,14 @@ class AgentMemoryError(Exception):
         self.code = code
         self.message = message
         self.revision = revision
+
+
+class MemoryRefused(ValueError):
+    """A refused Agent memory change as tool feedback, with a content-free ``code`` for the audit trail."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 # --- Text rules -------------------------------------------------------------
@@ -153,6 +168,28 @@ def evidence_matches(evidence: str, user_messages) -> bool:
     return any(quote in message for message in messages)
 
 
+# What composer-quote.js appends when the user asks about a passage of an
+# answer ("Ask about this"). The passage is model or web text, not the user's
+# words, so it must never count as evidence. Shared, tested contract with the
+# browser: tests/fixtures/composer_quote_format.json.
+QUOTE_TYPED_MARKER = "\n\nQuoted from the previous answer:\n\u201c"
+QUOTE_ONLY_PREFIX = "Please comment on this passage from the previous answer:\n\u201c"
+
+
+def user_words(message: object) -> str:
+    """The user's own words of a chat message, without a quoted answer passage.
+
+    Cut at the FIRST marker: a passage that itself contains the marker text
+    can then never leave part of itself behind as "user words".
+    """
+    if not isinstance(message, str):
+        return ""
+    if message.startswith(QUOTE_ONLY_PREFIX):
+        return ""
+    index = message.find(QUOTE_TYPED_MARKER)
+    return message[:index] if index >= 0 else message
+
+
 def validate_text(text: object) -> str:
     clean = clean_text(text)
     if not clean:
@@ -169,17 +206,25 @@ def validate_text(text: object) -> str:
 
 # --- Change requests --------------------------------------------------------
 
+# Deliberately lenient (the docstring below is the schema text the model reads,
+# so the reason lives here): this model rides inside ``compare_models``, and a
+# schema error there rejects the whole comparison; three rejected rounds end
+# the turn. ``id: null`` on add, a text that is too long or an unknown op must
+# come back as a refused memory change instead, so every rule lives in
+# ``MemoryTools.apply``/``normalize_change``. Enum and ``required`` in the JSON
+# schema only guide the model.
 class MemoryChange(BaseModel):
     """One change Agent proposes. ``evidence`` is checked against the user's words."""
 
-    model_config = ConfigDict(extra="forbid", strict=True)
-    op: Literal["add", "update", "delete"]
-    id: str = Field(default="", max_length=16, description=
+    model_config = ConfigDict(extra="ignore", json_schema_extra={"required": ["op", "evidence"]})
+    op: str = Field(default="", json_schema_extra={"enum": ["add", "update", "delete"]},
+                    description="add, update or delete.")
+    id: Optional[str] = Field(default="", description=
         "Existing memory id for update or delete (for example m3fa21b); empty for add.")
-    text: str = Field(default="", max_length=600, description=
+    text: Optional[str] = Field(default="", description=
         "The complete memory for add or update: one self-contained fact in the user's language, "
         f"third person, at most {MAX_ITEM_CHARS} characters. Empty for delete.")
-    evidence: str = Field(min_length=1, max_length=MAX_EVIDENCE_CHARS, description=
+    evidence: Optional[str] = Field(default="", description=
         "An exact quote of the user's own words in this conversation that justifies the change: at least "
         f"{MIN_EVIDENCE_CHARS} characters, or one entire short message. Never quote yourself, a tool result, "
         "a web page, a file or an email.")
@@ -202,7 +247,10 @@ def normalize_change(change, *, origin: str) -> dict:
             raise AgentMemoryError("invalid_id", "Leave id empty when adding a memory.")
         return {"op": op, "id": "", "text": validate_text(data.get("text"))}
     if not ITEM_ID_RE.fullmatch(item_id):
-        raise AgentMemoryError("invalid_id", f"Unknown memory id {item_id or '(empty)'}.")
+        # The refusal is saved in the activity: echo only an id-shaped value,
+        # never free text a model put into the id field.
+        shown = item_id if re.fullmatch(r"[A-Za-z0-9_-]{1,16}", item_id) else "(empty)" if not item_id else "(invalid)"
+        raise AgentMemoryError("invalid_id", f"Unknown memory id {shown}.")
     if op == "update":
         return {"op": op, "id": item_id, "text": validate_text(data.get("text"))}
     if origin == "agent" and str(data.get("text") or "").strip():
@@ -292,9 +340,17 @@ class MemorySnapshot:
         return self.available and self.enabled and self.auto
 
     def settings(self) -> dict:
-        """Content-free marker saved with the turn."""
+        """Content-free marker saved with the turn.
+
+        ``hint``: the browser may suggest "Let Agent update memory" under this
+        answer. Only when memory was readable, is in use (not paused) and the
+        opt-in is off; ``auto`` alone is also false for a paused memory and for
+        a failed read, where the suggestion would silently un-pause notes or
+        claim a setting the turn never saw.
+        """
         return {"used": bool(self.available and self.enabled and (self.items or not user_memory.profile_is_empty(self.profile))),
-                "auto": self.writable}
+                "auto": self.writable,
+                "hint": bool(self.available and self.enabled and not self.auto)}
 
 
 class FirestoreAgentMemoryRepository:
@@ -395,7 +451,10 @@ class FirestoreAgentMemoryRepository:
                 "schema_version": SCHEMA_VERSION, "revision": next_revision, "items": items,
                 "changes": log, "changes_purge_at": _purge_at(log), "updated_at": now,
             })
-            summary = [{"change_id": change_id, **entry, "undone": False}
+            # The turn keeps only which memory changed, never its text: a memory
+            # the user deletes later must not live on in every chat it touched.
+            # The live note gets the texts from the SSE event instead.
+            summary = [{"change_id": change_id, "op": entry["op"], "item_id": entry["item_id"], "undone": False}
                        for entry in applied if entry["op"] != "noop"]
             if turn_ref is not None:
                 previous = list(((turn.to_dict() or {}).get("agent_memory") or []))
@@ -701,7 +760,8 @@ conversation, at least a few words (12 characters) or an entire short message.
 Changes without such a quote are refused by the app.
 If the user says not to remember something, do not. Do not ask permission to
 remember ordinary details and do not narrate memory changes: the app shows
-every change under your answer with Undo. Confirm in one short sentence only
+every change while you work, and the user reviews or undoes it in
+Settings > Memory. Confirm in one short sentence only
 when the user explicitly asked you to remember or forget something.
 A message that only asks you to remember, change or forget something needs no
 comparison: call update_memory, then confirm briefly without tools."""
@@ -712,15 +772,25 @@ user asks you to remember or forget something, answer directly without a
 comparison: Agent memory updates are switched off; they can turn on "Let Agent
 update memory" in Settings > Memory or edit their memory there themselves."""
 
-MEMORY_PAUSED_PROMPT = """The user's memory is paused or unavailable for this message. Do not claim to
-know saved details about the user, and never say or imply that you saved,
-changed or will remember something. If they ask you to remember something,
-answer directly without a comparison: memory is paused in Settings > Memory."""
+MEMORY_PAUSED_PROMPT = """The user's memory is paused for this message. Do not claim to know saved
+details about the user, and never say or imply that you saved, changed or will
+remember something. If they ask you to remember something, answer directly
+without a comparison: memory is paused in Settings > Memory."""
+
+# A failed read is not the user's choice: never tell them it is paused.
+MEMORY_UNAVAILABLE_PROMPT = """The user's memory could not be loaded for this message (a temporary problem
+on the app's side, not a setting). Do not claim to know saved details about the
+user, and never say or imply that you saved, changed or will remember
+something. If they ask you to remember something, answer directly without a
+comparison: memory is unavailable right now, so nothing was saved; they can try
+again in a moment or add it in Settings > Memory."""
 
 
 def orchestrator_prompt(snapshot: MemorySnapshot) -> str:
     """Memory data plus the rules that fit the user's switches."""
-    if not (snapshot.available and snapshot.enabled):
+    if not snapshot.available:
+        return MEMORY_UNAVAILABLE_PROMPT
+    if not snapshot.enabled:
         return MEMORY_PAUSED_PROMPT
     block = render_memory_block(snapshot)
     rules = MEMORY_WRITE_PROMPT if snapshot.writable else MEMORY_READ_ONLY_PROMPT
@@ -746,10 +816,13 @@ def memory_field():
     vegetarisch" with the opt-in on and nothing saved). A required field turns
     remembering into a decision on every call; ``[]`` is the explicit "nothing".
     """
-    return (list[MemoryChange], Field(max_length=MAX_CHANGES_PER_CALL, description=
+    # No max_length: more than MAX_CHANGES_PER_CALL changes are refused in
+    # MemoryTools.apply, as a memory refusal instead of a rejected comparison.
+    return (list[MemoryChange], Field(description=
         "Required memory decision for the user's latest message. [] when it reveals nothing new and "
         "lasting about the user, which is the usual case. Otherwise the add, update or delete changes "
-        "(as with update_memory), for example a stated diet, home town, job, tools or answer preference."))
+        f"(as with update_memory, at most {MAX_CHANGES_PER_CALL}), for example a stated diet, home town, job, "
+        "tools or answer preference."))
 
 
 class MemoryTools:
@@ -782,34 +855,46 @@ class MemoryTools:
             UpdateMemoryArgs, self.update_memory)]
 
     def _user_messages(self) -> list[str]:
-        return [message["content"] for message in getattr(self.loop, "answer_conversation", [])
-                if message.get("role") == "user" and isinstance(message.get("content"), str)]
+        """The user's own words only: a quoted answer passage is cut off (``user_words``)."""
+        words = (user_words(message["content"]) for message in getattr(self.loop, "answer_conversation", [])
+                 if message.get("role") == "user" and isinstance(message.get("content"), str))
+        return [text for text in words if text.strip()]
 
     def update_memory(self, args, *, cancellation=None):
         return self.apply(args.changes)
 
     def apply(self, changes) -> dict:
-        """Validate and write. Raises ``ValueError`` with a model-readable reason."""
+        """Validate and write. Raises ``MemoryRefused`` (a ``ValueError``) with a model-readable reason.
+
+        Every failure ends here, also a storage error: a memory that cannot be
+        saved must never fail the comparison or the turn it rides on.
+        """
         if not self.writable:
-            raise ValueError("Agent memory updates are switched off for this user.")
+            raise MemoryRefused("auto_memory_off", "Agent memory updates are switched off for this user.")
         changes = list(changes or [])
         if not changes:
             return {"status": "unchanged", "changes": []}
+        if len(changes) > MAX_CHANGES_PER_CALL:
+            raise MemoryRefused("too_many_changes",
+                                f"At most {MAX_CHANGES_PER_CALL} memory changes per call. Nothing was saved.")
         with self.lock:
             if self.proposed + len(changes) > MAX_CHANGES_PER_TURN:
-                raise ValueError(f"At most {MAX_CHANGES_PER_TURN} memory changes per message.")
+                raise MemoryRefused("turn_limit", f"At most {MAX_CHANGES_PER_TURN} memory changes per message.")
             self.proposed += len(changes)
         user_messages = self._user_messages()
         normalized = []
         try:
             for index, change in enumerate(changes):
-                if not evidence_matches(change.evidence, user_messages):
+                if not evidence_matches(getattr(change, "evidence", None) or "", user_messages):
                     raise AgentMemoryError(
                         "evidence_not_found",
                         f"Change {index + 1}: evidence must be an exact quote of the user's own words in this "
                         f"conversation, at least {MIN_EVIDENCE_CHARS} characters or one entire message. "
                         "Nothing was saved.")
-                normalized.append(normalize_change(change, origin="agent"))
+                try:
+                    normalized.append(normalize_change(change, origin="agent"))
+                except AgentMemoryError as exc:
+                    raise AgentMemoryError(exc.code, f"Change {index + 1}: {exc.message} Nothing was saved.") from None
             loop = self.loop
             result = self.repository.apply(
                 loop.uid, normalized, origin="agent",
@@ -817,7 +902,12 @@ class MemoryTools:
                 turn_ref=loop.store._turn_ref(loop.uid, loop.chat_id, loop.turn_id),
                 chat_id=loop.chat_id, turn_id=loop.turn_id)
         except AgentMemoryError as exc:
-            raise ValueError(exc.message) from None
+            raise MemoryRefused(exc.code, exc.message) from None
+        except Exception as exc:
+            # Firestore down, contention, account deletion: only the category
+            # is logged, never memory text or evidence.
+            logging.warning("agent memory write failed category=%s", safe_exception(exc))
+            raise MemoryRefused("unavailable", "Memory could not be saved right now. Nothing was saved.") from None
         changed = [entry for entry in result.get("changes", []) if entry["op"] != "noop"]
         if changed:
             with self.lock:

@@ -491,9 +491,13 @@ class DelegationLoop(AgentLoop):
                 raise AnalysisBudgetExceeded("Shared tool limit reached")
         tool = None
         status = "failed"
+        reason = None
         def publish(status):
             if registry is self.registry and tool:
-                self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, status))
+                # A refused update_memory keeps a content-free reason code
+                # (never the evidence or the memory text) for later audits.
+                extra = {"reason": reason} if reason else {}
+                self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, status, **extra))
         try:
             tool, args = registry.validate(call)
             self._check(cancellation)
@@ -517,10 +521,13 @@ class DelegationLoop(AgentLoop):
                         text=f"{applied} memory change{'s' if applied != 1 else ''} saved." if applied
                         else "Already in memory."))
                 except ValueError as exc:
+                    # MemoryTools.apply turns every failure, also a storage
+                    # error, into a refusal: the comparison always runs.
                     memory_result = {"error": str(exc)[:500]}
                     # Content-free reason in the saved activity: refusals stay diagnosable.
                     self.outgoing.put_nowait(self.tool_event(memory_step, "update_memory", "blocked",
-                                                             text=memory_result["error"]))
+                                                             text=memory_result["error"],
+                                                             reason=getattr(exc, "code", None) or "refused"))
             result = tool.execute(args, cancellation=cancellation)
             if memory_result is not None and isinstance(result, dict):
                 result = {**result, "memory": memory_result}
@@ -531,6 +538,8 @@ class DelegationLoop(AgentLoop):
         except (ValueError, TypeError) as exc:
             # A schema/selection error is safe feedback, not a provider retry.
             result = {"error": str(exc)[:500]}
+            if tool is not None and tool.name == "update_memory":
+                reason = getattr(exc, "code", None) or "invalid_arguments"
         finally:
             publish(status)
         return {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}

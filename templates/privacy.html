@@ -74,11 +74,11 @@
             Settings also holds a list of short <em>saved memories</em> that you can add, edit and delete yourself. Only if you switch on
             &ldquo;Let Agent update memory&rdquo; (off by default) may the Agent model you use add, update or delete saved memories while it answers.
             It may do so only on the basis of statements in your own messages in that chat: each change must quote your words, and our server
-            rejects changes whose quote is not found there, so content from web pages, files, emails or other tool results cannot be saved this way.
+            rejects changes whose quote is not found there (a passage you quote from an earlier answer does not count as your words), so content from web pages, files, emails or other tool results cannot be saved on the strength of its own text.
             Agent is instructed not to keep special-category data unless you explicitly ask it to, and our server rejects text that looks like a
-            password, access key, card or bank account number. Every change is shown under the answer with Undo. For Undo we keep a record of
+            password, access key, card or bank account number. Each change is shown while Agent works on the answer, and Memory settings list every saved memory for review, editing, deletion and Undo. For Undo we keep a record of
             each change with the previous and the new text for at most 30 days (at most the last 50 changes); the chat in which a change was made
-            keeps a short summary of it until that chat is deleted. Saved memories are sent with your profile and note to the models of your runs
+            keeps only a note of which memory was added, changed or deleted (without its text) until that chat is deleted. Saved memories are sent with your profile and note to the models of your runs
             while Memory is on. Switching the option off stops new automatic changes; existing saved memories remain until you delete them.
             Apart from that, only text you enter in Memory settings or explicitly submit through Remember or Correct memory is stored and used. You can
             edit it, pause it with a single switch, or clear it at any time; it is deleted with your account. Scheduled Watch reruns do not receive your Memory profile as a separate input, and published pages do not display it as a profile field. However, generated answers or questions can reflect personal details from Memory; review content before publishing it. Please do not enter special-category data (for example

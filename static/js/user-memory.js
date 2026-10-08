@@ -239,6 +239,8 @@
     }
   }
 
+  // true, wenn `state.saved` danach dem Server entspricht (frisch geladen oder
+  // bewusst aus dem Cache), false bei Fehler, ohne Konto oder stehendem Entwurf.
   async function load(force, options) {
     const user = currentUser();
     if (!user) {
@@ -248,19 +250,19 @@
       writeForm(emptyProfile());
       setStatus("Log in to set up your memory — it lives on your account, not in this browser.", "muted");
       syncControls();
-      return;
+      return false;
     }
     if (state.loaded && state.uid === user.uid && !force) {
       syncControls();
-      return;
+      return true;
     }
     // Remember/Correct/Undo laden nach. Ein ungespeicherter Entwurf bleibt
     // dabei stehen und behaelt seine alte Revision: der naechste Save endet
     // dann ehrlich im Konflikt, statt den KI-Stand still zu ueberschreiben.
     if (options?.keepDraft && state.loaded && state.uid === user.uid && isDirty()) {
-      setStatus("Memory was updated elsewhere. Save to review the conflict, or load the latest version.", "muted");
+      if (!options?.quiet) setStatus("Memory was updated elsewhere. Save to review the conflict, or load the latest version.", "muted");
       syncControls();
-      return;
+      return false;
     }
 
     state.loading = true;
@@ -277,8 +279,10 @@
       writeForm(profile);
       receiveItems(result);
       setStatus("", "");
+      return true;
     } catch (error) {
       setStatus(error.message || "Memory could not be loaded.", "error");
+      return false;
     } finally {
       state.loading = false;
       syncControls();
@@ -379,7 +383,7 @@
     const next = { ...(state.saved || emptyProfile()), auto_memory: wanted };
     const ok = await persist(
       next,
-      wanted ? "Agent can now update your memory. Every change shows under its answer."
+      wanted ? AUTO_ON_MESSAGE
         : "Agent no longer changes your memory. Saved memories stay until you delete them.",
       { rewriteFields: false }
     );
@@ -389,15 +393,23 @@
     if (ok) window.App?.agentMemory?.dismissNudge?.();
   }
 
-  // The hint under an Agent answer (agent-memory.js): "Use my memory" and
-  // "Let Agent update memory" in one step, without touching the text fields.
+  // Die Zusage muss stimmen: der Hinweis unter der Antwort verschwindet mit dem
+  // Ende des Laufs (agent-memory.js), nachpruefen und rueckgaengig machen geht
+  // dauerhaft nur hier in den Einstellungen.
+  const AUTO_ON_MESSAGE = "Agent can now update your memory. Review or undo any change here in Settings › Memory.";
+
+  // The hint under an Agent answer (agent-memory.js): switches on "Let Agent
+  // update memory" without touching the text fields. It never un-pauses: the
+  // hint only appears for memory that is in use, and a pause the user set in
+  // another tab since then must win. Reads fresh first, because a cached
+  // profile from an earlier load could carry an old revision or old switches.
   async function enableAgentMemory() {
     if (!currentUser()) return false;
-    if (!state.loaded) await load();
-    if (!state.loaded) return false;
-    const next = { ...(state.saved || emptyProfile()), enabled: true, auto_memory: true };
-    const ok = await persist(next, "Agent can now update your memory. Every change shows under its answer.",
-      { rewriteFields: false });
+    if (!(await load(true, { keepDraft: true, quiet: true }))) return false;
+    if (state.saved?.enabled === false) return false;
+    if (state.saved?.auto_memory === true) return true;
+    const next = { ...(state.saved || emptyProfile()), auto_memory: true };
+    const ok = await persist(next, AUTO_ON_MESSAGE, { rewriteFields: false });
     if (ok) window.App?.trackAppEvent?.("app_auto_memory_on", { source: "hint" });
     return ok;
   }
@@ -514,7 +526,7 @@
     try {
       const result = await api("POST", { changes, expected_revision: state.itemsRevision ?? 0 }, "/api/my/memory/items");
       state.editingId = null;
-      receiveItems(result);
+      await acceptItems(result);
       setItemsStatus(successMessage, "ok");
       return true;
     } catch (error) {
@@ -562,7 +574,7 @@
     state.itemsBusy = true;
     syncItemControls();
     try {
-      receiveItems(await api("DELETE", null, "/api/my/memory/items"));
+      await acceptItems(await api("DELETE", null, "/api/my/memory/items"));
       setItemsStatus("All saved memories deleted.", "ok");
     } catch (error) {
       setItemsStatus(error.message || "Memory could not be deleted.", "error");
@@ -578,6 +590,13 @@
     } catch (error) {
       setItemsStatus(error.message || "Memory could not be loaded.", "error");
     }
+  }
+
+  // The save went through, but the server could not read the list back
+  // (`items_stale`): it is still a success; fetch the list separately.
+  async function acceptItems(result) {
+    if (result?.items_stale) await reloadItems();
+    else receiveItems(result);
   }
 
   function clearFields() {
@@ -648,8 +667,11 @@
     });
 
     // Die Einstellungen sind ein Modal: laden, wenn es tatsaechlich geoeffnet
-    // wird, statt bei jedem Seitenaufruf einen Firestore-Read zu bezahlen.
-    document.getElementById("editSystemPromptBtn")?.addEventListener("click", () => load());
+    // wird, statt bei jedem Seitenaufruf einen Firestore-Read zu bezahlen --
+    // und dann jedes Mal frisch: ein anderer Tab, der Hinweis unter einer
+    // Antwort oder Agent selbst koennen Schalter und Revision seitdem
+    // geaendert haben. Ein ungespeicherter Entwurf bleibt stehen.
+    document.getElementById("editSystemPromptBtn")?.addEventListener("click", () => load(true, { keepDraft: true, quiet: true }));
 
     writeForm(emptyProfile());
     syncControls();

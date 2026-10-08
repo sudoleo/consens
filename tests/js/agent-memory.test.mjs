@@ -50,6 +50,11 @@ function bootSettings(scripts = ["static/js/user-memory.js"], extraBody = "") {
         const ok = data => ({ ok: true, status: 200, json: async () => data });
         const listing = () => ({ items: server.items, items_revision: server.itemsRevision, limits: { items: 100, item_chars: 300 } });
         if (url === "/api/my/memory/items" && options.method === "POST") {
+          if (server.staleListing) {
+            server.items = [...server.items, { id: "m9f8e7d", text: body.changes[0].text, origin: "user" }];
+            server.itemsRevision += 1;
+            return ok({ status: "success", result: "applied", items_stale: true });
+          }
           if (body.expected_revision !== server.itemsRevision) {
             return { ok: false, status: 409, json: async () => ({ error: { error_code: "revision_conflict", message: "Changed.", revision: server.itemsRevision } }) };
           }
@@ -118,7 +123,8 @@ describe("Settings: Let Agent update memory", () => {
 
 describe("Hint under an Agent answer", () => {
   const ANSWER = '<div><div id="agentAnswerBody"></div></div>';
-  const off = { used: false, auto: false };
+  // The turn's content-free marker: memory readable, in use, opt-in off.
+  const off = { used: false, auto: false, hint: true };
   function boot() {
     const ctx = bootSettings(["static/js/user-memory.js", "static/js/agent-memory.js"], ANSWER);
     ctx.window.App.trackAppEvent = vi.fn();
@@ -134,7 +140,7 @@ describe("Hint under an Agent answer", () => {
     expect(ctx.hint()).toBeNull();
     nudge(ctx.body, { key: "run-2", finished: false, memory: off });
     expect(ctx.hint()).toBeNull();
-    nudge(ctx.body, { key: "run-3", finished: true, memory: { used: true, auto: true } });
+    nudge(ctx.body, { key: "run-3", finished: true, memory: { used: true, auto: true, hint: false } });
     expect(ctx.hint()).toBeNull();
     nudge(ctx.body, { key: "run-4", finished: true, memory: off });
     expect(ctx.hint().textContent).toContain("Agent can remember details you share");
@@ -161,19 +167,86 @@ describe("Hint under an Agent answer", () => {
     ctx.dom.window.close();
   });
 
-  it("Turn on switches on memory and Agent updates in one save, keeping the profile", async () => {
+  it("never shows for paused memory, a failed memory read or older turns without the marker", () => {
     const ctx = boot();
-    ctx.server.profile = { ...ctx.server.profile, enabled: false };
+    const { nudge } = ctx.window.App.agentMemory;
+    ctx.window.localStorage.setItem("consensio.memoryHint.v1", JSON.stringify({ answers: 3, shown: 0, off: false }));
+    // Paused and unreadable memory both have auto === false; neither may get the hint.
+    nudge(ctx.body, { key: "paused", finished: true, memory: { used: false, auto: false, hint: false } });
+    expect(ctx.hint()).toBeNull();
+    nudge(ctx.body, { key: "older-turn", finished: true, memory: { used: false, auto: false } });
+    expect(ctx.hint()).toBeNull();
+    expect(JSON.parse(ctx.window.localStorage.getItem("consensio.memoryHint.v1")).shown).toBe(0);
+    ctx.dom.window.close();
+  });
+
+  it("Turn on reads fresh and switches on only Agent updates, keeping the profile", async () => {
+    const ctx = boot();
+    // Settings were loaded earlier in this page; another tab saved since.
+    await open(ctx);
+    ctx.server.revision = 5;
     ctx.window.localStorage.setItem("consensio.memoryHint.v1", JSON.stringify({ answers: 3, shown: 0, off: false }));
     ctx.window.App.agentMemory.nudge(ctx.body, { key: "run-9", finished: true, memory: off });
+    const before = ctx.server.calls.length;
     [...ctx.hint().querySelectorAll("button")].find(b => b.textContent === "Turn on").click();
     await vi.waitFor(() => expect(ctx.hint().textContent).toMatch(/Memory is on|Could not/));
-    const put = ctx.server.calls.find(call => call.method === "PUT");
-    expect(put.body).toMatchObject({ enabled: true, auto_memory: true, role: "Nurse" });
+    const calls = ctx.server.calls.slice(before);
+    expect(calls.map(call => call.method)).toEqual(["GET", "PUT"]);
+    expect(calls[1].body).toMatchObject({ enabled: true, auto_memory: true, role: "Nurse", expected_revision: 5 });
     expect(ctx.hint().textContent).toContain("Memory is on");
+    expect(ctx.hint().textContent).toContain("Settings › Memory");
+    expect(ctx.hint().textContent).not.toContain("under its answer");
     expect([...ctx.hint().querySelectorAll("button")].map(b => b.textContent)).toEqual(["Manage memory"]);
     expect(JSON.parse(ctx.window.localStorage.getItem("consensio.memoryHint.v1")).off).toBe(true);
     expect(ctx.window.App.trackAppEvent).toHaveBeenCalledWith("app_auto_memory_on", { source: "hint" });
+    ctx.dom.window.close();
+  });
+
+  it("Turn on never un-pauses memory that was paused in the meantime", async () => {
+    const ctx = boot();
+    ctx.server.profile = { ...ctx.server.profile, enabled: false };
+    ctx.window.localStorage.setItem("consensio.memoryHint.v1", JSON.stringify({ answers: 3, shown: 0, off: false }));
+    ctx.window.App.agentMemory.nudge(ctx.body, { key: "run-10", finished: true, memory: off });
+    [...ctx.hint().querySelectorAll("button")].find(b => b.textContent === "Turn on").click();
+    await vi.waitFor(() => expect(ctx.hint().textContent).toContain("Could not turn it on"));
+    expect(ctx.server.calls.some(call => call.method === "PUT")).toBe(false);
+    ctx.dom.window.close();
+  });
+});
+
+describe("Settings: fresh state", () => {
+  it("reads memory again on every open, so switches from another tab never go stale", async () => {
+    const ctx = bootSettings();
+    await open(ctx);
+    expect(ctx.document.getElementById("memoryAutoSwitch").checked).toBe(false);
+    ctx.server.profile = { ...ctx.server.profile, auto_memory: true };
+    ctx.server.revision = 4;
+    await open(ctx);
+    expect(ctx.server.calls.filter(call => call.method === "GET")).toHaveLength(2);
+    expect(ctx.document.getElementById("memoryAutoSwitch").checked).toBe(true);
+    ctx.dom.window.close();
+  });
+
+  it("keeps an unsaved draft when the settings open again", async () => {
+    const ctx = bootSettings();
+    await open(ctx);
+    ctx.document.getElementById("memoryRoleInput").value = "Half-typed draft";
+    ctx.server.profile = { ...ctx.server.profile, role: "Changed elsewhere" };
+    await open(ctx);
+    expect(ctx.document.getElementById("memoryRoleInput").value).toBe("Half-typed draft");
+    ctx.dom.window.close();
+  });
+
+  it("reports a save as done and reloads the list when only the server's re-read failed", async () => {
+    const ctx = bootSettings();
+    await open(ctx);
+    ctx.server.staleListing = true;
+    ctx.document.getElementById("memoryItemInput").value = "Lives in Munich.";
+    ctx.document.getElementById("memoryItemAddForm").dispatchEvent(new ctx.window.Event("submit", { cancelable: true }));
+    await settle();
+    await vi.waitFor(() => expect(ctx.document.getElementById("memoryItemsStatus").dataset.tone).toBe("ok"));
+    expect(ctx.server.calls.at(-1).method).toBe("GET");
+    expect(ctx.document.getElementById("memoryItemsList").textContent).toContain("Lives in Munich.");
     ctx.dom.window.close();
   });
 });
@@ -285,6 +358,19 @@ describe("Memory updated under an answer", () => {
     w.App.agentMemory.render(body, { key: "turn", changes: [
       { change_id: CHANGE, op: "add", item_id: "m4d5e6f", text: "Has a dog.", undone: false }] });
     expect(body.nextElementSibling).toBeNull();
+    dom.window.close();
+  });
+
+  it("shows texts from live events; a saved turn carries none and shows nothing", () => {
+    const { window: w, document: d, dom } = bootNote();
+    const body = d.getElementById("answer");
+    const live = w.App.agentMemory.receive([], { changes: [{ change_id: CHANGE, op: "add", item_id: "m1a2b3c", text: "Likes tea." }] });
+    w.App.agentMemory.render(body, { key: "turn", running: true, changes: live });
+    expect(body.nextElementSibling.textContent).toContain("Saved: Likes tea.");
+    // The stored turn summary has no text (privacy); it never renders a line.
+    w.App.agentMemory.render(d.getElementById("answer"), { key: "other", running: true,
+      changes: [{ change_id: CHANGE, op: "add", item_id: "m1a2b3c", undone: false }] });
+    expect(body.nextElementSibling.querySelectorAll("li")).toHaveLength(0);
     dom.window.close();
   });
 
