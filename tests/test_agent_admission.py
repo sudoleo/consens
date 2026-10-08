@@ -103,8 +103,11 @@ def test_search_does_not_reserve_its_results_before_the_search(store):
         def stream(self, **kwargs):
             observed.append(kwargs["native_searches"])
             yield from super().stream(**kwargs)
+    from app.services.llm.agent_client import ROUTING_REASONING_HEADROOM
     loop = chat_loop(store, Capture)
-    quota(store, 45000)
+    # Fits one round only because its results are not reserved up front; the
+    # routing reasoning headroom is reserved for both generations of the round.
+    quota(store, 45000 + 2 * ROUTING_REASONING_HEADROOM)
     list(loop.run())
     assert observed == [1]
 
@@ -244,6 +247,10 @@ def test_server_search_final_answer_resumes_consensus_without_repeating_search(s
                 self.finish_reason = 'tool_calls'
                 return
             yield from super().stream(model=model, messages=messages, **kwargs)
+    from app.services import agent_budget_config
+    # Three research rounds with the routing reasoning headroom need more than
+    # the 250,000 test tokens (the free tier has 660,000).
+    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": 660_000})
     loop = make_loop(store, script)
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Researched

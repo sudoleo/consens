@@ -118,41 +118,93 @@ ANSWER_OUTPUT_FALLBACK = 32_768
 # all 32,768 tokens; at "high" all 8,000 in a probe). So a reasoning answer
 # step gets this much room on top of its text allowance.
 ANSWER_REASONING_HEADROOM = 32_768
-# Lightest reasoning for the one retry after a thought-only answer step.
+# Routing steps (plan, phrase the comparison, call a tool) have the same
+# problem on a smaller scale: in prod (2026-10-07) both Sonnet 5.5 "max" runs
+# used 3,808 and 3,998 of AGENT_MAX_OUTPUT_TOKENS (4,096) in their first step,
+# thinking and tool call together. Three times the text allowance on top
+# (16,384 in all by default) gives that thinking about four times its room,
+# while a routing reservation (multiplied per search round) stays well below
+# the answer step's 65,536.
+ROUTING_REASONING_HEADROOM = 12_288
+# Reasoning for the one retry after a thought-only step, in this order. "low"
+# comes first on purpose, not the lightest level: live 2026-10-08 a forced
+# retry of Sonnet 5.5 at "low" answered in 15 s with the answer's quality
+# intact. "minimal"/"none" only where a model offers nothing in between.
 RETRY_EFFORTS = ("low", "minimal", "none")
+# Characters of visible reasoning one step keeps in its stored activity.
+# Beyond that, deltas still stream for live progress but are not stored.
+REASONING_STORAGE_CHARS = 32_000
 # Visible text one model call may keep (the saved turn and review are bounded).
 # Longer output is cut here and finishes as "length", like a token limit, so a
 # long answer is kept as truncated instead of failing the whole step.
 TEXT_STORAGE_CHARS = 100_000
 
 
+def _metadata(model):
+    try:
+        return agent_model_metadata.snapshot().get(model.model) or {}
+    except Exception:
+        return {}
+
+
+def reasoning_active(model, metadata=None):
+    """Whether a request of this model really reasons (and needs headroom).
+
+    Off when the catalog knows no reasoning, the effort is "none", the
+    registry switches it off (Kimi K2.6: ``enabled: false``), or the model
+    reasons only on request and none is made (Grok 4.20 "No reasoning")."""
+    metadata = _metadata(model) if metadata is None else metadata
+    catalog = metadata.get("reasoning")
+    if not catalog:
+        return False
+    reasoning = model.request_config.get("reasoning") or {}
+    if reasoning.get("effort") == "none" or reasoning.get("enabled") is False:
+        return False
+    if reasoning.get("effort") or reasoning.get("enabled") is True or reasoning.get("max_tokens"):
+        return True
+    return catalog.get("default_enabled") is not False
+
+
 def answer_output_limit(model):
     """Completion allowance of the chat model's dedicated answer step."""
-    try:
-        metadata = agent_model_metadata.snapshot().get(model.model) or {}
-    except Exception:
-        metadata = {}
+    metadata = _metadata(model)
     limit = int((metadata.get("top_provider") or {}).get("max_completion_tokens") or ANSWER_OUTPUT_FALLBACK)
     allowance = ANSWER_OUTPUT_CEILING
-    if metadata.get("reasoning") and (model.request_config.get("reasoning") or {}).get("effort") != "none":
+    if reasoning_active(model, metadata):
         allowance += ANSWER_REASONING_HEADROOM
     return max(model.max_output_tokens, min(limit, allowance))
 
 
-def lighter_reasoning(model):
-    """The model at its lightest reasoning, or None when that changes nothing.
+def routing_output_limit(model):
+    """Completion allowance of an orchestrator routing step.
 
-    For the single retry after an answer step that only reasoned: the
-    comparison answers are already paid for, so the user still gets an answer."""
-    try:
-        metadata = agent_model_metadata.snapshot().get(model.model) or {}
-    except Exception:
-        metadata = {}
+    The configured text allowance (AGENT_MAX_OUTPUT_TOKENS), plus
+    ROUTING_REASONING_HEADROOM while the model reasons, bounded by the
+    model's own completion limit."""
+    metadata = _metadata(model)
+    if not reasoning_active(model, metadata):
+        return model.max_output_tokens
+    allowance = model.max_output_tokens + ROUTING_REASONING_HEADROOM
+    limit = int((metadata.get("top_provider") or {}).get("max_completion_tokens") or allowance)
+    return max(model.max_output_tokens, min(limit, allowance))
+
+
+def lighter_reasoning(model):
+    """The model at a lighter reasoning level, or None when none is lighter.
+
+    For the single retry after a step that only reasoned: the comparison
+    answers are already paid for, so the user still gets an answer.
+    RETRY_EFFORTS tries "low" first, then "minimal" and "none"; a level at or
+    above the current one is never a retry."""
+    metadata = _metadata(model)
     if not metadata.get("reasoning"):
         return None
     choices = _choices(model, metadata)
-    effort = next((effort for effort in RETRY_EFFORTS if effort in choices), None)
-    if effort is None or effort == (model.request_config.get("reasoning") or {}).get("effort"):
+    current = (model.request_config.get("reasoning") or {}).get("effort")
+    ceiling = _EFFORTS.index(current) if current in _EFFORTS else len(_EFFORTS)
+    effort = next((effort for effort in RETRY_EFFORTS
+                   if effort in choices and _EFFORTS.index(effort) < ceiling), None)
+    if effort is None:
         return None
     return _resolve_effort(model, metadata, effort)
 _EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
@@ -397,6 +449,24 @@ class AgentCompletion:
         self.tool_call_limit = 1
         self._reasoning_parts = []
         self._reasoning_text = ""
+        # Set when the step ended as ModelOutputLimit (see _output_limited).
+        self.output_limited = False
+
+    def _output_limited(self):
+        """The step ended without a usable answer or tool call after reasoning.
+
+        At the token limit: nothing written, or a tool call cut off before it
+        completed. A model that reasoned and then ended without any text or
+        tool call (``stop`` or no finish reason at all) counts the same way:
+        the same request would end the same way again."""
+        if self.finish_reason == "tool_calls":
+            return False
+        if self.finish_reason in {"length", "max_tokens"}:
+            return bool(self._tool_parts) or not self.text.strip()
+        reasoned = bool(self.reasoning_chars or self._reasoning_parts or self._reasoning_text
+                        or ((self.usage or {}).get("reasoning_tokens") or 0) > 0)
+        return (self.finish_reason in {"stop", ""} and reasoned
+                and not self._tool_parts and not self.text.strip())
 
     def record_rejection(self, error, model):
         # An HTTP admission rejection never opened an SSE generation, and a
@@ -486,16 +556,24 @@ class AgentCompletion:
             if kind not in {"reasoning.text", "reasoning.summary"} or not isinstance(text, str) or not text:
                 # Encrypted reasoning is not display text and is never persisted.
                 continue
-            available = max(0, 32_000 - self.reasoning_chars)
-            self.reasoning_truncated |= len(text) > available
-            text = text[:available]
-            if not text:
-                continue
-            self.reasoning_chars += len(text)
             block_id = str(detail.get("index", index))[:40]
-            event = self.event("reasoning", f"{kind}:{block_id}", format=kind.split(".")[1], text=text, append=True)
-            if event:
-                yield event
+            event_id, form = f"{kind}:{block_id}", kind.split(".")[1]
+            available = max(0, REASONING_STORAGE_CHARS - self.reasoning_chars)
+            self.reasoning_truncated |= len(text) > available
+            stored, rest = text[:available], text[available:]
+            event = None
+            if stored:
+                self.reasoning_chars += len(stored)
+                event = self.event("reasoning", event_id, format=form, text=stored, append=True)
+                if event:
+                    yield event
+            unstored = rest if event else text
+            if unstored:
+                # Past the stored bound the model keeps thinking, at "max"
+                # for minutes: live progress still sees every delta, nothing
+                # more is stored (``transient``, never in ``self.activity``).
+                yield {"type": "activity", "version": 1, "step_id": self.step_id, "kind": "reasoning",
+                       "id": event_id, "format": form, "text": unstored, "append": True, "transient": True}
 
     def _tool_delta(self, raw):
         if not isinstance(raw, list) or len(raw) > self.tool_call_limit:
@@ -673,10 +751,11 @@ class AgentCompletion:
                     self.tool_calls = [self._tool_parts[i] for i in sorted(self._tool_parts)]
                     if not self.tool_calls or any(not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", call["id"]) for call in self.tool_calls):
                         raise ValueError("Invalid completed tool call")
-                elif (not self._tool_parts and self.finish_reason in {"length", "max_tokens"}
-                      and not self.text.strip()):
-                    # The whole allowance went into reasoning. Not a provider
-                    # fault: the same request would fail the same way again.
+                elif self._output_limited():
+                    # The whole allowance went into reasoning, or into reasoning
+                    # and a tool call cut in half. Not a provider fault: the
+                    # same request would end the same way again.
+                    self.output_limited = True
                     raise ModelOutputLimit()
                 elif self._tool_parts or self.finish_reason not in {"stop", "length"} or not self.text.strip():
                     raise RuntimeError("Agent stream ended without a completed answer")

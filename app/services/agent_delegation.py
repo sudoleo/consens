@@ -21,9 +21,15 @@ from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
 from app.services.agent_policy import supports_delegation
-from app.services.agent_provider_limits import AgentRunInterrupted, ModelOutputLimit, agent_failure, provider_cooldowns
+from app.services.agent_provider_limits import (
+    TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelOutputLimit, agent_failure, provider_cooldowns,
+)
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
-from app.services.llm.agent_client import AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, resolve_agent_model
+from app.services.llm.agent_client import (
+    AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, reasoning_active, resolve_agent_model,
+    routing_output_limit,
+)
+from app.services.llm import agent_model_metadata
 from app.services.llm.provider_runtime import (
     AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled,
     bind_analysis_budget, bind_provider_cancellation,
@@ -45,6 +51,22 @@ GOOGLE_NO_SEARCH = ("\nWeb search is unavailable in this chat because it contain
 # the whole account: the wrap-up after turn_seconds gets this much extra time
 # for synthesis and judges, then the run stops hard (also mid-step).
 TURN_WRAP_UP_SECONDS = 300
+# Time the answer step and its checks still need after the comparisons, by the
+# chat model's reasoning effort. Live 2026-10-08: Sonnet 5.5 wrote its answer
+# in ~300 s at "max" (38-40k reasoning tokens) and in 15 s at "low"; the judges
+# add about a minute, a thought-only retry a little more. Generous on purpose:
+# running out ends a turn with paid comparisons but no answer. Waiting for
+# stragglers ("Answer start: all") and further routing stop this long before
+# the hard stop (answer_time_left).
+ANSWER_RESERVE_SECONDS = {"none": 120, "minimal": 120, "low": 150, "medium": 240,
+                          "high": 360, "xhigh": 480, "max": 600}
+# One retry of a rate-limited answer step (HTTP 429, nothing billed; OpenAI
+# under ZDR is 429-prone): after Retry-After, or this pause without one. A
+# provider asking for longer than the cap is not retried, nor is a turn with
+# less than RATE_LIMIT_RETRY_MIN_TURN_SECONDS left before its hard stop.
+RATE_LIMIT_RETRY_SECONDS = 3
+RATE_LIMIT_RETRY_MAX_SECONDS = 10
+RATE_LIMIT_RETRY_MIN_TURN_SECONDS = 60
 # Pace of the reasoning excerpts the answer step shows while it thinks.
 THINKING_UPDATE_SECONDS = 3
 # Polling has no arguments that change; repeating it is waiting, not looping.
@@ -63,8 +85,19 @@ def smaller_search(searches):
 
 
 def _thought_only(value):
-    """The answer step ended at its token limit before writing any text."""
-    return value.finish_reason in {"length", "max_tokens"} and not value.text.strip() and not value.tool_calls
+    """The step reasoned through its allowance without a usable result.
+
+    No text and no tool call at the token limit, or what the client marked
+    as such (AgentCompletion._output_limited: a tool call cut in half, or a
+    reasoning model that stopped without writing anything)."""
+    return bool(getattr(value, "output_limited", False)) or (
+        value.finish_reason in {"length", "max_tokens"} and not value.text.strip() and not value.tool_calls)
+
+
+def _free_rate_limit(error, value):
+    """A 429 the provider answered before generating anything: nothing billed."""
+    return (getattr(error, "status_code", None) == 429 and not value.text
+            and (value.usage or {}).get("source") == "provider_rejection")
 
 
 class StrictArgs(BaseModel):
@@ -168,6 +201,9 @@ class DelegationLoop(AgentLoop):
         self.clock = time.monotonic
         self.turn_started = self.clock()
         self.routing_steps = 0
+        # Set once a routing step reasoned through its allowance: later routing
+        # steps of this turn use that lighter level; the answer keeps the chosen one.
+        self.routing_lighter = None
         self.identical_calls = {}
         self.models = {model.selection_id: resolve_agent_model(model.selection_id)
                        for model, _ in agent_models() if supports_delegation(resolve_agent_model(model.selection_id))
@@ -271,12 +307,39 @@ class DelegationLoop(AgentLoop):
     def _turn_elapsed(self):
         return self.clock() - self.turn_started
 
+    def _hard_stop_left(self):
+        """Seconds until the turn's hard stop in _check, or None without one."""
+        if not (self.policy.account_budget_only and self.policy.turn_seconds):
+            return None
+        return self.policy.turn_seconds + TURN_WRAP_UP_SECONDS - self._turn_elapsed()
+
+    def _answer_reserve(self):
+        """ANSWER_RESERVE_SECONDS for the chat model's effective reasoning."""
+        try:
+            metadata = agent_model_metadata.snapshot().get(self.model.model) or {}
+        except Exception:
+            metadata = {}
+        effort = "none"
+        if reasoning_active(self.model, metadata):
+            effort = ((self.model.request_config.get("reasoning") or {}).get("effort")
+                      or (metadata.get("reasoning") or {}).get("default_effort") or "high")
+        return ANSWER_RESERVE_SECONDS.get(effort, ANSWER_RESERVE_SECONDS["high"])
+
+    def answer_time_left(self):
+        """Seconds before the answer step must start to finish ahead of the
+        hard stop, or None for runs without one (bounded runs)."""
+        left = self._hard_stop_left()
+        return None if left is None else left - self._answer_reserve()
+
     def _turn_limit(self):
         """Soft per-turn limit before the next orchestrator step, if reached."""
         policy = self.policy
         if not policy.account_budget_only:
             return None
-        if policy.turn_seconds and self._turn_elapsed() >= policy.turn_seconds:
+        if policy.turn_seconds and (self._turn_elapsed() >= policy.turn_seconds or self.answer_time_left() <= 0):
+            # Also when the answer at the chosen reasoning level would no
+            # longer fit before the hard stop (TURN_WRAP_UP_SECONDS is less
+            # than a "max" answer step and its checks need).
             return TURN_TIME_LIMIT
         if policy.turn_steps and self.routing_steps >= policy.turn_steps:
             return TURN_STEP_LIMIT
@@ -632,7 +695,13 @@ class DelegationLoop(AgentLoop):
                     "Use existing evidence, state uncertainty, and do not imply new web research."}
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
-              answer_step=False, search_rounds=1):
+              answer_step=False, search_rounds=1, retry_rate_limit=False, check_cooldown=True):
+        """One claimed, metered model call.
+
+        ``retry_rate_limit``: a free 429 (_free_rate_limit) returns the settled
+        step with ``value.rate_limited`` instead of raising, so the caller can
+        claim its one retry. ``check_cooldown=False`` is that retry, after its
+        wait (the 429 itself set the process cooldown)."""
         self._check(cancellation)
         if (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data"):
             from app.services.google_connections import restricted_model, GoogleError
@@ -649,7 +718,8 @@ class DelegationLoop(AgentLoop):
         publish_text = not worker and (not self.comparison or (answer_step and not self.comparison.text))
         if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
             raise AnalysisBudgetExceeded("Agent session context limit reached")
-        self.cooldowns.check(model, self.api_key)
+        if check_cooldown:
+            self.cooldowns.check(model, self.api_key)
         with self.condition:
             if not self.policy.account_budget_only and worker and self.costs.calls >= self.policy.max_calls - 2:
                 raise AnalysisBudgetExceeded("Remaining calls are reserved for the orchestrator")
@@ -772,11 +842,14 @@ class DelegationLoop(AgentLoop):
                             if event:
                                 yield event
                 except ModelOutputLimit:
-                    # A thought-only answer is a completed, paid step without
-                    # text; _write_synthesis decides on its one retry. A failed
-                    # step would also block the next step's claim.
-                    if not answer_step:
+                    # A thought-only orchestrator step (answer or routing) is a
+                    # completed, paid step without a result; _write_synthesis
+                    # and run() decide on its one retry. A failed step would
+                    # also block the next step's claim. Workers and comparison
+                    # answers report it as their failure.
+                    if worker:
                         raise
+                    value.output_limited = True
                 finally:
                     source.close()
             self._check(cancellation)
@@ -789,7 +862,13 @@ class DelegationLoop(AgentLoop):
         except Exception as exc:
             value.record_rejection(exc, model)
             self.cooldowns.record(model, self.api_key, exc)
-            raise
+            if not (retry_rate_limit and claimed and _free_rate_limit(exc, value)):
+                raise
+            # Refused before writing anything, settled at zero cost like a
+            # finished step without text, so that the one retry can claim
+            # the next step (a failed step would block that claim).
+            value.rate_limited = exc
+            status = "succeeded"
         finally:
             if worker is not None:
                 worker.partial_text = value.text or ""
@@ -1037,31 +1116,92 @@ class DelegationLoop(AgentLoop):
         # (minutes at high effort). It never enters the context, because the
         # tool-free answer step keeps no continuation data (_preserve_reasoning).
         model = replace(self.model, max_output_tokens=answer_output_limit(self.model))
-        value = yield from self._step(model, messages, f"completion:{index}", ToolRegistry(),
-                                      self.cancellation, searches_enabled=False, answer_step=True)
+        value = yield from self._answer_attempt(model, messages, index, steps)
         if _thought_only(value):
             # The model spent the whole allowance on reasoning. The same request
-            # would fail again; one retry with the lightest reasoning still turns
-            # the paid comparisons into an answer.
+            # would fail again; one retry with lighter reasoning (RETRY_EFFORTS,
+            # "low" first) still turns the paid comparisons into an answer.
             lighter = lighter_reasoning(model)
             index = next(steps, None) if lighter else None
             if index is None:
-                raise ModelOutputLimit()
+                raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
             logging.warning("Agent answer step reasoned through its allowance model=%s effort=%s retry_effort=%s",
                             model.model, model.reasoning_effort, lighter.reasoning_effort)
             yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
                                  "text": "The model used its whole output allowance on reasoning before writing. "
                                          "Writing the answer again with lighter reasoning."})
-            value = yield from self._step(lighter, messages, f"completion:{index}", ToolRegistry(),
-                                          self.cancellation, searches_enabled=False, answer_step=True)
+            value = yield from self._answer_attempt(lighter, messages, index, steps)
             if _thought_only(value):
-                raise ModelOutputLimit()
+                raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
         if value.finish_reason in {"length", "max_tokens"}:
             raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
         if value.finish_reason != "stop" or value.tool_calls or not value.text.strip():
             raise ValueError("The model did not complete the answer before review.")
         self.comparison.capture(value.text)
         return value
+
+    def _routing_model(self):
+        """The chat model for a routing step: reasoning headroom on top of
+        its text allowance (routing_output_limit), at the lighter level once
+        a routing step of this turn reasoned through its allowance."""
+        model = self.routing_lighter or self.model
+        return replace(model, max_output_tokens=routing_output_limit(model))
+
+    def _answer_attempt(self, model, messages, index, steps):
+        """One answer step; a rate-limited start waits briefly and tries once more.
+
+        The comparisons are already paid, a 429 before any output is free
+        (_free_rate_limit), and OpenAI under ZDR is 429-prone. The retry waits
+        for Retry-After (RATE_LIMIT_RETRY_SECONDS without one) and is skipped
+        when the provider asks for longer than RATE_LIMIT_RETRY_MAX_SECONDS
+        or the turn's hard stop is near. A second 429 ends the turn as before."""
+        step = f"completion:{index}"
+        try:
+            value = yield from self._step(model, messages, step, ToolRegistry(), self.cancellation,
+                                          searches_enabled=False, answer_step=True, retry_rate_limit=True)
+        except AgentProviderCooldown as exc:
+            # The process gate refused before any claim: the step index is still free.
+            delay = self._rate_limit_delay(exc.retry_after)
+            if delay is None:
+                raise
+            cause = exc
+        else:
+            cause = getattr(value, "rate_limited", None)
+            if cause is None:
+                return value
+            delay = self._rate_limit_delay(getattr(cause, "retry_after", None))
+            index = next(steps, None) if delay is not None else None
+            if index is None:
+                raise cause
+            step = f"completion:{index}"
+        logging.warning("Agent answer step rate limited model=%s retry_in=%s", model.model, delay)
+        yield self.activity({"step_id": step, "id": "rate_limit", "kind": "progress",
+                             "text": "The model's provider is busy right now. Trying again in a few seconds."})
+        yield from self._pause(delay)
+        return (yield from self._step(model, messages, step, ToolRegistry(), self.cancellation,
+                                      searches_enabled=False, answer_step=True, check_cooldown=False))
+
+    def _rate_limit_delay(self, retry_after):
+        """Seconds to wait before the one answer retry, or None for no retry."""
+        if type(retry_after) in (int, float) and retry_after > RATE_LIMIT_RETRY_MAX_SECONDS:
+            return None
+        delay = retry_after if type(retry_after) in (int, float) and retry_after >= 0 else RATE_LIMIT_RETRY_SECONDS
+        left = self._hard_stop_left()
+        if left is not None and left < delay + RATE_LIMIT_RETRY_MIN_TURN_SECONDS:
+            return None
+        return delay
+
+    def _pause(self, seconds):
+        """Wait without blocking a stop; queued events keep flowing."""
+        end = time.monotonic() + seconds
+        while True:
+            self._check()
+            left = end - time.monotonic()
+            if left <= 0:
+                return
+            with self.condition:
+                self.condition.wait(min(.2, left))
+            yield from self._events()
 
     def _answer_ready(self, value, last_accepted):
         """The last comparison needs no routing round before the answer.
@@ -1133,9 +1273,31 @@ class DelegationLoop(AgentLoop):
                     # Before a comparison the orchestrator may research to
                     # understand the question: several rounds, once.
                     research = bool(self.comparison and not self.comparison.comparisons)
-                    value = yield from self._step(self.model, self.messages, f"completion:{index}", self.registry, self.cancellation,
-                        searches_enabled=not (self.search_handoff and research),
-                        search_rounds=ORCHESTRATOR_SEARCH_ROUNDS if research else 1)
+                    search = {"searches_enabled": not (self.search_handoff and research),
+                              "search_rounds": ORCHESTRATOR_SEARCH_ROUNDS if research else 1}
+                    routing = self._routing_model()
+                    value = yield from self._step(routing, self.messages, f"completion:{index}", self.registry,
+                                                  self.cancellation, **search)
+                    if _thought_only(value):
+                        # Reasoned through the routing allowance without a
+                        # complete tool call (prod: Sonnet "max"). One retry with
+                        # lighter reasoning, kept for this turn's later routing
+                        # steps; the answer step keeps the chosen level.
+                        lighter = lighter_reasoning(self.routing_lighter or self.model)
+                        index = next(steps, None) if lighter else None
+                        if index is None:
+                            raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
+                        logging.warning("Agent routing step reasoned through its allowance model=%s effort=%s retry_effort=%s",
+                                        routing.model, routing.reasoning_effort, lighter.reasoning_effort)
+                        yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
+                                             "text": "The model used its whole output allowance on reasoning before choosing "
+                                                     "its next step. Trying again with lighter reasoning."})
+                        self.routing_lighter = lighter
+                        self.routing_steps += 1
+                        value = yield from self._step(self._routing_model(), self.messages, f"completion:{index}",
+                                                      self.registry, self.cancellation, **search)
+                        if _thought_only(value):
+                            raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
                     if value.finish_reason in {"length", "max_tokens"}:
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     self.messages.append(value.assistant_message())

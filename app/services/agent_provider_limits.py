@@ -50,9 +50,18 @@ provider_cooldowns = ProviderCooldowns()
 
 
 class ModelOutputLimit(RuntimeError):
-    """The model used its whole output allowance before any usable answer."""
-    def __init__(self):
-        super().__init__("This model used its whole output allowance before it finished an answer.")
+    """The model used its whole output allowance before any usable answer.
+
+    A turn that ends this way says what to do instead (TURN_OUTPUT_LIMIT); a
+    comparison answer keeps the plain cause (COMPARISON_FAILURES)."""
+    def __init__(self, message=None):
+        super().__init__(message or "This model used its whole output allowance before it finished an answer.")
+
+
+# The chat model reasoned through its allowance, also on its lighter retry:
+# the user can change the reasoning level, the app cannot do more by itself.
+TURN_OUTPUT_LIMIT = ("The chat model used its whole output allowance on reasoning before it could finish. "
+                     "Choose a lower reasoning level or another chat model and send the message again.")
 
 
 class AgentRunInterrupted(RuntimeError):

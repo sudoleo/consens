@@ -2463,7 +2463,12 @@ Threads (`compare_slots`, je Aufruf eine `ComparisonCancellation`) und wartet nu
 bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`);
 Standard ist seit 2026-10-07 `all` (jedes Modell, auch bei `quick`), weil eine
 späte Antwort nicht mehr in die Prüfung kommt; `balanced` wartet nur bei `full`
-auf alle.
+auf alle. Seit 2026-10-08 endet jedes Warten mit mindestens zwei Antworten,
+sobald `DelegationLoop.answer_time_left()` ≤ 0 ist: Zeit bis zum harten Stopp
+minus `ANSWER_RESERVE_SECONDS` nach Denkstufe des Chatmodells (none 120 s … max
+600 s); Nachzügler werden dann wie beim Quorum spät/`late_cutoff`. Dieselbe
+Reserve zieht `_turn_limit` vor (Wrap-up, bevor eine „max“-Antwort nicht mehr
+vor den harten Stopp passt).
 `_rebuild` normalisiert Quellen wie zuvor `fan_out_provider_answers` (das der
 Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
 `late`. `judge()` prüft seit 2026-10-07 nur Antworten ohne `late`.
@@ -2505,14 +2510,39 @@ Schreibschritt und `_finish_review`. Der Schreibschritt nutzt
 `answer_output_limit` (Completion-Grenze des Chatmodells; denkende Modelle
 bekommen seit 2026-10-07 `ANSWER_REASONING_HEADROOM` obendrauf, weil Reasoning
 im selben Budget zählt und adaptives Denken bei Claude weder Effort noch
-`reasoning.max_tokens` einhält). Endet der Schreibschritt mit `length` ohne
-jeden Text (`_thought_only`), wirft `AgentCompletion.stream` `ModelOutputLimit`
-(Code `output_limit`, nicht mehr `provider_error`); `_step` wertet das im
-Schreibschritt als erledigten, bezahlten Schritt, und `_write_synthesis`
-schreibt die Antwort genau einmal neu mit `lighter_reasoning` (leichteste
-erlaubte Stufe: low → minimal → none, Fortschrittszeile `completion:N/retry`).
+`reasoning.max_tokens` einhält). Seit 2026-10-08 entscheidet
+`agent_client.reasoning_active` über den Zuschlag: kein Headroom bei Effort
+`none`, `reasoning.enabled=false` (Kimi K2.6) oder Modellen, die nur auf
+Anfrage denken (`default_enabled=false`, Grok 4.20 „No reasoning“), sonst
+verdoppelten Reservierung und Stop-Schätzung (`unknown_estimate`) sich grundlos.
+Endet ein Orchestrator-Schritt ohne verwertbares Ergebnis (`_output_limited`:
+`length` ohne Text, `length` mit halb geschriebenem Toolcall, oder nach Reasoning
+`stop`/kein finish_reason ohne Text und Toolcall), wirft `AgentCompletion.stream`
+`ModelOutputLimit` und setzt `output_limited` (Code `output_limit`, nicht mehr
+`provider_error`); `_step` wertet das für Orchestrator-Schritte (Antwort und
+Routing, nicht Worker/Vergleichsantworten) als erledigten, bezahlten Schritt
+(`_thought_only`), damit der nächste Claim nicht an einem fehlgeschlagenen
+Vorgänger scheitert. `_write_synthesis` schreibt die Antwort genau einmal neu mit
+`lighter_reasoning` (`RETRY_EFFORTS`: bewusst zuerst `low`, dann minimal → none,
+nie eine Stufe über der aktuellen; Fortschrittszeile `completion:N/retry`).
 Ohne leichtere Stufe oder bei erneutem Leerlauf endet der Turn mit
-`output_limit`. `_admit_chat_step`
+`output_limit` und `TURN_OUTPUT_LIMIT` (Rat: niedrigere Denkstufe oder anderes
+Chatmodell). **Routing-Schritte** (seit 2026-10-08) laufen über
+`DelegationLoop._routing_model` mit `routing_output_limit`
+(`AGENT_MAX_OUTPUT_TOKENS` + `ROUTING_REASONING_HEADROOM` = 16.384, Prod: Sonnet
+„max“ brauchte 3.808/3.998 von 4.096 im ersten Schritt; die Reservierung wächst je
+Suchrunde mit). Ein ausgedachter Routing-Schritt wird genau einmal mit
+`lighter_reasoning` unter eigenem `completion:N` wiederholt; die leichtere Stufe
+bleibt für weitere Routing-Schritte des Turns (`routing_lighter`), der
+Antwortschritt behält die gewählte. **429 im Antwortschritt:**
+`_answer_attempt` wiederholt einen kostenlosen 429 (`_free_rate_limit`:
+HTTP-Ablehnung, `provider_rejection`, kein Text; `_step(retry_rate_limit=True)`
+settled ihn als erledigten Nullschritt) oder eine kurze Prozess-Sperre
+(`AgentProviderCooldown`, dann ohne Claim auf demselben Index) genau einmal nach
+Retry-After bzw. `RATE_LIMIT_RETRY_SECONDS` (3 s), nur bis
+`RATE_LIMIT_RETRY_MAX_SECONDS` (10 s) und mit mindestens 60 s bis zum harten
+Stopp; `_pause` bleibt abbrechbar, der Retry umgeht die selbst gesetzte Sperre
+(`check_cooldown=False`). `_admit_chat_step`
 kürzt für Vergleichsantworten und Antwortschritt bei Konkurrenz die Output-Grenze
 (`clamp_floor`), statt zu warten. Die Judges indexieren im Chat bis zu
 `CHAT_MAX_CONSENSUS_SENTENCES` Sätze; `_run_coverage_windows` teilt Coverage in
@@ -2565,7 +2595,10 @@ streamt der Schreibschritt sein Reasoning wieder (vorher `reasoning.exclude=true
 minutenlanges stilles Denken wirkte wie ein hängender Lauf. `_step` verdichtet es
 mit `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)` zu
 kurzen wörtlichen Auszügen in EINER Fortschrittszeile `completion:N/thinking`
-(kind `progress`, alle 3 s ersetzt). In Antwort und Kontext gelangt es nicht:
+(kind `progress`, alle 3 s ersetzt). Seit 2026-10-08 auch über
+`REASONING_STORAGE_CHARS` (32.000) hinaus: `reasoning_events` speichert nur bis
+dahin und liefert den Rest als `transient`-Ereignis nur an die Fortschritts-
+anzeigen (nie in `AgentCompletion.activity`). In Antwort und Kontext gelangt es nicht:
 ohne Tool-Aufrufe sammelt der Schritt keine Fortsetzungsdaten
 (`_preserve_reasoning`). Die eigentliche
 Synthese wird für Folgeschritte nach den Tool-Ergebnissen in den Kontext aufgenommen.
