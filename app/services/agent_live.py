@@ -1,19 +1,25 @@
-"""Process-local replay of a running Agent stream for networks that buffer SSE.
+"""Process-local frames of a running Agent turn: the one source every view reads.
 
-Some company proxies and TLS-inspecting virus scanners hold an event stream
-back until the response ends: the browser sees "Thinking…" for minutes and
-then the whole answer at once. The run itself is fine, only its bytes are
-stuck. Every Agent SSE frame therefore carries a per-run sequence number
-(`id:` line) and is also kept here, bounded, so the browser can fetch the same
-events with short JSON polls (`GET /agent/chats/{chat}/live`) and render them
-through its normal stream handlers.
+The producer (app.services.agent_background) runs a turn independently of any
+HTTP connection and records every frame here with a per-run sequence number.
+Readers never drive the run, they only follow it:
+
+- the POST /agent response tails the buffer as SSE (``tail_sse``), so closing
+  that connection stops nothing;
+- GET /agent/chats/{chat}/live returns the same frames as JSON, for networks
+  that buffer SSE (company proxies, TLS-inspecting scanners) and for a browser
+  that reconnects after a network drop, a sleeping tab or a reload.
 
 Nothing here is persisted. A buffer exists only in the process that runs the
-stream; another worker or a restart answers ``known: False`` and the browser
-keeps its ordinary behaviour (wait for the stream, 45-second status check).
-A buffer holds exactly the frames its own SSE response sends to the same
-account, keyed by uid + chat_id + client_request_id so the browser can address
-it before it has received a single byte.
+turn; another worker or a restart answers ``known: False`` and the browser
+asks for the saved turn instead (``recover_only``). Buffers are keyed by
+uid + chat_id + client_request_id, so the browser can address one before it
+has received a single byte and no other account can ever read it.
+
+Frames are bounded per run. A reader that fell behind the oldest retained
+frame receives a ``reset`` first: the answer text as it stood just before
+that frame (deltas appended, cleared where a status said so), so a late
+reader still shows the right partial answer instead of a gap.
 """
 from __future__ import annotations
 
@@ -23,17 +29,31 @@ import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 
+import anyio
 from fastapi.encoders import jsonable_encoder
 
-MAX_EVENTS_PER_RUN = 2000
-MAX_BYTES_PER_RUN = 2 * 1024 * 1024
+MAX_EVENTS_PER_RUN = 10000
+MAX_BYTES_PER_RUN = 4 * 1024 * 1024
 MAX_RUNS = 64
-MAX_TOTAL_BYTES = 24 * 1024 * 1024
+MAX_TOTAL_BYTES = 48 * 1024 * 1024
 ENDED_TTL_SECONDS = 600.0
-# A stream that never reported its end (a bug, a killed thread) must not
-# keep its events forever.
+# A run that never reported its end (a bug, a killed thread) must not keep
+# its events forever.
 ACTIVE_TTL_SECONDS = 3 * 3600.0
 MAX_EVENTS_PER_READ = 500
+TAIL_INTERVAL_SECONDS = 0.1
+TAIL_KEEPALIVE_SECONDS = 15.0
+
+
+def _text_effect(event_type, data):
+    """How a frame changes the streamed answer text (agent-chat.js handlers)."""
+    if not isinstance(data, dict):
+        return None
+    if event_type == "delta" and isinstance(data.get("text"), str) and data["text"]:
+        return ("append", data["text"])
+    if event_type == "activity" and data.get("kind") == "status" and data.get("clear_response"):
+        return ("clear",)
+    return None
 
 
 @dataclass
@@ -44,7 +64,14 @@ class LiveRun:
     bytes: int = 0
     done: bool = False
     ended_at: float | None = None
+    # (seq, type, json text, size, text effect)
     events: deque = field(default_factory=deque)
+    # The newest dropped frame and the answer text as it stood after it:
+    # what a reader behind the retained window resets to.
+    base_seq: int = 0
+    base_text: str = ""
+    # Evicted as a whole (global caps): its readers fall back to the saved turn.
+    evicted: bool = False
 
 
 class AgentLiveBuffers:
@@ -64,13 +91,20 @@ class AgentLiveBuffers:
         return (str(uid), str(chat_id), str(request_id))
 
     def open(self, uid, chat_id, request_id) -> LiveRun:
-        """A fresh buffer for one streaming response (replaces an older one)."""
+        """The buffer for one run: a fresh one, or the one still running.
+
+        A request identity has exactly one producer, so a concurrent duplicate
+        request shares the running buffer instead of cutting off its readers.
+        """
         key = self.key(uid, chat_id, request_id)
         with self._lock:
             self._expire()
-            old = self._runs.pop(key, None)
+            old = self._runs.get(key)
+            if old is not None and not old.done:
+                return old
             if old is not None:
-                self._total -= old.bytes
+                del self._runs[key]
+                self._evict(old)
             run = LiveRun(key=key, created_at=self._clock())
             self._runs[key] = run
             self._enforce_caps()
@@ -80,18 +114,17 @@ class AgentLiveBuffers:
         """Assign the next sequence number and keep the frame; returns (seq, json)."""
         encoded = jsonable_encoder(data)
         text = json.dumps(encoded, ensure_ascii=False)
-        size = len(text.encode("utf-8")) + len(event_type) + 16
+        size = len(text.encode("utf-8")) + len(event_type) + 24
+        effect = _text_effect(event_type, encoded)
         with self._lock:
             run.seq += 1
             seq = run.seq
             if self._runs.get(run.key) is run:
-                run.events.append((seq, event_type, encoded, size))
+                run.events.append((seq, event_type, text, size, effect))
                 run.bytes += size
                 self._total += size
                 while run.events and (len(run.events) > self.max_events or run.bytes > self.max_bytes):
-                    dropped = run.events.popleft()
-                    run.bytes -= dropped[3]
-                    self._total -= dropped[3]
+                    self._drop_oldest(run)
                 self._enforce_caps()
         return seq, text
 
@@ -110,22 +143,78 @@ class AgentLiveBuffers:
             run = self._runs.get(key)
             if run is None:
                 return {"events": [], "last_seq": int(after), "done": False, "known": False, "more": False}
-            pending = [item for item in run.events if item[0] > after]
-            chunk = pending[:MAX_EVENTS_PER_READ]
-            last_seq = chunk[-1][0] if chunk else max(int(after), 0)
-            more = len(pending) > len(chunk)
-            return {
-                "events": [{"seq": seq, "type": event_type, "data": data} for seq, event_type, data, _ in chunk],
-                "last_seq": last_seq,
-                # Done only once the reader has every retained event.
-                "done": run.done and not more,
-                "known": True,
-                "more": more,
-            }
+            chunk, more, reset, done = self._slice(run, int(after), MAX_EVENTS_PER_READ)
+        last_seq = chunk[-1][0] if chunk else (reset["seq"] if reset else max(int(after), 0))
+        result = {
+            "events": [{"seq": seq, "type": event_type, "data": json.loads(text)} for seq, event_type, text in chunk],
+            "last_seq": last_seq,
+            "done": done,
+            "known": True,
+            "more": more,
+        }
+        if reset:
+            result["reset"] = reset
+        return result
+
+    def frames(self, run: LiveRun, after: int = 0, limit: int = MAX_EVENTS_PER_READ):
+        """(frames, reset, done) of one run, also after it left the index."""
+        with self._lock:
+            chunk, _more, reset, done = self._slice(run, int(after), limit)
+        return chunk, reset, done
+
+    async def tail_sse(self, run: LiveRun, after: int = 0, *, lead: str | None = None,
+                       interval: float = TAIL_INTERVAL_SECONDS, keepalive: float = TAIL_KEEPALIVE_SECONDS):
+        """Follow a run as SSE until its last frame; leaving early stops nothing."""
+        if lead:
+            yield lead
+        cursor = int(after)
+        quiet_since = time.monotonic()
+        while True:
+            chunk, reset, done = self.frames(run, cursor)
+            if reset:
+                cursor = reset["seq"]
+                data = json.dumps({"text": reset["text"]}, ensure_ascii=False)
+                yield f"id: {cursor}\nevent: reset\ndata: {data}\n\n"
+            for seq, event_type, text in chunk:
+                cursor = seq
+                yield f"id: {seq}\nevent: {event_type}\ndata: {text}\n\n"
+            if chunk or reset:
+                quiet_since = time.monotonic()
+                continue
+            if done:
+                return
+            if time.monotonic() - quiet_since >= keepalive:
+                yield ": keepalive\n\n"
+                quiet_since = time.monotonic()
+            await anyio.sleep(interval)
 
     def stats(self) -> dict:
         with self._lock:
             return {"runs": len(self._runs), "bytes": self._total}
+
+    def _slice(self, run, after, limit):
+        if run.evicted:
+            return [], False, None, run.done
+        reset = None
+        if after < run.base_seq:
+            # Frames after the reader's position were dropped.
+            reset = {"seq": run.base_seq, "text": run.base_text}
+            after = run.base_seq
+        pending = [(seq, event_type, text) for seq, event_type, text, _, _ in run.events if seq > after]
+        chunk = pending[:limit]
+        more = len(pending) > len(chunk)
+        # Done only once the reader has every retained frame.
+        return chunk, more, reset, run.done and not more
+
+    def _drop_oldest(self, run):
+        seq, _type, _text, size, effect = run.events.popleft()
+        run.bytes -= size
+        self._total -= size
+        run.base_seq = seq
+        if effect and effect[0] == "append":
+            run.base_text += effect[1]
+        elif effect:
+            run.base_text = ""
 
     def _expire(self):
         now = self._clock()
@@ -135,7 +224,7 @@ class AgentLiveBuffers:
                 self._drop(key)
 
     def _enforce_caps(self):
-        # Ended buffers go first (oldest end first), then the oldest stream.
+        # Ended buffers go first (oldest end first), then the oldest run.
         while len(self._runs) > self.max_runs or self._total > self.max_total_bytes:
             ended = [run for run in self._runs.values() if run.done]
             victim = min(ended, key=lambda run: run.ended_at) if ended else next(iter(self._runs.values()))
@@ -144,9 +233,14 @@ class AgentLiveBuffers:
     def _drop(self, key):
         run = self._runs.pop(key, None)
         if run is not None:
-            self._total -= run.bytes
-            run.events.clear()
-            run.bytes = 0
+            self._evict(run)
+
+    def _evict(self, run):
+        self._total -= run.bytes
+        run.events.clear()
+        run.bytes = 0
+        run.base_text = ""
+        run.evicted = True
 
 
 agent_live = AgentLiveBuffers()

@@ -118,7 +118,10 @@ Owner-/Pro-/Admin-geschützte Endpoints mit `private, no-store`:
   Run-Status und bekannte Gesamtkosten.
 - `GET /agent/chats/{chat}/turns/{turn}/agents/{agent}?after=<seq>&limit=25`:
   Auftrag und paginierte Nachrichten, maximal 50 je Request.
-- `POST /agent/chats/{chat}/turns/{turn}/stop`: persistentes Abbruchsignal.
+- `POST /agent/chats/{chat}/turns/{turn}/stop`: persistentes Abbruchsignal; ein
+  Turn dieses Prozesses wird zusätzlich sofort abgebrochen.
+- `POST /agent/chats/{chat}/requests/{request_id}/stop`: dasselbe per
+  Request-Identität (der Stop-Knopf, auch bevor die Turn-ID bekannt ist).
 
 `/admin#configuration` verwaltet Delegationsregeln und Limits im bestehenden
 revisionsgesicherten Dokument `app_config/prompts.delegation`. Die beiden

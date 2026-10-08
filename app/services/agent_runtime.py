@@ -1,12 +1,10 @@
-"""Bound active Agent producers, including responses that never start streaming."""
+"""Bound active Agent producers; each holds one slot from admission to its end."""
 from __future__ import annotations
 
 import os
 import threading
 
-import anyio
-
-from app.services.llm.streaming import ProviderStreamingResponse
+from fastapi.responses import StreamingResponse
 
 
 class AgentCapacityExceeded(Exception):
@@ -44,30 +42,18 @@ class AgentLease:
                 self._state = "released"
                 self._slots.release()
 
-    def abandon(self, cleanup):
-        with self._lock:
-            if self._state != "reserved":
-                return
-            self._state = "closing"
-        try:
-            cleanup()
-        finally:
-            self.release()
 
+class AgentStreamingResponse(StreamingResponse):
+    """The POST /agent response: a tail of the run's frames, nothing more.
 
-class AgentStreamingResponse(ProviderStreamingResponse):
-    def __init__(self, *args, lease, cleanup, **kwargs):
+    The run belongs to its producer thread (agent_background) and holds the
+    lease; a client that disconnects only ends this response. ``lease`` is
+    kept for observation (tests), never released here.
+    """
+
+    def __init__(self, *args, lease, **kwargs):
         super().__init__(*args, **kwargs)
-        self._lease, self._cleanup = lease, cleanup
-
-    async def __call__(self, scope, receive, send):
-        try:
-            await super().__call__(scope, receive, send)
-        finally:
-            # A generator's finally block does not run if it was never entered.
-            # Fence a late pump before cleaning that reservation up off-loop.
-            with anyio.CancelScope(shield=True):
-                await anyio.to_thread.run_sync(self._lease.abandon, self._cleanup)
+        self._lease = lease
 
 
 agent_capacity = AgentCapacity(int(os.getenv("AGENT_MAX_CONCURRENT_RUNS", "16")))

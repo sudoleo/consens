@@ -1726,3 +1726,157 @@ describe("agent stream behind a buffering proxy", () => {
     dom.window.close();
   });
 });
+
+
+describe("agent turns that outlive their connection", () => {
+  const CHAT = "a".repeat(32);
+  const TURN = "b".repeat(32);
+  function finalData(text) {
+    return { response: text, chat_id: CHAT, turn_id: TURN, bookmark_meta: { id: "saved" },
+      token_budget: structuredClone(CATALOG.token_budget),
+      turn: { id: TURN, question: "Question", consensus: text, status: "completed", mode: "Agent", execution_mode: "agent" } };
+  }
+  function bootFollow({ pages = [], before } = {}) {
+    const stops = [];
+    const harness = boot({ live: true, setup(window) {
+      before?.(window);
+      const catalogFetch = window.fetch;
+      window.fetch = vi.fn(async (url, init) => {
+        const target = String(url);
+        if (target.includes("/live?")) {
+          const page = pages.length > 1 ? pages.shift() : pages[0];
+          if (page instanceof Error) throw page;
+          return { ok: true, status: 200, json: async () => structuredClone(page) };
+        }
+        if (target.endsWith("/stop")) { stops.push({ url: target, init }); return { ok: true, status: 200, json: async () => ({ status: "stopping" }) }; }
+        return catalogFetch(url, init);
+      });
+      window.App.trackAppEvent = vi.fn();
+    } });
+    harness.window.App.agentLive.SILENCE_MS = 5000;
+    harness.window.App.agentLive.POLL_MS = 10;
+    harness.window.App.agentLive.RUNNING_ELSEWHERE_MS = 10;
+    return { ...harness, stops };
+  }
+  const liveCalls = w => w.fetch.mock.calls.map(call => String(call[0])).filter(url => url.includes("/live?"));
+
+  it("follows the turn by polling when the stream breaks and ends with its answer", async () => {
+    const { window: w, document: d, dom } = bootFollow({ pages: [
+      { known: true, done: true, last_seq: 4, events: [
+        { seq: 3, type: "delta", data: { text: "answer" } }, { seq: 4, type: "final", data: finalData("Partial answer") }] }] });
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_url, _body, _signal, handlers, options) => {
+      options.onProgress();
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      handlers.delta.receive({ text: "Partial " }, "2");
+      throw Object.assign(new Error("network error"), { streamFailureKind: "stream_read_failed" });
+    });
+    d.querySelector("#questionInput").value = "Question";
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    expect(run.status).toBe("succeeded");
+    expect(run.consensus.text).toBe("Partial answer");
+    expect(run.consensus.error).toBe(null);
+    // Picks up after the last applied frame; no second paid request.
+    expect(liveCalls(w)[0]).toContain("after=2");
+    expect(w.streamSSERequest).toHaveBeenCalledTimes(1);
+    expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_stream_resumed")).toHaveLength(1);
+    expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
+    dom.window.close();
+  });
+
+  it("shows Reconnecting while the network is gone and the turn keeps running", async () => {
+    const { window: w, document: d, dom } = bootFollow({ pages: [new TypeError("Failed to fetch")] });
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_url, _body, _signal, handlers) => {
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      throw Object.assign(new Error("Failed to fetch"), { streamFailureKind: "request_failed" });
+    });
+    d.querySelector("#questionInput").value = "Question";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().metadata.offline).toBe(true));
+    const run = w.App.runRegistry.visible();
+    expect(run.status).toBe("running");
+    w.App.agentChat.project(run);
+    expect(d.getElementById("agentAnswerActivity").textContent).toContain("Reconnecting…");
+    // The record for a reload exists while the turn runs.
+    const pending = JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner"));
+    expect(pending.map(item => item.body.client_request_id)).toEqual([run.requestIdentity]);
+    w.App.runRegistry.cancel(run.runId);
+    await sending;
+    expect(w.App.runRegistry.visible().status).toBe("canceled");
+    dom.window.close();
+  });
+
+  it("stops the turn on the server only when the user presses Stop", async () => {
+    const { window: w, document: d, dom, stops } = bootFollow({ pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementation((_url, _body, _signal, handlers) => {
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      return new Promise(() => {});
+    });
+    d.querySelector("#questionInput").value = "Question";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().metadata.agentTurnId).toBe(TURN));
+    const run = w.App.runRegistry.visible();
+    w.App.runRegistry.cancel(run.runId);
+    await sending;
+    await vi.waitFor(() => expect(stops).toHaveLength(1));
+    expect(stops[0].url).toBe(`/agent/chats/${CHAT}/requests/${encodeURIComponent(run.requestIdentity)}/stop`);
+    expect(stops[0].init.method).toBe("POST");
+    expect(stops[0].init.headers.Authorization).toBe("Bearer verified");
+    expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
+    // A logout leaves the turn running to its saved answer.
+    d.querySelector("#questionInput").value = "Another question";
+    const second = w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible()?.question).toBe("Another question"));
+    w.App.runRegistry.clearAll("logout");
+    await second;
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(stops).toHaveLength(1);
+    dom.window.close();
+  });
+
+  it("follows a turn that was still running when the page reloaded", async () => {
+    const record = { at: Date.now(), title: "Resumed question", followup: false,
+      settings: { model_id: CATALOG.default_model_id, reasoning_effort: "default", label: "DeepSeek V4.1 Flash" },
+      body: { chat_id: CHAT, question: "Resumed question", client_request_id: "req-resume", bookmark_id: "b_agent_resume",
+        recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
+        check_sources: false, agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        google_selection: null, google_data_consent: false } };
+    const { window: w, dom } = bootFollow({
+      before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
+      pages: [
+        { known: true, done: false, last_seq: 3, reset: { seq: 1, text: "Earlier text, " },
+          events: [{ seq: 2, type: "accepted", data: { chat_id: CHAT, turn_id: TURN } }, { seq: 3, type: "delta", data: { text: "then more" } }] },
+        { known: true, done: true, last_seq: 4, events: [{ seq: 4, type: "final", data: finalData("Earlier text, then more") }] },
+      ] });
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-resume")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-resume");
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    expect(run.consensus.text).toBe("Earlier text, then more");
+    expect(run.metadata.agentTurnId).toBe(TURN);
+    expect(liveCalls(w)[0]).toBe(`/agent/chats/${CHAT}/live?request_id=req-resume&after=0`);
+    // Nothing was sent again: the turn ran on the server all along.
+    expect(w.streamSSERequest).not.toHaveBeenCalled();
+    expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
+    expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_run_resumed")).toHaveLength(1);
+    dom.window.close();
+  });
+
+  it("ignores stale or foreign records after a reload", async () => {
+    const stale = { at: Date.now() - 21 * 60 * 1000, body: { chat_id: CHAT, question: "Old", client_request_id: "old", bookmark_id: "b" } };
+    const { window: w, dom } = bootFollow({
+      before: window => {
+        window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([stale, { at: Date.now() }]));
+        window.sessionStorage.setItem("agent_pending_runs_someone-else", JSON.stringify([{ ...stale, at: Date.now() }]));
+      },
+      pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    await selectAgent(w);
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(w.App.runRegistry.list()).toHaveLength(0);
+    expect(liveCalls(w)).toHaveLength(0);
+    dom.window.close();
+  });
+});

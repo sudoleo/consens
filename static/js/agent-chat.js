@@ -329,6 +329,7 @@
       if (chip) chip.hidden = agent;
     }
     renderControls(agent);
+    if (agent) resumePending();
     const modeChanged = document.body.classList.contains("single-agent-active") !== (agent || demoView);
     document.body.classList.toggle("single-agent-active", agent || demoView);
     document.body.classList.toggle("agent-demo-active", demoView);
@@ -553,6 +554,7 @@
       answerText: state.text || state.streamText || '',
       settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
       highlight: running ? App.agentDelegation?.liveHighlight?.(context.metadata.chatId, context.metadata.agentTurnId) : null,
+      reconnecting: context.metadata.reconnecting === true && context.metadata.offline === true,
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.
@@ -872,6 +874,361 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
     App.composer?.expand?.();
   }
+  // A turn keeps running on the server when this page goes away (reload, a
+  // phone that discarded the tab). Its identity stays in this tab's session
+  // storage until the page saw the turn end, so a reload can follow it again.
+  const PENDING_MAX_AGE_MS = 20 * 60 * 1000;
+  let resumedFor = '';
+  function pendingKey(uid) { return `agent_pending_runs_${uid}`; }
+  function readPending(uid) {
+    try {
+      const list = JSON.parse(sessionStorage.getItem(pendingKey(uid)) || '[]');
+      return Array.isArray(list) ? list.filter(item => item && typeof item === 'object' && item.body
+        && Date.now() - Number(item.at) < PENDING_MAX_AGE_MS) : [];
+    } catch (_) { return []; }
+  }
+  function writePending(uid, list) {
+    try {
+      if (list.length) sessionStorage.setItem(pendingKey(uid), JSON.stringify(list));
+      else sessionStorage.removeItem(pendingKey(uid));
+    } catch (_) { /* private mode: no resume after reload */ }
+  }
+  function rememberPending(context, body) {
+    const uid = context.auth.uid;
+    if (!uid) return;
+    const list = readPending(uid).filter(item => item.body.client_request_id !== body.client_request_id);
+    list.push({ at: Date.now(), body, title: context.bookmark.title, followup: Boolean(context.basis),
+      settings: context.metadata.agentSettings || null, attachmentMeta: context.attachmentMeta || [] });
+    writePending(uid, list.slice(-4));
+  }
+  function forgetPending(context) {
+    const uid = context.auth.uid;
+    if (!uid) return;
+    const list = readPending(uid);
+    const rest = list.filter(item => item.body.client_request_id !== context.requestIdentity);
+    if (rest.length !== list.length) writePending(uid, rest);
+  }
+  // Stop is explicit: closing the connection no longer ends a turn. The
+  // request identity reaches the turn before its id is known, and a Stop
+  // that overtakes its own message keeps it from starting at all.
+  function stopOnServer(context) {
+    const chatId = context.metadata.chatId;
+    if (!context.metadata.requestSent || !chatId) return;
+    const url = `/agent/chats/${encodeURIComponent(chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/stop`;
+    const attempt = async () => {
+      const user = window.auth?.currentUser;
+      if (!user || user.uid !== context.auth.uid) return;
+      const token = await user.getIdToken();
+      await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, keepalive: true });
+    };
+    // Offline: deliver the Stop as soon as the network is back.
+    attempt().catch(() => window.addEventListener("online", () => { attempt().catch(() => {}); }, { once: true }));
+  }
+  function cancelRun(context, reason) {
+    context.consensus.status = "canceled";
+    context.consensus.error = null;
+    context.bookmark.status = "canceled";
+    if (context.metadata.agentReview) context.metadata.agentReview = { ...context.metadata.agentReview, status: "cancelled" };
+    else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
+    // Only the person's Stop ends the turn; a logout or account switch
+    // leaves it running to its saved answer.
+    if (reason === "user") stopOnServer(context);
+    forgetPending(context);
+    restoreUnsentDraft(context);
+  }
+  // After a reload: follow this tab's turns that were still running.
+  function resumePending() {
+    const uid = window.auth?.currentUser?.uid;
+    if (!uid || resumedFor === uid || !canUse() || catalogStatus !== 'ready' || selectedMode() !== 'agent') return;
+    resumedFor = uid;
+    const records = readPending(uid);
+    if (!records.length) return;
+    // Outside the current render: creating a run renders the shell again.
+    setTimeout(() => {
+      for (const record of records) {
+        if (registry.list().some(run => run.requestIdentity === record.body.client_request_id)) continue;
+        resume(record, uid);
+      }
+    }, 0);
+  }
+  async function resume(record, uid) {
+    if (!canUse() || window.auth.currentUser.uid !== uid) return;
+    const body = { ...record.body, recover_only: false };
+    const settings = record.settings || { model_id: body.model_id, reasoning_effort: body.reasoning_effort };
+    let context;
+    try {
+      context = registry.create({
+        question: body.question, mode: "Agent", basis: null, followup: false,
+        attachments: [], attachmentMeta: record.attachmentMeta || [],
+        requestIdentity: body.client_request_id, bookmarkId: body.bookmark_id, bookmarkTitle: record.title || body.question,
+        config: { executionMode: "agent", agentMode: true, autoConsensus: false, deepSearch: false,
+          checkSources: body.check_sources === true, useOwnKeys: false, providers: [],
+          agentSettings: { model_id: body.model_id, reasoning_effort: body.reasoning_effort },
+          comparisonModels: body.comparison_models || {},
+          agentPreferences: body.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided" },
+          googleSelection: body.google_selection || null, googleDataConsent: body.google_data_consent === true },
+        metadata: { draftQuestion: "", quotedContext: "", fileIds: body.file_ids || [], agentActivity: [],
+          agentSettings: settings, chatId: body.chat_id, requestSent: true, resumed: true },
+        usage: { status: "simulation", key: null },
+      });
+    } catch (_) { return; }
+    context.controllers.query = new AbortController();
+    const signal = context.controllers.query.signal;
+    context.cancelHook = reason => cancelRun(context, reason);
+    context.phase = "answers";
+    context.consensus.status = "streaming";
+    registry.setStatus(context.runId, "running");
+    App.composer?.collapse?.({ force: true });
+    App.trackAppEvent?.("app_run_resumed");
+    try {
+      const result = await follow(context, body, signal, { post: false });
+      if (!registry.isAuthCurrent(context) || signal.aborted) return;
+      adopt(context, result, { offer: !record.followup });
+      // The resumed view shows only this message; a follow-up's chat opens
+      // whole once its answer is saved.
+      if (record.followup && registry.isVisible(context.runId) && context.status === "succeeded") window.openBookmark?.(body.bookmark_id);
+    } catch (error) {
+      if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
+      failRun(context, error);
+    } finally {
+      context.controllers.query = null;
+      forgetPending(context);
+      if (registry.isAuthCurrent(context)) registry.renderVisible();
+      if (!context.metadata.terminalBudget && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
+    }
+  }
+  // A stream that broke or ended without its last frame: the turn itself
+  // keeps running on the server and is followed by polling instead.
+  const RESUMABLE = new Set(["request_failed", "stream_read_failed", "stream_incomplete"]);
+  // Back in the foreground or online after this long without a byte, the
+  // stream may be dead without an error (phones keep half-open connections).
+  const REVIVE_QUIET_MS = 5000;
+  // Follows one Agent turn to its end and returns that end the way
+  // streamSSERequest does ({ ok, status, data, streamed }). The server runs
+  // the turn independently of this connection (agent_background.py): a
+  // broken stream, a sleeping phone or a reload only switch to following it
+  // by polling (agent-live.js), they never end it. `post: false` follows a
+  // turn that is already running (after a reload) without sending anything.
+  async function follow(context, body, signal, { headers = null, post = true } = {}) {
+    let timer = null, resumeTracked = false, lastByte = Date.now();
+    const authHeaders = async () => {
+      const user = window.auth?.currentUser;
+      if (!user || !registry.isAuthCurrent(context)) throw new DOMException("Account changed", "AbortError");
+      return { Authorization: `Bearer ${await user.getIdToken()}` };
+    };
+    const stall = { misses: 0 };
+    const handlers = {
+      accepted: { receive(event) {
+        if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
+          context.metadata.agentTurnId = event.turn_id;
+          context.metadata.delegation = true;
+        }
+      } },
+      quota: { receive(event) {
+        if (registry.isAuthCurrent(context)) receiveBudget(event.token_budget, context.auth.uid);
+      } },
+      started: { receive(event) {
+        if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
+          context.metadata.agentTurnId = event.turn_id;
+          context.metadata.delegation = event.delegation === true;
+        }
+      } },
+      delegation: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        App.agentDelegation?.receive(context, event);
+        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+      } },
+      delegation_progress: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        App.agentDelegation?.receiveProgress(context, event);
+      } },
+      resources: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        context.metadata.resourcesSeen = true;
+        // Refresh only the list the event names; both when it names neither.
+        // Each side debounces its own GET per chat (300 ms).
+        const keys = event && typeof event === 'object' ? event : {};
+        const files = 'documents' in keys || 'files' in keys;
+        const actions = 'actions' in keys || 'gmail_evidence' in keys;
+        if (files || !actions) App.agentWorkspace?.refresh(context.metadata.chatId, true);
+        if (actions || !files) App.agentGoogle?.refreshActions?.(context.metadata.chatId, true);
+      } },
+      memory: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        context.metadata.agentMemory = App.agentMemory?.receive(context.metadata.agentMemory || [], event) || [];
+        registry.update(context.runId, () => {});
+      } },
+      review: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        context.metadata.agentReview = event.review;
+        registry.update(context.runId, () => {});
+      } },
+      activity: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        App.agentActivity?.receive(context.metadata.agentActivity, event);
+        if (event.kind === "status" && event.clear_response) context.consensus.streamText = "";
+        if (event.settings) context.metadata.agentSettings = event.settings;
+        if (event.kind === "usage") context.metadata.agentUsage = event.usage;
+        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+      } },
+      // A reader behind the server's frame window: the answer text so far.
+      reset: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        context.consensus.streamText = typeof event.text === "string" ? event.text : "";
+        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+      } },
+      delta: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        const text = typeof event.text === "string" ? event.text : "";
+        if (!text) return;
+        context.consensus.streamText += text;
+        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+      } },
+    };
+    // The one path every Agent frame takes, from the stream or from a
+    // live poll (agent-live.js): a sequence number already applied is
+    // dropped, so a buffered stream that flushes late renders nothing twice.
+    const seen = App.agentLive?.sequence();
+    const deliver = (type, data, seq) => {
+      if (seen && !seen.accept(seq)) return;
+      if (data && typeof data === "object") handlers[type]?.receive(data);
+    };
+    const streamHandlers = Object.fromEntries(Object.keys(handlers)
+      .map(type => [type, { receive: (data, seq) => deliver(type, data, seq),
+        append: (text, seq) => deliver(type, { text }, seq) }]));
+    // Abort only the stream (when a poll ended the run first), not the run.
+    const streamControl = new AbortController();
+    const abortStream = () => streamControl.abort();
+    signal.addEventListener("abort", abortStream, { once: true });
+    // The saved turn, without starting anything: a result with `turn`,
+    // 'running' (it runs on, e.g. on the previous server during a deploy),
+    // 'offline' (no verdict) or null (no such turn).
+    const recover = async () => {
+      let saved;
+      try {
+        const current = await authHeaders();
+        saved = await App.withRequestDeadline(requestSignal => window.streamSSERequest("/agent", { ...body, recover_only: true },
+          requestSignal, {}, { headers: current }), { signal, timeoutMs: 15000 });
+      } catch (_) { return signal.aborted ? null : "offline"; }
+      if (saved?.data?.turn) return saved;
+      if (saved?.data?.recovery_state === "running") return "running";
+      if (!saved || saved.status >= 500 || saved.status === 429) return "offline";
+      return null;
+    };
+    const live = App.agentLive?.watch({
+      chatId: body.chat_id, requestId: body.client_request_id, headers: authHeaders, signal, deliver,
+      cursor: () => seen?.last || 0, recover,
+      onEngage: () => App.trackAppEvent?.("app_stream_buffered"),
+      onState: ({ reconnecting, offline }) => {
+        if (!registry.isAuthCurrent(context)) return;
+        if (reconnecting && post && !resumeTracked) { resumeTracked = true; App.trackAppEvent?.("app_stream_resumed"); }
+        if (context.metadata.reconnecting === reconnecting && context.metadata.offline === offline) return;
+        context.metadata.reconnecting = reconnecting;
+        context.metadata.offline = offline;
+        registry.update(context.runId, () => {});
+      },
+    });
+    const revive = () => {
+      if (document.visibilityState === "hidden" || !live || live.reconnecting) return;
+      if (Date.now() - lastByte >= REVIVE_QUIET_MS) live.reconnect();
+    };
+    if (post) {
+      document.addEventListener("visibilitychange", revive);
+      window.addEventListener("online", revive);
+    }
+    try {
+      if (!post) {
+        if (!live) throw Object.assign(new Error("Connection lost before the response was completed."), { streamFailureKind: "stream_incomplete" });
+        live.reconnect();
+        const followed = await live.finished;
+        if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
+        if (!followed) throw Object.assign(new Error("This response could not be followed. Check its saved answer."), { streamFailureKind: "stream_incomplete" });
+        return followed;
+      }
+      const streaming = App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal,
+        streamHandlers, { headers, onProgress: () => { lastByte = Date.now(); onProgress?.(); live?.bytes(); } }),
+        { signal: streamControl.signal, timeoutMs: 45000, onIdle: () => checkStalledRun(context, body, headers, stall) });
+      if (!live) return await streaming;
+      streaming.catch(() => {}); // Rejects with AbortError when the poll wins.
+      const outcome = await Promise.race([streaming.then(value => ({ value }), error => ({ error })),
+        live.finished.then(value => ({ value, polled: true }))]);
+      if (outcome.polled) {
+        if (outcome.value) { abortStream(); return outcome.value; }
+        return await streaming;
+      }
+      if (!outcome.error) return outcome.value;
+      const error = outcome.error;
+      if (signal.aborted || error?.name === "AbortError" || !registry.isAuthCurrent(context) || !context.metadata.requestSent
+          || !(live.reconnecting || RESUMABLE.has(error?.streamFailureKind))) throw error;
+      // The stream broke, the turn did not: follow it to its end.
+      live.reconnect();
+      const followed = await live.finished;
+      if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
+      if (!followed) throw error;
+      return followed;
+    } finally {
+      live?.stop();
+      signal.removeEventListener("abort", abortStream);
+      document.removeEventListener("visibilitychange", revive);
+      window.removeEventListener("online", revive);
+      clearTimeout(timer);
+      context.metadata.reconnecting = false;
+      context.metadata.offline = false;
+    }
+  }
+  // The end the server reported (terminal frame, polled frame or saved
+  // turn): adopt the answer, or throw its failure for failRun.
+  function adopt(context, result, { offer = true } = {}) {
+    receiveBudget(result.data?.token_budget, context.auth.uid);
+    context.metadata.terminalBudget = Boolean(result.data?.token_budget);
+    const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
+    if (typeof recoverable === 'boolean') context.metadata.recoverable = recoverable;
+    context.metadata.recoveryState = result.data?.recovery_state;
+    if (result.data?.saved_answer?.turn && result.data.saved_answer.bookmark_meta) {
+      // A failed run can still have an authoritative saved partial answer.
+      // Keep its error/review state while adopting the durable bookmark now.
+      acceptAnswer(context, result.data.saved_answer);
+      App.trackAnswer?.(context, "partial");
+      return;
+    }
+    if (!result.ok || result.data?.error || !result.data?.turn) {
+      // A plain (non-SSE) 4xx refusal happens before the server accepted a
+      // turn: nothing was dispatched, so the message goes back to the composer.
+      const data = result.data || {};
+      const refused = result.streamed === false && result.status >= 400 && result.status < 500
+        && !context.metadata.agentTurnId && data.recoverable !== true && !data.recovery_state;
+      throw Object.assign(new Error(apiError(data)), { failure: data, notDispatched: refused });
+    }
+    acceptAnswer(context, result.data);
+    App.trackAnswer?.(context, "ok");
+    if (offer) offerWatch(context);
+  }
+  function failRun(context, error) {
+    const failure = error.failure || {};
+    const code = failure.code || failure.error_code || failure.detail?.code;
+    context.consensus.status = "error";
+    context.consensus.error = { message: error.message, code,
+      required_tokens: failure.required_tokens, available_tokens: failure.available_tokens };
+    // "ask" went out with the POST; a refusal still ends that run as
+    // failed, like a refused pipeline run (query-send.js finishFailed).
+    const asked = context.metadata.requestSent === true;
+    if (error.notDispatched || !context.metadata.requestSent) {
+      // Never offer "Check saved answer" or keep a Failed sidebar row for a
+      // message that the server refused before starting it.
+      context.metadata.requestSent = false;
+      context.metadata.recoverable = false;
+      context.consensus.error.message = `Message not sent. ${error.message}`;
+      releaseRunRow(context);
+    } else if (['agent_token_reservation', 'agent_tokens_exhausted'].includes(code) && !context.consensus.streamText) {
+      // An admission refusal produced no answer: offer the question again.
+      context.metadata.recoverable = false;
+      context.metadata.restoreDraft = true;
+    }
+    context.bookmark.status = "failed";
+    if (asked) App.trackAnswer?.(context, "failed");
+    registry.setStatus(context.runId, "failed", { message: error.message });
+    if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
+  }
   async function send(recovery = null, { retry = null } = {}) {
     if (recovery) return recoverAnswer(recovery);
     if (!canUse()) { App.showPopup?.("Sign in to use Agent."); return; }
@@ -925,14 +1282,7 @@
     context.controllers.query = new AbortController();
     const signal = context.controllers.query.signal;
     context.consensus.status = "pending";
-    context.cancelHook = () => {
-      context.consensus.status = "canceled";
-      context.consensus.error = null;
-      context.bookmark.status = "canceled";
-      if (context.metadata.agentReview) context.metadata.agentReview = { ...context.metadata.agentReview, status: "cancelled" };
-      else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
-      restoreUnsentDraft(context);
-    };
+    context.cancelHook = reason => cancelRun(context, reason);
     registry.setStatus(context.runId, "running");
     if (!recovery && !retry) {
       App.clearQuestionDraft?.();
@@ -941,7 +1291,6 @@
     }
     App.composer?.collapse?.({ force: true });
     if (!recovery && !retry) App.revealSentMessage?.();
-    let timer, terminalBudget = false;
     try {
       const token = await App.withRequestDeadline(() => window.auth.currentUser.getIdToken(), { signal });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
@@ -981,165 +1330,19 @@
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
       };
-      const stall = { misses: 0 };
-      const handlers = {
-        accepted: { receive(event) {
-          if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
-            context.metadata.agentTurnId = event.turn_id;
-            context.metadata.delegation = true;
-          }
-        } },
-        quota: { receive(event) {
-          if (registry.isAuthCurrent(context)) receiveBudget(event.token_budget, context.auth.uid);
-        } },
-        started: { receive(event) {
-          if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
-            context.metadata.agentTurnId = event.turn_id;
-            context.metadata.delegation = event.delegation === true;
-          }
-        } },
-        delegation: { receive(event) {
-          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-          App.agentDelegation?.receive(context, event);
-          if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
-        } },
-        delegation_progress: { receive(event) {
-          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-          App.agentDelegation?.receiveProgress(context, event);
-        } },
-        resources: { receive(event) {
-          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-          context.metadata.resourcesSeen = true;
-          // Refresh only the list the event names; both when it names neither.
-          // Each side debounces its own GET per chat (300 ms).
-          const keys = event && typeof event === 'object' ? event : {};
-          const files = 'documents' in keys || 'files' in keys;
-          const actions = 'actions' in keys || 'gmail_evidence' in keys;
-          if (files || !actions) App.agentWorkspace?.refresh(context.metadata.chatId, true);
-          if (actions || !files) App.agentGoogle?.refreshActions?.(context.metadata.chatId, true);
-        } },
-        memory: { receive(event) {
-          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-          context.metadata.agentMemory = App.agentMemory?.receive(context.metadata.agentMemory || [], event) || [];
-          registry.update(context.runId, () => {});
-        } },
-        review: { receive(event) {
-          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-          context.metadata.agentReview = event.review;
-          registry.update(context.runId, () => {});
-        } },
-        activity: { receive(event) {
-          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-          App.agentActivity?.receive(context.metadata.agentActivity, event);
-          if (event.kind === "status" && event.clear_response) context.consensus.streamText = "";
-          if (event.settings) context.metadata.agentSettings = event.settings;
-          if (event.kind === "usage") context.metadata.agentUsage = event.usage;
-          if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
-        } },
-        delta: { receive(event) {
-          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-          const text = typeof event.text === "string" ? event.text : "";
-          if (!text) return;
-          context.consensus.streamText += text;
-          if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
-        } },
-      };
-      // The one path every Agent frame takes, from the stream or from a
-      // live poll (agent-live.js): a sequence number already applied is
-      // dropped, so a buffered stream that flushes late renders nothing twice.
-      const seen = App.agentLive?.sequence();
-      const deliver = (type, data, seq) => {
-        if (seen && !seen.accept(seq)) return;
-        if (data && typeof data === "object") handlers[type]?.receive(data);
-      };
-      const streamHandlers = Object.fromEntries(Object.keys(handlers)
-        .map(type => [type, { receive: (data, seq) => deliver(type, data, seq),
-          append: (text, seq) => deliver(type, { text }, seq) }]));
-      // Abort only the stream (when a poll ended the run first), not the run.
-      const streamControl = new AbortController();
-      const abortStream = () => streamControl.abort();
-      signal.addEventListener("abort", abortStream, { once: true });
-      const live = App.agentLive?.watch({
-        chatId, requestId: context.requestIdentity, headers, signal, deliver, cursor: () => seen?.last || 0,
-        onEngage: () => App.trackAppEvent?.("app_stream_buffered"),
-        recover: async () => {
-          const saved = await App.withRequestDeadline(requestSignal => window.streamSSERequest("/agent", { ...body, recover_only: true },
-            requestSignal, {}, { headers }), { signal, timeoutMs: 15000 }).catch(() => null);
-          return saved?.data?.turn ? saved : null;
-        },
-      });
-      const streaming = App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal,
-        streamHandlers, { headers, onProgress: () => { onProgress?.(); live?.bytes(); } }),
-        { signal: streamControl.signal, timeoutMs: 45000, onIdle: () => checkStalledRun(context, body, headers, stall) });
-      let result;
-      try {
-        if (live) {
-          streaming.catch(() => {}); // Rejects with AbortError when the poll wins.
-          const outcome = await Promise.race([streaming.then(value => ({ value })),
-            live.finished.then(value => ({ value, polled: true }))]);
-          if (outcome.polled) abortStream();
-          result = outcome.value;
-        } else result = await streaming;
-      } finally {
-        live?.stop();
-        signal.removeEventListener("abort", abortStream);
-      }
+      rememberPending(context, body);
+      const result = await follow(context, body, signal, { headers });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
-      receiveBudget(result.data?.token_budget, context.auth.uid);
-      terminalBudget = Boolean(result.data?.token_budget);
-      const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
-      if (typeof recoverable === 'boolean') context.metadata.recoverable = recoverable;
-      context.metadata.recoveryState = result.data?.recovery_state;
-      if (result.data?.saved_answer?.turn && result.data.saved_answer.bookmark_meta) {
-        // A failed run can still have an authoritative saved partial answer.
-        // Keep its error/review state while adopting the durable bookmark now.
-        acceptAnswer(context, result.data.saved_answer);
-        App.trackAnswer?.(context, "partial");
-        return;
-      }
-      if (!result.ok || result.data?.error || !result.data?.turn) {
-        // A plain (non-SSE) 4xx refusal happens before the server accepted a
-        // turn: nothing was dispatched, so the message goes back to the composer.
-        const data = result.data || {};
-        const refused = result.streamed === false && result.status >= 400 && result.status < 500
-          && !context.metadata.agentTurnId && data.recoverable !== true && !data.recovery_state;
-        throw Object.assign(new Error(apiError(data)), { failure: data, notDispatched: refused });
-      }
-      acceptAnswer(context, result.data);
-      App.trackAnswer?.(context, "ok");
-      offerWatch(context);
+      adopt(context, result);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
-      const failure = error.failure || {};
-      const code = failure.code || failure.error_code || failure.detail?.code;
-      context.consensus.status = "error";
-      context.consensus.error = { message: error.message, code,
-        required_tokens: failure.required_tokens, available_tokens: failure.available_tokens };
-      // "ask" went out with the POST; a refusal still ends that run as
-      // failed, like a refused pipeline run (query-send.js finishFailed).
-      const asked = context.metadata.requestSent === true;
-      if (error.notDispatched || !context.metadata.requestSent) {
-        // Never offer "Check saved answer" or keep a Failed sidebar row for a
-        // message that the server refused before starting it.
-        context.metadata.requestSent = false;
-        context.metadata.recoverable = false;
-        context.consensus.error.message = `Message not sent. ${error.message}`;
-        releaseRunRow(context);
-      } else if (['agent_token_reservation', 'agent_tokens_exhausted'].includes(code) && !context.consensus.streamText) {
-        // An admission refusal produced no answer: offer the question again.
-        context.metadata.recoverable = false;
-        context.metadata.restoreDraft = true;
-      }
-      context.bookmark.status = "failed";
-      if (asked) App.trackAnswer?.(context, "failed");
-      registry.setStatus(context.runId, "failed", { message: error.message });
-      if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
+      failRun(context, error);
     } finally {
-      clearTimeout(timer);
       context.controllers.query = null;
+      forgetPending(context);
       restoreUnsentDraft(context);
       if (registry.isAuthCurrent(context)) registry.renderVisible();
-      if (!terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
+      if (!context.metadata.terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
   }
   App.agentChat = { canUse, modeState, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",

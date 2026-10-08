@@ -253,7 +253,7 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlight = null } = {}) {
+    highlight = null, reconnecting = false } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -315,7 +315,10 @@
     const reviewStage = review?.status === "running" ? "Checking the answer…"
       : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
     const waiting = running && latest?.status === 'waiting';
-    const heading = waiting ? 'Waiting for available tokens…' : reviewStage
+    // The run keeps going on the server while the browser is offline or
+    // asleep; say that instead of a step that may be long over.
+    const heading = running && reconnecting ? 'Reconnecting…'
+      : waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards (for example in
     // a late source check) reads as done: the same rule as failureNote.
@@ -335,15 +338,15 @@
       ? [{id:item.id, text:item.text, kind:'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
         : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item), kind:'step', status:item.status,
-          current:running && !waiting && item === activeTool},
+          current:running && !waiting && !reconnecting && item === activeTool},
           // The one place where the run waits on the user: say so, and link to the card.
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
             ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
-    if (running && (!activeTool || waiting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
+    if (running && (!activeTool || waiting || reconnecting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
     // While the comparison models answer, the main model is silent: one quiet
     // line quotes the reasoning of the model that reported last.
     const comparing = reviewStage === 'Comparing perspectives…' || activeTool?.name === 'compare_models';
-    if (running && !waiting && comparing && highlight?.text) {
+    if (running && !waiting && !reconnecting && comparing && highlight?.text) {
       // quiet: true keeps the frequent changes out of the screen reader log;
       // the agent panel offers the same highlights per model.
       paragraphs.push({ id: 'comparison-highlight', kind: 'progress', quiet: true,

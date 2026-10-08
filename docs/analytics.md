@@ -57,6 +57,11 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   die App den Fortschritt stattdessen per Polling holt (`agent-live.js`).
   Zählt, wie viele Läufe ohne diesen Fallback nur „Thinking…“ gezeigt hätten;
   ins Verhältnis zu `ask` mit `mode=agent` setzen.
+- `app_stream_resumed` (seit 2026-10-08, ohne Daten): einmal pro Agent-Lauf,
+  wenn der Antwort-Stream abbrach (Netz weg, Tab im Hintergrund, Neustart),
+  der Lauf aber auf dem Server weiterlief und die App ihm per Polling folgt.
+- `app_run_resumed` (seit 2026-10-08, ohne Daten): eine nach einem Neuladen
+  wieder aufgenommene, noch laufende Agent-Nachricht.
 - `auth_*`: jeder einzelne Anmeldeversuch mit Ergebnis und Fehlercode.
 - `landing_*`, `benchmark_*`, `pulse_*`, `consensus_engine_*`, `hub_*`,
   `share_*`, `topic_open`: die einzelnen Knöpfe der öffentlichen Seiten.

@@ -28,11 +28,12 @@ from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
 from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
+from app.services.agent_background import AgentRunDuplicate, AgentRunStopped, AgentShuttingDown, agent_background
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
 from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, default_agent_model_id, resolve_agent_model
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
-from app.services.llm.streaming import iter_sse_with_keepalive, SSE_HEADERS, SSE_PADDING
+from app.services.llm.streaming import SSE_HEADERS, SSE_PADDING
 from app.services.agent_live import agent_live
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.agent_calendar import GoogleSelection
@@ -271,6 +272,8 @@ def run_agent(request: Request, payload: AgentRequest):
         if payload.recover_only:
             return JSONResponse({"error": "No saved answer is available for this request.",
                 "code": "answer_unavailable", "recoverable": False}, status_code=404)
+        if agent_background.shutting_down:
+            raise AgentShuttingDown("The server is restarting. Please send your message again in a moment.")
         try:
             model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
         except ValueError as exc:
@@ -362,7 +365,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
                          source_limits=source_limits, agent_preferences=payload.agent_preferences, memory=memory,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
-        # Replay for networks that buffer the stream (GET .../live).
+        # Every view follows the run through this buffer (POST tail, GET .../live).
         live = agent_live.open(uid, payload.chat_id, payload.client_request_id)
     except Exception as exc:
         try:
@@ -376,7 +379,7 @@ def run_agent(request: Request, payload: AgentRequest):
             raise
         if isinstance(exc, AgentProviderCooldown):
             raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": str(exc.retry_after)}) from None
-        if isinstance(exc, AgentCapacityExceeded):
+        if isinstance(exc, (AgentCapacityExceeded, AgentShuttingDown)):
             raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from None
         if isinstance(exc, ValueError):
             raise HTTPException(status_code=422, detail=str(exc)) from None
@@ -422,13 +425,24 @@ def run_agent(request: Request, payload: AgentRequest):
                     # violate the generator protocol and strand the producer.
                     logging.warning("Agent stream cleanup unavailable category=%s", safe_exception(exc))
             status = "succeeded"
-        except (ProviderCancelled, GeneratorExit):
+        except GeneratorExit:
+            # The producer itself closed the stream (never a client: the run
+            # is not tied to a connection). No frame may follow.
             status = "cancelled"
             if not loop.claimed:
                 store.release_unclaimed(uid, payload.chat_id, turn["id"], failure={
                     "code": "cancelled", "error": "Response stopped before a model call started."})
             _save_interrupted(uid, payload, store, turn["id"])
             raise
+        except ProviderCancelled:
+            # Stop: settle and save like any other end, and tell every view
+            # still following the run (another tab, a reconnecting browser).
+            status = "cancelled"
+            if not loop.claimed:
+                store.release_unclaimed(uid, payload.chat_id, turn["id"], failure={
+                    "code": "cancelled", "error": "Response stopped before a model call started."})
+            error = "This response was stopped."
+            failure = {"code": "cancelled"}
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             failure = agent_failure(exc)
             error = failure.pop("error")
@@ -475,23 +489,50 @@ def run_agent(request: Request, payload: AgentRequest):
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
             yield pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True, "recovery_state": "saved"})
 
-    def stream_events():
-        if not lease.start():
-            return
+    def produce():
+        # The whole run, on its own thread: every frame goes into the live
+        # buffer, nothing waits for a reader.
         try:
-            yield from events()
+            if not lease.start():
+                return
+            for _frame in events():
+                pass
         finally:
-            agent_live.finish(live)
+            # Capacity first: whoever sees the run end may start the next.
             lease.release()
+            agent_live.finish(live)
 
-    def cleanup():
+    def interrupt(reason):
+        # Shutdown: end with this reason instead of a plain Stop, so the
+        # saved turn says why it is incomplete.
+        loop.watch_error = reason
+        cancellation.cancel()
+
+    try:
+        agent_background.start(uid=uid, chat_id=payload.chat_id, request_id=payload.client_request_id,
+                               turn_id=turn["id"], target=produce, cancel=cancellation.cancel, interrupt=interrupt)
+    except AgentRunDuplicate as exc:
+        # Two identical requests at once: the first one runs this turn; its
+        # buffer and saved state stay untouched.
+        lease.release()
+        return JSONResponse({"error": str(exc), "code": "request_running", "recoverable": True,
+                             "recovery_state": "running"}, status_code=409)
+    except Exception as exc:
         agent_live.finish(live)
-        store.release_unclaimed(uid, payload.chat_id, turn["id"])
-        _save_interrupted(uid, payload, store, turn["id"])
+        try:
+            failure = {"code": "cancelled", "error": str(exc)} if isinstance(exc, AgentRunStopped) else agent_failure(exc)
+            store.release_unclaimed(uid, payload.chat_id, turn["id"], failure=failure)
+            _save_interrupted(uid, payload, store, turn["id"])
+        finally:
+            lease.release()
+        if isinstance(exc, AgentRunStopped):
+            return JSONResponse({"error": str(exc), "code": "cancelled", "recoverable": False}, status_code=409)
+        if isinstance(exc, AgentShuttingDown):
+            raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from None
+        raise
 
     return AgentStreamingResponse(
-        iter_sse_with_keepalive(stream_events(), cancellation=cancellation, lead=SSE_PADDING),
-        cancellation=cancellation, lease=lease, cleanup=cleanup,
+        agent_live.tail_sse(live, lead=SSE_PADDING), lease=lease,
         media_type="text/event-stream", headers={**SSE_HEADERS, "Cache-Control": "private, no-store, no-transform"},
     )
 
@@ -548,7 +589,40 @@ def stop_agent_run(request: Request, chat_id: str, turn_id: str):
     uid = _chat_uid(request)
     require_agent_access(uid)
     try:
+        # This process runs it: cancel at once. Otherwise (or as well) the
+        # saved flag stops it wherever it runs, within the watcher's 3 s.
+        agent_background.stop(uid, chat_id, turn_id=turn_id)
         AgentRunStore(db_firestore).stop_delegation(uid, chat_id, turn_id)
         return JSONResponse({"status": "stopping"}, headers={"Cache-Control": "private, no-store"})
     except Exception as exc:
         _raise_store_error(exc, operation="stop agent sessions", uid=uid)
+
+
+@router.post("/agent/chats/{chat_id}/requests/{request_id}/stop")
+@limiter.limit("30/minute")
+def stop_agent_request(request: Request, chat_id: str, request_id: str):
+    """Stop a message by the browser's request identity (the Stop button).
+
+    A run no longer ends when its connection does, so Stop is explicit. It
+    works before the browser knows the turn id, and a Stop that overtakes
+    its own POST keeps that request from starting.
+    """
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
+        raise HTTPException(status_code=404, detail="Request not found")
+    if agent_background.stop(uid, chat_id, request_id=request_id):
+        return JSONResponse({"status": "stopping"}, headers={"Cache-Control": "private, no-store"})
+    try:
+        store = AgentRunStore(db_firestore)
+        turn_id = _idempotent_turn_id(chat_id, request_id)
+        try:
+            turn = store.get_turn(uid, chat_id, turn_id)
+        except ChatNotFound:
+            turn = None
+        if turn and turn.get("status") == "pending":
+            store.stop_delegation(uid, chat_id, turn_id)
+        return JSONResponse({"status": "stopping" if turn and turn.get("status") == "pending" else "not_running"},
+                            headers={"Cache-Control": "private, no-store"})
+    except Exception as exc:
+        _raise_store_error(exc, operation="stop agent request", uid=uid)

@@ -2,44 +2,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import threading
 
-import anyio
 import pytest
-from starlette.requests import Request, ClientDisconnect
 
 from app.api.routers import agent
 from app.services.agent_runtime import AgentCapacity, AgentCapacityExceeded
 from app.services.llm.agent_client import AgentModel
-from app.services import persistence_guard
 from test_agent_runs import UID, AUTH, api, store, pending, receipt, totals
-
-
-def test_disconnect_preserves_generator_exit_when_deleted_account_blocks_cleanup(api, monkeypatch, caplog):
-    client, store, calls = api
-    capacity = AgentCapacity(1)
-    monkeypatch.setattr(agent, "agent_capacity", capacity)
-    captured, closed = [], []
-    def source(self):
-        self.claimed = True
-        try:
-            yield {"type": "delta", "text": "Partial answer"}
-        finally:
-            closed.append(True)
-            raise persistence_guard.AccountDeletionInProgress("synthetic deleting account")
-    monkeypatch.setattr(agent.DelegationLoop, "run", source)
-    monkeypatch.setattr(agent, "iter_sse_with_keepalive", lambda stream, **kwargs: captured.append(stream) or iter(()))
-    chat = store.create_chat(UID, execution_mode="agent")["id"]
-    payload = agent.AgentRequest(chat_id=chat, question="Hi", client_request_id="close-deleted", bookmark_id="closed")
-    request = Request({"type": "http", "headers": [(b"authorization", b"Bearer verified")], "client": ("test", 123)})
-    agent.run_agent.__wrapped__(request, payload)
-    stream = captured[0]
-    assert "event: accepted" in next(stream)
-    assert "event: delta" in next(stream)
-    stream.close()  # May not yield an error frame while handling GeneratorExit.
-    assert closed == [True] and not calls
-    assert "Agent completion failed" not in caplog.text
-    assert "Agent stream cleanup unavailable" in caplog.text
-    assert list(stream) == []
-    capacity.acquire().release()
 
 
 def test_owner_limit_is_atomic_across_different_chats(store):
@@ -136,30 +104,3 @@ def test_owner_capacity_failure_unlocks_unclaimed_turn_and_does_not_call_model(a
     assert not calls and totals(store)["calls"] == 2
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
     assert pending(store, chat_id=chat_id, request_id="unlocked")[1]["status"] == "pending"
-
-
-def test_response_never_entered_releases_pending_turn_without_a_paid_claim(api, monkeypatch):
-    client, store, calls = api
-    capacity = AgentCapacity(1)
-    monkeypatch.setattr(agent, "agent_capacity", capacity)
-    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
-    payload = agent.AgentRequest(chat_id=chat_id, question="Hi", client_request_id="never-started", bookmark_id="bm1")
-    request = Request({"type": "http", "headers": [(b"authorization", b"Bearer verified")], "client": ("test", 123)})
-    response = agent.run_agent.__wrapped__(request, payload)
-
-    async def run():
-        async def send(message):
-            # Fail the initial HTTP response before body_iterator is entered.
-            raise OSError("Client left before response headers")
-        async def receive():
-            return {"type": "http.disconnect"}
-        with pytest.raises(ClientDisconnect):
-            await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
-        assert [item async for item in response.body_iterator] == []
-
-    anyio.run(run)
-    assert not calls
-    assert not (store.db.collection("users").document(UID).get().to_dict() or {}).get("agent_usage")
-    assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
-    assert store.db.collection("users").document(UID).collection("bookmarks").document("bm1").get().exists
-    capacity.acquire().release()

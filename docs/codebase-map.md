@@ -290,7 +290,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Replay des laufenden Streams für puffernde Netze, siehe §4 „Gepufferter Agent-Stream“). Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. `compare_models.memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. `compare_models.memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -2909,33 +2909,84 @@ bricht ab (Firmen-Proxys puffern SSE). Davor greift seit 2026-10-08 der
 `chat_id` und Bookmark, neue Request-Identität, aktuelles Modell; die Zeile des
 gescheiterten Laufs in der Sidebar wird übernommen.
 
-**Gepufferter Agent-Stream (seit 2026-10-08).** Firmen-Proxys und TLS-prüfende
-Virenscanner halten den `/agent`-Stream oft bis zum Ende zurück („Thinking…“
-minutenlang, dann alles auf einmal). Server: jedes Agent-Frame trägt eine
-pro Lauf monotone Nummer als SSE-`id:` (`agent.py::pack`), und
-`app/services/agent_live.py` (`agent_live`) hält denselben Frame begrenzt im
-Prozessspeicher (je Lauf ≤ 2000 Frames/2 MiB, älteste zuerst verworfen;
-≤ 64 Läufe/24 MiB gesamt, beendete zuerst; 10 min TTL nach Ende, 3 h für nie
-beendete), Schlüssel uid + chat_id + client_request_id. `GET
+**Agent-Turns laufen ohne Verbindung weiter (seit 2026-10-08).** Ein Turn
+hängt nicht mehr an der HTTP-Verbindung, die ihn gestartet hat. `POST /agent`
+bereitet ihn wie bisher vor (Admission, Lease, `create_turn`, `DelegationLoop`)
+und startet dann `produce()` über `app/services/agent_background.py`
+(`agent_background.start`, eigener Thread mit kopierten ContextVars). Der
+Producer schreibt jedes Frame mit einer pro Lauf monotonen Nummer (SSE `id:`,
+`agent.py::pack`) in `app/services/agent_live.py` (`agent_live`); die
+POST-Antwort (`AgentStreamingResponse`, ein schlichter `StreamingResponse`) ist
+nur `agent_live.tail_sse(...)`: 2-KiB-Padding, dann die Frames aus dem Puffer
+(alle 100 ms nachgesehen, Keepalive nach 15 s Stille), Ende nach dem letzten
+Frame. Ein Verbindungsabbruch beendet nur diesen Tail; der Turn rechnet zu Ende,
+rechnet ab und speichert Antwort und Bookmark selbst. Kein Rückstau mehr: ein
+langsamer Leser kann einen Lauf nicht mehr abbrechen.
+
+*Stop ist explizit.* `POST /agent/chats/{chat}/requests/{request_id}/stop`
+(30/min) bricht einen Turn dieses Prozesses sofort ab (`ProviderCancellation`
+wie früher beim Disconnect); kennt der Prozess ihn nicht, setzt es für einen
+laufenden gespeicherten Turn `stop_delegation` (wirkt überall über den 3-s-
+Watcher) und hinterlegt eine 10-min-Marke, damit ein noch nicht angekommener
+POST derselben Identität nie startet (`AgentRunStopped` → 409 `cancelled`,
+Turn `failed`, kein Modellaufruf; Registrierung und Marke unter demselben Lock).
+`POST …/turns/{turn}/stop` bricht zusätzlich einen Turn dieses Prozesses sofort
+ab. Ein gestoppter Turn sendet jetzt ein Terminal-Frame `error` mit
+`code: cancelled` (für andere Tabs und wiederverbindende Browser). Zwei
+gleichzeitige POSTs derselben Identität: der zweite bekommt 409
+`request_running`, `agent_live.open` teilt einen noch laufenden Puffer statt
+ihn zu ersetzen (`AgentRunDuplicate`).
+
+*Neustart/Deploy.* Render schickt SIGTERM und wartet die Shutdown-Frist des
+Dienstes (Standard 30 s, max. 300 s über `maxShutdownDelaySeconds`), dann
+SIGKILL. `main.py::_drain_agent_runs_on_sigterm` hängt sich in der Lifespan vor
+uvicorns Handler und ruft über die Event-Loop `agent_background.begin_shutdown`:
+keine neuen Turns (503, `Retry-After: 5`), laufende dürfen
+`AGENT_SHUTDOWN_GRACE_SECONDS` (Default 20) zu Ende rechnen, danach bekommt jeder
+verbliebene Turn `AgentRunInterrupted` („The server restarted during this
+response…“, Code `run_interrupted`) und speichert ab, bevor SIGKILL kommt. Das
+Lifespan-Ende wartet per `agent_background.drain` (Grace + 8 s). Die Grace muss
+unter der Render-Frist bleiben; wer die Frist erhöht, erhöht beide.
+
+*Puffer (`agent_live`).* Je Lauf ≤ 10000 Frames/4 MiB (älteste zuerst
+verworfen), ≤ 64 Läufe/48 MiB gesamt (beendete zuerst), 10 min TTL nach Ende,
+3 h für nie beendete; Schlüssel uid + chat_id + client_request_id. Liest jemand
+hinter dem behaltenen Fenster, bekommt er zuerst `reset` mit dem Antworttext bis
+dorthin (Deltas angehängt, bei `activity` `status` + `clear_response` geleert),
+im Tail als `event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert
+nichts mehr; der Browser folgt dann dem gespeicherten Turn. `GET
 /agent/chats/{chat}/live?request_id=…&after=<seq>` (Agent-Zugang, 120/min,
 `private, no-store`, kein Firestore) liefert `{events:[{seq,type,data}],
-last_seq, done, known, more}` mit höchstens 500 Frames; `known:false` heißt:
-dieser Prozess kennt den Lauf nicht (anderer Worker, Neustart, abgelaufen,
-fremdes Konto). Es wird nichts gesendet, was der Stream demselben Konto nicht
-auch sendet, und nichts persistiert; `recover_only` öffnet keinen Puffer.
-Client: `agent-live.js` (`App.agentLive.watch`, vor `agent-chat.js` im Bundle)
-pollt alle 1,5 s, wenn 5 s nach dem Senden kein Byte (normal: das Padding sofort)
-kam, und gibt jedes Frame an `deliver(type, data, seq)` in `agent-chat.js` —
-dieselbe Stelle, durch die auch der Stream läuft; `App.agentLive.sequence()`
-verwirft dort jede schon angewandte Nummer, ein später geflushter Stream rendert
-also nichts doppelt. Bytes vom Stream pausieren das Polling (nach erneuter Stille
-5 s läuft es wieder, aber nur wenn es schon einmal gegriffen hat); Ende bei
-`final`/`error` (das gepollte Terminal-Frame beendet den Lauf exakt wie der Stream,
-der zurückgehaltene Stream wird dann abgebrochen), Stop/Abort, `done` ohne
-Terminal-Frame (dann `recover_only` für die gespeicherte Antwort) oder 4× in Folge
-`known:false` (dann bleibt es beim bisherigen Verhalten inkl. 45-s-Prüfung).
-Einmal pro Lauf, sobald ein Poll den Lauf kennt und der Stream noch stumm ist:
-Analytics-Event `app_stream_buffered` (ohne Daten, docs/analytics.md).
+last_seq, done, known, more, reset?}` mit höchstens 500 Frames; `known:false`
+heißt: dieser Prozess kennt den Lauf nicht (anderer Worker, Neustart,
+abgelaufen, fremdes Konto). Nichts wird persistiert; `recover_only` öffnet
+keinen Puffer. Prod läuft mit einem Prozess; mehrere Worker kennten die Läufe
+der anderen nicht (der Browser fiele auf `recover_only` zurück).
+
+*Client.* `agent-chat.js::follow` ist der eine Weg, einem Turn zu folgen
+(`send` mit POST-Stream, `resume` ohne). `agent-live.js`
+(`App.agentLive.watch`, vor `agent-chat.js` im Bundle) hat zwei Betriebsarten:
+Puffernetz (kein Byte 5 s nach dem Senden → Polling alle 1,5 s, Bytes pausieren
+es, 4× `known:false` beendet es) und `reconnect()` (Stream mit
+`streamFailureKind` `request_failed`/`stream_read_failed`/`stream_incomplete`
+abgebrochen, Tab nach ≥ 5 s Stille wieder sichtbar bzw. `online`, oder Reload):
+Polling bis zum Turn-Ende, Netzfehler nur mit Backoff (bis 10 s), `online` und
+sichtbarer Tab pollen sofort, jeder Poll mit frischem ID-Token und 10-s-Timeout,
+nie zwei Polls gleichzeitig; `known:false` fragt `recover_only`: gespeicherter
+Turn beendet, `running` (z. B. alter Server im Deploy) wartet 5 s, zweimal
+nichts → Aufgabe mit dem ursprünglichen Fehler. Alle Frames laufen durch
+`deliver(type, data, seq)`; `App.agentLive.sequence()` verwirft schon angewandte
+Nummern, `reset` setzt `streamText`. Während Polls scheitern, zeigt die
+Aktivität „Reconnecting…“ (`agent-activity.js`, Spec `reconnecting`). Der
+Stop-Knopf (`registry.cancel(..., "user")` → `cancelRun`) ruft den Request-Stop
+(bei Netzfehler erneut beim nächsten `online`); Logout/Kontowechsel stoppen den
+Turn nicht. Nach dem Absenden liegt `{body, title, followup, settings}` in
+`sessionStorage["agent_pending_runs_<uid>"]` (≤ 4, 20 min), bis der Tab das
+Ende gesehen hat; nach einem Reload legt `resumePending` (sobald Katalog bereit,
+Agent-Modus) dafür wieder einen Run-Context an und folgt ihm ohne neuen Aufruf;
+ein Follow-up öffnet danach seinen Bookmark ganz. Analytics:
+`app_stream_buffered`, `app_stream_resumed`, `app_run_resumed`
+(docs/analytics.md).
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
 Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
 enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
@@ -3330,7 +3381,8 @@ bis zu 600 kB Review-Snapshot. Kein LLM-Kompressor. Der Admin-Prompteditor zeigt
 nur wirksame Worker-Parallelitäts-/Nachrichtengrößen und verweist auf Limits für
 das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
-Produzenten pro Prozess (Default 16). Consensus behält seine Run-Limits.
+Produzenten pro Prozess (Default 16), auch solche, deren Browser längst weg ist
+(der Producer hält seinen Slot bis zum Turn-Ende). Consensus behält seine Run-Limits.
 Ein einzelner Chat-Turn ist trotzdem nicht unbegrenzt: Vergleichs-, Schritt-,
 Zeit- und Wiederholungsgrenzen pro Turn (`AgentPolicy.turn_*`, oben bei
 `AgentPolicy.for_chat`) stoppen Schleifen gültiger Aufrufe vor dem Tageskonto.
@@ -5226,6 +5278,8 @@ app/services/
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
   agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
+  agent_background.py        Agent-Turns auf eigenem Thread statt an der Verbindung (start/stop per Request oder Turn, Stop-vor-Start-Marke, Drain bei SIGTERM)
+  agent_live.py              Prozesslokale Frames je laufendem Turn (SSE-Tail für POST /agent, JSON für /live, reset bei Fensterverlust)
   agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade

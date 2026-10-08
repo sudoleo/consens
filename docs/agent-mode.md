@@ -473,32 +473,65 @@ mit neuer Request-Identität und dem *jetzt* gewählten Modell. Bei
 model“. Budget-Absagen behalten ihre eigenen Aktionen; ein vor dem Start
 abgelehnter Text kommt wie bisher ins Eingabefeld zurück (kein Retry).
 
+**Ein Lauf hängt nicht an der Verbindung (seit 2026-10-08).** Der Server
+rechnet eine Agent-Nachricht auf einem eigenen Thread zu Ende, egal ob der
+Browser noch zuhört: Netz weg, Handy in die Tasche, App gewechselt, Laptop
+zugeklappt, Tab geschlossen oder neu geladen. Antwort, Abrechnung und Bookmark
+speichert der Lauf selbst. Nur der Stop-Knopf (oder „Stop run“ in der
+Agentenleiste) beendet ihn früher; Abmelden oder Kontowechsel nicht.
+
+Der Browser folgt dem Lauf so lange wie möglich:
+
+- Bricht der Stream ab, holt er die weiteren Schritte per
+  `GET /agent/chats/{chat}/live?request_id=<client_request_id>&after=<seq>`
+  ab dem zuletzt gesehenen Schritt. Netzfehler verlangsamen das nur (bis 10 s
+  Abstand); sobald das Netz zurück ist oder der Tab wieder sichtbar wird, fragt
+  er sofort. Solange keine Antwort durchkommt, steht „Reconnecting…“ in der
+  Aktivität.
+- Kennt der angefragte Server den Lauf nicht (neue Instanz nach einem Deploy,
+  Puffer abgelaufen), fragt er per `recover_only` nach dem gespeicherten Turn:
+  fertig oder fehlgeschlagen beendet das Warten, `recovery_state: running`
+  wartet weiter, zweimal gar nichts zeigt den Verbindungsfehler mit „Check saved
+  answer“.
+- Nach einem Neuladen im selben Tab nimmt die App laufende Nachrichten wieder
+  auf (gemerkt in `sessionStorage`, höchstens 20 min) und zeigt sie mit
+  Fortschritt bis zur Antwort, ohne etwas neu zu senden. Wer den Tab schließt,
+  findet die Antwort nach dem Ende im Verlauf.
+
+Beim Deploy oder dem nächtlichen Neustart nimmt der alte Prozess keine neuen
+Nachrichten mehr an und lässt laufende `AGENT_SHUTDOWN_GRACE_SECONDS` (Default
+20 s) zu Ende rechnen. Was dann noch läuft, endet mit „The server restarted
+during this response…“ und gespeichertem Teilergebnis, bevor Render den Prozess
+hart beendet. Render wartet nach SIGTERM die Shutdown-Frist des Dienstes
+(Standard 30 s, bis 300 s über `maxShutdownDelaySeconds`); die Grace muss
+darunter bleiben.
+
 Kommt 45 s lang kein Byte über den Stream, gibt der Browser nicht sofort auf:
 Manche Netze (Firmen-Proxys, Virenscanner) halten einen Event-Stream bis zum
 Ende zurück. Er fragt per `recover_only` mit derselben Identität nach. Ein
 gespeicherter Turn (fertig oder fehlgeschlagen) beendet das Warten,
 `recovery_state: running` hält den Stream offen, zweimal ohne Turn bricht ab.
 
-Damit der Lauf auf solchen Netzen trotzdem live sichtbar ist (seit 2026-10-08):
-Jede SSE-Antwort beginnt mit 2 KiB Kommentar-Padding und trägt
-`Cache-Control: … no-transform`; das reicht für Proxys, die nur die ersten KiB
-sammeln. Hält ein Netz den ganzen Stream zurück, merkt der Browser das daran,
-dass 5 s nach dem Senden kein einziges Byte kam, und holt die Frames alle
-1,5 s per `GET /agent/chats/{chat}/live?request_id=<client_request_id>&after=<seq>`
-aus dem Prozessspeicher des Servers, der den Lauf streamt. Jedes Frame trägt
-eine pro Lauf steigende Nummer (SSE `id:`); Stream und Poll laufen im Browser
-durch dieselbe Stelle, die bereits angewandte Nummern verwirft. Reasoning-
-Auszüge, Aktivität, Modell-Icons und Text erscheinen dadurch genau wie beim
-funktionierenden Stream, und wenn der Proxy später alles auf einmal freigibt,
-wird nichts doppelt angezeigt. Das gepollte `final`/`error` beendet den Lauf
-sofort (der zurückgehaltene Stream wird geschlossen); ist der Lauf fertig, ohne
-dass ein Terminal-Frame vorliegt, holt `recover_only` die gespeicherte Antwort.
-Der Puffer ist begrenzt (2000 Frames/2 MiB je Lauf, 64 Läufe/24 MiB gesamt,
+Damit der Lauf auf solchen Netzen trotzdem live sichtbar ist: Jede SSE-Antwort
+beginnt mit 2 KiB Kommentar-Padding und trägt `Cache-Control: … no-transform`;
+das reicht für Proxys, die nur die ersten KiB sammeln. Hält ein Netz den ganzen
+Stream zurück, merkt der Browser das daran, dass 5 s nach dem Senden kein
+einziges Byte kam, und holt die Frames alle 1,5 s über denselben
+`/live`-Endpunkt. Jedes Frame trägt eine pro Lauf steigende Nummer (SSE `id:`);
+Stream und Poll laufen im Browser durch dieselbe Stelle, die bereits angewandte
+Nummern verwirft. Reasoning-Auszüge, Aktivität, Modell-Icons und Text erscheinen
+dadurch genau wie beim funktionierenden Stream, und wenn der Proxy später alles
+auf einmal freigibt, wird nichts doppelt angezeigt. Das gepollte
+`final`/`error` beendet den Lauf sofort (der zurückgehaltene Stream wird
+geschlossen); ist der Lauf fertig, ohne dass ein Terminal-Frame vorliegt, holt
+`recover_only` die gespeicherte Antwort.
+
+Der Puffer ist begrenzt (10000 Frames/4 MiB je Lauf, 64 Läufe/48 MiB gesamt,
 10 min nach Laufende weg), wird nie gespeichert und ist nur dem eigenen Konto
-zugänglich. Kennt der angefragte Prozess den Lauf nicht (`known: false`, z. B.
-anderer Worker oder Neustart), hört der Browser nach vier Versuchen auf zu
-pollen und verhält sich wie bisher. Einmal pro Lauf zählt Umami
-`app_stream_buffered`.
+zugänglich. Wer hinter dem behaltenen Fenster liest, bekommt zuerst den
+Antworttext bis dorthin (`reset`). Umami zählt `app_stream_buffered`
+(Puffernetz), `app_stream_resumed` (abgebrochener Stream, Lauf lief weiter) und
+`app_run_resumed` (nach Reload wieder aufgenommen).
 
 Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
 Tool-Aufrufe erhalten eine dezente Statuszeile. Thinking bleibt geschlossen.
@@ -562,6 +595,7 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 | Review-Snapshot | maximal 600 kB |
 | Gleichzeitige Runs je UID | 2 |
 | Produzenten pro Prozess | AGENT_MAX_CONCURRENT_RUNS, standardmäßig 16 |
+| Nachlauf beim Neustart | AGENT_SHUTDOWN_GRACE_SECONDS, standardmäßig 20 (unter Renders Shutdown-Frist halten) |
 
 Reservierungen sind Zulassungskontrollen, keine Garantie für die tatsächliche
 Provider-Rechnung. Meldet der Provider höheren Verbrauch, wird er vollständig

@@ -57,6 +57,20 @@ def deepseek_default_agent(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_agent_background(monkeypatch):
+    """Each test gets its own Agent run registry: a lifespan test drains the
+    process-wide one (shutdown refuses new turns), which must not leak."""
+    import sys
+    from app.services import agent_background as module
+    runs = module.AgentBackgroundRuns()
+    monkeypatch.setattr(module, "agent_background", runs)
+    for name in ("app.api.routers.agent", "main"):
+        if name in sys.modules and hasattr(sys.modules[name], "agent_background"):
+            monkeypatch.setattr(sys.modules[name], "agent_background", runs)
+    return runs
+
+
+@pytest.fixture(autouse=True)
 def _single_differences_pass(monkeypatch):
     """Agent judge tests pin exact call sequences (fallback order, cooldowns,
     call counts) written for one differences pass. Production runs two in

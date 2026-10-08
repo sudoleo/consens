@@ -7,6 +7,7 @@ function boot() {
   const setup = loadScripts(["static/js/agent-live.js"]);
   setup.window.App.agentLive.SILENCE_MS = 20;
   setup.window.App.agentLive.POLL_MS = 10;
+  setup.window.App.agentLive.RUNNING_ELSEWHERE_MS = 10;
   return setup;
 }
 
@@ -133,6 +134,90 @@ describe("agent live fallback", () => {
     await new Promise(resolve => setTimeout(resolve, 60));
     expect(w.fetch.mock.calls.length).toBe(calls);
     expect(aborted.live.polling).toBe(false);
+    dom.window.close();
+  });
+
+  it("keeps following a turn through network errors and ends with its final frame", async () => {
+    const { window: w, dom } = boot();
+    const final = { response: "Answer", turn: { id: "t", consensus: "Answer" } };
+    let calls = 0;
+    w.fetch = vi.fn(async () => {
+      calls += 1;
+      if (calls <= 3) throw new TypeError("Failed to fetch");
+      return reply({ known: true, done: true, last_seq: 5, reset: { seq: 3, text: "So far " },
+        events: [{ seq: 4, type: "delta", data: { text: "and more" } }, { seq: 5, type: "final", data: final }] });
+    });
+    const states = [];
+    const tokens = ["t1", "t2", "t3", "t4"];
+    const { live, delivered, options } = watcher(w, { headers: async () => ({ Authorization: `Bearer ${tokens.shift()}` }),
+      onState: state => states.push(state) });
+    live.reconnect();
+    await expect(live.finished).resolves.toEqual({ ok: true, status: 200, data: final, streamed: true });
+    expect(delivered).toEqual([["reset", { text: "So far " }, 3], ["delta", { text: "and more" }, 4]]);
+    // Every poll asks for a fresh token; offline polls are no verdict.
+    expect(w.fetch.mock.calls.map(call => call[1].headers.Authorization)).toEqual(["Bearer t1", "Bearer t2", "Bearer t3", "Bearer t4"]);
+    expect(options.recover).not.toHaveBeenCalled();
+    expect(states.some(state => state.reconnecting && state.offline)).toBe(true);
+    expect(states.at(-1)).toEqual({ reconnecting: false, offline: false });
+    expect(options.onEngage).not.toHaveBeenCalled();
+    dom.window.close();
+  });
+
+  it("polls at once when the network returns or the tab becomes visible", async () => {
+    const { window: w, dom } = boot();
+    w.App.agentLive.POLL_MS = 400; // backoff far longer than the test waits
+    w.fetch = vi.fn(async () => { throw new TypeError("Failed to fetch"); });
+    const { live } = watcher(w);
+    live.reconnect();
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(1));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    w.dispatchEvent(new w.Event("online"));
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(2));
+    w.document.dispatchEvent(new w.Event("visibilitychange"));
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(3));
+    live.stop();
+    await expect(live.finished).resolves.toBe(null);
+    dom.window.close();
+  });
+
+  it("follows the saved turn when this server does not hold it", async () => {
+    const { window: w, dom } = boot();
+    w.fetch = vi.fn(async () => reply({ known: false, done: false, last_seq: 0, events: [] }));
+    const saved = { ok: true, status: 200, streamed: false, data: { turn: { id: "t" }, response: "Saved" } };
+    const answers = ["running", "offline", "running", saved];
+    const { live, options } = watcher(w, { recover: vi.fn(async () => answers.shift()) });
+    live.reconnect();
+    await expect(live.finished).resolves.toBe(saved);
+    expect(options.recover).toHaveBeenCalledTimes(4);
+    dom.window.close();
+  });
+
+  it("ends a followed turn with null when it is gone for good", async () => {
+    const { window: w, dom } = boot();
+    w.fetch = vi.fn(async () => reply({ known: false, done: false, last_seq: 0, events: [] }));
+    const { live, options } = watcher(w);
+    live.reconnect();
+    await expect(live.finished).resolves.toBe(null);
+    expect(options.recover).toHaveBeenCalledTimes(2);
+    expect(live.reconnecting).toBe(false);
+    dom.window.close();
+  });
+
+  it("never runs two polls at once and resolves null when its signal aborts", async () => {
+    const { window: w, dom } = boot();
+    let release;
+    w.fetch = vi.fn(() => new Promise(resolve => { release = () => resolve(reply({ known: true, done: false, last_seq: 0, events: [] })); }));
+    const controller = new w.AbortController();
+    const { live } = watcher(w, { signal: controller.signal });
+    live.reconnect();
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(1));
+    w.dispatchEvent(new w.Event("online"));
+    live.reconnect();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(w.fetch).toHaveBeenCalledTimes(1);
+    release();
+    controller.abort();
+    await expect(live.finished).resolves.toBe(null);
     dom.window.close();
   });
 });

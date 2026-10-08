@@ -54,6 +54,18 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Heimnetz kommt kein einziger `/live`-Aufruf. Umami: `app_stream_buffered`
       nur im Firmennetz. Automatisiert: `agent-live.test.mjs`,
       `test_agent_live.py`, `test_agent_chat_frontend.py::test_buffering_proxy_*`.
+- [ ] Lauf ohne Verbindung (2026-10-08, Prod, am besten am Handy): Agent-Frage
+      mit Vergleich senden, sobald „Thinking…“ steht 1) WLAN/Mobilfunk für
+      ~20 s aus → Aktivität zeigt „Reconnecting…“, nach dem Einschalten läuft
+      der Fortschritt weiter und die Antwort kommt genau einmal; 2) App
+      wechseln oder Bildschirm sperren, nach 1–2 min zurück → Fortschritt bzw.
+      fertige Antwort ohne Fehler; 3) Seite neu laden → der Lauf erscheint
+      wieder mit Fortschritt und endet mit der Antwort, kein zweiter
+      Modellaufruf (Admin-Usage); 4) Tab schließen, später öffnen → Antwort im
+      Verlauf. Stop-Knopf während eines Laufs → Aktivität „Response stopped“,
+      Network zeigt `POST …/requests/…/stop`. Automatisiert:
+      `test_agent_background.py`, `agent-live.test.mjs`,
+      `agent-chat.test.mjs` („agent turns that outlive their connection“).
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,

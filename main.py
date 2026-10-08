@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+import signal
+import threading
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -39,6 +41,7 @@ from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.static_delivery import StaticDeliveryMiddleware
 from app.core.e2e_profile import e2e_test_mode_enabled
 from app.core.rate_limit import limiter
+from app.services.agent_background import agent_background
 
 # Import routers
 from app.api.routers import (
@@ -151,6 +154,26 @@ def _run_once(func):
     return run_once
 
 
+def _drain_agent_runs_on_sigterm():
+    """Start the Agent drain the moment SIGTERM arrives, not after uvicorn
+    waited for open connections (Render: SIGTERM, then SIGKILL after the
+    service's shutdown delay). uvicorn installed its handler before the
+    lifespan starts and restores the original afterwards; ours runs first and
+    hands the work to the event loop, never doing it inside the signal."""
+    if threading.current_thread() is not threading.main_thread():
+        return
+    previous = signal.getsignal(signal.SIGTERM)
+    if not callable(previous):
+        return
+    loop = asyncio.get_running_loop()
+
+    def on_sigterm(signum, frame):
+        loop.call_soon_threadsafe(agent_background.begin_shutdown)
+        previous(signum, frame)
+
+    signal.signal(signal.SIGTERM, on_sigterm)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Before the E2E early-return: the streaming endpoints are the same
@@ -228,9 +251,13 @@ async def lifespan(app: FastAPI):
         model_config_sync_task,
         telegram_webhook_task,
     )
+    _drain_agent_runs_on_sigterm()
     try:
         yield
     finally:
+        # Running Agent turns are not tied to a connection: let them finish
+        # (or save what they have) before the process goes away.
+        await asyncio.to_thread(agent_background.drain)
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

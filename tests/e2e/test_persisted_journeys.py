@@ -197,8 +197,8 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
         j.page.click('#sendButton')
     original_request = started.value.post_data_json
     expect(j.page.locator('#agentAnswerBody')).to_contain_text('Saved partial answer', timeout=30000)
-    # The composer stop cancels its SSE request. The server observes disconnect;
-    # the native receipt/settlement, rather than a fabricated /stop reply, proves it.
+    # The composer stop sends the explicit request Stop (a closed connection no
+    # longer ends a turn); the native receipt/settlement proves it took effect.
     j.page.wait_for_function('() => Date.now() - App.runRegistry.visible().startedAt > 800')
     j.page.locator('#sendButton').click()
     j.page.wait_for_function('() => App.runRegistry.visible()?.status === "canceled"')
@@ -225,6 +225,38 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     after = j.control('state')
     assert after['calls'] == state['calls']
     assert j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']['used'] == 8 * 150
+
+
+def test_j02b_agent_turn_survives_a_reload_and_is_followed_to_its_answer(journey):
+    j = journey
+    j.control('seed', {'gate': True})
+    j.open()
+    j.page.locator('#attachTrigger').click()
+    j.page.locator('#runModeControl [data-value="agent"]').click()
+    question = 'Survives reload ' + j.uid
+    j.page.fill('#questionInput', question)
+    j.page.click('#sendButton')
+    expect(j.page.locator('#agentAnswerBody')).to_contain_text('Saved partial answer', timeout=30000)
+    # The reload closes the stream; the turn keeps running on the server.
+    j.page.reload(wait_until='domcontentloaded')
+    j.page.wait_for_function('uid => window.__consensioAuthState?.uid === uid', arg=j.uid)
+    j.page.wait_for_function('q => App.runRegistry.list().some(r => r.question === q && r.status === "running")',
+                             arg=question, timeout=30000)
+    expect(j.page.locator('#agentAnswerBody')).to_contain_text('Saved partial answer', timeout=15000)
+    [stream] = j.control('state')['streams'][:1]
+    assert stream['lease'] == 'running'
+    j.control('release', {})
+    j.page.wait_for_function('q => App.runRegistry.list().some(r => r.question === q && r.status === "succeeded")',
+                             arg=question, timeout=60000)
+    state = j.settled()
+    chat_id, chat = next(iter(state['collections']['chats'].items()))
+    [turn] = chat['children']['turns'].values()
+    assert turn['data']['status'] == 'completed'
+    assert state['collections']['bookmarks']
+    # Followed, never sent again: every model step ran exactly once.
+    steps = [call['step'] for call in state['calls']]
+    assert steps and len(steps) == len(set(steps)), steps
+    assert j.page.evaluate("() => sessionStorage.length === 0 || !Object.keys(sessionStorage).some(k => k.startsWith('agent_pending_runs_'))")
 
 
 def test_j03_historical_source_job_resumes_and_pages_a_native_revision(journey):
