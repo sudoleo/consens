@@ -1401,6 +1401,9 @@ class DelegationLoop(AgentLoop):
                 self.completion.failure = agent_failure(self.watch_error)
                 raise self.watch_error
             status = "cancelled"
+            if not self.claimed:
+                # release_unclaimed below saves this reason with the turn.
+                self.completion.failure = {"code": "cancelled", "error": "Response stopped before a model call started."}
             raise
         except GeneratorExit:
             status = "cancelled"

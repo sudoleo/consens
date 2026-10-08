@@ -908,21 +908,58 @@
     const rest = list.filter(item => item.body.client_request_id !== context.requestIdentity);
     if (rest.length !== list.length) writePending(uid, rest);
   }
+  function markPendingStop(context) {
+    const uid = context.auth.uid;
+    if (!uid) return;
+    const list = readPending(uid);
+    const item = list.find(entry => entry.body.client_request_id === context.requestIdentity);
+    if (!item) return;
+    item.stop = true;
+    writePending(uid, list);
+  }
   // Stop is explicit: closing the connection no longer ends a turn. The
   // request identity reaches the turn before its id is known, and a Stop
-  // that overtakes its own message keeps it from starting at all.
+  // that overtakes its own message keeps it from starting at all. It is
+  // retried (backoff, and at once when the network returns) until the server
+  // answered, and stays in the pending record so a reload delivers it too.
+  const STOP_RETRY_MAX_MS = 10 * 60 * 1000;
   function stopOnServer(context) {
     const chatId = context.metadata.chatId;
     if (!context.metadata.requestSent || !chatId) return;
+    markPendingStop(context);
     const url = `/agent/chats/${encodeURIComponent(chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/stop`;
+    const started = Date.now();
+    let delay = 1000;
+    const retry = () => {
+      if (Date.now() - started > STOP_RETRY_MAX_MS) return;
+      const wait = delay;
+      delay = Math.min(30000, delay * 2);
+      let timer = null;
+      const now = () => { clearTimeout(timer); window.removeEventListener("online", now); attempt(); };
+      timer = setTimeout(now, wait);
+      window.addEventListener("online", now, { once: true });
+    };
     const attempt = async () => {
       const user = window.auth?.currentUser;
+      // Another account now: the record stays for its owner's next visit.
       if (!user || user.uid !== context.auth.uid) return;
-      const token = await user.getIdToken();
-      await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, keepalive: true });
+      let response;
+      try {
+        const token = await user.getIdToken();
+        response = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, keepalive: true });
+      } catch (_) { retry(); return; }
+      if (response.status === 429 || response.status >= 500) { retry(); return; }
+      forgetPending(context);
+      if (!response.ok) return;
+      let data = null;
+      try { data = await response.json(); } catch (_) { /* no verdict needed */ }
+      // The turn had already ended (e.g. while this browser was offline):
+      // show what it ended with instead of a Stop that did nothing.
+      if (data?.status === "not_running" && context.metadata.agentTurnId && registry.get(context.runId)?.status === "canceled") {
+        recoverAnswer(context);
+      }
     };
-    // Offline: deliver the Stop as soon as the network is back.
-    attempt().catch(() => window.addEventListener("online", () => { attempt().catch(() => {}); }, { once: true }));
+    attempt();
   }
   function cancelRun(context, reason) {
     context.consensus.status = "canceled";
@@ -932,8 +969,8 @@
     else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     // Only the person's Stop ends the turn; a logout or account switch
     // leaves it running to its saved answer.
-    if (reason === "user") stopOnServer(context);
-    forgetPending(context);
+    if (reason === "user" && context.metadata.requestSent) stopOnServer(context);
+    else forgetPending(context);
     restoreUnsentDraft(context);
   }
   // After a reload: follow this tab's turns that were still running.
@@ -947,6 +984,12 @@
     setTimeout(() => {
       for (const record of records) {
         if (registry.list().some(run => run.requestIdentity === record.body.client_request_id)) continue;
+        if (record.stop) {
+          // Stopped before the reload, Stop not yet confirmed: deliver it.
+          stopOnServer({ runId: null, requestIdentity: record.body.client_request_id, auth: { uid },
+            metadata: { requestSent: true, chatId: record.body.chat_id } });
+          continue;
+        }
         resume(record, uid);
       }
     }, 0);
@@ -986,13 +1029,13 @@
       adopt(context, result, { offer: !record.followup });
       // The resumed view shows only this message; a follow-up's chat opens
       // whole once its answer is saved.
-      if (record.followup && registry.isVisible(context.runId) && context.status === "succeeded") window.openBookmark?.(body.bookmark_id);
+      if (record.followup && registry.isVisible(context.runId)) window.openBookmark?.(body.bookmark_id);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
       failRun(context, error);
     } finally {
       context.controllers.query = null;
-      forgetPending(context);
+      if (["succeeded", "failed"].includes(context.status)) forgetPending(context);
       if (registry.isAuthCurrent(context)) registry.renderVisible();
       if (!context.metadata.terminalBudget && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
@@ -1001,8 +1044,9 @@
   // keeps running on the server and is followed by polling instead.
   const RESUMABLE = new Set(["request_failed", "stream_read_failed", "stream_incomplete"]);
   // Back in the foreground or online after this long without a byte, the
-  // stream may be dead without an error (phones keep half-open connections).
-  const REVIVE_QUIET_MS = 5000;
+  // stream is dead without an error (phones keep half-open connections): the
+  // server sends a keepalive at least every 15 s.
+  const REVIVE_QUIET_MS = 20000;
   // Follows one Agent turn to its end and returns that end the way
   // streamSSERequest does ({ ok, status, data, streamed }). The server runs
   // the turn independently of this connection (agent_background.py): a
@@ -1121,16 +1165,21 @@
       onEngage: () => App.trackAppEvent?.("app_stream_buffered"),
       onState: ({ reconnecting, offline }) => {
         if (!registry.isAuthCurrent(context)) return;
-        if (reconnecting && post && !resumeTracked) { resumeTracked = true; App.trackAppEvent?.("app_stream_resumed"); }
         if (context.metadata.reconnecting === reconnecting && context.metadata.offline === offline) return;
         context.metadata.reconnecting = reconnecting;
         context.metadata.offline = offline;
         registry.update(context.runId, () => {});
       },
     });
+    // The stream died (error, silence) but the turn runs on: follow it by
+    // polling. Counted once per run, only for a stream that really died.
+    const resumeFollowing = () => {
+      if (!resumeTracked) { resumeTracked = true; App.trackAppEvent?.("app_stream_resumed"); }
+      live.reconnect();
+    };
     const revive = () => {
       if (document.visibilityState === "hidden" || !live || live.reconnecting) return;
-      if (Date.now() - lastByte >= REVIVE_QUIET_MS) live.reconnect();
+      if (Date.now() - lastByte >= REVIVE_QUIET_MS) resumeFollowing();
     };
     if (post) {
       document.addEventListener("visibilitychange", revive);
@@ -1147,21 +1196,28 @@
       }
       const streaming = App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal,
         streamHandlers, { headers, onProgress: () => { lastByte = Date.now(); onProgress?.(); live?.bytes(); } }),
-        { signal: streamControl.signal, timeoutMs: 45000, onIdle: () => checkStalledRun(context, body, headers, stall) });
+        // 45 s without a byte (keepalives come every 15 s): with the live
+        // follower the stream is given up for polling, never the turn.
+        { signal: streamControl.signal, timeoutMs: 45000, onIdle: live
+          ? () => { resumeFollowing(); return undefined; }
+          : () => checkStalledRun(context, body, headers, stall) });
       if (!live) return await streaming;
       streaming.catch(() => {}); // Rejects with AbortError when the poll wins.
       const outcome = await Promise.race([streaming.then(value => ({ value }), error => ({ error })),
         live.finished.then(value => ({ value, polled: true }))]);
       if (outcome.polled) {
-        if (outcome.value) { abortStream(); return outcome.value; }
-        return await streaming;
+        abortStream();
+        if (outcome.value) return outcome.value;
+        // The follower gave up (no such turn, follow limit): no silent stream
+        // may keep the run open.
+        throw Object.assign(new Error("Connection lost before the response was completed."), { streamFailureKind: "stream_incomplete" });
       }
       if (!outcome.error) return outcome.value;
       const error = outcome.error;
       if (signal.aborted || error?.name === "AbortError" || !registry.isAuthCurrent(context) || !context.metadata.requestSent
           || !(live.reconnecting || RESUMABLE.has(error?.streamFailureKind))) throw error;
       // The stream broke, the turn did not: follow it to its end.
-      live.reconnect();
+      resumeFollowing();
       const followed = await live.finished;
       if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
       if (!followed) throw error;
@@ -1339,7 +1395,9 @@
       failRun(context, error);
     } finally {
       context.controllers.query = null;
-      forgetPending(context);
+      // Only a known end clears the record for a reload; Stop and logout
+      // handle theirs in cancelRun, a transport problem keeps it.
+      if (["succeeded", "failed"].includes(context.status)) forgetPending(context);
       restoreUnsentDraft(context);
       if (registry.isAuthCurrent(context)) registry.renderVisible();
       if (!context.metadata.terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);

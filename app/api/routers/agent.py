@@ -220,10 +220,6 @@ def available_agent_budget(request: Request):
 def run_agent(request: Request, payload: AgentRequest):
     uid = _chat_uid(request)
     require_agent_access(uid)
-    try:
-        api_uid_limiter.check(uid, "agent:turn", 20)
-    except ApiUidRateLimitExceeded:
-        raise HTTPException(status_code=429, detail="Too many agent requests. Please wait.") from None
     store = AgentRunStore(db_firestore)
     turn = None
     lease = None
@@ -272,8 +268,17 @@ def run_agent(request: Request, payload: AgentRequest):
         if payload.recover_only:
             return JSONResponse({"error": "No saved answer is available for this request.",
                 "code": "answer_unavailable", "recoverable": False}, status_code=404)
+        # Only a new turn counts: a browser following a running turn asks
+        # with recover_only (above) and must not use up the send limit.
+        try:
+            api_uid_limiter.check(uid, "agent:turn", 20)
+        except ApiUidRateLimitExceeded:
+            raise HTTPException(status_code=429, detail="Too many agent requests. Please wait.") from None
         if agent_background.shutting_down:
             raise AgentShuttingDown("The server is restarting. Please send your message again in a moment.")
+        if agent_background.running(uid, payload.chat_id, payload.client_request_id):
+            return JSONResponse({"error": "This request is still running.", "code": "request_running",
+                                 "recoverable": True, "recovery_state": "running"}, status_code=409)
         try:
             model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
         except ValueError as exc:
@@ -366,7 +371,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          source_limits=source_limits, agent_preferences=payload.agent_preferences, memory=memory,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).
-        live = agent_live.open(uid, payload.chat_id, payload.client_request_id)
+        live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)
     except Exception as exc:
         try:
             if turn:
@@ -435,12 +440,10 @@ def run_agent(request: Request, payload: AgentRequest):
             _save_interrupted(uid, payload, store, turn["id"])
             raise
         except ProviderCancelled:
-            # Stop: settle and save like any other end, and tell every view
-            # still following the run (another tab, a reconnecting browser).
+            # Stop: the loop has settled and saved (an unclaimed turn as
+            # "cancelled"); tell every view still following the run (another
+            # tab, a reconnecting browser).
             status = "cancelled"
-            if not loop.claimed:
-                store.release_unclaimed(uid, payload.chat_id, turn["id"], failure={
-                    "code": "cancelled", "error": "Response stopped before a model call started."})
             error = "This response was stopped."
             failure = {"code": "cancelled"}
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
@@ -515,14 +518,21 @@ def run_agent(request: Request, payload: AgentRequest):
         # Two identical requests at once: the first one runs this turn; its
         # buffer and saved state stay untouched.
         lease.release()
+        if live_owned:
+            agent_live.discard(live)
         return JSONResponse({"error": str(exc), "code": "request_running", "recoverable": True,
                              "recovery_state": "running"}, status_code=409)
     except Exception as exc:
-        agent_live.finish(live)
         try:
-            failure = {"code": "cancelled", "error": str(exc)} if isinstance(exc, AgentRunStopped) else agent_failure(exc)
-            store.release_unclaimed(uid, payload.chat_id, turn["id"], failure=failure)
-            _save_interrupted(uid, payload, store, turn["id"])
+            # A buffer this request did not create belongs to a running
+            # duplicate, and so does the turn: leave both alone.
+            if live_owned:
+                agent_live.finish(live)
+                failure = ({"code": "cancelled", "error": str(exc)} if isinstance(exc, AgentRunStopped)
+                           else {"code": "run_interrupted", "error": str(exc)} if isinstance(exc, AgentShuttingDown)
+                           else agent_failure(exc))
+                store.release_unclaimed(uid, payload.chat_id, turn["id"], failure=failure)
+                _save_interrupted(uid, payload, store, turn["id"])
         finally:
             lease.release()
         if isinstance(exc, AgentRunStopped):

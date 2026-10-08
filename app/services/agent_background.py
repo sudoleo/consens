@@ -112,14 +112,15 @@ class AgentBackgroundRuns:
         run = BackgroundRun(uid=str(uid), chat_id=str(chat_id), request_id=str(request_id), turn_id=str(turn_id),
                             cancel=cancel, interrupt=interrupt)
         with self._lock:
+            # A running duplicate first: its turn and buffer are not ours to end.
+            current = self._runs.get(run.key)
+            if current is not None and not current.finished.is_set():
+                raise AgentRunDuplicate("This request is still running.")
             if self._shutdown_at is not None:
                 raise AgentShuttingDown("The server is restarting. Please send your message again in a moment.")
             self._expire_stops()
             if self._stops.pop(run.key, None) is not None:
                 raise AgentRunStopped("Response stopped before a model call started.")
-            current = self._runs.get(run.key)
-            if current is not None and not current.finished.is_set():
-                raise AgentRunDuplicate("This request is still running.")
             self._runs[run.key] = run
         # The producer runs off the request; carry its ContextVars (the
         # correlation id for logs and alerts) along.

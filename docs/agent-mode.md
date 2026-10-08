@@ -482,17 +482,23 @@ Agentenleiste) beendet ihn früher; Abmelden oder Kontowechsel nicht.
 
 Der Browser folgt dem Lauf so lange wie möglich:
 
-- Bricht der Stream ab, holt er die weiteren Schritte per
+- Bricht der Stream ab oder bleibt er 45 s stumm (eine halb tote Verbindung
+  meldet keinen Fehler), holt er die weiteren Schritte per
   `GET /agent/chats/{chat}/live?request_id=<client_request_id>&after=<seq>`
-  ab dem zuletzt gesehenen Schritt. Netzfehler verlangsamen das nur (bis 10 s
+  ab dem zuletzt gesehenen Schritt; ebenso, wenn der Tab nach mehr als 20 s
+  ohne ein Byte wieder sichtbar wird. Netzfehler verlangsamen das nur (bis 10 s
   Abstand); sobald das Netz zurück ist oder der Tab wieder sichtbar wird, fragt
   er sofort. Solange keine Antwort durchkommt, steht „Reconnecting…“ in der
   Aktivität.
 - Kennt der angefragte Server den Lauf nicht (neue Instanz nach einem Deploy,
-  Puffer abgelaufen), fragt er per `recover_only` nach dem gespeicherten Turn:
-  fertig oder fehlgeschlagen beendet das Warten, `recovery_state: running`
-  wartet weiter, zweimal gar nichts zeigt den Verbindungsfehler mit „Check saved
-  answer“.
+  Puffer abgelaufen), fragt er per `recover_only` nach dem gespeicherten Turn
+  (zählt nicht gegen das Sendelimit): fertig oder fehlgeschlagen beendet das
+  Warten, `recovery_state: running` wartet weiter (5 s, dann seltener bis
+  60 s), dreimal gar nichts über mindestens 20 s zeigt den Verbindungsfehler
+  mit „Check saved answer“.
+- Der Stop-Knopf wird wiederholt, bis der Server ihn angenommen hat (auch nach
+  einem Neuladen); war der Lauf da schon fertig, zeigt die App das
+  gespeicherte Ergebnis.
 - Nach einem Neuladen im selben Tab nimmt die App laufende Nachrichten wieder
   auf (gemerkt in `sessionStorage`, höchstens 20 min) und zeigt sie mit
   Fortschritt bis zur Antwort, ohne etwas neu zu senden. Wer den Tab schließt,
@@ -595,7 +601,7 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 | Review-Snapshot | maximal 600 kB |
 | Gleichzeitige Runs je UID | 2 |
 | Produzenten pro Prozess | AGENT_MAX_CONCURRENT_RUNS, standardmäßig 16 |
-| Nachlauf beim Neustart | AGENT_SHUTDOWN_GRACE_SECONDS, standardmäßig 20 (unter Renders Shutdown-Frist halten) |
+| Nachlauf beim Neustart | AGENT_SHUTDOWN_GRACE_SECONDS, standardmäßig 20 (unter Renders Shutdown-Frist halten); Prod 280 bei `maxShutdownDelaySeconds` 300 |
 
 Reservierungen sind Zulassungskontrollen, keine Garantie für die tatsächliche
 Provider-Rechnung. Meldet der Provider höheren Verbrauch, wird er vollständig

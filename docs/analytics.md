@@ -58,8 +58,9 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   Zählt, wie viele Läufe ohne diesen Fallback nur „Thinking…“ gezeigt hätten;
   ins Verhältnis zu `ask` mit `mode=agent` setzen.
 - `app_stream_resumed` (seit 2026-10-08, ohne Daten): einmal pro Agent-Lauf,
-  wenn der Antwort-Stream abbrach (Netz weg, Tab im Hintergrund, Neustart),
-  der Lauf aber auf dem Server weiterlief und die App ihm per Polling folgt.
+  wenn der Antwort-Stream wirklich tot war (Fehler, 45 s ohne Byte oder Tab nach
+  über 20 s Stille zurück), der Lauf aber auf dem Server weiterlief und die App
+  ihm per Polling folgt.
 - `app_run_resumed` (seit 2026-10-08, ohne Daten): eine nach einem Neuladen
   wieder aufgenommene, noch laufende Agent-Nachricht.
 - `auth_*`: jeder einzelne Anmeldeversuch mit Ergebnis und Fehlercode.

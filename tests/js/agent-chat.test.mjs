@@ -1756,6 +1756,7 @@ describe("agent turns that outlive their connection", () => {
     harness.window.App.agentLive.SILENCE_MS = 5000;
     harness.window.App.agentLive.POLL_MS = 10;
     harness.window.App.agentLive.RUNNING_ELSEWHERE_MS = 10;
+    harness.window.App.agentLive.GONE_MS = 30;
     return { ...harness, stops };
   }
   const liveCalls = w => w.fetch.mock.calls.map(call => String(call[0])).filter(url => url.includes("/live?"));
@@ -1879,4 +1880,123 @@ describe("agent turns that outlive their connection", () => {
     expect(liveCalls(w)).toHaveLength(0);
     dom.window.close();
   });
+
+  it("follows the turn instead of failing when the stream goes silent", async () => {
+    const { window: w, document: d, dom } = bootFollow({ pages: [
+      { known: true, done: true, last_seq: 2, events: [{ seq: 2, type: "final", data: finalData("Silent stream answer") }] }] });
+    await selectAgent(w);
+    const originalTimer = w.setTimeout.bind(w);
+    let idle;
+    w.setTimeout = (fn, ms, ...args) => ms === 45000 ? (idle = fn, 999) : originalTimer(fn, ms, ...args);
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, handlers) => {
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      return new Promise(() => {}); // a half-open connection: no error, no bytes
+    });
+    d.querySelector("#questionInput").value = "Question";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(idle).toBeTypeOf("function"));
+    idle();
+    await sending;
+    const run = w.App.runRegistry.visible();
+    expect(run.status).toBe("succeeded");
+    expect(run.consensus.text).toBe("Silent stream answer");
+    // No recover_only stall checks: the live follower decided.
+    expect(w.streamSSERequest).toHaveBeenCalledTimes(1);
+    expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_stream_resumed")).toHaveLength(1);
+    dom.window.close();
+  });
+
+  it("does not switch a healthy stream to polling for a short tab switch", async () => {
+    const { window: w, document: d, dom } = bootFollow({ pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    await selectAgent(w);
+    let release;
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, handlers, options) => {
+      options.onProgress();
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      return new Promise(resolve => { release = resolve; });
+    });
+    d.querySelector("#questionInput").value = "Question";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const realNow = w.Date.now;
+    const base = realNow();
+    w.Date.now = () => base + 8000; // back after 8 s, inside the keepalive window
+    w.document.dispatchEvent(new w.Event("visibilitychange"));
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(liveCalls(w)).toHaveLength(0);
+    w.Date.now = realNow;
+    release({ ok: true, status: 200, streamed: true, data: finalData("Answer") });
+    await sending;
+    expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_stream_resumed")).toHaveLength(0);
+    dom.window.close();
+  });
+
+  it("retries a Stop the server could not take and keeps it for a reload", async () => {
+    let attempts = 0;
+    const { window: w, document: d, dom } = bootFollow({ pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    await selectAgent(w);
+    const catalogFetch = w.fetch.getMockImplementation();
+    w.fetch.mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/stop")) {
+        attempts += 1;
+        return attempts < 2 ? { ok: false, status: 503, json: async () => ({}) } : { ok: true, status: 200, json: async () => ({ status: "stopping" }) };
+      }
+      return catalogFetch(url, init);
+    });
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, handlers) => {
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      return new Promise(() => {});
+    });
+    d.querySelector("#questionInput").value = "Question";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().metadata.agentTurnId).toBe(TURN));
+    const run = w.App.runRegistry.visible();
+    w.App.runRegistry.cancel(run.runId);
+    await sending;
+    await vi.waitFor(() => expect(attempts).toBe(1));
+    // Not confirmed yet: the record says so, for a reload.
+    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner"))[0].stop).toBe(true);
+    w.dispatchEvent(new w.Event("online"));
+    await vi.waitFor(() => expect(attempts).toBe(2));
+    await vi.waitFor(() => expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null));
+    dom.window.close();
+  });
+
+  it("delivers an unconfirmed Stop after a reload instead of following the turn", async () => {
+    const record = { at: Date.now(), stop: true, title: "Stopped", followup: false,
+      body: { chat_id: CHAT, question: "Stopped", client_request_id: "req-stopped", bookmark_id: "b_agent_stopped" } };
+    const { window: w, dom, stops } = bootFollow({
+      before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
+      pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    await selectAgent(w);
+    await vi.waitFor(() => expect(stops).toHaveLength(1));
+    expect(stops[0].url).toBe(`/agent/chats/${CHAT}/requests/req-stopped/stop`);
+    expect(w.App.runRegistry.list()).toHaveLength(0);
+    expect(liveCalls(w)).toHaveLength(0);
+    await vi.waitFor(() => expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null));
+    dom.window.close();
+  });
+
+  it("shows the saved answer when a late Stop finds the turn already ended", async () => {
+    const { window: w, document: d, dom } = bootFollow({ pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    await selectAgent(w);
+    const catalogFetch = w.fetch.getMockImplementation();
+    w.fetch.mockImplementation(async (url, init) => String(url).endsWith("/stop")
+      ? { ok: true, status: 200, json: async () => ({ status: "not_running" }) } : catalogFetch(url, init));
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, handlers) => {
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      return new Promise(() => {});
+    });
+    d.querySelector("#questionInput").value = "Question";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().metadata.agentTurnId).toBe(TURN));
+    w.streamSSERequest.mockResolvedValueOnce({ ok: true, status: 200, streamed: false, data: finalData("Finished meanwhile") });
+    w.App.runRegistry.cancel(w.App.runRegistry.visible().runId);
+    await sending;
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().status).toBe("succeeded"));
+    expect(w.App.runRegistry.visible().consensus.text).toBe("Finished meanwhile");
+    expect(w.streamSSERequest.mock.calls.at(-1)[1].recover_only).toBe(true);
+    dom.window.close();
+  });
 });
+

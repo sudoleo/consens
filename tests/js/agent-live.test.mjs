@@ -8,6 +8,8 @@ function boot() {
   setup.window.App.agentLive.SILENCE_MS = 20;
   setup.window.App.agentLive.POLL_MS = 10;
   setup.window.App.agentLive.RUNNING_ELSEWHERE_MS = 10;
+  setup.window.App.agentLive.GONE_MS = 30;
+  setup.window.App.agentLive.STREAM_QUIET_MS = 200;
   return setup;
 }
 
@@ -196,9 +198,12 @@ describe("agent live fallback", () => {
     const { window: w, dom } = boot();
     w.fetch = vi.fn(async () => reply({ known: false, done: false, last_seq: 0, events: [] }));
     const { live, options } = watcher(w);
+    const started = Date.now();
     live.reconnect();
     await expect(live.finished).resolves.toBe(null);
-    expect(options.recover).toHaveBeenCalledTimes(2);
+    // Not before three answers and the grace time: a turn may still be in preparation.
+    expect(options.recover.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(30);
     expect(live.reconnecting).toBe(false);
     dom.window.close();
   });
@@ -218,6 +223,66 @@ describe("agent live fallback", () => {
     release();
     controller.abort();
     await expect(live.finished).resolves.toBe(null);
+    dom.window.close();
+  });
+
+  it("can still reconnect after the buffering fallback gave up", async () => {
+    const { window: w, dom } = boot();
+    const final = { response: "Answer", turn: { id: "t" } };
+    let known = false;
+    w.fetch = vi.fn(async () => reply(known
+      ? { known: true, done: true, last_seq: 1, events: [{ seq: 1, type: "final", data: final }] }
+      : { known: false, done: false, last_seq: 0, events: [] }));
+    const { live } = watcher(w);
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(4));
+    await new Promise(resolve => setTimeout(resolve, 40));
+    expect(live.polling).toBe(false);
+    known = true; // the turn's buffer exists now; then the stream breaks
+    live.reconnect();
+    await expect(live.finished).resolves.toEqual({ ok: true, status: 200, data: final, streamed: true });
+    dom.window.close();
+  });
+
+  it("holds polls back while the stream still delivers bytes", async () => {
+    const { window: w, dom } = boot();
+    w.fetch = vi.fn(async () => reply({ known: true, done: false, last_seq: 0, events: [] }));
+    const { live } = watcher(w);
+    live.reconnect();
+    live.bytes(); // the stream answered right after all
+    const ticker = setInterval(() => live.bytes(), 20);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const during = w.fetch.mock.calls.length;
+    expect(during).toBeLessThanOrEqual(2);
+    clearInterval(ticker);
+    // Silent longer than STREAM_QUIET_MS: polling resumes.
+    await vi.waitFor(() => expect(w.fetch.mock.calls.length).toBeGreaterThan(during), { timeout: 1000 });
+    live.stop();
+    dom.window.close();
+  });
+
+  it("checks a turn running elsewhere less and less often", async () => {
+    const { window: w, dom } = boot();
+    w.fetch = vi.fn(async () => reply({ known: false, done: false, last_seq: 0, events: [] }));
+    const times = [];
+    const { live } = watcher(w, { recover: vi.fn(async () => { times.push(Date.now()); return "running"; }) });
+    live.reconnect();
+    await vi.waitFor(() => expect(times.length).toBeGreaterThanOrEqual(4), { timeout: 2000 });
+    const gaps = times.slice(1).map((time, index) => time - times[index]);
+    expect(gaps[2]).toBeGreaterThan(gaps[0]);
+    live.stop();
+    dom.window.close();
+  });
+
+  it("delivers lasting frames from the dropped window before the reset", async () => {
+    const { window: w, dom } = boot();
+    w.fetch = vi.fn(async () => reply({ known: true, done: false, last_seq: 7,
+      reset: { seq: 6, text: "So far", frames: [{ seq: 1, type: "accepted", data: { turn_id: "t" } }, { seq: 4, type: "quota", data: { token_budget: {} } }] },
+      events: [{ seq: 7, type: "delta", data: { text: "!" } }] }));
+    const { live, delivered } = watcher(w);
+    live.reconnect();
+    await vi.waitFor(() => expect(delivered.map(item => item[2])).toEqual([1, 4, 6, 7]));
+    expect(delivered.map(item => item[0])).toEqual(["accepted", "quota", "reset", "delta"]);
+    live.stop();
     dom.window.close();
   });
 });

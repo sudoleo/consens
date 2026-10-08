@@ -2930,12 +2930,17 @@ laufenden gespeicherten Turn `stop_delegation` (wirkt überall über den 3-s-
 Watcher) und hinterlegt eine 10-min-Marke, damit ein noch nicht angekommener
 POST derselben Identität nie startet (`AgentRunStopped` → 409 `cancelled`,
 Turn `failed`, kein Modellaufruf; Registrierung und Marke unter demselben Lock).
+Ein Stop vor dem ersten Modellaufruf speichert den Turn mit `cancelled`
+(`DelegationLoop.run` setzt `completion.failure` für `release_unclaimed`).
 `POST …/turns/{turn}/stop` bricht zusätzlich einen Turn dieses Prozesses sofort
 ab. Ein gestoppter Turn sendet jetzt ein Terminal-Frame `error` mit
 `code: cancelled` (für andere Tabs und wiederverbindende Browser). Zwei
 gleichzeitige POSTs derselben Identität: der zweite bekommt 409
-`request_running`, `agent_live.open` teilt einen noch laufenden Puffer statt
-ihn zu ersetzen (`AgentRunDuplicate`).
+`request_running` (schon vor der Vorbereitung, wenn der Prozess die Identität
+laufen hat; sonst `AgentRunDuplicate`, das `start()` vor Shutdown und Stop-Marke
+prüft), `agent_live.acquire` teilt einen noch laufenden Puffer statt ihn zu
+ersetzen. Kommt SIGTERM während der Vorbereitung, endet der schon angelegte Turn
+mit `run_interrupted` (503).
 
 *Neustart/Deploy.* Render schickt SIGTERM und wartet die Shutdown-Frist des
 Dienstes (Standard 30 s, max. 300 s über `maxShutdownDelaySeconds`), dann
@@ -2946,45 +2951,73 @@ keine neuen Turns (503, `Retry-After: 5`), laufende dürfen
 verbliebene Turn `AgentRunInterrupted` („The server restarted during this
 response…“, Code `run_interrupted`) und speichert ab, bevor SIGKILL kommt. Das
 Lifespan-Ende wartet per `agent_background.drain` (Grace + 8 s). Die Grace muss
-unter der Render-Frist bleiben; wer die Frist erhöht, erhöht beide.
+unter der Render-Frist bleiben; wer die Frist erhöht, erhöht beide. Prod (seit
+2026-10-08): `maxShutdownDelaySeconds` 300 am Render-Dienst, Env
+`AGENT_SHUTDOWN_GRACE_SECONDS=280`; zusammen mit Renders 60 s Überlappung hat
+ein laufender Turn beim Deploy gut sechs Minuten.
 
 *Puffer (`agent_live`).* Je Lauf ≤ 10000 Frames/4 MiB (älteste zuerst
-verworfen), ≤ 64 Läufe/48 MiB gesamt (beendete zuerst), 10 min TTL nach Ende,
-3 h für nie beendete; Schlüssel uid + chat_id + client_request_id. Liest jemand
-hinter dem behaltenen Fenster, bekommt er zuerst `reset` mit dem Antworttext bis
-dorthin (Deltas angehängt, bei `activity` `status` + `clear_response` geleert),
-im Tail als `event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert
-nichts mehr; der Browser folgt dann dem gespeicherten Turn. `GET
-/agent/chats/{chat}/live?request_id=…&after=<seq>` (Agent-Zugang, 120/min,
-`private, no-store`, kein Firestore) liefert `{events:[{seq,type,data}],
-last_seq, done, known, more, reset?}` mit höchstens 500 Frames; `known:false`
-heißt: dieser Prozess kennt den Lauf nicht (anderer Worker, Neustart,
-abgelaufen, fremdes Konto). Nichts wird persistiert; `recover_only` öffnet
-keinen Puffer. Prod läuft mit einem Prozess; mehrere Worker kennten die Läufe
-der anderen nicht (der Browser fiele auf `recover_only` zurück).
+verworfen, das neueste nie, damit auch ein übergroßes `final`/`error` ankommt),
+≤ 64 Läufe/48 MiB gesamt (beendete zuerst), 10 min TTL nach Ende, 3 h für nie
+beendete; Schlüssel uid + chat_id + client_request_id. Gezählt wird echter
+Speicher (`FRAME_OVERHEAD_BYTES` = 256 je Frame plus der für Nachzügler
+aufgehobene Text). Frames werden als gültiges JSON gespeichert (NaN → `null`,
+einzelne Surrogates ersetzt). Liest jemand hinter dem behaltenen Fenster,
+bekommt er zuerst die neuesten verworfenen Frames mit bleibendem Zustand
+(`STICKY_TYPES`: accepted, started, review, memory, quota, resources) und dann
+`reset` mit dem Antworttext bis dorthin (Deltas angehängt, bei `activity`
+`status` + `clear_response` geleert), im Tail als eigene Frames bzw.
+`event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert nichts
+mehr und beendet seinen Tail ohne Terminal-Frame; der Browser folgt dann dem
+gespeicherten Turn. `acquire()` meldet, ob die Anfrage den Puffer angelegt hat:
+nur dann darf sie ihn (und den Turn) bei einem Startfehler beenden;
+`AgentRunDuplicate` verwirft einen eigenen, nie benutzten Puffer (`discard`).
+`GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (Agent-Zugang,
+120/min, `private, no-store`, kein Firestore) liefert `{events:[{seq,type,data}],
+last_seq, done, known, more, reset?: {seq, text, frames}}` mit höchstens 500
+Frames (Index statt Scan: die Nummern im Fenster sind lückenlos);
+`known:false` heißt: dieser Prozess kennt den Lauf nicht (anderer Worker,
+Neustart, abgelaufen, fremdes Konto). Nichts wird persistiert; `recover_only`
+öffnet keinen Puffer und zählt nicht gegen das Sendelimit
+(`api_uid_limiter` „agent:turn“ prüft erst vor einem neuen Turn). Prod läuft mit
+einem Prozess; mehrere Worker kennten die Läufe der anderen nicht (der Browser
+fiele auf `recover_only` zurück).
 
 *Client.* `agent-chat.js::follow` ist der eine Weg, einem Turn zu folgen
 (`send` mit POST-Stream, `resume` ohne). `agent-live.js`
 (`App.agentLive.watch`, vor `agent-chat.js` im Bundle) hat zwei Betriebsarten:
 Puffernetz (kein Byte 5 s nach dem Senden → Polling alle 1,5 s, Bytes pausieren
-es, 4× `known:false` beendet es) und `reconnect()` (Stream mit
-`streamFailureKind` `request_failed`/`stream_read_failed`/`stream_incomplete`
-abgebrochen, Tab nach ≥ 5 s Stille wieder sichtbar bzw. `online`, oder Reload):
-Polling bis zum Turn-Ende, Netzfehler nur mit Backoff (bis 10 s), `online` und
-sichtbarer Tab pollen sofort, jeder Poll mit frischem ID-Token und 10-s-Timeout,
-nie zwei Polls gleichzeitig; `known:false` fragt `recover_only`: gespeicherter
-Turn beendet, `running` (z. B. alter Server im Deploy) wartet 5 s, zweimal
-nichts → Aufgabe mit dem ursprünglichen Fehler. Alle Frames laufen durch
-`deliver(type, data, seq)`; `App.agentLive.sequence()` verwirft schon angewandte
-Nummern, `reset` setzt `streamText`. Während Polls scheitern, zeigt die
-Aktivität „Reconnecting…“ (`agent-activity.js`, Spec `reconnecting`). Der
-Stop-Knopf (`registry.cancel(..., "user")` → `cancelRun`) ruft den Request-Stop
-(bei Netzfehler erneut beim nächsten `online`); Logout/Kontowechsel stoppen den
-Turn nicht. Nach dem Absenden liegt `{body, title, followup, settings}` in
-`sessionStorage["agent_pending_runs_<uid>"]` (≤ 4, 20 min), bis der Tab das
-Ende gesehen hat; nach einem Reload legt `resumePending` (sobald Katalog bereit,
-Agent-Modus) dafür wieder einen Run-Context an und folgt ihm ohne neuen Aufruf;
-ein Follow-up öffnet danach seinen Bookmark ganz. Analytics:
+es, 4× `known:false` legt es still, ohne den Watch zu beenden) und
+`reconnect()`: Stream mit `streamFailureKind`
+`request_failed`/`stream_read_failed`/`stream_incomplete` abgebrochen, 45 s
+ohne Byte (`withRequestDeadline` `onIdle`, statt der früheren
+`checkStalledRun`-Prüfung), Tab nach ≥ 20 s Stille wieder sichtbar bzw.
+`online` (der Server schickt spätestens alle 15 s ein Keepalive), oder Reload.
+Dann Polling bis zum Turn-Ende: Netzfehler nur mit Backoff (bis 10 s),
+`online` und sichtbarer Tab pollen sofort, jeder Poll mit frischem ID-Token und
+10-s-Timeout, nie zwei Polls gleichzeitig; Stream-Bytes halten Polls zurück,
+solange der Stream lebt (20 s). `known:false` fragt `recover_only`:
+gespeicherter Turn beendet, `running` (z. B. alter Server im Deploy) prüft nach
+5 s, dann doppelt so lange bis 60 s; erst dreimal nichts über mindestens 20 s
+(ein Turn kann noch in Vorbereitung sein) oder 30 min Folgen geben auf, mit
+dem ursprünglichen Fehler. `app_stream_resumed` zählt nur einen wirklich
+toten Stream (Fehler, 45 s oder 20 s Stille). Alle Frames laufen durch
+`deliver(type, data, seq)`; `App.agentLive.sequence()` verwirft schon
+angewandte Nummern, `reset` setzt `streamText`. Während Polls scheitern, zeigt
+die Aktivität „Reconnecting…“ (`agent-activity.js`, Spec `reconnecting`). Der
+Stop-Knopf (`registry.cancel(..., "user")` → `cancelRun` → `stopOnServer`) ruft
+den Request-Stop und wiederholt ihn bei Netzfehler, 429 oder 5xx (Backoff bis
+30 s, sofort bei `online`, höchstens 10 min); bis zur Antwort steht `stop: true`
+im Pending-Eintrag, ein Reload liefert ihn dann nach, statt dem Turn zu folgen.
+Antwortet der Server `not_running` für einen angenommenen Turn, holt
+`recoverAnswer` das gespeicherte Ergebnis. Logout/Kontowechsel stoppen den
+Turn nicht. Nach dem Absenden liegt `{at, body, title, followup, settings,
+attachmentMeta, stop?}` in `sessionStorage["agent_pending_runs_<uid>"]` (≤ 4,
+20 min), bis der Tab ein bekanntes Ende gesehen hat (Erfolg/gespeicherter
+Fehler; ein Transportproblem behält ihn); nach einem Reload legt
+`resumePending` (sobald Katalog bereit, Agent-Modus) dafür wieder einen
+Run-Context an und folgt ihm ohne neuen Aufruf; ein Follow-up öffnet danach
+seinen Bookmark ganz. Analytics:
 `app_stream_buffered`, `app_stream_resumed`, `app_run_resumed`
 (docs/analytics.md).
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.

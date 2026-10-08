@@ -324,14 +324,15 @@ def test_tail_streams_frames_until_the_end_and_resets_a_late_reader():
 
     chunks = anyio.run(collect, 0)
     assert chunks[0] == ": pad\n\n"
-    # seq 1 (accepted) and 2 ("one ") were dropped: the reader gets the text
-    # they produced, then every retained frame.
-    assert chunks[1] == 'id: 2\nevent: reset\ndata: {"text": "one "}\n\n'
-    assert [chunk.split("\n")[0] for chunk in chunks[2:]] == ["id: 3", "id: 4", "id: 5"]
+    # seq 1 (accepted) and 2 ("one ") were dropped: the reader gets the
+    # lasting frame (accepted), the text they produced, then every retained frame.
+    assert chunks[1] == 'id: 1\nevent: accepted\ndata: {"turn_id": "t"}\n\n'
+    assert chunks[2] == 'id: 2\nevent: reset\ndata: {"text": "one "}\n\n'
+    assert [chunk.split("\n")[0] for chunk in chunks[3:]] == ["id: 3", "id: 4", "id: 5"]
     # A reader inside the window gets no reset.
     assert [chunk.split("\n")[0] for chunk in anyio.run(collect, 3)[1:]] == ["id: 4", "id: 5"]
     data = buffers.read("u", "c", "r", after=0)
-    assert data["reset"] == {"seq": 2, "text": "one "}
+    assert data["reset"] == {"seq": 2, "text": "one ", "frames": [{"seq": 1, "type": "accepted", "data": {"turn_id": "t"}}]}
     assert [event["seq"] for event in data["events"]] == [3, 4, 5] and data["done"] is True
 
 
@@ -342,7 +343,7 @@ def test_reset_text_follows_cleared_answers():
     buffers.record(run, "activity", {"kind": "status", "clear_response": True})
     buffers.record(run, "delta", {"text": "final "})
     buffers.record(run, "delta", {"text": "answer"})
-    assert buffers.read("u", "c", "r")["reset"] == {"seq": 3, "text": "final "}
+    assert buffers.read("u", "c", "r")["reset"] == {"seq": 3, "text": "final ", "frames": []}
 
 
 def test_tail_sends_keepalives_and_ends_for_an_evicted_run():
@@ -386,3 +387,80 @@ def test_post_response_is_the_tail_with_the_stream_headers(api, runs):
     frames = [block for block in response.text.split("\n\n") if block.startswith("id: ")]
     assert frames[0].split("\n")[1] == "event: accepted" and frames[-1].split("\n")[1] == "event: final"
     assert json.loads(frames[-1].split("data: ", 1)[1])["turn"]["status"] == "completed"
+
+
+def test_a_stop_before_the_first_model_call_is_saved_as_stopped(api, runs, live, monkeypatch):
+    client, store, calls = api
+    entered, release = threading.Event(), threading.Event()
+    original = agent.DelegationLoop._admit_chat_step
+
+    def slow_admission(self, *args, **kwargs):
+        entered.set()
+        release.wait(5)
+        self._check()
+        return (yield from original(self, *args, **kwargs))
+
+    monkeypatch.setattr(agent.DelegationLoop, "_admit_chat_step", slow_admission)
+    chat_id, _response = _start(client, "early-stop")
+    assert entered.wait(5)
+    assert client.post(f"/agent/chats/{chat_id}/requests/early-stop/stop", headers=AUTH).json() == {"status": "stopping"}
+    release.set()
+    _idle(runs)
+    turn = store.get_turn(UID, chat_id, _turn(store, chat_id)["id"])
+    assert turn["status"] == "failed" and turn["agent_failure"]["code"] == "cancelled"
+    assert not calls
+    [terminal] = _terminal(live, chat_id, "early-stop")
+    assert terminal["data"]["code"] == "cancelled"
+
+
+def test_shutdown_during_preparation_saves_an_interrupted_turn(api, runs, live, monkeypatch):
+    client, store, calls = api
+    original = runs.start
+
+    def shutting_down_meanwhile(**kwargs):
+        runs.begin_shutdown(grace=30)
+        return original(**kwargs)
+
+    monkeypatch.setattr(runs, "start", shutting_down_meanwhile)
+    chat_id = _chat(client)
+    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi", "client_request_id": "late",
+                                           "bookmark_id": "bm1"}, headers=AUTH)
+    assert response.status_code == 503 and response.headers["retry-after"] == "5"
+    turn = store.get_turn(UID, chat_id, _turn(store, chat_id)["id"])
+    assert turn["agent_failure"]["code"] == "run_interrupted" and not calls
+    assert live.stats()["runs"] == 1 and live.read(UID, chat_id, "late")["done"] is True
+
+
+def test_a_duplicate_never_ends_the_running_turn_or_its_buffer(api, runs, live, monkeypatch):
+    client, store, _ = api
+    gate = Gate(monkeypatch)
+    chat_id, _response = _start(client, "twice")
+    assert gate.entered.wait(5)
+    # The same identity again while it runs: refused before anything is touched.
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "twice", "bookmark_id": "bm1"}
+    again = client.post("/agent", json=payload, headers=AUTH)
+    assert again.status_code == 409 and again.json()["code"] == "request_running"
+    # Even when the race slips past that check, shutdown or not: the running
+    # producer keeps its buffer and turn.
+    runs.begin_shutdown(grace=30)
+    request = agent.AgentRequest(**payload)
+    monkeypatch.setattr(runs, "running", lambda *args: False)
+    duplicate = agent.run_agent.__wrapped__(_request(), request)
+    assert duplicate.status_code == 409 and json.loads(duplicate.body)["code"] == "request_running"
+    assert live.read(UID, chat_id, "twice")["done"] is False
+    assert _turn(store, chat_id)["status"] == "pending"
+    gate.open.set()
+    _idle(runs)
+    assert _turn(store, chat_id)["status"] == "completed"
+
+
+def test_following_a_turn_never_uses_up_the_send_limit(api, runs, monkeypatch):
+    client, store, calls = api
+    chat_id = _chat(client)
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "once", "bookmark_id": "bm1"}
+    assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
+    for _ in range(25):
+        assert client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH).status_code == 200
+    second = client.post("/agent", json={**payload, "client_request_id": "next"}, headers=AUTH)
+    assert second.status_code == 200 and "event: final" in second.text and len(calls) == 2
+

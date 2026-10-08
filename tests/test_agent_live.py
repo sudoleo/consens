@@ -52,13 +52,17 @@ def test_per_run_event_and_byte_caps_drop_oldest_frames():
     for index in range(5):
         buffers.record(run, "delta", {"text": str(index)})
     assert [e["seq"] for e in buffers.read("u", "c", "r")["events"]] == [3, 4, 5]
-    buffers = AgentLiveBuffers(max_bytes=200)
+    buffers = AgentLiveBuffers(max_bytes=1000)
     run = buffers.open("u", "c", "r")
     for index in range(10):
         buffers.record(run, "delta", {"text": "x" * 40})
     kept = buffers.read("u", "c", "r")["events"]
     assert kept and kept[-1]["seq"] == 10 and len(kept) < 10
-    assert buffers.stats()["bytes"] <= 200
+    assert run.bytes <= 1000
+    # The caps count real memory: each frame costs its overhead, and the text
+    # kept for late readers counts toward the total.
+    assert run.bytes == len(kept) * (len('{"text": "' + "x" * 40 + '"}') + len("delta") + live_module.FRAME_OVERHEAD_BYTES)
+    assert buffers.stats()["bytes"] == run.bytes + run.base_bytes and run.base_bytes >= 40 * (10 - len(kept))
 
 
 def test_global_caps_evict_ended_runs_first_and_ttl_expires_them():
@@ -77,7 +81,7 @@ def test_global_caps_evict_ended_runs_first_and_ttl_expires_them():
     assert buffers.read("u", "c", "3")["known"] is False
     assert buffers.stats() == {"runs": 0, "bytes": 0}
     # The total byte budget evicts whole buffers, never just the newest frame.
-    buffers = AgentLiveBuffers(max_total_bytes=300)
+    buffers = AgentLiveBuffers(max_total_bytes=700)
     old = buffers.open("u", "c", "old")
     buffers.record(old, "delta", {"text": "x" * 150})
     new = buffers.open("u", "c", "new")
@@ -200,3 +204,69 @@ def test_private_api_streams_keep_no_transform_under_the_security_middleware():
     client = TestClient(app)
     assert client.get("/api/v1/stream").headers.get_list("cache-control")[-1] == "private, no-store, no-transform"
     assert client.get("/api/v1/json").headers.get_list("cache-control")[-1] == "private, no-store"
+
+
+def test_the_newest_frame_is_never_dropped_even_when_oversized():
+    buffers = AgentLiveBuffers(max_bytes=100)
+    run = buffers.open("u", "c", "r")
+    buffers.record(run, "delta", {"text": "a"})
+    buffers.record(run, "final", {"response": "x" * 500})
+    data = buffers.read("u", "c", "r")
+    assert [event["type"] for event in data["events"]] == ["final"]
+    assert data["reset"]["text"] == "a"
+
+
+def test_lasting_state_survives_in_the_reset():
+    buffers = AgentLiveBuffers(max_events=2)
+    run = buffers.open("u", "c", "r")
+    buffers.record(run, "accepted", {"turn_id": "t1"})
+    buffers.record(run, "quota", {"token_budget": {"remaining": 5}})
+    buffers.record(run, "quota", {"token_budget": {"remaining": 4}})
+    for text in ("a", "b", "c"):
+        buffers.record(run, "delta", {"text": text})
+    reset = buffers.read("u", "c", "r")["reset"]
+    assert reset["seq"] == 4 and reset["text"] == "a"
+    # The newest dropped frame of each lasting kind, in order.
+    assert [(f["seq"], f["type"], f["data"]) for f in reset["frames"]] == [
+        (1, "accepted", {"turn_id": "t1"}), (3, "quota", {"token_budget": {"remaining": 4}})]
+    # A reader past a sticky frame does not receive it again.
+    assert [f["seq"] for f in buffers.read("u", "c", "r", after=2)["reset"]["frames"]] == [3]
+
+
+def test_byte_totals_stay_exact_through_drops_and_evictions():
+    import random
+    rng = random.Random(7)
+    buffers = AgentLiveBuffers(max_events=20, max_bytes=6000, max_runs=4, max_total_bytes=20000)
+    runs = [buffers.open("u", "c", str(i)) for i in range(3)]
+    for step in range(3000):
+        run = rng.choice(runs)
+        kind = rng.choice(["delta", "delta", "activity", "quota", "accepted"])
+        data = {"text": "t" * rng.randint(1, 300)} if kind == "delta" else {"kind": "status", "clear_response": rng.random() < .1}
+        buffers.record(run, kind, data)
+        if step % 400 == 399:
+            index = rng.randrange(len(runs))
+            buffers.finish(runs[index])
+            runs[index] = buffers.open("u", "c", f"n{step}")
+        indexed = list(buffers._runs.values())
+        assert buffers._total == sum(r.bytes + r.base_bytes for r in indexed) >= 0
+        assert buffers._total <= 20000 or len(indexed) == 1
+
+
+def test_frames_are_valid_json_even_with_nan_or_lone_surrogates():
+    buffers = AgentLiveBuffers()
+    run = buffers.open("u", "c", "r")
+    _, text = buffers.record(run, "activity", {"usage": {"cost": float("nan")}, "text": "bad \ud800 text"})
+    assert "NaN" not in text and json.loads(text)["usage"]["cost"] is None
+    text.encode("utf-8")
+    assert buffers.read("u", "c", "r")["events"][0]["data"]["usage"] == {"cost": None}
+
+
+def test_acquire_reports_ownership_and_discard_removes_a_buffer():
+    buffers = AgentLiveBuffers()
+    run, created = buffers.acquire("u", "c", "r")
+    again, created_again = buffers.acquire("u", "c", "r")
+    assert created is True and again is run and created_again is False
+    fresh, _ = buffers.acquire("u", "c", "other")
+    buffers.discard(fresh)
+    assert buffers.read("u", "c", "other")["known"] is False and fresh.evicted
+    assert buffers.stats()["runs"] == 1

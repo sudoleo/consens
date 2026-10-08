@@ -168,8 +168,12 @@ def _drain_agent_runs_on_sigterm():
     loop = asyncio.get_running_loop()
 
     def on_sigterm(signum, frame):
-        loop.call_soon_threadsafe(agent_background.begin_shutdown)
-        previous(signum, frame)
+        try:
+            loop.call_soon_threadsafe(agent_background.begin_shutdown)
+        except RuntimeError:
+            pass  # Loop already closed: nothing left to drain.
+        finally:
+            previous(signum, frame)
 
     signal.signal(signal.SIGTERM, on_sigterm)
 

@@ -7,17 +7,20 @@
 // - Buffering networks: some company proxies and virus scanners hold a whole
 //   SSE response back until it ends. When no byte at all has arrived after
 //   SILENCE_MS, polling starts and hands every frame to the run's dispatcher.
-// - Reconnect (`reconnect()`): the stream broke (network drop, a phone that
-//   put the tab to sleep, a server restart) or the page was reloaded while
-//   the turn ran. Polling then continues until the turn ends: network errors
-//   only slow it down, `online` and a visible tab poll at once, and a server
-//   that does not know the turn (another instance after a deploy, an expired
-//   buffer) is asked for the saved turn instead.
+// - Reconnect (`reconnect()`): the stream broke or went silent (network drop,
+//   a phone that put the tab to sleep, a half-open connection, a server
+//   restart) or the page was reloaded while the turn ran. Polling then
+//   continues until the turn ends: network errors only slow it down, `online`
+//   and a visible tab poll at once, and a server that does not know the turn
+//   (another instance after a deploy, an expired buffer) is asked for the
+//   saved turn instead. Stream bytes that arrive meanwhile hold polling back
+//   while the stream is healthy (the server sends a keepalive every 15 s).
 //
 // Each frame carries the run's sequence number (SSE `id:`), so a late flush
 // of a buffered stream cannot apply a frame twice: `sequence()` is the one
 // guard both paths pass through (agent-chat.js `deliver`). A reader that fell
-// behind the server's window first receives `reset` with the answer text so far.
+// behind the server's window first receives the newest dropped frames that
+// set lasting state, then `reset` with the answer text so far.
 //
 // Contract (App.agentLive):
 //   sequence() -> { accept(seq) -> boolean, last }
@@ -28,8 +31,10 @@
 //     -> { bytes(), stop(), reconnect(), finished: Promise<result|null> }
 // `finished` resolves when polling ended the run: with the terminal frame
 // (same shape as streamSSERequest's result) or recover()'s saved answer. After
-// reconnect() it also resolves with null when the turn is gone for good (or
-// the watch was stopped), so the caller can fall back. It never rejects.
+// reconnect() it also resolves with null when the turn is gone for good, the
+// follow limit passed or the watch was stopped, so the caller can fall back.
+// A buffering-mode watch that gave up stays able to reconnect(); only stop()
+// (or the signal) ends it. `finished` never rejects.
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -37,16 +42,25 @@
   const POLL_MS = 1500;
   const BUSY_POLL_MS = 5000;
   // A turn this server does not hold but that is still running elsewhere
-  // (the previous instance during a deploy): check its saved state slowly.
+  // (the previous instance during a deploy, a lease not yet expired): its
+  // saved state is checked from this delay, doubling up to a minute.
   const RUNNING_ELSEWHERE_MS = 5000;
+  const MAX_ELSEWHERE_MS = 60000;
+  // Polls wait while the stream delivered a byte within this window; the
+  // server's keepalive comes every 15 s, so longer silence means it is dead.
+  const STREAM_QUIET_MS = 20000;
   const REQUEST_TIMEOUT_MS = 10000;
   // Network errors back off up to this delay; `online` polls at once.
   const MAX_BACKOFF_MS = 10000;
-  // Another worker, a restart or an expired buffer: give up after this many
-  // consecutive "unknown" answers and keep the ordinary stream behaviour.
+  // Another worker, a restart or an expired buffer: in buffering mode, stop
+  // polling after this many consecutive "unknown" answers.
   const MAX_UNKNOWN = 4;
-  // After reconnect(): how often "no turn, no saved answer" ends the wait.
-  const MAX_GONE = 2;
+  // After reconnect(): "no turn, no saved answer" this often and for at least
+  // GONE_MS (a turn may still be in preparation) ends the wait.
+  const MAX_GONE = 3;
+  const GONE_MS = 20000;
+  // A turn ends within 15 min plus its wrap-up; following stops after this.
+  const MAX_FOLLOW_MS = 30 * 60 * 1000;
 
   function sequence() {
     let applied = 0;
@@ -69,11 +83,13 @@
     const cursorOf = typeof options.cursor === 'function' ? options.cursor : () => 0;
     // Read at watch time, so tests can shorten them on App.agentLive.
     const silenceMs = api.SILENCE_MS, pollMs = api.POLL_MS, elsewhereMs = api.RUNNING_ELSEWHERE_MS;
+    const quietMs = api.STREAM_QUIET_MS, goneMs = api.GONE_MS, followMs = api.MAX_FOLLOW_MS;
     let resolveFinished;
     const finished = new Promise(resolve => { resolveFinished = resolve; });
     let stopped = false, polling = false, engaged = false, bytesSeen = false, persistent = false;
     let silenceTimer = null, pollTimer = null, controller = null;
-    let unknown = 0, gone = 0, failures = 0, cursor = 0, inFlight = false, offline = false;
+    let unknown = 0, gone = 0, goneSince = 0, failures = 0, cursor = 0, inFlight = false, offline = false;
+    let elsewhereDelay = elsewhereMs, followSince = 0, lastByte = 0;
 
     function clearTimers() {
       clearTimeout(silenceTimer); silenceTimer = null;
@@ -85,7 +101,7 @@
       if (persistent) report();
     }
     function report() {
-      try { onState?.({ reconnecting: persistent && !stopped, offline }); } catch (_) { /* display only */ }
+      try { onState?.({ reconnecting: persistent && !stopped, offline: offline && !stopped }); } catch (_) { /* display only */ }
     }
     function stop() {
       if (stopped) return;
@@ -96,6 +112,12 @@
       window.removeEventListener('online', wake);
       document.removeEventListener('visibilitychange', wake);
       if (persistent) { report(); resolveFinished(null); }
+    }
+    // Buffering mode gives up without ending the watch: a later reconnect()
+    // (the stream broke after all) can still follow the turn.
+    function idle() {
+      polling = false;
+      clearTimers();
     }
     function finish(result) {
       if (stopped) return;
@@ -111,14 +133,16 @@
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         silenceTimer = null;
-        if (stopped) return;
+        if (stopped || persistent) return;
         polling = true;
         poll();
       }, silenceMs);
     }
     function schedule(ms = pollMs) {
       clearTimeout(pollTimer);
-      pollTimer = setTimeout(() => { pollTimer = null; poll(); }, ms);
+      // A healthy stream (a byte within quietMs) makes polling unnecessary.
+      const quiet = persistent && lastByte ? quietMs - (Date.now() - lastByte) : 0;
+      pollTimer = setTimeout(() => { pollTimer = null; poll(); }, Math.max(ms, quiet));
     }
     function backoff() {
       return Math.min(MAX_BACKOFF_MS, pollMs * 2 ** Math.min(failures - 1, 6));
@@ -131,10 +155,28 @@
     }
     async function poll() {
       if (stopped || !polling || inFlight) return;
+      if (persistent && Date.now() - followSince > followMs) { finish(null); return; }
       // One poll at a time, including its saved-state check: `online` and a
       // visible tab must not start a second one beside it.
       inFlight = true;
       try { await pollOnce(); } finally { inFlight = false; }
+    }
+    // After reconnect(): the server holds no frames (or ended without a
+    // terminal frame). The saved turn decides.
+    async function followSaved() {
+      const outcome = await savedState();
+      if (stopped || !polling) return;
+      if (outcome?.data?.turn) { finish(outcome); return; }
+      if (outcome === 'offline') { failures += 1; setOffline(true); schedule(backoff()); return; }
+      if (outcome === 'running') {
+        gone = 0;
+        schedule(elsewhereDelay);
+        elsewhereDelay = Math.min(MAX_ELSEWHERE_MS, elsewhereDelay * 2);
+        return;
+      }
+      if (!gone) goneSince = Date.now();
+      if (++gone >= MAX_GONE && Date.now() - goneSince >= goneMs) { finish(null); return; }
+      schedule();
     }
     async function pollOnce() {
       let data = null, busy = false, network = false;
@@ -162,27 +204,23 @@
       setOffline(false);
       if (busy) { schedule(BUSY_POLL_MS); return; }
       if (!data || data.known !== true) {
-        if (persistent) {
-          const outcome = await savedState();
-          if (stopped || !polling) return;
-          if (outcome?.data?.turn) { finish(outcome); return; }
-          if (outcome === 'offline') { failures += 1; setOffline(true); schedule(backoff()); return; }
-          if (outcome === 'running') { gone = 0; schedule(elsewhereMs); return; }
-          if (++gone >= MAX_GONE) { stop(); return; }
-          schedule();
-          return;
-        }
-        if (++unknown >= MAX_UNKNOWN) { stop(); return; }
+        if (persistent) { await followSaved(); return; }
+        if (++unknown >= MAX_UNKNOWN) { idle(); return; }
         schedule();
         return;
       }
-      unknown = 0; gone = 0;
+      unknown = 0; gone = 0; elsewhereDelay = elsewhereMs;
       if (!engaged && !bytesSeen && !persistent) {
         engaged = true;
         try { onEngage?.(); } catch (_) { /* analytics never breaks a run */ }
       }
       const reset = data.reset;
       if (reset && Number.isInteger(Number(reset.seq))) {
+        // Lasting state from the dropped frames first, in order, then the text.
+        for (const frame of Array.isArray(reset.frames) ? reset.frames : []) {
+          if (frame?.type === 'final' || frame?.type === 'error') continue;
+          deliver(frame?.type, frame?.data, frame?.seq);
+        }
         cursor = Math.max(cursor, Number(reset.seq));
         deliver('reset', { text: typeof reset.text === 'string' ? reset.text : '' }, reset.seq);
       }
@@ -203,11 +241,11 @@
       if (data.done) {
         // Ended without a terminal frame in the buffer: ask for the saved
         // answer instead of waiting for the proxy to release the stream.
+        if (persistent) { await followSaved(); return; }
         const outcome = await savedState();
-        if (stopped) return;
+        if (stopped || !polling) return;
         if (outcome?.data?.turn) { finish(outcome); return; }
-        if (persistent && outcome === 'offline') { failures += 1; setOffline(true); schedule(backoff()); return; }
-        stop();
+        idle();
         return;
       }
       schedule();
@@ -221,25 +259,38 @@
     return {
       finished,
       stop,
-      // The stream broke or never existed (a reload): follow the turn by
-      // polling until it ends, whatever the network does meanwhile.
+      // The stream broke, went silent or never existed (a reload): follow the
+      // turn by polling until it ends, whatever the network does meanwhile.
       reconnect() {
         if (stopped) { resolveFinished(null); return; }
-        if (persistent) return;
+        if (persistent) {
+          // Already following: a second signal (stream error) polls now.
+          if (!inFlight) { clearTimeout(pollTimer); pollTimer = null; lastByte = 0; poll(); }
+          return;
+        }
         persistent = true;
         polling = true;
         unknown = 0;
+        followSince = Date.now();
+        lastByte = 0;
         clearTimeout(silenceTimer); silenceTimer = null;
         window.addEventListener('online', wake);
         document.addEventListener('visibilitychange', wake);
         report();
         if (!inFlight) { clearTimeout(pollTimer); pollTimer = null; poll(); }
       },
-      // Stream bytes arrived: the stream is live (again), polling pauses. On
-      // a network that has buffered once, renewed silence resumes it.
+      // Stream bytes arrived: the stream is live (again). Buffering mode
+      // pauses polling (renewed silence resumes it once it has engaged);
+      // while following, polls wait until the stream falls silent.
       bytes() {
         bytesSeen = true;
-        if (stopped || persistent) return;
+        if (stopped) return;
+        if (persistent) {
+          lastByte = Date.now();
+          setOffline(false);
+          if (!inFlight && pollTimer) schedule();
+          return;
+        }
         polling = false;
         clearTimers();
         if (engaged) armSilence();
@@ -250,5 +301,6 @@
     };
   }
 
-  const api = App.agentLive = { sequence, watch, SILENCE_MS, POLL_MS, RUNNING_ELSEWHERE_MS };
+  const api = App.agentLive = { sequence, watch, SILENCE_MS, POLL_MS, RUNNING_ELSEWHERE_MS,
+    STREAM_QUIET_MS, GONE_MS, MAX_FOLLOW_MS };
 })();
