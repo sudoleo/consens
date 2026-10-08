@@ -2,7 +2,9 @@
 
 A weekly watch that waits for an announcement should not learn about it six
 days late. Once a day, one inexpensive model with web search is asked whether
-anything new bears on the question or the goal since the last check. Only a
+anything new bears on the goal since the last check. Only watches with a goal
+are probed: a watch without one is a plain schedule, and its owner chose the
+day it reports on, so nothing may pull its check (and its mail) forward. Only a
 source the standing answer did not cite counts; then the full check (all
 models, cross-checked, evidence-aware) is pulled forward to now. Everything
 else changes nothing -- a probe never writes an answer, it only schedules
@@ -49,11 +51,16 @@ def utcnow() -> datetime:
 
 
 def eligible(watch: dict) -> bool:
-    """Probes are for owner watches that wait longer than a day between checks."""
+    """Probes are for goal watches that wait longer than a day between checks.
+
+    Without a goal the owner chose a fixed run day; an off-schedule check
+    would break that promise, so such watches keep strictly to their schedule.
+    """
     return (
         watch.get("status") == "active"
         and watch.get("interval") in {"weekly", "monthly"}
         and watch.get("model_tier") != "free"
+        and bool(str(watch.get("condition") or "").strip())
     )
 
 

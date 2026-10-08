@@ -181,7 +181,7 @@ def _probe_watch(db, **overrides):
     db.stores["watches"]["w1"] = {
         "owner_uid": "u1", "share_id": "A" * 16, "status": "active",
         "interval": "weekly", "next_probe_at": NOW - timedelta(minutes=1),
-        "next_run_at": NOW + timedelta(days=5), **overrides,
+        "next_run_at": NOW + timedelta(days=5), "condition": "GPT-6 is released", **overrides,
     }
 
 
@@ -203,6 +203,19 @@ def test_probe_is_skipped_when_the_full_check_is_close_or_the_watch_is_daily():
     _probe_watch(db, interval="daily")
     assert watch_probe.claim_probe("w1", now=NOW, db=db) == (None, "not_eligible")
     assert db.stores["watches"]["w1"]["next_probe_at"] is None
+
+
+def test_a_watch_without_goal_is_never_probed_off_schedule():
+    # A plain weekly watch reports on the day its owner chose; a probe must
+    # not pull its check (and the mail) to another day.
+    db = FakeDb()
+    _probe_watch(db, condition="")
+    assert watch_probe.claim_probe("w1", now=NOW, db=db) == (None, "not_eligible")
+    assert db.stores["watches"]["w1"]["next_probe_at"] is None
+    assert db.stores["watches"]["w1"]["next_run_at"] == NOW + timedelta(days=5)
+    base = {"status": "active", "interval": "weekly", "model_tier": "pro"}
+    assert watch_probe.next_probe_after({**base, "condition": "  "}, NOW) is None
+    assert watch_probe.next_probe_after({**base, "condition": "Released"}, NOW) == NOW + watch_probe.PROBE_INTERVAL
 
 
 def test_new_evidence_pulls_the_full_check_forward():

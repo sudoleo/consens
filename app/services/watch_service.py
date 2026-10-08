@@ -941,7 +941,8 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
         # really changes; re-sending the current status must not free the
         # lease of a running check and let a second worker start it.
         updates["status"] = status
-    if schedule_changed or "status" in updates:
+    if schedule_changed or "status" in updates or "condition" in updates:
+        # The goal decides whether the daily probe applies at all.
         from app.services import watch_probe
 
         updates["next_probe_at"] = watch_probe.next_probe_after({**data, **updates}, now)

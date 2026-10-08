@@ -6292,8 +6292,9 @@ löst eine Nachprüfung aus. Weiterbeobachten (`PATCH status=active`) verlangt e
 neues oder leeres Ziel (`goal_reached`, 409). `changes_only` meldet `moved` oder
 den Abschluss, `condition` nur den Abschluss, `every_run` jeden Check. Ein Ziel,
 das während des Laufs geändert wurde, wird weder bewertet noch gespeichert (R16).
-**Tages-Scan (`watch_probe.py`):** aktive Owner-Watches mit Intervall weekly/
-monthly tragen `next_probe_at` (Index `status`+`next_probe_at`). Im Watch-Tick
+**Tages-Scan (`watch_probe.py`):** aktive Owner-Watches **mit Ziel** und Intervall weekly/
+monthly tragen `next_probe_at` (Watches ohne Ziel halten strikt ihren Wochentag;
+eine Zieländerung berechnet `next_probe_at` neu) (Index `status`+`next_probe_at`). Im Watch-Tick
 claimt `run_probe` at-most-once (Termin rückt vor, Tagesdeckel
 `watch_probe_max_per_day` aus den Admin-Limits, 0 = aus) und fragt ein
 günstiges Free-Watch-Modell mit Websuche (`NEW: yes|no`) nach Neuem seit dem

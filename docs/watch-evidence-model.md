@@ -121,9 +121,11 @@ Fehlt er (Altbestand), gilt der letzte erfolgreiche Lauf.
 
 ## Vorprüfung (`watch_probe`)
 
-Zwischen zwei vollen Checks (weekly/monthly, keine Publisher-Watches) prüft
-einmal täglich **ein** günstiges Modell mit Websuche, ob es seit dem letzten
-Check neue Belege zur Frage oder zum Ziel gibt. Findet es eine Quelle, die in
+Nur für Watches **mit Ziel** (weekly/monthly, keine Publisher-Watches): Zwischen
+zwei vollen Checks prüft einmal täglich **ein** günstiges Modell mit Websuche,
+ob es seit dem letzten Check neue Belege zum Ziel gibt. Watches ohne Ziel
+halten sich strikt an den gewählten Tag; nichts zieht ihren Check (und die
+Mail) vor. Findet es eine Quelle, die in
 der geltenden Antwort fehlt, wird der volle Check auf jetzt vorgezogen. Sonst
 passiert nichts. Eigener Tagesdeckel `watch_probe_max_per_day`; Fehler bleiben
 folgenlos (der reguläre Check kommt ohnehin).
