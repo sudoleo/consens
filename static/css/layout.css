@@ -7,6 +7,12 @@
    Only the input box (action surface) and the consensus box (result surface)
    keep their glass; the response cards float directly on the canvas. The
    element itself stays for centering + container queries (container-type). */
+/* The desktop sidebar's width: draggable (sidebar-resize.js sets it on
+   <html>); everything that sits beside or inside it derives from it. */
+:root {
+  --sidebar-width: 260px;
+}
+
 body {
   --app-container-width: 768px;
   --app-sidebar-offset: 0px;
@@ -30,7 +36,7 @@ body {
    here would also change the containing block of fixed overlays. */
 @media (min-width: 1100px) {
   body:has(.sidebar:not(.collapsed)) {
-    --app-sidebar-offset: 260px;
+    --app-sidebar-offset: var(--sidebar-width);
   }
 
   .container {
@@ -55,8 +61,8 @@ body {
      Sidebar-Brand-Zeile (12px Sidebar-Padding + 4px Brand-Padding + 34/2). */
   top: 16px;
   /* Offene Sidebar (Desktop): Toggle sitzt in ihrer rechten oberen Ecke
-     (260px Breite − 34px Button − 12px Rand). Eingeklappt: links oben. */
-  left: 214px;
+     (Sidebar-Breite − 34px Button − 12px Rand). Eingeklappt: links oben. */
+  left: calc(var(--sidebar-width) - 46px);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -410,7 +416,7 @@ body:has(.sidebar.active) .brand-float {
   top: 0;
   left: 0;
   padding: 12px;
-  width: 260px;
+  width: var(--sidebar-width);
   height: 100%;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-border);
@@ -426,6 +432,59 @@ body:has(.sidebar.active) .brand-float {
 
 .sidebar.collapsed {
   transform: translateX(-100%);
+}
+
+/* Drag handle on the sidebar's right edge (sidebar-resize.js). A wide,
+   invisible hit area; the hairline only shows on hover, focus and drag. */
+.sidebar-resizer {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  body:has(.sidebar:not(.collapsed)) .sidebar-resizer {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--sidebar-width) - 5px);
+    width: 10px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: calc(var(--z-sidebar) + 1);
+    outline: none;
+  }
+
+  .sidebar-resizer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 2px;
+    background: var(--ink-3, currentColor);
+    opacity: 0;
+    transition: opacity var(--dur-state) var(--ease-standard);
+  }
+
+  .sidebar-resizer:hover::after,
+  .sidebar-resizer:focus-visible::after,
+  body.is-resizing-sidebar .sidebar-resizer::after {
+    opacity: 0.45;
+  }
+
+  /* While dragging everything follows the pointer at once. */
+  body.is-resizing-sidebar,
+  body.is-resizing-sidebar * {
+    cursor: col-resize !important;
+    user-select: none;
+  }
+
+  body.is-resizing-sidebar .container,
+  body.is-resizing-sidebar .sidebar,
+  body.is-resizing-sidebar .app-nav-float,
+  body.is-resizing-sidebar .view-switch {
+    transition: none !important;
+  }
 }
 
 .sidebar-pinned {
@@ -572,7 +631,7 @@ body:has(.sidebar.active) .brand-float {
   position: fixed;
   bottom: 14px;
   left: 12px;
-  width: calc(260px - 24px);
+  width: calc(var(--sidebar-width) - 24px);
   text-align: center;
   display: flex;
   flex-direction: column;

@@ -804,6 +804,21 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Bookmarks teilen dieselben Icon-/Textspalten und dieselbe Titeltypografie;
   der Bookmark-Toggle sowie seine Suche sind bis zum verifizierten Login
   nativ deaktiviert.
+- **Ziehbare Sidebar-Breite** (seit 2026-10-08) — `static/js/sidebar-resize.js`
+  (Head-Bundle, `App.sidebarResize` `{get, set, reset, bounds}`) setzt
+  `--sidebar-width` auf `<html>` (Default 260px in `layout.css :root`), schon vor
+  dem ersten Paint aus `localStorage["sidebar_width"]`. Daraus leiten sich ab:
+  `.sidebar`-Breite, `.sidebar-settings`, `.app-nav-float` (`left`),
+  `--app-sidebar-offset` und `--reader-left-rail` (Antwort-Reader). Der Griff
+  `#sidebarResizer` (`role="separator"`, nach `#appSidebar` eingefügt,
+  `position: fixed` auf der Kante) gibt es nur ab 1100px bei offener Sidebar;
+  die Overlay-Sidebar (≤1099px) behält `min(82vw, 360px)`. Ziehen (Pointer
+  Capture, `body.is-resizing-sidebar` schaltet Transitions und Textauswahl ab),
+  Doppelklick = 260px und Speicher löschen, Pfeiltasten ±10 (Shift ±40),
+  Pos1/Ende = Grenzen. Grenzen 200px bis min(480px, 40 % des Fensters); ein
+  schmaleres Fenster deckelt nur die Anzeige, die gewählte Breite bleibt
+  gespeichert. Neue Stellen, die neben der Sidebar Platz rechnen, nutzen
+  `var(--sidebar-width)` statt 260px.
 - **Ein einziger Sidebar-Toggle** — `.app-nav-float .sidebar-toggle` erscheint
   nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt rechts neben der
   Wortmarke in `.sidebar-brand-row`. Beide zeichnen dasselbe Panel-Icon (`.sidebar-panel-icon`,
@@ -917,7 +932,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Firestore-Live-Listener mehr. Die gemeinsame Lesespalte für Fragen, Antworten
   und Composer ist standardmäßig 768px breit (`--app-container-width` auf
   `body`, `layout.css`) und schrumpft auf kleinen Viewports. Bei offener
-  Desktop-Sidebar ab 1100px zentriert `--app-sidebar-offset: 260px` die Spalte
+  Desktop-Sidebar ab 1100px zentriert `--app-sidebar-offset: var(--sidebar-width)` die Spalte
   und den Startseiten-View-Switch im verbleibenden Bereich rechts der Navigation;
   eingeklappt und im mobilen Overlay-Modus gilt die Viewport-Mitte. Der mobile
   fixierte Composer verwendet dieselbe Breite wie der Spalteninhalt; mobil

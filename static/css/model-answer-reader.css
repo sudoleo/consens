@@ -188,7 +188,7 @@ body.answer-reader-modal { overflow: hidden; }
 @media (min-width: 1400px) {
   body.answer-reader-docked {
     --reader-dock-width: clamp(520px, 36vw, 720px);
-    --reader-left-rail: 260px;
+    --reader-left-rail: var(--sidebar-width);
     /* 100% is resolved on .container: the body's content box. With the
        reserved scrollbar gutter (shell.css) 100vw overstated the canvas. */
     --reader-chat-width: min(900px, calc(100% + 20px - var(--reader-left-rail) - var(--reader-dock-width) - 64px));

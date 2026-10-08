@@ -1,5 +1,5 @@
 {
-  "sources": "b8aa93143fb2",
+  "sources": "67f72fcbf73d",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -101,6 +101,7 @@
     "static/js/run-view.js",
     "static/js/share-dialog.js",
     "static/js/sidebar-quota.js",
+    "static/js/sidebar-resize.js",
     "static/js/source-verification.js",
     "static/js/sources.js",
     "static/js/tab-status.js",
@@ -184,7 +185,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.34c324ecbfa2.js",
+      "src": "/static/dist/head.4e2c8d3ccce7.js",
       "module": false,
       "defer": false
     },
@@ -214,11 +215,11 @@
     }
   ],
   "styles": {
-    "app": "/static/dist/app.65cea853e5a6.css"
+    "app": "/static/dist/app.4f2dceaa1823.css"
   },
   "previous_assets": [
-    "app.ee7b5fb17548.css",
-    "app.1c0464ac6e20.css",
+    "app.a450dbcfc326.css",
+    "app.65cea853e5a6.css",
     "app.95cc2ffdea6a.js",
     "app.f3b0b8e6b550.js",
     "auth.5e487d1e2570.js",
@@ -226,7 +227,7 @@
     "demo.0ae29ba9ea95.js",
     "firebase.a637d57a03c8.js",
     "firebase.9d4fb8bf3096.js",
-    "head.e8cdb9165195.js",
-    "head.9acdf23ecc29.js"
+    "head.34c324ecbfa2.js",
+    "head.e8cdb9165195.js"
   ]
 }

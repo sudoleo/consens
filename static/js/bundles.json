@@ -38,6 +38,10 @@
         {
           "file": "static/js/error-reporter.js",
           "note": "Must be in place before anything can throw."
+        },
+        {
+          "file": "static/js/sidebar-resize.js",
+          "note": "Applies the stored sidebar width before the first paint; mounts the drag handle on DOMContentLoaded."
         }
       ]
     },

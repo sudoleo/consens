@@ -8,6 +8,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 
 ## Neue Funktionsgruppen und Restprüfung
 
+- [ ] Sidebar-Breite (2026-10-08, Desktop ≥1100px): rechte Sidebar-Kante
+      greifen (Cursor wird zum Doppelpfeil, dünne Linie erscheint) und ziehen →
+      Sidebar, Zahnrad-Fußzeile und Toggle folgen, die Lesespalte bleibt mittig;
+      neu laden → gleiche Breite ohne Springen; Doppelklick → zurück auf
+      Standard; mit Tab auf den Griff und Pfeiltasten. Im schmalen Fenster und
+      bei eingeklappter Sidebar kein Griff. Automatisiert:
+      `sidebar-resize.test.mjs`, `tests/e2e/test_sidebar_resize.py`.
 - [ ] Google als Quelle (Standard: nur lesen): echte OAuth-Rückkehr mit nur
       Lese-Scopes, Widerruf, Zustimmung **einmal pro Chat** (Folgefrage ohne
       Checkbox, Info-Chip „Private chat · Google data“), keine Schreib-Zeilen im
