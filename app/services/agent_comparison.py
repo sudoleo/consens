@@ -611,8 +611,18 @@ class ComparisonTools:
                           else (QUORUM_GRACE[depth], MIN_GRACE_SECONDS))
         started = time.monotonic()
         reached = None
+        time_left = getattr(self.loop, "answer_time_left", None)
         with done:
             while len(finished) < total:
+                # Never wait into the time the answer step and its checks
+                # need before the turn's hard stop (prod: DeepSeek V4 Flash
+                # took up to 299 s). With two answers the answer starts;
+                # stragglers then become late answers as with any quorum.
+                left = time_left() if time_left else None
+                if left is not None and left <= 0 and len(self._raw[cid]) >= 2:
+                    logging.info("Agent comparison stops waiting for %d stragglers before the turn deadline",
+                                 total - len(finished))
+                    break
                 self.loop._check(cancellation)
                 elapsed = time.monotonic() - started
                 if len(self._raw[cid]) >= quorum:

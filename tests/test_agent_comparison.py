@@ -303,7 +303,7 @@ def _search(kwargs):
 # "full" answers may search three rounds, "quick" answers once, whatever the
 # account's remaining budget: their search is booked, not reserved.
 @pytest.mark.parametrize("depth,limit,rounds", [("quick", 10_000_000, 1), ("full", 10_000_000, 3),
-                                                ("full", 250_000, 3), ("full", 60_000, 3)])
+                                                ("full", 300_000, 3), ("full", 100_000, 3)])
 def test_every_model_searches_with_one_configuration_and_judges_never_search(store, depth, limit, rounds):
     from app.services.llm.engines import web_search_tool
     script = Script(direct=True, depth=depth)
@@ -345,8 +345,9 @@ def test_every_model_searches_with_one_configuration_and_judges_never_search(sto
     # with it); sources named in a context are only hints to the answer models.
     [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
     # Its own research is optional: a tight budget shrinks it (unlike the
-    # answer models' rounds above).
-    own = 3 if limit >= 250_000 else 1
+    # answer models' rounds above). Its reservation includes the routing
+    # reasoning headroom for every search round (ROUTING_REASONING_HEADROOM).
+    own = 3 if limit >= 300_000 else 1
     assert searched == own and tool == expected("anthropic", own)
     assert all("hints, never a requirement" in prompt for *_, prompt in comparisons.values())
     assert all(rounds == 0 for kind, _, rounds, _, _ in seen if kind in {"judge", "answer"})

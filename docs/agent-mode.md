@@ -191,7 +191,12 @@ und der Antwortschritt starten bei Konkurrenz mit einer kleineren, noch
 passenden Grenze (mindestens `MAX_TOKENS`), statt auf das Settlement anderer
 Aufrufe zu warten.
 
-Im Standard `all` (seit 2026-10-07) wartet die Synthese immer auf jedes Modell.
+Im Standard `all` (seit 2026-10-07) wartet die Synthese auf jedes Modell, seit
+2026-10-08 aber nur so lange, wie danach noch Zeit für Antwort und Prüfung bleibt:
+Liegen mindestens zwei Antworten vor und ist bis zum harten Stopp des Turns nur
+noch die Reserve der Denkstufe übrig (`ANSWER_RESERVE_SECONDS`, bei „max“ 10 min),
+beginnt die Synthese, und Nachzügler gelten wie unten als spät (Prod: DeepSeek V4
+Flash brauchte bis zu 299 s).
 Mit `balanced` wartet sie seit 2026-10-06 bei `full` auf
 jedes Modell: Das sorgfältigste Modell recherchiert oft am längsten und darf
 nicht wegfallen; wer schneller will, wählt `fast`. Bei `quick` gilt das Quorum
@@ -233,10 +238,23 @@ die Orchestrierung. Modell und gewählte Denkstufe bleiben erhalten. Seit 2026-1
 zeigt der Schreibschritt während des Denkens kurze Auszüge aus dem Provider-
 Reasoning als eine laufend ersetzte Fortschrittszeile (sonst wirkten Minuten bei
 hoher Denkstufe wie ein hängender Lauf); in Antwort und Kontext gelangt davon
-nichts. Denkende Modelle bekommen zusätzlichen Platz im Ausgabebudget. Verbraucht
-ein Modell trotzdem alles fürs Denken, ohne ein Wort zu schreiben, schreibt die
-App die Antwort einmal mit der leichtesten Denkstufe neu; scheitert auch das,
-meldet sie `output_limit` statt eines Provider-Fehlers. Der sichtbare Antwort-
+nichts. Seit 2026-10-08 laufen die Auszüge auch nach 32.000 Reasoning-Zeichen
+weiter (gespeichert wird nur bis dahin). Denkende Modelle bekommen zusätzlichen
+Platz im Ausgabebudget; Modelle, deren Reasoning abgeschaltet ist (Effort `none`,
+Kimi K2.6, Grok 4.20 „No reasoning“), nicht. Verbraucht ein Modell trotzdem alles
+fürs Denken, ohne ein Wort zu schreiben (oder hört nach dem Denken ohne Text auf),
+schreibt die App die Antwort einmal mit leichterer Denkstufe neu: bewusst zuerst
+`low` (live in 15 s bei gleicher Qualität), nur ohne diese Stufe `minimal` oder
+`none`, nie höher als die gewählte. Scheitert auch das, meldet sie `output_limit`
+statt eines Provider-Fehlers und rät zu einer niedrigeren Denkstufe oder einem
+anderen Chatmodell. Lehnt der Provider den Schreibschritt mit 429 ab, bevor er
+etwas erzeugt (kostenlos; OpenAI unter ZDR häufig), versucht die App es nach
+Retry-After (ohne Angabe 3 s, höchstens 10 s, nie kurz vor dem harten Stopp)
+genau einmal erneut, statt die bezahlten Vergleiche ohne Antwort zu beenden.
+Dasselbe gilt für Orchestrierungsschritte: Sie haben 12.288 Tokens Denk-Reserve
+über `AGENT_MAX_OUTPUT_TOKENS` hinaus, und ein ausgedachter Schritt (auch einer
+mit halb geschriebenem Toolcall) wird einmal mit leichterer Stufe wiederholt, die
+für die restliche Orchestrierung des Turns bleibt. Der sichtbare Antwort-
 text wird nicht nachträglich durch Stichwortfilter verändert.
 Beendet das Modell die Orchestrierung ohne nötigen Prüfaufruf, führt der Server
 die bestehenden Prüf-Tools einschließlich ihrer Fallback-Judges selbst aus.
@@ -499,7 +517,7 @@ sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
 |---|---|---|
 | Vergleiche (`turn_comparisons`) | 4 | Der fünfte `compare_models` liefert einen Tool-Fehler („call judge_answer now“), nichts Bezahltes startet; der vierte meldet „last comparison allowed“. |
 | Orchestrierungsschritte (`turn_steps`) | 24 | Vor dem 25. Routing-Schritt: Wrap-up (siehe unten). |
-| Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. |
+| Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. Seit 2026-10-08 kommt der Wrap-up früher, wenn bis zum harten Stopp weniger als `ANSWER_RESERVE_SECONDS` der Denkstufe bleibt (max 10 min, high 6 min, low 2,5 min); ebenso endet dann das Warten auf Nachzügler. |
 | Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (ohne `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
 
 Wrap-up: Gibt es einen Vergleich mit mindestens zwei Antworten (oder schon eine
@@ -516,8 +534,8 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 | Parallele Judge-Aufrufe | 6 |
 | Antwortmodelle pro Vergleich | vorhandene Auswahl, mindestens 2 |
 | Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch fairen Budgetanteil und Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit` |
-| Synthese | Completion-Grenze des Chatmodells (höchstens 32768), begrenzt durch Kontextfenster und Restbudget |
-| Orchestrierungsschritte | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096 |
+| Synthese | Completion-Grenze des Chatmodells (höchstens 32768, mit aktivem Reasoning 65536), begrenzt durch Kontextfenster und Restbudget |
+| Orchestrierungsschritte | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096; mit aktivem Reasoning zusätzlich 12288 (`ROUTING_REASONING_HEADROOM`), reserviert je Suchrunde |
 | Geprüfte Antwortsätze | 320; Coverage prüft in parallelen Fenstern zu 80 Sätzen |
 | Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |
@@ -632,7 +650,9 @@ geprüften Modell-/Reasoning-Kombinationen und die bestehende Admin-Konfiguratio
 siehe [agent-delegation.md](agent-delegation.md). Vergleichstools sind davon
 unabhängig. Der gemeinsame Tool-Loop erhält die kompletten Provider-Fortsetzungs-
 informationen intern; verschlüsselte Reasoning-Blöcke werden nie öffentlich oder
-persistiert. Sichtbares Reasoning bleibt auf 32000 Zeichen begrenzt.
+persistiert. Gespeichertes sichtbares Reasoning bleibt auf 32000 Zeichen begrenzt
+(`REASONING_STORAGE_CHARS`); weitere Deltas erreichen nur noch die Live-
+Fortschrittsanzeigen (`transient`).
 
 Gestreamte `reasoning_details` werden wie im OpenRouter-SDK zusammengesetzt:
 Text- und Summary-Fragmente verlängern den vorherigen Block derselben Art (gleicher

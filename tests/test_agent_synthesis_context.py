@@ -185,6 +185,8 @@ def test_thought_only_answer_without_lighter_reasoning_fails_as_output_limit_not
         list(loop.run())
     assert len(requests) == 1
     assert loop.completion.failure["code"] == "output_limit"
+    # The turn says what to do instead of only what happened.
+    assert "lower reasoning level" in loop.completion.failure["error"]
     assert agent_failure(ModelOutputLimit())["code"] == "output_limit"
 
 
@@ -195,7 +197,7 @@ def test_reasoning_answer_step_gets_headroom_and_a_lighter_retry_effort():
                         request_config={"reasoning": {"effort": "max", "exclude": False}})
     assert answer_output_limit(sonnet) == ANSWER_OUTPUT_CEILING + ANSWER_REASONING_HEADROOM
     lighter = lighter_reasoning(sonnet)
-    # Sonnet cannot switch reasoning off: its lightest supported effort.
+    # Sonnet cannot switch reasoning off; the retry tries "low" first anyway.
     assert lighter.reasoning_effort == "low" and lighter.request_config["reasoning"]["effort"] == "low"
     assert lighter_reasoning(lighter) is None
     off = replace(sonnet, model="openai/gpt-6-luna", request_config={"reasoning": {"effort": "none"}})
