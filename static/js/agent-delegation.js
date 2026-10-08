@@ -721,7 +721,10 @@
       if (agent.kind !== "comparison" || !activeStates.has(agent.status) || !agent.progress_text) continue;
       if (!latest || (agent.progressAt || 0) > (latest.progressAt || 0)) latest = agent;
     }
-    const text = String(latest?.progress_text || "").split("\n").map(line => line.trim()).filter(Boolean).at(-1);
+    // Same cleanup as agentActivity's compactReasoning: no markdown marks.
+    const text = String(latest?.progress_text || "").split("\n")
+      .map(line => line.replace(/^[#*>\s-]+/, "").replace(/\*\*|__|`/g, "").replace(/\s+/g, " ").trim())
+      .filter(Boolean).at(-1);
     return text ? { id: latest.id, label: latest.model?.label || "", text } : null;
   }
   App.agentDelegation = { receive, receiveProgress, project, demo, tokens, liveHighlight, isTicking: () => Boolean(timer) };

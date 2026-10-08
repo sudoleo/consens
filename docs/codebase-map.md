@@ -2091,9 +2091,18 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   liefert die letzte Zeile des `progress_text` des Vergleichsmodells, das noch
   läuft und zuletzt berichtet hat (Judges nie); `agent-chat.js::project` reicht
   sie als `highlight` an `agentActivity.render`, das sie nur live und nur in
-  dieser Phase als `Modell: Satz` unter den Schritt setzt (ein DOM-Knoten
-  `comparison-highlight`, nie gespeichert). Keine zusätzlichen Modellaufrufe
-  oder Tokens: es sind die Reasoning-Auszüge, die der Lauf ohnehin streamt.
+  dieser Phase als `Modell: Satz` unter den Schritt setzt (ein `<p>` unter dem
+  internen Schlüssel `comparison-highlight`, `aria-hidden`, damit der
+  Screenreader-Log nicht überläuft; nie gespeichert). Damit die Zeile nicht
+  nach wenigen Sätzen einfriert, nutzen Vergleichsantworten
+  `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)`
+  (andere Worker behalten das Limit), und `comparison_selection` fordert für
+  OpenAI-Modelle mit Reasoning `reasoning.summary = "auto"` an
+  (`agent_client.with_reasoning_summary`, wie im Chat-Modell), sonst kämen nur
+  verschlüsselte Blöcke. Keine zusätzlichen Modellaufrufe und kein
+  zusätzliches Reasoning: es wird nur lesbar, was ohnehin gestreamt wird.
+  Modelle ohne Reasoning (z. B. Haiku, Mistral Small, Grok 4.20 im
+  Standard-Preset) liefern keine Zeile.
   Die Landing-Schiene (`.lp-scene-rail`) zeichnet weiter die alte Linie.
   Reduzierte Bewegung: kein Pulsieren, kein Aufleuchten. Alles Drückbare gibt
   beim Druck auf 97 % nach (`base.css`, Spezifität 0, eigene Transforms

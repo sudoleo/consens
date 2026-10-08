@@ -219,3 +219,21 @@ def test_answer_step_progress_keeps_updating_past_the_kept_window_at_its_pace():
     # The newest excerpt is at most one pacing interval behind.
     assert any(f"gap number {i}" in published[-1][1] for i in (57, 58, 59))
     assert all(b[0] - a[0] >= 3 for a, b in zip(published, published[1:]))
+
+
+def test_comparison_models_request_readable_openai_reasoning_only():
+    from dataclasses import replace
+    from app.services.agent_comparison import comparison_selection
+    from app.services.llm.agent_client import with_reasoning_summary
+    models = comparison_selection()
+    for model in models.values():
+        reasoning = model.request_config.get("reasoning") or {}
+        if model.model.startswith("openai/"):
+            assert reasoning.get("summary") == "auto"
+        else:
+            assert "summary" not in reasoning
+    gpt = next((m for m in models.values() if m.model.startswith("openai/")), None)
+    if gpt:
+        # An explicit "no reasoning" stays untouched.
+        off = replace(gpt, request_config={"reasoning": {"effort": "none"}})
+        assert with_reasoning_summary(off) is off

@@ -327,6 +327,18 @@ def resolve_agent_model(model_id=None, reasoning_effort="default"):
     raise ValueError("This model is not available in Agent Beta.")
 
 
+def with_reasoning_summary(model, _metadata=None):
+    """OpenAI reasons by default but streams only encrypted blocks unless a
+    summary is requested. Asking for it adds no reasoning; it makes the
+    reasoning that happens anyway readable (same rule as _resolve_effort)."""
+    metadata = (_metadata if _metadata is not None else agent_model_metadata.snapshot()).get(model.model) or {}
+    reasoning = dict((model.request_config or {}).get("reasoning") or {})
+    if (not model.model.startswith("openai/") or not metadata.get("reasoning")
+            or reasoning.get("effort") == "none" or reasoning.get("enabled") is False):
+        return model
+    return replace(model, request_config={**(model.request_config or {}), "reasoning": {**reasoning, "summary": "auto"}})
+
+
 def _resolve_effort(model, metadata, reasoning_effort):
     if reasoning_effort not in _choices(model, metadata):
         raise ValueError("This reasoning level is not supported by the selected model.")

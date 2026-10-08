@@ -379,6 +379,8 @@ describe("single-model agent chat", () => {
     const preview = host.querySelector('.agent-progress');
     expect(preview.textContent).toContain('Comparing perspectives…');
     expect(preview.textContent).toContain('Gemini: Checking the 2026 figures.');
+    // Frequent changes stay out of the screen reader log.
+    expect([...preview.querySelectorAll('p')].find(p => p.textContent.startsWith('Gemini:')).getAttribute('aria-hidden')).toBe('true');
     w.App.agentActivity.render(host, {running:true, events, highlight:{...highlight, label:'GPT', text:'Weighing both sources.'}});
     expect(preview.querySelectorAll('p:not(.agent-progress-step)')).toHaveLength(1);
     expect(preview.textContent).toContain('GPT: Weighing both sources.');

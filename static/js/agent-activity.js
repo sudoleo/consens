@@ -344,7 +344,9 @@
     // line quotes the reasoning of the model that reported last.
     const comparing = reviewStage === 'Comparing perspectives…' || activeTool?.name === 'compare_models';
     if (running && !waiting && comparing && highlight?.text) {
-      paragraphs.push({ id: 'comparison-highlight', kind: 'progress',
+      // quiet: true keeps the frequent changes out of the screen reader log;
+      // the agent panel offers the same highlights per model.
+      paragraphs.push({ id: 'comparison-highlight', kind: 'progress', quiet: true,
         text: highlight.label ? `${highlight.label}: ${highlight.text}` : highlight.text });
     }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
@@ -380,6 +382,7 @@
         if (position !== p) view.preview.insertBefore(p, position || null);
         continue;
       }
+      if (item.quiet) p.setAttribute('aria-hidden', 'true');
       p.classList.toggle('agent-progress-step', item.kind === 'step');
       p.classList.toggle('agent-current-status', Boolean(item.current));
       if (item.current) p.setAttribute('role', 'status'); else p.removeAttribute('role');

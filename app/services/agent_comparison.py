@@ -16,7 +16,7 @@ from pydantic.json_schema import SkipJsonSchema
 from app.core import config as cfg
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_provider_limits import ModelOutputLimit
-from app.services.llm.agent_client import metered_model
+from app.services.llm.agent_client import metered_model, with_reasoning_summary
 from app.services.llm.provider_runtime import (bind_analysis_budget, bind_provider_cancellation, ProviderCancelled,
                                                ProviderCancellation, current_provider_cancellation)
 from app.services.llm import provider_transport as transport
@@ -261,7 +261,9 @@ def comparison_selection(value=None):
             raise ValueError("Comparison model is not available")
     # The model's own completion limit. Reasoning models spend part of it
     # before the first visible word; a product cap cut them off mid-answer.
-    return {key: metered_model(value, max_tokens=COMPARISON_OUTPUT_CEILING) for key, value in chosen.items()}
+    # Readable reasoning feeds the live line during the comparison (no extra tokens).
+    return {key: with_reasoning_summary(metered_model(value, max_tokens=COMPARISON_OUTPUT_CEILING))
+            for key, value in chosen.items()}
 
 
 class ComparisonTools:

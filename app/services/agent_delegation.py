@@ -752,7 +752,12 @@ class DelegationLoop(AgentLoop):
         value = self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         value.tool_call_limit = 4
-        worker_progress = ReasoningProgress() if worker else None
+        # A comparison answer's line is quoted live in the chat while the main
+        # model waits (agent-activity.js highlight): it keeps updating, paced,
+        # instead of freezing after the first few sentences.
+        worker_progress = (None if not worker else
+                           ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)
+                           if getattr(worker, "kind", None) == "comparison" else ReasoningProgress())
         thinking = ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS) if answer_step and not worker else None
         stream_progress = StreamProgress(worker.stream_chars) if worker else None
         status = "failed"

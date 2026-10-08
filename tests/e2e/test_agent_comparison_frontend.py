@@ -611,3 +611,120 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
         assert not errors
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(browser, phase4_server, width):
+    """The quiet compare_models phase quotes ONE comparison model's latest
+    reasoning sentence from streamed delegation events; it follows the model
+    that reported last, leaves with the comparison and is never saved."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    chat, turn, gemini, gpt = (c * 32 for c in "abcd")
+    text = "Both plans fit; the smaller one is cheaper."
+    def answer(identity, seq, status, label, model, progress):
+        return {"id": identity, "seq": seq, "status": status, "kind": "comparison", "title": "Independent answer",
+                "model": {"model": model, "label": label}, "duration_ms": 1200, "progress_text": progress}
+    tool = {"version": 1, "id": "compare", "kind": "tool", "name": "compare_models", "status": "running"}
+    saved = {"id": turn, "question": "Compare plans for our team", "status": "completed", "execution_mode": "agent",
+             "mode": "Agent", "consensus": text, "sources": [], "model_answers": {},
+             "agent_activity": [{**tool, "status": "succeeded"}],
+             "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "policy": {"delegation": True}}}
+    listed = {"agents": [], "status": "running"}
+    bookmarks, errors = [], []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": chat, "execution_mode": "agent"}}))
+        page.route(f"**/agent/chats/{chat}/turns/{turn}/agents", lambda r: _json(r, listed))
+        page.route("**/bookmarks?*", lambda r: _json(r, {"bookmarks": bookmarks, "next_cursor": None}))
+        page.route("**/bookmarks/*/conversation*", lambda r: _json(r, {"chat_id": chat, "turns": [saved], "has_more": False}))
+        page.route("**/bookmarks/*", lambda r: _json(r, {"bookmark": bookmarks[0]}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        # A real open stream: the app's SSE parser and run lifecycle receive
+        # each delegation event in turn, as during a live comparison.
+        page.evaluate("""data => {
+          const fetch = window.fetch;
+          window.fetch = (url, options) => {
+            if (String(url) !== '/agent') return fetch(url, options);
+            window.__agentRequest = JSON.parse(options.body);
+            return Promise.resolve(new Response(new ReadableStream({start(controller) {
+              window.__agentPush = (type, event) => controller.enqueue(new TextEncoder().encode(`event: ${type}\\ndata: ${JSON.stringify(event)}\\n\\n`));
+              // The app may abort the stream itself once the final event arrived.
+              window.__agentClose = () => { try { controller.close(); } catch (_) {} };
+              window.__agentPush('started', {chat_id: data.chat, turn_id: data.turn, delegation: true});
+              window.__agentPush('activity', data.tool);
+            }}), {headers: {'Content-Type': 'text/event-stream'}}));
+          };
+        }""", {"chat": chat, "turn": turn, "tool": tool})
+        push = lambda name, event: page.evaluate("([name, event]) => window.__agentPush(name, event)", [name, event])
+        delegate = lambda agent: push("delegation", {"version": 1, "chat_id": chat, "turn_id": turn, "agent": agent})
+        page.locator("#questionInput").fill(saved["question"])
+        page.locator("#sendButton").click()
+        preview = page.locator("#agentAnswerActivity .agent-progress")
+        expect(preview).to_contain_text("Comparing perspectives…")
+        quotes = preview.locator("p").filter(has_text=re.compile(r"^(Gemini 3\.5 Flash-Lite|GPT-5\.4 Mini): "))
+        expect(quotes).to_have_count(0)
+
+        delegate(answer(gemini, 1, "working", "Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite",
+                        "Reading the question.\nChecking the 2026 figures."))
+        expect(quotes).to_have_count(1)
+        expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Checking the 2026 figures.")
+        delegate(answer(gpt, 1, "working", "GPT-5.4 Mini", "openai/gpt-5.4-mini", "Weighing both sources."))
+        expect(quotes).to_have_text("GPT-5.4 Mini: Weighing both sources.")
+        # Gemini's newer reasoning takes the line back; still exactly one line.
+        delegate(answer(gemini, 2, "working", "Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite",
+                        "Checking the 2026 figures.\nComparing the seat limits."))
+        expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Comparing the seat limits.")
+        expect(preview.locator("p:not(.agent-progress-step)")).to_have_count(1)
+        expect(preview).to_contain_text("Comparing perspectives…")
+        # The quote is live only: it never enters the activity history.
+        expect(page.locator("#agentAnswerActivity .agent-activity-history")).not_to_contain_text("seat limits")
+
+        # Once both comparison models finished, the line leaves while the run continues.
+        finished = [answer(gemini, 3, "completed", "Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite", "Comparing the seat limits."),
+                    answer(gpt, 2, "completed", "GPT-5.4 Mini", "openai/gpt-5.4-mini", "Weighing both sources.")]
+        for agent in finished:
+            delegate(agent)
+        expect(quotes).to_have_count(0)
+        assert page.evaluate("App.runRegistry.visible()?.status") == "running"
+        # A newer report from a model still answering brings it back; the end of the run removes it.
+        delegate(answer(gpt, 3, "working", "GPT-5.4 Mini", "openai/gpt-5.4-mini", "Rechecking the price."))
+        expect(quotes).to_have_text("GPT-5.4 Mini: Rechecking the price.")
+        listed.update(agents=finished, status="succeeded")
+        request = page.evaluate("window.__agentRequest")
+        bookmark = {"id": request["bookmark_id"], "chat_id": chat, "turn_id": turn, "title": saved["question"],
+                    "query": saved["question"], "mode": "Agent", "execution_mode": "agent", "has_consensus": True,
+                    "responses": {"consensus": text}}
+        bookmarks.append(bookmark)
+        push("activity", {**tool, "status": "succeeded"})
+        push("delta", {"text": text})
+        push("final", {"chat_id": chat, "turn_id": turn, "response": text, "turn": saved, "bookmark_meta": bookmark})
+        page.evaluate("() => window.__agentClose()")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(page.locator("#agentAnswerBody")).to_contain_text(text)
+        expect(preview).to_be_hidden()
+        expect(page.locator("#agentAnswerActivity")).not_to_contain_text("Rechecking the price")
+
+        # Nothing of it is stored: not in browser storage, not in the reopened turn.
+        page.reload(wait_until="domcontentloaded")
+        assert "Rechecking" not in page.evaluate("() => JSON.stringify({...localStorage, ...sessionStorage})")
+        row = page.locator(f'.bookmark[data-id="{bookmark["id"]}"]')
+        expect(row).to_have_count(1)
+        if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") != "true":
+            page.locator("#toggleSidebarButton").click()
+        row.click()
+        expect(page.locator("#agentAnswerBody")).to_contain_text(text)
+        activity = page.locator("#agentAnswerActivity")
+        activity.locator(".agent-activity-title").click()
+        expect(activity.locator(".agent-activity-history")).to_be_visible()
+        expect(activity).to_contain_text("Model comparison")
+        expect(activity).not_to_contain_text("Comparing the seat limits")
+        expect(activity).not_to_contain_text("Gemini 3.5 Flash-Lite:")
+        expect(activity.locator(".agent-progress")).to_be_hidden()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        assert not errors
+    finally:
+        context.close()

@@ -479,7 +479,7 @@ describe("Agent sidebar", () => {
     const live = () => w.App.agentDelegation.liveHighlight(chatId, turnId);
     expect(live()).toBeNull();
     receive(w, { ...agent(1, "working", "f".repeat(32)), kind: "judge", progress_text: "Judges never speak here." });
-    receive(w, answer("a".repeat(32), 1, "working", "Reading the question.\nChecking the 2026 figures."));
+    receive(w, answer("a".repeat(32), 1, "working", "Reading the question.\n- Checking the **2026** `figures`."));
     expect(live()).toMatchObject({ label: "GPT", text: "Checking the 2026 figures." });
     receive(w, answer("b".repeat(32), 1, "working", "Comparing both sources."));
     expect(live()).toMatchObject({ label: "Gemini", text: "Comparing both sources." });
