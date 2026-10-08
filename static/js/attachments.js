@@ -468,7 +468,9 @@
         const load = window.App?.agentWorkspace?.openFile
           ? window.App.agentWorkspace.openFile(fileId).then(function (file) {
             if ((file.mime || file.blob.type || "").indexOf("image/") !== 0) throw new Error("Not an image");
-            return URL.createObjectURL(file.blob);
+            // A data: URL like the viewer: the CSP's img-src allows data:,
+            // not blob:, so a blob URL tile failed and fell back to "IMG".
+            return readDataUrl(file.blob);
           })
           : Promise.reject(new Error("Files are not available"));
         // A failed load (chat changed, file removed) may be retried later.

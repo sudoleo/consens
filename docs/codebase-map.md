@@ -788,7 +788,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `attachments.js` (`imageTile`) nimmt direkt nach dem Senden das Bild aus dem
   Composer (`sentImages`, Schlüssel Name|Größe|Typ, gefüllt in `messageMeta`),
   später die gespeicherte Agent-Datei (`openFile`, einmal pro Datei,
-  `storedImages`); fehlt beides, bleibt die Plakette.
+  `storedImages`, als `data:`-URL wie im Viewer: die CSP erlaubt für Bilder
+  `data:`, aber kein `blob:`, eine Blob-URL fiel bis 2026-10-08 auf „IMG“
+  zurück); fehlt beides, bleibt die Plakette.
   Entfernen (×) ist an beiden Stellen derselbe neutrale Knopf, nie rot: es ist
   kein Alarm. Der einzige Farbträger ist die DeepSeek-Notiz in der
   Ampel-Gelbstufe `--partial-bg` (vorher ein eigenes Amber `#f59e0b`).
