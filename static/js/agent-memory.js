@@ -1,7 +1,9 @@
 // "Memory updated" while an Agent run is working: what Agent saved, changed or
 // forgot during that message, with Undo and a way into Settings > Memory. It
-// disappears once the answer is final (render without `running`); the server is
-// the only state.
+// disappears once the answer is final (render without `running`); from then on
+// Settings > Memory is the place to review and undo. The server is the only
+// state, and the saved turn keeps no memory texts (only which entry changed),
+// so the live list comes from the SSE ``memory`` events.
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -155,9 +157,12 @@
 
   // A quiet hint for accounts that have not let Agent update memory yet: from
   // the second finished answer in this browser, under at most three answers,
-  // until switched on or dismissed. One click turns on "Use my memory" and
-  // "Let Agent update memory"; it stays opt-in. Whether the turn could write
-  // comes from its own settings (agent_settings.memory.auto), so no extra read.
+  // until switched on or dismissed. One click turns on "Let Agent update
+  // memory"; it stays opt-in. Whether the hint fits comes from the turn's own
+  // settings, so no extra read: only an explicit `memory.hint === true` (memory
+  // readable, in use, opt-in off). `auto === false` alone is no reason: it is
+  // also false for a deliberately paused memory and for a turn whose memory
+  // read failed. Older turns without the marker show nothing.
   const HINT_KEY = 'consensio.memoryHint.v1';
   const HINT_FROM_ANSWER = 2;
   const HINT_MAX_SHOWN = 3;
@@ -179,7 +184,7 @@
     let view = hints.get(body);
     if (view && view.key !== key) { view.note.remove(); hints.delete(body); view = null; }
     if (view) { place(body, view.note); return; }
-    if (!finished || !memory || memory.auto !== false || !key) return;
+    if (!finished || !memory || memory.hint !== true || !key) return;
     let state = hintState();
     if (!counted.has(key)) {
       counted.add(key);
@@ -224,7 +229,7 @@
         return;
       }
       dismissNudge();
-      text.textContent = 'Memory is on. Agent saves what you share, and every change shows under its answer with Undo.';
+      text.textContent = 'Memory is on. Agent saves what you share; review or undo any change in Settings › Memory.';
       const manage = document.createElement('button');
       manage.type = 'button';
       manage.textContent = 'Manage memory';

@@ -62,17 +62,28 @@ MAX_FIELD_CHARS = 250
 MAX_NOTES_CHARS = 12_000
 # Gerenderter Inhalt ohne Rahmen: vier Kurzfelder plus Langnotiz und Labels.
 MAX_PROFILE_CHARS = 13_200
+# Die einzeln gespeicherten Erinnerungen (agent_memory.py, bis 100 x 300
+# Zeichen) bekommen ein eigenes Budget INNERHALB dieses Deckels, neueste
+# zuerst; sonst gingen bis zu ~31k Zeichen an alle sechs Modelle. Sie haben
+# Vorrang vor dem Ende einer langen Notiz, weil sie die neuere Information sind.
+MAX_ITEMS_PROMPT_CHARS = 3_000
+ITEMS_HEADING = ("SAVED MEMORIES (individual facts and preferences kept in the user's memory, newest first; "
+                 "newer than the note above):")
 
 # Marken, die einen Prompt-Rahmen schliessen. Ein Nutzer koennte sie sonst in ein
 # Profilfeld tippen und damit den Chat-Kontext-Rahmen vorzeitig beenden. Das
 # schadet nur seinem eigenen Lauf -- aber es waere ein stiller Defekt, der
 # aussieht wie ein Modellfehler.
+#
+# Alle Rahmen stehen in Grossbuchstaben; nur genau diese Marken gehen, normale
+# Formulierungen ("tell me about the user settings", "saved memories")
+# bleiben stehen. Frueher war der alte Teil case-insensitiv und frass solche
+# Saetze aus Profil, Notiz und Erinnerungen.
 _FRAME_MARKER_RE = re.compile(
     r"(?:END\s+)?(?:AUTHORITATIVE\s+CHAT\s+CONTEXT|OF\s+USER\s+PROFILE|ABOUT\s+THE\s+USER)"
     # The Agent memory block (agent_memory.render_memory_block) is framed in
-    # capitals; only those exact markers go, ordinary wording stays.
-    r"|(?-i:(?:END\s+OF\s+)?USER\s+MEMORY|SAVED\s+MEMORIES)",
-    re.IGNORECASE,
+    # capitals as well.
+    r"|(?:END\s+OF\s+)?USER\s+MEMORY|SAVED\s+MEMORIES"
 )
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -157,13 +168,36 @@ def profile_is_empty(profile: dict) -> bool:
     return not any(str(profile.get(field) or "").strip() for field in PROFILE_FIELDS)
 
 
+def _newest_first(items: list) -> list:
+    """Neueste Erinnerung zuerst (``updated_at``, sonst ``created_at``, sonst Speicherreihenfolge)."""
+    def key(pair):
+        index, item = pair
+        stamp = item.get("updated_at") or item.get("created_at")
+        return (stamp.timestamp() if isinstance(stamp, datetime) else float("-inf"), index)
+    return [item for _, item in sorted(enumerate(items), key=key, reverse=True)]
+
+
+def _item_lines(items: list, room: int) -> list[str]:
+    """So viele Erinnerungen, neueste zuerst, wie in ``room`` Zeichen passen."""
+    lines, used = [], 0
+    for item in _newest_first(items):
+        line = f"- {' '.join(str(item['text']).split())}"
+        if used + len(line) + 1 > room:
+            break
+        lines.append(line)
+        used += len(line) + 1
+    return lines
+
+
 def render_profile(profile: object, *, max_notes_chars: int = MAX_NOTES_CHARS, items=()) -> str:
     """Der Profilblock fuer den System-Prompt -- oder "" , wenn es keinen gibt.
 
     "" ist der Normalfall fuer alle, die nichts eingetragen oder das Profil
     pausiert haben. Ein leerer Rahmen waere teurer Ballast in sechs Prompts.
     ``items`` sind die einzeln gespeicherten Erinnerungen (agent_memory.py);
-    sie stehen nach der Notiz, weil sie die neuere Information tragen.
+    sie stehen nach der Notiz, weil sie die neuere Information tragen, und
+    teilen sich mit ihr den Deckel: hoechstens ``MAX_ITEMS_PROMPT_CHARS``,
+    neueste zuerst, reserviert vor der Notiz.
     """
     clean = sanitize_profile(profile, max_notes_chars=max_notes_chars)
     items = [item for item in (items or ()) if isinstance(item, dict) and str(item.get("text") or "").strip()]
@@ -189,19 +223,20 @@ def render_profile(profile: object, *, max_notes_chars: int = MAX_NOTES_CHARS, i
             line = line[:room].rstrip()
         lines.append(line)
         used += len(line) + 1
+    profile_limit = max_notes_chars + (MAX_PROFILE_CHARS - MAX_NOTES_CHARS)
+    item_lines = _item_lines(items, min(MAX_ITEMS_PROMPT_CHARS, profile_limit - used - len(ITEMS_HEADING) - 1))
+    item_block = f"{ITEMS_HEADING}\n" + "\n".join(item_lines) if item_lines else ""
+    reserved = len(item_block) + 1 if item_block else 0
     notes = clean[NOTES_FIELD]
     if notes and used < MAX_PROFILE_CHARS:
         heading = "SAVED MEMORIES (a verbatim note the user maintains manually):"
-        profile_limit = max_notes_chars + (MAX_PROFILE_CHARS - MAX_NOTES_CHARS)
-        room = profile_limit - used - len(heading) - 1
+        room = profile_limit - used - reserved - len(heading) - 1
         if room >= 40:
             note_text = notes[:room].rstrip()
             lines.append(f"{heading}\n{note_text}")
             used += len(heading) + len(note_text) + 2
-    if items:
-        rendered = "\n".join(f"- {' '.join(str(item['text']).split())}" for item in items)
-        lines.append("SAVED MEMORIES (individual facts and preferences kept in the user's memory; "
-                     f"newer than the note above):\n{rendered}")
+    if item_block:
+        lines.append(item_block)
     if not lines:
         return ""
 

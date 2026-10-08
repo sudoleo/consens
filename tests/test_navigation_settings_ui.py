@@ -506,9 +506,11 @@ def test_the_memory_profile_is_only_fetched_when_the_settings_open():
     # Geladen wird nur bei offenem Fenster oder beim Logout (dann ohne Netz).
     assert "if (settingsModalIsOpen() || !uid) {" in listener
     assert "state.saved = null;" in listener
-    # Der einzige Auslöser fuer einen Read im Normalfall.
-    assert 'getElementById("editSystemPromptBtn")?.addEventListener("click", () => load())' in memory
-    # Und er bleibt einmalig: ein zweites Oeffnen liest den gemerkten Stand.
+    # Der einzige Auslöser fuer einen Read im Normalfall. Seit 2026-10-08 liest
+    # jedes Oeffnen frisch (ein anderer Tab oder der Hinweis unter einer
+    # Antwort kann Schalter und Revision geaendert haben); ein Entwurf bleibt.
+    assert ('getElementById("editSystemPromptBtn")?.addEventListener("click", '
+            '() => load(true, { keepDraft: true, quiet: true }))') in memory
     assert "if (state.loaded && state.uid === user.uid && !force) {" in memory
 
 
@@ -559,7 +561,8 @@ def test_selecting_answer_text_offers_asking_about_it():
     # Bookmark, Chat-Kontext und die sechs Modelle. Die getippte Frage steht
     # vorn: Thread-Kopf, Seitentitel und Bookmark-Name zeigen den Anfang
     # dieser Zeichenkette als reinen Text.
-    assert "`${typed}\\n\\nQuoted from the previous answer:\\n${passage}`" in quote
+    assert "`${typed}${FORMAT.typedMarker}${state.text}${FORMAT.close}`" in quote
+    assert 'typedMarker: "\\n\\nQuoted from the previous answer:\\n\\u201c"' in quote
     assert "> ${" not in quote
     assert "window.App.quote?.compose?.(draftQuestion) ?? draftQuestion" in query
     # Ein geplatzter Lauf gibt Entwurf UND Zitat unveraendert zurueck.

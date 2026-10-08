@@ -7,6 +7,9 @@
  * eat the run's word budget.
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
@@ -85,6 +88,16 @@ describe("App.quote", () => {
     expect(ctx.quote.compose("")).toBe(
       "Please comment on this passage from the previous answer:\n“A claim without a source.”"
     );
+  });
+
+  it("builds exactly the shared format the server cuts off before memory evidence checks", () => {
+    const format = JSON.parse(readFileSync(resolve(process.cwd(), "tests/fixtures/composer_quote_format.json"), "utf8"));
+    expect({ ...ctx.quote.format }).toEqual({
+      typedMarker: format.typedMarker, quoteOnlyPrefix: format.quoteOnlyPrefix, close: format.close,
+    });
+    ctx.quote.set("A passage.");
+    expect(ctx.quote.compose("Why?")).toBe(`Why?${format.typedMarker}A passage.${format.close}`);
+    expect(ctx.quote.compose("")).toBe(`${format.quoteOnlyPrefix}A passage.${format.close}`);
   });
 
   it("returns the question untouched when there is no quote", () => {

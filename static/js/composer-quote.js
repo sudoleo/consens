@@ -28,6 +28,17 @@
 
   const state = { text: "" };
 
+  // Exakt dieses Format setzt compose() zusammen. Der Server schneidet das
+  // Zitat daran wieder ab, bevor er pruefen laesst, ob ein Agent-Memory-Beleg
+  // die eigenen Worte des Nutzers sind (agent_memory.user_words): ein Absatz
+  // aus einer Antwort ist Modell- oder Webtext, nie die Aussage des Nutzers.
+  // Gemeinsamer, getesteter Vertrag: tests/fixtures/composer_quote_format.json.
+  const FORMAT = Object.freeze({
+    typedMarker: "\n\nQuoted from the previous answer:\n\u201c",
+    quoteOnlyPrefix: "Please comment on this passage from the previous answer:\n\u201c",
+    close: "\u201d"
+  });
+
   function els() {
     return {
       box: document.getElementById("composerQuote"),
@@ -92,10 +103,9 @@
   function compose(question) {
     const typed = String(question ?? "").trim();
     if (!state.text) return String(question ?? "");
-    const passage = `“${state.text}”`;
     return typed
-      ? `${typed}\n\nQuoted from the previous answer:\n${passage}`
-      : `Please comment on this passage from the previous answer:\n${passage}`;
+      ? `${typed}${FORMAT.typedMarker}${state.text}${FORMAT.close}`
+      : `${FORMAT.quoteOnlyPrefix}${state.text}${FORMAT.close}`;
   }
 
   function bind() {
@@ -113,6 +123,7 @@
     text: () => state.text,
     has: () => !!state.text,
     compose,
+    format: FORMAT,
     focusComposer,
     // Fuer composer-collapse.js: ein stehendes Zitat ist Angefangenes und darf
     // nicht hinter dem Ruecken des Nutzers weggeklappt werden.

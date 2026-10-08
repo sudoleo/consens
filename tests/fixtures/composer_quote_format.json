@@ -1,0 +1,6 @@
+{
+  "_comment": "Exact format composer-quote.js uses to append a quoted answer passage to a question. agent_memory.user_words cuts it off before checking memory evidence. Tested in tests/js/composer-quote.test.mjs and tests/test_agent_memory.py.",
+  "typedMarker": "\n\nQuoted from the previous answer:\n“",
+  "quoteOnlyPrefix": "Please comment on this passage from the previous answer:\n“",
+  "close": "”"
+}
