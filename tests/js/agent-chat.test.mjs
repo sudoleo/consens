@@ -15,8 +15,9 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
   { id: "gpt-4o", label: "GPT-4o", reasoning_efforts: ["default"], reasoning_available: false },
 ] };
 
-function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare } = {}) {
-  const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
+function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, live = false } = {}) {
+  const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js",
+    ...(live ? ["static/js/agent-live.js"] : []), "static/js/agent-chat.js"], {
     body,
     before(window) {
       // These cases start from a Consensus preference; Agent is the default.
@@ -1592,6 +1593,117 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     // Unlinking a link that never applied is a no-op, not an error.
     w.App.linkModelPicker(d.getElementById('agentModelDropdown'), null);
     expect(trigger.querySelector('.model-picker-display-count').hidden).toBe(true);
+    dom.window.close();
+  });
+});
+
+describe("agent stream behind a buffering proxy", () => {
+  const TURN = "b".repeat(32);
+  function finalData(text) {
+    return { response: text, chat_id: "a".repeat(32), turn_id: TURN, bookmark_meta: { id: "saved" },
+      token_budget: structuredClone(CATALOG.token_budget),
+      turn: { id: TURN, question: "Behind a proxy", consensus: text, status: "completed", mode: "Agent", execution_mode: "agent" } };
+  }
+  function bootLive(pages) {
+    const harness = boot({ live: true, setup(window) {
+      const catalogFetch = window.fetch;
+      window.fetch = vi.fn(async (url, init) => {
+        if (String(url).includes("/live?")) {
+          const page = pages.length > 1 ? pages.shift() : pages[0];
+          return { ok: true, status: 200, json: async () => structuredClone(page) };
+        }
+        return catalogFetch(url, init);
+      });
+      window.App.trackAppEvent = vi.fn();
+    } });
+    harness.window.App.agentLive.SILENCE_MS = 20;
+    harness.window.App.agentLive.POLL_MS = 10;
+    return harness;
+  }
+  const liveCalls = w => w.fetch.mock.calls.map(call => String(call[0])).filter(url => url.includes("/live?"));
+
+  it("shows polled progress first and skips the frames a late flush repeats", async () => {
+    const { window: w, document: d, dom } = bootLive([
+      { known: true, done: false, last_seq: 2, events: [
+        { seq: 1, type: "accepted", data: { chat_id: "a".repeat(32), turn_id: TURN } },
+        { seq: 2, type: "delta", data: { type: "delta", text: "Partial " } }] },
+      { known: true, done: false, last_seq: 2, events: [] },
+    ]);
+    await selectAgent(w);
+    let handlers, release, signal;
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming, given) => {
+      handlers = given; signal = incoming;
+      return new Promise(resolve => { release = resolve; });
+    });
+    d.querySelector("#questionInput").value = "Behind a proxy";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().consensus.streamText).toBe("Partial "));
+    const run = w.App.runRegistry.visible();
+    expect(run.status).toBe("running");
+    expect(run.metadata.agentTurnId).toBe(TURN);
+    const sent = w.streamSSERequest.mock.calls[0][1];
+    expect(liveCalls(w)[0]).toBe(`/agent/chats/${"a".repeat(32)}/live?request_id=${encodeURIComponent(sent.client_request_id)}&after=0`);
+    await vi.waitFor(() => expect(liveCalls(w).some(url => url.endsWith("after=2"))).toBe(true));
+    expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_stream_buffered")).toHaveLength(1);
+
+    // The proxy releases the whole body at once: frames 1-2 again, then 3.
+    handlers.accepted.receive({ chat_id: "a".repeat(32), turn_id: TURN }, "1");
+    handlers.delta.receive({ type: "delta", text: "Partial " }, "2");
+    handlers.delta.receive({ type: "delta", text: "answer" }, "3");
+    expect(run.consensus.streamText).toBe("Partial answer");
+    release({ ok: true, status: 200, streamed: true, data: finalData("Partial answer") });
+    await sending;
+    expect(signal.aborted).toBe(false);
+    expect(w.App.runRegistry.visible().status).toBe("succeeded");
+    expect(w.App.runRegistry.visible().consensus.text).toBe("Partial answer");
+    const polls = liveCalls(w).length;
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(liveCalls(w)).toHaveLength(polls); // polling ended with the run
+    dom.window.close();
+  });
+
+  it("ends the run from the polled final frame without waiting for the stream", async () => {
+    const { window: w, document: d, dom } = bootLive([
+      { known: true, done: true, last_seq: 2, events: [
+        { seq: 1, type: "delta", data: { type: "delta", text: "Whole answer" } },
+        { seq: 2, type: "final", data: finalData("Whole answer") }] },
+    ]);
+    await selectAgent(w);
+    let signal;
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming) => { signal = incoming; return new Promise(() => {}); });
+    d.querySelector("#questionInput").value = "Behind a proxy";
+    await w.App.agentChat.send();
+    expect(signal.aborted).toBe(true); // the held-back stream is closed
+    expect(w.App.runRegistry.visible().status).toBe("succeeded");
+    expect(w.App.runRegistry.visible().consensus.text).toBe("Whole answer");
+    expect(w.streamSSERequest).toHaveBeenCalledTimes(1); // no recovery request needed
+    dom.window.close();
+  });
+
+  it("does not poll when the stream delivers bytes, and stops on Stop", async () => {
+    const { window: w, document: d, dom } = bootLive([{ known: true, done: false, last_seq: 0, events: [] }]);
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, handlers, options) => {
+      options.onProgress(); // the padding arrived at once
+      handlers.delta.receive({ text: "Live" }, "1");
+      return new Promise(resolve => setTimeout(() => resolve({ ok: true, status: 200, streamed: true, data: finalData("Live") }), 60));
+    });
+    d.querySelector("#questionInput").value = "Behind a proxy";
+    await w.App.agentChat.send();
+    expect(liveCalls(w)).toHaveLength(0);
+    expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_stream_buffered")).toHaveLength(0);
+
+    let signal;
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming) => { signal = incoming; return new Promise(() => {}); });
+    d.querySelector("#questionInput").value = "Second question";
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(liveCalls(w).length).toBeGreaterThan(0));
+    w.App.runRegistry.visible().controllers.query.abort();
+    await sending;
+    expect(signal.aborted).toBe(true);
+    const polls = liveCalls(w).length;
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(liveCalls(w)).toHaveLength(polls);
     dom.window.close();
   });
 });

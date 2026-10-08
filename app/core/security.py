@@ -169,7 +169,10 @@ class CustomSecurityMiddleware:
                     headers.pop(b"referrer-policy", None)
                     headers[b"Referrer-Policy"] = b"no-referrer"
                 if sensitive_api_response:
-                    headers[b"Cache-Control"] = b"private, no-store"
+                    # An event stream keeps no-transform (no proxy buffering
+                    # or re-encoding), see SSE_HEADERS.
+                    stream = headers.get(b"content-type", b"").lower().startswith(b"text/event-stream")
+                    headers[b"Cache-Control"] = b"private, no-store, no-transform" if stream else b"private, no-store"
                     headers[b"Pragma"] = b"no-cache"
                     headers[b"Expires"] = b"0"
                     headers[b"Vary"] = b"X-API-Key, Authorization"

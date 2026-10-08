@@ -377,12 +377,18 @@ async function readSSEStream(response, onEvent, onProgress) {
     return normalized;
   }
 
+  // Comment frames (": keepalive", the server's 2 KiB padding) carry no
+  // data and are dropped here. `id:` (the Agent's per-run sequence number)
+  // is passed on as the third argument.
   function dispatch(rawEvent) {
     let eventName = "message";
+    let eventId;
     const dataLines = [];
     rawEvent.split("\n").forEach(line => {
       if (line.startsWith("event:")) {
         eventName = line.slice(6).trim();
+      } else if (line.startsWith("id:")) {
+        eventId = line.slice(3).trim();
       } else if (line.startsWith("data:")) {
         dataLines.push(line.slice(5).replace(/^\s/, ""));
       }
@@ -394,7 +400,7 @@ async function readSSEStream(response, onEvent, onProgress) {
     } catch (_) {
       return;
     }
-    return onEvent(eventName, parsed);
+    return onEvent(eventName, parsed, eventId);
   }
 
   try {
@@ -457,7 +463,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers, requestOpt
     }
 
     let finalData = null;
-    await readSSEStream(response, (eventName, data) => {
+    await readSSEStream(response, (eventName, data, eventId) => {
       if (eventName === "final" || eventName === "error") {
         finalData = data;
         return true;
@@ -470,7 +476,8 @@ async function streamSSERequest(url, payload, signal, deltaRenderers, requestOpt
         }
         const renderer = renderers[eventName];
         if (!renderer || !data) return;
-        if (renderer.receive) { renderer.receive(data); return; }
+        // Only the Agent stream numbers its frames (`id:`, agent-chat.js dedupe).
+        if (renderer.receive) { eventId === undefined ? renderer.receive(data) : renderer.receive(data, eventId); return; }
         const deltaText = coerceStreamText(data.text);
         if (deltaText) {
           renderer.append(deltaText);

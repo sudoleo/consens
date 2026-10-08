@@ -981,7 +981,7 @@
         google_data_consent: context.config.googleDataConsent === true,
       };
       const stall = { misses: 0 };
-      const result = await App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal, {
+      const handlers = {
         accepted: { receive(event) {
           if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
             context.metadata.agentTurnId = event.turn_id;
@@ -1035,12 +1035,54 @@
           if (event.kind === "usage") context.metadata.agentUsage = event.usage;
           if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
         } },
-        delta: { append(text) {
+        delta: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+          const text = typeof event.text === "string" ? event.text : "";
+          if (!text) return;
           context.consensus.streamText += text;
           if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
         } },
-      }, { headers, onProgress }), { signal, timeoutMs: 45000, onIdle: () => checkStalledRun(context, body, headers, stall) });
+      };
+      // The one path every Agent frame takes, from the stream or from a
+      // live poll (agent-live.js): a sequence number already applied is
+      // dropped, so a buffered stream that flushes late renders nothing twice.
+      const seen = App.agentLive?.sequence();
+      const deliver = (type, data, seq) => {
+        if (seen && !seen.accept(seq)) return;
+        if (data && typeof data === "object") handlers[type]?.receive(data);
+      };
+      const streamHandlers = Object.fromEntries(Object.keys(handlers)
+        .map(type => [type, { receive: (data, seq) => deliver(type, data, seq),
+          append: (text, seq) => deliver(type, { text }, seq) }]));
+      // Abort only the stream (when a poll ended the run first), not the run.
+      const streamControl = new AbortController();
+      const abortStream = () => streamControl.abort();
+      signal.addEventListener("abort", abortStream, { once: true });
+      const live = App.agentLive?.watch({
+        chatId, requestId: context.requestIdentity, headers, signal, deliver, cursor: () => seen?.last || 0,
+        onEngage: () => App.trackAppEvent?.("app_stream_buffered"),
+        recover: async () => {
+          const saved = await App.withRequestDeadline(requestSignal => window.streamSSERequest("/agent", { ...body, recover_only: true },
+            requestSignal, {}, { headers }), { signal, timeoutMs: 15000 }).catch(() => null);
+          return saved?.data?.turn ? saved : null;
+        },
+      });
+      const streaming = App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal,
+        streamHandlers, { headers, onProgress: () => { onProgress?.(); live?.bytes(); } }),
+        { signal: streamControl.signal, timeoutMs: 45000, onIdle: () => checkStalledRun(context, body, headers, stall) });
+      let result;
+      try {
+        if (live) {
+          streaming.catch(() => {}); // Rejects with AbortError when the poll wins.
+          const outcome = await Promise.race([streaming.then(value => ({ value })),
+            live.finished.then(value => ({ value, polled: true }))]);
+          if (outcome.polled) abortStream();
+          result = outcome.value;
+        } else result = await streaming;
+      } finally {
+        live?.stop();
+        signal.removeEventListener("abort", abortStream);
+      }
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       receiveBudget(result.data?.token_budget, context.auth.uid);
       terminalBudget = Boolean(result.data?.token_budget);

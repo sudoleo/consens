@@ -227,6 +227,13 @@ content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
 HTML ab 1 KiB gzip bei passendem `Accept-Encoding`. API-JSON und
 `text/event-stream` laufen unverändert Frame für Frame durch (SSE wird nie
 komprimiert oder gepuffert); `tests/test_static_delivery.py` sichert beides ab.
+Seit 2026-10-08 tragen alle App-SSE-Antworten `Cache-Control: … no-transform`
+(`SSE_HEADERS`; Agent `private, no-store, no-transform`, auch wenn
+`CustomSecurityMiddleware` auf `/api/v1/` u. a. den Header überschreibt) und
+senden als ersten Chunk `SSE_PADDING` (2 KiB SSE-Kommentar,
+`iter_sse_with_keepalive(lead=…)`, Consensus-Replay direkt), damit Proxys, die
+erst nach einigen KiB weiterreichen, sofort freigeben. Clients ignorieren
+Kommentare (`markdown-stream.js`, `iter_sse_events`).
 Jeder Request erhält eine PII-freie `req-*`-Correlation-ID (auch als
 `X-Correlation-ID` in der Response); `GET /health/metrics` liefert nur
 prozesslokale, aggregierte Provider-/Scheduler-Zähler und Laufzeiten ohne
@@ -283,7 +290,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. `compare_models.memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Replay des laufenden Streams für puffernde Netze, siehe §4 „Gepufferter Agent-Stream“). Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. `compare_models.memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -1304,7 +1311,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   nur wenn außer LaTeX nichts im Anker steht, wird er nachträglich als Formel
   gesetzt — ein einziges Wort Text lässt ihn Text bleiben.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
-  (`createStreamRenderer`, `streamSSERequest`); setzt LaTeX nach jedem
+  (`createStreamRenderer`, `streamSSERequest`; eine `id:`-Zeile wird als zweites
+  Argument an `renderer.receive(data, id)` gereicht, nur wenn vorhanden); setzt LaTeX nach jedem
   gedrosselten Streaming-Render über `window.ConsensusMath`. Fehlt `marked`
   oder `DOMPurify` nach einem Asset-Ladefehler, rendert es sicher als Plaintext
   und meldet den degradierten Zustand, statt eine Promise-Rejection auszulösen.
@@ -2878,10 +2886,39 @@ Stille im `/agent`-Stream (45 s ohne Byte) ruft `onIdle` von
 `App.withRequestDeadline` (`request-deadline.js`) auf: `checkStalledRun` in
 `agent-chat.js` fragt mit `recover_only` und derselben Identität nach; ein
 gespeicherter Turn beendet den Lauf, `running` wartet weiter, zweimal kein Turn
-bricht ab (Firmen-Proxys puffern SSE). Fehlerhinweise tragen die Aktion
+bricht ab (Firmen-Proxys puffern SSE). Davor greift seit 2026-10-08 der
+**gepufferte Agent-Stream**-Fallback (unten). Fehlerhinweise tragen die Aktion
 `retry` (`retryFailed` → `send(null, {retry})`): gleiche Frage, `file_ids`,
 `chat_id` und Bookmark, neue Request-Identität, aktuelles Modell; die Zeile des
 gescheiterten Laufs in der Sidebar wird übernommen.
+
+**Gepufferter Agent-Stream (seit 2026-10-08).** Firmen-Proxys und TLS-prüfende
+Virenscanner halten den `/agent`-Stream oft bis zum Ende zurück („Thinking…“
+minutenlang, dann alles auf einmal). Server: jedes Agent-Frame trägt eine
+pro Lauf monotone Nummer als SSE-`id:` (`agent.py::pack`), und
+`app/services/agent_live.py` (`agent_live`) hält denselben Frame begrenzt im
+Prozessspeicher (je Lauf ≤ 2000 Frames/2 MiB, älteste zuerst verworfen;
+≤ 64 Läufe/24 MiB gesamt, beendete zuerst; 10 min TTL nach Ende, 3 h für nie
+beendete), Schlüssel uid + chat_id + client_request_id. `GET
+/agent/chats/{chat}/live?request_id=…&after=<seq>` (Agent-Zugang, 120/min,
+`private, no-store`, kein Firestore) liefert `{events:[{seq,type,data}],
+last_seq, done, known, more}` mit höchstens 500 Frames; `known:false` heißt:
+dieser Prozess kennt den Lauf nicht (anderer Worker, Neustart, abgelaufen,
+fremdes Konto). Es wird nichts gesendet, was der Stream demselben Konto nicht
+auch sendet, und nichts persistiert; `recover_only` öffnet keinen Puffer.
+Client: `agent-live.js` (`App.agentLive.watch`, vor `agent-chat.js` im Bundle)
+pollt alle 1,5 s, wenn 5 s nach dem Senden kein Byte (normal: das Padding sofort)
+kam, und gibt jedes Frame an `deliver(type, data, seq)` in `agent-chat.js` —
+dieselbe Stelle, durch die auch der Stream läuft; `App.agentLive.sequence()`
+verwirft dort jede schon angewandte Nummer, ein später geflushter Stream rendert
+also nichts doppelt. Bytes vom Stream pausieren das Polling (nach erneuter Stille
+5 s läuft es wieder, aber nur wenn es schon einmal gegriffen hat); Ende bei
+`final`/`error` (das gepollte Terminal-Frame beendet den Lauf exakt wie der Stream,
+der zurückgehaltene Stream wird dann abgebrochen), Stop/Abort, `done` ohne
+Terminal-Frame (dann `recover_only` für die gespeicherte Antwort) oder 4× in Folge
+`known:false` (dann bleibt es beim bisherigen Verhalten inkl. 45-s-Prüfung).
+Einmal pro Lauf, sobald ein Poll den Lauf kennt und der Stream noch stumm ist:
+Analytics-Event `app_stream_buffered` (ohne Daten, docs/analytics.md).
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
 Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
 enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
@@ -6565,6 +6602,13 @@ ersten Check statt eines leeren Consensus-Panels.
   `static/dist` ein Jahr `immutable`, alles andere unter `/static` ist
   `no-cache` (ETag-Revalidierung). Handgeschriebene `?v=` verbietet
   `tests/test_frontend_resilience.py`; Details in `docs/frontend-build.md`.
+- **SSE-Antworten (seit 2026-10-08)**: neue Streams nutzen `SSE_HEADERS`
+  (`no-transform`) und `iter_sse_with_keepalive(..., lead=SSE_PADDING)`; ein
+  Test, der den ersten Chunk liest, muss das Padding überspringen. Agent-Frames
+  laufen nur über `agent.py::pack` (Nummer + Live-Puffer) und im Browser nur über
+  `deliver` in `agent-chat.js` (Dedupe per `App.agentLive.sequence()`); ein
+  Handler, der daran vorbei direkt an `streamSSERequest` hängt, rendert bei
+  gepuffertem Stream doppelt.
 - **Provider-Label-Konvention**: Frontend nutzt teils `Claude`, Backend kanonisch
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.

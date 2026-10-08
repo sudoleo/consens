@@ -392,6 +392,83 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         context.close()
 
 
+def _agent_frames(events):
+    """The server's wire format: 2 KiB padding, then numbered frames (agent.py pack)."""
+    from app.services.llm.streaming import SSE_PADDING
+    return SSE_PADDING + "".join(f"id: {seq}\nevent: {kind}\ndata: {json.dumps(data)}\n\n"
+                                 for seq, (kind, data) in enumerate(events, start=1))
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_buffering_proxy_shows_polled_progress_before_the_answer(browser, phase4_server, width):
+    """A proxy that releases the Agent stream only at its end (company networks).
+
+    The POST /agent route plays that proxy: it holds the request and delivers
+    the whole body at once, after the test has seen the progress the browser
+    fetched from GET /agent/chats/{chat}/live in the meantime.
+    """
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
+    errors, held, polls = [], [], []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    chat_id, turn_id = "a" * 32, "1".rjust(32, "0")
+    text = "Partial answer arrives in full."
+    reasoning = {"version": 1, "step_id": "completion:0", "kind": "reasoning", "id": "r1", "format": "summary",
+                 "text": "Checking the sources behind the proxy."}
+    events = [("accepted", {"chat_id": chat_id, "turn_id": turn_id}), ("activity", reasoning),
+              ("delta", {"type": "delta", "text": "Partial answer "}), ("delta", {"type": "delta", "text": "arrives in full."})]
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda route: _json(route, CATALOG))
+        page.route("**/chats", lambda route: _json(route, {"chat": {"id": chat_id, "execution_mode": "agent"}}))
+        page.route("**/bookmarks/**", lambda route: _json(route, {"bookmark": {}}))
+        page.route("**/agent", lambda route: held.append(route))
+
+        def live(route):
+            polls.append(route.request.url)
+            after = int(re.search(r"after=(\d+)", route.request.url).group(1))
+            # The run is still going: the first three frames exist so far.
+            sent = [{"seq": seq, "type": kind, "data": data} for seq, (kind, data) in enumerate(events[:3], start=1) if seq > after]
+            _json(route, {"events": sent, "last_seq": max(after, 3), "done": False, "known": True, "more": False})
+        page.route("**/agent/chats/*/live*", live)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
+        page.evaluate("""() => { window.__tracked = []; const track = window.trackUmamiEvent;
+          window.trackUmamiEvent = (name, data) => { window.__tracked.push(name); return track?.(name, data); }; }""")
+        page.locator("#questionInput").fill("Answer behind a buffering proxy")
+        page.locator("#sendButton").click()
+
+        # Nothing arrives over the stream, yet the progress shows up.
+        expect(page.locator("#agentAnswerActivity .agent-progress")).to_contain_text(reasoning["text"], timeout=15000)
+        expect(page.locator("#agentAnswerBody")).to_contain_text("Partial answer")
+        assert page.evaluate("() => App.runRegistry.visible().status") == "running"
+        request = held[0].request.post_data_json
+        assert f"request_id={request['client_request_id']}" in polls[0] and polls[0].endswith("after=0")
+        page.wait_for_function("() => window.__tracked.includes('app_stream_buffered')")
+
+        # The proxy releases everything at once: frames 1-3 again, then the rest.
+        turn = {"id": turn_id, "turn_id": turn_id, "question": request["question"], "status": "completed",
+                "position": 1, "mode": "Agent", "execution_mode": "agent", "consensus": text, "differences": "",
+                "differences_data": None, "model_answers": {}, "sources": [], "agent_activity": [reasoning]}
+        meta = {"id": request["bookmark_id"], "title": request["question"], "query": request["question"],
+                "mode": "Agent", "has_consensus": True}
+        final = {"chat_id": chat_id, "turn_id": turn_id, "response": text, "turn": turn, "bookmark_meta": meta}
+        held[0].fulfill(status=200, headers={"Content-Type": "text/event-stream", "Cache-Control": "private, no-store, no-transform"},
+                        body=_agent_frames([*events, ("final", final)]))
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text(text)
+        assert body.inner_text().count("Partial answer") == 1
+        assert page.evaluate("() => window.__tracked.filter(name => name === 'app_stream_buffered').length") == 1
+        settled = len(polls)
+        page.wait_for_timeout(2000)
+        assert len(polls) == settled  # polling ended with the run
+        assert not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True), (320, False)])
 def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server)

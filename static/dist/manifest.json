@@ -1,5 +1,5 @@
 {
-  "sources": "47160f9de8f1",
+  "sources": "3784cd9c1431",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -58,6 +58,7 @@
     "static/js/agent-delegation.js",
     "static/js/agent-drive.js",
     "static/js/agent-google.js",
+    "static/js/agent-live.js",
     "static/js/agent-memory.js",
     "static/js/agent-mode.js",
     "static/js/agent-preferences.js",
@@ -207,7 +208,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.8951b880c2b2.js",
+      "src": "/static/dist/app.df6905b364f0.js",
       "module": false,
       "defer": true
     }
@@ -218,8 +219,8 @@
   "previous_assets": [
     "app.ee7b5fb17548.css",
     "app.1c0464ac6e20.css",
+    "app.8951b880c2b2.js",
     "app.363c6bd4f7b2.js",
-    "app.c2dbbcd4ce24.js",
     "auth.5e487d1e2570.js",
     "demo.3165094e7e81.js",
     "demo.0ae29ba9ea95.js",

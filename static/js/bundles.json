@@ -123,6 +123,10 @@
         "static/js/chat-session.js",
         "static/js/agent-activity.js",
         "static/js/request-deadline.js",
+        {
+          "file": "static/js/agent-live.js",
+          "note": "App.agentLive: polling fallback when a network buffers the Agent stream; read by agent-chat.js at send time."
+        },
         "static/js/agent-delegation.js",
         "static/js/agent-review.js",
         "static/js/agent-preferences.js",

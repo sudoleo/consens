@@ -479,6 +479,27 @@ Ende zurück. Er fragt per `recover_only` mit derselben Identität nach. Ein
 gespeicherter Turn (fertig oder fehlgeschlagen) beendet das Warten,
 `recovery_state: running` hält den Stream offen, zweimal ohne Turn bricht ab.
 
+Damit der Lauf auf solchen Netzen trotzdem live sichtbar ist (seit 2026-10-08):
+Jede SSE-Antwort beginnt mit 2 KiB Kommentar-Padding und trägt
+`Cache-Control: … no-transform`; das reicht für Proxys, die nur die ersten KiB
+sammeln. Hält ein Netz den ganzen Stream zurück, merkt der Browser das daran,
+dass 5 s nach dem Senden kein einziges Byte kam, und holt die Frames alle
+1,5 s per `GET /agent/chats/{chat}/live?request_id=<client_request_id>&after=<seq>`
+aus dem Prozessspeicher des Servers, der den Lauf streamt. Jedes Frame trägt
+eine pro Lauf steigende Nummer (SSE `id:`); Stream und Poll laufen im Browser
+durch dieselbe Stelle, die bereits angewandte Nummern verwirft. Reasoning-
+Auszüge, Aktivität, Modell-Icons und Text erscheinen dadurch genau wie beim
+funktionierenden Stream, und wenn der Proxy später alles auf einmal freigibt,
+wird nichts doppelt angezeigt. Das gepollte `final`/`error` beendet den Lauf
+sofort (der zurückgehaltene Stream wird geschlossen); ist der Lauf fertig, ohne
+dass ein Terminal-Frame vorliegt, holt `recover_only` die gespeicherte Antwort.
+Der Puffer ist begrenzt (2000 Frames/2 MiB je Lauf, 64 Läufe/24 MiB gesamt,
+10 min nach Laufende weg), wird nie gespeichert und ist nur dem eigenen Konto
+zugänglich. Kennt der angefragte Prozess den Lauf nicht (`known: false`, z. B.
+anderer Worker oder Neustart), hört der Browser nach vier Versuchen auf zu
+pollen und verhält sich wie bisher. Einmal pro Lauf zählt Umami
+`app_stream_buffered`.
+
 Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
 Tool-Aufrufe erhalten eine dezente Statuszeile. Thinking bleibt geschlossen.
 Die Agentenleiste öffnet sanft und zeigt gemessene Input+Output-Tokens statt

@@ -50,11 +50,19 @@ logger = logging.getLogger(__name__)
 
 StreamEvent = Dict[str, Any]
 
+# no-transform: proxies and TLS-inspecting scanners may not re-encode or
+# hold back the stream (RFC 9111 5.2.2.6); nginx-style buffers honour
+# X-Accel-Buffering.
 SSE_HEADERS = {
-    "Cache-Control": "no-cache",
+    "Cache-Control": "no-cache, no-transform",
     "X-Accel-Buffering": "no",
     "Connection": "keep-alive",
 }
+
+# First frame of every app SSE response: a 2 KiB comment. Some proxies and
+# virus scanners release a response only after its first few KiB; the padding
+# fills that window so the real frames pass at once. Clients ignore comments.
+SSE_PADDING = ":" + " " * 2045 + "\n\n"
 
 
 def sse_pack(event: str, data: Dict[str, Any]) -> str:
@@ -95,7 +103,13 @@ def iter_sse_with_keepalive(
     source,
     interval_seconds: float = SSE_KEEPALIVE_INTERVAL_SECONDS,
     cancellation: ProviderCancellation | None = None,
+    lead: str | None = None,
 ):
+    """Yield ``source`` from its own pump thread, with keepalive comments.
+
+    ``lead`` (the SSE padding) is yielded before the producer's first frame,
+    unless the response was already cancelled before it was entered.
+    """
     events: queue.Queue = queue.Queue(maxsize=SSE_QUEUE_SIZE)
     done = object()
     cancellation = cancellation or ProviderCancellation()
@@ -150,6 +164,8 @@ def iter_sse_with_keepalive(
 
     next_keepalive = time.monotonic() + interval_seconds
     try:
+        if lead and not cancellation.cancelled:
+            yield lead
         while True:
             try:
                 item = events.get(timeout=min(interval_seconds, 0.1))
@@ -177,7 +193,7 @@ def iter_sse_with_keepalive(
 def keepalive_streaming_response(source) -> ProviderStreamingResponse:
     cancellation = ProviderCancellation()
     return ProviderStreamingResponse(
-        iter_sse_with_keepalive(source, cancellation=cancellation),
+        iter_sse_with_keepalive(source, cancellation=cancellation, lead=SSE_PADDING),
         media_type="text/event-stream",
         headers=dict(SSE_HEADERS),
         cancellation=cancellation,
@@ -528,7 +544,7 @@ def streaming_model_response(
     # Cancellation eines fremden, laengst beendeten Laufs, bricht als
     # ProviderCancelled ab und schickt nie ein final-Event.
     return ProviderStreamingResponse(
-        iter_sse_with_keepalive(event_source(), cancellation=cancellation),
+        iter_sse_with_keepalive(event_source(), cancellation=cancellation, lead=SSE_PADDING),
         media_type="text/event-stream",
         headers=dict(SSE_HEADERS),
         cancellation=cancellation,

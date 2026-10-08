@@ -46,6 +46,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Schalter aus → „merk dir …“ wird nur mit Hinweis auf den Schalter
       beantwortet, nichts gespeichert. Im Usage-Panel der zweiten Nachricht
       eines Claude-Chats sollten `cached_input_tokens` > 0 sein.
+- [ ] Gepufferter Agent-Stream (2026-10-08, Prod, Firmennetz bzw. puffernder
+      Proxy/Virenscanner): Agent-Frage mit Reasoning senden. Nach etwa 5 s
+      erscheinen Reasoning-Auszüge, Aktivität und Text live (DevTools → Network:
+      `GET /agent/chats/…/live` alle ~1,5 s, `known: true`), die fertige Antwort
+      steht genau einmal da, ohne Minuten-Warten auf das Stream-Ende. Im
+      Heimnetz kommt kein einziger `/live`-Aufruf. Umami: `app_stream_buffered`
+      nur im Firmennetz. Automatisiert: `agent-live.test.mjs`,
+      `test_agent_live.py`, `test_agent_chat_frontend.py::test_buffering_proxy_*`.
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,

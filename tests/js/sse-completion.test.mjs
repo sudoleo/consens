@@ -53,6 +53,20 @@ describe("SSE completion and failure diagnostics", () => {
     dom.window.close();
   });
 
+  it("ignores the 2 KiB padding comment and hands the frame id to the renderer", async () => {
+    const chunks = [new TextEncoder().encode(":" + " ".repeat(2045) + "\n\n"),
+      new TextEncoder().encode('id: 7\nevent: delta\ndata: {"text":"Hi"}\n\n'),
+      new TextEncoder().encode('id: 8\nevent: final\ndata: {"response":"Hi"}\n\n')];
+    const reader = { read: vi.fn(async () => ({ value: chunks.shift() })) };
+    const { window, dom } = boot(reader);
+    const receive = vi.fn(), onProgress = vi.fn();
+    const result = await window.streamSSERequest("/agent", {}, undefined, { delta: { receive } }, { onProgress });
+    expect(receive.mock.calls).toEqual([[{ text: "Hi" }, "7"]]);
+    expect(onProgress).toHaveBeenCalledTimes(3); // the padding alone already counts as a live byte
+    expect(result.data).toEqual({ response: "Hi" });
+    dom.window.close();
+  });
+
   it.each([
     ["request_failed", null, new TypeError("fetch failed")],
     ["stream_read_failed", { read: async () => { throw new TypeError("read failed"); } }],

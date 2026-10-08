@@ -39,6 +39,7 @@ from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm
 from app.services.llm.provider_runtime import ProviderCancelled
 from app.services.llm.streaming import (
     SSE_HEADERS,
+    SSE_PADDING,
     keepalive_streaming_response,
     sse_pack,
     streaming_model_response,
@@ -702,6 +703,7 @@ def _replay_completed_chat_turn(
         return payload
 
     def replay_event_source():
+        yield SSE_PADDING
         yield sse_pack("consensus.final", {"text": consensus_text})
         yield sse_pack("differences.final", {
             "differences": payload["differences"], "differences_data": payload["differences_data"],

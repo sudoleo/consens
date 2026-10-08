@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import asdict, replace
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Query
@@ -31,7 +32,8 @@ from app.services.chat_store import normalize_question, ChatNotFound, TurnStatus
 from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, default_agent_model_id, resolve_agent_model
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
-from app.services.llm.streaming import iter_sse_with_keepalive, sse_pack, SSE_HEADERS
+from app.services.llm.streaming import iter_sse_with_keepalive, SSE_HEADERS, SSE_PADDING
+from app.services.agent_live import agent_live
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.agent_calendar import GoogleSelection
 
@@ -360,6 +362,8 @@ def run_agent(request: Request, payload: AgentRequest):
                          comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
                          source_limits=source_limits, agent_preferences=payload.agent_preferences, memory=memory,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
+        # Replay for networks that buffer the stream (GET .../live).
+        live = agent_live.open(uid, payload.chat_id, payload.client_request_id)
     except Exception as exc:
         try:
             if turn:
@@ -378,6 +382,12 @@ def run_agent(request: Request, payload: AgentRequest):
             raise HTTPException(status_code=422, detail=str(exc)) from None
         _raise_store_error(exc, operation="prepare agent turn", uid=uid)
 
+    def pack(event_type, data):
+        # One sequence per run: the SSE id line and the live replay share it,
+        # so the browser can drop frames it already applied from a poll.
+        seq, text = agent_live.record(live, event_type, data)
+        return f"id: {seq}\nevent: {event_type}\ndata: {text}\n\n"
+
     def events():
         completion = loop.completion
         status = "failed"
@@ -386,16 +396,16 @@ def run_agent(request: Request, payload: AgentRequest):
         try:
             # Give the browser a durable identity while admission is still
             # waiting, so Stop/status do not depend on a paid call starting.
-            yield sse_pack("accepted", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
+            yield pack("accepted", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
             source = loop.run()
             closing = False
             try:
                 for event in source:
                     if event:
-                        yield sse_pack(event["type"], event)
+                        yield pack(event["type"], event)
                         if event["type"] == "started" or (event["type"] == "activity" and event.get("kind") == "usage"):
                             try:
-                                yield sse_pack("quota", {"token_budget": agent_quota.snapshot(store.db, uid)})
+                                yield pack("quota", {"token_budget": agent_quota.snapshot(store.db, uid)})
                             except Exception as exc:
                                 logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
             except GeneratorExit:
@@ -438,7 +448,7 @@ def run_agent(request: Request, payload: AgentRequest):
             report_server_exception(exc, where="agent.turn_stream")
         if status != "succeeded":
             for event in loop._events():
-                yield sse_pack(event["type"], event)
+                yield pack(event["type"], event)
             interrupted = _save_interrupted(uid, payload, store, turn["id"])
             if interrupted is not None:
                 pending = interrupted["status"] == "pending"
@@ -450,20 +460,20 @@ def run_agent(request: Request, payload: AgentRequest):
                     failure["saved_answer"] = {"chat_id": payload.chat_id, "turn_id": saved["id"],
                         "turn": saved, "response": saved.get("consensus", ""), "bookmark_meta": bookmark_meta}
             if interrupted and interrupted.get("agent_review"):
-                yield sse_pack("review", {"review": interrupted["agent_review"]})
-            yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
+                yield pack("review", {"review": interrupted["agent_review"]})
+            yield pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
             try:
                 failure["token_budget"] = agent_quota.snapshot(store.db, uid)
             except Exception as exc:
                 logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
-            yield sse_pack("error", {"error": error, **failure})
+            yield pack("error", {"error": error, **failure})
             return
         try:
             completed = store.get_turn(uid, payload.chat_id, turn["id"])
-            yield sse_pack("final", _final(uid, payload, store, completed))
+            yield pack("final", _final(uid, payload, store, completed))
         except Exception as exc:
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
-            yield sse_pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True, "recovery_state": "saved"})
+            yield pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True, "recovery_state": "saved"})
 
     def stream_events():
         if not lease.start():
@@ -471,16 +481,18 @@ def run_agent(request: Request, payload: AgentRequest):
         try:
             yield from events()
         finally:
+            agent_live.finish(live)
             lease.release()
 
     def cleanup():
+        agent_live.finish(live)
         store.release_unclaimed(uid, payload.chat_id, turn["id"])
         _save_interrupted(uid, payload, store, turn["id"])
 
     return AgentStreamingResponse(
-        iter_sse_with_keepalive(stream_events(), cancellation=cancellation), cancellation=cancellation,
-        lease=lease, cleanup=cleanup,
-        media_type="text/event-stream", headers={**SSE_HEADERS, "Cache-Control": "private, no-store"},
+        iter_sse_with_keepalive(stream_events(), cancellation=cancellation, lead=SSE_PADDING),
+        cancellation=cancellation, lease=lease, cleanup=cleanup,
+        media_type="text/event-stream", headers={**SSE_HEADERS, "Cache-Control": "private, no-store, no-transform"},
     )
 
 
@@ -508,6 +520,26 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
         return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
     except Exception as exc:
         _raise_store_error(exc, operation="read agent sessions", uid=uid)
+
+
+@router.get("/agent/chats/{chat_id}/live")
+@limiter.limit("120/minute")
+def agent_live_events(request: Request, chat_id: str,
+                      request_id: str = Query(..., min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"),
+                      after: int = Query(0, ge=0)):
+    """The running stream's frames after ``after``, for networks that buffer SSE.
+
+    Process memory only (no Firestore read): ``known: false`` means this
+    process holds no stream for uid + chat + request, e.g. another worker,
+    a restart or an expired buffer. The buffer is keyed by the caller's uid,
+    so another account can never address it.
+    """
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id):
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return JSONResponse(agent_live.read(uid, chat_id, request_id, after),
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/agent/chats/{chat_id}/turns/{turn_id}/stop")

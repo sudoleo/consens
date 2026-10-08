@@ -1,6 +1,6 @@
 # Analytics (Umami): welches Event was bedeutet
 
-Stand 2026-10-07. Tracking-Code: `templates/partials/analytics.html` (Snippet,
+Stand 2026-10-08. Tracking-Code: `templates/partials/analytics.html` (Snippet,
 Website-ID) und `static/js/analytics-opt-out.js` (Selbst-Ausschluss,
 Bot-Filter, Kampagnen-Parameter, `open_app`). App-Events laufen über
 `window.trackUmamiEvent` (`static/js/app-bootstrap.js`), das Schlüssel wie
@@ -52,6 +52,11 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
 - `app_memory_hint` (`action`: shown, dismissed) und `app_auto_memory_on`
   (`source: hint` beim Einschalten aus dem Hinweis unter einer Agent-Antwort,
   ohne `source` aus Settings): wie viele den Gedächtnis-Hinweis sehen und annehmen.
+- `app_stream_buffered` (seit 2026-10-08, ohne Daten): einmal pro Agent-Lauf,
+  wenn das Netz den Antwort-Stream zurückhält (Firmen-Proxy, Virenscanner) und
+  die App den Fortschritt stattdessen per Polling holt (`agent-live.js`).
+  Zählt, wie viele Läufe ohne diesen Fallback nur „Thinking…“ gezeigt hätten;
+  ins Verhältnis zu `ask` mit `mode=agent` setzen.
 - `auth_*`: jeder einzelne Anmeldeversuch mit Ergebnis und Fehlercode.
 - `landing_*`, `benchmark_*`, `pulse_*`, `consensus_engine_*`, `hub_*`,
   `share_*`, `topic_open`: die einzelnen Knöpfe der öffentlichen Seiten.
