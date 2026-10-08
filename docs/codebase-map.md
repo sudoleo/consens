@@ -2332,7 +2332,16 @@ sie mit `premium`, und `agent-chat.js` zeigt sie mit Pro-Badge, aber gesperrt
 (`locked()`/`selectable()`). Ebenso seit 2026-10-07 die Denkstufen High, Extra
 high und Max (`PRO_REASONING_EFFORTS`, `require_reasoning_access` → 403 für
 Free/Plus; `agent-chat.js` `effortLocked()` zeigt sie gesperrt mit Pro-Badge und
-fällt bei gespeicherter Wahl auf Auto zurück). Ausnahme seit 2026-10-07: das Standard-Chatmodell
+fällt bei gespeicherter Wahl auf Auto zurück). Seit 2026-10-08 läuft „Auto“
+ohne Pro als Medium, wo das Modell Medium anbietet: Auto schickt sonst keine
+Stufe, und Sonnet 5.5 denkt dann mit seinem Standard „high“, einer Pro-Stufe.
+`agent_client.free_default_effort(model_id)` entscheidet (Registry-Einträge mit
+fester niedriger Einstellung wie Kimi aus / GLM low behalten sie, eine fest
+eingetragene Pro-Stufe wie Grok 4.3 „high“ wird Medium; ohne Medium bleibt
+Auto), `run_agent` löst damit auf, die gespeicherte Auswahl und die
+Request-Identität behalten „default“. `/agent/models` meldet je Modell
+`free_default_effort`; `agent-chat.js` (`autoEffort`/`visibleEfforts`/`effortFor`)
+blendet für Nicht-Pro dann „Auto“ aus und wählt Medium. Ausnahme seit 2026-10-07: das Standard-Chatmodell
 (`default_agent_model_id()`, derzeit Claude Sonnet 5.5) ist als Chatmodell für
 jede Stufe frei; `/agent/models` meldet es mit `premium: false` und
 `early_access: true`, der Picker zeigt ein neutrales „Early access“-Badge

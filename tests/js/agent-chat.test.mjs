@@ -1077,6 +1077,32 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("runs Auto as Medium without Pro and keeps Auto for Pro", async () => {
+    const catalog = structuredClone(CATALOG);
+    catalog.models[0] = { ...catalog.models[0], reasoning_efforts: ["default", "low", "medium", "high", "max"], free_default_effort: "medium" };
+    for (const pro of [false, true]) {
+      const { window, document, dom } = boot({ catalog, setup(w) { w.App.state = { get: key => key === "isUserPro" ? pro : undefined, set() {} }; } });
+      await selectAgent(window);
+      const effort = document.getElementById("agentReasoningEffort");
+      const values = [...effort.options].map(option => option.value);
+      expect(values.includes("default")).toBe(pro);
+      expect(effort.value).toBe(pro ? "default" : "medium");
+      document.getElementById("questionInput").value = "Question";
+      await window.App.agentChat.send();
+      expect(window.streamSSERequest.mock.calls[0][1].reasoning_effort).toBe(pro ? "default" : "medium");
+      dom.window.close();
+    }
+  });
+
+  it("keeps Auto without Pro when the model has no Medium or pins its reasoning", async () => {
+    const { window, document, dom } = boot({ setup(w) { w.App.state = { get: () => false, set() {} }; } });
+    await selectAgent(window);
+    const effort = document.getElementById("agentReasoningEffort");
+    expect(effort.value).toBe("default"); // DeepSeek: no free_default_effort
+    expect([...effort.options].map(option => option.value)[0]).toBe("default");
+    dom.window.close();
+  });
+
   it("streams reasoning separately, preserves disclosure, and ignores deltas after stop", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);

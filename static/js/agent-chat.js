@@ -63,14 +63,25 @@
   function effortLocked(value) {
     return PRO_EFFORTS.has(value) && window.App?.state?.get?.("isUserPro") !== true;
   }
+  // Auto lets the model reason at its own default, "high" for Sonnet 5.5,
+  // a Pro level. Without Pro the server runs Auto as Medium where the model
+  // offers it (free_default_effort), so the picker shows Medium instead.
+  function autoEffort(model) {
+    return window.App?.state?.get?.("isUserPro") !== true && model?.free_default_effort ? model.free_default_effort : null;
+  }
+  function visibleEfforts(model) {
+    const efforts = model?.reasoning_efforts || ["default"];
+    return autoEffort(model) ? efforts.filter(value => value !== "default") : efforts;
+  }
+  function effortFor(model, value) {
+    return visibleEfforts(model).includes(value) && !effortLocked(value) ? value : autoEffort(model) || "default";
+  }
   function selection() {
     const preferred = preferredSelection() || {};
     const available = catalog?.models.filter(selectable);
     const model = available?.find(item => item.id === preferred.model_id)
       || available?.find(item => item.id === catalog.default_model_id) || available?.[0];
-    return model ? { model_id: model.id,
-      reasoning_effort: model.reasoning_efforts.includes(preferred.reasoning_effort) && !effortLocked(preferred.reasoning_effort)
-        ? preferred.reasoning_effort : "default" } : preferred;
+    return model ? { model_id: model.id, reasoning_effort: effortFor(model, preferred.reasoning_effort) } : preferred;
   }
   function rememberSelection(value) {
     selections.set(selectionKey(), value);
@@ -203,7 +214,7 @@
     select.value = ready ? current.model_id || catalog.default_model_id : "";
     select.disabled = !ready || running || !catalog.models.some(selectable);
     const model = catalog?.models.find(item => item.id === select.value);
-    const efforts = model?.reasoning_efforts || ["default"];
+    const efforts = visibleEfforts(model);
     const effortSignature = JSON.stringify([model?.id, efforts, efforts.map(effortLocked)]);
     if (effort.dataset.options !== effortSignature) {
       effort.replaceChildren(...efforts.map(value => {
@@ -219,7 +230,7 @@
       }));
       effort.dataset.options = effortSignature;
     }
-    effort.value = efforts.includes(current.reasoning_effort) && !effortLocked(current.reasoning_effort) ? current.reasoning_effort : "default";
+    effort.value = model ? effortFor(model, current.reasoning_effort) : "default";
     effort.disabled = !ready || running || efforts.length < 2;
     effort.dataset.available = String(ready && model?.reasoning_available);
     effort.parentElement.hidden = true;
@@ -241,7 +252,7 @@
     const effort = document.getElementById("agentReasoningEffort");
     const model = catalog?.models.find(item => item.id === select?.value);
     if (!selectable(model) || !canUse()) return;
-    const value = { model_id: model.id, reasoning_effort: model.reasoning_efforts.includes(effort.value) ? effort.value : "default" };
+    const value = { model_id: model.id, reasoning_effort: effortFor(model, effort.value) };
     rememberSelection(value);
     render();
   }

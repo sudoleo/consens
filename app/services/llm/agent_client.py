@@ -269,6 +269,8 @@ def agent_model_options():
          "reasoning_efforts": _choices(model, metadata),
          "default_reasoning": model.request_config.get("reasoning", metadata.get("reasoning") or {}),
          "reasoning_available": bool(metadata.get("reasoning")),
+         # What Auto becomes without Pro (null: the model's own default).
+         "free_default_effort": _free_default_effort(model, metadata),
          "delegation_by_effort": {effort: supports_delegation(_resolve_effort(model, metadata, effort))
                                   for effort in _choices(model, metadata)},
          "tools_by_effort": {effort: list(tools_for_model(model))
@@ -337,6 +339,36 @@ def with_reasoning_summary(model, _metadata=None):
             or reasoning.get("effort") == "none" or reasoning.get("enabled") is False):
         return model
     return replace(model, request_config={**(model.request_config or {}), "reasoning": {**reasoning, "summary": "auto"}})
+
+
+# "Auto" sends no level, so the model reasons at its own default, which is
+# "high" for some (Claude Sonnet 5.5) - a Pro level. Without Pro, Auto means
+# this level wherever the model offers it (Max, 2026-10-08).
+FREE_DEFAULT_REASONING = "medium"
+# The expensive levels are Pro (Max, 2026-10-07): they multiply thinking tokens.
+PRO_REASONING_EFFORTS = frozenset({"high", "xhigh", "max"})
+
+
+def _free_default_effort(model, metadata):
+    """The level Auto stands for without Pro, or None to keep the model default.
+
+    A registry entry that pins a low setting (Kimi off, GLM low) keeps it:
+    Auto is the only way to use it. A pinned Pro level (Grok 4.3 "high")
+    becomes Medium like an unpinned default."""
+    pinned = (model.request_config or {}).get("reasoning") or {}
+    if pinned and pinned.get("effort") not in PRO_REASONING_EFFORTS:
+        return None
+    return FREE_DEFAULT_REASONING if FREE_DEFAULT_REASONING in _choices(model, metadata) else None
+
+
+def free_default_effort(model_id=None):
+    """`_free_default_effort` for a selectable chat model (None if unknown)."""
+    models = agent_models()
+    wanted = model_id or models[0][0].selection_id
+    for model, metadata in models:
+        if wanted in (model.selection_id, model.model):
+            return _free_default_effort(model, metadata)
+    return None
 
 
 def _resolve_effort(model, metadata, reasoning_effort):

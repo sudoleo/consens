@@ -30,7 +30,8 @@ from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
 from app.services.agent_background import AgentRunDuplicate, AgentRunStopped, AgentShuttingDown, agent_background
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
-from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, default_agent_model_id, resolve_agent_model
+from app.services.llm.agent_client import (PRO_REASONING_EFFORTS, AgentCompletion, agent_model, agent_model_options,
+                                           default_agent_model_id, free_default_effort, resolve_agent_model)
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
 from app.services.llm.streaming import SSE_HEADERS, SSE_PADDING
@@ -79,8 +80,8 @@ def require_model_access(uid, model_ids):
 
 
 # The expensive reasoning levels are Pro (Max, 2026-10-07): they multiply the
-# chat model's thinking tokens, and Auto already uses the model's own default.
-PRO_REASONING_EFFORTS = frozenset({"high", "xhigh", "max"})
+# chat model's thinking tokens. Without Pro, Auto runs as Medium where the
+# model offers it (agent_client.free_default_effort, below in run_agent).
 
 
 def require_reasoning_access(uid, reasoning_effort):
@@ -280,7 +281,13 @@ def run_agent(request: Request, payload: AgentRequest):
             return JSONResponse({"error": "This request is still running.", "code": "request_running",
                                  "recoverable": True, "recovery_state": "running"}, status_code=409)
         try:
-            model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
+            effort = payload.reasoning_effort
+            if effort == "default" and not _premium_allowed(uid):
+                # Auto without Pro: Medium instead of the model's own default
+                # (Sonnet's is "high", a Pro level). The request identity and
+                # the saved selection keep what the browser sent.
+                effort = free_default_effort(payload.model_id) or effort
+            model = configured_model(resolve_agent_model(payload.model_id, effort))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
         # None means the preset default, which is never a premium model. The
