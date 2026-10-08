@@ -552,6 +552,7 @@
       review: state.completedTurn?.agent_review || context.metadata.agentReview,
       answerText: state.text || state.streamText || '',
       settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
+      highlight: running ? App.agentDelegation?.liveHighlight?.(context.metadata.chatId, context.metadata.agentTurnId) : null,
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.

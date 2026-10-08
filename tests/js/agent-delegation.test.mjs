@@ -472,6 +472,24 @@ describe("Agent sidebar", () => {
     expect(d.querySelector(".agent-light")).toBeNull();
     dom.window.close();
   });
+  it("quotes the latest reasoning line of a comparison model that is still answering", () => {
+    const answer = (id, seq, status, progress_text) => ({ ...agent(seq, status, id), kind: "comparison",
+      model: { model: `test/${id[0]}`, label: id === "a".repeat(32) ? "GPT" : "Gemini" }, progress_text });
+    const { window: w, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [], status: "running" }) }));
+    const live = () => w.App.agentDelegation.liveHighlight(chatId, turnId);
+    expect(live()).toBeNull();
+    receive(w, { ...agent(1, "working", "f".repeat(32)), kind: "judge", progress_text: "Judges never speak here." });
+    receive(w, answer("a".repeat(32), 1, "working", "Reading the question.\nChecking the 2026 figures."));
+    expect(live()).toMatchObject({ label: "GPT", text: "Checking the 2026 figures." });
+    receive(w, answer("b".repeat(32), 1, "working", "Comparing both sources."));
+    expect(live()).toMatchObject({ label: "Gemini", text: "Comparing both sources." });
+    // A finished model no longer speaks for the running comparison.
+    receive(w, answer("b".repeat(32), 2, "completed", "Comparing both sources."));
+    expect(live()).toMatchObject({ label: "GPT" });
+    receive(w, answer("a".repeat(32), 2, "completed", "Done."));
+    expect(live()).toBeNull();
+    dom.window.close();
+  });
   it("projects a local demo turn without requests and releases it again", async () => {
     const { window: w, document: d, dom } = boot();
     d.getElementById("agentAnswerActivity").innerHTML = "<details><summary></summary></details>";

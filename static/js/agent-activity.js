@@ -252,7 +252,8 @@
     }
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
-    status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null } = {}) {
+    status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
+    highlight = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -339,6 +340,13 @@
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
             ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
     if (running && (!activeTool || waiting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
+    // While the comparison models answer, the main model is silent: one quiet
+    // line quotes the reasoning of the model that reported last.
+    const comparing = reviewStage === 'Comparing perspectives…' || activeTool?.name === 'compare_models';
+    if (running && !waiting && comparing && highlight?.text) {
+      paragraphs.push({ id: 'comparison-highlight', kind: 'progress',
+        text: highlight.label ? `${highlight.label}: ${highlight.text}` : highlight.text });
+    }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
     const previewHeight = view.preview.getBoundingClientRect().height;
     const showPreview = running && paragraphs.length;

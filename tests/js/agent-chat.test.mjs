@@ -370,6 +370,23 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('details').open).toBe(false);
     dom.window.close();
   });
+  it('fills the quiet comparison phase with one compact reasoning line of a comparison model', () => {
+    const {window:w,document:d,dom} = boot();
+    const host = d.querySelector('#agentAnswerActivity');
+    const events = [{kind:'tool',id:'t1',name:'compare_models',status:'running'}];
+    const highlight = {id:'a', label:'Gemini', text:'Checking the 2026 figures.'};
+    w.App.agentActivity.render(host, {running:true, events, highlight});
+    const preview = host.querySelector('.agent-progress');
+    expect(preview.textContent).toContain('Comparing perspectives…');
+    expect(preview.textContent).toContain('Gemini: Checking the 2026 figures.');
+    w.App.agentActivity.render(host, {running:true, events, highlight:{...highlight, label:'GPT', text:'Weighing both sources.'}});
+    expect(preview.querySelectorAll('p:not(.agent-progress-step)')).toHaveLength(1);
+    expect(preview.textContent).toContain('GPT: Weighing both sources.');
+    // Other steps and finished runs never show it.
+    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'t2',name:'web_search',status:'running'}], highlight});
+    expect(host.querySelector('.agent-progress').textContent).not.toContain('Gemini:');
+    dom.window.close();
+  });
   it('keeps the newest status and usage after long runs exceed the activity window', () => {
     const {window:w,document:d,dom} = boot();
     const events = [];

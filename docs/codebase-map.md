@@ -2086,6 +2086,14 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   (`agent-model-wait`), failed/stopped bleibt blass; `completed` blendet in
   die eigene Farbe über. Kein Rahmen um die Icons (Max). Den Status setzt
   `agent-delegation.js` schon immer auf die `.agent-inline-model`-Buttons.
+  Seit 2026-10-08 füllt eine ruhige Zeile die sonst stille Vergleichsphase
+  („Comparing perspectives…“): `agentDelegation.liveHighlight(chatId, turnId)`
+  liefert die letzte Zeile des `progress_text` des Vergleichsmodells, das noch
+  läuft und zuletzt berichtet hat (Judges nie); `agent-chat.js::project` reicht
+  sie als `highlight` an `agentActivity.render`, das sie nur live und nur in
+  dieser Phase als `Modell: Satz` unter den Schritt setzt (ein DOM-Knoten
+  `comparison-highlight`, nie gespeichert). Keine zusätzlichen Modellaufrufe
+  oder Tokens: es sind die Reasoning-Auszüge, die der Lauf ohnehin streamt.
   Die Landing-Schiene (`.lp-scene-rail`) zeichnet weiter die alte Linie.
   Reduzierte Bewegung: kein Pulsieren, kein Aufleuchten. Alles Drückbare gibt
   beim Druck auf 97 % nach (`base.css`, Spezifität 0, eigene Transforms

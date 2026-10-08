@@ -147,7 +147,11 @@
     if (!agent || !/^[a-f0-9]{32}$/.test(agent.id) || !Number.isInteger(agent.seq)) return;
     const old = view.agents.get(agent.id);
     if (!old || agent.seq > old.seq) {
-      view.agents.set(agent.id, {...agent, runtimeAnchor: performance.now()});
+      // When its reasoning line last changed: the activity preview quotes the
+      // comparison model that reported most recently (liveHighlight).
+      const progressAt = agent.progress_text && agent.progress_text !== old?.progress_text
+        ? performance.now() : old?.progressAt;
+      view.agents.set(agent.id, {...agent, runtimeAnchor: performance.now(), progressAt});
       if (!activeStates.has(agent.status)) view.progress.delete(agent.id);
     } else if (agent.seq === old.seq && Number.isFinite(agent.duration_ms) && agent.duration_ms > (old.duration_ms || 0)) {
       old.duration_ms = agent.duration_ms;
@@ -706,5 +710,19 @@
   document.addEventListener("consensio:reader-opening", () => {
     if (current) { current.closed = true; prefs(current); hide(); render(); }
   });
-  App.agentDelegation = { receive, receiveProgress, project, demo, tokens, isTicking: () => Boolean(timer) };
+  // The latest reasoning line of a comparison model still answering, for the
+  // otherwise quiet "Comparing perspectives…" phase in the activity preview.
+  // Live only: data the run streams anyway, never a request of its own.
+  function liveHighlight(chatId, turnId) {
+    const view = chatId && turnId ? views.get(keyFor(chatId, turnId)) : null;
+    if (!view || view.ended) return null;
+    let latest = null;
+    for (const agent of view.agents.values()) {
+      if (agent.kind !== "comparison" || !activeStates.has(agent.status) || !agent.progress_text) continue;
+      if (!latest || (agent.progressAt || 0) > (latest.progressAt || 0)) latest = agent;
+    }
+    const text = String(latest?.progress_text || "").split("\n").map(line => line.trim()).filter(Boolean).at(-1);
+    return text ? { id: latest.id, label: latest.model?.label || "", text } : null;
+  }
+  App.agentDelegation = { receive, receiveProgress, project, demo, tokens, liveHighlight, isTicking: () => Boolean(timer) };
 })();
