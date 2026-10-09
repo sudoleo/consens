@@ -459,4 +459,30 @@ describe("result card of a checked pasted text", () => {
     expect(toggle.getAttribute("aria-controls")).toBe(card().querySelector(".passage-check-body").id);
     expect(card().querySelector(".passage-check-who").textContent).toBe("1 of 1 model disagrees");
   });
+
+  it("opens on the full text under All checks, and follows the setting until the reader chooses", async () => {
+    const { window, document, body, card } = boot({ mode: "all" });
+    const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+    window.App.passageCheck.apply(body, review({ claims: [
+      claim("Heat pumps work in old buildings below 55 degrees.", { agree: ["Claude", "GPT"] }),
+      claim("The state pays up to 70 percent.", { agree: ["Claude", "GPT"] })] }));
+    // Every sentence holds: folded, there would be nothing highlighted at all.
+    expect(card().classList.contains("is-full")).toBe(true);
+    const marks = [...card().querySelectorAll(".passage-check-text .pc-claim")];
+    expect(marks.map(mark => mark.classList.contains("is-quiet"))).toEqual([false, false]);
+    expect(card().querySelector(".passage-check-toggle").textContent).toBe("Show less");
+    document.body.dataset.consensusHighlightMode = "concerns";
+    await tick();
+    expect(card().classList.contains("is-full")).toBe(false);
+    document.body.dataset.consensusHighlightMode = "all";
+    await tick();
+    expect(card().classList.contains("is-full")).toBe(true);
+    // The reader folds it: the setting no longer moves it.
+    card().querySelector(".passage-check-toggle").click();
+    document.body.dataset.consensusHighlightMode = "concerns";
+    await tick();
+    document.body.dataset.consensusHighlightMode = "all";
+    await tick();
+    expect(card().classList.contains("is-full")).toBe(false);
+  });
 });

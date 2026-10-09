@@ -192,6 +192,14 @@
     return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "concerns";
   }
 
+  // "All checks" promises every verdict highlighted, so the card opens on the
+  // full text there; the folded card only quotes what other models dispute,
+  // which for a text that holds is nothing to see. Once the reader folds or
+  // unfolds the card, it stays as they left it.
+  function openByDefault() {
+    return highlightMode() === "all";
+  }
+
   // The quoted sentences are always painted: they are quoted because of
   // their verdict. The full text paints what the Highlights setting paints.
   function paint(card) {
@@ -498,16 +506,19 @@
     card.addEventListener("click", event => {
       const chip = event.target.closest(".passage-check-count");
       if (chip) {
+        card._passageChosen = true;
         focusVerdict(card, chip);
         return;
       }
       const toggle = event.target.closest(".passage-check-toggle");
       if (toggle) {
+        card._passageChosen = true;
         unfold(card, !card.classList.contains("is-full"));
         toggle.focus?.({ preventScroll: true });
         return;
       }
       if (event.target.closest(".passage-check-more")) {
+        card._passageChosen = true;
         unfold(card, true);
         card.querySelector(".passage-check-toggle")?.focus?.({ preventScroll: true });
         return;
@@ -553,6 +564,7 @@
       card = node("section", "passage-check");
       card.setAttribute("aria-label", "Check of your text");
       body._passageCard = card;
+      card.classList.toggle("is-full", openByDefault());
       bind(card);
     }
     // Right above the answer, also after other rows were put there.
@@ -565,22 +577,32 @@
     for (const other of cards) if (!other.isConnected) cards.delete(other);
     cards.add(card);
     if (card._passageSignature === signature) return;
-    // The same card shows another turn's text (a chat switch): folded again.
+    // The same card shows another turn's text (a chat switch): back to the
+    // default of the Highlights setting.
     const previous = card._passageCheck;
     if (previous && (previous.text !== check.text || previous.comparisonId !== check.comparisonId)) {
-      card.classList.remove("is-full");
+      card._passageChosen = false;
+      card.classList.toggle("is-full", openByDefault());
     }
     card._passageSignature = signature;
     card._passageCheck = check;
     render(card, check, live);
   }
 
-  // The Highlights setting changes which verdicts the full text paints, live.
+  // The Highlights setting changes which verdicts the full text paints, live,
+  // and opens or folds a card the reader has not set themselves.
   if (typeof MutationObserver === "function" && document.body) {
     new MutationObserver(() => {
       for (const card of [...cards]) {
-        if (card.isConnected) paint(card);
-        else cards.delete(card);
+        if (!card.isConnected) {
+          cards.delete(card);
+          continue;
+        }
+        if (!card._passageChosen && card._passageCheck && card.classList.contains("is-full") !== openByDefault()) {
+          unfold(card, openByDefault());
+        } else {
+          paint(card);
+        }
       }
     }).observe(document.body, { attributes: true, attributeFilter: ["data-consensus-highlight-mode"] });
   }

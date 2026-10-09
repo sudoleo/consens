@@ -3605,7 +3605,11 @@ Antwort-Prompt).
   ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
   Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene; mehr
   als 8 widersprochene Sätze → „N more in the full text" (klappt auf). Der
-  Toggle trägt `aria-controls` auf die Schiene.
+  Toggle trägt `aria-controls` auf die Schiene. Unter „All checks" öffnet die
+  Karte standardmäßig auf dem Volltext (zugeklappt stünden nur bestrittene
+  Sätze, bei einem haltbaren Text also gar nichts Eingefärbtes); ein Wechsel
+  der Einstellung klappt mit, bis der Nutzer selbst auf-/zuklappt
+  (`card._passageChosen`).
   „Show full text" zeigt die ganze Passage
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
