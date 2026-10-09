@@ -341,3 +341,24 @@ def test_deleting_a_metered_job_returns_its_unspent_reservation(store):
     assert ledger(store)['reserved'] > 0
     assert store.delete(stub['job_id'])
     assert ledger(store)['reserved'] == 0
+
+
+def test_a_check_that_never_started_in_time_is_dropped_not_caught_up(store, monkeypatch):
+    # A backlog (worker down, stale queue) must never turn into a bill later:
+    # a queued check older than MAX_QUEUE_SECONDS fails without any call and
+    # its reservation goes back.
+    from datetime import timedelta
+    from app.services.source_check_repository import MAX_QUEUE_SECONDS, utcnow
+    def no_call(*args, **kwargs):
+        raise AssertionError('an expired check must not run')
+    monkeypatch.setattr(cv, 'judge_contradictions', no_call)
+    stub = metered(store)
+    assert ledger(store)['reserved'] > 0
+    store.ref(stub['job_id']).set({'created_at': utcnow() - timedelta(seconds=MAX_QUEUE_SECONDS + 1)}, merge=True)
+    jobs.process_one(store)
+    account = ledger(store)
+    assert account['reserved'] == 0 and account.get('used', 0) == 0 and not account.get('estimated')
+    header = store.get(stub['job_id'])
+    assert header['status'] == 'failed' and header['metering']['state'] == 'released'
+    assert header['snapshot']['runtime']['error_code'] == 'expired'
+    assert store.claim(stub['job_id']) is None

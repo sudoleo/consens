@@ -3834,6 +3834,10 @@ Bekannte Fehler erhalten stattdessen den lease-gebunden gespeicherten Grund
 `worker_preparation_failed`, `worker_execution_failed` oder
 `result_persistence_failed` aus `last_failure` für genau diesen Paketindex.
 Die Quellen-UI benennt die Fehlerphase; rohe Exceptions werden nicht gespeichert.
+Ein Job, der `MAX_QUEUE_SECONDS` (15 min) nach dem Anlegen noch nie gestartet
+ist (`queued`, `attempts` 0, kein Paket fertig), wird beim Claim ohne jeden
+Modellaufruf `failed` mit `error_code: expired`; die Reservierung geht zurück
+(`metering.state: released`). Ein Rückstau wird so nie nachträglich abgerechnet.
 
 Neue Jobs sind physisch nach Dispatch-Protokoll und Umgebung getrennt:
 `source_check_jobs_dispatch_v1_local` / `_production`. Render oder

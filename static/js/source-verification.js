@@ -388,7 +388,8 @@
       return {timeout: "Source check timed out", output_limit: "Source check response incomplete",
         invalid_output: "Source check response invalid", missing_credential: "Source check needs an API key",
         provider_error: "Source service unavailable",
-        token_budget_exhausted: "Not checked: today's token allowance is used up"}[code] || "Source check unavailable";
+        token_budget_exhausted: "Not checked: today's token allowance is used up",
+        expired: "Not checked: the source check did not start in time"}[code] || "Source check unavailable";
     }
     if (verification.status === "skipped") return "No cited statements";
     const { issues, unknown } = assessment(verification);

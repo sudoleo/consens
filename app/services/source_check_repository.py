@@ -47,6 +47,9 @@ TERMINAL = {'complete', 'partial', 'failed', 'skipped', 'cancelled'}
 # Package results whose earlier, lost attempt may already have paid a model.
 UNCERTAIN_PACKAGE_CODES = {'worker_interrupted', 'worker_execution_failed', 'result_persistence_failed'}
 LEASE_SECONDS = 300
+# A check that never started within this window is dropped, not caught up:
+# nobody waits for it any more, and a backlog must never turn into a bill.
+MAX_QUEUE_SECONDS = 15 * 60
 PAGE_PACKAGES = 4
 MAX_PACKED_BYTES = 700_000
 _ID = re.compile(r'^[a-f0-9]{64}$')
@@ -387,6 +390,21 @@ class SourceCheckRepository:
                 return None
             self._fence(tx, job)
             if job['status'] not in ACTIVE or not job.get('next_attempt_at') or job['next_attempt_at'] > now:
+                return None
+            created = job.get('created_at')
+            if (job['status'] == 'queued' and not job.get('attempts') and not job.get('completed_packages')
+                    and created and now - created > timedelta(seconds=MAX_QUEUE_SECONDS)):
+                # Never ran, so nothing was spent: the reservation goes back.
+                release = self._release_reservation(tx, job)
+                revision = job['revision'] + 1
+                update = dict(status='failed', next_attempt_at=None, lease_token=None,
+                    revision=revision, updated_at=now,
+                    snapshot={**job['snapshot'], 'status': 'failed', 'revision': revision,
+                              'runtime': {**(job['snapshot'].get('runtime') or {}), 'error_code': 'expired'}})
+                if release:
+                    update['metering'] = {**job['metering'], 'reserved': 0, 'state': 'released'}
+                    tx.set(*release)
+                tx.update(ref, update)
                 return None
             # Retire accidentally admitted background/API checks before loading
             # their plan, resolving credentials or making any fetch/judge call.
