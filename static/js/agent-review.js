@@ -4,6 +4,10 @@
   const App = window.App = window.App || {};
   const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
     partial: "Partly checked", failed: "Check could not run", cancelled: "Check stopped", missing: "Answer not checked" };
+  // An answer check that did not run because its comparison checked a pasted
+  // text (agent_comparison.py, PASSAGE_CHECKED): the card above the answer.
+  const PASSAGE_CHECKED = "passage_checked";
+  const PASSAGE_NOTE = "This comparison checked your text sentence by sentence; the result is shown above the answer.";
   // Short, calm reasons for one model call that ended without a result. The
   // provider's own error text never reaches the page (see provider_failure).
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
@@ -181,8 +185,10 @@
       const check = currentCheck(review, comparison, raw);
       const issues = checkIssues(comparison, check);
       const state = check?.status || (['running', 'failed', 'cancelled', 'missing'].includes(review.status) ? review.status : 'required');
+      // The comparison checked a pasted text instead (agent_comparison.py).
+      const passageChecked = check?.skipped === PASSAGE_CHECKED;
       card.append(node('p', 'agent-activity-check', comparison.status === 'running' && !check
-        ? 'Waiting for independent model answers.' : statusText(state, issues)));
+        ? 'Waiting for independent model answers.' : passageChecked ? PASSAGE_NOTE : statusText(state, issues)));
       const differences = check?.differences_data?.differences || [];
       if (differences.length) {
         const list = node('ul', 'agent-activity-findings');
@@ -197,7 +203,9 @@
       }
       for (const issue of issues) card.append(node('p', 'agent-activity-limitation', issueText(issue)));
       const verification = check?.source_verification;
-      if (verification?.answer_version === check?.answer_hash && verification?.run_id === comparison.id
+      if (passageChecked) {
+        // No answer judges, so no disagreements to source either.
+      } else if (verification?.answer_version === check?.answer_hash && verification?.run_id === comparison.id
           && verification?.basis_hash === comparison.basis_hash) {
         const scope = verification.scope;
         if (Number.isInteger(scope?.checked_contradictions) && Number.isInteger(scope?.contradictions)) {
@@ -490,7 +498,9 @@
         // Everything after the cards is supporting detail: one quiet footer
         // below a hairline instead of notes and reports above the findings.
         const footer = node("div", "agent-evidence-footer");
-        if (!check || !check.differences_data) {
+        if (check?.skipped === PASSAGE_CHECKED) {
+          panel.append(node("p", "agent-review-note", PASSAGE_NOTE));
+        } else if (!check || !check.differences_data) {
           panel.append(node("p", "agent-review-note", exact ? "The answer has no completed check for this comparison yet."
             : "The text changed. This version needs a new review."));
         } else {

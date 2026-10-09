@@ -30,9 +30,11 @@
     // windows side by side, and the checks run side by side: a check lasts
     // from its first start to its last end (summing only without start times).
     const duration = Math.max(...titles.map(title => span(view, judges.filter(a => a.title === title))));
-    return { id: CHECK_ID, kind: "check", title: "Answer check", status, usage, duration_ms: duration,
-      // A pasted text was checked: its result is the card above the answer.
-      checkedText: titles.includes("Text check"),
+    // A pasted text was checked: its result is the card above the answer.
+    // Alone, it was the only check (the answer itself is not judged then).
+    const textOnly = titles.length === 1 && titles[0] === "Text check";
+    return { id: CHECK_ID, kind: "check", title: textOnly ? "Text check" : "Answer check", status, usage, duration_ms: duration,
+      checkedText: titles.includes("Text check"), textOnly,
       progress_text: busy.find(agent => agent.progress_text)?.progress_text || "",
       missing: status === "failed" ? titles.filter(title => !done.has(title)).map(title => checkNames[title] || "answer") : [] };
   }
@@ -394,8 +396,9 @@
       if (row.body.dataset.signature === signature) return;
       row.body.dataset.signature = signature;
       row.body.setAttribute('aria-busy', 'false');
-      row.body.replaceChildren(node('p', 'agent-judge-purpose',
-        'Checks which statements are supported by the comparison answers and where those answers disagree.'));
+      row.body.replaceChildren(node('p', 'agent-judge-purpose', agent.textOnly
+        ? 'Checks each sentence of your text against the independent answers.'
+        : 'Checks which statements are supported by the comparison answers and where those answers disagree.'));
       if (agent.progress_text) row.body.append(node('p', 'agent-session-progress', agent.progress_text));
       if (measured(agent.usage)) {
         const usage = node('dl', 'agent-token-breakdown'); usage.title = tokenDescription(agent.usage);
@@ -407,7 +410,8 @@
       const names = agent.missing;
       row.body.append(node('p', 'agent-judge-note', agent.status === 'working' ? 'Check in progress.'
         : names.length ? `The ${joinNames(names)} ${names.length === 1 ? 'check' : 'checks'} could not run. The answer is shown without ${names.length === 1 ? 'it' : 'them'}.`
-          : agent.checkedText ? 'The check of your text is shown above the answer, the rest under Review.'
+          : agent.textOnly ? 'The check of your text is shown above the answer.'
+            : agent.checkedText ? 'The check of your text is shown above the answer, the rest under Review.'
             : 'Results are marked in the answer and listed under Review.'));
       return;
     }
@@ -633,7 +637,7 @@
       // The check row belongs at the end; answer rows that arrive later go above it.
       if (agent.kind === "check" && row.root.nextElementSibling) row.root.parentElement.append(row.root);
       setText(row.title, agent.model?.label || agent.title);
-      setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'check' ? 'Differences and coverage' : agent.title);
+      setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
       setText(row.state, `${stateLabel(agent)} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');

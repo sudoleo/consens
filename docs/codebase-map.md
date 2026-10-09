@@ -3536,6 +3536,26 @@ Antwort-Prompt).
   bekommt `evidence.checked_text` (der Prompt sagt dazu: Übereinstimmung, keine
   Wahrheit); der Orchestrator sieht `passage_check` inkl. `issues` im Toolergebnis.
   Im begrenzten Altmodus reserviert `max_calls` zwei Aufrufe mehr.
+- **Kein zweiter Antwort-Check (seit 2026-10-09):** `judge()` lässt für den
+  Vergleich, dessen Passage-Check `succeeded`/`partial` ist
+  (`_passage_checked`), Differences- und Coverage-Judge über die
+  Agent-Antwort weg: die Antwort redet nur ÜBER den Text, den die Modelle nie
+  sahen, ihre Marken und ihr Score wären ohnehin ausgeblendet, und der Lauf
+  kostete so den Großteil seiner Judge-Tokens doppelt. Gespeichert wird ein
+  normaler abgeschlossener Check (`status: succeeded`, `issues: []`,
+  `differences_data: null`, Merker `skipped: "passage_checked"` =
+  `PASSAGE_CHECKED`), bewusst KEIN neuer Status: `review_is_bound`,
+  `finish_run`, die Status-Aggregation und alte gecachte Oberflächen bleiben
+  unverändert. `check_contradictions` schreibt dafür einen terminalen
+  `skipped`-Snapshot mit `reason_code: passage_checked` statt
+  `differences_failed`. Scheitert der Passage-Check, laufen die Antwort-Judges
+  wie bisher (dann sind sie der einzige Beleg). Folgen: für diesen Vergleich
+  keine Differences-/Widerspruchskarten und keine Quellenprüfung, und ein
+  reiner Prüf-Lauf schreibt keine Model-Pulse-Stimme
+  (`agent_best_model_choice` findet kein `best_model`). Oberfläche:
+  `agent-review.js` erklärt den Vergleich in Aktivität und Review-Panel
+  („This comparison checked your text …"), `agent-delegation.js` nennt die
+  Zeile „Text check", wenn nur der Text-Judge lief.
 - **Daten:** `agent_review.passage_check` = `{version, status
   (waiting|running|succeeded|partial|failed|cancelled), comparison_id,
   answer_to, text, hash, basis_hash, providers, claims[], models_compared,
@@ -7284,6 +7304,8 @@ Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur be
 ist das Ergebnis der Checks (`completed`, sobald jeder Check einmal fertig ist;
 `failed` nennt die nicht ausführbaren Checks), Tokens sind die Summe der
 gemessenen Judge-Aufrufe. Chip-Zähler und Modell-Icons zählen Judges nicht mit.
+Lief nur der Judge eines eingefügten Texts („Text check", kein Antwort-Check),
+heißt die Zeile „Text check" und verweist auf die Karte über der Antwort.
 Eine ausgefallene Vergleichsantwort heißt `No answer`; beendete Aufrufe ohne
 gemessene Tokens zeigen keine Tokenzeile.
 

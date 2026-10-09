@@ -332,6 +332,9 @@ PASSAGE_MIN_SECONDS = 20
 PASSAGE_TIME_MARGIN = 5
 # Words per shingle when testing whether question or context repeat the passage.
 PASSAGE_SHINGLE_WORDS = 6
+# Marker (and source-check reason) of an answer check that did not run because
+# its comparison checked a pasted text; the card above the answer is the result.
+PASSAGE_CHECKED = "passage_checked"
 _PASSAGE_CHARACTERS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u201e": '"', "\u00ab": '"', "\u00bb": '"',
                                      "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2013": "-", "\u2014": "-",
                                      "\u00a0": " "})
@@ -661,6 +664,13 @@ class ComparisonTools:
             # picker. The family alias selects only judge policy.
             reference = cfg.provider_label(search_family(self.loop.model))
         return reference
+
+    def _passage_checked(self, comparison):
+        """Whether this comparison's pasted text has its sentence check.
+
+        A failed or stopped one leaves the answer judges as the only evidence."""
+        passage = self.passage or {}
+        return passage.get("comparison_id") == comparison["id"] and passage.get("status") in {"succeeded", "partial"}
 
     def _check_passage(self, comparison, cancellation):
         """Coverage judge on the user's passage against this comparison's answers.
@@ -1212,6 +1222,15 @@ class ComparisonTools:
                 check = {"comparison_id": comparison["id"], "basis_hash": comparison.get("basis_hash"),
                          "answer_hash": answer_hash(self.text), "status": "failed", "differences_data": None}
                 self.review["checks"].append(check)
+                if self._passage_checked(comparison):
+                    # This comparison checked a pasted text, and its result is
+                    # the card above the answer. The answer only talks ABOUT
+                    # that text, which the models never saw: judging it again
+                    # cost most of the turn's judge tokens for marks nobody is
+                    # shown. A finished check with a marker, not a new status,
+                    # so binding, finish_run and saved views stay as they are.
+                    check.update(status="succeeded", issues=[], skipped=PASSAGE_CHECKED)
+                    continue
                 # Answers that arrived after the synthesis started were never
                 # part of it; checking the text against them only adds noise
                 # ("not addressed"). They stay visible as late answers.

@@ -364,6 +364,22 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("names the row after the text when only the pasted text was checked", async () => {
+    const answer = { ...agent(1, "completed"), kind: "comparison", title: "Comparison 1 · Haiku" };
+    const text = { ...agent(2, "completed", "b".repeat(32)), kind: "judge", title: "Text check",
+      model: { model: "m/2", label: "Judge 2" }, usage: null };
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer, text], status: "succeeded" }) }));
+    for (const item of [answer, text]) receive(w, item);
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    const check = [...d.querySelectorAll(".agent-session")][1];
+    expect(check.querySelector("strong").textContent).toBe("Text check");
+    expect(check.textContent).toContain("Your text, sentence by sentence");
+    check.open = true; check.dispatchEvent(new w.Event("toggle"));
+    expect(check.querySelector(".agent-judge-purpose").textContent).toBe("Checks each sentence of your text against the independent answers.");
+    expect(check.querySelector(".agent-judge-note").textContent).toBe("The check of your text is shown above the answer.");
+    dom.window.close();
+  });
+
   it("folds judge attempts, retries and backups into one quiet Answer check row", async () => {
     const judge = (id, seq, status, title, extra = {}) => ({ ...agent(seq, status, id), kind: "judge", title,
       model: { model: `m/${seq}`, label: `Judge ${seq}` }, usage: null, ...extra });

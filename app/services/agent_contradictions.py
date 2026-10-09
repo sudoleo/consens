@@ -77,7 +77,7 @@ class ContradictionChecks:
                      "references": [f"users/{loop.uid}/chats/{loop.chat_id}"]})
 
     def check(self, args, *, cancellation):
-        from app.services.agent_comparison import review_is_bound
+        from app.services.agent_comparison import PASSAGE_CHECKED, review_is_bound
         from app.services.source_check_jobs import unavailable_snapshot
         owner, loop = self.comparison, self.comparison.loop
         loop._check(cancellation)
@@ -87,7 +87,12 @@ class ContradictionChecks:
             if source_check_is_bound(check, comparison, owner.snapshot()["answer_hash"]):
                 continue
             binding = {"run_id": comparison["id"], "basis_hash": comparison.get("basis_hash")}
-            if not isinstance(check.get("differences_data"), dict):
+            if check.get("skipped") == PASSAGE_CHECKED:
+                # No answer judges ran (a pasted text was checked instead), so
+                # there are no contradictions to source: skipped, not failed.
+                snapshot = unavailable_snapshot(owner.text, PASSAGE_CHECKED, check_type="contradiction_evidence")
+                check["source_verification"] = {**snapshot, "status": "skipped", "runtime": {}, **binding}
+            elif not isinstance(check.get("differences_data"), dict):
                 check["source_verification"] = {**unavailable_snapshot(owner.text, "differences_failed",
                     check_type="contradiction_evidence"), **binding}
             else:

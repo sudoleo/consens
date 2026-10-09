@@ -84,7 +84,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
       nur grau, nie grün). Ein Zähler/Satz öffnet die Karte, „View answer“ die
       Modellantwort. Die Antwort nennt den Fehler und trägt selbst keine Marken
-      und keinen Score. Aktivität: Vergleichsfrage enthält den Text nicht.
+      und keinen Score. Aktivität: Vergleichsfrage enthält den Text nicht; im
+      Agent-Panel genau eine Prüfzeile „Text check“, kein zweiter Antwort-Check
+      nach dem Schreiben.
       Gegenprobe „Fasse diesen Text zusammen: …“ → keine Karte.
       Automatisiert: `test_agent_passage_check.py`, `passage-check.test.mjs`,
       `test_passage_check_frontend.py`.

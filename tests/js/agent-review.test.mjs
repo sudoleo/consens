@@ -560,3 +560,31 @@ it('puts the inline model row of an earlier turn above the card of a checked tex
   expect(card.nextElementSibling).toBe(body);
   dom.window.close();
 });
+it('explains a comparison whose answer check was skipped because it checked a pasted text', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.comparisons = review.comparisons.slice(0, 1);
+  review.checks = [{ comparison_id: 'c1', basis_hash: 'b1', answer_hash: 'answer-hash', status: 'succeeded',
+    differences_data: null, issues: [], skipped: 'passage_checked',
+    source_verification: { answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', check_type: 'contradiction_evidence',
+      status: 'skipped', reason_code: 'passage_checked', scope: { contradictions: 0, checked_contradictions: 0 } } }];
+  review.check_sources = true;
+  review.passage_check = { status: 'succeeded', comparison_id: 'c1', text: 'Pasted.', claims: [] };
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
+  w.App.agentReview.render(body, review);
+  const note = 'This comparison checked your text sentence by sentence; the result is shown above the answer.';
+  expect(details.querySelector('.agent-activity-check').textContent).toBe(note);
+  expect(details.textContent).not.toContain('Source checks:');
+  expect(details.textContent).not.toContain('Partly checked');
+  const status = body._agentReview.querySelector('.agent-review-status');
+  expect(status.dataset.state).toBe('succeeded');
+  expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
+  const context = w.App.agentReview.contextFor(review, 'c1');
+  const panel = context.renderPanel('differences');
+  expect(panel.textContent).toContain(note);
+  expect(panel.textContent).not.toContain('no completed check');
+  expect(panel.textContent).not.toMatch(/did not complete|pending/);
+  dom.window.close();
+});

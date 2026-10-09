@@ -198,6 +198,28 @@ def test_checked_passage_is_marked_and_never_reaches_the_comparison_models(store
                                            "issues": []}
     titles = [a.get("title") for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]]
     assert "Text check" in titles
+    # The answer only talks ABOUT the pasted text: it is not judged again.
+    assert review["status"] == "succeeded"
+    assert review["checks"] == [{"comparison_id": review["comparisons"][0]["id"],
+                                 "basis_hash": review["comparisons"][0]["basis_hash"], "answer_hash": review["answer_hash"],
+                                 "status": "succeeded", "differences_data": None, "issues": [], "skipped": "passage_checked"}]
+    assert not {"Differences judge", "Coverage judge"} & set(titles)
+    assert not any("with low flow temperatures" in p for p in script.coverage_prompts)
+
+
+def test_skipped_answer_check_still_finishes_a_turn_with_source_checks(store):
+    script = Script([{**NEUTRAL, "check": CHECK}])
+    loop = make_loop(store, script, check_sources=True,
+                     messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": MESSAGE}])
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed"
+    review = saved["agent_review"]
+    assert review_is_bound(review, saved["consensus"], check_sources=True)
+    verification = review["checks"][0]["source_verification"]
+    # Nothing to source, on purpose: skipped, never "did not finish".
+    assert verification["status"] == "skipped" and verification["reason_code"] == "passage_checked"
+    assert verification["run_id"] == review["comparisons"][0]["id"]
 
 
 def test_copying_the_passage_into_the_task_is_refused_before_anything_is_paid(store):
@@ -236,8 +258,13 @@ def test_a_failed_check_may_be_tried_again_in_the_same_message(store):
     script.factory = factory
     _, _, saved = run(store, script)
     assert not any("already checks a passage" in r for r in script.tool_results)
-    assert saved["agent_review"]["passage_check"]["status"] == "succeeded"
-    assert len(saved["agent_review"]["comparisons"]) == 2
+    review = saved["agent_review"]
+    assert review["passage_check"]["status"] == "succeeded"
+    assert len(review["comparisons"]) == 2
+    # Only the comparison whose check holds skips the answer judges.
+    assert review["passage_check"]["comparison_id"] == review["comparisons"][1]["id"]
+    assert ["skipped" in check for check in review["checks"]] == [False, True]
+    assert review_is_bound(review, saved["consensus"])
 
 
 def test_no_check_when_the_answer_needs_the_remaining_time(store):
@@ -274,6 +301,9 @@ def test_a_failed_check_costs_the_marks_not_the_answer(store):
     assert passage["status"] == "failed"
     assert {"code": "coverage_unavailable"} in passage["issues"]
     assert "claims" not in passage
+    # Without the sentence check the answer judges are the only evidence left.
+    check = saved["agent_review"]["checks"][0]
+    assert "skipped" not in check and isinstance(check["differences_data"], dict)
 
 
 def test_too_few_answers_leave_the_passage_unchecked(store):
