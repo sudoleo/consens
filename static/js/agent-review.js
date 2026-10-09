@@ -459,7 +459,10 @@
       // above the answer (passage-check.js). The answer's own sentences talk
       // ABOUT that text, which the models never saw, so marks and a score on
       // them would only look like a second verdict.
-      const checksPassage = !!comparison.id && review.passage_check?.comparison_id === comparison.id;
+      // A failed text check leaves the answer's own checks as the evidence
+      // (the server runs them then), so they show as usual.
+      const checksPassage = !!comparison.id && review.passage_check?.comparison_id === comparison.id
+        && ["succeeded", "partial"].includes(review.passage_check?.status);
       const findAnswer = name => answers.find(a => [a.provider, a.provider_label, a.model?.label].some(v => v?.toLowerCase() === name?.toLowerCase()));
       const context = { key: `agent-evidence:${comparison.id}`, question: comparison.question, scopeLabel: "Comparison focus",
         check, modelCount: answers.length, checksPassage,
@@ -581,7 +584,9 @@
     for (const context of contexts) { contextsByKey.delete(context.key); contextsByKey.set(context.key, context); }
     while (contextsByKey.size > 64) contextsByKey.delete(contextsByKey.keys().next().value);
     activityContexts.set(review, contexts);
-    let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts[0];
+    // By default the evidence of a comparison with marks: the one that checked
+    // a pasted text has its result in the card above the answer.
+    let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts.find(c => !c.checksPassage) || contexts[0];
     function select(context) {
       chosen = context; host._selectedBasis = context.key;
       context.mark(); tabs.replaceChildren();

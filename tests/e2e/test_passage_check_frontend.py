@@ -124,9 +124,16 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         expect(quotes).to_have_count(1)
         expect(quotes).to_have_text("You always need underfloor heating for that.")
         assert quotes.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
-        expect(card.locator(".passage-check-fold")).to_have_text(["1 sentence holds", "1 unconfirmed sentence"])
-        expect(card).to_contain_text("Checked against 3 models as an answer to “Do heat pumps make sense in old buildings?”")
-        expect(card).to_contain_text("The models answered without seeing your text.")
+        # Under the sentence: who disagrees and what one of them says instead,
+        # in the reading colour; no grey rows between the quotes.
+        verdict = card.locator(".passage-check-verdict")
+        expect(verdict).to_have_text("2 of 3 models disagree – OpenAI: “Larger radiators are often enough.”")
+        assert verdict.evaluate("el => getComputedStyle(el).color") != card.locator(".passage-check-note").evaluate(
+            "el => getComputedStyle(el).color")
+        expect(card.locator(".passage-check-quotes > *")).to_have_count(1)
+        expect(card.locator(".passage-check-rest")).to_have_text("2 other sentences: 1 unconfirmed, 1 holds. Show full text")
+        expect(card).to_contain_text("Checked against 3 models that answered “Do heat pumps make sense in old buildings?” "
+                                     "without seeing your text.")
         # On a phone the counts wrap as whole units, never as a lone dot.
         assert card.locator(".passage-check-unit").evaluate_all("els => els.every(el => el.getClientRects().length === 1)")
         # The answer talks about the pasted text: no marks of its own.

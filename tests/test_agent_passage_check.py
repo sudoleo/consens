@@ -6,7 +6,7 @@ import pytest
 
 from app.services.agent_comparison import (PassageCheck, locate_passage, repeated_sentences, review_is_bound)
 from app.services.llm.agent_client import AgentCompletion, measured_usage
-from test_agent_comparison import make_loop
+from test_agent_comparison import THREE, make_loop
 from test_agent_runs import UID, api, pending, store  # noqa: F401  (fixtures)
 
 
@@ -460,6 +460,50 @@ def test_later_comparisons_may_not_show_the_checked_passage_either(store):
     assert any("Later comparisons must not show it" in r for r in script.tool_results)
     assert all("underfloor" not in m[1]["content"] for m in script.prompts)
     assert len(saved["agent_review"]["comparisons"]) == 2
+
+
+def test_after_a_failed_check_later_comparisons_may_not_show_the_passage_either(store):
+    # The answer is told the models never saw the text: a failed check does
+    # not lift that.
+    script = Script([{**NEUTRAL, "check": CHECK, "next_step": "more_work"},
+                     {**NEUTRAL, "question": "Explain this", "context": PASTED},
+                     {**NEUTRAL, "question": "Which subsidies exist?"}], fail_coverage=True)
+    _, _, saved = run(store, script)
+    assert saved["agent_review"]["passage_check"]["status"] == "failed"
+    assert any("Later comparisons must not show it" in r for r in script.tool_results)
+    assert all("underfloor" not in m[1]["content"] for m in script.prompts)
+
+
+def test_a_skipped_answer_check_is_partial_when_a_model_did_not_answer(store):
+    script = Script([{**NEUTRAL, "check": CHECK}], fail_model=True)
+    loop = make_loop(store, script, models=THREE, messages=[{"role": "system", "content": "Answer."},
+                                                            {"role": "user", "content": MESSAGE}])
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    assert len(review["comparisons"][0]["answers"]) == 2
+    check = review["checks"][0]
+    assert check["skipped"] == "passage_checked"
+    assert check["status"] == "partial" and check["issues"][0]["code"] == "models_unavailable"
+    assert review["status"] == "partial"
+    assert review_is_bound(review, saved["consensus"])
+
+
+@pytest.mark.parametrize("starts_with,ends_with", [
+    ("Eine Wärmepumpe senkt den CO2-Ausstoß", "für 150 m2 Wohnfläche."),
+    ("Eine Wärmepumpe senkt den CO₂-Ausstoß", "für 150 m² Wohnfläche."),
+    ("Eine Wärmepumpe senkt den CO₂-Ausstoß", "reicht… für 150 m² Wohnfläche."),
+])
+def test_subscripts_superscripts_and_ellipses_do_not_hide_the_passage(starts_with, ends_with):
+    pasted = "Eine Wärmepumpe senkt den CO₂-Ausstoß deutlich. Eine Anlage mit 8 kW reicht… für 150 m² Wohnfläche."
+    passage, _, _ = locate_passage("Stimmt das?\n\n" + pasted, check(starts_with=starts_with, ends_with=ends_with))
+    assert passage == pasted
+
+
+def test_a_decomposed_accent_keeps_the_passage_whole():
+    pasted = "Heat pumps work in old buildings. Ask the café"
+    passage, _, _ = locate_passage("Check: " + pasted, check(starts_with="Heat pumps work", ends_with="ask the café"))
+    assert passage == pasted
 
 
 def test_no_retry_after_the_time_ran_out_and_the_orchestrator_learns_why(store):

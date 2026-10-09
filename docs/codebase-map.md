@@ -3510,14 +3510,16 @@ Antwort-Prompt).
   `locate_passage` sucht in den Nutzernachrichten (neueste zuerst, also auch
   vor einer Rückfrage) tolerant gegen Groß/Klein, Anführungszeichen, Leerraum,
   Markdown (`*`, `` ` ``, `#`, `>`, `_`, Aufzählungszeichen) und unsichtbare
-  Zeichen; bevorzugt einen Anfang nach Zeilenbeginn/Doppelpunkt/Anführung (die
+  Zeichen, NFKC je Zeichen samt Kombinationszeichen wie beim Anker („CO₂" =
+  „CO2", „m²" = „m2", „…" = „...", e + Akzent = „é"); bevorzugt einen Anfang nach Zeilenbeginn/Doppelpunkt/Anführung (die
   Frage des Nutzers wiederholt oft die ersten Wörter), erweitert auf ganze
   Wörter und ein folgendes Satzende. `repeated_sentences` lehnt ab, wenn Frage
   und Kontext zwei oder mehr Sätze der Passage zu mindestens der Hälfte in
   wörtlichen 6-Wort-Läufen enthalten; nicht gezählt werden Sätze unter 6
   Wörtern (Tabellenzellen) und Läufe, die der Nutzer selbst geschrieben hat
   (seine Rahmendaten muss die Aufgabe behalten). Dieselbe Sperre gilt für spätere
-  Vergleiche derselben Nachricht. Alle Absagen kommen, bevor etwas Bezahltes
+  Vergleiche derselben Nachricht, auch nachdem die Prüfung scheiterte (der
+  Antwort-Prompt sagt, die Modelle hätten den Text nie gesehen). Alle Absagen kommen, bevor etwas Bezahltes
   startet, und nennen „leave check out" als Ausweg. Höchstens eine stehende
   Passage pro Nachricht; nach `failed`/`cancelled` darf neu geprüft werden,
   nach `no_time` nicht.
@@ -3542,9 +3544,10 @@ Antwort-Prompt).
   Agent-Antwort weg: die Antwort redet nur ÜBER den Text, den die Modelle nie
   sahen, ihre Marken und ihr Score wären ohnehin ausgeblendet, und der Lauf
   kostete so den Großteil seiner Judge-Tokens doppelt. Gespeichert wird ein
-  normaler abgeschlossener Check (`status: succeeded`, `issues: []`,
-  `differences_data: null`, Merker `skipped: "passage_checked"` =
-  `PASSAGE_CHECKED`), bewusst KEIN neuer Status: `review_is_bound`,
+  normaler abgeschlossener Check (`status: succeeded`, bzw. `partial` mit
+  `issues: [models_unavailable]`, wenn ein Modell fehlte oder der Passage-Check
+  nur `partial` ist; `differences_data: null`, Merker `skipped:
+  "passage_checked"` = `PASSAGE_CHECKED`), bewusst KEIN neuer Status: `review_is_bound`,
   `finish_run`, die Status-Aggregation und alte gecachte Oberflächen bleiben
   unverändert. `check_contradictions` schreibt dafür einen terminalen
   `skipped`-Snapshot mit `reason_code: passage_checked` statt
@@ -3554,8 +3557,12 @@ Antwort-Prompt).
   reiner Prüf-Lauf schreibt keine Model-Pulse-Stimme
   (`agent_best_model_choice` findet kein `best_model`). Oberfläche:
   `agent-review.js` erklärt den Vergleich in Aktivität und Review-Panel
-  („This comparison checked your text …"), `agent-delegation.js` nennt die
-  Zeile „Text check", wenn nur der Text-Judge lief.
+  („This comparison checked your text …") und wählt im „Evidence for"-Picker
+  standardmäßig einen Vergleich mit Marken; `agent-delegation.js` nennt die
+  Zeile „Text check", wenn nur der Text-Judge lief oder läuft (nach einem
+  gescheiterten heißt sie weiter „Answer check", die Antwort-Judges folgen);
+  `agent-activity.js` sagt bei einem reinen Prüf-Lauf „Checked your text" und
+  „Skipped the source check: your text was checked instead".
 - **Daten:** `agent_review.passage_check` = `{version, status
   (waiting|running|succeeded|partial|failed|cancelled), comparison_id,
   answer_to, text, hash, basis_hash, providers, claims[], models_compared,
@@ -3580,10 +3587,13 @@ Antwort-Prompt).
   „Your text", darunter die Zähler als Kopfzeile, Ampelfarbe nur auf den
   Zahlen (Klick: erster Satz dieses Urteils, sonst klappt der Volltext auf),
   dann der Text auf einer Schiene wie ein Zitat der Antwort. Zugeklappt stehen
-  dort nur widersprochene/geteilte Sätze (höchstens 8) wörtlich mit „N of M
-  models disagree"; dazwischen je eine Faltzeile, die sagt, was sie enthält
-  („17 sentences hold", „1 unconfirmed sentence", „5 more sentences, 1
-  unconfirmed"; Klick klappt auf). „Show full text" zeigt die ganze Passage
+  dort nur widersprochene/geteilte Sätze (höchstens 8) wörtlich, darunter in
+  Lesefarbe (nicht grau, seit 2026-10-09 abends) „N of M models disagree –
+  Modell: „was es stattdessen sagt"" (erstes Gegenzitat, Markdown entfernt,
+  ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
+  Keine Faltzeilen mehr zwischen den Zitaten: EINE Zeile unter der Schiene
+  zählt den Rest („8 other sentences: 2 unconfirmed, 6 hold. Show full text",
+  ohne Zitat „All 9 sentences hold" ohne leere Schiene). „Show full text" zeigt die ganze Passage
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
   als Fürstimmen), gemalt nach der Highlights-Einstellung
@@ -3593,12 +3603,20 @@ Antwort-Prompt).
   öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
   über `App.agentReview.contextFor`, während des Laufs über einen
   Minimal-Kontext aus `review.comparisons`. Darunter „Checked against N models
-  as an answer to …", eine an beiden Enden auslaufende Haarlinie trennt zur
-  Antwort. Die Antwort selbst bekommt für den Vergleich mit Passage keine
-  Marken und keinen Agreement-Score (`agent-review.js`, `checksPassage`): ihre
-  Sätze reden ÜBER den Text, den die Modelle nie sahen. Die Signatur ist
+  that answered „…" without seeing your text.", eine an beiden Enden
+  auslaufende Haarlinie trennt zur Antwort. Eingefügtes Markdown wird Text
+  (`displayText`: Fett/Kursiv, Überschriften, Zitatzeichen, Code-Zäune,
+  Inline-Code, Links → Linktext, Tabellen mit „·"; ob ein Stück eine Zeile
+  beendet, entscheidet der ganze Text, sonst liefen Tabellenzellen, die je ein
+  eigener Satz sind, zusammen). Die Antwort selbst bekommt für den Vergleich mit
+  erfolgreichem Passage-Check (`succeeded`/`partial`) keine Marken und keinen
+  Agreement-Score (`agent-review.js`, `checksPassage`): ihre Sätze reden ÜBER
+  den Text, den die Modelle nie sahen. Scheiterte er, zeigt sie die Marken der
+  dann gelaufenen Antwort-Judges wie gewohnt. Die Signatur ist
   kanonisch (Firestore liefert Maps ohne Reihenfolge), ein Laufende zeichnet
-  nichts neu, der aufgeklappte Zustand bleibt. Aufgerufen aus `agent-chat.js`
+  nichts neu, der aufgeklappte Zustand bleibt (zeigt dieselbe Karte den Text
+  eines anderen Turns, klappt sie zu); abgehängte Karten fallen bei jedem
+  `apply` aus der Beobachterliste. Aufgerufen aus `agent-chat.js`
   (live, gespeichert, und leerend für Consensus/neuen Chat), `run-view.js`
   (leerend) und `consensus-run.js::appendHistoryTurn`. Der Aufklapp-Link der
   Nachricht heißt seither „Show full message"/„Collapse message".

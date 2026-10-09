@@ -50,7 +50,15 @@
     const count = Number.isInteger(item.count) && item.count > 0 ? item.count : 0;
     return count ? `Searched the web · ${count} ${count === 1 ? 'search' : 'searches'}` : 'Searched the web';
   }
-  function stepLabel(item) {
+  // A turn whose only check was that of a pasted text: the answer judges and
+  // the source check of their contradictions did not run (agent_comparison.py).
+  const textOnlySteps = { judge_answer: 'Checked your text', check_contradictions: 'Skipped the source check: your text was checked instead' };
+  function textOnlyReview(review) {
+    const checks = Array.isArray(review?.checks) ? review.checks : [];
+    return checks.length > 0 && checks.every(check => check?.skipped === 'passage_checked');
+  }
+  function stepLabel(item, textOnly = false) {
+    if (item.status === 'succeeded' && textOnly && textOnlySteps[item.name]) return textOnlySteps[item.name];
     if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
     if (item.status === 'succeeded' && item.name === 'web_search') return searchSummary(item);
     if (item.status === 'succeeded') return tools[item.name]?.[2] || `${toolName(item.name)} · Completed`;
@@ -308,6 +316,7 @@
       && item.status === "unknown" && (item.server_tool || item.provider_native)
       && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
+    const textOnly = textOnlyReview(review);
     const latest = events.filter(item => item.kind === "status").at(-1);
     // Text the model writes before a tool call is a preamble, not the answer.
     // Once a later step (search, comparison) has run, "Writing answer…" only
@@ -339,7 +348,7 @@
     const paragraphs = events.flatMap(item => progress.includes(item)
       ? [{id:item.id, text:item.text, kind:'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
-        : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item), kind:'step', status:item.status,
+        : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
           current:running && !waiting && !reconnecting && item === activeTool},
           // The one place where the run waits on the user: say so, and link to the card.
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
@@ -430,14 +439,15 @@
         if (item.kind === 'progress' && view.details.open && running) reveal(node);
       }
       if (item.kind === "tool") {
-        const signature = JSON.stringify(item);
+        const signature = JSON.stringify([item, textOnly]);
         if (node.dataset.signature !== signature) {
           node.dataset.signature = signature;
           node.dataset.status = item.status;
           const title = document.createElement("strong");
           const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Skipped · budget reserve", cancelled: "Stopped", unknown: "Usage unavailable" };
           const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
-          title.textContent = `${toolName(item.name)} · ${toolStatus[item.status] || "Details"}${count}`;
+          title.textContent = item.status === 'succeeded' && textOnly && textOnlySteps[item.name]
+            ? textOnlySteps[item.name] : `${toolName(item.name)} · ${toolStatus[item.status] || "Details"}${count}`;
           node.replaceChildren(title);
           if (item.text) {
             const text = document.createElement("p");

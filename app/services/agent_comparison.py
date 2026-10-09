@@ -354,22 +354,30 @@ def _search_form(text):
     text = str(text or "")
     chars, origin = [], []
     line_start = True
-    for index, char in enumerate(text):
+    index = 0
+    while index < len(text):
+        char, start = text[index], index
+        # A character with its combining marks is one unit: NFKC turns it into
+        # what an anchor (normalized as a whole) contains, "CO₂" into "CO2",
+        # "m²" into "m2", "…" into "..." and "é" spelt as e + accent into "é".
+        index += 1
+        while index < len(text) and unicodedata.combining(text[index]):
+            index += 1
         if char == "\n":
             line_start = True
         if char in _PASSAGE_SKIPPED or (line_start and char in _PASSAGE_BULLETS
-                                        and text[index + 1:index + 2].isspace()):
+                                        and text[index:index + 1].isspace()):
             continue
         char = char.translate(_PASSAGE_CHARACTERS)
         if char.isspace():
             if chars and chars[-1] != " ":
                 chars.append(" ")
-                origin.append(index)
+                origin.append(start)
             continue
         line_start = False
-        for folded in char.casefold():
+        for folded in unicodedata.normalize("NFKC", char + text[start + 1:index]).casefold():
             chars.append(folded)
-            origin.append(index)
+            origin.append(start)
     return "".join(chars), origin
 
 
@@ -401,6 +409,9 @@ def _locate_in(message, start, end):
         if last < 0:
             continue
         begin, stop = origin[first], origin[last + len(end) - 1] + 1
+        # The last character keeps its combining marks.
+        while stop < len(message) and unicodedata.combining(message[stop]):
+            stop += 1
         # Anchors cut inside a word take the whole word, and an anchor that
         # ends just before the sentence's own end ("... run here" or "... run
         # here...") still takes its full stop and closing quote along.
@@ -881,8 +892,10 @@ class ComparisonTools:
                                  "judges the text from the comparisons.")
             passage, sentences, _ = locate_passage(self.user_messages(), args.check)
             self._refuse_repeated_passage(args, sentences, passage, declaring=True)
-        elif standing:
-            # Later comparisons of this message must not show the passage either.
+        elif self.passage is not None:
+            # Later comparisons of this message must not show the passage
+            # either, also after its check failed: the answer is told that the
+            # models answered without seeing it.
             from app.services.llm.consensus_engine import _enumerate_consensus_sentences
             _, sentences = _enumerate_consensus_sentences(self.passage["text"], limit=None)
             self._refuse_repeated_passage(args, sentences, self.passage["text"], declaring=False)
@@ -1229,7 +1242,11 @@ class ComparisonTools:
                     # cost most of the turn's judge tokens for marks nobody is
                     # shown. A finished check with a marker, not a new status,
                     # so binding, finish_run and saved views stay as they are.
-                    check.update(status="succeeded", issues=[], skipped=PASSAGE_CHECKED)
+                    # Partial like the evidence it stands for: a model that
+                    # did not answer, or sentences the text check missed.
+                    issues = [i for i in review_issues(comparison, None) if i["code"] == "models_unavailable"]
+                    whole = not issues and comparison["status"] == "succeeded" and self.passage["status"] == "succeeded"
+                    check.update(status="succeeded" if whole else "partial", issues=issues, skipped=PASSAGE_CHECKED)
                     continue
                 # Answers that arrived after the synthesis started were never
                 # part of it; checking the text against them only adds noise

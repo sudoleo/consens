@@ -551,10 +551,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    One section at the top of the answer; the user's message stays as it was
    sent. No box around it (the house rule): one uppercase label, the tally as
    its headline with the verdict colour on the numbers only, then the user's
-   text on a rail like a quote in the answer. Folded, the rail carries the
-   sentences other models disagree with; the sentences between them are one
-   quiet row each. A hairline that fades at both ends hands over to the
-   answer. */
+   text on a rail like a quote in the answer. Folded, the rail carries only
+   the sentences other models disagree with, each followed by its verdict
+   and what a model says instead, in the reading colour (no grey rows in
+   between); one line under the rail counts the rest. A hairline that fades
+   at both ends hands over to the answer. */
 .passage-check {
   max-width: 66ch;
   margin: 0 0 26px;
@@ -588,7 +589,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .passage-check[data-state="failed"] .passage-check-status { color: var(--ink-3); font-size: var(--font-size-sm); }
 .passage-check-unit { white-space: nowrap; }
 .passage-check-count,
-.passage-check-fold,
 .passage-check-toggle {
   min-height: 0;
   margin: 0;
@@ -611,7 +611,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .passage-check-count.is-disputed .passage-check-num { color: var(--dispute); }
 .passage-check-count.is-split .passage-check-num { color: var(--partial); }
 .passage-check-count.is-holds .passage-check-num { color: var(--agree); }
-.passage-check :is(.passage-check-count, .passage-check-fold, .passage-check-toggle):focus-visible {
+.passage-check :is(.passage-check-count, .passage-check-toggle):focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
   border-radius: 3px;
@@ -625,42 +625,45 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   font-size: var(--font-size-base);
   line-height: 1.65;
 }
-.passage-check-quotes { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.passage-check-quotes { display: flex; flex-direction: column; gap: 16px; }
 .passage-check-quote { overflow-wrap: anywhere; }
+/* Under each quoted sentence: who disagrees and what one of them says.
+   Readable, not a footnote: the reason a sentence is quoted. */
 .passage-check-verdict {
-  display: block;
-  margin-top: 2px;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.55;
+  cursor: pointer;
 }
-.passage-check-fold {
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-}
-.passage-check-fold:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.passage-check-who { color: var(--ink); font-weight: var(--font-weight-semibold); }
+.passage-check-verdict:hover .passage-check-who { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
 .passage-check-text { white-space: pre-line; overflow-wrap: anywhere; }
 .passage-check-foot {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 4px 16px;
+  flex-direction: column;
+  gap: 6px;
   margin-top: 14px;
+}
+.passage-check[data-state="running"] .passage-check-foot { margin-top: 4px; }
+.passage-check-rest {
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.passage-check-note {
   color: var(--ink-3);
   font-size: var(--font-size-xs);
   line-height: 1.5;
 }
-.passage-check[data-state="running"] .passage-check-foot { margin-top: 4px; }
-.passage-check-note { flex: 1 1 260px; min-width: 0; }
 .passage-check-toggle {
   white-space: nowrap;
+  color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: var(--line);
 }
-.passage-check-toggle:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
+.passage-check-toggle:hover { text-decoration-color: var(--ink-3); }
 .pc-claim { cursor: pointer; }
 /* Unpainted by the Highlights setting (by default green and grey): plain
    text that still opens its card. Under pointer and focus it shows that it
@@ -672,5 +675,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe 1.8s ease-in-out infinite; }
 }
 @media (pointer: coarse) {
-  .passage-check-fold, .passage-check-toggle { display: inline-flex; align-items: center; min-height: 32px; }
+  .passage-check-toggle { display: inline-flex; align-items: center; min-height: 32px; vertical-align: middle; }
+  /* A larger target for a finger without moving the line. */
+  .passage-check-count { padding-block: 6px; margin-block: -6px; }
 }

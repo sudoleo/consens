@@ -360,6 +360,24 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('names the steps of a turn that only checked a pasted text', () => {
+    const {window:w,document:d,dom} = boot();
+    const host = d.querySelector('#agentAnswerActivity');
+    const events = [{kind:'tool',id:'j',name:'judge_answer',status:'succeeded'},
+      {kind:'tool',id:'s',name:'check_contradictions',status:'succeeded'}];
+    const review = {checks:[{comparison_id:'c1',status:'succeeded',skipped:'passage_checked'}]};
+    w.App.agentActivity.render(host, {events, review});
+    expect(host.textContent).toContain('Checked your text');
+    expect(host.textContent).toContain('Skipped the source check: your text was checked instead');
+    expect(host.textContent).not.toContain('Checked the answer');
+    // A turn with an answer check of its own keeps the usual words.
+    review.checks.push({comparison_id:'c2',status:'succeeded'});
+    w.App.agentActivity.render(host, {events, review});
+    expect(host.textContent).toContain('Answer review · Completed');
+    expect(host.textContent).not.toContain('Checked your text');
+    dom.window.close();
+  });
+
   it('explains allowance waiting outside the collapsed activity details', () => {
     const {window:w,document:d,dom} = boot();
     const host = d.querySelector('#agentAnswerActivity');

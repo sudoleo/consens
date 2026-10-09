@@ -380,6 +380,19 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("keeps calling the row Answer check while the answer's own checks follow a failed text check", async () => {
+    const answer = { ...agent(1, "completed"), kind: "comparison", title: "Comparison 1 · Haiku" };
+    const text = { ...agent(2, "failed", "b".repeat(32)), kind: "judge", title: "Text check",
+      model: { model: "m/2", label: "Judge 2" }, usage: null };
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer, text], status: "running" }) }));
+    for (const item of [answer, text]) receive(w, item);
+    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    const check = [...d.querySelectorAll(".agent-session")][1];
+    expect(check.querySelector("strong").textContent).toBe("Answer check");
+    expect(check.textContent).toContain("Differences and coverage");
+    dom.window.close();
+  });
+
   it("folds judge attempts, retries and backups into one quiet Answer check row", async () => {
     const judge = (id, seq, status, title, extra = {}) => ({ ...agent(seq, status, id), kind: "judge", title,
       model: { model: `m/${seq}`, label: `Judge ${seq}` }, usage: null, ...extra });

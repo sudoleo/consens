@@ -79,8 +79,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Fehler einfügen, „Stimmt das?“ davor → die eigene Nachricht bleibt, wie
       sie abgeschickt wurde (kein Umbau, keine Marken). Über der Antwort zuerst
       „YOUR TEXT · Checking …“, dann die Zähler (Farbe nur auf den Zahlen) und
-      auf einer Schiene nur die widersprochenen/geteilten Sätze, dazwischen
-      Faltzeilen wie „17 sentences hold“; „Show full text“ zeigt alle Sätze
+      auf einer Schiene nur die widersprochenen/geteilten Sätze, jeder mit
+      „N of M models disagree – Modell: „…““ darunter (gut lesbar, nicht grau),
+      keine grauen Zeilen dazwischen; darunter eine Zeile „N other sentences:
+      … Show full text“; „Show full text“ zeigt alle Sätze
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
       nur grau, nie grün). Ein Zähler/Satz öffnet die Karte, „View answer“ die
       Modellantwort. Die Antwort nennt den Fehler und trägt selbst keine Marken

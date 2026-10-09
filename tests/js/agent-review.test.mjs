@@ -527,6 +527,12 @@ it('leaves the answer of a checked pasted text unmarked and unscored; the card c
   review.checks[1].differences_data.agreement = { score: 31, coverage_status: 'sufficient' };
   review.passage_check = { status: 'succeeded', comparison_id: 'c1', text: 'Pasted.', claims: [] };
   w.App.agentReview.render(body, review);
+  // By default the evidence of the comparison that has marks.
+  const focus = body._agentReview.querySelector('.agent-evidence-focus select');
+  expect(focus.value).toBe('agent-evidence:c2');
+  expect(body._agentReview.querySelector('.agent-agreement')).not.toBeNull();
+  w.renderStoredConsensusClaims.mockClear();
+  focus.value = 'agent-evidence:c1'; focus.dispatchEvent(new w.Event('change'));
   // The answer talks ABOUT the pasted text, which the models never saw.
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
   expect(body._agentReview.querySelector('.agent-agreement')).toBeNull();
@@ -548,6 +554,20 @@ it('leaves the answer of a checked pasted text unmarked and unscored; the card c
   picker.value = 'agent-evidence:c2'; picker.dispatchEvent(new w.Event('change'));
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   expect(body._agentReview.querySelector('.agent-agreement').dataset.tone).toBe('alert');
+  dom.window.close();
+});
+it('marks and scores the answer as usual when the check of the pasted text failed', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.comparisons = review.comparisons.slice(0, 1);
+  review.checks = review.checks.slice(0, 1);
+  review.checks[0].differences_data.agreement = { score: 72, coverage_status: 'sufficient' };
+  // The server runs the answer's own checks then: they are the evidence.
+  review.passage_check = { status: 'failed', comparison_id: 'c1', text: 'Pasted.', issues: [{ code: 'coverage_unavailable' }] };
+  w.App.agentReview.render(body, review);
+  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
+  expect(body._agentReview.querySelector('.agent-agreement')).not.toBeNull();
   dom.window.close();
 });
 it('puts the inline model row of an earlier turn above the card of a checked text', () => {
