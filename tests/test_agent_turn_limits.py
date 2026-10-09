@@ -131,7 +131,10 @@ def test_deadline_wraps_up_or_stops_without_sleeping(store, fail_model):
 
 def test_hard_deadline_stops_inside_a_step_only_in_account_mode(store):
     loop = chat_loop(store, Script())
-    now = [loop.turn_started + loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS - 1]
+    # A small start keeps the arithmetic exact; on Linux the large monotonic
+    # clock loses the last bits and "exactly on the limit" lands just before it.
+    loop.turn_started = 0.0
+    now = [loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS - 1]
     loop.clock = lambda: now[0]
     loop._check()
     now[0] += 1

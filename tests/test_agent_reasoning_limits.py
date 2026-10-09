@@ -284,11 +284,11 @@ def test_answer_reserve_follows_the_reasoning_level_and_moves_the_soft_limit(sto
     loop.model = SONNET
     assert loop._answer_reserve() == agent_delegation.ANSWER_RESERVE_SECONDS["max"]
     hard = loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS
-    now = [loop.turn_started + hard - loop._answer_reserve() - 1]
+    loop.turn_started = 0.0  # exact arithmetic (the monotonic clock loses bits)
+    now = [hard - loop._answer_reserve() - 1]
     loop.clock = lambda: now[0]
-    # approx: on Linux the monotonic clock is large enough to lose the last bits.
-    assert loop._turn_limit() is None and loop.answer_time_left() == pytest.approx(1)
-    now[0] += 2  # just past the reserve (not exactly on it: float rounding)
+    assert loop._turn_limit() is None and loop.answer_time_left() == 1
+    now[0] += 1  # exactly on the reserve
     # A "max" answer and its checks would no longer fit before the hard stop.
     assert loop._turn_limit() == TURN_TIME_LIMIT
     loop.model = low(SONNET)
