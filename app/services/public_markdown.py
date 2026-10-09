@@ -50,6 +50,12 @@ _MATH_SPAN_RE = re.compile(
     re.DOTALL,
 )
 _MARKDOWN_PUNCTUATION_RE = re.compile(r"[!-/:-@\x5b-\x60{-~]")
+# "[ P(\text{a}) = \frac12 ]" without the backslashes of \[ \] (some models
+# write it so): same guards as bareBracketsToDisplay in math-render.js.
+_BARE_DISPLAY_RE = re.compile(
+    r"(^|[^\\\]\w])\[(\s+)((?:[^\[\]\n]|\n(?![ \t]*\n))+?)(\s+)\](?![(\[:])"
+)
+_LATEX_COMMAND_RE = re.compile(r"\\[A-Za-z]")
 
 # Second-Level-Suffixe wie in getSourceSiteName() im Frontend (z. B. bbc.co.uk).
 _SLD_SUFFIXES = {"co", "com", "org", "net", "ac", "gov"}
@@ -139,8 +145,19 @@ def _link_source_tags(md_text, labels, dropped=frozenset()):
     )
 
 
+def _bare_brackets_to_display(text):
+    def wrap(match):
+        before, opening, body, closing = match.groups()
+        if len(body) > 2000 or not _LATEX_COMMAND_RE.search(body):
+            return match[0]
+        return before + "\\[" + opening + body + closing + "\\]"
+
+    return _BARE_DISPLAY_RE.sub(wrap, text)
+
+
 def _preserve_math_delimiters(md_text):
     def protect_segment(segment):
+        segment = _bare_brackets_to_display(segment)
         pieces = []
         cursor = 0
         for match in _MATH_SPAN_RE.finditer(segment):

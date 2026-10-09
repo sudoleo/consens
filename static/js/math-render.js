@@ -53,6 +53,30 @@
     );
   }
 
+  // Manche Modelle lassen die Backslashes von "\[ ... \]" weg und schreiben
+  // "[ P(\text{a}\mid b) = \frac12. ]" - im Text stand dann die Formel als
+  // Quelltext in eckigen Klammern. Als abgesetzte Formel gilt nur ein Paar,
+  // das innen an beiden Klammern Leerraum hat, einen \befehl enthaelt, keine
+  // Leerzeile ueberspannt und kein Link/Quellenverweis ist ("[S1]", "[x](url)").
+  const BARE_DISPLAY_RE =
+    /(^|[^\\\]\w])\[(\s+)((?:[^[\]\n]|\n(?![ \t]*\n))+?)(\s+)\](?![(\[:])/g;
+  const MAX_DISPLAY_MATH_CHARS = 2000;
+
+  function bareBracketsToDisplay(text) {
+    return String(text).replace(
+      BARE_DISPLAY_RE,
+      function (match, before, open, body, close) {
+        if (body.length > MAX_DISPLAY_MATH_CHARS) return match;
+        if (!/\\[A-Za-z]/.test(body)) return match;
+        return before + "\\[" + open + body + close + "\\]";
+      }
+    );
+  }
+
+  function toKatexDelimiters(text) {
+    return bareBracketsToDisplay(dollarInlineToParens(text));
+  }
+
   // Innerhalb einer Formel ist Markdown kein Markup, sondern Notation.
   // Markdown frisst aber jeden Backslash vor einem Satzzeichen: aus
   // "17{,}5\%" wird "17{,}5%" - und das Prozentzeichen leitet in TeX einen
@@ -77,7 +101,7 @@
         // einer Formel steht, behaelt die alte, konservative Behandlung:
         // ein einzelnes "\(" bleibt sichtbar, statt zu "(" zu verkuemmern.
         return withMathSegments(
-          dollarInlineToParens(part),
+          toKatexDelimiters(part),
           escapeMathSegment,
           function (plain) { return plain.replace(/\\([\[\]()])/g, "\\\\$1"); }
         );
@@ -106,7 +130,7 @@
   function stripMath(value) {
     const source = String(value || "");
     const stripped = withMathSegments(
-      dollarInlineToParens(source),
+      toKatexDelimiters(source),
       function () { return " "; },
       function (plain) { return plain; }
     );

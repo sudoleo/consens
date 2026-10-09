@@ -59,6 +59,25 @@ describe("Markdown and KaTeX integration", () => {
     window.close();
   });
 
+  it("reads LaTeX in bare brackets as display math, but not links or citations", () => {
+    const { window, document } = bootRenderPipeline();
+    const answer = document.getElementById("answer");
+    window.injectMarkdown(answer, String.raw`So, conditioning on a goat being revealed, [
+P(\text{initial choice correct}\mid\text{goat revealed})
+=\frac{(1/3)\cdot1}{(1/3)\cdot1+(2/3)\cdot(1/2)} =\frac12.
+] The remaining door also has [S1] and [a \LaTeX guide](https://example.com).`);
+    expect(answer.querySelectorAll(".katex-display")).toHaveLength(1);
+    expect(answer.querySelector(".katex-error")).toBeNull();
+    expect(answer.querySelector("annotation").textContent).toContain(String.raw`\frac12.`);
+    expect(answer.querySelector("a").getAttribute("href")).toBe("https://example.com");
+    expect(answer.textContent).toContain("[S1]");
+    const { prepareMarkdown } = window.ConsensusMath;
+    for (const plain of ["[ ] todo", "[1, 3]", "[ see \\cite ](https://x.y)", "a [ b ] c"]) {
+      expect(prepareMarkdown(plain).replace(/\\\\/g, "\\")).toBe(plain);
+    }
+    window.close();
+  });
+
   it("recovers a formula once its streaming delimiter is complete", async () => {
     const { window, document } = bootRenderPipeline();
     const answer = document.getElementById("answer");
