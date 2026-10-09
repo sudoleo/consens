@@ -1,4 +1,4 @@
-"""A pasted AI answer the Agent checked: marks on the user's message, built frontend, no providers."""
+"""A pasted AI answer the Agent checked: a result card above the answer, built frontend, no providers."""
 import hashlib
 import json
 
@@ -75,8 +75,16 @@ def _setup(page, requests):
     page.route("**/agent", respond)
 
 
+# A colour-mix comes back as color(srgb 0..1), a plain colour as rgb(0..255).
+# The ink itself is a slightly cool grey (34/36/40); the agree green is 20+ apart.
+GREY = r"""el => { const value = getComputedStyle(el).backgroundColor;
+    const scale = value.startsWith('color(') ? 255 : 1;
+    const [r, g, b] = value.match(/[\d.]+/g).slice(0, 3).map(n => Number(n) * scale);
+    return Math.max(r, g, b) - Math.min(r, g, b) <= 10; }"""
+
+
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
-def test_pasted_answer_is_marked_on_the_message(browser, phase4_server, width, dark):
+def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     requests, errors = [], []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -95,26 +103,40 @@ def test_pasted_answer_is_marked_on_the_message(browser, phase4_server, width, d
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         assert requests[0]["question"] == QUESTION
 
+        # The message stays as it was sent: plain text, no marks.
         ask = page.locator("#threadAsk")
-        marks = ask.locator(".pc-claim")
-        expect(marks).to_have_count(3)
-        assert marks.evaluate_all("els => els.map(el => el.dataset.verdict)") == ["holds", "disputed", "unconfirmed"]
-        expect(marks.nth(1)).to_have_text("You always need underfloor heating for that.")
-        # The pasted list keeps its lines; the bubble does not collapse them.
-        assert ask.locator("#threadAskText").evaluate("el => getComputedStyle(el).whiteSpace") == "pre-line"
-        assert marks.nth(1).evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
-        summary = ask.locator(".passage-check")
-        expect(summary).to_contain_text("Checked against 3 models as an answer to “Do heat pumps make sense in old buildings?”")
-        expect(summary).to_contain_text("The models answered without seeing your text.")
+        expect(ask.locator(".pc-claim")).to_have_count(0)
+        expect(ask.locator(".passage-check")).to_have_count(0)
+        assert ask.locator("#threadAskText").evaluate("el => getComputedStyle(el).whiteSpace") == "normal"
+        expect(ask.locator("#threadAskMore")).to_have_text("Show full message")
+
+        # The result is one card right above the answer.
+        card = page.locator("#agentAnswer > .passage-check")
+        expect(card).to_be_visible()
+        assert card.evaluate("el => el.nextElementSibling.id") == "agentAnswerBody"
+        expect(card.locator(".passage-check-eyebrow")).to_have_text("Your text")
+        # No box around it: no surface, no border; the text sits on a rail.
+        assert card.evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
+        assert card.evaluate("el => getComputedStyle(el).borderTopWidth") == "0px"
+        assert card.locator(".passage-check-body").evaluate("el => getComputedStyle(el).borderLeftWidth") == "3px"
+        expect(card.locator("button.passage-check-count")).to_have_count(3)
+        quotes = card.locator(".passage-check-quote .pc-claim")
+        expect(quotes).to_have_count(1)
+        expect(quotes).to_have_text("You always need underfloor heating for that.")
+        assert quotes.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
+        expect(card.locator(".passage-check-fold")).to_have_text(["1 sentence holds", "1 unconfirmed sentence"])
+        expect(card).to_contain_text("Checked against 3 models as an answer to “Do heat pumps make sense in old buildings?”")
+        expect(card).to_contain_text("The models answered without seeing your text.")
         # On a phone the counts wrap as whole units, never as a lone dot.
-        units = summary.locator(".passage-check-unit")
-        assert units.evaluate_all("els => els.every(el => el.getClientRects().length === 1)")
-        expect(summary.locator("button.passage-check-count")).to_have_count(3)
+        assert card.locator(".passage-check-unit").evaluate_all("els => els.every(el => el.getClientRects().length === 1)")
+        # The answer talks about the pasted text: no marks of its own.
+        expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(0)
+        expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
         _snapshot(page, f"passage-check-{width}")
 
-        # A count jumps to its first sentence and opens the same card as a
-        # checked answer sentence, with a way to the model's own answer.
-        summary.locator('[data-verdict="disputed"]').click()
+        # A count opens the same card as a checked answer sentence, with a
+        # way to the model's own answer.
+        card.locator('.passage-check-count[data-verdict="disputed"]').click()
         popover = page.locator("#claimPopover")
         expect(popover).to_be_visible()
         expect(popover).to_contain_text("Deviate")
@@ -122,25 +144,48 @@ def test_pasted_answer_is_marked_on_the_message(browser, phase4_server, width, d
         _snapshot(page, f"passage-check-popover-{width}")
         page.keyboard.press("Escape")
         expect(popover).to_be_hidden()
-        marks.nth(1).click()
+        quotes.click()
         expect(popover).to_be_visible()
         popover.get_by_role("button", name="View answer").first.click()
         expect(page.locator(".answer-reader-dialog, .answer-reader")).to_be_visible()
         page.keyboard.press("Escape")
+        expect(page.locator(".answer-reader-dialog, .answer-reader")).to_be_hidden()
 
-        # Restoring the saved chat (bookmark path) keeps the marks, even when
+        # The full text marks every sentence; what the Highlights setting does
+        # not paint stays uncoloured, also under the pointer (no green).
+        card.locator(".passage-check-toggle").click()
+        marks = card.locator(".passage-check-text .pc-claim")
+        expect(marks).to_have_count(3)
+        assert marks.evaluate_all("els => els.map(el => el.dataset.verdict)") == ["holds", "disputed", "unconfirmed"]
+        assert card.locator(".passage-check-text").evaluate("el => getComputedStyle(el).whiteSpace") == "pre-line"
+        assert marks.nth(0).evaluate("el => el.classList.contains('is-quiet')")
+        assert marks.nth(0).evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
+        if width >= 700:
+            marks.nth(0).hover()
+            page.wait_for_timeout(250)
+            hovered = marks.nth(0).evaluate("el => getComputedStyle(el).backgroundColor")
+            assert marks.nth(0).evaluate(GREY), hovered
+            assert hovered != "rgba(0, 0, 0, 0)"
+        _snapshot(page, f"passage-check-full-{width}")
+        expect(card.locator(".passage-check-toggle")).to_have_text("Show less")
+
+        # Restoring the saved chat (bookmark path) keeps the card, even when
         # the thread question is set again afterwards.
         page.evaluate("""turn => {
             App.runRegistry.showSavedView({type: 'bookmark'}, {chatId: 'a'.repeat(32), turnId: turn.id, executionMode: 'agent',
                 question: turn.question, consensus: turn.consensus, currentTurn: turn});
             App.setThreadQuestion(turn.question);
         }""", SAVED)
-        expect(ask.locator(".pc-claim")).to_have_count(3)
-        # As an earlier turn of the chat, the message keeps its marks too.
+        expect(page.locator("#agentAnswer > .passage-check")).to_have_count(1)
+        expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(0)
+        # As an earlier turn of the chat, the card stays with its answer.
         page.evaluate("turn => App.followup.renderStoredTurns([turn])", SAVED)
-        history = page.locator("#threadHistory .thread-history-question")
-        expect(history.locator(".pc-claim")).to_have_count(3)
-        expect(history.locator(".passage-check")).to_contain_text("1 disputed")
+        history = page.locator("#threadHistory .thread-history-turn").first
+        expect(history.locator(".thread-history-question .pc-claim")).to_have_count(0)
+        history_card = history.locator(".thread-history-answer > .passage-check")
+        expect(history_card).to_contain_text("1 disputed")
+        assert history_card.evaluate("el => el.nextElementSibling.classList.contains('thread-history-answer-body')")
+        expect(history.locator(".thread-history-answer-body .cx-claim")).to_have_count(0)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert errors == []
     finally:

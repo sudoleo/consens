@@ -318,7 +318,7 @@
       const questionMore = document.createElement("button");
       questionMore.type = "button";
       questionMore.className = "thread-ask-more";
-      questionMore.textContent = "Show full question";
+      questionMore.textContent = "Show full message";
       question.appendChild(questionMore);
 
       const answer = document.createElement("div");
@@ -370,8 +370,8 @@
         }
         window.App.agentReview?.render(answerBody, turnData.agent_review,
           {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
-        // A pasted text the Agent checked carries its marks on the message.
-        window.App.passageCheck?.apply(question, questionText, turnData.question, turnData.agent_review);
+        // A pasted text the Agent checked: its result card above the answer.
+        window.App.passageCheck?.apply(answerBody, turnData.agent_review);
         window.App.agentMemory?.render(answerBody, { key: turnId, changes: turnData.agent_memory });
         // Documents and mail attachments of this turn stay with its answer;
         // agent-workspace.js fills the row from the chat's file list.

@@ -637,8 +637,8 @@ class ComparisonTools:
     def checked_text_evidence(self):
         """What the answer step learns about the user's checked passage.
 
-        The marks on the user's message come from this check; the answer reads
-        the same verdicts, so text and marks do not contradict each other
+        The card above the answer comes from this check; the answer reads
+        the same verdicts, so answer and card do not contradict each other
         without a stated reason."""
         passage = self.passage
         if not passage:
@@ -889,7 +889,7 @@ class ComparisonTools:
                       "asked": asked, "status": "running", "answers": [], "failed_models": []}
         self.comparisons.append(comparison)
         if passage is not None:
-            # Visible on the user's message from now on ("Checking ..."), not
+            # Visible above the answer from now on ("Checking ..."), not
             # only once the judge has finished.
             self.passage = {"version": 1, "status": "waiting", "comparison_id": comparison["id"],
                             "answer_to": " ".join(args.check.answer_to.split())[:PASSAGE_ANSWER_TO_CHARS],

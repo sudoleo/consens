@@ -519,3 +519,44 @@ it('stops following a job when its answer leaves the page or shows another revie
   expect(options.isActive()).toBe(false);
   dom.window.close();
 });
+it('leaves the answer of a checked pasted text unmarked and unscored; the card carries the verdict', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.checks[0].differences_data.agreement = { score: 72, coverage_status: 'sufficient' };
+  review.checks[1].differences_data.agreement = { score: 31, coverage_status: 'sufficient' };
+  review.passage_check = { status: 'succeeded', comparison_id: 'c1', text: 'Pasted.', claims: [] };
+  w.App.agentReview.render(body, review);
+  // The answer talks ABOUT the pasted text, which the models never saw.
+  expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
+  expect(body._agentReview.querySelector('.agent-agreement')).toBeNull();
+  expect(body.textContent).toBe('Exact answer.');
+  // The evidence of that comparison stays reachable.
+  expect([...body._agentReview.querySelectorAll('.agent-evidence-link')].map(b => b.textContent).join(' ')).toContain('Answers');
+  // An unchanged answer is not redrawn; a redrawn one is drawn again.
+  const injected = w.injectMarkdown.mock.calls.length;
+  review.comparisons[0].reason = 'Another reason';
+  w.App.agentReview.render(body, review);
+  expect(w.injectMarkdown.mock.calls.length).toBe(injected);
+  body.textContent = 'Streamed text';
+  review.comparisons[0].reason = 'Yet another reason';
+  w.App.agentReview.render(body, review);
+  expect(w.injectMarkdown.mock.calls.length).toBe(injected + 1);
+  expect(body.textContent).toBe('Exact answer.');
+  // Another comparison of the same turn keeps its marks and its score.
+  const picker = body._agentReview.querySelector('.agent-evidence-focus select');
+  picker.value = 'agent-evidence:c2'; picker.dispatchEvent(new w.Event('change'));
+  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
+  expect(body._agentReview.querySelector('.agent-agreement').dataset.tone).toBe('alert');
+  dom.window.close();
+});
+it('puts the inline model row of an earlier turn above the card of a checked text', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  body.classList.add('thread-history-answer-body');
+  const card = d.createElement('section'); body.before(card); body._passageCard = card;
+  w.App.agentReview.render(body, snapshot());
+  expect(card.previousElementSibling.classList.contains('agent-history-models')).toBe(true);
+  expect(card.nextElementSibling).toBe(body);
+  dom.window.close();
+});

@@ -3549,27 +3549,39 @@ Antwort-Prompt).
   im selben `compare_models`-Aufruf mitfährt); für spätere Turns gilt die
   Memory-Anweisung („nichts aus eingefügtem Text"), ein echter Ausschluss wäre
   eine zusätzliche Firestore-Abfrage pro Lauf.
-- **Oberfläche:** `static/js/passage-check.js` (`App.passageCheck`, in
-  bundles.json nach `agent-review.js`) markiert die Passage AUF DER
-  NUTZERNACHRICHT: `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/
-  unbestätigt = `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen =
-  mehr Gegen- als Fürstimmen). Gemalt wird nach der Highlights-Einstellung
-  (`body[data-consensus-highlight-mode]`, Standard „concerns" = rot/gelb), der
-  Rest ist `is-quiet`: ungefärbt, aber per Klick/Tab/Enter bedienbar; Hover und
-  Fokus färben. Im hellen Modus sind die Markenfarben gegen die graue Blase
-  gemischt (`html:not(.dark-mode) .has-passage-check`). Klick öffnet die
-  gemeinsame Claim-Karte (`App.claimPopover`; öffnet nahe dem unteren Rand nach
-  oben) mit „View answer" über `App.agentReview.contextFor`, während des Laufs
-  über einen Minimal-Kontext aus `review.comparisons`. Darunter `.passage-check`:
-  Zähler zuerst (Sprung zum ersten Satz; ohne Marken öffnet die Karte am Zähler),
-  dann „Checked against N models as an answer to …". Sobald ein Check deklariert
-  ist, behält die Blase die Zeilen der Passage (`white-space: pre-line`, Clamp 10
-  Zeilen, Markdown leise bereinigt) und die Zusammenfassung hat schon zwei
-  Zeilen: die Marken ändern danach nur Farben, nicht die Größe. Tab unter den
-  Falz klappt die Nachricht auf. Die Signatur ist kanonisch (Firestore liefert
-  Maps ohne Reihenfolge), ein Laufende zeichnet nichts neu. Aufgerufen aus
-  `agent-chat.js` (live, gespeichert, und leerend für Consensus/neuen Chat),
-  `run-view.js` (leerend) und `consensus-run.js::appendHistoryTurn`.
+- **Oberfläche (seit 2026-10-09 eine Karte über der Antwort):**
+  `static/js/passage-check.js` (`App.passageCheck.apply(answerBody, review,
+  {live})`, in bundles.json nach `agent-review.js`) setzt `.passage-check`
+  direkt VOR den Antwortkörper (`#agentAnswerBody` bzw.
+  `.thread-history-answer-body`, Referenz `body._passageCard`). Die
+  Nutzernachricht bleibt unverändert so, wie sie abgeschickt wurde (der Agent
+  entscheidet erst im Lauf, ob er prüft; eine nachträglich umgebaute Blase
+  sprang, und nur manchmal). Kein Kasten (Hausregel): ein Versalien-Etikett
+  „Your text", darunter die Zähler als Kopfzeile, Ampelfarbe nur auf den
+  Zahlen (Klick: erster Satz dieses Urteils, sonst klappt der Volltext auf),
+  dann der Text auf einer Schiene wie ein Zitat der Antwort. Zugeklappt stehen
+  dort nur widersprochene/geteilte Sätze (höchstens 8) wörtlich mit „N of M
+  models disagree"; dazwischen je eine Faltzeile, die sagt, was sie enthält
+  („17 sentences hold", „1 unconfirmed sentence", „5 more sentences, 1
+  unconfirmed"; Klick klappt auf). „Show full text" zeigt die ganze Passage
+  mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
+  `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
+  als Fürstimmen), gemalt nach der Highlights-Einstellung
+  (`body[data-consensus-highlight-mode]`, Standard „concerns"); der Rest ist
+  `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
+  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Klick/Enter auf einen Satz
+  öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
+  über `App.agentReview.contextFor`, während des Laufs über einen
+  Minimal-Kontext aus `review.comparisons`. Darunter „Checked against N models
+  as an answer to …", eine an beiden Enden auslaufende Haarlinie trennt zur
+  Antwort. Die Antwort selbst bekommt für den Vergleich mit Passage keine
+  Marken und keinen Agreement-Score (`agent-review.js`, `checksPassage`): ihre
+  Sätze reden ÜBER den Text, den die Modelle nie sahen. Die Signatur ist
+  kanonisch (Firestore liefert Maps ohne Reihenfolge), ein Laufende zeichnet
+  nichts neu, der aufgeklappte Zustand bleibt. Aufgerufen aus `agent-chat.js`
+  (live, gespeichert, und leerend für Consensus/neuen Chat), `run-view.js`
+  (leerend) und `consensus-run.js::appendHistoryTurn`. Der Aufklapp-Link der
+  Nachricht heißt seither „Show full message"/„Collapse message".
 - **Länge:** Im Agent-Modus prüft `validateInputText` die Zeichengrenze des
   Servers (`consensus_max_question_chars`, 8.000; Codepoints nach NFKC wie
   `normalize_question`) statt der Wortgrenze; der doppelte Klick-Validator in

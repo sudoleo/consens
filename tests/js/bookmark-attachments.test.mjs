@@ -52,7 +52,7 @@ const BODY = `
   <div class="thread-ask-label">Question</div>
   <div class="thread-ask-text" id="threadAskText"></div>
   <div class="attachment-bar message-attachments" id="threadAskAttachments" hidden></div>
-  <button type="button" id="threadAskMore" class="thread-ask-more">Show full question</button>
+  <button type="button" id="threadAskMore" class="thread-ask-more">Show full message</button>
 </div>
 <div class="chat-input-container">
   <div id="attachmentBar" class="attachment-bar" hidden></div>

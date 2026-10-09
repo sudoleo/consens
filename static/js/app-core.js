@@ -115,14 +115,11 @@
     if (!wrap || !text) return "";
 
     const normalized = String(question || "").replace(/\s+/g, " ").trim();
-    // The question is remembered apart from the DOM: a checked passage
-    // (passage-check.js) marks the text, so its textContent no longer
-    // equals the plain question.
     const unchanged = (text.dataset.question ?? text.textContent) === normalized;
     // Die Multi-Run-Projektion schreibt den sichtbaren Context waehrend des
     // Streamings regelmaessig neu ins DOM. Eine identische Frage ist dabei
     // kein neuer Turn: ihren lokalen Disclosure-State zurueckzusetzen liess
-    // "Show full question" unter dem Mauszeiger flackern und klappte einen
+    // "Show full message" unter dem Mauszeiger flackern und klappte einen
     // erfolgreichen Klick beim naechsten Stream-Update sofort wieder zu.
     // Nur neuer Inhalt initialisiert Clamp und Link deshalb von vorn.
     if (unchanged) {
@@ -137,10 +134,9 @@
     wrap.classList.remove("is-open", "is-long");
     const more = wrap.querySelector(".thread-ask-more");
     if (more) {
-      more.textContent = "Show full question";
+      more.textContent = "Show full message";
       more.setAttribute("aria-expanded", "false");
     }
-    window.App.passageCheck?.restore(wrap, text, question);
     if (!normalized) return "";
 
     requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
@@ -220,7 +216,7 @@
   // Ob eine Frage laenger als drei Zeilen ist, haengt an der Breite des
   // Blocks - und die steht im ersten Frame noch nicht fest: Der Ausstieg aus
   // dem Hero animiert den Container, und die Sidebar aendert ihn spaeter noch
-  // einmal. Wurde nur einmal gemessen, blieb "Show full question" bei einer
+  // einmal. Wurde nur einmal gemessen, blieb "Show full message" bei einer
   // langen Frage aus und die vierte Zeile verschwand lautlos - beim
   // gefuehrten Lauf ausgerechnet das Ende der Frage. Deshalb misst ein
   // ResizeObserver nach jeder Groessenaenderung nach — einer je Fragen-Kopf
@@ -244,14 +240,6 @@
     wrap.classList.toggle("is-long", full > clamped + 2);
   }
 
-  // A checked passage changes how long a question is (line breaks, marks).
-  function refreshThreadAskClamp(wrap) {
-    const text = wrap?.querySelector(":scope > .thread-ask-text, :scope > .thread-history-question-text");
-    if (text) requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
-  }
-
-  window.App.syncThreadAskClamp = refreshThreadAskClamp;
-
   function observeThreadAskWidth(wrap, text) {
     if (typeof ResizeObserver !== "function" || threadAskResizeObservers.has(text)) return;
     const observer = new ResizeObserver(() => syncThreadAskClamp(wrap, text));
@@ -268,7 +256,8 @@
     const wrap = more.closest(".thread-ask, .thread-history-question");
     if (!wrap) return;
     const open = wrap.classList.toggle("is-open");
-    more.textContent = open ? "Collapse question" : "Show full question";
+    // "message", not "question": a pasted text in it is no question.
+    more.textContent = open ? "Collapse message" : "Show full message";
     more.setAttribute("aria-expanded", String(open));
     // A folded box starts at its first line, even after focus scrolled it.
     const text = wrap.querySelector(":scope > .thread-ask-text, :scope > .thread-history-question-text");

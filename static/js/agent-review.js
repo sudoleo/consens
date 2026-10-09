@@ -447,9 +447,14 @@
       const check = boundCheck(comparison);
       const answers = comparison.answers || [];
       const sources = turnSources;
+      // The comparison that checked a pasted text: its result is the card
+      // above the answer (passage-check.js). The answer's own sentences talk
+      // ABOUT that text, which the models never saw, so marks and a score on
+      // them would only look like a second verdict.
+      const checksPassage = !!comparison.id && review.passage_check?.comparison_id === comparison.id;
       const findAnswer = name => answers.find(a => [a.provider, a.provider_label, a.model?.label].some(v => v?.toLowerCase() === name?.toLowerCase()));
       const context = { key: `agent-evidence:${comparison.id}`, question: comparison.question, scopeLabel: "Comparison focus",
-        check, modelCount: answers.length,
+        check, modelCount: answers.length, checksPassage,
         contextLabel: comparison.question.length > 64 ? comparison.question.slice(0, 61) + "…" : comparison.question,
         contextGroup: () => contexts,
         answers: [
@@ -525,9 +530,12 @@
       context.mark = () => {
         // Same text, check, sources and DOM: keep the marked DOM. Rebuilding
         // it on every live update restarted the reveal and hover state.
-        const markSignature = JSON.stringify([raw, context.key, check?.differences_data || null, sources,
+        const markSignature = JSON.stringify([raw, context.key, checksPassage ? null : check?.differences_data || null, sources,
           body._agentRenderSerial || 0]);
-        if (body._markSignature === markSignature && body.querySelector('.cx-claim')) {
+        // Without marks (a checked text), the first node tells whether the
+        // body was redrawn since.
+        const intact = checksPassage ? !!body.firstChild && body._markedFirst === body.firstChild : body.querySelector('.cx-claim');
+        if (body._markSignature === markSignature && intact) {
           // The evidence row was rebuilt: its key-claims list moves along.
           const previous = body._markFallback;
           if (previous && previous !== fallback) { fallback.replaceChildren(...previous.childNodes); fallback.hidden = previous.hidden; }
@@ -538,11 +546,12 @@
         body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
         if (typeof raw === "string") window.injectMarkdown?.(body, raw, []);
-        if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
+        if (check?.differences_data && !checksPassage) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
           answerNavigation: navigation,
           focusDifference: differenceIndex => open("differences", { index: differenceIndex, trigger: document.activeElement })
         });
         window.linkifyAgentSources?.(body, sources);
+        body._markedFirst = body.firstChild;
       };
       context.links = () => {
         const differences = check?.differences_data?.differences || [];
@@ -568,7 +577,7 @@
       context.mark(); tabs.replaceChildren();
       // The score belongs to the comparison the row shows.
       host.querySelector(':scope > .agent-agreement')?.remove();
-      const agreement = agreementNode(context.check, context.modelCount);
+      const agreement = context.checksPassage ? null : agreementNode(context.check, context.modelCount);
       if (agreement) host.append(agreement);
       for (const [section, label, count, note] of context.links()) {
         const button = evidenceButton(section, label, count, note);
@@ -604,12 +613,13 @@
         button.addEventListener('click', () => App.answerReader?.openContext(context, { model: answer.provider, trigger: button }));
         stack.append(button);
       }
-      body.before(models); body._agentModels = models;
+      // Above the result card of a checked text, if the answer has one.
+      (body._passageCard?.parentNode === body.parentNode ? body._passageCard : body).before(models); body._agentModels = models;
     }
     contexts.forEach(c => App.answerReader?.refreshContext(c));
   }
   // The reader context of one comparison of a rendered review, e.g. for the
-  // "View answer" link of a checked sentence in the user's message.
+  // "View answer" link of a checked sentence in the passage card.
   function contextFor(review, comparisonId) {
     const key = `agent-evidence:${comparisonId}`;
     // While a run is live the review row may not be built yet for this exact

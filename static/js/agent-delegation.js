@@ -10,7 +10,7 @@
   // whose state is the outcome of the checks, not of individual attempts.
   const ended = new Set(["failed", "stopped"]);
   const CHECK_ID = "answer-check";
-  const checkNames = { "Differences judge": "differences", "Coverage judge": "coverage" };
+  const checkNames = { "Differences judge": "differences", "Coverage judge": "coverage", "Text check": "text" };
   function joinNames(names) {
     return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
   }
@@ -31,6 +31,8 @@
     // from its first start to its last end (summing only without start times).
     const duration = Math.max(...titles.map(title => span(view, judges.filter(a => a.title === title))));
     return { id: CHECK_ID, kind: "check", title: "Answer check", status, usage, duration_ms: duration,
+      // A pasted text was checked: its result is the card above the answer.
+      checkedText: titles.includes("Text check"),
       progress_text: busy.find(agent => agent.progress_text)?.progress_text || "",
       missing: status === "failed" ? titles.filter(title => !done.has(title)).map(title => checkNames[title] || "answer") : [] };
   }
@@ -405,7 +407,8 @@
       const names = agent.missing;
       row.body.append(node('p', 'agent-judge-note', agent.status === 'working' ? 'Check in progress.'
         : names.length ? `The ${joinNames(names)} ${names.length === 1 ? 'check' : 'checks'} could not run. The answer is shown without ${names.length === 1 ? 'it' : 'them'}.`
-          : 'Results are marked in the answer and listed under Review.'));
+          : agent.checkedText ? 'The check of your text is shown above the answer, the rest under Review.'
+            : 'Results are marked in the answer and listed under Review.'));
       return;
     }
     const detail = view.details.get(agent.id);

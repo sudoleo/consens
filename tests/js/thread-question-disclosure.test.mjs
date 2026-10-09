@@ -6,12 +6,12 @@ const BODY = `
 <div id="threadAsk" class="thread-ask" hidden>
   <div class="thread-ask-text" id="threadAskText"></div>
   <div id="threadAskAttachments" hidden></div>
-  <button type="button" class="thread-ask-more">Show full question</button>
+  <button type="button" class="thread-ask-more">Show full message</button>
 </div>
 <div id="threadPendingAsk" class="thread-ask" hidden>
   <div class="thread-ask-text" id="threadPendingAskText"></div>
   <div id="threadPendingAskAttachments" hidden></div>
-  <button type="button" class="thread-ask-more">Show full question</button>
+  <button type="button" class="thread-ask-more">Show full message</button>
 </div>
 `;
 
@@ -42,7 +42,7 @@ describe("thread question disclosure", () => {
     more.click();
 
     expect(wrap.classList.contains("is-open")).toBe(true);
-    expect(more.textContent).toBe("Collapse question");
+    expect(more.textContent).toBe("Collapse message");
     expect(more.getAttribute("aria-expanded")).toBe("true");
 
     // run-view.js does this repeatedly for the visible run while provider
@@ -51,7 +51,7 @@ describe("thread question disclosure", () => {
 
     expect(wrap.classList.contains("is-open")).toBe(true);
     expect(wrap.classList.contains("is-long")).toBe(true);
-    expect(more.textContent).toBe("Collapse question");
+    expect(more.textContent).toBe("Collapse message");
     expect(more.getAttribute("aria-expanded")).toBe("true");
   });
 
@@ -67,7 +67,7 @@ describe("thread question disclosure", () => {
 
     expect(wrap.classList.contains("is-open")).toBe(false);
     expect(wrap.classList.contains("is-long")).toBe(false);
-    expect(more.textContent).toBe("Show full question");
+    expect(more.textContent).toBe("Show full message");
     expect(more.getAttribute("aria-expanded")).toBe("false");
   });
 });

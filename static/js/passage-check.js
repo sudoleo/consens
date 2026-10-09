@@ -2,23 +2,24 @@
 // passage-check.js
 // "Paste an AI answer to check it": the Agent checked a passage of the
 // user's own message against independent answers (review.passage_check,
-// see app/services/agent_comparison.py). This module marks that passage
-// sentence by sentence ON THE USER'S MESSAGE and puts one short line
-// under it: how many sentences are disputed, split, unconfirmed or hold,
-// and which question the text was checked against.
+// see app/services/agent_comparison.py). This module puts the result at
+// the top of the ANSWER as one card: the sentences that do not hold,
+// verbatim, each with how many models disagree; the sentences in between
+// fold into quiet "N more sentences" rows; "Show full text" unfolds the
+// whole passage with every sentence marked.
 //
-// Why on the message and not in the answer: the user asked about THEIR
-// text. The answer below explains the verdict; the marks show where.
+// Why in the answer and not on the message: the message is what the user
+// sent and stays exactly that (the Agent only decides during the run
+// whether it checks at all, so a message that changed shape afterwards
+// would jump, and only sometimes). The verdict comes from the models and
+// reads as their turn; quoting the sentences keeps it tied to the text.
 // Marks reuse the answer's vocabulary (cx-claim states, the claim popover),
-// so a checked sentence looks and opens like a checked answer sentence, and
-// they follow the same Highlights setting: by default only red and amber are
-// painted, every sentence still opens its card.
+// and the full text follows the Highlights setting: by default only red and
+// amber are painted, every sentence still opens its card.
 //
-// The server sends exact character offsets (code points) for every sentence,
-// so nothing is searched in the DOM. As soon as a check is declared, the
-// passage keeps its line breaks (a pasted list stays a list), so the marks
-// arriving later change colour, never the bubble's size.
-// Exports: window.App.passageCheck.{apply, restore, verdict, from}
+// The server sends exact character offsets (code points) for every
+// sentence, so nothing is searched in the DOM.
+// Exports: window.App.passageCheck.{apply, verdict, from}
 // =====================================================================
 
 (function () {
@@ -36,10 +37,15 @@
     critical: new Set(["disputed"]),
     none: new Set()
   };
+  // What the folded card quotes: the sentences other models disagree with.
+  // A sentence only one model makes is counted, not quoted: in a text full
+  // of figures that would be most of it.
+  const QUOTED = new Set(["disputed", "split"]);
+  const MAX_QUOTES = 8;
   const DONE = new Set(["succeeded", "partial"]);
   const LIVE = new Set(["waiting", "running"]);
   const ANSWER_TO_CHARS = 140;
-  const bubbles = new Set();
+  const cards = new Set();
 
   // Same reading as the claim popover: two supporting models and no dissent
   // hold; any dissent splits; more dissent than support disputes.
@@ -51,12 +57,8 @@
     return claim.coverage === "supported" || agree >= 2 ? "holds" : "unconfirmed";
   }
 
-  function collapse(value) {
-    return String(value || "").replace(/\s+/g, " ").trim();
-  }
-
   function normalize(value) {
-    return collapse(String(value || "").normalize("NFKC"));
+    return String(value || "").normalize("NFKC").replace(/\s+/g, " ").trim();
   }
 
   // A stored check, validated: anything malformed renders as no check at all.
@@ -95,19 +97,19 @@
     };
   }
 
-  // What the bubble shows, independent of key order: a saved turn comes back
+  // What the card shows, independent of key order: a saved turn comes back
   // from Firestore with its maps in another order than the live frames had.
-  function signatureOf(check, question, live) {
-    return JSON.stringify([normalize(question), DONE.has(check.status) ? "done" : live ? "live" : check.status,
+  function signatureOf(check, live) {
+    return JSON.stringify([DONE.has(check.status) ? "done" : live ? "live" : check.status,
       check.status, check.text, check.answerTo, check.models.slice().sort(),
       check.issues.map(issue => [issue.code, issue.count]).sort(),
       check.claims.map(claim => [claim.start, claim.end, verdict(claim), claim.agree.slice().sort(),
         claim.dissent.map(item => [item.model, item.quote]).sort()])]);
   }
 
-  // Pasted Markdown (ChatGPT's copy button) reads as text in a message: bold
-  // markers, heading hashes and table rules go, list bullets become dots and
-  // table cells are separated by a middle dot. Underscores stay (__init__).
+  // Pasted Markdown (ChatGPT's copy button) reads as text: bold markers,
+  // heading hashes and table rules go, list bullets become dots and table
+  // cells are separated by a middle dot. Underscores stay (__init__).
   function displayText(piece, atLineStart) {
     const lineStart = atLineStart ? "(^|\\n)" : "(\\n)";
     return piece
@@ -121,12 +123,12 @@
       .replace(/\n{3,}/g, "\n\n");
   }
 
-  // "View answer" in the card opens the comparison answer. Until the
+  // "View answer" in the claim card opens the comparison answer. Until the
   // answer's own evidence row exists (during the run), a minimal reader
   // context is built from the review's comparison.
-  function readerContext(wrap) {
-    const review = wrap._passageReview;
-    const id = wrap._passageCheck?.comparisonId;
+  function readerContext(card) {
+    const review = card._passageReview;
+    const id = card._passageCheck?.comparisonId;
     const built = window.App.agentReview?.contextFor?.(review, id);
     if (built) return built;
     const comparison = (review?.comparisons || []).find(item => item?.id === id);
@@ -142,22 +144,22 @@
     };
   }
 
-  function navigation(wrap) {
+  function navigation(card) {
     const find = (ctx, name) => (ctx?.answers || []).find(answer =>
       [answer.provider, answer.label].some(value => value?.toLowerCase() === String(name || "").toLowerCase()));
     return {
-      canOpen: name => Boolean(find(readerContext(wrap), name)),
+      canOpen: name => Boolean(find(readerContext(card), name)),
       open: (name, quote) => {
-        const ctx = readerContext(wrap);
+        const ctx = readerContext(card);
         const answer = find(ctx, name);
         if (ctx && answer) window.App.answerReader?.openContext(ctx, { section: "answers", model: answer.provider, quote });
       }
     };
   }
 
-  function openDetails(wrap, anchor, claim) {
+  function openDetails(card, anchor, claim) {
     if (!claim) return;
-    window.App.claimPopover?.open(claim, anchor, wrap._passageCheck.models, navigation(wrap));
+    window.App.claimPopover?.open(claim, anchor, card._passageCheck.models, navigation(card));
   }
 
   function claimLabel(claim) {
@@ -172,55 +174,88 @@
     return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "concerns";
   }
 
-  function paint(wrap) {
+  // The quoted sentences are always painted: they are quoted because of
+  // their verdict. The full text paints what the Highlights setting paints.
+  function paint(card) {
     const painted = PAINTED[highlightMode()];
-    wrap.querySelectorAll(".pc-claim").forEach(span => {
+    card.querySelectorAll(".passage-check-text .pc-claim").forEach(span => {
       span.classList.toggle("is-quiet", !painted.has(span.dataset.verdict));
     });
   }
 
-  // Where the passage sits in the displayed question. The user's own words
-  // keep their spelling (collapsed whitespace, no NFKC) whenever they can.
-  function split(question, passageText) {
-    for (const form of [collapse, normalize]) {
-      const full = form(question);
-      const passage = form(passageText);
-      const index = passage ? full.indexOf(passage) : -1;
-      if (index >= 0) return [full.slice(0, index).trim(), full.slice(index + passage.length).trim()];
-    }
-    return null;
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text) element.textContent = text;
+    return element;
   }
 
-  function renderText(text, question, check, marks) {
-    const parts = split(question, check.text);
-    if (!parts) return false;
-    const [before, after] = parts;
-    const nodes = [];
-    if (before) nodes.push(document.createTextNode(before + "\n\n"));
-    const body = document.createElement("span");
-    body.className = "passage-check-text";
+  function mark(claim, index, text) {
+    const span = node("span", `cx-claim pc-claim is-interactive ${MARKS[verdict(claim)]}`, text);
+    span.dataset.claim = String(index);
+    span.dataset.verdict = verdict(claim);
+    span.tabIndex = 0;
+    span.setAttribute("role", "button");
+    span.setAttribute("aria-haspopup", "dialog");
+    // A button's name replaces its text: the sentence has to be in it.
+    span.setAttribute("aria-label", `“${text}” – ${claimLabel(claim)}. Show details`);
+    return span;
+  }
+
+  function fullText(check) {
+    const body = node("div", "passage-check-text");
     const atLine = index => index === 0 || check.text[index - 1] === "\n";
     let cursor = 0;
-    (marks ? check.claims : []).forEach((claim, claimIndex) => {
+    check.claims.forEach((claim, index) => {
       if (claim.start > cursor) body.append(displayText(check.text.slice(cursor, claim.start), atLine(cursor)));
-      const span = document.createElement("span");
-      span.className = `cx-claim pc-claim is-interactive ${MARKS[verdict(claim)]}`;
-      span.dataset.claim = String(claimIndex);
-      span.dataset.verdict = verdict(claim);
-      span.tabIndex = 0;
-      span.setAttribute("role", "button");
-      span.setAttribute("aria-haspopup", "dialog");
-      span.textContent = displayText(check.text.slice(claim.start, claim.end), atLine(claim.start));
-      // A button's name replaces its text: the sentence has to be in it.
-      span.setAttribute("aria-label", `“${span.textContent}” – ${claimLabel(claim)}. Show details`);
-      body.append(span);
+      body.append(mark(claim, index, displayText(check.text.slice(claim.start, claim.end), atLine(claim.start))));
       cursor = claim.end;
     });
     if (cursor < check.text.length) body.append(displayText(check.text.slice(cursor), atLine(cursor)));
-    nodes.push(body);
-    if (after) nodes.push(document.createTextNode("\n\n" + after));
-    text.replaceChildren(...nodes);
-    return true;
+    return body;
+  }
+
+  function sentences(count) {
+    return `${count} sentence${count === 1 ? "" : "s"}`;
+  }
+
+  // A fold says what it holds: "17 sentences hold", "1 unconfirmed
+  // sentence", "5 more sentences, 1 unconfirmed".
+  function foldLabel(claims) {
+    const tally = counts({ claims });
+    const count = claims.length;
+    const other = ["disputed", "split", "unconfirmed"].filter(state => tally[state]);
+    if (!other.length) return `${sentences(count)} ${count === 1 ? "holds" : "hold"}`;
+    if (other.length === 1 && tally[other[0]] === count) return `${count} ${other[0]} sentence${count === 1 ? "" : "s"}`;
+    return `${count} more ${count === 1 ? "sentence" : "sentences"}, ${other.map(state => `${tally[state]} ${state}`).join(", ")}`;
+  }
+
+  function fold(claims) {
+    const label = foldLabel(claims);
+    const button = node("button", "passage-check-fold", label);
+    button.type = "button";
+    button.setAttribute("aria-label", `${label}: show the full text`);
+    return button;
+  }
+
+  // The folded card: the quoted sentences in reading order, the sentences
+  // between them as one quiet row each. Without a quote it is one row.
+  function quotes(check) {
+    const list = node("div", "passage-check-quotes");
+    const quoted = check.claims.map((claim, index) => ({ claim, index }))
+      .filter(item => QUOTED.has(verdict(item.claim)));
+    let next = 0;
+    for (const { claim, index } of quoted.slice(0, MAX_QUOTES)) {
+      if (index > next) list.append(fold(check.claims.slice(next, index)));
+      const row = node("p", "passage-check-quote");
+      // A quoted list item or heading stands alone: no bullet in front.
+      const text = displayText(check.text.slice(claim.start, claim.end), true).replace(/^[\s•]+/, "").replace(/\s+/g, " ").trim();
+      row.append(mark(claim, index, text), node("span", `passage-check-verdict is-${verdict(claim)}`, claimLabel(claim)));
+      list.append(row);
+      next = index + 1;
+    }
+    if (check.claims.length > next) list.append(fold(check.claims.slice(next)));
+    return list;
   }
 
   function counts(check) {
@@ -243,7 +278,7 @@
         notes.push(`${issue.count} model${issue.count === 1 ? "" : "s"} did not answer`);
       }
       if ((issue.code === "sentences_unchecked" || issue.code === "unindexed_sentences") && issue.count) {
-        notes.push(`${issue.count} sentence${issue.count === 1 ? "" : "s"} could not be checked`);
+        notes.push(`${sentences(issue.count)} could not be checked`);
       }
     }
     return notes.length ? notes.join(" · ") + "." : "";
@@ -268,188 +303,185 @@
     return `“${short}”` + (/[.?!…]$/.test(short) ? "" : ".");
   }
 
-  function line(className, text) {
-    const node = document.createElement("p");
-    node.className = className;
-    if (text) node.textContent = text;
-    return node;
+  // One uppercase label names the block; the tally under it is its
+  // headline, with the verdict colour on the numbers only.
+  function head(check, live) {
+    const row = node("div", "passage-check-head");
+    row.append(node("p", "passage-check-eyebrow", "Your text"));
+    if (!DONE.has(check.status)) {
+      row.append(node("p", "passage-check-status", LIVE.has(check.status) && live
+        ? (check.status === "running" ? "Checking each sentence…" : "Checking against independent answers…")
+        : failureText(check, live)));
+      return row;
+    }
+    if (!check.claims.length) {
+      row.append(node("p", "passage-check-status", "No checkable statements found in your text."));
+      return row;
+    }
+    // Each count carries the separator after it, so a wrapped line never
+    // starts with a dot.
+    const tally = counts(check);
+    const shown = STATES.filter(state => tally[state]);
+    const list = node("p", "passage-check-counts");
+    shown.forEach((state, index) => {
+      const unit = node("span", "passage-check-unit");
+      const chip = node("button", `passage-check-count is-${state}`);
+      chip.type = "button";
+      chip.dataset.verdict = state;
+      const [number, ...label] = CHIP_LABELS[state](tally[state]).split(" ");
+      chip.append(node("span", "passage-check-num", number), ` ${label.join(" ")}`);
+      chip.setAttribute("aria-label", `${chip.textContent}: show the first one`);
+      unit.append(chip);
+      if (index < shown.length - 1) unit.append(" ·");
+      list.append(unit);
+      if (index < shown.length - 1) list.append(" ");
+    });
+    row.append(list);
+    return row;
   }
 
-  function renderSummary(wrap, check, live) {
-    let summary = wrap.querySelector(":scope > .passage-check");
-    if (!summary) {
-      summary = document.createElement("div");
-      summary.className = "passage-check";
-      summary.setAttribute("role", "status");
-      wrap.append(summary);
-    }
+  function foot(check, live) {
     const running = LIVE.has(check.status) && live;
-    summary.dataset.state = DONE.has(check.status) ? "done" : running ? "running" : "failed";
-    const lines = [];
-    if (running) {
-      lines.push(line("passage-check-head", check.status === "running"
-        ? "Checking each sentence of your text…"
-        : "Checking your text against independent answers…"));
-    } else if (!DONE.has(check.status)) {
-      lines.push(line("passage-check-head", failureText(check, live)));
-    } else {
-      // The counts lead: they are what the user came for. Each count carries
-      // the separator after it, so a wrapped line never starts with a dot.
-      const head = line("passage-check-head");
-      if (!check.claims.length) head.append("No checkable statements found in your text.");
-      const tally = counts(check);
-      const shown = STATES.filter(state => tally[state]);
-      shown.forEach((state, index) => {
-        const unit = document.createElement("span");
-        unit.className = "passage-check-unit";
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = `passage-check-count is-${state}`;
-        chip.dataset.verdict = state;
-        chip.textContent = CHIP_LABELS[state](tally[state]);
-        chip.setAttribute("aria-label", `${chip.textContent}: show the first one`);
-        unit.append(chip);
-        if (index < shown.length - 1) unit.append(" ·");
-        head.append(unit);
-        if (index < shown.length - 1) head.append(" ");
-      });
-      lines.push(head);
-    }
+    const row = node("div", "passage-check-foot");
     if (check.answerTo && (DONE.has(check.status) || running)) {
       const note = issueNote(check);
-      lines.push(line("passage-check-note", (running
+      row.append(node("p", "passage-check-note", (running
         ? `Checking it as an answer to ${quotedQuestion(check.answerTo)} The models answer without seeing your text.`
         : `Checked against ${check.models.length} models as an answer to ${quotedQuestion(check.answerTo)} `
           + "The models answered without seeing your text.") + (note ? ` ${note}` : "")));
     }
-    summary.replaceChildren(...lines);
+    if (DONE.has(check.status) && check.claims.length) {
+      const toggle = node("button", "passage-check-toggle");
+      toggle.type = "button";
+      row.append(toggle);
+    }
+    return row.childNodes.length ? row : null;
   }
 
-  function open(wrap) {
-    const text = textElement(wrap);
-    if (text) text.scrollTop = 0;
-    if (wrap.classList.contains("is-open")) return;
-    wrap.classList.add("is-open");
-    const more = wrap.querySelector(":scope > .thread-ask-more");
-    if (more) {
-      more.textContent = "Collapse question";
-      more.setAttribute("aria-expanded", "true");
+  // Folded (the quotes) or unfolded (the full text): only the body and the
+  // toggle change, the counts and the note stay.
+  function syncBody(card) {
+    const check = card._passageCheck;
+    const full = card.classList.contains("is-full");
+    const body = card.querySelector(":scope > .passage-check-body");
+    if (body) {
+      body.replaceChildren(full ? fullText(check) : quotes(check));
+      paint(card);
+    }
+    const toggle = card.querySelector(".passage-check-toggle");
+    if (toggle) {
+      toggle.textContent = full ? "Show less" : "Show full text";
+      toggle.setAttribute("aria-expanded", String(full));
     }
   }
 
-  // A count jumps to the first sentence with that verdict and opens its card;
-  // without marks on the bubble, the card opens at the count itself.
-  function focusVerdict(wrap, chip) {
+  function render(card, check, live) {
+    const done = DONE.has(check.status);
+    card.dataset.state = done ? "done" : LIVE.has(check.status) && live ? "running" : "failed";
+    const parts = [head(check, live)];
+    if (done && check.claims.length) parts.push(node("div", "passage-check-body"));
+    const footer = foot(check, live);
+    if (footer) parts.push(footer);
+    card.replaceChildren(...parts);
+    syncBody(card);
+  }
+
+  function unfold(card, full) {
+    if (card.classList.contains("is-full") === full) return;
+    card.classList.toggle("is-full", full);
+    syncBody(card);
+  }
+
+  // A count opens the first sentence with that verdict: a quoted one where
+  // it stands, any other in the unfolded text.
+  function focusVerdict(card, chip) {
     const state = chip.dataset.verdict;
-    const span = wrap.querySelector(`.pc-claim[data-verdict="${state}"]`);
-    const check = wrap._passageCheck;
+    let span = card.querySelector(`.pc-claim[data-verdict="${state}"]`);
     if (!span) {
-      openDetails(wrap, chip, check?.claims.find(claim => verdict(claim) === state));
-      return;
+      unfold(card, true);
+      span = card.querySelector(`.pc-claim[data-verdict="${state}"]`);
     }
-    open(wrap);
+    if (!span) return;
     span.scrollIntoView({ block: "center", behavior: "smooth" });
     span.focus({ preventScroll: true });
-    openDetails(wrap, span, check?.claims[Number(span.dataset.claim)]);
+    openDetails(card, span, card._passageCheck?.claims[Number(span.dataset.claim)]);
   }
 
-  function bind(wrap) {
-    if (wrap._passageCheckBound) return;
-    wrap._passageCheckBound = true;
-    wrap.addEventListener("click", event => {
+  function bind(card) {
+    card.addEventListener("click", event => {
       const chip = event.target.closest(".passage-check-count");
-      if (chip && wrap.contains(chip)) {
-        focusVerdict(wrap, chip);
+      if (chip) {
+        focusVerdict(card, chip);
+        return;
+      }
+      const toggle = event.target.closest(".passage-check-toggle, .passage-check-fold");
+      if (toggle) {
+        const full = toggle.matches(".passage-check-fold") || !card.classList.contains("is-full");
+        unfold(card, full);
+        // The toggle is rebuilt in place; a fold is gone, so focus moves on.
+        (card.querySelector(".passage-check-toggle") || card).focus?.({ preventScroll: true });
         return;
       }
       const span = event.target.closest(".pc-claim");
-      // Selecting pasted text (to copy it, or for the memory toolbar) is not
-      // a request for the card.
+      // Selecting quoted text (to copy it) is not a request for the card.
       if (window.getSelection?.()?.isCollapsed === false) return;
-      if (span && wrap.contains(span)) openDetails(wrap, span, wrap._passageCheck?.claims[Number(span.dataset.claim)]);
+      if (span) openDetails(card, span, card._passageCheck?.claims[Number(span.dataset.claim)]);
     });
-    wrap.addEventListener("keydown", event => {
+    card.addEventListener("keydown", event => {
       const span = event.target.closest?.(".pc-claim");
       if (!span || (event.key !== "Enter" && event.key !== " ")) return;
       event.preventDefault();
-      openDetails(wrap, span, wrap._passageCheck?.claims[Number(span.dataset.claim)]);
-    });
-    // A sentence reached with Tab below the fold unfolds the message; the
-    // clamped box must never scroll itself to show it.
-    wrap.addEventListener("focusin", event => {
-      if (event.target.closest?.(".pc-claim")) open(wrap);
+      openDetails(card, span, card._passageCheck?.claims[Number(span.dataset.claim)]);
     });
   }
 
-  function textElement(wrap) {
-    return wrap?.querySelector(":scope > .thread-ask-text, :scope > .thread-history-question-text") || null;
+  function remove(body) {
+    const card = body._passageCard;
+    if (!card) return;
+    card.remove();
+    cards.delete(card);
+    body._passageCard = null;
   }
 
-  function clear(wrap, text) {
-    wrap.querySelector(":scope > .passage-check")?.remove();
-    bubbles.delete(wrap);
-    if (!wrap.classList.contains("has-passage-check")) return;
-    wrap.classList.remove("has-passage-check");
-    if (text) text.textContent = text.dataset.question ?? normalize(wrap._passageQuestion);
-    window.App.syncThreadAskClamp?.(wrap);
-  }
-
-  // Draws the check of `review` onto a question bubble, or removes a stale
-  // one. Called on every projection; unchanged input does nothing.
-  function apply(wrap, text, question, review, options = {}) {
-    if (!wrap) return;
-    text = text || textElement(wrap);
+  // Draws the check of `review` as a card right above the answer `body`, or
+  // removes a stale one. Called on every projection; unchanged input does
+  // nothing (no rebuilt DOM, no lost focus, no detached anchor of an open
+  // claim card).
+  function apply(body, review, options = {}) {
+    if (!body) return;
     const check = from(review);
+    if (!check || !body.parentNode) {
+      remove(body);
+      return;
+    }
+    let card = body._passageCard;
+    if (!card) {
+      card = node("section", "passage-check");
+      card.setAttribute("aria-label", "Check of your text");
+      body._passageCard = card;
+      bind(card);
+    }
+    // Right above the answer, also after other rows were put there.
+    if (card.nextElementSibling !== body) body.before(card);
+    card._passageReview = review || null;
     const live = Boolean(options.live);
-    const signature = check ? signatureOf(check, question, live) : "";
-    wrap._passageReview = review || null;
-    // Unchanged input changes nothing: the summary is a live region, and
-    // rebuilding it would make it speak again, drop focus and detach the
-    // anchor of an open card.
-    if (wrap._passageSignature === signature) return;
-    wrap._passageSignature = signature;
-    wrap._passageCheck = check;
-    wrap._passageQuestion = question;
-    wrap._passageLive = live;
-    if (!check || !text) {
-      clear(wrap, text);
-      return;
-    }
-    const shown = renderText(text, question, check, DONE.has(check.status));
-    if (shown) wrap.classList.add("has-passage-check");
-    else if (wrap.classList.contains("has-passage-check")) clear(wrap, text);
-    renderSummary(wrap, check, live);
-    paint(wrap);
-    bubbles.add(wrap);
-    bind(wrap);
-    window.App.syncThreadAskClamp?.(wrap);
+    const signature = signatureOf(check, live);
+    cards.add(card);
+    if (card._passageSignature === signature) return;
+    card._passageSignature = signature;
+    card._passageCheck = check;
+    render(card, check, live);
   }
 
-  // app-core.js re-renders the bubble's text when the question changes;
-  // the same question keeps its check.
-  function restore(wrap, text, question) {
-    if (!wrap?._passageCheck) return;
-    if (normalize(wrap._passageQuestion) !== normalize(question)) {
-      wrap._passageCheck = null;
-      wrap._passageSignature = "";
-      wrap._passageQuestion = question;
-      clear(wrap, text);
-      return;
-    }
-    const review = wrap._passageReview;
-    wrap._passageSignature = "";
-    apply(wrap, text, question, review, { live: wrap._passageLive });
-  }
-
-  // The Highlights setting changes which verdicts are painted, live.
+  // The Highlights setting changes which verdicts the full text paints, live.
   if (typeof MutationObserver === "function" && document.body) {
     new MutationObserver(() => {
-      for (const wrap of [...bubbles]) {
-        if (wrap.isConnected) paint(wrap);
-        else bubbles.delete(wrap);
+      for (const card of [...cards]) {
+        if (card.isConnected) paint(card);
+        else cards.delete(card);
       }
     }).observe(document.body, { attributes: true, attributeFilter: ["data-consensus-highlight-mode"] });
   }
 
-  window.App.passageCheck = { apply, restore, verdict, from };
+  window.App.passageCheck = { apply, verdict, from };
 })();

@@ -548,47 +548,48 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 
 /* ---- A pasted text the Agent checked (passage-check.js) --------------------
-   The marks sit on the user's own message, in the same vocabulary as the
-   answer's marks. The passage keeps its line breaks, and the bubble shows
-   more of it before it folds: the marks are the point of the message now.
-   One quiet line under the bubble says what was checked against what; its
-   counts are the only colour there (the traffic-light dot), never a surface. */
-.has-passage-check > :is(.thread-ask-text, .thread-history-question-text) {
-  white-space: pre-line;
-  -webkit-line-clamp: 10;
-}
-/* The answer's mark colours are mixed for the page; on the grey bubble the
-   light ones vanished (contrast 1.02). Light mode mixes them against it. */
-html:not(.dark-mode) .has-passage-check {
-  --cx-mark-agree: color-mix(in srgb, #34c759 16%, var(--chat-surface));
-  --cx-mark-agree-strong: color-mix(in srgb, #34c759 28%, var(--chat-surface));
-  --cx-mark-thin: color-mix(in srgb, var(--ink) 8%, var(--chat-surface));
-  --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 15%, var(--chat-surface));
-  --cx-mark-split: color-mix(in srgb, #ff9f0a 22%, var(--chat-surface));
-  --cx-mark-split-strong: color-mix(in srgb, #ff9f0a 34%, var(--chat-surface));
-  --cx-mark-major: color-mix(in srgb, #ff453a 20%, var(--chat-surface));
-  --cx-mark-major-strong: color-mix(in srgb, #ff453a 32%, var(--chat-surface));
-}
-.pc-claim { cursor: pointer; }
-/* Unpainted by the Highlights setting (by default green and grey): plain
-   text that still opens its card and shows itself under pointer and focus. */
-.cx-claim.pc-claim.is-quiet { --cx-paint: transparent; }
-.cx-claim.pc-claim:is(:hover, :focus) { --cx-paint: var(--cx-mark-strong); }
+   One section at the top of the answer; the user's message stays as it was
+   sent. No box around it (the house rule): one uppercase label, the tally as
+   its headline with the verdict colour on the numbers only, then the user's
+   text on a rail like a quote in the answer. Folded, the rail carries the
+   sentences other models disagree with; the sentences between them are one
+   quiet row each. A hairline that fades at both ends hands over to the
+   answer. */
 .passage-check {
-  max-width: min(100%, 560px);
-  margin: 7px 2px 0 auto;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-  text-align: right;
+  max-width: 66ch;
+  margin: 0 0 26px;
+  color: var(--ink);
+}
+.passage-check::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 22px;
+  background: var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
 }
 .passage-check p { margin: 0; }
-.passage-check-head { color: var(--ink-2); }
-.passage-check[data-state="failed"] .passage-check-head { color: var(--ink-3); }
-.passage-check-note { margin-top: 2px; }
+.passage-check-eyebrow {
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+.passage-check .passage-check-counts,
+.passage-check .passage-check-status {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+.passage-check[data-state="failed"] .passage-check-status { color: var(--ink-3); font-size: var(--font-size-sm); }
 .passage-check-unit { white-space: nowrap; }
-.passage-check-count {
-  display: inline;
+.passage-check-count,
+.passage-check-fold,
+.passage-check-toggle {
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -597,29 +598,79 @@ html:not(.dark-mode) .has-passage-check {
   box-shadow: none;
   color: inherit;
   font: inherit;
+  text-align: start;
   cursor: pointer;
+}
+.passage-check-count { text-decoration: none; }
+.passage-check-count:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.passage-check-num {
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.passage-check-count.is-disputed .passage-check-num { color: var(--dispute); }
+.passage-check-count.is-split .passage-check-num { color: var(--partial); }
+.passage-check-count.is-holds .passage-check-num { color: var(--agree); }
+.passage-check :is(.passage-check-count, .passage-check-fold, .passage-check-toggle):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* The rail is the user's text, folded or whole: the same quote rule as in
+   the answer body. */
+.passage-check-body {
+  margin-top: 14px;
+  padding-inline-start: 1em;
+  border-inline-start: 3px solid var(--line);
+  font-size: var(--font-size-base);
+  line-height: 1.65;
+}
+.passage-check-quotes { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.passage-check-quote { overflow-wrap: anywhere; }
+.passage-check-verdict {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+.passage-check-fold {
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+.passage-check-fold:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.passage-check-text { white-space: pre-line; overflow-wrap: anywhere; }
+.passage-check-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 14px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+.passage-check[data-state="running"] .passage-check-foot { margin-top: 4px; }
+.passage-check-note { flex: 1 1 260px; min-width: 0; }
+.passage-check-toggle {
+  white-space: nowrap;
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: var(--line);
 }
-.passage-check-count:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
-.passage-check-count:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 3px; }
-.passage-check-count::before {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 5px;
-  border-radius: 50%;
-  vertical-align: 1px;
-  background: var(--ink-3);
-}
-.passage-check-count.is-disputed::before { background: var(--dispute); }
-.passage-check-count.is-split::before { background: var(--partial); }
-.passage-check-count.is-holds::before { background: var(--agree); }
+.passage-check-toggle:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
+.pc-claim { cursor: pointer; }
+/* Unpainted by the Highlights setting (by default green and grey): plain
+   text that still opens its card. Under pointer and focus it shows that it
+   is a sentence, in neutral grey: its verdict colour stays the setting's. */
+.cx-claim.pc-claim.is-quiet { --cx-paint: transparent; }
+.cx-claim.pc-claim:not(.is-quiet):is(:hover, :focus-visible) { --cx-paint: var(--cx-mark-strong); }
+.cx-claim.pc-claim.is-quiet:is(:hover, :focus-visible) { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
 @media (prefers-reduced-motion: no-preference) {
-  .passage-check[data-state="running"] .passage-check-head { animation: agent-segment-breathe 1.8s ease-in-out infinite; }
+  .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe 1.8s ease-in-out infinite; }
 }
-@media (max-width: 640px) {
-  .has-passage-check > :is(.thread-ask-text, .thread-history-question-text) { max-width: 88%; }
+@media (pointer: coarse) {
+  .passage-check-fold, .passage-check-toggle { display: inline-flex; align-items: center; min-height: 32px; }
 }

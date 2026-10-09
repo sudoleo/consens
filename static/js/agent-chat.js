@@ -401,8 +401,8 @@
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
-      App.passageCheck?.apply(document.getElementById("threadAsk"), document.getElementById("threadAskText"),
-        basis.question, basis.currentTurn?.agent_review, { live: basis.currentTurn?.status === "pending" });
+      App.passageCheck?.apply(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
+        { live: basis.currentTurn?.status === "pending" });
       App.agentMemory?.render(document.getElementById('agentAnswerBody'), {
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
       });
@@ -413,8 +413,8 @@
     }
     if (!agent || (!context && !basis)) {
       App.agentDelegation?.project(null);
-      // A saved Consensus turn or a new chat: no passage check on this message.
-      App.passageCheck?.apply(document.getElementById("threadAsk"), null, "", null);
+      // A saved Consensus turn or a new chat: no check of a pasted text.
+      App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
     }
     window.updateQuestionInputAccess?.();
     syncPendingReview();
@@ -603,10 +603,9 @@
         { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
           key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });
     }
-    // A pasted text the Agent checks: "Checking ..." under the message while
-    // the models answer, its marks as soon as the check is in.
-    App.passageCheck?.apply(document.getElementById("threadAsk"), document.getElementById("threadAskText"),
-      context.question, state.completedTurn?.agent_review || liveReview, { live: running });
+    // A pasted text the Agent checks: "Checking ..." above the answer while
+    // the models answer, the result card as soon as the check is in.
+    App.passageCheck?.apply(answerBody, state.completedTurn?.agent_review || liveReview, { live: running });
     // Memory changes appear as soon as Agent made them, not only at the end.
     App.agentMemory?.render(answerBody, { key: context.runId, running,
       changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });

@@ -346,6 +346,24 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("points a checked pasted text to its card above the answer, and names a failed text check", async () => {
+    const judge = (id, seq, status, title) => ({ ...agent(seq, status, id), kind: "judge", title,
+      model: { model: `m/${seq}`, label: `Judge ${seq}` }, usage: null });
+    const answer = { ...agent(1, "completed"), kind: "comparison", title: "Comparison 1 · Haiku" };
+    const judges = [judge("b".repeat(32), 2, "completed", "Text check"), judge("e".repeat(32), 3, "completed", "Differences judge"),
+      judge("f".repeat(32), 4, "completed", "Coverage judge")];
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer, ...judges], status: "succeeded" }) }));
+    for (const item of [answer, ...judges]) receive(w, item);
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    const check = [...d.querySelectorAll(".agent-session")][1];
+    check.open = true; check.dispatchEvent(new w.Event("toggle"));
+    expect(check.querySelector(".agent-judge-note").textContent).toBe("The check of your text is shown above the answer, the rest under Review.");
+    receive(w, judge("b".repeat(32), 5, "failed", "Text check"));
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    expect(d.querySelector(".agent-judge-note").textContent).toBe("The text check could not run. The answer is shown without it.");
+    dom.window.close();
+  });
+
   it("folds judge attempts, retries and backups into one quiet Answer check row", async () => {
     const judge = (id, seq, status, title, extra = {}) => ({ ...agent(seq, status, id), kind: "judge", title,
       model: { model: `m/${seq}`, label: `Judge ${seq}` }, usage: null, ...extra });
