@@ -111,7 +111,7 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         expect(ask.locator(".pc-claim")).to_have_count(0)
         expect(ask.locator(".passage-check")).to_have_count(0)
         assert ask.locator("#threadAskText").evaluate("el => getComputedStyle(el).whiteSpace") == "pre-wrap"
-        expect(ask.locator("#threadAskMore")).to_have_text("Show full message")
+        expect(ask.locator("#threadAskMore")).to_have_text("Show more")
 
         # The result is one card right above the answer.
         card = page.locator("#agentAnswer > .passage-check")

@@ -1281,9 +1281,9 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
             ).textAlign,
             answerLeft: previous.getBoundingClientRect().left,
             answerRight: previous.getBoundingClientRect().right,
-            currentTextBox: document.getElementById('threadAskText')
+            currentTextBox: document.querySelector('#threadAsk .thread-ask-bubble')
               .getBoundingClientRect(),
-            archivedTextBox: document.querySelector('.thread-history-question-text')
+            archivedTextBox: document.querySelector('.thread-history-question .thread-ask-bubble')
               .getBoundingClientRect(),
           };
         }"""

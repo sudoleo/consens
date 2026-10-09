@@ -2189,7 +2189,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   „Quoted from …"-Satzes. Seit 2026-10-09 behält die Blase außerdem die Absätze
   (`App.normalizeQuestionText` ebnet nur Leerzeichen und Leerzeilen-Folgen ein,
   `white-space: pre-wrap`); mehrere Absätze werden `.thread-ask-paragraph`-
-  Blöcke, damit eine Leerzeile keine der drei eingeklappten Zeilen belegt.
+  Blöcke, damit eine Leerzeile keine der eingeklappten Zeilen belegt.
+  Eingeklappt wird großzügig: `App.observeQuestionFold(wrap, text)` (aktiver
+  Kopf, schwebende Nachricht und jede archivierte Frage) setzt `is-long` erst,
+  wenn mindestens drei Zeilen über acht hinaus verschwänden; dann clampt CSS
+  auf 8 Zeilen, und „Show more ⌄" steht unten links in der Blase
+  (`.thread-ask-bubble` = Fläche um Text und Link, Anhänge darunter).
   `dataset.question` bleibt der volle normalisierte Text (Identität der Nachricht). `query-send.js`
   hält Entwurf und Zitat getrennt in `sentMessage.{draft,quote}`, damit ein
   geplatzter Lauf beides unverändert zurückgibt. Das Menü zeigt „Ask about this"
@@ -3646,7 +3651,8 @@ Antwort-Prompt).
   `apply` aus der Beobachterliste. Aufgerufen aus `agent-chat.js`
   (live, gespeichert, und leerend für Consensus/neuen Chat), `run-view.js`
   (leerend) und `consensus-run.js::appendHistoryTurn`. Der Aufklapp-Link der
-  Nachricht heißt seither „Show full message"/„Collapse message".
+  Nachricht heißt seit 2026-10-09 „Show more"/„Show less" und steht in der
+  Blase (`.thread-ask-bubble`).
 - **Länge:** Im Agent-Modus prüft `validateInputText` die Zeichengrenze des
   Servers (`consensus_max_question_chars`, 8.000; Codepoints nach NFKC wie
   `normalize_question`) statt der Wortgrenze; der doppelte Klick-Validator in

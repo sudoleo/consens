@@ -106,11 +106,6 @@
     row.hidden = true;
   }
 
-  // Beide Fragen-Koepfe im Thread teilen sich Optik und Aufklapp-Logik: der
-  // aktive (#threadAsk) und der der gerade abgeschickten, noch nicht
-  // uebernommenen Nachricht (#threadPendingAsk). Leerer Text versteckt den
-  // Block wieder. Lange Fragen clampen per CSS auf drei Zeilen; is-long
-  // schaltet den Aufklapp-Link frei, is-open hebt den Clamp auf.
   // Absaetze der Nachricht bleiben stehen (die Blase setzt pre-wrap); nur
   // Leerzeichenfolgen und mehr als eine Leerzeile werden eingeebnet.
   function normalizeQuestionText(question) {
@@ -126,7 +121,7 @@
   // in der Blase aber Kontext: es steht als abgesetzter Block unter der
   // getippten Frage statt als "Quoted from the previous answer: ..."-Satz.
   // Absaetze werden eigene Bloecke mit Abstand statt einer Leerzeile: die
-  // eingeklappte Blase zeigt drei Zeilen, und eine Leerzeile waere eine davon.
+  // eingeklappte Blase zeigt nur acht Zeilen, und eine Leerzeile waere eine davon.
   function fillQuestionText(element, normalized) {
     const parts = window.App.quote?.split?.(normalized) || { typed: normalized, quote: "" };
     const paragraphs = parts.typed.split(/\n\n+/).filter(Boolean);
@@ -148,6 +143,11 @@
     element.append(quote);
   }
 
+  // Beide Fragen-Koepfe im Thread teilen sich Optik und Aufklapp-Logik: der
+  // aktive (#threadAsk) und der der gerade abgeschickten, noch nicht
+  // uebernommenen Nachricht (#threadPendingAsk). Leerer Text versteckt den
+  // Block wieder. Lange Nachrichten klappen per CSS ein, sobald
+  // syncQuestionFold is-long setzt; is-open hebt den Clamp auf.
   function renderThreadQuestion(wrap, text, question) {
     if (!wrap || !text) return "";
 
@@ -156,12 +156,12 @@
     // Die Multi-Run-Projektion schreibt den sichtbaren Context waehrend des
     // Streamings regelmaessig neu ins DOM. Eine identische Frage ist dabei
     // kein neuer Turn: ihren lokalen Disclosure-State zurueckzusetzen liess
-    // "Show full message" unter dem Mauszeiger flackern und klappte einen
+    // "Show more" unter dem Mauszeiger flackern und klappte einen
     // erfolgreichen Klick beim naechsten Stream-Update sofort wieder zu.
     // Nur neuer Inhalt initialisiert Clamp und Link deshalb von vorn.
     if (unchanged) {
       wrap.hidden = !normalized;
-      if (normalized) observeThreadAskWidth(wrap, text);
+      if (normalized) observeQuestionFold(wrap, text);
       return normalized;
     }
 
@@ -171,13 +171,12 @@
     wrap.classList.remove("is-open", "is-long");
     const more = wrap.querySelector(".thread-ask-more");
     if (more) {
-      more.textContent = "Show full message";
+      more.textContent = "Show more";
       more.setAttribute("aria-expanded", "false");
     }
     if (!normalized) return "";
 
-    requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
-    observeThreadAskWidth(wrap, text);
+    observeQuestionFold(wrap, text);
     return normalized;
   }
 
@@ -250,42 +249,46 @@
     window.App.chatScroll?.sent();
   }
 
-  // Ob eine Frage laenger als drei Zeilen ist, haengt an der Breite des
-  // Blocks - und die steht im ersten Frame noch nicht fest: Der Ausstieg aus
-  // dem Hero animiert den Container, und die Sidebar aendert ihn spaeter noch
-  // einmal. Wurde nur einmal gemessen, blieb "Show full message" bei einer
-  // langen Frage aus und die vierte Zeile verschwand lautlos - beim
-  // gefuehrten Lauf ausgerechnet das Ende der Frage. Deshalb misst ein
-  // ResizeObserver nach jeder Groessenaenderung nach — einer je Fragen-Kopf
-  // (der aktive und der der gerade abgeschickten Nachricht), sonst zoege der
-  // zweite Kopf am Beobachter des ersten vorbei.
+  // Eingeklappt wird grosszuegig: erst wenn mindestens drei Zeilen ueber acht
+  // hinaus verschwinden wuerden. Eine Frage mit ein paar Absaetzen bleibt
+  // ganz stehen, und "Show more" verbirgt nie nur eine einzelne Zeile.
+  const FOLD_LINES = 8;
+  const FOLD_MIN_HIDDEN_LINES = 3;
+
+  // Ob eine Nachricht so lang ist, haengt an der Breite der Blase - und die
+  // steht im ersten Frame noch nicht fest: Der Ausstieg aus dem Hero animiert
+  // den Container, und die Sidebar aendert ihn spaeter noch einmal. Wurde nur
+  // einmal gemessen, blieb der Link bei einer langen Frage aus und das Ende
+  // verschwand lautlos. Deshalb misst ein ResizeObserver nach jeder
+  // Groessenaenderung nach — einer je Fragen-Text (aktiver Kopf, schwebende
+  // Nachricht, jede archivierte Frage).
   const threadAskResizeObservers = new WeakMap();
 
-  function syncThreadAskClamp(wrap, text) {
-    // Aufgeklappt gibt es nichts zu messen: dort ist scrollHeight gleich
-    // clientHeight, und die Marke wuerde sich selbst zuruecknehmen.
+  function syncQuestionFold(wrap, text) {
+    // Aufgeklappt gibt es nichts zu messen: die Marke bleibt, der Link auch.
     if (wrap.hidden || wrap.classList.contains("is-open")) return;
-    const clamped = text.clientHeight;
-    // scrollHeight allein reicht nicht: An einem geklammerten Block meldet er
-    // je nach Zeitpunkt die geklammerte statt der vollen Hoehe - mal 4 Zeilen,
-    // mal 3. Deshalb wird der Clamp fuer die Messung kurz aufgehoben. Das
-    // passiert innerhalb eines Frames, es wird also nichts davon gezeichnet.
+    // Der Clamp wird fuer die Messung kurz aufgehoben (innerhalb eines
+    // Frames, es wird also nichts davon gezeichnet): an einem geklammerten
+    // Block meldet scrollHeight je nach Zeitpunkt die geklammerte Hoehe.
     const previous = text.style.webkitLineClamp;
     text.style.webkitLineClamp = "unset";
     const full = text.scrollHeight;
     text.style.webkitLineClamp = previous;
-    wrap.classList.toggle("is-long", full > clamped + 2);
+    const line = parseFloat(getComputedStyle(text).lineHeight) || 24;
+    wrap.classList.toggle("is-long", full > line * (FOLD_LINES + FOLD_MIN_HIDDEN_LINES) + 2);
   }
 
-  function observeThreadAskWidth(wrap, text) {
+  function observeQuestionFold(wrap, text) {
+    if (!wrap || !text) return;
+    syncQuestionFold(wrap, text);
     if (typeof ResizeObserver !== "function" || threadAskResizeObservers.has(text)) return;
-    const observer = new ResizeObserver(() => syncThreadAskClamp(wrap, text));
+    const observer = new ResizeObserver(() => syncQuestionFold(wrap, text));
     observer.observe(text);
     threadAskResizeObservers.set(text, observer);
   }
 
   // Dieselbe Geste fuer die aktive Frage (#threadAskMore) und fuer jede
-  // archivierte im Verlauf: der Link gehoert immer zu der Frage, unter der er
+  // archivierte im Verlauf: der Link gehoert immer zu der Blase, in der er
   // steht, deshalb wird der Umschalter aus dem geklickten Knopf abgeleitet.
   document.addEventListener("click", (event) => {
     const more = event.target.closest(".thread-ask-more");
@@ -293,11 +296,10 @@
     const wrap = more.closest(".thread-ask, .thread-history-question");
     if (!wrap) return;
     const open = wrap.classList.toggle("is-open");
-    // "message", not "question": a pasted text in it is no question.
-    more.textContent = open ? "Collapse message" : "Show full message";
+    more.textContent = open ? "Show less" : "Show more";
     more.setAttribute("aria-expanded", String(open));
     // A folded box starts at its first line, even after focus scrolled it.
-    const text = wrap.querySelector(":scope > .thread-ask-text, :scope > .thread-history-question-text");
+    const text = wrap.querySelector(".thread-ask-text, .thread-history-question-text");
     if (text && !open) text.scrollTop = 0;
   });
 
@@ -518,6 +520,7 @@
     setThreadQuestion,
     normalizeQuestionText,
     fillQuestionText,
+    observeQuestionFold,
     setThreadQuestionAttachments,
     setPendingThreadQuestion,
     clearPendingThreadQuestion,

@@ -299,7 +299,7 @@ def test_a_run_that_never_happens_gives_the_message_back():
 
 
 def test_archived_questions_clamp_like_the_active_one():
-    """Eine lange Frage bleibt auch im Verlauf auf drei Zeilen eingeklappt.
+    """Eine lange Frage bleibt auch im Verlauf eingeklappt (acht Zeilen).
     Ohne Clamp hat ab dem zweiten Turn jede lange Frage den Thread wieder
     aufgerissen — es sah aus, als schalte sich das Einklappen im Lauf eines
     Chats ab (User-Befund 2026-08-14)."""
@@ -307,16 +307,17 @@ def test_archived_questions_clamp_like_the_active_one():
     run = read("static/js/consensus-run.js")
     core = read("static/js/app-core.js")
 
-    clamp_block = css.split(".thread-history-question-text {", 1)[1].split("}", 1)[0]
-    assert "-webkit-line-clamp: 3" in clamp_block
-    assert ".thread-history-question.is-open .thread-history-question-text" in css
+    clamp_block = css.split(
+        ".thread-history-question.is-long:not(.is-open) .thread-history-question-text {", 1
+    )[1].split("}", 1)[0]
+    assert "-webkit-line-clamp: 8" in clamp_block
     assert ".thread-history-question.is-long .thread-ask-more" in css
 
     history_block = run.split("appendHistoryTurn(", 1)[1].split(
         "archiveCurrentExchange()", 1
     )[0]
     assert 'questionMore.className = "thread-ask-more"' in history_block
-    assert 'question.classList.toggle(\n          "is-long",' in history_block
+    assert "window.App.observeQuestionFold?.(question, questionText);" in history_block
 
     # Ein Klick auf den Link gehoert zu der Frage, unter der er steht — nicht
     # fest zum aktiven Kopf.

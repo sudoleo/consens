@@ -2829,8 +2829,8 @@ body:not(.is-hero) .consensus-section::before {
    (User-Vorgabe 2026-08-14): wer spricht, sagt die Position, nicht der Grad.
    Der Block sitzt rechts (die Antwort links), der Text darin bleibt aber
    linksbuendig — rechtsbuendiger Flattersatz ueber mehrere Zeilen liest sich
-   schlecht. Long questions clamp to three lines and the link below unfolds
-   them. */
+   schlecht. Long messages fold to eight lines; "Show more" in the bubble
+   unfolds them. */
 .thread-ask {
   display: flex;
   flex-direction: column;
@@ -2843,28 +2843,29 @@ body:not(.is-hero) .consensus-section::before {
   display: none;
 }
 
-.thread-ask-text {
-  /* Der Block bleibt am rechten Rand und hoert vor dem linken auf, damit er
-     als Zug des Nutzers liest und nicht als erste Zeile der Antwort. Gesetzt
-     wird er trotzdem linksbuendig (siehe .thread-ask). Die Nachricht selbst
-     steht seit 2026-08-14 auf einer eigenen, eine Stufe abgesetzten Flaeche
-     (`--chat-surface`, warmgrau bzw. im Dark Mode deutlich angehoben) — die
-     Blase ist die Sprecherkennzeichnung, nicht eine Farbe. */
+/* Die Blase ist ein eigener Kasten um Text UND Aufklapp-Link (wie bei
+   ChatGPT steht "Show more" in der Blase, nicht darunter). Sie bleibt am
+   rechten Rand und hoert vor dem linken auf, damit sie als Zug des Nutzers
+   liest und nicht als erste Zeile der Antwort; gesetzt wird linksbuendig
+   (siehe .thread-ask). Die eigene, eine Stufe abgesetzte Flaeche
+   (`--chat-surface`) ist die Sprecherkennzeichnung, nicht eine Farbe. */
+.thread-ask-bubble {
   box-sizing: border-box;
   max-width: 70%;
   margin-left: auto;
-  /* Die Innenluft der Blase ist ein durchsichtiger Rahmen, KEIN Padding:
-     `overflow: hidden` schneidet erst an der Aussenkante des Paddings ab, die
-     vierte Zeile einer eingeklappten Frage waere dort also als angeschnittener
-     Streifen sichtbar geblieben. Der Rahmen liegt ausserhalb dieser Kante,
-     der Hintergrund reicht (background-clip: border-box) trotzdem bis unter
-     ihn. */
-  padding: 0;
-  border-style: solid;
-  border-color: transparent;
-  border-width: 11px 15px;
+  padding: 11px 15px;
   border-radius: var(--radius-lg);
   background: var(--chat-surface);
+}
+
+/* Der Text selbst traegt kein Padding: `overflow: hidden` schneidet dann
+   genau an der letzten sichtbaren Zeile ab, statt einen Streifen der
+   naechsten im Innenrand stehen zu lassen. Eingeklappt wird erst, wenn
+   mindestens drei Zeilen ueber acht hinaus verschwinden wuerden
+   (app-core.js syncQuestionFold setzt dann is-long) — eine normale Frage mit
+   ein paar Absaetzen bleibt ganz stehen. */
+.thread-ask-text,
+.thread-history-question-text {
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   line-height: var(--line-height-reading);
@@ -2872,16 +2873,15 @@ body:not(.is-hero) .consensus-section::before {
   color: var(--ink);
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
   overflow-wrap: anywhere;
   /* Absaetze der Nachricht bleiben stehen: wer Zeilen umbricht, meint das. */
   white-space: pre-wrap;
 }
 
-.thread-ask.is-open .thread-ask-text {
-  -webkit-line-clamp: unset;
-  overflow: visible;
+.thread-ask.is-long:not(.is-open) .thread-ask-text,
+.thread-history-question.is-long:not(.is-open) .thread-history-question-text {
+  -webkit-line-clamp: 8;
+  overflow: hidden;
 }
 
 /* ---- Anhaenge an der Nachricht -------------------------------------------
@@ -2979,14 +2979,39 @@ body:not(.is-hero) .consensus-section::before {
   text-decoration-color: var(--line);
 }
 
-.thread-ask.is-long .thread-ask-more,
-.thread-history-question.is-long .thread-ask-more {
-  display: inline-block;
-}
-
 .thread-ask-more:hover {
   color: var(--ink);
   text-decoration-color: var(--ink-3);
+}
+
+/* In der Blase: "Show more" mit Winkel, ohne Unterstrich. */
+.thread-ask-bubble .thread-ask-more {
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+
+.thread-ask-bubble .thread-ask-more::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.thread-ask.is-open .thread-ask-more::after,
+.thread-history-question.is-open .thread-ask-more::after {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+
+.thread-ask.is-long .thread-ask-more,
+.thread-history-question.is-long .thread-ask-more {
+  display: inline-flex;
 }
 
 /* ---- Abgeschlossene Follow-up-Turns --------------------------------------
@@ -3011,39 +3036,6 @@ body:not(.is-hero) .consensus-section::before {
   align-items: flex-end;
   margin: 10px 6px 0;
   text-align: left;
-}
-
-/* Eine archivierte Frage klappt genauso ein wie die aktive (.thread-ask-text).
-   Ohne den Clamp hat ab dem zweiten Turn jede lange Frage den Thread wieder
-   auseinandergeschoben — es sah aus, als schalte sich das Einklappen im Lauf
-   eines Chats ab. */
-.thread-history-question-text {
-  box-sizing: border-box;
-  max-width: 70%;
-  margin-left: auto;
-  /* Durchsichtiger Rahmen statt Padding — Begruendung siehe .thread-ask-text. */
-  padding: 0;
-  border-style: solid;
-  border-color: transparent;
-  border-width: 11px 15px;
-  border-radius: var(--radius-lg);
-  background: var(--chat-surface);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-reading);
-  letter-spacing: var(--tracking-tight);
-  color: var(--ink);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.thread-history-question.is-open .thread-history-question-text {
-  -webkit-line-clamp: unset;
-  overflow: visible;
 }
 
 /* Absaetze und ein "Ask about this"-Zitat in der gesendeten Nachricht

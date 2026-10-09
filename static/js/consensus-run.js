@@ -299,7 +299,11 @@
       if (window.App.fillQuestionText) window.App.fillQuestionText(questionText, normalizedQuestion);
       else questionText.textContent = normalizedQuestion;
       questionText.dataset.question = normalizedQuestion;
-      question.append(questionText);
+      // Text und "Show more" teilen sich die Blase (wie der aktive Kopf).
+      const questionBubble = document.createElement("div");
+      questionBubble.className = "thread-ask-bubble";
+      questionBubble.append(questionText);
+      question.append(questionBubble);
 
       // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
       // Verlauf rutscht.
@@ -314,14 +318,15 @@
         if (rendered) question.appendChild(attachmentRow);
       }
 
-      // Eine archivierte Frage klappt wie die aktive auf drei Zeilen ein
+      // Eine archivierte Frage klappt wie die aktive ein
       // (#threadAskMore in app-core.js schaltet beide). Ohne das hat ab dem
       // zweiten Turn jede lange Frage den Thread wieder aufgerissen.
       const questionMore = document.createElement("button");
       questionMore.type = "button";
       questionMore.className = "thread-ask-more";
-      questionMore.textContent = "Show full message";
-      question.appendChild(questionMore);
+      questionMore.textContent = "Show more";
+      questionMore.setAttribute("aria-expanded", "false");
+      questionBubble.appendChild(questionMore);
 
       const answer = document.createElement("div");
       answer.className = "thread-history-answer";
@@ -573,12 +578,7 @@
       }
       // Erst im DOM laesst sich messen, ob der Clamp ueberhaupt greift; nur
       // dann bekommt der Turn seinen Aufklapp-Link.
-      requestAnimationFrame(() => {
-        question.classList.toggle(
-          "is-long",
-          questionText.scrollHeight > questionText.clientHeight + 2
-        );
-      });
+      window.App.observeQuestionFold?.(question, questionText);
       return true;
     },
 
