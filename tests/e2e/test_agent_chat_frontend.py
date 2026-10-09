@@ -409,6 +409,7 @@ def test_buffering_proxy_shows_polled_progress_before_the_answer(browser, phase4
     """
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     errors, held, polls = [], [], []
+    available = [2]  # frames the run has produced so far
     page.on("pageerror", lambda error: errors.append(str(error)))
     chat_id, turn_id = "a" * 32, "1".rjust(32, "0")
     text = "Partial answer arrives in full."
@@ -427,9 +428,10 @@ def test_buffering_proxy_shows_polled_progress_before_the_answer(browser, phase4
         def live(route):
             polls.append(route.request.url)
             after = int(re.search(r"after=(\d+)", route.request.url).group(1))
-            # The run is still going: the first three frames exist so far.
-            sent = [{"seq": seq, "type": kind, "data": data} for seq, (kind, data) in enumerate(events[:3], start=1) if seq > after]
-            _json(route, {"events": sent, "last_seq": max(after, 3), "done": False, "known": True, "more": False})
+            # The run is still going: only the first frames exist so far.
+            count = available[0]
+            sent = [{"seq": seq, "type": kind, "data": data} for seq, (kind, data) in enumerate(events[:count], start=1) if seq > after]
+            _json(route, {"events": sent, "last_seq": max(after, count), "done": False, "known": True, "more": False})
         page.route("**/agent/chats/*/live*", live)
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
@@ -440,8 +442,12 @@ def test_buffering_proxy_shows_polled_progress_before_the_answer(browser, phase4
         page.locator("#sendButton").click()
 
         # Nothing arrives over the stream, yet the progress shows up.
-        expect(page.locator("#agentAnswerActivity .agent-progress")).to_contain_text(reasoning["text"], timeout=15000)
+        progress = page.locator("#agentAnswerActivity .agent-progress")
+        expect(progress).to_contain_text(reasoning["text"], timeout=15000)
+        # The answer starts: like over the stream, the progress lines give way.
+        available[0] = 3
         expect(page.locator("#agentAnswerBody")).to_contain_text("Partial answer")
+        expect(progress).to_be_hidden()
         assert page.evaluate("() => App.runRegistry.visible().status") == "running"
         request = held[0].request.post_data_json
         assert f"request_id={request['client_request_id']}" in polls[0] and polls[0].endswith("after=0")
