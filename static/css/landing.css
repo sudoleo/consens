@@ -60,7 +60,6 @@ img { display: block; max-width: 100%; }
   --lp-field-line: rgba(34, 36, 40, 0.11);
   --lp-field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
   --lp-field-lift-hover: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
-  --lp-field-chip: rgba(34, 36, 40, 0.055);
 }
 
 .dark-mode {
@@ -68,7 +67,6 @@ img { display: block; max-width: 100%; }
   --lp-field-line: rgba(255, 255, 255, 0.11);
   --lp-field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
   --lp-field-lift-hover: 0 2px 5px rgba(0, 0, 0, 0.36), 0 22px 44px -20px rgba(0, 0, 0, 0.6);
-  --lp-field-chip: rgba(255, 255, 255, 0.075);
 }
 
 /* --------------------------------------------------------------------------
@@ -913,11 +911,10 @@ img { display: block; max-width: 100%; }
   line-height: 20px;
   white-space: nowrap;
   box-shadow: none;
-  transition: background-color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
 }
 
 .lp-run-chip { margin-left: auto; }
-.lp-run-chip-count { margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.lp-run-chip-count { margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums; transition: color var(--dur-state) var(--ease-standard); }
 
 .lp-run-chip i {
   width: 5px;
@@ -927,12 +924,12 @@ img { display: block; max-width: 100%; }
   border-bottom: 1.5px solid currentColor;
   transform: rotate(45deg);
   opacity: 0.65;
+  transition: opacity var(--dur-state) var(--ease-standard);
 }
 
-.lp-run-chip.is-lit {
-  background: var(--lp-field-chip);
-  box-shadow: 0 0 0 1px var(--line);
-}
+/* Its step lights the text, never a frame: the picker in /app has none. */
+.lp-run-chip.is-lit .lp-run-chip-count { color: var(--ink); }
+.lp-run-chip.is-lit i { opacity: 1; }
 
 .lp-send {
   display: inline-flex;
