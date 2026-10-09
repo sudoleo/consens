@@ -3209,6 +3209,14 @@ Scrollbalken nebeneinander): sie fließen in der Liste, der Kopf einer offenen
 Zeile klebt (`position: sticky`) oben, und ein vom Nutzer geöffneter Eintrag
 (Fokus auf dem `summary`, also Klick, Taste oder Modell-Icon) wird per
 `reveal()` in Sicht gescrollt — höher als die Liste: Anfang oben.
+Seit 2026-10-09 öffnet ein Klick auf eine Vergleichsmodell-Zeile stattdessen
+den Answer-Reader auf genau dieser Antwort, „Answer check“ dort die
+Differences (`openInReader` in `agent-delegation.js`; Kontext über
+`comparison_id` der Sitzung und `App.agentReview.contextFor`). Die Agent-Leiste
+schließt dabei wie bei jedem Reader-Öffnen. Gibt es noch keinen Reader-Kontext
+(Lauf läuft, Worker-Zeile), klappt die Zeile wie bisher auf. `agent-review.js`
+behält dafür die Kontexte der letzten 64 Vergleiche (`contextsByKey`) statt nur
+die der zuletzt gerenderten Antwort.
 Die Inline-Icons behalten ihre DOM-Knoten pro API-Modell: Statuswechsel,
 Tokenupdates und zusätzliche Aufrufe desselben Modells aktualisieren nur ihre
 Metadaten und das Ziel der Detailansicht. Neu hinzukommende Icons blenden sich

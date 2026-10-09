@@ -190,7 +190,9 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
     activity = [{"version": 1, "id": "search", "kind": "tool", "name": "web_search", "status": "succeeded",
                  "sources": [{"url": "https://example.org/pricing", "title": "Plan details"}]}]
     agents = [{"id": f"{i + 10:032x}", "seq": i + 1, "status": "completed", "kind": "comparison", "title": a["model"]["label"], "model": a["model"], "duration_ms": 3100,
-               "progress_text": "Checking seat limits and monthly billing.", "progress_kind": "excerpt"} for i, a in enumerate(answers)]
+               "comparison_id": "c1", "progress_text": "Checking seat limits and monthly billing.", "progress_kind": "excerpt"} for i, a in enumerate(answers)]
+    agents.append({"id": f"{30:032x}", "seq": 7, "status": "completed", "kind": "judge", "title": "Differences judge",
+                   "model": answers[0]["model"], "duration_ms": 2100})
     review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
         "versions": [{"id": 1, "text": text, "hash": digest, "status": "succeeded"}],
         "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Which plan suits a team of five?", "reason": "Compare cost and flexibility",
@@ -317,6 +319,21 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert any('kimi.svg' in src for src in icons)
         assert any('zai.svg' in src for src in icons)
         assert any('meta.svg' in src for src in icons)
+        # A model's row in the agent panel opens its answer in the reader;
+        # the answer check opens the differences.
+        if not page.locator('#agentSidebar').is_visible():
+            page.locator('#agentAnswer .agent-sidebar-toggle').click()
+        page.locator('.agent-session', has_text='Kimi K2.6').locator('summary').click()
+        expect(page.locator('#modelAnswerReader')).to_be_visible()
+        expect(page.locator('#agentSidebar')).not_to_be_visible()
+        expect(page.locator('#answerReaderModel')).to_have_value('Kimi')
+        expect(page.locator('#answerReaderColumns')).to_contain_text('Recommendation')
+        page.keyboard.press('Escape')
+        expect(page.locator('#modelAnswerReader')).not_to_be_visible()
+        page.locator('#agentAnswer .agent-sidebar-toggle').click()
+        page.locator('.agent-session', has_text='Answer check').locator('summary').click()
+        expect(page.locator('#answerReaderInspector')).to_contain_text('Whether the smaller plan includes five seats')
+        page.keyboard.press('Escape')
         if page.locator('#agentSidebar').is_visible():
             page.locator('.agent-sidebar-close').click()
         page.mouse.move(0, 0)

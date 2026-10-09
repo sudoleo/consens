@@ -368,6 +368,24 @@
     prefs(current); render();
     (sidebar._rows.get(agentId)?.summary || sidebar.querySelector(".agent-sidebar-close")).focus({ preventScroll: true });
   }
+  // A comparison model's answer is read where answers are read: in the
+  // reader, on that model; the answer check opens its differences there.
+  // Without a readable answer yet (still running, a delegated worker) the
+  // row opens its detail here as before.
+  function openInReader(view, agent) {
+    const comparisonId = agent?.kind === "check"
+      ? [...view.agents.values()].findLast(item => item.kind === "comparison" && item.comparison_id)?.comparison_id
+      : agent?.kind === "comparison" ? agent.comparison_id : null;
+    const context = comparisonId && App.agentReview?.contextFor?.(null, comparisonId);
+    if (!context) return false;
+    const trigger = inline?.querySelector(".agent-sidebar-toggle");
+    if (agent.kind === "check") {
+      return Boolean(context.check) && App.answerReader?.openContext(context, { section: "differences", trigger }) !== false;
+    }
+    const answer = context.answers?.find(item => (agent.model?.model && item.model === agent.model.model)
+      || (agent.model?.label && item.label === agent.model.label));
+    return Boolean(answer) && App.answerReader?.openContext(context, { model: answer.provider, trigger }) !== false;
+  }
   function renderDetail(row, view, agent) {
     if (agent.kind === 'check') {
       const signature = JSON.stringify([agent.status, agent.usage, agent.progress_text, agent.missing]);
@@ -589,6 +607,9 @@
         const body = node("div", "agent-session-detail");
         info.append(heading, meta); summary.append(mark(agent), info); root.append(summary, body);
         summary.setAttribute('aria-describedby', state.id);
+        summary.addEventListener("click", event => {
+          if (current === view && openInReader(view, findRow(view, agent.id))) event.preventDefault();
+        });
         root.addEventListener("toggle", () => {
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
           if (root.open) {

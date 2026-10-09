@@ -557,8 +557,10 @@
       return context;
     });
     host._contexts = contexts;
-    contextsByKey.clear();
-    for (const context of contexts) contextsByKey.set(context.key, context);
+    // Keys are comparison ids, so earlier turns stay findable (the agent
+    // panel opens a model's answer from any turn); the oldest drop out.
+    for (const context of contexts) { contextsByKey.delete(context.key); contextsByKey.set(context.key, context); }
+    while (contextsByKey.size > 64) contextsByKey.delete(contextsByKey.keys().next().value);
     activityContexts.set(review, contexts);
     let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts[0];
     function select(context) {
