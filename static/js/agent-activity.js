@@ -50,8 +50,9 @@
     const count = Number.isInteger(item.count) && item.count > 0 ? item.count : 0;
     return count ? `Searched the web · ${count} ${count === 1 ? 'search' : 'searches'}` : 'Searched the web';
   }
-  // A turn whose only check was that of a pasted text: the answer judges and
-  // the source check of their contradictions did not run (agent_comparison.py).
+  // A turn whose only check was that of a pasted text (saved on 2026-10-09
+  // before the answer of such a turn was judged too): the answer judges and
+  // the source check of their contradictions did not run.
   const textOnlySteps = { judge_answer: 'Checked your text', check_contradictions: 'Skipped the source check: your text was checked instead' };
   function textOnlyReview(review) {
     const checks = Array.isArray(review?.checks) ? review.checks : [];

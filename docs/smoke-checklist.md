@@ -78,17 +78,19 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       paste an AI answer to check“). Eine ChatGPT-Antwort mit einem bekannten
       Fehler einfügen, „Stimmt das?“ davor → die eigene Nachricht bleibt, wie
       sie abgeschickt wurde (kein Umbau, keine Marken). Über der Antwort zuerst
-      „YOUR TEXT · Checking …“, dann die Zähler (Farbe nur auf den Zahlen) und
-      auf einer Schiene nur die widersprochenen/geteilten Sätze, jeder mit
+      „Checking your text …“, dann EIN Ergebnissatz („4 of 28 statements in
+      your text are contradicted“, Farbe nur auf der Zahl, kein Versalien-
+      Etikett), Satzstreifen und Legende mit Farbpunkten, auf einer Schiene nur
+      die widersprochenen/geteilten Sätze, jeder mit
       „N of M models disagree – Modell: „…““ darunter (gut lesbar, nicht grau),
-      keine grauen Zeilen dazwischen; darunter eine Zeile „N other sentences:
-      … Show full text“; „Show full text“ zeigt alle Sätze
+      keine grauen Zeilen dazwischen; „Show full text“ zeigt alle Sätze
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
       nur grau, nie grün). Ein Zähler/Satz öffnet die Karte, „View answer“ die
-      Modellantwort. Die Antwort nennt den Fehler und trägt selbst keine Marken
-      und keinen Score. Aktivität: Vergleichsfrage enthält den Text nicht; im
-      Agent-Panel genau eine Prüfzeile „Text check“, kein zweiter Antwort-Check
-      nach dem Schreiben.
+      Modellantwort. Die Antwort nennt den Fehler und wird wie jede Antwort
+      geprüft (Marken, Score); ein Satz wie „Dein Text sagt X, das stimmt
+      nicht“ trägt keine rote Marke für X. Aktivität: Vergleichsfrage enthält
+      den Text nicht; im Agent-Panel eine Zeile „Answer check“ (vor dem
+      Schreiben „Text check“).
       Gegenprobe „Fasse diesen Text zusammen: …“ → keine Karte.
       Automatisiert: `test_agent_passage_check.py`, `passage-check.test.mjs`,
       `test_passage_check_frontend.py`.

@@ -519,27 +519,28 @@ it('stops following a job when its answer leaves the page or shows another revie
   expect(options.isActive()).toBe(false);
   dom.window.close();
 });
-it('leaves the answer of a checked pasted text unmarked and unscored; the card carries the verdict', () => {
+it('marks and scores the answer of a checked pasted text like any answer', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   const review = snapshot();
   review.checks[0].differences_data.agreement = { score: 72, coverage_status: 'sufficient' };
-  review.checks[1].differences_data.agreement = { score: 31, coverage_status: 'sufficient' };
   review.passage_check = { status: 'succeeded', comparison_id: 'c1', text: 'Pasted.', claims: [] };
   w.App.agentReview.render(body, review);
-  // By default the evidence of the comparison that has marks.
-  const focus = body._agentReview.querySelector('.agent-evidence-focus select');
-  expect(focus.value).toBe('agent-evidence:c2');
+  // The answer gives a verdict and the correct information: its own
+  // statements are judged and shown as usual; the card covers the text.
+  expect(body._agentReview.querySelector('.agent-evidence-focus select').value).toBe('agent-evidence:c1');
+  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   expect(body._agentReview.querySelector('.agent-agreement')).not.toBeNull();
-  w.renderStoredConsensusClaims.mockClear();
-  focus.value = 'agent-evidence:c1'; focus.dispatchEvent(new w.Event('change'));
-  // The answer talks ABOUT the pasted text, which the models never saw.
-  expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
-  expect(body._agentReview.querySelector('.agent-agreement')).toBeNull();
-  expect(body.textContent).toBe('Exact answer.');
-  // The evidence of that comparison stays reachable.
-  expect([...body._agentReview.querySelectorAll('.agent-evidence-link')].map(b => b.textContent).join(' ')).toContain('Answers');
-  // An unchanged answer is not redrawn; a redrawn one is drawn again.
+  dom.window.close();
+});
+it('does not redraw an unchanged answer without claims, and draws a redrawn one again', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.comparisons = review.comparisons.slice(0, 1);
+  review.checks = review.checks.slice(0, 1);
+  review.checks[0].differences_data.claims = [];
+  w.App.agentReview.render(body, review);
   const injected = w.injectMarkdown.mock.calls.length;
   review.comparisons[0].reason = 'Another reason';
   w.App.agentReview.render(body, review);
@@ -549,11 +550,6 @@ it('leaves the answer of a checked pasted text unmarked and unscored; the card c
   w.App.agentReview.render(body, review);
   expect(w.injectMarkdown.mock.calls.length).toBe(injected + 1);
   expect(body.textContent).toBe('Exact answer.');
-  // Another comparison of the same turn keeps its marks and its score.
-  const picker = body._agentReview.querySelector('.agent-evidence-focus select');
-  picker.value = 'agent-evidence:c2'; picker.dispatchEvent(new w.Event('change'));
-  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
-  expect(body._agentReview.querySelector('.agent-agreement').dataset.tone).toBe('alert');
   dom.window.close();
 });
 it('marks and scores the answer as usual when the check of the pasted text failed', () => {

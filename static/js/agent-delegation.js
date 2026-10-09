@@ -31,8 +31,9 @@
     // from its first start to its last end (summing only without start times).
     const duration = Math.max(...titles.map(title => span(view, judges.filter(a => a.title === title))));
     // A pasted text was checked: its result is the card above the answer.
-    // Alone and running or done, it is the only check (the answer itself is
-    // not judged then). A failed one is followed by the answer's own checks.
+    // Alone and running or done, the answer's own checks have not started yet
+    // (or never ran: turns saved before they followed it, 2026-10-09). After
+    // a failed one the answer's checks follow as usual.
     const textOnly = titles.length === 1 && titles[0] === "Text check" && (done.size === 1 || busy.length > 0);
     return { id: CHECK_ID, kind: "check", title: textOnly ? "Text check" : "Answer check", status, usage, duration_ms: duration,
       checkedText: titles.includes("Text check"), textOnly,

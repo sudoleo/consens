@@ -100,9 +100,6 @@ describe("result card of a checked pasted text", () => {
     expect(mark.getAttribute("aria-label")).toBe("“You always need underfloor heating for that.” – Show details");
     expect(mark.getAttribute("role")).toBe("button");
     expect(mark.getAttribute("aria-haspopup")).toBe("dialog");
-    // The rest is one line under the rail.
-    expect(card().querySelector(".passage-check-rest").textContent)
-      .toBe("2 other sentences: 1 unconfirmed, 1 holds. Show full text");
     // The verdict line opens the same card as the sentence.
     line.click();
     expect(popover).toHaveBeenCalledTimes(1);
@@ -129,18 +126,24 @@ describe("result card of a checked pasted text", () => {
     expect(card().querySelector(".passage-check-verdict").textContent).toBe("1 of 3 models disagrees");
   });
 
-  it("leads with the counts and names the question it was checked against", () => {
+  it("leads with the result as one sentence, a strip of the sentences and a legend", () => {
     const { window, body, card } = boot();
     window.App.passageCheck.apply(body, review());
     expect(card().dataset.state).toBe("done");
-    expect(card().querySelector(".passage-check-eyebrow").textContent).toBe("Your text");
+    // No uppercase label: the headline is the result, its number in the verdict colour.
+    expect(card().querySelector(".passage-check-eyebrow")).toBeNull();
+    const headline = card().querySelector(".passage-check-headline");
+    expect(headline.textContent).toBe("1 of 3 statements in your text is contradicted");
+    expect(headline.querySelector(".passage-check-figure").className).toBe("passage-check-figure is-disputed");
+    // One segment per sentence in reading order; decoration, the legend says it in words.
+    const strip = card().querySelector(".passage-check-strip");
+    expect(strip.getAttribute("aria-hidden")).toBe("true");
+    expect([...strip.children].map(segment => segment.dataset.verdict)).toEqual(["holds", "disputed", "unconfirmed"]);
     expect([...card().querySelectorAll(".passage-check-count")].map(chip => chip.textContent))
       .toEqual(["1 disputed", "1 unconfirmed", "1 holds"]);
-    // The verdict colour sits on the number only.
     expect([...card().querySelectorAll(".passage-check-num")].map(num => num.textContent)).toEqual(["1", "1", "1"]);
-    // Each count carries its separator, so a wrapped line never starts with a dot.
-    expect([...card().querySelectorAll(".passage-check-unit")].map(unit => unit.textContent))
-      .toEqual(["1 disputed ·", "1 unconfirmed ·", "1 holds"]);
+    // The way to the full text sits at the end of the legend.
+    expect(card().querySelector(".passage-check-legend").lastElementChild.className).toBe("passage-check-toggle");
     // No second full stop after a quoted question mark.
     expect(card().querySelector(".passage-check-note").textContent).toBe(NOTE);
     expect(card().querySelector(".passage-check-toggle").textContent).toBe("Show full text");
@@ -167,12 +170,9 @@ describe("result card of a checked pasted text", () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect([...text.querySelectorAll(".pc-claim")].map(mark => mark.classList.contains("is-quiet")))
       .toEqual([false, false, false]);
-    // Unfolded, every sentence is on the rail: the rest line has nothing to count.
-    expect(card().querySelector(".passage-check-rest-label").textContent).toBe("");
     toggle.click();
     expect(card().querySelector(".passage-check-text")).toBeNull();
     expect(card().querySelectorAll(".passage-check-quote")).toHaveLength(1);
-    expect(card().querySelector(".passage-check-rest-label").textContent).toBe("2 other sentences: 1 unconfirmed, 1 holds. ");
   });
 
   it("opens the claim card for a sentence, a count and the keyboard", () => {
@@ -216,13 +216,13 @@ describe("result card of a checked pasted text", () => {
     const waiting = review({ status: "waiting", claims: undefined, models_compared: undefined });
     window.App.passageCheck.apply(body, waiting, { live: true });
     expect(card().dataset.state).toBe("running");
-    expect(card().querySelector(".passage-check-status").textContent).toBe("Checking against independent answers…");
+    expect(card().querySelector(".passage-check-status").textContent).toBe("Checking your text against independent answers…");
     expect(card().querySelector(".passage-check-note").textContent).toBe(
       "Checking it as an answer to “Do heat pumps make sense in old buildings?” The models answer without seeing your text.");
     expect(card().querySelector(".passage-check-toggle")).toBeNull();
-    expect(card().querySelector(".passage-check-rest")).toBeNull();
+    expect(card().querySelector(".passage-check-legend")).toBeNull();
     window.App.passageCheck.apply(body, review({ status: "running", claims: undefined }), { live: true });
-    expect(card().querySelector(".passage-check-status").textContent).toBe("Checking each sentence…");
+    expect(card().querySelector(".passage-check-status").textContent).toBe("Checking each sentence of your text…");
     window.App.passageCheck.apply(body, review(), { live: true });
     expect(card().dataset.state).toBe("done");
     expect(card().querySelectorAll(".passage-check-quote")).toHaveLength(1);
@@ -230,7 +230,7 @@ describe("result card of a checked pasted text", () => {
     // A run that ended without the check says so.
     window.App.passageCheck.apply(body, waiting, { live: false });
     expect(card().dataset.state).toBe("failed");
-    expect(card().textContent).toBe("Your text" + "The check of your text did not finish.");
+    expect(card().textContent).toBe("The check of your text did not finish.");
   });
 
   it("does not redraw a finished check when the run ends or the saved turn comes back reordered", () => {
@@ -332,22 +332,31 @@ describe("result card of a checked pasted text", () => {
     expect(card().querySelector(".passage-check-quote .pc-claim").textContent).toBe(other);
   });
 
-  it("sums up a text no model disagrees with in one line, and says when nothing could be checked", () => {
+  it("sums up a text no model disagrees with in its headline, and says when nothing could be checked", () => {
     const { window, body, card } = boot();
     window.App.passageCheck.apply(body, review({ claims: [
       claim("Heat pumps work in old buildings below 55 degrees.", { agree: ["Claude", "GPT"] }),
       claim("The state pays up to 70 percent.", { agree: ["Claude"] })] }));
     expect(card().querySelector(".passage-check-quote")).toBeNull();
-    // No empty rail: the line says it all.
+    expect(card().querySelector(".passage-check-headline").textContent).toBe("No model contradicts your text");
+    expect([...card().querySelectorAll(".passage-check-count")].map(chip => chip.textContent))
+      .toEqual(["1 unconfirmed", "1 holds"]);
+    // No empty rail: the headline says it all.
     expect(card().querySelector(".passage-check-body").hidden).toBe(true);
-    expect(card().querySelector(".passage-check-rest").textContent).toBe("2 sentences: 1 unconfirmed, 1 holds. Show full text");
     card().querySelector(".passage-check-toggle").click();
     expect(card().querySelector(".passage-check-body").hidden).toBe(false);
     window.App.passageCheck.apply(body, review({ claims: [
       claim("Heat pumps work in old buildings below 55 degrees.", { agree: ["Claude", "GPT"] }),
       claim("The state pays up to 70 percent.", { agree: ["Claude", "GPT"] })] }));
-    card().querySelector(".passage-check-toggle").click();
-    expect(card().querySelector(".passage-check-rest-label").textContent).toBe("All 2 sentences hold. ");
+    const headline = card().querySelector(".passage-check-headline");
+    expect(headline.textContent).toBe("All 2 statements in your text hold up");
+    expect(headline.querySelector(".passage-check-figure").className).toBe("passage-check-figure is-holds");
+    // A single verdict is the headline already: no legend counts repeat it.
+    expect(card().querySelector(".passage-check-count")).toBeNull();
+    expect(card().querySelector(".passage-check-toggle")).not.toBeNull();
+    window.App.passageCheck.apply(body, review({ text: "The state pays.", claims: [
+      claim("The state pays.", { agree: ["Claude", "GPT"], text: "The state pays." })] }));
+    expect(card().querySelector(".passage-check-headline").textContent).toBe("The statement in your text holds up");
     window.App.passageCheck.apply(body, review({ claims: [] }));
     expect(card().querySelector(".passage-check-status").textContent).toBe("No sentence of your text could be checked against the answers.");
     expect(card().querySelector(".passage-check-body")).toBeNull();
@@ -362,7 +371,8 @@ describe("result card of a checked pasted text", () => {
     window.App.passageCheck.apply(body, review({ text,
       claims: sentences.map(sentence => claim(sentence, { agree: [], dissent: ["A", "B"], text })) }));
     expect(card().querySelectorAll(".passage-check-quote")).toHaveLength(8);
-    expect(card().querySelector(".passage-check-rest-label").textContent).toBe("4 other sentences: 4 disputed. ");
+    // The headline counts all of them; the full text shows the rest.
+    expect(card().querySelector(".passage-check-headline").textContent).toBe("12 of 12 statements in your text are contradicted");
   });
 
   it("does not open the claim card while text is being selected", () => {
@@ -404,7 +414,8 @@ describe("result card of a checked pasted text", () => {
     broken.passage_check.claims.push({ anchor: "x", start: 5, end: 9999, agree: [], dissent: [] });
     broken.passage_check.claims.push({ anchor: "y", start: 2, end: 6, agree: [], dissent: [] });
     window.App.passageCheck.apply(body, broken);
-    expect(card().querySelector(".passage-check-counts").textContent).toBe("1 disputed · 1 unconfirmed · 1 holds");
+    expect([...card().querySelectorAll(".passage-check-count")].map(chip => chip.textContent))
+      .toEqual(["1 disputed", "1 unconfirmed", "1 holds"]);
     expect(document.querySelectorAll(".passage-check")).toHaveLength(1);
   });
 });

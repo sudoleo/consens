@@ -4,8 +4,9 @@
   const App = window.App = window.App || {};
   const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
     partial: "Partly checked", failed: "Check could not run", cancelled: "Check stopped", missing: "Answer not checked" };
-  // An answer check that did not run because its comparison checked a pasted
-  // text (agent_comparison.py, PASSAGE_CHECKED): the card above the answer.
+  // Turns saved between 7303e034 and the full answer check (both 2026-10-09) did not
+  // check the answer of a comparison that checked a pasted text (`skipped`);
+  // since then it is judged like any answer.
   const PASSAGE_CHECKED = "passage_checked";
   const PASSAGE_NOTE = "This comparison checked your text sentence by sentence; the result is shown above the answer.";
   // Short, calm reasons for one model call that ended without a result. The
@@ -455,17 +456,9 @@
       const check = boundCheck(comparison);
       const answers = comparison.answers || [];
       const sources = turnSources;
-      // The comparison that checked a pasted text: its result is the card
-      // above the answer (passage-check.js). The answer's own sentences talk
-      // ABOUT that text, which the models never saw, so marks and a score on
-      // them would only look like a second verdict.
-      // A failed text check leaves the answer's own checks as the evidence
-      // (the server runs them then), so they show as usual.
-      const checksPassage = !!comparison.id && review.passage_check?.comparison_id === comparison.id
-        && ["succeeded", "partial"].includes(review.passage_check?.status);
       const findAnswer = name => answers.find(a => [a.provider, a.provider_label, a.model?.label].some(v => v?.toLowerCase() === name?.toLowerCase()));
       const context = { key: `agent-evidence:${comparison.id}`, question: comparison.question, scopeLabel: "Comparison focus",
-        check, modelCount: answers.length, checksPassage,
+        check, modelCount: answers.length,
         contextLabel: comparison.question.length > 64 ? comparison.question.slice(0, 61) + "…" : comparison.question,
         contextGroup: () => contexts,
         answers: [
@@ -543,11 +536,12 @@
       context.mark = () => {
         // Same text, check, sources and DOM: keep the marked DOM. Rebuilding
         // it on every live update restarted the reveal and hover state.
-        const markSignature = JSON.stringify([raw, context.key, checksPassage ? null : check?.differences_data || null, sources,
+        const markSignature = JSON.stringify([raw, context.key, check?.differences_data || null, sources,
           body._agentRenderSerial || 0]);
-        // Without marks (a checked text), the first node tells whether the
-        // body was redrawn since.
-        const intact = checksPassage ? !!body.firstChild && body._markedFirst === body.firstChild : body.querySelector('.cx-claim');
+        // Without claims to mark, the first node tells whether the body was
+        // redrawn since.
+        const intact = check?.differences_data?.claims?.length ? body.querySelector('.cx-claim')
+          : !!body.firstChild && body._markedFirst === body.firstChild;
         if (body._markSignature === markSignature && intact) {
           // The evidence row was rebuilt: its key-claims list moves along.
           const previous = body._markFallback;
@@ -559,7 +553,7 @@
         body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
         if (typeof raw === "string") window.injectMarkdown?.(body, raw, []);
-        if (check?.differences_data && !checksPassage) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
+        if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
           answerNavigation: navigation,
           focusDifference: differenceIndex => open("differences", { index: differenceIndex, trigger: document.activeElement })
         });
@@ -584,15 +578,13 @@
     for (const context of contexts) { contextsByKey.delete(context.key); contextsByKey.set(context.key, context); }
     while (contextsByKey.size > 64) contextsByKey.delete(contextsByKey.keys().next().value);
     activityContexts.set(review, contexts);
-    // By default the evidence of a comparison with marks: the one that checked
-    // a pasted text has its result in the card above the answer.
-    let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts.find(c => !c.checksPassage) || contexts[0];
+    let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts[0];
     function select(context) {
       chosen = context; host._selectedBasis = context.key;
       context.mark(); tabs.replaceChildren();
       // The score belongs to the comparison the row shows.
       host.querySelector(':scope > .agent-agreement')?.remove();
-      const agreement = context.checksPassage ? null : agreementNode(context.check, context.modelCount);
+      const agreement = agreementNode(context.check, context.modelCount);
       if (agreement) host.append(agreement);
       for (const [section, label, count, note] of context.links()) {
         const button = evidenceButton(section, label, count, note);

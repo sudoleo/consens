@@ -46,7 +46,10 @@ def _review(status="succeeded"):
                                "reason": "Check the pasted answer", "context": "", "status": "succeeded", "answers": answers}]}
     if status == "succeeded":
         review["checks"] = [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
-                             "differences_data": {"claims": [], "differences": [], "models_compared": [m[1] for m in MODELS]}}]
+                             # The answer's own statement, judged like any answer's.
+                             "differences_data": {"claims": [{"anchor": ANSWER, "agree": ["OpenAI"], "coverage": "split",
+                                                              "dissent": [{"model": "Gemini", "quote": "Underfloor heating is needed."}]}],
+                                                  "differences": [], "models_compared": [m[1] for m in MODELS]}}]
     return review
 
 
@@ -114,7 +117,12 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         card = page.locator("#agentAnswer > .passage-check")
         expect(card).to_be_visible()
         assert card.evaluate("el => el.nextElementSibling.id") == "agentAnswerBody"
-        expect(card.locator(".passage-check-eyebrow")).to_have_text("Your text")
+        # The result as one sentence, its number in the verdict colour; no label above it.
+        headline = card.locator(".passage-check-headline")
+        expect(headline).to_have_text("1 of 3 statements in your text is contradicted")
+        figure = headline.locator(".passage-check-figure")
+        assert figure.evaluate("el => getComputedStyle(el).color") != headline.evaluate("el => getComputedStyle(el).color")
+        expect(card.locator(".passage-check-strip i")).to_have_count(3)
         # No box around it: no surface, no border; the text sits on a rail.
         assert card.evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
         assert card.evaluate("el => getComputedStyle(el).borderTopWidth") == "0px"
@@ -131,14 +139,12 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         assert verdict.evaluate("el => getComputedStyle(el).color") != card.locator(".passage-check-note").evaluate(
             "el => getComputedStyle(el).color")
         expect(card.locator(".passage-check-quotes > *")).to_have_count(1)
-        expect(card.locator(".passage-check-rest")).to_have_text("2 other sentences: 1 unconfirmed, 1 holds. Show full text")
         expect(card).to_contain_text("Checked against 3 models that answered “Do heat pumps make sense in old buildings?” "
                                      "without seeing your text.")
         # On a phone the counts wrap as whole units, never as a lone dot.
-        assert card.locator(".passage-check-unit").evaluate_all("els => els.every(el => el.getClientRects().length === 1)")
-        # The answer talks about the pasted text: no marks of its own.
-        expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(0)
-        expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
+        assert card.locator(".passage-check-count").evaluate_all("els => els.every(el => el.getClientRects().length === 1)")
+        # The answer's own statements are checked and marked like any answer's.
+        expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
         _snapshot(page, f"passage-check-{width}")
 
         # A count opens the same card as a checked answer sentence, with a
@@ -184,15 +190,15 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
             App.setThreadQuestion(turn.question);
         }""", SAVED)
         expect(page.locator("#agentAnswer > .passage-check")).to_have_count(1)
-        expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(0)
+        expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
         # As an earlier turn of the chat, the card stays with its answer.
         page.evaluate("turn => App.followup.renderStoredTurns([turn])", SAVED)
         history = page.locator("#threadHistory .thread-history-turn").first
         expect(history.locator(".thread-history-question .pc-claim")).to_have_count(0)
         history_card = history.locator(".thread-history-answer > .passage-check")
-        expect(history_card).to_contain_text("1 disputed")
+        expect(history_card).to_contain_text("1 of 3 statements in your text is contradicted")
         assert history_card.evaluate("el => el.nextElementSibling.classList.contains('thread-history-answer-body')")
-        expect(history.locator(".thread-history-answer-body .cx-claim")).to_have_count(0)
+        expect(history.locator(".thread-history-answer-body .cx-claim")).to_have_count(1)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert errors == []
     finally:

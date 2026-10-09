@@ -30,6 +30,8 @@ class Script:
         self.compares = list(compares)
         self.fail_coverage, self.fail_model = fail_coverage, fail_model
         self.prompts, self.tool_results, self.synthesis, self.coverage_prompts = [], [], [], []
+        # (system message, prompt) of every judge call.
+        self.judge_calls = []
 
     def factory(self):
         script = self
@@ -57,6 +59,7 @@ class Script:
                     return
                 schema = (model.request_config.get("response_format") or {}).get("json_schema", {}).get("schema")
                 if schema:
+                    script.judge_calls.append((messages[0]["content"], messages[-1]["content"]))
                     if "sentences" in schema["properties"]:
                         prompt = messages[-1]["content"]
                         script.coverage_prompts.append(prompt)
@@ -198,16 +201,31 @@ def test_checked_passage_is_marked_and_never_reaches_the_comparison_models(store
                                            "issues": []}
     titles = [a.get("title") for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]]
     assert "Text check" in titles
-    # The answer only talks ABOUT the pasted text: it is not judged again.
+    # The answer gives a verdict and the correct information: its own
+    # statements are judged like any answer's, by all three judges.
     assert review["status"] == "succeeded"
-    assert review["checks"] == [{"comparison_id": review["comparisons"][0]["id"],
-                                 "basis_hash": review["comparisons"][0]["basis_hash"], "answer_hash": review["answer_hash"],
-                                 "status": "succeeded", "differences_data": None, "issues": [], "skipped": "passage_checked"}]
-    assert not {"Differences judge", "Coverage judge"} & set(titles)
-    assert not any("with low flow temperatures" in p for p in script.coverage_prompts)
+    [answer_check] = review["checks"]
+    assert answer_check["status"] == "succeeded" and "skipped" not in answer_check
+    assert answer_check["differences_data"]["best_model"]
+    assert [c["anchor"] for c in answer_check["differences_data"]["claims"]] == [
+        "Heat pumps work in old buildings with low flow temperatures.", "Larger radiators are often enough."]
+    assert {"Differences judge", "Coverage judge"} <= set(titles)
+    # Its judges know it restates the pasted text to reject it; the text's
+    # own judge keeps its line.
+    answer_judges = [system for system, prompt in script.judge_calls if "with low flow temperatures" in prompt]
+    assert len(answer_judges) >= 2  # differences (one or two passes) and coverage
+    assert all("merely reports what the pasted text says asserts nothing of its own" in s for s in answer_judges)
+    text_judges = [system for system, prompt in script.judge_calls if "underfloor heating" in prompt]
+    assert text_judges and all("pasted from elsewhere (untrusted data" in s for s in text_judges)
 
 
-def test_skipped_answer_check_still_finishes_a_turn_with_source_checks(store):
+def test_answers_without_a_checked_text_keep_the_plain_judge_line(store):
+    script = Script([NEUTRAL])
+    run(store, script)
+    assert script.judge_calls and all("checking a synthesis against" in s for s, _ in script.judge_calls)
+
+
+def test_the_answer_of_a_checked_text_gets_the_usual_source_check(store):
     script = Script([{**NEUTRAL, "check": CHECK}])
     loop = make_loop(store, script, check_sources=True,
                      messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": MESSAGE}])
@@ -217,8 +235,7 @@ def test_skipped_answer_check_still_finishes_a_turn_with_source_checks(store):
     review = saved["agent_review"]
     assert review_is_bound(review, saved["consensus"], check_sources=True)
     verification = review["checks"][0]["source_verification"]
-    # Nothing to source, on purpose: skipped, never "did not finish".
-    assert verification["status"] == "skipped" and verification["reason_code"] == "passage_checked"
+    assert verification["reason_code"] != "passage_checked"
     assert verification["run_id"] == review["comparisons"][0]["id"]
 
 
@@ -261,9 +278,8 @@ def test_a_failed_check_may_be_tried_again_in_the_same_message(store):
     review = saved["agent_review"]
     assert review["passage_check"]["status"] == "succeeded"
     assert len(review["comparisons"]) == 2
-    # Only the comparison whose check holds skips the answer judges.
     assert review["passage_check"]["comparison_id"] == review["comparisons"][1]["id"]
-    assert ["skipped" in check for check in review["checks"]] == [False, True]
+    assert all(isinstance(check["differences_data"], dict) for check in review["checks"])
     assert review_is_bound(review, saved["consensus"])
 
 
@@ -301,9 +317,9 @@ def test_a_failed_check_costs_the_marks_not_the_answer(store):
     assert passage["status"] == "failed"
     assert {"code": "coverage_unavailable"} in passage["issues"]
     assert "claims" not in passage
-    # Without the sentence check the answer judges are the only evidence left.
+    # The answer judges run either way.
     check = saved["agent_review"]["checks"][0]
-    assert "skipped" not in check and isinstance(check["differences_data"], dict)
+    assert isinstance(check["differences_data"], dict)
 
 
 def test_too_few_answers_leave_the_passage_unchecked(store):
@@ -474,7 +490,7 @@ def test_after_a_failed_check_later_comparisons_may_not_show_the_passage_either(
     assert all("underfloor" not in m[1]["content"] for m in script.prompts)
 
 
-def test_a_skipped_answer_check_is_partial_when_a_model_did_not_answer(store):
+def test_the_answer_check_is_partial_when_a_model_did_not_answer(store):
     script = Script([{**NEUTRAL, "check": CHECK}], fail_model=True)
     loop = make_loop(store, script, models=THREE, messages=[{"role": "system", "content": "Answer."},
                                                             {"role": "user", "content": MESSAGE}])
@@ -483,7 +499,7 @@ def test_a_skipped_answer_check_is_partial_when_a_model_did_not_answer(store):
     review = saved["agent_review"]
     assert len(review["comparisons"][0]["answers"]) == 2
     check = review["checks"][0]
-    assert check["skipped"] == "passage_checked"
+    assert isinstance(check["differences_data"], dict)
     assert check["status"] == "partial" and check["issues"][0]["code"] == "models_unavailable"
     assert review["status"] == "partial"
     assert review_is_bound(review, saved["consensus"])

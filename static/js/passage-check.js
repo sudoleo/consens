@@ -3,11 +3,12 @@
 // "Paste an AI answer to check it": the Agent checked a passage of the
 // user's own message against independent answers (review.passage_check,
 // see app/services/agent_comparison.py). This module puts the result at
-// the top of the ANSWER as one card: the sentences that do not hold,
-// verbatim, each with how many models disagree and what one of them says
-// instead; everything else is one line under them ("8 other sentences:
-// 6 hold, 2 unconfirmed"), and "Show full text" unfolds the whole passage
-// with every sentence marked.
+// the top of the ANSWER as one card: the result as one sentence ("4 of 28
+// statements in your text are contradicted"), the text as a strip of its
+// sentences in reading order and a legend; then the sentences that do not
+// hold, verbatim, each with how many models disagree and what one of them
+// says instead. "Show full text" unfolds the whole passage, every sentence
+// marked.
 //
 // Why in the answer and not on the message: the message is what the user
 // sent and stays exactly that (the Agent only decides during the run
@@ -238,20 +239,6 @@
     return `${count} sentence${count === 1 ? "" : "s"}`;
   }
 
-  // One line for every sentence the card does not quote: "All 9
-  // sentences hold", "8 other sentences: 6 hold, 2 unconfirmed".
-  function restLabel(claims, quoted) {
-    const tally = counts({ claims });
-    const count = claims.length;
-    const shown = STATES.filter(state => tally[state]);
-    if (shown.length === 1 && shown[0] === "holds") {
-      if (!quoted) return count === 1 ? "The sentence holds" : `All ${count} sentences hold`;
-      return count === 1 ? "The other sentence holds" : `The other ${count} sentences hold`;
-    }
-    const parts = shown.map(state => CHIP_LABELS[state](tally[state]));
-    return `${quoted ? `${count} other ${count === 1 ? "sentence" : "sentences"}` : sentences(count)}: ${parts.join(", ")}`;
-  }
-
   // What one dissenting model says instead, short: the card is a summary,
   // the claim card has every model's own words.
   function instead(claim) {
@@ -336,14 +323,70 @@
     return `“${short}”` + (/[.?!…]$/.test(short) ? "" : ".");
   }
 
-  // One uppercase label names the block; the tally under it is its
-  // headline, with the verdict colour on the numbers only.
+  // The result as one sentence. The verdict colour sits on its number, the
+  // one glyph that carries it (no label above, no tinted area around it).
+  function headline(check) {
+    const tally = counts(check);
+    const total = check.claims.length;
+    const contested = tally.disputed + tally.split;
+    const line = node("p", "passage-check-headline");
+    const figure = (value, state) => node("span", `passage-check-figure is-${state}`, String(value));
+    const statements = total === 1 ? "statement" : "statements";
+    if (contested) {
+      line.append(figure(contested, tally.disputed ? "disputed" : "split"),
+        ` of ${total} ${statements} in your text ${contested === 1 ? "is" : "are"} contradicted`);
+    } else if (tally.unconfirmed) {
+      line.append("No model contradicts your text");
+    } else if (total === 1) {
+      line.append("The statement in your text holds up");
+    } else {
+      line.append("All ", figure(total, "holds"), ` ${statements} in your text hold up`);
+    }
+    return line;
+  }
+
+  // The text at a glance: one segment per sentence in reading order, in its
+  // verdict colour, so the reader sees where the trouble sits. The legend
+  // under it says the same in words; the strip itself is decoration.
+  function strip(check) {
+    const bar = node("div", "passage-check-strip");
+    bar.setAttribute("aria-hidden", "true");
+    for (const claim of check.claims) {
+      const segment = document.createElement("i");
+      segment.dataset.verdict = verdict(claim);
+      bar.append(segment);
+    }
+    return bar;
+  }
+
+  // One count per verdict, each with its colour dot; a count opens the first
+  // sentence of its kind. The way to the full text sits at its end.
+  function legend(check) {
+    const row = node("div", "passage-check-legend");
+    const list = node("p", "passage-check-counts");
+    const tally = counts(check);
+    const shown = STATES.filter(item => tally[item]);
+    // A single verdict is the headline already ("All 28 statements …").
+    for (const state of shown.length > 1 ? shown : []) {
+      const chip = node("button", `passage-check-count is-${state}`);
+      chip.type = "button";
+      chip.dataset.verdict = state;
+      const [number, ...label] = CHIP_LABELS[state](tally[state]).split(" ");
+      chip.append(node("span", "passage-check-num", number), ` ${label.join(" ")}`);
+      chip.setAttribute("aria-label", `${chip.textContent}: show the first one`);
+      list.append(chip);
+    }
+    const toggle = node("button", "passage-check-toggle");
+    toggle.type = "button";
+    row.append(list, toggle);
+    return row;
+  }
+
   function head(check, live) {
     const row = node("div", "passage-check-head");
-    row.append(node("p", "passage-check-eyebrow", "Your text"));
     if (!DONE.has(check.status)) {
       row.append(node("p", "passage-check-status", LIVE.has(check.status) && live
-        ? (check.status === "running" ? "Checking each sentence…" : "Checking against independent answers…")
+        ? (check.status === "running" ? "Checking each sentence of your text…" : "Checking your text against independent answers…")
         : failureText(check, live)));
       return row;
     }
@@ -351,67 +394,34 @@
       row.append(node("p", "passage-check-status", "No sentence of your text could be checked against the answers."));
       return row;
     }
-    // Each count carries the separator after it, so a wrapped line never
-    // starts with a dot.
-    const tally = counts(check);
-    const shown = STATES.filter(state => tally[state]);
-    const list = node("p", "passage-check-counts");
-    shown.forEach((state, index) => {
-      const unit = node("span", "passage-check-unit");
-      const chip = node("button", `passage-check-count is-${state}`);
-      chip.type = "button";
-      chip.dataset.verdict = state;
-      const [number, ...label] = CHIP_LABELS[state](tally[state]).split(" ");
-      chip.append(node("span", "passage-check-num", number), ` ${label.join(" ")}`);
-      chip.setAttribute("aria-label", `${chip.textContent}: show the first one`);
-      unit.append(chip);
-      if (index < shown.length - 1) unit.append(" ·");
-      list.append(unit);
-      if (index < shown.length - 1) list.append(" ");
-    });
-    row.append(list);
+    row.append(headline(check), strip(check), legend(check));
     return row;
   }
 
-  // Under the rail: one line for the sentences not quoted, with the way to
-  // the full text, then where the check comes from.
+  // Under the rail: where the check comes from, in one quiet line.
   function foot(check, live) {
     const running = LIVE.has(check.status) && live;
+    if (!check.answerTo || !(DONE.has(check.status) || running)) return null;
+    const note = issueNote(check);
     const row = node("div", "passage-check-foot");
-    if (DONE.has(check.status) && check.claims.length) {
-      const rest = node("p", "passage-check-rest");
-      const toggle = node("button", "passage-check-toggle");
-      toggle.type = "button";
-      rest.append(node("span", "passage-check-rest-label"), toggle);
-      row.append(rest);
-    }
-    if (check.answerTo && (DONE.has(check.status) || running)) {
-      const note = issueNote(check);
-      row.append(node("p", "passage-check-note", (running
-        ? `Checking it as an answer to ${quotedQuestion(check.answerTo)} The models answer without seeing your text.`
-        : `Checked against ${check.models.length} models that answered ${quotedQuestion(check.answerTo).replace(/\.$/, "")} `
-          + "without seeing your text.") + (note ? ` ${note}` : "")));
-    }
-    return row.childNodes.length ? row : null;
+    row.append(node("p", "passage-check-note", (running
+      ? `Checking it as an answer to ${quotedQuestion(check.answerTo)} The models answer without seeing your text.`
+      : `Checked against ${check.models.length} models that answered ${quotedQuestion(check.answerTo).replace(/\.$/, "")} `
+        + "without seeing your text.") + (note ? ` ${note}` : "")));
+    return row;
   }
 
   // Folded (the quotes) or unfolded (the full text): only the body and the
-  // toggle change, the counts and the note stay.
+  // toggle change, the headline, the legend and the note stay.
   function syncBody(card) {
     const check = card._passageCheck;
     const full = card.classList.contains("is-full");
     const body = card.querySelector(":scope > .passage-check-body");
-    const quoted = full ? new Set() : quotedIndexes(check);
     if (body) {
-      // Folded without a quote, the line under the rail says it all.
-      body.hidden = !full && !quoted.size;
+      // Folded without a quote, the headline says it all: no empty rail.
+      body.hidden = !full && !quotedIndexes(check).size;
       body.replaceChildren(full ? fullText(check) : quotes(check));
       paint(card);
-    }
-    const label = card.querySelector(".passage-check-rest-label");
-    if (label) {
-      const rest = full ? [] : check.claims.filter((claim, index) => !quoted.has(index));
-      label.textContent = rest.length ? `${restLabel(rest, quoted.size > 0)}. ` : "";
     }
     const toggle = card.querySelector(".passage-check-toggle");
     if (toggle) {

@@ -549,13 +549,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 
 /* ---- A pasted text the Agent checked (passage-check.js) --------------------
    One section at the top of the answer; the user's message stays as it was
-   sent. No box around it (the house rule): one uppercase label, the tally as
-   its headline with the verdict colour on the numbers only, then the user's
-   text on a rail like a quote in the answer. Folded, the rail carries only
-   the sentences other models disagree with, each followed by its verdict
-   and what a model says instead, in the reading colour (no grey rows in
-   between); one line under the rail counts the rest. A hairline that fades
-   at both ends hands over to the answer. */
+   sent. No box, no uppercase label, no grey filler (house rules): the result
+   is one sentence in the reading colour with the verdict colour on its
+   number only; under it a hairline strip of the text's sentences in reading
+   order and a quiet legend. Then, on a rail like a quote in the answer, the
+   sentences other models disagree with, each with who disagrees and what
+   one of them says instead. One small note says where the check comes from;
+   a hairline that fades at both ends hands over to the answer. */
 .passage-check {
   max-width: 66ch;
   margin: 0 0 26px;
@@ -571,23 +571,54 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
 }
 .passage-check p { margin: 0; }
-.passage-check-eyebrow {
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
+.passage-check-headline {
+  color: var(--ink);
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  line-height: 1.4;
+  line-height: 1.45;
+  letter-spacing: -0.006em;
+  text-wrap: pretty;
 }
-.passage-check .passage-check-counts,
+.passage-check-figure { font-variant-numeric: tabular-nums; }
+.passage-check-figure.is-disputed { color: var(--dispute); }
+.passage-check-figure.is-split { color: var(--partial); }
+.passage-check-figure.is-holds { color: var(--agree); }
 .passage-check .passage-check-status {
-  margin-top: 4px;
   color: var(--ink-2);
   font-size: var(--font-size-base);
   line-height: 1.5;
 }
 .passage-check[data-state="failed"] .passage-check-status { color: var(--ink-3); font-size: var(--font-size-sm); }
-.passage-check-unit { white-space: nowrap; }
+/* One segment per sentence, reading order. Grey is "only one model says
+   this", not an empty track: every segment is a sentence. */
+.passage-check-strip {
+  display: flex;
+  gap: 2px;
+  height: 3px;
+  margin-top: 12px;
+}
+.passage-check-strip:has(> i:nth-child(41)) { gap: 1px; }
+.passage-check-strip i {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink-3) 38%, transparent);
+}
+.passage-check-strip i[data-verdict="disputed"] { background: var(--dispute); }
+.passage-check-strip i[data-verdict="split"] { background: var(--partial); }
+.passage-check-strip i[data-verdict="holds"] { background: color-mix(in srgb, var(--agree) 78%, transparent); }
+.passage-check-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 20px;
+  margin-top: 10px;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.passage-check .passage-check-counts { display: flex; flex-wrap: wrap; gap: 2px 16px; }
 .passage-check-count,
 .passage-check-toggle {
   min-height: 0;
@@ -601,16 +632,33 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   text-align: start;
   cursor: pointer;
 }
-.passage-check-count { text-decoration: none; }
-.passage-check-count:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.passage-check-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+/* The verdict colour on a dot, the same glyph rule as the headline. */
+.passage-check-count::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  align-self: center;
+  background: color-mix(in srgb, var(--ink-3) 55%, transparent);
+}
+.passage-check-count.is-disputed::before { background: var(--dispute); }
+.passage-check-count.is-split::before { background: var(--partial); }
+.passage-check-count.is-holds::before { background: var(--agree); }
+.passage-check-count:hover { color: var(--ink); }
 .passage-check-num {
+  color: var(--ink);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
 }
-.passage-check-count.is-disputed .passage-check-num { color: var(--dispute); }
-.passage-check-count.is-split .passage-check-num { color: var(--partial); }
-.passage-check-count.is-holds .passage-check-num { color: var(--agree); }
 .passage-check :is(.passage-check-count, .passage-check-toggle):focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
@@ -619,7 +667,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* The rail is the user's text, folded or whole: the same quote rule as in
    the answer body. */
 .passage-check-body {
-  margin-top: 14px;
+  margin-top: 18px;
   padding-inline-start: 1em;
   border-inline-start: 3px solid var(--line);
   font-size: var(--font-size-base);
@@ -639,18 +687,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .passage-check-who { color: var(--ink); font-weight: var(--font-weight-semibold); }
 .passage-check-verdict:hover .passage-check-who { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
 .passage-check-text { white-space: pre-line; overflow-wrap: anywhere; }
-.passage-check-foot {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 14px;
-}
+.passage-check-foot { margin-top: 14px; }
 .passage-check[data-state="running"] .passage-check-foot { margin-top: 4px; }
-.passage-check-rest {
-  color: var(--ink-2);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-}
 .passage-check-note {
   color: var(--ink-3);
   font-size: var(--font-size-xs);
@@ -675,7 +713,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe 1.8s ease-in-out infinite; }
 }
 @media (pointer: coarse) {
-  .passage-check-toggle { display: inline-flex; align-items: center; min-height: 32px; vertical-align: middle; }
   /* A larger target for a finger without moving the line. */
-  .passage-check-count { padding-block: 6px; margin-block: -6px; }
+  .passage-check :is(.passage-check-count, .passage-check-toggle) { padding-block: 6px; margin-block: -6px; }
 }

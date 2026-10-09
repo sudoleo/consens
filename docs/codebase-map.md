@@ -3542,31 +3542,25 @@ Antwort-Prompt).
   bekommt `evidence.checked_text` (der Prompt sagt dazu: Übereinstimmung, keine
   Wahrheit); der Orchestrator sieht `passage_check` inkl. `issues` im Toolergebnis.
   Im begrenzten Altmodus reserviert `max_calls` zwei Aufrufe mehr.
-- **Kein zweiter Antwort-Check (seit 2026-10-09):** `judge()` lässt für den
-  Vergleich, dessen Passage-Check `succeeded`/`partial` ist
-  (`_passage_checked`), Differences- und Coverage-Judge über die
-  Agent-Antwort weg: die Antwort redet nur ÜBER den Text, den die Modelle nie
-  sahen, ihre Marken und ihr Score wären ohnehin ausgeblendet, und der Lauf
-  kostete so den Großteil seiner Judge-Tokens doppelt. Gespeichert wird ein
-  normaler abgeschlossener Check (`status: succeeded`, bzw. `partial` mit
-  `issues: [models_unavailable]`, wenn ein Modell fehlte oder der Passage-Check
-  nur `partial` ist; `differences_data: null`, Merker `skipped:
-  "passage_checked"` = `PASSAGE_CHECKED`), bewusst KEIN neuer Status: `review_is_bound`,
-  `finish_run`, die Status-Aggregation und alte gecachte Oberflächen bleiben
-  unverändert. `check_contradictions` schreibt dafür einen terminalen
-  `skipped`-Snapshot mit `reason_code: passage_checked` statt
-  `differences_failed`. Scheitert der Passage-Check, laufen die Antwort-Judges
-  wie bisher (dann sind sie der einzige Beleg). Folgen: für diesen Vergleich
-  keine Differences-/Widerspruchskarten und keine Quellenprüfung, und ein
-  reiner Prüf-Lauf schreibt keine Model-Pulse-Stimme
-  (`agent_best_model_choice` findet kein `best_model`). Oberfläche:
-  `agent-review.js` erklärt den Vergleich in Aktivität und Review-Panel
-  („This comparison checked your text …") und wählt im „Evidence for"-Picker
-  standardmäßig einen Vergleich mit Marken; `agent-delegation.js` nennt die
-  Zeile „Text check", wenn nur der Text-Judge lief oder läuft (nach einem
-  gescheiterten heißt sie weiter „Answer check", die Antwort-Judges folgen);
-  `agent-activity.js` sagt bei einem reinen Prüf-Lauf „Checked your text" und
-  „Skipped the source check: your text was checked instead".
+- **Die Antwort wird wie jede Antwort geprüft (Max-Entscheidung 2026-10-09
+  abends):** Differences (zwei Durchgänge) und Coverage laufen auch über die
+  Antwort eines Prüf-Laufs: sie gibt ein Urteil über den Text und die richtigen
+  Informationen, und genau diese eigenen Aussagen nimmt der Nutzer mit. Damit
+  gibt es Marken, Agreement-Score, Unterschiedskarten, Quellenprüfung und
+  Model-Pulse-Stimme wie überall, ohne Sonderweg. Einzige Besonderheit: für den
+  Vergleich mit Passage-Check (`_passage_checked`) bindet `judge()` den
+  Judge-Transport mit `subject="passage_answer"`, und die Systemzeile sagt dem
+  Judge (`_PASSAGE_ANSWER_SUBJECT`), dass die Antwort die Aussagen des Texts
+  wiederholt, um sie zu bestätigen oder zu widerlegen: ein Satz, der nur
+  berichtet, was der Text sagt, ist keine eigene Aussage; bei einer Widerlegung
+  zählt die Korrektur. Ohne diese Zeile las „Dein Text sagt X, das stimmt
+  nicht" sich als Behauptung X. Zwischenstand von 7303e034 bis zu dieser
+  Änderung (beide 2026-10-09): die Antwort-Judges entfielen, gespeicherte
+  Checks tragen `skipped: "passage_checked"` ohne `differences_data`;
+  `agent-review.js` erklärt sie weiter („This comparison checked your text …"),
+  `agent-activity.js` sagt dort „Checked your text"/„Skipped the source check",
+  `agent-delegation.js` nennt die Zeile „Text check", solange nur der
+  Text-Judge lief oder läuft.
 - **Daten:** `agent_review.passage_check` = `{version, status
   (waiting|running|succeeded|partial|failed|cancelled), comparison_id,
   answer_to, text, hash, basis_hash, providers, claims[], models_compared,
@@ -3587,17 +3581,22 @@ Antwort-Prompt).
   `.thread-history-answer-body`, Referenz `body._passageCard`). Die
   Nutzernachricht bleibt unverändert so, wie sie abgeschickt wurde (der Agent
   entscheidet erst im Lauf, ob er prüft; eine nachträglich umgebaute Blase
-  sprang, und nur manchmal). Kein Kasten (Hausregel): ein Versalien-Etikett
-  „Your text", darunter die Zähler als Kopfzeile, Ampelfarbe nur auf den
-  Zahlen (Klick: erster Satz dieses Urteils, sonst klappt der Volltext auf),
-  dann der Text auf einer Schiene wie ein Zitat der Antwort. Zugeklappt stehen
+  sprang, und nur manchmal). Kein Kasten, kein Versalien-Etikett, kein Grau
+  als Füllung (Max 2026-10-09: „billig, oldschool HTML"): Kopf ist EIN Satz in
+  Lesefarbe, halbfett, Ampelfarbe nur auf seiner Zahl („4 of 28 statements in
+  your text are contradicted", „No model contradicts your text", „All 28
+  statements in your text hold up"); darunter ein 3-px-Satzstreifen (ein
+  Segment je Satz in Lesereihenfolge, Ampelfarbe, `aria-hidden`; ab 41 Sätzen
+  1 px Abstand) und eine Legende mit Farbpunkten (Zähler als Knöpfe, Klick:
+  erster Satz dieses Urteils, sonst klappt der Volltext auf; bei nur einem
+  Urteil entfällt sie, der Satz sagt es schon), rechts „Show full text". Dann
+  der Text auf einer Schiene wie ein Zitat der Antwort. Zugeklappt stehen
   dort nur widersprochene/geteilte Sätze (höchstens 8) wörtlich, darunter in
   Lesefarbe (nicht grau, seit 2026-10-09 abends) „N of M models disagree –
   Modell: „was es stattdessen sagt"" (erstes Gegenzitat, Markdown entfernt,
   ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
-  Keine Faltzeilen mehr zwischen den Zitaten: EINE Zeile unter der Schiene
-  zählt den Rest („8 other sentences: 2 unconfirmed, 6 hold. Show full text",
-  ohne Zitat „All 9 sentences hold" ohne leere Schiene). „Show full text" zeigt die ganze Passage
+  Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene.
+  „Show full text" zeigt die ganze Passage
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
   als Fürstimmen), gemalt nach der Highlights-Einstellung
@@ -3612,11 +3611,8 @@ Antwort-Prompt).
   (`displayText`: Fett/Kursiv, Überschriften, Zitatzeichen, Code-Zäune,
   Inline-Code, Links → Linktext, Tabellen mit „·"; ob ein Stück eine Zeile
   beendet, entscheidet der ganze Text, sonst liefen Tabellenzellen, die je ein
-  eigener Satz sind, zusammen). Die Antwort selbst bekommt für den Vergleich mit
-  erfolgreichem Passage-Check (`succeeded`/`partial`) keine Marken und keinen
-  Agreement-Score (`agent-review.js`, `checksPassage`): ihre Sätze reden ÜBER
-  den Text, den die Modelle nie sahen. Scheiterte er, zeigt sie die Marken der
-  dann gelaufenen Antwort-Judges wie gewohnt. Die Signatur ist
+  eigener Satz sind, zusammen). Die Antwort selbst trägt Marken und Score wie
+  jede Antwort (siehe oben). Die Signatur ist
   kanonisch (Firestore liefert Maps ohne Reihenfolge), ein Laufende zeichnet
   nichts neu, der aufgeklappte Zustand bleibt (zeigt dieselbe Karte den Text
   eines anderen Turns, klappt sie zu); abgehängte Karten fallen bei jedem
@@ -7326,8 +7322,10 @@ Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur be
 ist das Ergebnis der Checks (`completed`, sobald jeder Check einmal fertig ist;
 `failed` nennt die nicht ausführbaren Checks), Tokens sind die Summe der
 gemessenen Judge-Aufrufe. Chip-Zähler und Modell-Icons zählen Judges nicht mit.
-Lief nur der Judge eines eingefügten Texts („Text check", kein Antwort-Check),
-heißt die Zeile „Text check" und verweist auf die Karte über der Antwort.
+Lief bisher nur der Judge eines eingefügten Texts („Text check"; die
+Antwort-Judges folgen nach dem Schreiben, gespeicherte Turns vom 2026-10-09
+haben keine), heißt die Zeile „Text check" und verweist auf die Karte über der
+Antwort.
 Eine ausgefallene Vergleichsantwort heißt `No answer`; beendete Aufrufe ohne
 gemessene Tokens zeigen keine Tokenzeile.
 
