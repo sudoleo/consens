@@ -24,9 +24,27 @@
     return generation;
   }
 
+  // A bare "signed in on this browser" hint for the server: with it, opening
+  // consens.io goes straight to /app instead of the landing page (see
+  // routers/pages.py landing). It carries no identity; the login itself
+  // stays in Firebase's browser storage.
+  const APP_HINT = "consens_app";
+
+  function rememberSignedIn(signedIn) {
+    try {
+      const secure = window.location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = signedIn
+        ? `${APP_HINT}=1; Max-Age=31536000; Path=/; SameSite=Lax${secure}`
+        : `${APP_HINT}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+    } catch (_) {
+      // Cookies blocked: the landing page simply stays the entry point.
+    }
+  }
+
   function publish(nextUid) {
     known = true;
     uid = nextUid || null;
+    rememberSignedIn(!!uid);
     syncCompatibilityState();
     window.dispatchEvent(new CustomEvent("consensio:auth-state", {
       detail: window.__consensioAuthState

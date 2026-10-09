@@ -139,8 +139,36 @@ def sitemap_pages_xml():
     )
     return Response(content=xml, media_type="application/xml")
 
+# Set by the app (static/js/auth-session-state.js) while someone is signed in
+# on this browser; it says nothing about who.
+APP_HINT_COOKIE = "consens_app"
+
+
+def _opens_the_app(request: Request) -> bool:
+    """A signed-in visitor who opens consens.io itself goes straight to /app.
+
+    Only entries count -- typed, bookmarked, from a search result or another
+    site. A click inside consens.io (logo, "Product", "/#watch") still shows
+    the landing page; otherwise a signed-in user could never reach it again.
+    Without Sec-Fetch-Site (old browsers) a same-site Referer marks a click.
+    """
+    if request.cookies.get(APP_HINT_COOKIE) != "1" or "home" in request.query_params:
+        return False
+    fetch_site = request.headers.get("sec-fetch-site", "").lower()
+    if fetch_site:
+        return fetch_site in {"none", "cross-site"}
+    referer = request.headers.get("referer", "")
+    return not referer.startswith(str(request.base_url).rstrip("/"))
+
+
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request):
+    if _opens_the_app(request):
+        query = request.url.query
+        response = RedirectResponse(url="/app" + (f"?{query}" if query else ""), status_code=302)
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Cookie, Sec-Fetch-Site"
+        return response
     # The composer mockups name the agent's real default model, never a
     # showcase model the visitor would not get.
     try:
@@ -148,9 +176,12 @@ def landing(request: Request):
         agent_label = agent_model_label()
     except Exception:
         agent_label = ""
-    return templates.TemplateResponse(request=request, name="landing.html",
-                                      context={"agent_label": agent_label or "Agent",
-                                               "pulse": landing_pulse_preview()})
+    response = templates.TemplateResponse(request=request, name="landing.html",
+                                          context={"agent_label": agent_label or "Agent",
+                                                   "pulse": landing_pulse_preview()})
+    # The same URL answers signed-in entries with a redirect.
+    response.headers["Vary"] = "Cookie, Sec-Fetch-Site"
+    return response
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy(req: Request):
