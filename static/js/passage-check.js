@@ -50,6 +50,7 @@
   const LIVE = new Set(["waiting", "running"]);
   const ANSWER_TO_CHARS = 140;
   const cards = new Set();
+  let serial = 0;
 
   // Same reading as the claim popover: two supporting models and no dissent
   // hold; any dissent splits; more dissent than support disputes.
@@ -183,8 +184,8 @@
     const state = verdict(claim);
     const total = claim.agree.length + claim.dissent.length;
     if (state === "unconfirmed") return claim.agree.length ? "Only one model says this" : "No other model says this";
-    if (state === "holds") return `${claim.agree.length} of ${total} models agree`;
-    return `${claim.dissent.length} of ${total} ${claim.dissent.length === 1 ? "models disagrees" : "models disagree"}`;
+    const of = (count, verb) => `${count} of ${total} ${total === 1 ? "model" : "models"} ${count === 1 ? `${verb}s` : verb}`;
+    return state === "holds" ? of(claim.agree.length, "agree") : of(claim.dissent.length, "disagree");
   }
 
   function highlightMode() {
@@ -275,6 +276,12 @@
       row.append(sentence, line);
       list.append(row);
     }
+    const more = check.claims.filter(claim => QUOTED.has(verdict(claim))).length - MAX_QUOTES;
+    if (more > 0) {
+      const button = node("button", "passage-check-more", `${more} more in the full text`);
+      button.type = "button";
+      list.append(button);
+    }
     return list;
   }
 
@@ -325,36 +332,54 @@
 
   // The result as one sentence. The verdict colour sits on its number, the
   // one glyph that carries it (no label above, no tinted area around it).
+  // "Disagree with" covers both a majority against a sentence (disputed) and
+  // a single dissent (split); the legend tells them apart. A text with
+  // sentences left unchecked says "checked statements", so the headline never
+  // claims more than was checked.
   function headline(check) {
     const tally = counts(check);
     const total = check.claims.length;
     const contested = tally.disputed + tally.split;
     const line = node("p", "passage-check-headline");
     const figure = (value, state) => node("span", `passage-check-figure is-${state}`, String(value));
-    const statements = total === 1 ? "statement" : "statements";
+    const unchecked = check.issues.some(issue => ["sentences_unchecked", "unindexed_sentences"].includes(issue.code) && issue.count);
+    const statements = `${unchecked ? "checked " : ""}${total === 1 ? "statement" : "statements"}`;
     if (contested) {
-      line.append(figure(contested, tally.disputed ? "disputed" : "split"),
-        ` of ${total} ${statements} in your text ${contested === 1 ? "is" : "are"} contradicted`);
+      line.append("Models disagree with ", figure(contested, tally.disputed ? "disputed" : "split"),
+        ` of ${total} ${statements} in your text`);
+    } else if (!tally.holds) {
+      // Nothing contradicted, but nothing confirmed either: not "fine".
+      line.append(total === 1 ? `No model contradicts the ${statements} in your text, but none confirms it`
+        : `No model contradicts your text, but none of its ${total} ${statements} is confirmed`);
     } else if (tally.unconfirmed) {
-      line.append("No model contradicts your text");
+      line.append("No model contradicts your text; ", figure(tally.holds, "holds"),
+        ` of ${total} ${statements} ${tally.holds === 1 ? "is" : "are"} confirmed`);
     } else if (total === 1) {
-      line.append("The statement in your text holds up");
+      line.append(`The ${statements} in your text holds up`);
     } else {
       line.append("All ", figure(total, "holds"), ` ${statements} in your text hold up`);
     }
     return line;
   }
 
-  // The text at a glance: one segment per sentence in reading order, in its
-  // verdict colour, so the reader sees where the trouble sits. The legend
-  // under it says the same in words; the strip itself is decoration.
+  // The text at a glance: the sentences in reading order, each run of one
+  // verdict a segment as wide as its sentences, so the reader sees where the
+  // trouble sits (and 300 sentences still fit a phone). The legend says the
+  // same in words; the strip itself is decoration.
   function strip(check) {
     const bar = node("div", "passage-check-strip");
     bar.setAttribute("aria-hidden", "true");
+    let segment = null;
     for (const claim of check.claims) {
-      const segment = document.createElement("i");
-      segment.dataset.verdict = verdict(claim);
-      bar.append(segment);
+      const state = verdict(claim);
+      if (segment?.dataset.verdict !== state) {
+        segment = document.createElement("i");
+        segment.dataset.verdict = state;
+        segment.dataset.count = "0";
+        bar.append(segment);
+      }
+      segment.dataset.count = String(Number(segment.dataset.count) + 1);
+      segment.style.flexGrow = segment.dataset.count;
     }
     return bar;
   }
@@ -378,7 +403,8 @@
     }
     const toggle = node("button", "passage-check-toggle");
     toggle.type = "button";
-    row.append(list, toggle);
+    if (list.childNodes.length) row.append(list);
+    row.append(toggle);
     return row;
   }
 
@@ -427,6 +453,7 @@
     if (toggle) {
       toggle.textContent = full ? "Show less" : "Show full text";
       toggle.setAttribute("aria-expanded", String(full));
+      if (body) toggle.setAttribute("aria-controls", body.id);
     }
   }
 
@@ -434,7 +461,11 @@
     const done = DONE.has(check.status);
     card.dataset.state = done ? "done" : LIVE.has(check.status) && live ? "running" : "failed";
     const parts = [head(check, live)];
-    if (done && check.claims.length) parts.push(node("div", "passage-check-body"));
+    if (done && check.claims.length) {
+      const body = node("div", "passage-check-body");
+      body.id = `passage-check-body-${++serial}`;
+      parts.push(body);
+    }
     const footer = foot(check, live);
     if (footer) parts.push(footer);
     card.replaceChildren(...parts);
@@ -474,6 +505,11 @@
       if (toggle) {
         unfold(card, !card.classList.contains("is-full"));
         toggle.focus?.({ preventScroll: true });
+        return;
+      }
+      if (event.target.closest(".passage-check-more")) {
+        unfold(card, true);
+        card.querySelector(".passage-check-toggle")?.focus?.({ preventScroll: true });
         return;
       }
       // Selecting quoted text (to copy it) is not a request for the card.

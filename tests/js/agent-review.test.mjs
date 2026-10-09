@@ -604,3 +604,14 @@ it('explains a comparison whose answer check was skipped because it checked a pa
   expect(panel.textContent).not.toMatch(/did not complete|pending/);
   dom.window.close();
 });
+it('opens a turn saved with a skipped answer check on the comparison that has marks', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.checks[0] = { ...review.checks[0], differences_data: null, skipped: 'passage_checked' };
+  review.passage_check = { status: 'succeeded', comparison_id: 'c1', text: 'Pasted.', claims: [] };
+  w.App.agentReview.render(body, review);
+  expect(body._agentReview.querySelector('.agent-evidence-focus select').value).toBe('agent-evidence:c2');
+  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
+  dom.window.close();
+});

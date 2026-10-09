@@ -557,6 +557,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    one of them says instead. One small note says where the check comes from;
    a hairline that fades at both ends hands over to the answer. */
 .passage-check {
+  /* One colour per verdict for the strip and the legend dots. */
+  --pc-holds: color-mix(in srgb, var(--agree) 82%, transparent);
+  --pc-unconfirmed: color-mix(in srgb, var(--ink-3) 45%, transparent);
   max-width: 66ch;
   margin: 0 0 26px;
   color: var(--ink);
@@ -589,24 +592,25 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   line-height: 1.5;
 }
 .passage-check[data-state="failed"] .passage-check-status { color: var(--ink-3); font-size: var(--font-size-sm); }
-/* One segment per sentence, reading order. Grey is "only one model says
-   this", not an empty track: every segment is a sentence. */
+/* The sentences in reading order, each run of one verdict a segment as
+   wide as its sentences (flex-grow from passage-check.js). Grey is "only one
+   model says this", not an empty track. */
 .passage-check-strip {
   display: flex;
   gap: 2px;
   height: 3px;
   margin-top: 12px;
+  overflow: hidden;
 }
-.passage-check-strip:has(> i:nth-child(41)) { gap: 1px; }
 .passage-check-strip i {
   flex: 1 1 0;
-  min-width: 1px;
+  min-width: 2px;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--ink-3) 38%, transparent);
+  background: var(--pc-unconfirmed);
 }
 .passage-check-strip i[data-verdict="disputed"] { background: var(--dispute); }
 .passage-check-strip i[data-verdict="split"] { background: var(--partial); }
-.passage-check-strip i[data-verdict="holds"] { background: color-mix(in srgb, var(--agree) 78%, transparent); }
+.passage-check-strip i[data-verdict="holds"] { background: var(--pc-holds); }
 .passage-check-legend {
   display: flex;
   flex-wrap: wrap;
@@ -620,7 +624,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 .passage-check .passage-check-counts { display: flex; flex-wrap: wrap; gap: 2px 16px; }
 .passage-check-count,
-.passage-check-toggle {
+.passage-check-toggle,
+.passage-check-more {
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -648,18 +653,20 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   margin-right: 3px;
   border-radius: 50%;
   align-self: center;
-  background: color-mix(in srgb, var(--ink-3) 55%, transparent);
+  background: var(--pc-unconfirmed);
 }
 .passage-check-count.is-disputed::before { background: var(--dispute); }
 .passage-check-count.is-split::before { background: var(--partial); }
-.passage-check-count.is-holds::before { background: var(--agree); }
+.passage-check-count.is-holds::before { background: var(--pc-holds); }
+/* The global button:hover dims the whole button, the dot with it. */
+.passage-check :is(.passage-check-count, .passage-check-toggle, .passage-check-more):hover { opacity: 1; }
 .passage-check-count:hover { color: var(--ink); }
 .passage-check-num {
   color: var(--ink);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
-.passage-check :is(.passage-check-count, .passage-check-toggle):focus-visible {
+.passage-check :is(.passage-check-count, .passage-check-toggle, .passage-check-more):focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
   border-radius: 3px;
@@ -702,6 +709,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   text-decoration-color: var(--line);
 }
 .passage-check-toggle:hover { text-decoration-color: var(--ink-3); }
+/* More disputed sentences than the card quotes: the way to the rest. */
+.passage-check-more {
+  align-self: flex-start;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+}
+.passage-check-more:hover { color: var(--ink); }
 .pc-claim { cursor: pointer; }
 /* Unpainted by the Highlights setting (by default green and grey): plain
    text that still opens its card. Under pointer and focus it shows that it
@@ -713,6 +730,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe 1.8s ease-in-out infinite; }
 }
 @media (pointer: coarse) {
-  /* A larger target for a finger without moving the line. */
-  .passage-check :is(.passage-check-count, .passage-check-toggle) { padding-block: 6px; margin-block: -6px; }
+  /* A larger target for a finger without moving the line; wrapped rows
+     keep their targets apart. */
+  .passage-check :is(.passage-check-count, .passage-check-toggle, .passage-check-more) { padding-block: 8px; margin-block: -8px; }
+  .passage-check-legend, .passage-check .passage-check-counts { row-gap: 16px; }
 }

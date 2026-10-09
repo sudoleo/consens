@@ -3547,13 +3547,16 @@ Antwort-Prompt).
   Antwort eines Prüf-Laufs: sie gibt ein Urteil über den Text und die richtigen
   Informationen, und genau diese eigenen Aussagen nimmt der Nutzer mit. Damit
   gibt es Marken, Agreement-Score, Unterschiedskarten, Quellenprüfung und
-  Model-Pulse-Stimme wie überall, ohne Sonderweg. Einzige Besonderheit: für den
-  Vergleich mit Passage-Check (`_passage_checked`) bindet `judge()` den
-  Judge-Transport mit `subject="passage_answer"`, und die Systemzeile sagt dem
-  Judge (`_PASSAGE_ANSWER_SUBJECT`), dass die Antwort die Aussagen des Texts
-  wiederholt, um sie zu bestätigen oder zu widerlegen: ein Satz, der nur
-  berichtet, was der Text sagt, ist keine eigene Aussage; bei einer Widerlegung
-  zählt die Korrektur. Ohne diese Zeile las „Dein Text sagt X, das stimmt
+  Model-Pulse-Stimme wie überall, ohne Sonderweg. Einzige Besonderheit: in
+  jedem Turn mit deklarierter Passage (`self.passage`, jeder Status, jeder
+  Vergleich: die Antwort ist derselbe Text und redet auch nach einer
+  gescheiterten Prüfung über ihn) bindet `judge()` den Judge-Transport mit
+  `subject="passage_answer"`; der ContextVar reicht in die Hintergrund-Threads
+  (zweiter Differences-Durchgang, Coverage, Reparatur). Die Systemzeile
+  (`_PASSAGE_ANSWER_SUBJECT`) sagt dem Judge, dass die Antwort die Aussagen
+  des Texts wiederholt: Zustimmung behauptet die Aussage, Widerlegung die
+  Korrektur, nur ein bloßer Bericht ist `not_a_claim` (keine Differenz daran
+  verankern); Differenzen zwischen den Antworten weiter vollständig. Ohne diese Zeile las „Dein Text sagt X, das stimmt
   nicht" sich als Behauptung X. Zwischenstand von 7303e034 bis zu dieser
   Änderung (beide 2026-10-09): die Antwort-Judges entfielen, gespeicherte
   Checks tragen `skipped: "passage_checked"` ohne `differences_data`;
@@ -3583,11 +3586,16 @@ Antwort-Prompt).
   entscheidet erst im Lauf, ob er prüft; eine nachträglich umgebaute Blase
   sprang, und nur manchmal). Kein Kasten, kein Versalien-Etikett, kein Grau
   als Füllung (Max 2026-10-09: „billig, oldschool HTML"): Kopf ist EIN Satz in
-  Lesefarbe, halbfett, Ampelfarbe nur auf seiner Zahl („4 of 28 statements in
-  your text are contradicted", „No model contradicts your text", „All 28
-  statements in your text hold up"); darunter ein 3-px-Satzstreifen (ein
-  Segment je Satz in Lesereihenfolge, Ampelfarbe, `aria-hidden`; ab 41 Sätzen
-  1 px Abstand) und eine Legende mit Farbpunkten (Zähler als Knöpfe, Klick:
+  Lesefarbe, halbfett, Ampelfarbe nur auf seiner Zahl („Models disagree with
+  4 of 28 statements in your text" für widersprochen UND geteilt; ohne
+  Widerspruch nie bloß „alles gut": „No model contradicts your text; 20 of 28
+  statements are confirmed" bzw. „…, but none of its 9 statements is
+  confirmed"; „All 28 statements in your text hold up"; mit nicht erreichten
+  Sätzen `sentences_unchecked`/`unindexed_sentences` heißt es „checked
+  statements"); darunter ein 3-px-Satzstreifen (Sätze in Lesereihenfolge, je
+  Lauf eines Urteils ein Segment mit `flex-grow` = Satzzahl, Ampelfarbe,
+  `aria-hidden`, passt auch bei 320 Sätzen aufs Handy) und eine Legende mit
+  Farbpunkten in denselben Farben (`--pc-holds`/`--pc-unconfirmed`; Zähler als Knöpfe, Klick:
   erster Satz dieses Urteils, sonst klappt der Volltext auf; bei nur einem
   Urteil entfällt sie, der Satz sagt es schon), rechts „Show full text". Dann
   der Text auf einer Schiene wie ein Zitat der Antwort. Zugeklappt stehen
@@ -3595,7 +3603,9 @@ Antwort-Prompt).
   Lesefarbe (nicht grau, seit 2026-10-09 abends) „N of M models disagree –
   Modell: „was es stattdessen sagt"" (erstes Gegenzitat, Markdown entfernt,
   ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
-  Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene.
+  Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene; mehr
+  als 8 widersprochene Sätze → „N more in the full text" (klappt auf). Der
+  Toggle trägt `aria-controls` auf die Schiene.
   „Show full text" zeigt die ganze Passage
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-

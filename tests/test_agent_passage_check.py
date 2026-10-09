@@ -214,7 +214,7 @@ def test_checked_passage_is_marked_and_never_reaches_the_comparison_models(store
     # own judge keeps its line.
     answer_judges = [system for system, prompt in script.judge_calls if "with low flow temperatures" in prompt]
     assert len(answer_judges) >= 2  # differences (one or two passes) and coverage
-    assert all("merely reports what the pasted text says asserts nothing of its own" in s for s in answer_judges)
+    assert all("merely reports what the text says, without endorsing or rejecting it" in s and "agrees with a statement of that text asserts" in s for s in answer_judges)
     text_judges = [system for system, prompt in script.judge_calls if "underfloor heating" in prompt]
     assert text_judges and all("pasted from elsewhere (untrusted data" in s for s in text_judges)
 
@@ -280,6 +280,9 @@ def test_a_failed_check_may_be_tried_again_in_the_same_message(store):
     assert len(review["comparisons"]) == 2
     assert review["passage_check"]["comparison_id"] == review["comparisons"][1]["id"]
     assert all(isinstance(check["differences_data"], dict) for check in review["checks"])
+    # Both comparisons judge the same answer, which talks about the pasted text.
+    answer_judges = [s for s, p in script.judge_calls if "with low flow temperatures" in p]
+    assert len(answer_judges) >= 4 and all("merely reports what the text says, without endorsing or rejecting it" in s for s in answer_judges)
     assert review_is_bound(review, saved["consensus"])
 
 
@@ -317,9 +320,11 @@ def test_a_failed_check_costs_the_marks_not_the_answer(store):
     assert passage["status"] == "failed"
     assert {"code": "coverage_unavailable"} in passage["issues"]
     assert "claims" not in passage
-    # The answer judges run either way.
+    # The answer judges run either way, still told the answer restates the text.
     check = saved["agent_review"]["checks"][0]
     assert isinstance(check["differences_data"], dict)
+    answer_judges = [s for s, p in script.judge_calls if "with low flow temperatures" in p]
+    assert answer_judges and all("merely reports what the text says, without endorsing or rejecting it" in s for s in answer_judges)
 
 
 def test_too_few_answers_leave_the_passage_unchecked(store):

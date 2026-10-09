@@ -80,8 +80,9 @@
       const below = (parseFloat(style.paddingBottom) || 0) + (inFlow ? composer.offsetHeight : 0) + after;
       const turn = reserve.getBoundingClientRect().top - question.getBoundingClientRect().top;
       // Rounded down: a reserve a fraction too tall makes the page scroll by
-      // that fraction; one a fraction short is filled by the column's own
-      // minimum height.
+      // that fraction. A fraction short is filled by the column's minimum
+      // height on a one-viewport page; on later turns the question lands
+      // under a pixel lower, unseen.
       height = Math.max(0, Math.floor(window.innerHeight - landing(question) - turn - below));
     }
     const current = parseFloat(reserve.style.height) || 0;

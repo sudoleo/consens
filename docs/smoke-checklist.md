@@ -78,8 +78,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       paste an AI answer to check“). Eine ChatGPT-Antwort mit einem bekannten
       Fehler einfügen, „Stimmt das?“ davor → die eigene Nachricht bleibt, wie
       sie abgeschickt wurde (kein Umbau, keine Marken). Über der Antwort zuerst
-      „Checking your text …“, dann EIN Ergebnissatz („4 of 28 statements in
-      your text are contradicted“, Farbe nur auf der Zahl, kein Versalien-
+      „Checking your text …“, dann EIN Ergebnissatz („Models disagree with 4
+      of 28 statements in your text“, Farbe nur auf der Zahl, kein Versalien-
       Etikett), Satzstreifen und Legende mit Farbpunkten, auf einer Schiene nur
       die widersprochenen/geteilten Sätze, jeder mit
       „N of M models disagree – Modell: „…““ darunter (gut lesbar, nicht grau),

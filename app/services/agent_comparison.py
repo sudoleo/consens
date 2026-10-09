@@ -351,9 +351,11 @@ _PASSAGE_OPENERS = set("\n:\"'\u201c\u201e\u00ab\u2018(")
 _PASSAGE_ANSWER_SUBJECT = (
     "an answer that gives a verdict on a text the user pasted (another AI's answer) and the correct "
     "information. The answer quotes or restates that text's statements in order to confirm, reject or "
-    "correct them. Judge only what the answer itself asserts: a sentence that merely reports what the "
-    "pasted text says asserts nothing of its own (not a claim); a sentence that rejects a statement "
-    "asserts the correction, and that correction is what you check")
+    "correct them. A sentence that agrees with a statement of that text asserts that statement; one that "
+    "rejects or corrects it asserts the correction, and that is what you check. Only a sentence that "
+    "merely reports what the text says, without endorsing or rejecting it, asserts nothing of its own "
+    '(classification "not_a_claim"; anchor no disagreement on it). Disagreements between the model '
+    "responses are still reported in full. Check the answer")
 
 
 def _search_form(text):
@@ -683,11 +685,6 @@ class ComparisonTools:
             # picker. The family alias selects only judge policy.
             reference = cfg.provider_label(search_family(self.loop.model))
         return reference
-
-    def _passage_checked(self, comparison):
-        """Whether this comparison's pasted text has its sentence check."""
-        passage = self.passage or {}
-        return passage.get("comparison_id") == comparison["id"] and passage.get("status") in {"succeeded", "partial"}
 
     def _check_passage(self, comparison, cancellation):
         """Coverage judge on the user's passage against this comparison's answers.
@@ -1251,12 +1248,14 @@ class ComparisonTools:
                     continue
                 # judge_answer runs in a tool thread without the turn's
                 # cancellation; bind it so a Stop also ends running judge calls.
-                # The answer about a checked pasted text gives a verdict on it
+                # An answer in a turn with a pasted text gives a verdict on it
                 # and the correct information: its own statements are judged
                 # like any answer's, all three judges, told that it restates
-                # the text's statements in order to reject them.
+                # the text's statements in order to confirm or reject them.
+                # For every comparison and also after a failed check: the
+                # answer is the same text and still talks about the pasted one.
                 transport = (partial(self.judge_transport, subject="passage_answer")
-                             if self._passage_checked(comparison) else self.judge_transport)
+                             if self.passage is not None else self.judge_transport)
                 with bind_task_transport(transport), bind_provider_cancellation(cancellation):
                     _, data = query_differences({cfg.provider_label(a["provider"]): a["text"] for a in checked},
                         self.text, {"OpenRouter": loop.api_key}, differences_model=self._judge_reference(),

@@ -578,7 +578,9 @@
     for (const context of contexts) { contextsByKey.delete(context.key); contextsByKey.set(context.key, context); }
     while (contextsByKey.size > 64) contextsByKey.delete(contextsByKey.keys().next().value);
     activityContexts.set(review, contexts);
-    let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts[0];
+    // Turns saved with a skipped answer check open on a comparison with marks.
+    let chosen = contexts.find(c => c.key === host._selectedBasis)
+      || contexts.find(c => c.check?.skipped !== PASSAGE_CHECKED) || contexts[0];
     function select(context) {
       chosen = context; host._selectedBasis = context.key;
       context.mark(); tabs.replaceChildren();

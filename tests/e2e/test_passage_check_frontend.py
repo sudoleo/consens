@@ -119,7 +119,7 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         assert card.evaluate("el => el.nextElementSibling.id") == "agentAnswerBody"
         # The result as one sentence, its number in the verdict colour; no label above it.
         headline = card.locator(".passage-check-headline")
-        expect(headline).to_have_text("1 of 3 statements in your text is contradicted")
+        expect(headline).to_have_text("Models disagree with 1 of 3 statements in your text")
         figure = headline.locator(".passage-check-figure")
         assert figure.evaluate("el => getComputedStyle(el).color") != headline.evaluate("el => getComputedStyle(el).color")
         expect(card.locator(".passage-check-strip i")).to_have_count(3)
@@ -196,7 +196,7 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         history = page.locator("#threadHistory .thread-history-turn").first
         expect(history.locator(".thread-history-question .pc-claim")).to_have_count(0)
         history_card = history.locator(".thread-history-answer > .passage-check")
-        expect(history_card).to_contain_text("1 of 3 statements in your text is contradicted")
+        expect(history_card).to_contain_text("Models disagree with 1 of 3 statements in your text")
         assert history_card.evaluate("el => el.nextElementSibling.classList.contains('thread-history-answer-body')")
         expect(history.locator(".thread-history-answer-body .cx-claim")).to_have_count(1)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
