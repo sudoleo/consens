@@ -42,6 +42,22 @@ class StreamProgress:
         return snapshot
 
 
+# A short announcement of the model's own next step ("I'll answer directly.",
+# "Let me search.", "No search needed.") is true but says nothing about the
+# question; shown as the one live line it reads like a strange verdict.
+# Longer planning sentences name their topic and stay.
+_PLAN_ONLY = re.compile(
+    r"^(?:(?:ok(?:ay)?|so|alright|right|now|then|well)[,.!]?\s+)*"
+    r"(?:i[\u2019']ll|i will|i[\u2019']m going to|i am going to|let me|let[\u2019']s|i should|i need to|i can"
+    r"|no (?:need (?:to|for) )?(?:a |any )?(?:web )?search|(?:a |the )?(?:web )?search (?:is )?(?:not )?needed)\b",
+    re.IGNORECASE)
+_PLAN_ONLY_MAX_CHARS = 40
+
+
+def _plan_only(sentence):
+    return len(sentence) <= _PLAN_ONLY_MAX_CHARS and bool(_PLAN_ONLY.match(sentence))
+
+
 class ReasoningProgress:
     def __init__(self, *, unlimited=False, min_seconds=0.0, clock=time.monotonic):
         # unlimited: a long answer step keeps showing signs of life for its
@@ -89,7 +105,7 @@ class ReasoningProgress:
                 sentence = re.sub(r"\s+", " ", candidate).strip(" #*\t")
                 if len(sentence) > 180:
                     sentence = sentence[:177].rsplit(" ", 1)[0] + "…"
-                if len(sentence) >= 12 and sentence not in excerpts:
+                if len(sentence) >= 12 and sentence not in excerpts and not _plan_only(sentence):
                     excerpts.append(sentence)
         summary = "\n".join(excerpts[-3:])
         if not summary or summary == self.summary:

@@ -111,10 +111,47 @@
   // uebernommenen Nachricht (#threadPendingAsk). Leerer Text versteckt den
   // Block wieder. Lange Fragen clampen per CSS auf drei Zeilen; is-long
   // schaltet den Aufklapp-Link frei, is-open hebt den Clamp auf.
+  // Absaetze der Nachricht bleiben stehen (die Blase setzt pre-wrap); nur
+  // Leerzeichenfolgen und mehr als eine Leerzeile werden eingeebnet.
+  function normalizeQuestionText(question) {
+    return String(question || "")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[^\S\n]+/g, " ")
+      .replace(/ ?\n ?/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  // Ein "Ask about this"-Zitat ist Teil der gesendeten Frage (composer-quote.js),
+  // in der Blase aber Kontext: es steht als abgesetzter Block unter der
+  // getippten Frage statt als "Quoted from the previous answer: ..."-Satz.
+  // Absaetze werden eigene Bloecke mit Abstand statt einer Leerzeile: die
+  // eingeklappte Blase zeigt drei Zeilen, und eine Leerzeile waere eine davon.
+  function fillQuestionText(element, normalized) {
+    const parts = window.App.quote?.split?.(normalized) || { typed: normalized, quote: "" };
+    const paragraphs = parts.typed.split(/\n\n+/).filter(Boolean);
+    if (!parts.quote && paragraphs.length <= 1) {
+      element.textContent = normalized;
+      return;
+    }
+    element.replaceChildren();
+    for (const paragraph of paragraphs) {
+      const block = document.createElement("span");
+      block.className = "thread-ask-paragraph";
+      block.textContent = paragraph;
+      element.append(block);
+    }
+    if (!parts.quote) return;
+    const quote = document.createElement("span");
+    quote.className = "thread-ask-quote";
+    quote.textContent = parts.quote;
+    element.append(quote);
+  }
+
   function renderThreadQuestion(wrap, text, question) {
     if (!wrap || !text) return "";
 
-    const normalized = String(question || "").replace(/\s+/g, " ").trim();
+    const normalized = normalizeQuestionText(question);
     const unchanged = (text.dataset.question ?? text.textContent) === normalized;
     // Die Multi-Run-Projektion schreibt den sichtbaren Context waehrend des
     // Streamings regelmaessig neu ins DOM. Eine identische Frage ist dabei
@@ -128,7 +165,7 @@
       return normalized;
     }
 
-    text.textContent = normalized;
+    fillQuestionText(text, normalized);
     text.dataset.question = normalized;
     wrap.hidden = !normalized;
     wrap.classList.remove("is-open", "is-long");
@@ -479,6 +516,8 @@
     getSelectedModelCount,
     setAppTitle,
     setThreadQuestion,
+    normalizeQuestionText,
+    fillQuestionText,
     setThreadQuestionAttachments,
     setPendingThreadQuestion,
     clearPendingThreadQuestion,

@@ -16,7 +16,7 @@ const BODY = `
 `;
 
 function boot() {
-  return loadScripts(["static/js/app-core.js"], {
+  return loadScripts(["static/js/app-core.js", "static/js/composer-quote.js"], {
     body: BODY,
     before: window => {
       window.matchMedia = () => ({
@@ -69,5 +69,42 @@ describe("thread question disclosure", () => {
     expect(wrap.classList.contains("is-long")).toBe(false);
     expect(more.textContent).toBe("Show full message");
     expect(more.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("keeps the paragraphs of a sent message and flattens only runs of spaces", () => {
+    const { window, document } = boot();
+    const [CR, NL, TAB] = [13, 10, 9].map(code => String.fromCharCode(code));
+
+    window.App.setThreadQuestion(`First   paragraph. ${CR}${NL}${CR}${NL}${CR}${NL} Second${TAB}line${NL}third line`);
+
+    const text = document.getElementById("threadAskText");
+    // Paragraphs become blocks: a blank line would be one of the three lines
+    // the folded bubble shows. Line breaks inside a paragraph stay (pre-wrap).
+    const paragraphs = [...text.querySelectorAll(".thread-ask-paragraph")].map(node => node.textContent);
+    expect(paragraphs).toEqual(["First paragraph.", `Second line${NL}third line`]);
+    expect(text.dataset.question).toBe(`First paragraph.${NL}${NL}Second line${NL}third line`);
+
+    window.App.setThreadQuestion(`One paragraph${NL}with a line break`);
+    expect(text.querySelector(".thread-ask-paragraph")).toBeNull();
+    expect(text.textContent).toBe(`One paragraph${NL}with a line break`);
+  });
+
+  it("shows an Ask-about-this quote as a block below the typed question", () => {
+    const { window, document } = boot();
+    const { typedMarker, quoteOnlyPrefix, close } = window.App.quote.format;
+
+    window.App.setThreadQuestion(`How likely is 200?${typedMarker}Ageing: slowing is realistic.${close}`);
+
+    const text = document.getElementById("threadAskText");
+    const quote = text.querySelector(".thread-ask-quote");
+    expect(quote.textContent).toBe("Ageing: slowing is realistic.");
+    expect(text.textContent).toBe("How likely is 200?Ageing: slowing is realistic.");
+    expect(text.textContent).not.toContain("Quoted from");
+    // The full sent text stays the identity of the message.
+    expect(text.dataset.question).toBe(`How likely is 200?${typedMarker}Ageing: slowing is realistic.${close}`);
+
+    window.App.setThreadQuestion(`${quoteOnlyPrefix}A claim.${close}`);
+    expect(text.textContent).toBe("A claim.");
+    expect(text.querySelector(".thread-ask-quote").textContent).toBe("A claim.");
   });
 });

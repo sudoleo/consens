@@ -2875,6 +2875,8 @@ body:not(.is-hero) .consensus-section::before {
   -webkit-line-clamp: 3;
   overflow: hidden;
   overflow-wrap: anywhere;
+  /* Absaetze der Nachricht bleiben stehen: wer Zeilen umbricht, meint das. */
+  white-space: pre-wrap;
 }
 
 .thread-ask.is-open .thread-ask-text {
@@ -3036,11 +3038,36 @@ body:not(.is-hero) .consensus-section::before {
   -webkit-line-clamp: 3;
   overflow: hidden;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .thread-history-question.is-open .thread-history-question-text {
   -webkit-line-clamp: unset;
   overflow: visible;
+}
+
+/* Absaetze und ein "Ask about this"-Zitat in der gesendeten Nachricht
+   (app-core.js fillQuestionText). Das Zitat ist Kontext unter der eigenen
+   Frage, abgesetzt wie ein Blockzitat statt als angehaengter
+   "Quoted from ..."-Satz. */
+.thread-ask-paragraph {
+  display: block;
+}
+
+.thread-ask-paragraph + .thread-ask-paragraph {
+  margin-top: 0.6em;
+}
+
+.thread-ask-quote {
+  display: block;
+  padding-left: 10px;
+  border-left: 2px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+}
+
+.thread-ask-quote:not(:first-child) {
+  margin-top: 8px;
 }
 
 .thread-history-answer {

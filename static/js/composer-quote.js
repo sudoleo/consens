@@ -108,6 +108,20 @@
       : `${FORMAT.quoteOnlyPrefix}${state.text}${FORMAT.close}`;
   }
 
+  // Die Umkehrung von compose() fuer die Anzeige einer gesendeten Nachricht:
+  // getippte Frage und Zitat getrennt. Wie agent_memory.user_words schneidet
+  // es am ERSTEN Marker. Ohne Zitat: { typed: text, quote: "" }.
+  function split(message) {
+    const text = String(message ?? "");
+    const unquote = (rest) => rest.endsWith(FORMAT.close) ? rest.slice(0, -FORMAT.close.length) : rest;
+    if (text.startsWith(FORMAT.quoteOnlyPrefix)) {
+      return { typed: "", quote: unquote(text.slice(FORMAT.quoteOnlyPrefix.length)).trim() };
+    }
+    const index = text.indexOf(FORMAT.typedMarker);
+    if (index < 0) return { typed: text, quote: "" };
+    return { typed: text.slice(0, index), quote: unquote(text.slice(index + FORMAT.typedMarker.length)).trim() };
+  }
+
   function bind() {
     const { remove, input } = els();
     remove?.addEventListener("click", () => {
@@ -123,6 +137,7 @@
     text: () => state.text,
     has: () => !!state.text,
     compose,
+    split,
     format: FORMAT,
     focusComposer,
     // Fuer composer-collapse.js: ein stehendes Zitat ist Angefangenes und darf

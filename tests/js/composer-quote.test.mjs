@@ -128,4 +128,14 @@ describe("App.quote", () => {
     expect(() => bare.window.App.quote.set("text")).not.toThrow();
     expect(bare.window.App.quote.text()).toBe("text");
   });
+
+  it("splits a sent message back into typed question and quote at the first marker", () => {
+    const { typedMarker, quoteOnlyPrefix, close } = ctx.quote.format;
+
+    expect(ctx.quote.split("Just a question.")).toEqual({ typed: "Just a question.", quote: "" });
+    expect(ctx.quote.split(`Why?${typedMarker}A passage${typedMarker}inside.${close}`)).toEqual({
+      typed: "Why?", quote: `A passage${typedMarker}inside.`.trim(),
+    });
+    expect(ctx.quote.split(`${quoteOnlyPrefix}A passage.${close}`)).toEqual({ typed: "", quote: "A passage." });
+  });
 });

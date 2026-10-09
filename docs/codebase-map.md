@@ -2138,6 +2138,10 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   (`agent_client.with_reasoning_summary`, wie im Chat-Modell), sonst kämen nur
   verschlüsselte Blöcke. Keine zusätzlichen Modellaufrufe und kein
   zusätzliches Reasoning: es wird nur lesbar, was ohnehin gestreamt wird.
+  Seit 2026-10-09 lässt `ReasoningProgress` kurze Ansagen des eigenen nächsten
+  Schritts weg (`_plan_only`: ≤ 40 Zeichen, beginnt mit „I'll/Let me/I should…"
+  oder „No search needed"): GLM zeigte sonst nach der Such-Entscheidung
+  „I'll answer directly." als einzige Live-Zeile.
   Modelle ohne Reasoning (z. B. Haiku, Mistral Small, Grok 4.20 im
   Standard-Preset) liefern keine Zeile.
   Die Landing-Schiene (`.lp-scene-rail`) zeichnet weiter die alte Linie.
@@ -2177,7 +2181,16 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   einem fremden Absatz (bzw. einem nirgends gerenderten Markdown-`>`) beginnen.
   Ab `compose()` ist das Zitat Teil der Frage: Lauf, Chat-Kontext, Bookmark und
   die sechs Modelle sehen genau EINEN Text, deshalb weiß außer `query-send.js`
-  (Senden) und `app-init.js` (`clearResponseBoxes`) niemand davon. `query-send.js`
+  (Senden) und `app-init.js` (`clearResponseBoxes`) niemand davon. Einzige
+  Ausnahme ist die Anzeige: `App.quote.split(text)` trennt die gesendete
+  Nachricht wieder in `{typed, quote}`, und `App.fillQuestionText` (app-core.js,
+  für `#threadAsk`, `#threadPendingAsk` und `.thread-history-question-text`)
+  zeigt das Zitat als `.thread-ask-quote`-Block unter der Frage statt des
+  „Quoted from …"-Satzes. Seit 2026-10-09 behält die Blase außerdem die Absätze
+  (`App.normalizeQuestionText` ebnet nur Leerzeichen und Leerzeilen-Folgen ein,
+  `white-space: pre-wrap`); mehrere Absätze werden `.thread-ask-paragraph`-
+  Blöcke, damit eine Leerzeile keine der drei eingeklappten Zeilen belegt.
+  `dataset.question` bleibt der volle normalisierte Text (Identität der Nachricht). `query-send.js`
   hält Entwurf und Zitat getrennt in `sentMessage.{draft,quote}`, damit ein
   geplatzter Lauf beides unverändert zurückgibt. Das Menü zeigt „Ask about this"
   nur über Consensus-/Modellantworten (die eigene Frage zu zitieren wäre ein

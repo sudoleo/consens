@@ -275,7 +275,8 @@
       if (!history || !turnData?.question || (!turnData?.consensus
           && !(turnData.execution_mode === 'agent' && turnData.status === 'failed'))) return false;
       const turnId = String(turnData.turn_id || "").trim();
-      const normalizedQuestion = String(turnData.question).replace(/\s+/g, " ").trim();
+      const normalizedQuestion = window.App.normalizeQuestionText?.(turnData.question)
+        ?? String(turnData.question).replace(/\s+/g, " ").trim();
       // A replay of the same completed turn is idempotent. A colliding ID with
       // different content must never make the visible exchange disappear:
       // append it and let the owner-bound transcript remain the authority.
@@ -295,7 +296,8 @@
       question.className = "thread-history-question";
       const questionText = document.createElement("div");
       questionText.className = "thread-history-question-text";
-      questionText.textContent = normalizedQuestion;
+      if (window.App.fillQuestionText) window.App.fillQuestionText(questionText, normalizedQuestion);
+      else questionText.textContent = normalizedQuestion;
       questionText.dataset.question = normalizedQuestion;
       question.append(questionText);
 

@@ -26,6 +26,16 @@ def test_short_highlights_update_at_boundaries_and_remain_bounded():
     assert progress.updates <= 8 and len(progress.text) <= 8000
 
 
+def test_short_announcements_of_the_next_step_are_no_highlight():
+    progress = ReasoningProgress()
+    assert progress.update(event("Okay, no search needed. I'll answer directly.")) is None
+    value = progress.update(event(" The question is whether every disease could become curable."))
+    assert value["text"] == "The question is whether every disease could become curable."
+    # A planning sentence that names its topic says something and stays.
+    value = ReasoningProgress().update(event("Let me weigh the biological limits of ageing against therapies."))
+    assert value["text"] == "Let me weigh the biological limits of ageing against therapies."
+
+
 def test_provider_summary_replaces_excerpts_and_ignores_raw_reasoning():
     progress = ReasoningProgress()
     progress.update(event("A preliminary assumption needs checking."))
