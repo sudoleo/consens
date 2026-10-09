@@ -139,21 +139,6 @@ function enhanceMarkdownTables(root) {
   });
 }
 
-// An answer that opens with a short paragraph has a first sentence worth
-// reading first: it is set as a lead (shell.css, `.has-lead`). Only answer
-// bodies, only a paragraph short enough to be one thought, and only once
-// something follows it, so a one-paragraph answer stays plain text and a
-// streaming paragraph is not promoted while it is still growing.
-const ANSWER_LEAD_MAX_CHARS = 240;
-
-function markAnswerLead(el) {
-  if (!el?.classList?.contains("consensus-answer-body")) return;
-  const first = el.firstElementChild;
-  const lead = Boolean(first && first.tagName === "P" && first.nextElementSibling
-    && first.textContent.trim().length <= ANSWER_LEAD_MAX_CHARS);
-  el.classList.toggle("has-lead", lead);
-}
-
 // Utils: Markdown → HTML (sanitised) + deine Addons
 function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources) {
   el.innerHTML = renderMarkdownHtml(md);
@@ -168,11 +153,9 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   }
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);
-  markAnswerLead(el);
 }
 
 window.injectMarkdown = injectMarkdown;
-window.markAnswerLead = markAnswerLead;
 
 // --- Incremental Markdown for a growing answer -------------------------
 // Re-parsing the whole answer on every streamed chunk makes the total work
@@ -221,13 +204,16 @@ function nextStreamBlockEnd(text, from) {
   return -1;
 }
 
-function renderStreamFragment(md) {
+// `decorate` gives a block its final inline form before it is shown (for
+// example source pills): changing it afterwards re-wrapped lines under the eye.
+function renderStreamFragment(md, decorate) {
   const template = document.createElement("template");
   template.innerHTML = renderMarkdownHtml(md);
   const holder = document.createElement("div");
   holder.append(template.content);
   enhanceMarkdownTables(holder);
   if (window.ConsensusMath) window.ConsensusMath.render(holder);
+  decorate?.(holder);
   return Array.from(holder.childNodes);
 }
 
@@ -245,7 +231,7 @@ function closeOpenStrong(text) {
 
 // Renders `md` into `el`, reusing the blocks of the previous call when `md`
 // only grew. Returns the number of characters that were parsed.
-function renderMarkdownStream(el, md) {
+function renderMarkdownStream(el, md, { decorate } = {}) {
   md = String(md || "");
   let state = el._markdownStream;
   // Anyone else writing into the element (a full injectMarkdown, a review
@@ -260,7 +246,7 @@ function renderMarkdownStream(el, md) {
     const block = md.slice(state.committed, end);
     state.tail.forEach(node => node.remove());
     state.tail = [];
-    el.append(...renderStreamFragment(block));
+    el.append(...renderStreamFragment(block, decorate));
     parsed += block.length;
     state.committed = end;
     state.committedText = md.slice(0, end);
@@ -268,13 +254,12 @@ function renderMarkdownStream(el, md) {
   const tailText = md.slice(state.committed);
   if (tailText !== state.tailText) {
     state.tail.forEach(node => node.remove());
-    state.tail = tailText.trim() ? renderStreamFragment(closeOpenStrong(tailText)) : [];
+    state.tail = tailText.trim() ? renderStreamFragment(closeOpenStrong(tailText), decorate) : [];
     el.append(...state.tail);
     state.tailText = tailText;
     parsed += tailText.length;
   }
   state.nodeCount = el.childNodes.length;
-  markAnswerLead(el);
   return parsed;
 }
 

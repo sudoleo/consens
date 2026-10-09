@@ -78,4 +78,23 @@ describe("incremental streamed Markdown", () => {
     expect(el.querySelector("img")).toBeNull();
     expect(el.innerHTML).not.toContain("evil.example");
   });
+
+  it("gives each streamed block its final inline form before it is shown", () => {
+    const { window, document } = boot();
+    const el = document.createElement("div");
+    const decorate = holder => holder.querySelectorAll("a").forEach(link => link.classList.add("decorated"));
+    window.renderMarkdownStream(el, "See [one](https://a.example/).\n\nAnd [two](https://b.example/", { decorate });
+    window.renderMarkdownStream(el, "See [one](https://a.example/).\n\nAnd [two](https://b.example/).\n\nMore\n", { decorate });
+    window.renderMarkdownStream(el, "See [one](https://a.example/).\n\nAnd [two](https://b.example/).\n\nMore text", { decorate });
+    expect(el.querySelectorAll("a")).toHaveLength(2);
+    expect([...el.querySelectorAll("a")].every(link => link.classList.contains("decorated"))).toBe(true);
+  });
+
+  it("never promotes a paragraph to a larger lead once more text follows", () => {
+    const { window, document } = boot();
+    const el = document.createElement("div");
+    el.className = "consensus-answer-body";
+    window.renderMarkdownStream(el, "Short first paragraph.\n\nSecond paragraph follows.\n\nThird");
+    expect(el.classList.contains("has-lead")).toBe(false);
+  });
 });

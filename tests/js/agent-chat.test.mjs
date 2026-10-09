@@ -682,14 +682,35 @@ describe("single-model agent chat", () => {
     details.querySelector('summary').click();
     expect(details.open).toBe(true);
     activity.render(host, {events, running:false});
-    expect(details.open).toBe(false);
+    // A history the reader opened stays open on screen: closing it moved the answer.
+    expect(details.open).toBe(true);
     expect(host.querySelector('.agent-progress').hidden).toBe(true);
     expect(host.querySelector('.agent-progress').childElementCount).toBe(0);
-    details.querySelector('summary').click();
     activity.renderTurn(host, {status:'completed', agent_activity:events});
     expect(details.open).toBe(true);
     expect([...details.querySelectorAll('.agent-activity-update')].map(p => p.textContent)).toEqual([first.text, second.text]);
     expect(details.querySelector('.agent-activity-note').hidden).toBe(true);
+    dom.window.close();
+  });
+
+  it('clears the progress lines the moment the answer starts, before text stands below them', () => {
+    const { window, document, dom } = boot();
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const events = [];
+    activity.receive(events, {version:1, id:'p1', kind:'progress', text:'Comparing the plans.'});
+    activity.receive(events, {version:1, id:'search', kind:'tool', name:'web_search', status:'running'});
+    activity.render(host, {events, running:true, answerText:'A preamble.'});
+    // A preamble before a running tool is not the answer: the step stays.
+    expect(host.querySelector('.agent-progress').hidden).toBe(false);
+    activity.receive(events, {version:1, id:'search', kind:'tool', name:'web_search', status:'succeeded'});
+    activity.receive(events, {version:1, id:'writing', kind:'status', status:'responding'});
+    activity.render(host, {events, running:true, answerText:'The answer begins'});
+    const preview = host.querySelector('.agent-progress');
+    expect(preview.hidden).toBe(true);
+    expect(preview.childElementCount).toBe(0);
+    activity.render(host, {events, running:false, answerText:'The answer begins and ends.'});
+    expect(preview.hidden).toBe(true);
     dom.window.close();
   });
 
@@ -1331,7 +1352,8 @@ describe("single-model agent chat", () => {
     }
     expect(pickers).not.toHaveBeenCalled();
     expect(full).not.toHaveBeenCalled();
-    expect(w.renderMarkdownStream).toHaveBeenLastCalledWith(d.getElementById('agentAnswerBody'), 'First part. More. Even more. Last.');
+    expect(w.renderMarkdownStream).toHaveBeenLastCalledWith(d.getElementById('agentAnswerBody'), 'First part. More. Even more. Last.',
+      { decorate: expect.any(Function) });
     expect(w.App.agentReview.render).not.toHaveBeenCalled();
     resolve({ ok: true, data: { response: 'Final answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
       turn: { id: 'b'.repeat(32), consensus: 'Final answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });

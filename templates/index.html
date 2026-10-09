@@ -41,7 +41,9 @@
   {% for script in frontend.scripts if script.group == "head" %}
   <script src="{{ script.src }}"></script>
   {% endfor %}
-  <!-- Google Fonts -->
+  {# Same URL the stylesheet's @font-face resolves to: the download starts
+     with the HTML instead of after the CSS, so first paint usually has Inter. #}
+  <link rel="preload" href="/static/fonts/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ frontend.style }}">
   <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
@@ -571,7 +573,7 @@
           </button>
         </div>
       </div>
-      <div id="composerModeBar" class="composer-mode-bar" aria-label="Question options and attachments" hidden>
+      <div id="composerModeBar" class="composer-mode-bar" aria-label="Question options and attachments">
         <div class="composer-mode-controls">
           <button type="button" id="composerReasoningToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="false" aria-label="Reasoning" title="Reasoning">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>

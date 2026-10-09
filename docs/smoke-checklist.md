@@ -140,6 +140,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Status sichtbar.
 
 ## Kern-Flow
+- [x] Keine Verschiebung (09.10.2026): Senden bringt die neue Frage einmal nach
+      oben (Agent und Consensus, Erst- und Folgefrage); Streamen, Markierungen,
+      Quellen-Pills, Evidenzzeile und Laufende bewegen kein sichtbares Wort und
+      scrollen nicht (Wortpositionen pro Frame gemessen, 1400/390px). Gast-
+      Reload 1400/375px ohne Layout-Shift-Eintrag. Offen für Handtest:
+      angemeldeter Reload mit eingeklappter Sidebar und Agent als letztem Modus.
 - [x] Consensus-Scroll (18.09.2026): Einmaliger Sprung beim Absenden und bei
       „Latest message“, kein automatisches Mitlaufen mit Consensus-Deltas.
       Schnelle Ausgabe, weitere Deltas nach dem Klick, Abschluss und Reduced

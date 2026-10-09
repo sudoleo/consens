@@ -1,26 +1,18 @@
-// Agent chats may follow output; consensus chats only move on an explicit jump.
+// Conversation scrolling like ChatGPT/Claude: Send moves the new question to
+// the top once, the answer grows into reserved space below it, and nothing
+// scrolls on its own while text streams, checks arrive or a run ends.
 (function () {
   "use strict";
   const App = window.App = window.App || {};
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const NEAR_END = 80;
-  let context = null, following = false, frame = 0, observer = null, button = null;
-  let lastY = window.scrollY, started = null, from = 0;
-  let resumeUntil = 0, touchY = null;
-  let destination = null;
-  let oneShot = false;
-  let explicitJump = false;
+  let context = null, frame = 0, observer = null, button = null, reserve = null;
+  let started = null, from = 0;
+  // "head": the current question to the top; "end": the end of the thread;
+  // "latest": the end of the content as it was when "Latest message" was pressed.
+  let jump = null, destination = null;
 
-  function followsOutput() { return context?.config?.executionMode === "agent"; }
-  function settleExplicitJump() {
-    // A first Send can reach the empty shell before the first response exists.
-    // Keep that user intent until there is answer content to reach (or the
-    // user interrupts); an immediately completed response still gets one jump.
-    const waitingForAnswer = followsOutput() && context.consensus && !context.finishedAt
-      && !String(context.consensus.text || context.consensus.streamText || '').trim();
-    if (!waitingForAnswer) explicitJump = false;
-  }
-
+  function container() { return document.querySelector(".container"); }
   function maxTop() {
     const root = document.scrollingElement || document.documentElement;
     return Math.max(0, root.scrollHeight - window.innerHeight);
@@ -38,24 +30,75 @@
       || !!document.querySelector('dialog[open]:not(.is-docked)')
       || window.getComputedStyle(document.body).overflowY === "hidden";
   }
+  // The question that heads the newest turn (the pending bubble while a
+  // follow-up has not been promoted yet).
+  function head() {
+    for (const id of ["threadPendingAsk", "threadAsk"]) {
+      const element = document.getElementById(id);
+      if (element && !element.hidden && element.getClientRects().length) return element;
+    }
+    return null;
+  }
+  // The question lands where a first question sits on an unscrolled page:
+  // below the column's top padding and its own top margin.
+  function landing(question) {
+    const column = container();
+    if (!column) return 0;
+    return column.getBoundingClientRect().top + window.scrollY
+      + (parseFloat(window.getComputedStyle(column).paddingTop) || 0)
+      + (parseFloat(window.getComputedStyle(question).marginTop) || 0);
+  }
+  function headTop() {
+    const element = head();
+    return element ? Math.max(0, Math.round(element.getBoundingClientRect().top + window.scrollY - landing(element))) : null;
+  }
+  // Space below the newest turn, so its question can reach the top while the
+  // answer is still short. The answer, its evidence row and late files fill
+  // this space instead of lengthening the page: nothing above or on screen
+  // moves, and the page only grows once the turn is taller than the viewport.
+  function updateReserve() {
+    const column = container();
+    if (!column) return;
+    if (!reserve) {
+      reserve = document.createElement("div");
+      reserve.className = "chat-scroll-reserve";
+      reserve.setAttribute("aria-hidden", "true");
+    }
+    if (reserve.parentNode !== column) column.append(reserve);
+    const question = head();
+    let height = 0;
+    if (question && !document.body.classList.contains("is-hero") && column.getClientRects().length) {
+      const style = window.getComputedStyle(column);
+      const composer = column.querySelector(".input-section");
+      const inFlow = composer && window.getComputedStyle(composer).position !== "fixed";
+      const root = document.scrollingElement || document.documentElement;
+      const columnEnd = column.getBoundingClientRect().bottom + window.scrollY;
+      const below = (parseFloat(style.paddingBottom) || 0) + (inFlow ? composer.offsetHeight : 0)
+        + Math.max(0, root.scrollHeight - columnEnd);
+      const turn = reserve.getBoundingClientRect().top - question.getBoundingClientRect().top;
+      height = Math.max(0, Math.ceil(window.innerHeight - landing(question) - turn - below));
+    }
+    const current = parseFloat(reserve.style.height) || 0;
+    if (Math.abs(current - height) >= 1) reserve.style.height = `${height}px`;
+  }
+  function contentEnd() {
+    return reserve?.isConnected ? reserve.getBoundingClientRect().bottom + window.scrollY : null;
+  }
   function cancelFrame() {
     if (frame) window.cancelAnimationFrame(frame);
     frame = 0; started = null;
   }
   function syncButton() {
-    if (button) button.hidden = !valid() || following || occupied() || maxTop() - window.scrollY <= NEAR_END;
-    document.body.classList.toggle("chat-scroll-following", !!valid() && following);
+    if (button) button.hidden = !valid() || !!jump || occupied() || maxTop() - window.scrollY <= NEAR_END;
+    document.body.classList.toggle("chat-scroll-following", !!valid() && !!jump);
   }
   function pause() {
-    following = false;
-    explicitJump = false;
-    resumeUntil = 0;
+    jump = null;
     cancelFrame();
     syncButton();
   }
   function write(top) {
     // Each frame is immediate; a native smooth scroll must not outlive our cancellation.
-    lastY = top;
     window.scrollTo({ top, left: window.scrollX, behavior: "instant" });
   }
   function preserveAbove(element, anchor = null) {
@@ -76,44 +119,45 @@
       syncButton();
     };
   }
+  function finish() {
+    jump = null; started = null; syncButton();
+  }
   function step(now) {
     frame = 0;
-    if (!valid() || !following || occupied()) { pause(); return; }
-    const target = Math.min(destination ?? maxTop(), maxTop());
-    const y = window.scrollY;
-    if (target - y <= 1) {
-      if (target > y) write(target);
-      if (oneShot) following = false;
-      settleExplicitJump();
-      started = null; syncButton(); return;
+    if (!valid() || !jump || occupied()) { pause(); return; }
+    updateReserve();
+    // Re-measured every frame: the question settles, history is appended and
+    // the composer collapses while the jump runs.
+    // "Latest message" keeps the content end it was pressed for in view: text
+    // streaming in meanwhile must not stretch the jump into following, while
+    // a composer that grows (focus on narrow screens) still moves the end.
+    let goal = jump === "head" ? headTop() ?? maxTop() : maxTop();
+    if (jump === "latest") {
+      const end = contentEnd();
+      if (destination === null) destination = end;
+      if (end !== null && destination !== null) goal = maxTop() - (end - destination);
     }
-    if (motion.matches) {
-      write(target);
-      if (oneShot) following = false;
-      settleExplicitJump();
-      started = null; syncButton(); return;
+    const target = Math.min(goal, maxTop());
+    const y = window.scrollY;
+    if (Math.abs(target - y) <= 1 || motion.matches) {
+      if (Math.abs(target - y) > .5) write(target);
+      finish(); return;
     }
     if (started === null) { started = now; from = y; }
     const progress = Math.min(1, (now - started) / 420);
     const eased = 1 - Math.pow(1 - progress, 3);
-    // Re-measure as Markdown, images, the composer or the mobile viewport resize.
-    // Never pull upwards when content gets shorter.
-    write(Math.max(y, Math.min(target, Math.round(from + (target - from) * eased))));
+    write(Math.round(from + (target - from) * eased));
     if (progress < 1) frame = window.requestAnimationFrame(step);
-    else {
-      if (oneShot) following = false;
-      settleExplicitJump();
-      started = null; syncButton();
-    }
+    else finish();
   }
   function changed() {
+    updateReserve();
     if (!valid()) { pause(); return; }
     syncButton();
-    if (following && !frame) frame = window.requestAnimationFrame(step);
   }
   function ensure() {
-    const container = document.querySelector(".container");
-    const composer = container?.querySelector(".input-section");
+    const column = container();
+    const composer = column?.querySelector(".input-section");
     if (!button && composer) {
       button = document.createElement("button");
       button.type = "button"; button.className = "chat-scroll-latest";
@@ -121,17 +165,18 @@
       button.setAttribute("aria-label", "Scroll to the latest message");
       button.hidden = true;
       button.addEventListener("click", event => {
-        sent();
+        start("latest");
         // Keep keyboard focus usable without opening the mobile keyboard on a tap.
         if (event.detail === 0) document.getElementById("questionInput")?.focus({ preventScroll: true });
         else button.blur();
       });
       composer.append(button);
     }
-    if (!observer && container && typeof ResizeObserver === "function") {
+    if (!observer && column && typeof ResizeObserver === "function") {
       observer = new ResizeObserver(changed);
-      observer.observe(container);
+      observer.observe(column);
     }
+    updateReserve();
   }
   function project(next) {
     if (!next && !App.runRegistry?.visible()) {
@@ -147,80 +192,44 @@
         || context?.auth?.generation !== next?.auth?.generation || !eligible) {
       pause();
       context = eligible ? next : null;
-      lastY = window.scrollY;
     }
     ensure();
-    if (following && next?.finishedAt) {
-      // A fast answer may finish during the explicit Send jump. Let that jump
-      // settle once, but never follow later review/layout updates indefinitely.
-      // A queued resize/follow frame is not an unfinished user jump. Letting
-      // it settle would scroll past the reading position when the final Copy
-      // and evidence row is inserted below the answer.
-      if (explicitJump) oneShot = true;
-      else pause();
-    }
     syncButton();
   }
-  function sent() {
+  // One explicit, cancellable jump. Streaming, review and completion never
+  // start one; only Send, "Latest message" and opening a conversation do.
+  function start(kind) {
     if (!valid()) return;
     cancelFrame();
-    // Snapshot the current destination before fast consensus deltas arrive.
-    // Even during the animation, new tokens must not move this target.
-    destination = followsOutput() ? null : maxTop();
-    oneShot = !followsOutput() || !!context.bookmarkId;
-    following = true;
-    explicitJump = true;
+    jump = kind;
+    destination = null;
     syncButton();
-    // Let the question clamp, history append and collapsed composer settle first.
+    // Let the question, history append and collapsed composer settle first.
     frame = window.requestAnimationFrame(() => {
       frame = window.requestAnimationFrame(step);
     });
   }
+  function sent() { start("head"); }
   function opened() {
     if (window.innerWidth < 1100 && document.querySelector('.sidebar.active')) {
       document.getElementById('sidebarToggleInner')?.click();
     }
     project(App.runRegistry?.visible());
-    if (!valid()) return;
-    sent();
-    // Opening a conversation is one explicit jump, following layout changes
-    // during the animation without enabling ongoing output-following.
-    destination = null;
-    oneShot = true;
+    start("end");
   }
   function interrupt(event) {
     if (event.target?.closest?.(".chat-scroll-latest")) return;
     if (event.type === "keydown" && !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Tab", "Escape"].includes(event.key)) return;
-    if (valid()) {
-      pause();
-      if (event.type === "touchstart") touchY = event.touches?.[0]?.clientY;
-      const towardEnd = (event.type === "wheel" && event.deltaY > 0)
-        || (event.type === "keydown" && ["ArrowDown", "PageDown", "End", " "].includes(event.key) && !event.shiftKey)
-        || (event.type === "pointerdown" && event.target === document.documentElement);
-      if (towardEnd) resumeUntil = performance.now() + 1500;
-    }
+    if (jump) pause();
   }
   ["wheel", "touchstart", "pointerdown", "keydown"].forEach(name => {
     window.addEventListener(name, interrupt, { passive: true, capture: true });
   });
-  window.addEventListener("touchmove", event => {
-    const y = event.touches?.[0]?.clientY;
-    if (valid() && y < touchY) resumeUntil = performance.now() + 1500;
-    touchY = y;
-  }, { passive: true });
-  window.addEventListener("scroll", () => {
-    const y = window.scrollY;
-    // Only a real downward move back to the end resumes following. Layout
-    // shrinkage, an interrupted animation and nested scroll areas cannot do so.
-    if (valid() && followsOutput() && !frame && performance.now() < resumeUntil && y > lastY
-        && maxTop() - y <= NEAR_END && !occupied()) following = true;
-    lastY = y;
-    syncButton();
-  }, { passive: true });
+  window.addEventListener("scroll", syncButton, { passive: true });
   window.addEventListener("resize", changed, { passive: true });
   window.visualViewport?.addEventListener("resize", changed, { passive: true });
   document.addEventListener("selectionchange", () => { if (!window.getSelection()?.isCollapsed) pause(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
-  window.addEventListener("consensio:run-registry-change", () => { if (!valid()) project(null); });
-  App.chatScroll = { project, changed, sent, opened, preserveAbove };
+  window.addEventListener("consensio:run-registry-change", () => { if (!valid()) project(null); else changed(); });
+  App.chatScroll = { project, changed, sent, opened, latest: () => start("latest"), preserveAbove };
 })();

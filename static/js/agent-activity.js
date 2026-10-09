@@ -121,8 +121,10 @@
     }
     cancelMotion(host._agentActivity?.historyMotion);
   }
-  function reveal(element) {
-    return motion(element, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }]);
+  // `lift: false` fades only: the answer's first words must not glide.
+  function reveal(element, { lift = true } = {}) {
+    return motion(element, lift ? [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }]
+      : [{ opacity: 0 }, { opacity: 1 }]);
   }
   function clearPreview(view) {
     view.preview.hidden = true;
@@ -131,13 +133,13 @@
     view.previewExit = false;
     view.previewMotion = null;
   }
-  function hidePreview(view) {
-    if (view.previewExit) return;
+  function hidePreview(view, instant = false) {
+    if (view.previewExit && !instant) return;
     const height = view.preview.getBoundingClientRect().height;
     cancelMotion(view.previewMotion);
     view.preview.setAttribute('aria-hidden', 'true');
     view.preview.inert = true;
-    if (!height) { clearPreview(view); return; }
+    if (!height || instant) { clearPreview(view); return; }
     view.previewExit = true;
     const style = getComputedStyle(view.preview);
     view.previewMotion = motion(view.preview, [
@@ -328,8 +330,8 @@
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings, running, heading);
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
-    // Completion collapses even a manually opened live history. Later explicit
-    // expansion is preserved across saved-turn and usage updates.
+    // Completion collapses a manually opened live history only offscreen
+    // (below). Later explicit expansion is preserved across saved-turn and usage updates.
     const finished = view.running && !running;
     view.running = running;
     // Stable paragraphs keep earlier updates readable and prevent a live region
@@ -354,7 +356,12 @@
     }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
     const previewHeight = view.preview.getBoundingClientRect().height;
-    const showPreview = running && paragraphs.length;
+    // Like ChatGPT/Claude, the progress lines give way the moment the answer
+    // starts: at that point nothing stands below them yet. Kept until the
+    // run ended, their collapse pulled the finished answer up under the eye.
+    // A preamble before a running tool is not the answer yet.
+    const answering = running && !activeTool && Boolean(String(answerText || '').trim());
+    const showPreview = running && paragraphs.length && !answering;
     let previewChanged = false;
     if (showPreview) {
       if (view.previewExit) { cancelMotion(view.previewMotion); view.previewExit = false; }
@@ -410,7 +417,7 @@
           { height: `${previewHeight}px`, overflow: 'clip' }, { height: `${height}px`, overflow: 'clip' },
         ]);
       }
-    } else hidePreview(view);
+    } else hidePreview(view, answering);
     const ids = new Set();
     for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || tools.includes(item))) {
       ids.add(item.id);
@@ -475,7 +482,10 @@
     view.usageEl.textContent = tokens + cost;
     view.usageEl.title = measured ? `${usage.input_tokens.toLocaleString()} input · ${usage.output_tokens.toLocaleString()} output tokens` : "The provider did not report token usage.";
     view.usageEl.hidden = running;
-    if (finished) disclosure(view, false);
+    // A history the reader opened stays open while it is on screen: closing
+    // it there moved the answer below. Above the viewport the correction in
+    // render() keeps the reading position, so it can tidy itself up.
+    if (finished && (offscreenUpdate || !view.details.open)) disclosure(view, false);
   }
 
   function renderTurn(host, turn) {

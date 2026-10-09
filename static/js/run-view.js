@@ -266,7 +266,10 @@
       pipeline.renderProvenance?.();
       return;
     }
+    const writing = ["consensus", "differences"].includes(context.phase)
+      && Boolean(String(context.consensus.streamText || context.consensus.text || "").trim());
     if (!phaseChanged) {
+      if (writing) pipeline.onConsensusText?.();
       pipeline.renderProvenance?.();
       return;
     }
@@ -282,6 +285,7 @@
         pipeline.onConsensusStart?.();
       }
       if (context.phase === "differences") pipeline.onDifferencesStart?.();
+      if (writing) pipeline.onConsensusText?.();
     } else if (context.status === "succeeded") {
       pipeline.setRunFacts?.(runFacts(context));
       pipeline.onConsensusEnd?.();

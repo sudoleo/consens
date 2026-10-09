@@ -537,11 +537,10 @@ Hauslicht. Komponenten wählen den nächstliegenden Token statt eines eigenen We
 geben klassenlosen Buttons den alten Look in `admin.css`.
 `shell.css` gibt Agent-/Consensus-Antworten und gespeicherten Turns denselben
 Leserhythmus: 17 px (`--font-size-read`) mit 1,7-facher Zeilenhöhe, Fließtext
-höchstens 66 Zeichen breit (Tabellen, Code, Formeln volle Spalte), ein kurzer
-erster Absatz (≤ 240 Zeichen, gefolgt von weiterem Inhalt) wird zum Lead
-(`.has-lead`, gesetzt von `markAnswerLead` in `markdown-stream.js` bei jedem
-Rendern, auch im Stream), normale Laufweite, eigene Absatz-,
-Listen- und Überschriftenabstände. Die Regeln für den Consensus-Labelkopf gelten
+höchstens 66 Zeichen breit (Tabellen, Code, Formeln volle Spalte), normale
+Laufweite, eigene Absatz-, Listen- und Überschriftenabstände. Seit 2026-10-09
+gibt es dort keinen größeren Lead-Absatz und kein `text-wrap: pretty/balance`
+mehr: beides setzte im Stream schon gelesene Zeilen neu (Layout-Shift-Audit). Die Regeln für den Consensus-Labelkopf gelten
 nur für direkte `h2`-Kinder, nicht für Markdown-Überschriften im Antworttext.
 Statusmeldungen, Antwortleser, Codeblöcke und Tabellen behalten ihre eigene Typografie.
 `index.html`, `admin.html` und `admin_benchmark.html` enthalten keine Inline-Skripte, Inline-Styles oder
@@ -1634,10 +1633,14 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   separat gebucht; `consensus-insights.js` ruft dafuer nach dem Markieren
   `renderProvenance()` nach; `app-init.js::renderEvidenceSources` ebenso fuer
   den Quellen-Chip. Bruecke: `window.App.consensusPipeline.{onPrepare,
-  onQueryStatus,onConsensusStart,onDifferencesStart,onConsensusEnd,
+  onQueryStatus,onConsensusStart,onConsensusText,onDifferencesStart,onConsensusEnd,
   renderProvenance,dismiss}`. `onPrepare` kommt aus `query-send.js` **vor**
   `/prepare`, `onDifferencesStart` aus dem ersten `differences.delta`
-  (`consensus-run.js`).
+  (`consensus-run.js`). Seit 2026-10-09 weicht die Karte, sobald Konsens-Text
+  existiert (`run-view.js::syncPipeline` → `onConsensusText()` → `hideNow()`),
+  solange darunter noch nichts steht; vorher klappte sie ~0,7 s nach der
+  fertigen Antwort zu und zog sie 100–130 px hoch. Der Lauf lebt in der
+  Provenienzzeile weiter.
 - **Composer-Hoehe** — `composer-autosize.js` wird vor `app-init.js` geladen.
   `App.initComposerAutosize` installiert dessen bisherige Input-/Viewport- und
   Placeholder-Listener; `App.resizeQuestionInput()` bleibt der explizite Trigger.
@@ -1710,26 +1713,36 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Absenden aus, sondern erst beim Archivieren: bis dahin ist er die Antwort auf
   die Frage, die oben noch als Kopf steht.
   `App.chatScroll` (`chat-scroll.js`, nach `app-core.js` in `bundles.json`) steuert
-  das Scrollen im Agent- und Consensus-Chat. `App.revealSentMessage()` aktiviert
-  es beim tatsächlichen Absenden. `openBookmark()` ruft nach der Projektion
-  `App.chatScroll.opened()` für einen einmaligen sanften Sprung ans Gesprächsende
-  auf, auch bei noch lokal vorhandenen Runs; mobil schließt dabei die Sidebar.
+  das Scrollen im Agent- und Consensus-Chat wie ChatGPT/Claude (seit 2026-10-09,
+  Layout-Shift-Audit): `App.revealSentMessage()` → `sent()` bringt beim
+  tatsächlichen Absenden die neue Frage (`#threadAsk`, sonst
+  `#threadPendingAsk`) einmal sanft nach oben, genau an die Stelle, an der eine
+  erste Frage auf ungescrollter Seite steht (Spalten-Padding + Frage-Margin).
+  Danach scrollt nichts mehr von selbst: kein Mitlaufen beim Streamen, beim
+  Review, am Laufende. Damit die Frage auch bei kurzer Antwort oben stehen kann,
+  hängt `.chat-scroll-reserve` (letztes Kind von `.container`, `order: 4`)
+  genau so viel Leerraum an, dass der neueste Turn den Viewport füllt; Antwort,
+  Evidenzzeile und spät geladene Dateien wachsen in diesen Raum, die Seite wird
+  erst länger, wenn der Turn den Viewport übersteigt. Die Reserve rechnet in
+  Dokumentkoordinaten (Frage, Reserve-Oberkante, Composer im Fluss oder
+  `padding-bottom` beim fixierten Handy-Composer) und wird bei jedem
+  ResizeObserver-/Resize-/Projektionsdurchlauf nachgeführt.
+  `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` für einen
+  einmaligen sanften Sprung ans Gesprächsende auf (mit Reserve: die letzte
+  Frage oben), auch bei noch lokal vorhandenen Runs; mobil schließt dabei die
+  Sidebar. „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
+  beim Drücken bestand (gemessen an der Reserve-Unterkante); Text, der während
+  des Sprungs ankommt, verlängert ihn nicht, ein wachsender Composer schon.
   Gespeicherte Ansichten binden die
   Animation an Bookmark und Auth-Generation; neue Auswahl und Leseinteraktionen
   brechen sie ab. `getSelectedConversationIdentity()` liest dafür nur ID/Modus,
   ohne den gespeicherten Antwort-/Reviewtext pro Animationsframe zu kopieren.
   Recovery, Direktvergleich und Hintergrundläufe erzwingen keinen
-  Sprung. Nach zwei Layout-
-  Frames scrollt es sanft zum Dokumentende. Im Consensus-Chat wird das Ziel beim
-  Absenden eingefroren: Streaming verschiebt weder das laufende Sprungziel noch
-  die anschließende Leseposition. „Latest message“ springt dort ebenfalls nur
-  einmal zum aktuellen Ende; auch manuelles Scrollen aktiviert kein Mitlaufen.
-  Im Agent-Chat folgt es wachsendem Inhalt, solange unten mitgelesen wird.
-  `run-view.js` bindet die Projektion an Run und Account;
-  ResizeObserver plus Viewport-Resize berücksichtigen Markdown, Bilder und Composer.
+  Sprung. Das Sprungziel wird pro Frame neu gemessen (Frage setzt sich,
+  History wird angehängt, Composer klappt ein). `run-view.js` bindet die
+  Projektion an Run und Account.
   Wheel/Touch/Scrolltasten/Pointer und Textauswahl unterbrechen sofort, auch vor
-  dem ersten Frame. Erst bewusstes Abwärtsscrollen bis ans Ende oder „Latest message“
-  aktiviert im Agent-Chat das Folgen erneut. Die dezente Schaltfläche mit
+  dem ersten Frame. Die dezente Schaltfläche mit
   SVG-Abwärtspfeil liegt oberhalb des Composers, blendet sich kurz ein (ohne
   Animation bei Reduced Motion) und gibt den
   Tastaturfokus ohne Scrollsprung ans Eingabefeld zurück. Reduced Motion scrollt
@@ -3165,10 +3178,9 @@ laufenden Höhenanimationen und führt Änderungen ohne Animation aus.
 `chatScroll.preserveAbove` gleicht die Änderung der Dokumentposition unmittelbar
 aus, sodass die gerade gelesene Antwortzeile stehen bleibt; bereits erfolgtes
 natives Scroll-Anchoring wird nicht doppelt verrechnet. Nach Run-Abschluss endet
-dauerhaftes Nachscrollen. Ein noch laufender bewusster Send-/Latest-Sprung darf
-einmal fertiglaufen. `chat-scroll.js` trennt diesen expliziten Sprung von einem
-nur eingeplanten Resize-/Follow-Frame; Letzterer wird beim Abschluss verworfen,
-damit neue Copy-/Evidenzzeilen die Antwort nicht nach oben verschieben.
+dauerhaftes Nachscrollen (seit 2026-10-09 gibt es gar keins mehr, siehe
+`App.chatScroll`). Ein noch laufender bewusster Send-/Latest-Sprung darf
+einmal fertiglaufen.
 Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
@@ -7048,7 +7060,31 @@ geschlossenes `**` rendert `closeOpenStrong` schon fett statt mit rohen
 Sternchen (nicht in Code-Fences). Fremde Schreibzugriffe oder nicht nur wachsender
 Text starten neu. Die finale Antwort rendert einmal vollständig mit
 `injectMarkdown` (gleiche Sanitisierung). `resetMarkdownStream(el)` verwirft den
-Zustand.
+Zustand. Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
+gibt jedem Block vor dem Einhängen seine endgültige Inline-Form; Agent nutzt das
+für Quellen-Pills (`agent-chat.js::streamSourcePills` → `linkifyAgentSources`
+mit den Links des Blocks). Pills zeigen den Host, ihre Breite hängt also nicht
+an der finalen Quellennummerierung; der Review-Pass baut dieselbe Geometrie.
+
+**Keine Verschiebung (2026-10-09, `docs/layout-shift-audit-2026-10-09.md`).**
+Was schon sichtbar ist, bewegt sich nicht mehr: Claim-Marken (`.cx-claim`)
+haben keinen horizontalen Innen-/Außenabstand mehr, der Überstand ist ein
+`box-shadow` in Markenfarbe (`--cx-paint`, `--cx-bleed`; `cx-join-*` lassen die
+innere Seite weg), Filter/Ausblenden setzen auch `box-shadow: none`. Die
+Fortschrittszeilen über der Antwort (`.agent-progress`) verschwinden ohne
+Animation, sobald Antworttext steht und kein Tool läuft (eine Präambel vor einem
+laufenden Tool zählt nicht); eine vom Leser geöffnete Aktivitäts-Historie bleibt
+am Laufende offen, solange sie im Bild ist (oberhalb des Viewports klappt sie mit
+`preserveAbove`-Korrektur zu). Der Antwortbeginn blendet nur ein
+(`reveal(body, {lift:false})`). Laden: `app-bootstrap.js` setzt per
+MutationObserver vor dem ersten Paint `agent-mode-enabled`, den gespeicherten
+Sidebar-Zustand (`sidebar_collapsed`, Overlay < 1100 px), `#authTopActions`
+nur für Gäste ohne `id_token` und bei `html.agent-shell-expected` die
+Agent-Texte (Begrüßung, „New chat“), die `renderShellNow` bis zur bekannten
+Berechtigung hält; `#composerModeBar` ist im Template sichtbar (Startbildschirm).
+Inter wird in `index.html` vorgeladen, bis dahin setzt „Inter Fallback“ (Arial
+mit Inter-Metriken, `typography.css`) den Text ohne Umbruchänderung;
+`.sidebar-content` reserviert eine dünne Scrollbar-Rinne.
 
 **Ressourcen-Refresh.** Ein `resources`-SSE-Ereignis ruft
 `App.agentWorkspace?.refresh(chatId, true)` nur bei Schlüsseln

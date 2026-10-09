@@ -364,24 +364,30 @@
   text-decoration: none;
 }
 
-/* Gemeinsame Geometrie aller vier Stufen. Der Innenabstand ist bewusst klein
-   und der negative Aussenabstand noch kleiner: zwischen zwei markierten
-   Saetzen muss ein sichtbarer Rest des Wortzwischenraums frei bleiben, sonst
-   laufen die Marken zu einem durchgehenden Farbband zusammen und der Absatz
-   sieht aus wie eine Flaeche statt wie mehrere angestrichene Saetze. */
+/* Gemeinsame Geometrie aller vier Stufen. Die Marke darf keinen Platz
+   beanspruchen: sie kommt, waehrend der Satz schon gelesen wird, und ein
+   horizontaler Innenabstand brach jede markierte Zeile neu um. Der kleine
+   Ueberstand links und rechts ist deshalb ein Schatten in Markenfarbe (er
+   zeichnet, verschiebt aber nichts); der vertikale Innenabstand aendert die
+   Zeilenhoehe von Inline-Elementen ohnehin nicht. Der Ueberstand bleibt kleiner
+   als der halbe Wortzwischenraum, damit zwei markierte Saetze getrennte
+   Marken bleiben statt zu einem Farbband zu verschmelzen. */
 .cx-claim.is-thin,
 .cx-claim.is-unanimous,
 .cx-claim.is-minor,
 .cx-claim.is-split,
 .cx-claim.is-major {
-  padding: 0.1em 0.14em;
-  margin: 0 -0.02em;
+  --cx-paint: var(--cx-mark, transparent);
+  --cx-bleed: 0.09em;
+  padding: 0.1em 0;
+  margin: 0;
   border-radius: 3px;
-  background-color: var(--cx-mark, transparent);
+  background-color: var(--cx-paint);
+  box-shadow: calc(-1 * var(--cx-bleed)) 0 0 var(--cx-paint), var(--cx-bleed) 0 0 var(--cx-paint);
   /* Ueber einen Zeilenumbruch hinweg bekommt jedes Fragment eigene Ecken. */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  transition: background-color var(--dur-press) var(--ease-standard);
+  transition: background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
 }
 
 .cx-claim.is-thin {
@@ -431,29 +437,30 @@
 }
 
 .cx-claim.is-hovered {
-  background-color: var(--cx-mark-strong, color-mix(in srgb, var(--text-color) 7%, transparent));
+  --cx-paint: var(--cx-mark-strong, color-mix(in srgb, var(--text-color) 7%, transparent));
+  background-color: var(--cx-paint);
   border-radius: 3px;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 
 /* Ein Satz, den Fettdruck, Kursiv oder Links in mehrere Spans teilen, bleibt
-   eine durchgehende Marke: nur die aeusseren Enden tragen Innenabstand und
-   Rundung. Sonst stand an jeder Elementgrenze ein sichtbarer Zusatzabstand
-   vor Satzzeichen und Klammern. */
+   eine durchgehende Marke: nur die aeusseren Enden tragen Ueberstand und
+   Rundung. Sonst stand an jeder Elementgrenze ein sichtbarer Absatz in der
+   Marke vor Satzzeichen und Klammern. */
 .cx-claim.cx-join-start {
-  padding-left: 0;
-  margin-left: 0;
+  box-shadow: var(--cx-bleed, 0) 0 0 var(--cx-paint, transparent);
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
 
 .cx-claim.cx-join-end {
-  padding-right: 0;
-  margin-right: 0;
+  box-shadow: calc(-1 * var(--cx-bleed, 0)) 0 0 var(--cx-paint, transparent);
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
+
+.cx-claim.cx-join-start.cx-join-end { box-shadow: none; }
 
 /* Tastaturfokus auf der Passage: der Ring liegt aussen um die Marke, damit er
    nicht mit ihr verschmilzt. */

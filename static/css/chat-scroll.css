@@ -23,3 +23,7 @@ body.chat-scroll-following .container { overflow-anchor: none; }
 @media (prefers-reduced-motion: reduce) {
   .chat-scroll-latest { animation: none; transition: none; }
 }
+/* Room below the newest turn (chat-scroll.js sizes it): the question can sit
+   at the top while its answer grows into this space without moving anything. */
+.chat-scroll-reserve { order: 4; flex: none; pointer-events: none; }
+body.is-hero .chat-scroll-reserve { display: none; }

@@ -349,21 +349,24 @@
     const accessKnown = Boolean(App.agentAccess?.uid && App.agentAccess.uid === window.auth?.currentUser?.uid);
     if (accessKnown) { try { localStorage.setItem("agentShellExpected", agent ? "1" : "0"); } catch (_) {} }
     if (agent || accessKnown || (authState?.known && !authState.uid)) document.documentElement.classList.remove("agent-shell-expected");
+    // Until access is known, a reload that ended in Agent keeps Agent's words
+    // (seeded before the first paint in app-bootstrap.js).
+    const wording = agent || document.documentElement.classList.contains("agent-shell-expected");
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
     // Only the label follows the mode; the icon and the switch's thumb stay.
     const chatTabLabel = document.querySelector("#viewSwitchConsensus > span");
-    if (chatTabLabel) chatTabLabel.textContent = agent ? "Chat" : "Consensus";
+    if (chatTabLabel) chatTabLabel.textContent = wording ? "Chat" : "Consensus";
     const greeting = document.querySelector(".hero-greeting");
     const newChat = document.getElementById("newRunButton");
     if (newChat) {
       const text = newChat.querySelector("span");
-      if (text) text.textContent = agent ? "New chat" : "New comparison";
-      newChat.title = agent ? "Start a new chat" : "Start a new comparison";
+      if (text) text.textContent = wording ? "New chat" : "New comparison";
+      newChat.title = wording ? "Start a new chat" : "Start a new comparison";
     }
     if (greeting) {
       if (!greeting.dataset.consensusGreeting) greeting.dataset.consensusGreeting = greeting.textContent;
-      greeting.textContent = agent ? "What can I help you with?" : greeting.dataset.consensusGreeting;
+      greeting.textContent = wording ? "What can I help you with?" : greeting.dataset.consensusGreeting;
     }
     const panel = document.getElementById("agentAnswer");
     const context = registry.visible();
@@ -410,6 +413,16 @@
     window.updateQuestionInputAccess?.();
     syncPendingReview();
   }
+  // Links become the same source pills the finished answer shows while their
+  // block streams in. Turning them into pills only when the check arrived
+  // re-wrapped every cited paragraph the reader was already in. Pills show a
+  // host, so their width does not depend on the final source numbering.
+  function streamSourcePills(holder) {
+    const sources = [...holder.querySelectorAll('a[href]')]
+      .filter(link => !link.closest('code, pre, .katex') && !link.querySelector('img, svg'))
+      .map(link => ({ url: link.getAttribute('href'), title: link.textContent }));
+    if (sources.length) window.linkifyAgentSources?.(holder, sources);
+  }
   // While a run streams, only the growing last Markdown block is parsed again
   // (markdown-stream.js). The final text is rendered once in full, like a
   // saved answer, so review markers and cross-block Markdown are exact.
@@ -428,7 +441,7 @@
       const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
       body.dataset.markdown = text;
       body.dataset.renderMode = mode;
-      if (mode === 'stream') window.renderMarkdownStream(body, text);
+      if (mode === 'stream') window.renderMarkdownStream(body, text, { decorate: streamSourcePills });
       else {
         window.resetMarkdownStream?.(body);
         window.injectMarkdown?.(body, text, []);
@@ -437,7 +450,7 @@
       body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
       // Animate the start of an answer once, never each streamed text chunk.
       if (!text.trim()) body._agentReveal?.cancel();
-      else if (entering) body._agentReveal = App.agentActivity?.reveal(body);
+      else if (entering) body._agentReveal = App.agentActivity?.reveal(body, { lift: false });
     }
     renderError(typeof error === 'string' ? { text: error } : error);
   }

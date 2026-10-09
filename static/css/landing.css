@@ -1760,6 +1760,8 @@ img { display: block; max-width: 100%; }
   background-color: transparent;
   background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
   background-repeat: no-repeat;
+  /* The app's bleed is a shadow that a stroke cannot grow with. */
+  box-shadow: none;
   animation: cxStroke 0.55s ease 0.45s backwards;
 }
 

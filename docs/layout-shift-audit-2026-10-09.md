@@ -12,6 +12,18 @@ durch ersetzte DOM-Knoten (`innerHTML`) und durch programmatisches Scrollen
 nicht. Beides ist hier die Hauptursache; gemessen wird daher über Wortpositionen
 relativ zum Viewport.
 
+## Stand der Umsetzung (2026-10-09)
+
+Umgesetzt: 1–4 (Marken ohne Geometrie, Pills im Stream, Reserve statt
+Mitscrollen macht DOM-Tausch und Evidenzzeile unsichtbar), 6–11, 13 (Scrollen
+wie ChatGPT/Claude: Frage nach oben, Reserve darunter, kein Mitlaufen), 14
+(Sidebar), 16 (Auth-Buttons), 17 (Modusleiste sichtbar ab Template), 18
+teilweise (Begrüßung, „New chat“, View-Switch-Label; Modell-Chip im Composer
+noch nicht), 19 (Preload + metrikangepasste Fallback-Schrift; gehashte
+Font-URL nicht), 20 (Scrollbar-Rinne). Nachgemessen: kein Wort bewegt sich
+mehr bei Stream/Review/Ende, Gast-Reload ohne Layout-Shift-Eintrag.
+Offen: 5 (nur noch geometrieneutral, kein Sprung), 12, 15, 21–28.
+
 ## P1 — „Markierungen erscheinen → Text springt“
 
 Alles feuert in einem synchronen Aufruf: `agent-chat.js` (~576–586) →

@@ -49,22 +49,80 @@
     }
   } catch (_) { /* storage unavailable */ }
 
+  // First-paint state. DOMContentLoaded waits for the deferred bundles (and
+  // the Firebase CDN modules before them), so the browser usually paints the
+  // bare template first; everything set only then slid or swapped into place
+  // in front of the reader: the stored collapsed sidebar animated shut, the
+  // auth buttons blinked for signed-in users. A MutationObserver runs
+  // between parsing and painting, so each element gets its state as soon as
+  // it exists. CSP forbids an inline script in the body for the same job.
+  let token = null;
+  try { token = localStorage.getItem("id_token"); } catch (_) { /* storage unavailable */ }
+  const seeded = new Set();
+  function seed() {
+    if (!seeded.has("body") && document.body) {
+      seeded.add("body");
+      // The consensus view is painted before auth resolves; run-mode.js
+      // (earlier in this bundle) owns the stored choice.
+      if (window.App?.runMode?.preference() !== "compare") {
+        document.body.classList.add("agent-mode-enabled");
+      }
+    }
+    const sidebar = !seeded.has("sidebar") && document.getElementById("appSidebar");
+    if (sidebar) {
+      seeded.add("sidebar");
+      // Same rule as checkWindowSize() in app-init.js, which keeps it later.
+      const overlay = window.matchMedia("(max-width: 1099px)").matches;
+      let collapsed = overlay;
+      try { collapsed = overlay || localStorage.getItem("sidebar_collapsed") === "true"; } catch (_) { /* storage unavailable */ }
+      sidebar.classList.toggle("collapsed", collapsed);
+    }
+    const authTopActions = !seeded.has("auth") && document.getElementById("authTopActions");
+    if (authTopActions) {
+      seeded.add("auth");
+      // Guests only. A stored token means a session is being restored:
+      // firebase.js shows the buttons if it turns out to be a guest after all.
+      const authState = window.__consensioAuthState;
+      if (authState?.known ? !authState.uid : !token) authTopActions.hidden = false;
+    }
+    // A reload that ended in Agent starts with Agent's words (agent-chat.js
+    // keeps them until access is known): the consensus wording swapped in
+    // front of the reader once /user_status answered, and the greeting
+    // changed size with it.
+    if (document.documentElement.classList.contains("agent-shell-expected")) {
+      const greeting = !seeded.has("greeting") && document.querySelector(".hero-greeting");
+      if (greeting) {
+        seeded.add("greeting");
+        greeting.dataset.consensusGreeting = greeting.textContent;
+        greeting.textContent = "What can I help you with?";
+      }
+      const newChat = !seeded.has("newChat") && document.getElementById("newRunButton");
+      const newChatText = newChat?.querySelector("span");
+      if (newChatText) {
+        seeded.add("newChat");
+        newChatText.textContent = "New chat";
+        newChat.title = "Start a new chat";
+      }
+    } else {
+      seeded.add("greeting");
+      seeded.add("newChat");
+    }
+    return seeded.size === 5;
+  }
+  if (!seed() && typeof MutationObserver === "function") {
+    const observer = new MutationObserver(() => { if (seed()) observer.disconnect(); });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    document.addEventListener("DOMContentLoaded", () => observer.disconnect(), { once: true });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
-    // The consensus view is painted before auth resolves; run-mode.js
-    // (earlier in this bundle) owns the stored choice.
-    if (window.App?.runMode?.preference() !== "compare") {
-      document.body.classList.add("agent-mode-enabled");
-    }
-    const authTopActions = document.getElementById("authTopActions");
+    seed();
     const authState = window.__consensioAuthState;
-    if (authTopActions && !(authState?.known && authState.uid)) {
-      authTopActions.hidden = false;
-    }
     try {
       if (document.documentElement.dataset.authUnavailable === "true") return;
       // A resolved session owns the UI; a cached token must not overwrite it.
       if (authState?.known) return;
-      if (!localStorage.getItem("id_token")) return;
+      if (!token) return;
       const bookmarks = document.getElementById("bookmarksContainer");
       if (bookmarks) {
         bookmarks.innerHTML = '<div class="skeleton-group bookmarks-skeleton" role="status" aria-label="Loading chats">'

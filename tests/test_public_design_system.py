@@ -73,7 +73,10 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     app_tokens = read("static/css/variables.css")
     public_tokens = read("static/css/public-tokens.css")
 
-    assert typography.count('@font-face {') == 2
+    # Two Inter files plus the metric-matched local fallback (no download).
+    assert typography.count('@font-face {') == 3
+    assert typography.count("url(") == 2
+    assert 'font-family: "Inter Fallback";' in typography and "size-adjust:" in typography
     assert "../fonts/inter/InterVariable.woff2" in typography
     assert "../fonts/inter/InterVariable-Italic.woff2" in typography
     for contract in (
@@ -97,6 +100,9 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
 
     for template_path in (ROOT / "templates").rglob("*.html"):
         assert "fonts.googleapis.com" not in template_path.read_text(encoding="utf-8")
+    # /app fetches Inter with the HTML, at the exact URL @font-face resolves to.
+    assert ('<link rel="preload" href="/static/fonts/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>'
+            in read("templates/index.html"))
 
     security = read("app/core/security.py")
     assert "fonts.googleapis.com" not in security

@@ -487,6 +487,15 @@
     }, delay);
   }
 
+  // The run gives way the moment the consensus text starts, while nothing
+  // stands below it yet (as ChatGPT/Claude do with their status line).
+  // Collapsing it after the answer was written pulled the answer up under
+  // the reader. Its summary lives on in the provenance line below.
+  function onConsensusText() {
+    if (stage !== "consensus" && stage !== "differences") return;
+    if (root()?.hidden === false) hideNow();
+  }
+
   function hideNow() {
     const el = root();
     if (!el) return;
@@ -968,6 +977,7 @@
     onPrepare,
     onQueryStatus,
     onConsensusStart,
+    onConsensusText,
     onDifferencesStart,
     onConsensusEnd,
     renderProvenance,

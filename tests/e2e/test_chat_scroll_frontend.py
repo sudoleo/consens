@@ -41,7 +41,7 @@ def test_agent_review_and_completion_keep_visible_answer_still(browser, phase4_s
             page.locator('#agentAnswerActivity summary').click()
         page.wait_for_timeout(400)
         if at_end:
-            page.evaluate('() => App.chatScroll.sent()')
+            page.evaluate('() => App.chatScroll.latest()')
             page.wait_for_function('() => document.documentElement.scrollHeight - innerHeight - scrollY < 3')
         else:
             page.evaluate("""() => {
@@ -154,7 +154,7 @@ def test_consensus_stream_stays_still_and_latest_only_jumps_once(browser, phase4
 
 
 @pytest.mark.parametrize("width,reduced", [(1280, False), (390, False), (390, True)])
-def test_agent_chat_follows_new_messages_without_stealing_the_readers_position(browser, phase4_server, width, reduced):
+def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the_reader(browser, phase4_server, width, reduced):
     context, page = _real_firebase_page(browser, phase4_server)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -169,9 +169,6 @@ def test_agent_chat_follows_new_messages_without_stealing_the_readers_position(b
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
         page.evaluate("""() => {
-          window.__scrollCalls = [];
-          const original = window.scrollTo.bind(window);
-          window.scrollTo = (...args) => { window.__scrollCalls.push(args); original(...args); };
           window.__replyCount = 0;
           window.streamSSERequest = async (_url, body, signal, handlers) => {
             if (window.__replyCount++) {
@@ -185,63 +182,59 @@ def test_agent_chat_follows_new_messages_without_stealing_the_readers_position(b
                 agent_settings:{model_id:body.model_id,label:'DeepSeek V4.1 Flash'}},
               bookmark_meta:{id:body.bookmark_id,title:body.question,query:body.question,mode:'Agent',has_consensus:true}}};
           };
+          window.__askTop = () => document.getElementById('threadAsk').getBoundingClientRect().top;
         }""")
         page.locator("#questionInput").fill("First message")
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
-        page.wait_for_function("() => document.documentElement.scrollHeight - innerHeight - scrollY < 3")
-        assert page.evaluate("scrollY > 500")
+        page.wait_for_timeout(500)
+        # The first question already stands at the top: nothing scrolled, nothing followed the answer.
+        assert page.evaluate("scrollY") < 3
+        landing = page.evaluate("__askTop()")
+        assert 0 < landing < 120
 
-        # An explicit send returns to the newest turn even when reading old history.
+        # A new message brings its question to the top, even from old history.
         page.mouse.move(width // 2, 200)
-        page.mouse.wheel(0, -20000)
-        page.wait_for_function("() => scrollY < 10")
-        page.evaluate("""() => {
-          const input = document.getElementById('questionInput'); input.value = 'Next message';
-          window.__scrollCalls = []; window.__sending = App.agentChat.send();
-        }""")
+        page.mouse.wheel(0, 900)
+        page.wait_for_timeout(300)
+        page.evaluate("""() => { const input = document.getElementById('questionInput'); input.value = 'Next message';
+          window.__sending = App.agentChat.send(); }""")
         page.wait_for_function("() => !!window.__streamHandlers")
-        page.wait_for_function("() => scrollY > 500 && document.documentElement.scrollHeight - innerHeight - scrollY < 3")
-        assert page.evaluate("document.getElementById('threadPendingAsk').hidden")
-        if not reduced:
-            assert page.evaluate("window.__scrollCalls.length > 2")
-
+        page.wait_for_function(f"() => scrollY > 500 && Math.abs(__askTop() - {landing}) < 3")
+        assert page.evaluate("document.getElementById('threadAskText').textContent").startswith("Next message")
+        before = page.evaluate("scrollY")
         page.evaluate("__streamHandlers.delta.append(Array.from({length:35}, (_, i) => `New answer ${i}. Text for the current turn.`).join('\\n\\n'))")
         page.wait_for_function("() => document.getElementById('agentAnswerBody').textContent.includes('New answer 34')")
-        page.wait_for_function("() => document.documentElement.scrollHeight - innerHeight - scrollY < 3")
-
-        page.mouse.wheel(0, -900)
-        page.wait_for_function("() => document.documentElement.scrollHeight - innerHeight - scrollY > 400")
-        page.wait_for_timeout(150)  # Let the browser finish the wheel gesture.
-        before = page.evaluate("scrollY")
-        page.evaluate("__streamHandlers.delta.append('\\n\\n' + 'Additional material.\\n\\n'.repeat(20))")
         page.wait_for_timeout(600)  # A full animation interval must not move the reader.
         assert abs(page.evaluate("scrollY") - before) < 3
+        assert abs(page.evaluate("__askTop()") - landing) < 3
+
         latest = page.locator(".chat-scroll-latest")
         expect(latest).to_be_visible()
         box = latest.bounding_box()
         assert 0 <= box["x"] and box["x"] + box["width"] <= width
         capture = Path("test-results/chat-scroll")
         capture.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(capture / f"paused-{width}-{reduced}.png"))
-        await_bottom = "() => document.documentElement.scrollHeight - innerHeight - scrollY < 3"
+        page.screenshot(path=str(capture / f"question-top-{width}-{reduced}.png"))
+        # "Latest message" goes to the end as it was when pressed; text that
+        # still lands during the jump may leave it within the near-end band.
+        await_bottom = "() => document.documentElement.scrollHeight - innerHeight - scrollY < 81"
         latest.click()
         page.wait_for_function(await_bottom)
         expect(latest).not_to_be_visible()
-        # Keyboard activation restores focus; a tap must not open the soft keyboard.
         if width < 1100:
             assert page.evaluate("document.activeElement.id !== 'questionInput'")
-        page.mouse.move(width // 2, 200)
-        page.mouse.wheel(0, -900)
+        # Reaching the end does not resume following.
+        before = page.evaluate("scrollY")
+        page.evaluate("__streamHandlers.delta.append('\\n\\n' + 'Additional material.\\n\\n'.repeat(20))")
+        page.wait_for_timeout(600)
+        assert abs(page.evaluate("scrollY") - before) < 3
         expect(latest).to_be_visible()
         latest.focus()
         latest.press("Enter")
         page.wait_for_function(await_bottom)
         expect(page.locator("#questionInput")).to_be_focused()
 
-        # Resize preserves following; choosing another view fences pending callbacks.
-        page.set_viewport_size({"width": width, "height": 650})
-        page.wait_for_function(await_bottom)
         page.evaluate("App.runRegistry.clearVisible()")
         before = page.evaluate("scrollY")
         page.evaluate("__streamHandlers.delta.append('\\n\\nA late background message.')")

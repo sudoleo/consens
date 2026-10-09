@@ -22,8 +22,21 @@
   font-display: swap;
 }
 
+/* Until Inter has loaded, text is set in Arial scaled to Inter's metrics, so
+   the swap (font-display: swap) changes the letter shapes but not the line
+   breaks: with Segoe UI as the stand-in every line grew a few pixels wider
+   and re-wrapped on Windows. Values as next/font derives them for Inter. */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("Arimo");
+  ascent-override: 90.49%;
+  descent-override: 22.56%;
+  line-gap-override: 0%;
+  size-adjust: 107.06%;
+}
+
 :root {
-  --font-sans: "Inter Variable", Inter, system-ui, -apple-system,
+  --font-sans: "Inter Variable", Inter, "Inter Fallback", system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New",
     monospace;

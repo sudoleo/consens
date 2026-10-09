@@ -36,14 +36,9 @@
     consensusOutputEl.classList.remove("is-hidden");
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        // No scroll here: Send already brought the question to the top and
+        // the consensus appears below it (chat-scroll.js owns all jumps).
         consensusOutputEl.classList.add("is-visible");
-        // Konsens lebt OBERHALB der Antwortboxen: Wer beim Reveal weiter
-        // unten liest, wird sanft dorthin geholt (scroll-margin-top in CSS
-        // hält Abstand zur Float-Nav). Nur scrollen, wenn nötig.
-        const rect = consensusOutputEl.getBoundingClientRect();
-        if (rect.top < 0 || rect.top > window.innerHeight * 0.65) {
-          consensusOutputEl.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
       });
     });
     // Demo-Pfad ruft reveal direkt (ohne startRun): Pipeline auf Stufe 2.

@@ -647,6 +647,11 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .sidebar-content {
   min-height: 0;
   margin-bottom: 0;
+  /* Windows draws a classic scrollbar inside the list once it overflows:
+     every row lost its width the moment the bookmarks had loaded (and again
+     while searching). The thin gutter is always reserved instead. */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 
 .sidebar-quota {
@@ -3242,20 +3247,11 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
 /* Shared reading rhythm for rendered answers, including saved turns.
    Status, source controls, code and tables retain their own typography. */
 .consensus-answer-body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { max-width: 66ch; }
-.consensus-answer-body :is(p, li) { text-wrap: pretty; }
-.consensus-answer-body :is(h1, h2, h3, h4, h5, h6) { text-wrap: balance; }
 .consensus-answer-body p { margin: 0 0 1em; }
-/* The lead: a short first paragraph says the answer before the reasons
-   (markAnswerLead in markdown-stream.js decides). One step up, set tight. */
-.consensus-answer-body.has-lead > p:first-child {
-  margin-bottom: .85em;
-  font-size: 1.1765em; /* 20px on the 17px reading size */
-  line-height: 1.45;
-  font-weight: var(--font-weight-medium);
-  letter-spacing: -0.012em;
-  text-wrap: balance;
-}
-.consensus-answer-body.has-lead > p:first-child :is(strong, b) { font-weight: var(--font-weight-semibold); }
+/* No text-wrap: pretty/balance and no larger lead paragraph in answers: the
+   text streams in, and both re-set lines the reader already sees (pretty and
+   balance re-break the last lines on every chunk; the lead was promoted once
+   the second paragraph arrived). Answers keep the browser's plain line breaks. */
 .consensus-answer-body :is(ul, ol) { margin: 1em 0; padding-inline-start: 1.5em; }
 .consensus-answer-body li { padding-inline-start: .2em; }
 .consensus-answer-body li + li { margin-top: .375em; }
@@ -3307,6 +3303,7 @@ body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
   padding: 0;
   border-radius: 0;
   background-color: transparent;
+  box-shadow: none;
   cursor: text;
   outline: none;
 }
