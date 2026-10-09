@@ -58,157 +58,19 @@
   {% set public_nav_event = "share_page_cta" %}
   {% include "partials/public_nav.html" %}
 
-  {% macro agreement_chart(history, compact=false) %}
-  <svg class="watch-chart{% if compact %} is-compact{% endif %}" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
-       aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}. Select a point to jump to that run.">
-    {% if not compact %}<line class="watch-grid" x1="38" y1="18" x2="38" y2="160"></line>{% endif %}
-    <line class="watch-grid" x1="38" y1="18" x2="622" y2="18"></line>
-    <line class="watch-grid" x1="38" y1="89" x2="622" y2="89"></line>
-    <line class="watch-grid" x1="38" y1="160" x2="622" y2="160"></line>
-    {% if not compact %}
-    <text class="watch-axis-label" x="4" y="23">100</text>
-    <text class="watch-axis-label" x="13" y="94">50</text>
-    <text class="watch-axis-label" x="21" y="165">0</text>
-    {% endif %}
-    <path class="watch-chart-line" d="{{ history.path }}"></path>
-    {% for point in history.points if point.y is not none %}
-    <a class="watch-chart-target" href="#watch-run-{{ point.anchor_id }}"
-       aria-label="{{ point.ts.strftime('%Y-%m-%d') }}: {{ point.agreement_score }} out of 100 agreement{% if point.change_summary %}. {{ point.change_summary }}{% endif %}">
-      <circle class="watch-chart-point{% if point.trigger == "changed" %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if compact %}{% if point.trigger == "changed" %}8{% else %}7{% endif %}{% elif point.trigger == "changed" %}5{% else %}4{% endif %}">
-        <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.trigger == "changed" and point.change_summary %} · {{ point.change_summary }}{% elif point.restated and point.change_summary %} · Restated, not moved: {{ point.change_summary }}{% else %} · No material movement{% endif %}</title>
-      </circle>
-    </a>
-    {% endfor %}
-    {% if not compact %}
-    <text class="watch-date-label" x="38" y="184">{{ history.start_date }}</text>
-    <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ history.end_date }}</text>
-    {% endif %}
-  </svg>
-  {% endmacro %}
-
   <main class="page-shell share-shell" data-math-render>
     <header class="page-header share-header">
-      <p class="eyebrow">{% if watch_page %}Tracked question{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
+      <p class="eyebrow">Shared consensus{% if is_private %} · Private{% endif %}</p>
       <!-- Lange Fragen klappen wie in /app (#threadAsk) auf drei Zeilen ein.
            Ohne JS bleibt der volle Text sichtbar: die Klammer setzt erst das
            Skript unten, das auch prüft, ob überhaupt etwas abgeschnitten ist. -->
       <h1 id="shareQuestion" class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
       <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
-      {% if watch_page and not watch_has_comparison %}
-      <p class="watch-plain-intro">
-        {% if watch_awaiting_first_run %}
-          This question is scheduled for repeated checks. The first result will become the baseline; there is no development to report yet.
-        {% else %}
-          This is the first saved result. Future checks will be compared with it, so there is no trend to interpret yet.
-        {% endif %}
-      </p>
-      {% endif %}
       <div class="share-meta">
-        {% if date_display %}<span>{% if watch_awaiting_first_run %}Created {% elif watch_page %}{% if watch_selected_version.is_original %}Original consensus {% elif watch_selected_version.is_historical %}Historical consensus {% else %}Current consensus {% endif %}{% endif %}{{ date_display }}</span>{% endif %}
-        {% if watch_page %}
-        <span class="watch-simple-status is-{{ watch_page.status }}"><i aria-hidden="true"></i>{{ watch_page.status_label }}</span>
-        <div class="watch-meta-compact is-{{ watch_page.status }}" aria-label="Tracking schedule and check dates">
-          {% if watch_page.schedule_label %}<span class="watch-meta-item"><b>Runs</b> {{ watch_page.schedule_label }}</span>{% endif %}
-          <span class="watch-meta-item"><b>Last</b> {% if watch_page.last_run.display %}<time datetime="{{ watch_page.last_run.iso }}">{{ watch_page.last_run.display }}</time>{% else %}Not yet{% endif %}</span>
-          {% if watch_page.is_active %}<span class="watch-meta-item"><b>Next</b> {% if watch_page.next_run.display %}<time datetime="{{ watch_page.next_run.iso }}">{{ watch_page.next_run.display }}</time>{% else %}Pending{% endif %}</span>{% endif %}
-        </div>
-        {% endif %}
+        {% if date_display %}<span>{{ date_display }}</span>{% endif %}
       </div>
-      {% if watch_selected_version and watch_selected_version.fallback_notice %}
-      <div class="watch-version-fallback" role="status">
-        <strong>Latest version unavailable.</strong>
-        <span>{{ watch_selected_version.fallback_notice }}</span>
-      </div>
-      {% endif %}
-      {% if watch_page and (watch_page.resolution or watch_page.goal) %}
-      <!-- What the owner is waiting for, and -- once a source confirmed it --
-           that the watch is complete (docs/watch-evidence-model.md). -->
-      <section class="watch-goal-banner{% if watch_page.resolution %} is-resolved{% endif %}" aria-label="Watch goal">
-        {% if watch_page.resolution %}
-        <p class="eyebrow">Resolved{% if watch_page.resolution.at.display %} &middot; <time datetime="{{ watch_page.resolution.at.iso }}">{{ watch_page.resolution.at.display }}</time>{% endif %}</p>
-        <strong class="watch-goal-banner-goal">{{ watch_page.resolution.goal or watch_page.goal }}</strong>
-        {% if watch_page.resolution.reason %}<p class="watch-goal-banner-reason">{{ watch_page.resolution.reason }}</p>{% endif %}
-        {% if watch_page.resolution.sources %}
-        <ul class="watch-evidence-list">
-          {% for item in watch_page.resolution.sources %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
-        </ul>
-        {% endif %}
-        {% else %}
-        <p class="eyebrow">Waiting for</p>
-        <strong class="watch-goal-banner-goal">{{ watch_page.goal }}</strong>
-        <p class="watch-goal-banner-reason">The watch closes when a source confirms it.</p>
-        {% endif %}
-      </section>
-      {% endif %}
-      {% if watch_page and watch_drift and not watch_awaiting_first_run %}
-      {% if watch_has_comparison %}
-      <section class="watch-drift-hero is-{{ watch_drift.trigger }}" aria-labelledby="watchDriftHeading">
-        <div class="watch-drift-layout">
-          <div class="watch-drift-copy">
-            <div class="watch-drift-status">
-              <span class="watch-drift-pulse" aria-hidden="true"></span>
-              <div>
-                <p class="eyebrow">{% if watch_selected_version.is_original %}Tracking baseline{% elif watch_selected_version.is_historical %}Movement at this check{% else %}Latest movement{% endif %}</p>
-                <h2 id="watchDriftHeading">{{ watch_drift.label }}</h2>
-              </div>
-            </div>
-            <p class="watch-drift-summary">{{ watch_drift.summary }}</p>
-            {% if watch_drift.evidence_sources %}
-            <ul class="watch-evidence-list" aria-label="Sources behind this change">
-              {% for item in watch_drift.evidence_sources %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
-            </ul>
-            {% endif %}
-            {% if watch_drift.pending_check %}
-            <p class="watch-pending-check is-{{ watch_drift.pending_check.signal }}">
-              <strong>Latest check{% if watch_drift.pending_check.checked_at %} &middot; {{ watch_drift.pending_check.checked_at.strftime('%b %d, %Y') }}{% endif %}:</strong>
-              {{ watch_drift.pending_check.note }}
-            </p>
-            {% endif %}
-            <!-- Zwei Belegzahlen als eine ruhige Zeile. Der Vergleichsbezug
-                 steckt im Wert, nicht in einer dritten Beschriftung, und der
-                 Absatz "Since tracking began" steht jetzt bei der Historie:
-                 dort gehoert eine Bilanz ueber alle Checks hin. -->
-            <dl class="watch-drift-metrics">
-              <div>
-                <dt>Direction shift</dt>
-                <dd>{% if watch_drift.direction_shift is not none %}{{ watch_drift.direction_shift }}<span>/100</span>{% else %}&mdash;{% endif %}</dd>
-              </div>
-              <div>
-                <dt>Agreement</dt>
-                <dd>{% if watch_drift.score_delta is not none %}{% if watch_drift.score_delta > 0 %}+{% endif %}{{ watch_drift.score_delta }}<span> pts vs {% if watch_selected_version.is_original %}tracking start{% else %}previous check{% endif %}{% if watch_drift.score_within_range %}, within the range of the recent checks{% endif %}</span>{% else %}&mdash;{% endif %}</dd>
-              </div>
-            </dl>
-          </div>
-          {% if watch_history %}
-          <div class="watch-compact-agreement" aria-labelledby="watchCompactAgreementHeading">
-            <div class="watch-compact-agreement-heading">
-              <div>
-                <p class="eyebrow" id="watchCompactAgreementHeading">Agreement over time</p>
-              </div>
-              <strong>{% if watch_history.latest_score is not none %}{{ watch_history.latest_score }}<span>/100</span>{% else %}Insufficient evidence{% endif %}</strong>
-            </div>
-            {{ agreement_chart(watch_history, true) }}
-            <a class="watch-full-chart-link" href="#watchFullAgreement">View full chart</a>
-          </div>
-          {% endif %}
-        </div>
-        {% if watch_selected_version.is_historical %}
-        <div class="watch-version-banner">
-          <span>You are viewing {% if watch_selected_version.is_original %}the original baseline{% else %}a historical version{% endif %}.</span>
-          <a href="{{ watch_selected_version.current_url }}">Return to current consensus</a>
-        </div>
-        {% endif %}
-      </section>
-      {% else %}
-      <section class="watch-baseline-card" aria-labelledby="watchBaselineHeading">
-        <p class="eyebrow">{% if watch_selected_version.is_original %}Original baseline{% else %}First result{% endif %}</p>
-        <h2 id="watchBaselineHeading">This is the baseline</h2>
-        <p>There is no earlier check to compare yet. The next completed check will show whether the answer, model positions, or agreement changed.</p>
-      </section>
-      {% endif %}
-      {% endif %}
       {% if scoreboard and (scoreboard.score is not none or scoreboard.model_count) %}
-      <div class="share-scoreboard{% if watch_page and watch_has_comparison and watch_history %} is-facts-only{% endif %}" role="group" aria-label="Consensus verdict at a glance">
+      <div class="share-scoreboard" role="group" aria-label="Consensus verdict at a glance">
         {% if scoreboard.score is not none %}
         <div class="share-scoreboard-score">
           <strong>{{ scoreboard.score }}</strong>
@@ -228,7 +90,6 @@
           {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
           {% if has_differences_view %}<li{% if scoreboard.contradiction_count %} class="is-contradiction"{% endif %}><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
           {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
-          {% if scoreboard.checks > 1 %}<li><b>{{ scoreboard.checks }}</b> checks since {{ scoreboard.tracked_since }}</li>{% endif %}
         </ul>
       </div>
       {% endif %}
@@ -260,8 +121,8 @@
       {% endif %}
       {% if has_differences_view %}
       <div class="share-toggle has-cue" role="group" aria-label="Switch between consensus and differences">
-        <button type="button" id="toggleConsensusView" aria-pressed="true">{% if watch_page %}{% if watch_selected_version.is_original %}Original consensus{% elif watch_selected_version.is_historical %}Consensus at this check{% else %}Current consensus{% endif %}{% else %}Consensus{% endif %}</button>
-        <button type="button" id="toggleDifferencesView" aria-pressed="false">{% if watch_page %}Model differences{% else %}Differences{% endif %}</button>
+        <button type="button" id="toggleConsensusView" aria-pressed="true">Consensus</button>
+        <button type="button" id="toggleDifferencesView" aria-pressed="false">Differences</button>
       </div>
       {% endif %}
     </header>
@@ -283,21 +144,10 @@
 
     <div class="page-content">
       <div id="consensusView" class="share-view">
-        {% if watch_awaiting_first_run %}
-        <section class="legal-panel watch-awaiting-first" aria-labelledby="watchAwaitingHeading">
-          <span class="watch-awaiting-icon" aria-hidden="true"></span>
-          <div>
-            <p class="eyebrow">Scheduled</p>
-            <h2 id="watchAwaitingHeading">The first consensus has not run yet</h2>
-            <p>This Watch will establish its baseline at the first scheduled check{% if watch_page.next_run.display %}, {{ watch_page.next_run.display }}{% endif %}. No model run was needed to create it.</p>
-          </div>
-        </section>
-        {% else %}
-        <section class="legal-panel"{% if not watch_page %} data-source-verification='{{ source_verification | default(none) | tojson | forceescape }}' data-differences-data='{{ differences_data | default(none) | tojson | forceescape }}' data-source-check-url="{{ source_check_url | default('') }}"{% endif %}>
-          <h2>{% if watch_page %}{% if watch_selected_version.is_original %}Original consensus{% elif watch_selected_version.is_historical %}Consensus at this check{% else %}Current consensus{% endif %}{% else %}Consensus answer{% endif %}</h2>
+        <section class="legal-panel" data-source-verification='{{ source_verification | default(none) | tojson | forceescape }}' data-differences-data='{{ differences_data | default(none) | tojson | forceescape }}' data-source-check-url="{{ source_check_url | default('') }}">
+          <h2>Consensus answer</h2>
           <div class="share-md">{{ consensus_html | safe }}</div>
         </section>
-        {% endif %}
         {% if has_differences_view and contradiction_count %}
         <button type="button" id="diffTeaser" class="share-diff-teaser" data-umami-event="share_diff_teaser_click">
           <span class="share-diff-teaser-icon" aria-hidden="true">&#9888;</span>
@@ -329,27 +179,10 @@
       </div>
       {% endif %}
 
-      {% if can_follow %}
-      <section class="legal-panel share-follow" aria-labelledby="shareFollowHeading">
-        <div class="share-follow-main">
-          <h2 id="shareFollowHeading">Follow this question</h2>
-          <p>This page is re-checked {{ watch_page.interval_label | lower }}. Get one e-mail when the AI consensus shifts &mdash; no account needed.</p>
-        </div>
-        <form id="shareFollowForm" class="share-follow-form">
-          <label class="visually-hidden" for="shareFollowEmail" hidden>E-mail address</label>
-          <input id="shareFollowEmail" type="email" required maxlength="254"
-                 placeholder="you@example.com" autocomplete="email" inputmode="email">
-          <button type="submit" class="button-primary" data-umami-event="share_follow_submit">Follow</button>
-        </form>
-        <p class="share-follow-note">Double opt-in &middot; unsubscribe anytime &middot; your address is only used for these updates.</p>
-        <p id="shareFollowDone" class="share-follow-done" role="status" hidden></p>
-      </section>
-      {% endif %}
-
       {% if sources %}
       <section class="legal-panel">
         <h2>{{ 'Contradiction source checks' if source_verification and source_verification.check_type == 'contradiction_evidence' else ('Verify sources' if source_verification else 'Sources') }}</h2>
-        {% if not watch_page %}<div id="shareSourceVerificationReport" class="source-verification-report"></div>{% endif %}
+        <div id="shareSourceVerificationReport" class="source-verification-report"></div>
         <ol id="shareSources" class="share-sources">
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
@@ -368,81 +201,6 @@
       </section>
       {% endif %}
 
-      {% if watch_history and watch_history.position_map %}
-      <section class="legal-panel watch-position-map" aria-labelledby="watchPositionHeading">
-        <div class="watch-position-intro">
-          <div>
-            <p class="eyebrow">Position Map</p>
-            <h2 id="watchPositionHeading">Where the models stand</h2>
-            <p>Each row is one part of the answer. The cards show the distinct positions; the model chips show who supports each one.</p>
-          </div>
-          <div class="watch-direction-score" aria-label="How much model positions changed">
-            {% if watch_history.position_map.shift_score is not none %}
-            <strong>{{ watch_history.position_map.shift_score }}<span>/100</span></strong>
-            {% else %}
-            <strong>&mdash;</strong>
-            {% endif %}
-            <span>Direction Shift &middot; {{ watch_history.position_map.shift_label }}</span>
-          </div>
-        </div>
-
-        <div class="watch-position-dimensions" aria-label="Latest model positions">
-          {% for dimension in watch_history.position_map.dimensions %}
-          <article class="watch-position-dimension">
-            <div class="watch-position-question">
-              <span class="watch-dimension-type">{% if dimension.type == "contradiction" %}Models disagree{% elif dimension.type == "claim" %}Shared conclusion{% else %}Different emphasis{% endif %}</span>
-              <h3>{{ dimension.label }}</h3>
-            </div>
-            <div class="watch-position-clusters">
-              {% for position in dimension.positions %}
-              <div class="watch-position-cluster">
-                <span class="watch-position-label">{% if dimension.positions | length == 1 %}Shared position{% else %}Position {{ loop.index }}{% endif %}</span>
-                {% if position.stance and position.stance != dimension.label %}
-                <p>{{ position.stance }}</p>
-                {% else %}
-                <p>Supports this conclusion</p>
-                {% endif %}
-                <ul aria-label="Models supporting this position">{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
-              </div>
-              {% endfor %}
-            </div>
-          </article>
-          {% endfor %}
-        </div>
-
-        {% if watch_history.position_map.trajectories %}
-        <details class="watch-position-movement">
-          <summary>See how each model moved across checks</summary>
-          <div class="watch-trajectory-scroll">
-            <table class="watch-trajectory">
-              <caption class="sr-only">Model position movement by watch date</caption>
-              <thead>
-                <tr><th scope="col">Model</th>{% for date in watch_history.position_map.dates %}<th scope="col">{{ date }}</th>{% endfor %}</tr>
-              </thead>
-              <tbody>
-                {% for row in watch_history.position_map.trajectories %}
-                <tr>
-                  <th scope="row">{{ row.provider }}</th>
-                  {% for cell in row.cells %}
-                  <td>
-                    {% if cell.score is not none %}
-                    <span class="watch-motion-marker{% if cell.moved %} is-moved{% else %} is-stable{% endif %}"
-                          aria-label="{{ row.provider }} on {{ cell.date }}: {% if cell.moved %}position changed, {{ cell.score }} out of 100{% else %}same position{% endif %}"
-                          title="{{ row.provider }} · {{ cell.date }} · {% if cell.moved %}changed {{ cell.score }}/100{% if cell.summary %}: {{ cell.summary }}{% endif %}{% else %}same position{% endif %}"></span>
-                    {% else %}<span class="watch-motion-marker is-missing" aria-label="No comparable position">&mdash;</span>{% endif %}
-                  </td>
-                  {% endfor %}
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <div class="watch-motion-legend" aria-hidden="true"><span><i class="is-stable"></i>Same position</span><span><i class="is-moved"></i>Changed position</span></div>
-        </details>
-        {% endif %}
-      </section>
-      {% endif %}
-
       {% if citation_text %}
       <section class="legal-panel">
         <h2>Cite this answer</h2>
@@ -453,47 +211,6 @@
           <button type="button" id="copyCitationBtn" class="button-secondary" data-umami-event="share_page_copy_citation">Copy citation</button>
           <a href="/app" class="button-primary">Ask your own question</a>
         </div>
-      </section>
-      {% endif %}
-
-      {% if watch_history %}
-      <section class="legal-panel watch-history" aria-labelledby="watchHistoryHeading">
-        <div class="watch-history-heading">
-          <div>
-            <p class="eyebrow">Consensus Watch</p>
-            <h2 id="watchHistoryHeading">Run history</h2>
-          </div>
-          <strong class="watch-history-latest">{% if watch_history.latest_score is not none %}{{ watch_history.latest_score }}<span>/100</span><small> latest agreement</small>{% else %}<small>Insufficient evidence for latest agreement</small>{% endif %}</strong>
-        </div>
-        {% if watch_drift and watch_drift.baseline_changed and watch_drift.baseline_summary %}
-        <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
-        {% endif %}
-        <details id="watchFullAgreement" class="watch-full-agreement">
-          <summary>View the full agreement chart</summary>
-          <div class="watch-agreement-heading">
-            <h3>Agreement over time</h3>
-            <p>How strongly the models support the same claims. Every point links to its run below. Gaps mark checks with insufficient evidence.</p>
-          </div>
-          <div class="watch-chart-scroll">{{ agreement_chart(watch_history) }}</div>
-        </details>
-
-        <div class="watch-runs-heading">
-          <h3>Checks</h3>
-          <p>Newest first. Open any saved result to read the full consensus from that date.</p>
-        </div>
-        <ol class="watch-runs">
-          {% for point in watch_history.points | reverse %}
-          <li id="watch-run-{{ point.anchor_id }}" class="is-{{ point.trigger }}{% if point.run_id == watch_selected_version.id %} is-selected{% endif %}" tabindex="-1">
-            <div class="watch-run-meta">
-              <time datetime="{{ point.ts.isoformat() }}">{{ point.ts.strftime("%Y-%m-%d") }}</time>
-              <span class="watch-run-state">{% if point.trigger == "changed" %}Meaningful change{% else %}Stable{% endif %}</span>
-            </div>
-            <strong>{% if point.agreement_score is not none %}{{ point.agreement_score }}<span>/100 agreement</span>{% else %}Insufficient evidence{% endif %}</strong>
-            <p>{% if point.trigger == "changed" %}{{ point.change_summary or "The consensus moved materially in this check." }}{% elif point.restated and point.change_summary %}<span class="watch-run-restated">Restated, not moved:</span> {{ point.change_summary }}{% else %}No meaningful movement detected in this check.{% endif %}</p>
-            {% if point.has_snapshot and point.run_id %}<a class="watch-version-link" href="{{ watch_selected_version.current_url }}?version={{ point.run_id }}">Open this consensus</a>{% endif %}
-          </li>
-          {% endfor %}
-        </ol>
       </section>
       {% endif %}
 
@@ -518,12 +235,11 @@
            bekommen sie eine Ueberschrift statt einer Fussnoten-Optik. Der
            Irrtumshinweis bleibt woertlich erhalten. -->
       <section class="share-about" aria-labelledby="shareAboutHeading">
-        <h2 id="shareAboutHeading">About this {% if watch_page %}tracked question{% else %}consensus{% endif %}</h2>
+        <h2 id="shareAboutHeading">About this consensus</h2>
         <p>
           {% if scoreboard and scoreboard.model_count %}{{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }}{% else %}Several AI models{% endif %}
           answered this question independently{% if date_display %} on {{ date_display }}{% endif %}. A judge model
           then cross-checked the answers, scored how far they agree and flagged where they differ.
-          {%- if watch_page and watch_page.interval %} The question is re-checked {{ watch_page.interval }}{% if scoreboard and scoreboard.checks > 1 %} &mdash; this is check {{ scoreboard.checks }} since {{ scoreboard.tracked_since }}{% endif %}, and every earlier version stays on this page.{% endif %}
         </p>
         <p class="share-about-caveat">
           AI models can make mistakes &ndash; verify important information against the sources above.
@@ -585,50 +301,6 @@
         });
       }
     })();
-
-    // Der kompakte Verlauf verlinkt dezent auf die große Grafik. Ein normaler
-    // Hash-Link bleibt ohne JS verständlich; mit JS öffnet sich das Detail.
-    (function () {
-      const fullChart = document.getElementById("watchFullAgreement");
-      if (!fullChart) return;
-      document.querySelectorAll('a[href="#watchFullAgreement"]').forEach(function (link) {
-        link.addEventListener("click", function () {
-          fullChart.open = true;
-        });
-      });
-      if (window.location.hash === "#watchFullAgreement") fullChart.open = true;
-    })();
-
-    {% if can_follow %}
-    // Follow-Formular: Double-Opt-in-Anfrage, rein serverseitig verarbeitet.
-    (function () {
-      const form = document.getElementById("shareFollowForm");
-      const done = document.getElementById("shareFollowDone");
-      if (!form || !done) return;
-      form.addEventListener("submit", function (event) {
-        event.preventDefault();
-        const email = document.getElementById("shareFollowEmail").value.trim();
-        if (!email) return;
-        const button = form.querySelector("button[type=submit]");
-        button.disabled = true;
-        fetch("/api/share/{{ share_id }}/follow", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email })
-        }).then(function (response) {
-          return response.json().catch(function () { return {}; }).then(function (data) {
-            if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
-            form.hidden = true;
-            done.textContent = data.message || "Check your inbox and confirm to start following.";
-            done.hidden = false;
-          });
-        }).catch(function (error) {
-          button.disabled = false;
-          alert("Follow request failed: " + error.message);
-        });
-      });
-    })();
-    {% endif %}
 
     // Lange Fragen: auf drei Zeilen einklappen, wie #threadAsk in /app.
     // Erst klammern, dann messen – ist nichts abgeschnitten, bleibt der

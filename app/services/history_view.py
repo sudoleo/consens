@@ -45,6 +45,40 @@ def _plain_dimensions(dimensions):
     return plain
 
 
+def day_label(value) -> str:
+    """"Aug 11" -- strftime has no portable day without a leading zero."""
+    return f"{value:%b} {value.day}"
+
+
+def _timeline(coords):
+    """What a Watch page lists of its history, newest first.
+
+    A Watch is worth reading for the checks that moved the answer, so only
+    those stand on their own, plus the newest check (what did the last look
+    find?) and the first one (since when is this watched?). The quiet checks
+    between them fold into one entry ("6 checks, no change").
+    """
+    last = len(coords) - 1
+    entries = []
+    for index in range(last, -1, -1):
+        point = coords[index]
+        if index == 0:
+            kind = "start"
+        elif point["trigger"] == "changed":
+            kind = "moved"
+        elif index == last:
+            kind = "latest"
+        else:
+            if not entries or entries[-1]["kind"] != "quiet":
+                entries.append({"kind": "quiet", "points": []})
+            entries[-1]["points"].append(point)
+            continue
+        entries.append({"kind": kind, "points": [point]})
+    for entry in entries:
+        entry["run_ids"] = [point.get("run_id") for point in entry["points"] if point.get("run_id")]
+    return entries
+
+
 def build_history_view(points):
     if not points:
         return None
@@ -67,6 +101,7 @@ def build_history_view(points):
             # Stable within the rendered history and independent of Firestore
             # document IDs, so chart points can link to their visible run row.
             "anchor_id": f"check-{index + 1}",
+            "day": day_label(point["ts"]),
             "trigger": trigger,
             "x": round(x, 1),
             "y": round(y, 1) if y is not None else None,
@@ -121,6 +156,7 @@ def build_history_view(points):
         "height": height,
         "path": path,
         "points": coords,
+        "timeline": _timeline(coords),
         "events": events,
         "start_date": points[0]["ts"].strftime("%Y-%m-%d"),
         "end_date": points[-1]["ts"].strftime("%Y-%m-%d"),

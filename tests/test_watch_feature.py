@@ -2100,7 +2100,7 @@ class WatchFrontendContractTests(unittest.TestCase):
     def test_watch_dashboard_supports_query_first_creation(self):
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
-        share_source = Path("templates/share.html").read_text(encoding="utf-8")
+        share_source = Path("templates/watch_share.html").read_text(encoding="utf-8")
         self.assertIn('renderQuestionStep(options?.question, modalIntent, options?.goal)', source)
         self.assertIn('payload.question = directQuestion', source)
         self.assertIn('No model run starts until the Watch reaches its scheduled check.', source)
@@ -2479,9 +2479,10 @@ class BriefCollectTests(unittest.TestCase):
         }]
         with patch.object(watch_brief.watch_service, "list_watches", return_value=watches):
             items, changes = watch_brief.collect_brief_items("u1", since=since, db=FakeDb())
-        # 52->80 is a score event, the last point is flagged; the pre-baseline
-        # change and the small 50->52 move do not count.
-        self.assertEqual(changes, 2)
+        # Only the major grade counts. 52->80 leaves the score band, but the
+        # Judge saw no difference there (docs/watch-evidence-model.md), and
+        # the pre-baseline change and the small 50->52 move do not count.
+        self.assertEqual(changes, 1)
         self.assertEqual(len(items), 1)
         self.assertEqual(len(items[0]["new_points"]), 3)
         self.assertEqual(items[0]["goal"], "")

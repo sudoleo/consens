@@ -116,12 +116,17 @@ def is_restated(changed, severity) -> bool:
 
 def _legacy_signal(point: dict, window: list) -> str:
     """History written before the Judge reported a cause."""
-    if is_major(point.get("changed"), point.get("severity")) or score_left_band(
-        point.get("agreement_score"), window,
-    ):
+    changed = point.get("changed")
+    if is_major(changed, point.get("severity")):
         return SIGNAL_MOVED
-    if is_restated(point.get("changed"), point.get("severity")):
+    if is_restated(changed, point.get("severity")):
         return SIGNAL_RESTATED
+    # The Judge read both answers and found no material difference. That
+    # verdict outranks a score that jumped one grading step; otherwise the
+    # page announced "Meaningful change" above "the differences are purely in
+    # wording". Only a check without any verdict still falls back to the band.
+    if not isinstance(changed, bool) and score_left_band(point.get("agreement_score"), window):
+        return SIGNAL_MOVED
     return SIGNAL_STABLE
 
 

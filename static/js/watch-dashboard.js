@@ -21,7 +21,9 @@
     const date = new Date(iso);
     if (isNaN(date.getTime())) return "";
     try {
-      return new Intl.DateTimeFormat(undefined, {
+      // English like the rest of the page; the browser locale put "7. Aug."
+      // into English sentences.
+      return new Intl.DateTimeFormat("en-US", {
         weekday: "short", month: "short", day: "numeric",
         hour: "2-digit", minute: "2-digit"
       }).format(date);
@@ -35,7 +37,7 @@
     const date = new Date(iso);
     if (isNaN(date.getTime())) return "";
     try {
-      return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+      return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
     } catch (_) {
       return date.toDateString();
     }

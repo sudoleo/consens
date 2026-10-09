@@ -1623,20 +1623,23 @@ class SharePageRouteTests(unittest.TestCase):
                 patch.object(share_router.snapshots, "list_watch_history", return_value=points):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         body = response.text
-        self.assertIn("Agreement over time", body)
+        # The curve stays for wide screens (CSS hides it on a phone); every
+        # point jumps to its entry in the timeline.
         self.assertIn('class="watch-chart"', body)
         self.assertIn("M 38.0", body)
+        self.assertIn("The answer changed", body)
         self.assertIn("The central recommendation changed.", body)
-        self.assertIn("76<span>/100</span>", body)
         self.assertIn('href="#watch-run-check-1"', body)
         self.assertIn('id="watch-run-check-1"', body)
-        self.assertIn('id="watchFullAgreement"', body)
+        self.assertIn("Watch started", body)
         self.assertNotIn(
             "The latest answer is shown below. We compare every check with the previous result",
             body,
         )
 
-    def test_watch_history_renders_position_map_and_direction_shift(self):
+    def test_watch_page_leaves_the_position_map_out(self):
+        """The map, its Direction Shift and the model table were the noise
+        that hid what a Watch is for; the page shows the answer and its changes."""
         doc = self._share_doc()
         position_map = {
             "schema_version": 1,
@@ -1665,14 +1668,10 @@ class SharePageRouteTests(unittest.TestCase):
                 patch.object(share_router.snapshots, "list_watch_history", return_value=points):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         body = response.text
-        self.assertIn("Position Map", body)
-        self.assertIn("Direction Shift", body)
-        self.assertIn("50<span>/100</span>", body)
-        self.assertIn("Recommended adoption timeline", body)
-        self.assertIn("OpenAI", body)
-        self.assertLess(body.index(">Sources<"), body.index("Position Map"))
-        self.assertLess(body.index("Position Map"), body.index(">Cite this answer<"))
-        self.assertNotIn('<details class="watch-history-details">', body)
+        self.assertNotIn("Position Map", body)
+        self.assertNotIn("Direction Shift", body)
+        self.assertNotIn("Cite this answer", body)
+        self.assertIn("Watch started", body)
 
     def test_active_watch_page_shows_run_metadata_before_history_exists(self):
         doc = self._share_doc()
@@ -1686,12 +1685,10 @@ class SharePageRouteTests(unittest.TestCase):
                 patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         body = response.text
-        self.assertIn('class="watch-meta-compact is-active"', body)
-        self.assertNotIn("Schedule and check dates", body)
-        self.assertIn("<b>Last</b>", body)
-        self.assertIn("2026-07-12 08:30 UTC", body)
-        self.assertIn("<b>Next</b>", body)
-        self.assertIn("Original consensus", body)
+        self.assertIn('class="wp-dot is-active"', body)
+        self.assertIn("Watch · checked weekly", body)
+        self.assertIn("next check Jul 19", body)
+        self.assertIn("Current answer", body)
 
     def test_a_rephrased_check_reads_as_stable_on_the_watch_page(self):
         """Every completed check used to raise the change badge, because the
@@ -1729,12 +1726,10 @@ class SharePageRouteTests(unittest.TestCase):
         path = "/s/%s-%s" % (doc["slug"], self.share_id)
         with patch.object(share_router.snapshots, "get_share", return_value=doc),                 patch.object(share_router.snapshots, "list_watch_history", return_value=points),                 patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta),                 patch.object(share_router.snapshots, "get_watch_version", return_value=version):
             current = self.client.get(path)
-        self.assertIn("Stable since last check", current.text)
-        self.assertNotIn("Changed since last check", current.text)
-        self.assertIn("A qualification was rephrased.", current.text)
-        self.assertIn("The wording moved, the conclusion held", current.text)
-        # Die Zeile darunter wiederholt das Badge nicht mehr.
-        self.assertNotIn("No material change was detected", current.text)
+        self.assertIn("Unchanged since Jul 14", current.text)
+        self.assertIn("Checked: same answer, new wording", current.text)
+        self.assertNotIn("The answer changed", current.text)
+        self.assertNotIn("Changed on", current.text)
 
     def test_watch_page_renders_latest_version_without_mutating_shared_baseline(self):
         doc = self._share_doc(
@@ -1781,17 +1776,15 @@ class SharePageRouteTests(unittest.TestCase):
             self.assertNotIn('id="shareSourceVerificationReport"', page.text)
         self.assertIn("Latest watched answer.", current.text)
         self.assertNotIn("Original immutable answer.", current.text)
-        self.assertIn("Changed since last check", current.text)
-        self.assertIn('class="watch-chart is-compact"', current.text)
-        self.assertIn('<strong>82</strong>', current.text)
-        self.assertIn("2</b> AI models", current.text)
+        self.assertIn("Changed on Jul 21", current.text)
+        self.assertIn("How the 2 models compared", current.text)
         self.assertIn("Current source", current.text)
         self.assertIn("2026-07-21", current.text)
-        self.assertIn("#shareSources", current.text)
+        self.assertIn('id="shareSources"', current.text)
         self.assertIn('href="https://current.test"', current.text)
         self.assertIn("Original immutable answer.", original.text)
         self.assertNotIn("Latest watched answer.", original.text)
-        self.assertIn('<strong>71</strong>', original.text)
+        self.assertIn("Answer from Jul 21", original.text)
         self.assertIn("2026-06-11", original.text)
         self.assertIn("max-age=60", current.headers["Cache-Control"])
         # Historical versions never change, but their publication can be
@@ -1835,11 +1828,12 @@ class SharePageRouteTests(unittest.TestCase):
             response = self.client.get(path)
         body = response.text
         self.assertIn("Historical answer only.", body)
-        self.assertIn('<strong>42</strong>', body)
+        self.assertIn("Answer from Jul 2", body)
         self.assertIn("Historical source", body)
-        self.assertIn("2</b> AI models", body)
+        self.assertIn("How the 2 models compared", body)
         self.assertIn("2026-07-02", body)
-        self.assertIn("Models consulted: Google Gemini: historic, Grok: historic.", body)
+        self.assertIn("Google Gemini historic &middot; Grok historic", body)
+        self.assertNotIn("original-model", body)
         self.assertNotIn("Original source", body)
 
     def test_missing_current_full_version_falls_back_consistently_to_original(self):
@@ -1863,10 +1857,11 @@ class SharePageRouteTests(unittest.TestCase):
         body = response.text
         self.assertIn("Latest version unavailable", body)
         self.assertIn("Original fallback answer.", body)
-        self.assertIn('<strong>17</strong>', body)
         self.assertIn("Baseline source", body)
-        self.assertIn("Models consulted: OpenAI: baseline.", body)
-        self.assertIn("Original baseline", body)
+        self.assertIn("OpenAI baseline", body)
+        self.assertIn("First answer", body)
+        # The page shows the original answer, so it must not claim a change.
+        self.assertNotIn("Changed on", body)
 
     def test_legacy_compact_history_without_version_pointer_keeps_original_snapshot(self):
         doc = self._share_doc(
@@ -1885,12 +1880,11 @@ class SharePageRouteTests(unittest.TestCase):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         body = response.text
         self.assertIn("Legacy original answer.", body)
-        self.assertIn('<strong>33</strong>', body)
         self.assertIn("Legacy baseline source", body)
         self.assertNotIn("Latest version unavailable", body)
         get_version.assert_not_called()
 
-    def test_watch_page_shows_selected_local_run_time(self):
+    def test_watch_page_shows_the_next_check_in_local_time(self):
         doc = self._share_doc()
         next_run = datetime(2026, 7, 19, 7, 0, tzinfo=timezone.utc)
         meta = {
@@ -1900,8 +1894,7 @@ class SharePageRouteTests(unittest.TestCase):
         with patch.object(share_router.snapshots, "get_share", return_value=doc), \
                 patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
-        self.assertIn("Weekly at 09:00 (Europe/Berlin)", response.text)
-        self.assertIn("2026-07-19 09:00 Europe/Berlin", response.text)
+        self.assertIn("next check Jul 19", response.text)
 
     def test_rendered_citation_contains_canonical_url(self):
         doc = self._share_doc()
@@ -2527,7 +2520,7 @@ class ShareSeoEnhancementTests(unittest.TestCase):
         body = response.text
         # Sichtbar im Scoreboard und lesbar im Suchergebnis: die Seite wird
         # nachgeprueft, sie ist keine einmalige Antwort.
-        self.assertIn("2</b> checks since 20 Jun 2026", body)
+        self.assertIn("Checked 2 times since Jun 20", body)
         self.assertIn("2 checks since 20 Jun 2026. ", body)
 
     def test_unscored_watch_check_keeps_its_change_and_version_link(self):
@@ -2548,9 +2541,11 @@ class ShareSeoEnhancementTests(unittest.TestCase):
                 patch.object(share_router.snapshots, "get_watch_version", return_value=version):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Insufficient evidence for latest agreement", response.text)
-        self.assertIn("Changed since last check", response.text)
-        self.assertIn("?version=unscored12345678", response.text)
+        self.assertIn("Changed on Jul 10", response.text)
+        # The changed check is the version on screen, so it says so instead
+        # of linking to itself.
+        self.assertIn('id="watch-run-check-2"', response.text)
+        self.assertIn("Shown above", response.text)
         self.assertNotIn('cy="None"', response.text)
         self.assertNotIn("None/100", response.text)
 

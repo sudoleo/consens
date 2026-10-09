@@ -125,14 +125,20 @@ def test_share_page_loads_the_common_math_renderer():
     assert re.search(r'<main class="page-shell[^"]*" data-math-render>', template)
 
 
-def test_watch_header_keeps_intro_left_aligned_and_dates_visible():
-    template = read("templates/share.html")
+def test_watch_page_leads_with_one_state_line_and_keeps_the_curve_off_phones():
+    template = read("templates/watch_share.html")
     public_css = read("static/css/public-pages.css")
-    intro_rule = public_css.split(".watch-plain-intro {", 1)[1].split("}", 1)[0]
+    phone_rules = public_css.split(".wp-shell { width: calc(100% - 32px)", 1)[1].split("}\n}", 1)[0]
 
-    assert "margin: 16px 0 0" in intro_rule
-    assert "Schedule and check dates" not in template
-    assert 'class="watch-meta-compact is-{{ watch_page.status }}"' in template
+    assert 'class="wp-state is-{{ watch_state.tone }}"' in template
+    assert template.index("wp-state") < template.index("wp-answer") < template.index("wp-history")
+    # No scoreboard, model chips or differences toggle above the answer.
+    assert "share-scoreboard" not in template
+    assert "toggleDifferencesView" not in template
+    assert ".wp-chart { display: none; }" in phone_rules
+    # A long, non-wrapping source title once pushed the whole phone page
+    # sideways: the list item has to be capped, not only the link.
+    assert ".wp-evidence li { min-width: 0; max-width: 100%; }" in public_css
 
 
 def test_landing_explains_consensus_watch_as_fourth_product_step():

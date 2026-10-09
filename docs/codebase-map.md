@@ -322,7 +322,8 @@ entfernt.
 Script-/Style-Tags rendert `app/core/assets.py` aus `static/js/bundles.json`),
 `admin.html`, `admin_benchmark.html` (Admin-Benchmark-Visualisierung, eigenes
 Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
-Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
+Consensus-Seite), `watch_share.html` (dieselbe Route `/s/…`, sobald die Seite
+Watch-Metadaten oder -History hat), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
 `topics.html` und `topic.html` bilden den öffentlichen Topics-Hub bzw. die
 Timeline-/Evidence-Detailseite; die Topic-Redaktion liegt als eigener Tab in
@@ -6674,37 +6675,37 @@ komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
 Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
 Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
 (HTTP 400), geht dieselbe Nachricht als Klartext raus.
-Watch-Seiten erklären nur vor dem ersten Vergleich die Baseline; bei vorhandener
-History beginnt der Inhalt direkt mit Status und Zeitplan. Lange Fragen klappen im Seitenkopf auf drei Zeilen
-ein (`#shareQuestion` + `#shareQuestionMore`, gleiche Geste wie `#threadAsk` in
-/app; ohne JS bleibt der volle Text stehen), in der Dashboard-Karte auf drei. Zeitplan und Check-Daten stehen im Kopf stets
-sichtbar; nur Direction-/Agreement-Metriken liegen in einklappbaren
-Expertendetails. Vor der ersten echten Vergleichsstufe
-werden keine Entwicklungsmetriken suggeriert. Bei vorhandener History integriert
-der Drift-Header einen kompakten Agreement-Chart: seine Punkte besitzen Hover-
-Beschreibungen und springen in die stets sichtbare Run-Liste. Die große Kurve
-bleibt als dezentes, zunächst geschlossenes Detail aus dem Header verlinkt. Die normale Watch-URL
-rendert serverseitig die **geltende** Vollversion (`accepted_run_id`, sonst die
-neueste) über dem unveränderten Share-Baseline-Dokument; steht der neueste Check
-nicht (`held`/`confirming`), nennt die Seite ihn als „Latest check: …“ über der
-geltenden Antwort. Ein Ziel bzw. ein Abschluss steht als `.watch-goal-banner`
-im Kopf (öffentliche Seiten zeigen das Ziel), die Quellen hinter einer Bewegung
-als `.watch-evidence-list`; `?version=<run_id>` öffnet eine unveränderliche (aber nur kurz gecachte, widerrufbare) historische Vollversion und
-`?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
-bisheriges Snapshot-Verhalten. Ein Backend-`display_version` ist die einzige
-Quelle für Consensus, Differences, Agreement, Modelle, Quellen, Answer-Zeit und
-Citation; kompakte History-Metadaten werden nie in den Share-Snapshot gemischt.
-Fehlt die aktuelle Vollversion (auch bei Legacy-History), zeigt die Seite einen
-klaren Hinweis und rendert den Original-Snapshot vollständig konsistent. Der
-Drift-Header stellt Stable/Changed sowie den Change-Summary vor den Text; seine
-Expertendetails trennen Direction Shift und Agreement Change. Die Engine-
-Provenienz und der Vergleichshinweis stehen als Methodennotiz am Seitenende.
-Direkt unter den Quellen rendert die öffentliche Watch-History eine stets offene,
-menschenlesbare **Position Map**: statt einer universellen Ja/Nein-Achse zeigt
-sie pro frage-spezifischer Dimension klar benannte Positionskarten samt
-Modell-Chips. Provider-Bewegungen über die Läufe bleiben als nachrangiges Detail
-verfügbar; der Kopf zeigt den gemeinsamen
-**Direction Shift**. Die Berechnung ist deterministisch aus dem ohnehin
+**Watch-Seiten** (`templates/watch_share.html`, seit 2026-10-10) sind eine
+ruhige Spalte mit genau drei Aussagen: (1) eine Zustandszeile
+(`_watch_state_view` in `routers/share.py`: „Unchanged since …“, „Changed on …“
+mit Satz und Belegen, „Resolved on …“, „Waiting for the first check“, „Answer
+from …“ für `?version=` und „Latest version unavailable“), darunter Ziel,
+„Latest check: …“ für einen nicht geltenden neuesten Check und eine Faktenzeile
+(Checks seit, nächster Check bzw. pausiert); (2) die Antwort mit Quellen (ab 6
+eingeklappt); (3) eine Zeitleiste (`history_view.timeline`): der neueste Check,
+jede Bewegung und der Start stehen einzeln, ruhige Checks dazwischen klappen zu
+„N checks, no change“ zusammen (Anker `#watch-run-check-N` öffnen die Gruppe).
+Die Agreement-Kurve steht nur auf breiten Bildschirmen über der Zeitleiste
+(`.wp-chart`, unter 700 px ausgeblendet). Scoreboard, Modell-Chips,
+Consensus/Differences-Umschalter, Position Map, Direction Shift, Zitierblock
+und „Related questions“ gibt es dort bewusst nicht mehr; die Modell-
+Unterschiede liegen zugeklappt am Ende („How the N models compared“). Lange
+Fragen klappen auf drei Zeilen ein (`#shareQuestion` + `#shareQuestionMore`).
+Die normale Watch-URL rendert serverseitig die **geltende** Vollversion
+(`accepted_run_id`, sonst die neueste) über dem unveränderten
+Share-Baseline-Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber
+nur kurz gecachte, widerrufbare) historische Vollversion und
+`?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten
+`share.html` mit ihrem bisherigen Snapshot-Verhalten. Ein Backend-
+`display_version` ist die einzige Quelle für Consensus, Differences, Modelle,
+Quellen, Answer-Zeit und Citation; kompakte History-Metadaten werden nie in den
+Share-Snapshot gemischt. Fehlt die aktuelle Vollversion (auch bei
+Legacy-History), sagt die Zustandszeile das und die Seite rendert den
+Original-Snapshot konsistent.
+Die **Position Map** (`opinion_map`) wird weiter pro Check gespeichert und auf
+Topic-Seiten gezeigt: statt einer universellen Ja/Nein-Achse pro
+frage-spezifischer Dimension benannte Positionen samt Modellen und ein
+gemeinsamer **Direction Shift**. Die Berechnung ist deterministisch aus dem ohnehin
 vorhandenen Differences-JSON plus dem Change-Judge-Ergebnis und verursacht
 keinen zusätzlichen LLM-Call. `opinion_map.stance_changed` wertet geänderte
 Zahlen (mit Vorzeichen/Einheit/Währung), Negationen, Bedingungen und Monate

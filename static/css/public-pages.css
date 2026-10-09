@@ -266,24 +266,6 @@ a:hover {
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.52)) saturate(1.12);
 }
 
-.watch-awaiting-first {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: clamp(22px, 4vw, 32px);
-}
-.watch-awaiting-first h2 { margin: 2px 0 7px; }
-.watch-awaiting-first p:last-child { margin: 0; color: var(--muted); }
-.watch-awaiting-icon {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 auto;
-  margin-top: 10px;
-  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-}
-
 .model-card {
   transition: transform var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
 }
@@ -782,9 +764,6 @@ canvas {
 .share-diff-teaser-icon { color: #c0392b; font-size: var(--font-size-base); }
 .dark-mode .share-diff-teaser-icon { color: #ff8a7a; }
 
-/* Follow-CTA: Besucher abonnieren Änderungen einer Watch-Seite per Mail. */
-.share-follow-main p { margin: 6px 0 0; color: var(--muted); }
-
 .share-follow-form {
   display: flex;
   flex-wrap: wrap;
@@ -1195,7 +1174,6 @@ canvas {
   margin-top: 8px;
 }
 
-
 /* Differences-Karten */
 .diff-verdict {
   font-weight: var(--font-weight-semibold);
@@ -1358,28 +1336,6 @@ canvas {
 }
 
 /* Consensus Watch history: server-rendered SVG, no chart dependency. */
-/* Ruhige Flaeche, farbiges Signal: der Zustand haengt am Punkt und an der
-   Zeile darueber, nicht an einer getoenten Wand. Ein Erstbesucher liest hier
-   ueber eine Veraenderung, bevor er die Antwort kennt - der Block darf
-   praesent sein, aber nicht schreien. */
-.watch-drift-hero {
-  margin: 20px 0 4px;
-  /* Nur der Einzug der Schiene. Eine getoente Flaeche haette hier nichts zu
-     sagen, was die Schiene und die Zeile nicht schon sagen -- und die Seite
-     stapelt sonst Kasten auf Kasten. */
-  padding: 2px 0 2px 16px;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  text-align: left;
-}
-
-/* Frage, Drift und Scoreboard teilen dieselbe Inhaltsbreite, damit die
-   Watch-Seite als zusammenhängendes Dashboard lesbar bleibt. */
-.share-header .watch-drift-hero {
-  box-sizing: border-box;
-  width: 100%;
-}
 
 .share-header .share-scoreboard {
   box-sizing: border-box;
@@ -1390,193 +1346,11 @@ canvas {
    die Flaeche. Die Zeile darueber bleibt in der normalen Textfarbe: --partial
    erreicht im Hellmodus keine 4.5:1 und waere als Kleinschrift nicht lesbar. */
 
-.watch-drift-status { display: flex; align-items: center; gap: 11px; }
-.watch-drift-status .eyebrow { margin: 0 0 3px; }
-.watch-drift-status h2 { margin: 0; color: var(--heading); font-size: var(--font-size-lg); }
-/* Nur Geometrie; die Farbe des Punktes setzt public-shell.css zusammen mit
-   der Schiene, damit beide nie verschiedene Zustaende behaupten. */
-.watch-drift-pulse { width: 13px; height: 13px; border-radius: 50%; }
-.watch-drift-summary { max-width: 70ch; margin: 10px 0 0; color: var(--text); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
-
-.watch-drift-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, .85fr);
-  gap: clamp(20px, 4vw, 44px);
-  align-items: center;
-}
-
 .share-scoreboard.is-facts-only { margin-top: 10px; padding-block: 11px; }
 .share-scoreboard.is-facts-only .share-scoreboard-score { display: none; }
 
-.watch-drift-copy { min-width: 0; }
-
-/* Die Kurve ist der visuelle Anker des Blocks: seit der Rahmen ruhig ist,
-   traegt sie die eigene Flaeche, damit sie nicht mit ihm verschwimmt. */
-.watch-compact-agreement {
-  min-width: 0;
-  padding: 0;
-  border-radius: 0;
-  background: none;
-}
-
-.watch-compact-agreement-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.watch-compact-agreement-heading .eyebrow { margin: 0 0 3px; }
-.watch-compact-agreement-heading div > span { display: block; color: var(--muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
-.watch-compact-agreement-heading > strong { color: var(--heading); font-size: var(--font-size-lg); line-height: var(--line-height-solid); }
-.watch-compact-agreement-heading > strong span { color: var(--muted); font-size: var(--font-size-micro); }
-.watch-full-chart-link {
-  display: block;
-  width: fit-content;
-  margin: 1px 0 0 auto;
-  color: var(--muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.watch-full-chart-link:hover { color: var(--heading); }
-
-.watch-plain-intro {
-  width: min(100%, 760px);
-  margin: 16px 0 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-reading);
-}
-
-.watch-simple-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-
-.watch-simple-status i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
-}
-
-.watch-simple-status:not(.is-active) { color: var(--muted); }
-
-.watch-baseline-card {
-  box-sizing: border-box;
-  width: min(var(--maxw), calc(100vw - 40px));
-  margin: 22px auto 8px;
-  padding: clamp(18px, 3vw, 26px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--panel-bg);
-  text-align: left;
-}
-.watch-baseline-card .eyebrow { margin: 0 0 4px; }
-.watch-baseline-card h2 { margin: 0; color: var(--heading); font-size: var(--font-size-xl); }
-.watch-baseline-card p:last-child { max-width: 68ch; margin: 10px 0 0; color: var(--text-secondary); line-height: var(--line-height-reading); }
-
-/* Drei Belegzahlen zum Satz darueber. Als Zeile gesetzt, weil ein Kasten pro
-   Zahl dreimal mehr Flaeche kostet, als die Zahlen wert sind. */
-.watch-drift-metrics { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 20px; margin: 10px 0 0; padding: 0; border: 0; border-radius: 0; background: none; }
-.watch-drift-metrics > div { display: flex; align-items: baseline; gap: 7px; min-width: 0; padding: 0; background: none; }
-.watch-drift-metrics dt { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.watch-drift-metrics dd { margin: 0; color: var(--text); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
-.watch-drift-metrics dd span { color: var(--muted); font-weight: var(--font-weight-medium); }
-/* Evidence model (docs/watch-evidence-model.md): the goal a watch waits for,
-   the sources behind a change, and the newest check when its answer does not
-   stand. */
-.watch-goal-banner {
-  margin: 18px 0 0;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: var(--raise);
-}
-.watch-goal-banner.is-resolved { background: var(--agree-bg); }
-.watch-goal-banner .eyebrow { margin: 0; }
-.watch-goal-banner.is-resolved .eyebrow { color: var(--agree); }
-.watch-goal-banner-goal { display: block; margin-top: 4px; color: var(--heading); font-size: var(--font-size-base); }
-.watch-goal-banner-reason { margin: 6px 0 0; color: var(--text); font-size: var(--font-size-sm); line-height: var(--line-height-reading); }
-.watch-evidence-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
-.watch-evidence-list a {
-  display: inline-block;
-  max-width: 100%;
-  padding: 4px 10px;
-  border-radius: var(--radius-xs);
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  color: var(--heading);
-  font-size: var(--font-size-xs);
-  overflow: hidden;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.watch-evidence-list a:hover { box-shadow: inset 0 0 0 1px var(--line); }
-.watch-pending-check {
-  max-width: 70ch;
-  margin: 12px 0 0;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--raise);
-  color: var(--muted);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-}
-.watch-pending-check strong { color: var(--heading); }
-
-.watch-drift-baseline { max-width: 78ch; margin: 10px 0 0; color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
-.watch-drift-baseline strong { color: var(--heading); }
-
-.watch-version-banner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 18px; margin: 16px -2px -4px; padding-top: 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-xs); }
-.watch-version-banner a, .watch-version-link { color: var(--accent); font-weight: var(--font-weight-semibold); text-decoration: none; }
-.watch-version-banner a:hover, .watch-version-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-
-.watch-history-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 14px;
-}
-
-.watch-meta-compact {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  max-width: 100%;
-  min-height: 30px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 6%, var(--panel-bg));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 48%, transparent);
-  color: var(--muted);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-ui);
-}
-
-.watch-meta-compact > span { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 4px 9px; }
-.watch-meta-compact > span + span { border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent); }
-.watch-meta-compact b { color: var(--heading); font-size: var(--font-size-micro); text-transform: uppercase; letter-spacing: var(--tracking-wide); }
-.watch-version-fallback {
-  width: min(100%, 780px); box-sizing: border-box; margin: 14px auto 0;
-  padding: 11px 14px; border: 1px solid color-mix(in srgb, #d97706 42%, var(--border));
-  border-radius: var(--radius-md); background: color-mix(in srgb, #f59e0b 9%, var(--panel-bg));
-  color: var(--text); font-size: var(--font-size-sm); line-height: var(--line-height-ui);
-}
-.watch-version-fallback strong { color: var(--heading); margin-right: 4px; }
-
-.watch-history-heading .eyebrow { margin: 0 0 4px; }
-.watch-history-heading h2 { margin: 0; }
+.watch-version-link { color: var(--accent); font-weight: var(--font-weight-semibold); text-decoration: none; }
+.watch-version-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .watch-history-latest {
   flex: 0 0 auto;
@@ -1607,32 +1381,6 @@ canvas {
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent-secondary) 5%, var(--panel-bg));
 }
-
-.watch-position-intro {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 22px;
-}
-
-.watch-position-intro .eyebrow { margin: 0 0 4px; }
-.watch-position-intro h2,
-.watch-agreement-heading h3 { margin: 0; color: var(--heading); font-size: var(--font-size-base); }
-.watch-position-intro p,
-.watch-agreement-heading p { max-width: 62ch; margin: 6px 0 0; color: var(--muted); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-
-.watch-direction-score {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  text-align: right;
-}
-
-.watch-direction-score strong { color: var(--heading); font-size: var(--font-size-xl); line-height: var(--line-height-solid); }
-.watch-direction-score strong span { color: var(--muted); font-size: var(--font-size-micro); }
-.watch-direction-score > span { color: var(--muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); text-transform: uppercase; letter-spacing: var(--tracking-wide); }
 
 .watch-trajectory-scroll { width: 100%; margin-top: 18px; overflow-x: auto; overscroll-behavior-inline: contain; }
 .watch-trajectory { width: 100%; min-width: 430px; border-collapse: collapse; font-size: var(--font-size-micro); }
@@ -1671,19 +1419,9 @@ canvas {
 .watch-position-cluster { min-width: 0; padding: 12px 14px; border-left: 3px solid var(--accent-secondary); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: color-mix(in srgb, var(--glass-bg-strong) 72%, transparent); }
 .watch-position-cluster:nth-child(even) { border-left-color: var(--accent-tertiary); }
 .watch-position-cluster p { margin: 0; color: var(--text); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
-.watch-position-label { display: block; margin-bottom: 5px; color: var(--muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); letter-spacing: var(--tracking-wide); text-transform: uppercase; }
+
 .watch-position-cluster ul { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 0; padding: 0; list-style: none; }
 .watch-position-cluster li { padding: 3px 7px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--muted); font-size: var(--font-size-micro); }
-.watch-position-movement { margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--border); }
-.watch-position-movement > summary,
-.watch-full-agreement > summary { width: fit-content; color: var(--heading); cursor: pointer; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
-.watch-agreement-heading { margin: 18px 0 8px; }
-
-.watch-full-agreement {
-  margin-top: 4px;
-  padding: 12px 0 16px;
-  border-bottom: 1px solid var(--border);
-}
 
 .watch-chart-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
 .watch-chart { display: block; width: 100%; min-width: 460px; height: auto; overflow: visible; }
@@ -1697,32 +1435,6 @@ canvas {
 .watch-chart-target .watch-chart-point { transform-box: fill-box; transform-origin: center; transition: transform var(--dur-press) var(--ease-standard), filter var(--dur-press) var(--ease-standard); }
 .watch-chart-target:hover .watch-chart-point,
 .watch-chart-target:focus .watch-chart-point { transform: scale(1.35); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 48%, transparent)); }
-
-.watch-runs-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 18px; }
-.watch-runs-heading h3 { margin: 0; color: var(--heading); font-size: var(--font-size-base); }
-.watch-runs-heading p { margin: 0; color: var(--muted); font-size: var(--font-size-xs); }
-.watch-runs { display: grid; gap: 0; margin: 10px 0 0; padding: 0; list-style: none; }
-.watch-runs li {
-  display: grid;
-  grid-template-columns: minmax(130px, auto) auto minmax(220px, 1fr) auto;
-  gap: 10px 18px;
-  align-items: center;
-  padding: 13px 10px;
-  border-top: 1px solid var(--border);
-  scroll-margin-top: 84px;
-}
-.watch-runs li:last-child { border-bottom: 1px solid var(--border); }
-.watch-runs li:target { border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 8%, var(--panel-bg)); outline: none; }
-.watch-run-meta { display: flex; flex-direction: column; gap: 4px; }
-.watch-run-meta time { color: var(--heading); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
-.watch-run-state { color: var(--muted); font-size: var(--font-size-micro); }
-.watch-runs li.is-changed .watch-run-state { color: var(--partial); font-weight: var(--font-weight-bold); }
-.watch-runs li > strong { color: var(--heading); font-size: var(--font-size-base); white-space: nowrap; }
-.watch-runs li > strong span { margin-left: 3px; color: var(--muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); }
-.watch-runs li > p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
-/* Eine Wortaenderung bleibt lesbar, aber sie bekommt nicht die Stimme einer
-   Bewegung: Vorspann in der Muted-Farbe, Satz normal weiter. */
-.watch-run-restated { color: var(--muted); font-weight: var(--font-weight-semibold); }
 
 /* Herkunftsangabe: eine benannte Sektion, kein Kleingedrucktes. Ruhig genug,
    dass sie den Fuss nicht dominiert, gross genug, dass man sie liest. */
@@ -1759,11 +1471,6 @@ canvas {
   font-weight: var(--font-weight-semibold);
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-@media (max-width: 900px) {
-  .watch-drift-layout { grid-template-columns: 1fr; }
-  .watch-compact-agreement { width: 100%; box-sizing: border-box; }
 }
 
 .watch-events { list-style: none; margin: 18px 0 0; padding: 0; border-top: 1px solid var(--border); }
@@ -1874,20 +1581,168 @@ canvas {
   .watch-events li { grid-template-columns: auto auto 1fr; }
   .watch-events p { grid-column: 1 / -1; }
   .watch-events .watch-version-link { grid-column: 1 / -1; }
-  .share-header .watch-drift-hero,
   .share-header .share-scoreboard { width: 100%; }
-  .watch-position-intro { flex-direction: column; }
-  .watch-direction-score { align-items: flex-start; text-align: left; }
+
   .watch-position-dimension { grid-template-columns: 1fr; gap: 12px; }
   .watch-position-clusters { grid-template-columns: 1fr; }
-  .watch-runs-heading { display: block; }
-  .watch-runs-heading p { margin-top: 5px; }
-  .watch-runs li { grid-template-columns: 1fr auto; gap: 7px 12px; }
-  .watch-runs li > p { grid-column: 1 / -1; }
-  .watch-runs .watch-version-link { grid-column: 1 / -1; }
-  .watch-meta-compact { width: 100%; }
-  .watch-meta-compact > span { flex: 1 1 auto; }
-  .watch-meta-compact > span + span { border-left: 0; }
+}
+
+/* ==========================================================================
+   Watch page (/s/... mit Watch, templates/watch_share.html): eine Spalte,
+   drei Aussagen -- der Stand, die Antwort, die Aenderungen ueber die Zeit.
+   ========================================================================== */
+.wp-shell { width: min(860px, calc(100% - 48px)); padding: 44px 0 8px; }
+
+.wp-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.wp-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.wp-dot.is-active { background: var(--agree); box-shadow: 0 0 0 3px color-mix(in srgb, var(--agree) 18%, transparent); }
+.wp-question {
+  margin: 12px 0 0;
+  color: var(--heading);
+  font-size: clamp(1.75rem, 4.6vw, var(--font-size-2xl));
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-height-heading);
+}
+
+/* Der Stand: eine Zeile, die sagt, ob sich die Antwort bewegt hat. */
+.wp-state { margin: 22px 0 0; padding: 18px 20px; border-radius: var(--radius-lg); background: var(--raise); }
+.wp-state-headline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--heading);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+}
+.wp-state-mark { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--agree); }
+.wp-state.is-moved .wp-state-mark { background: var(--partial); }
+.wp-state.is-waiting .wp-state-mark,
+.wp-state.is-past .wp-state-mark { background: var(--muted); }
+.wp-state-text { margin: 8px 0 0; color: var(--text); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
+.wp-goal { margin: 12px 0 0; color: var(--text); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
+.wp-goal span { margin-right: 6px; color: var(--muted); font-weight: var(--font-weight-semibold); }
+.wp-note { margin: 10px 0 0; color: var(--muted); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
+.wp-facts { margin: 12px 0 0; color: var(--muted); font-size: var(--font-size-xs); }
+.wp-back { display: inline-block; margin-top: 10px; color: var(--accent); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); text-decoration: none; }
+.wp-evidence { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+/* Ohne die Grenze am Listenpunkt waechst er auf die volle Laenge eines
+   nicht umbrechenden Quellentitels ("… | Preisvergleich Geizhals
+   Deutschland") und schiebt die ganze Seite seitlich auf. */
+.wp-evidence li { min-width: 0; max-width: 100%; }
+.wp-evidence a {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--heading);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wp-label {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.wp-answer { margin-top: 36px; }
+.wp-sources-label { margin-top: 26px; }
+.share-sources.is-short li:nth-child(n+6) { display: none; }
+
+.wp-follow { margin-top: 36px; padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.wp-follow h2 { margin: 0; color: var(--heading); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
+.wp-follow > p:first-of-type { margin: 4px 0 0; color: var(--muted); font-size: var(--font-size-sm); }
+
+/* Zeitleiste: Punkte an einer Linie. Nur Bewegungen sind farbig. */
+.wp-history { margin-top: 40px; }
+.wp-chart { margin: 0 0 28px; }
+/* 1:1 in Kurven-Einheiten: groesser wirkt sie wie ein Dashboard, nicht wie ein Beleg. */
+.wp-chart .watch-chart { max-width: 640px; }
+.wp-chart figcaption { margin-top: 6px; color: var(--muted); font-size: var(--font-size-xs); }
+.wp-timeline { margin: 0; padding: 0; list-style: none; }
+.wp-event { position: relative; padding: 0 0 22px 26px; scroll-margin-top: 84px; }
+.wp-event::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: -4px;
+  left: 4px;
+  width: 2px;
+  background: var(--line-soft);
+}
+.wp-event:last-child { padding-bottom: 0; }
+.wp-event:last-child::before { display: none; }
+.wp-event::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 0;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.wp-event.is-moved::after { background: var(--partial); }
+.wp-event.is-latest::after { background: var(--agree); }
+.wp-event.is-start::after { border: 2px solid var(--muted); background: var(--panel-bg); }
+.wp-event time { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.wp-event.is-selected > time { color: var(--heading); }
+.wp-event-title { margin: 2px 0 0; color: var(--heading); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
+.wp-event-text { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--font-size-sm); line-height: var(--line-height-reading); }
+.wp-version { display: inline-block; margin-top: 6px; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); text-decoration: none; }
+.wp-version:hover, .wp-back:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wp-version.is-current { color: var(--muted); }
+.wp-event.is-quiet summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.wp-event.is-quiet summary::-webkit-details-marker { display: none; }
+.wp-event.is-quiet summary::after { content: "Show"; margin-left: auto; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.wp-event.is-quiet details[open] summary::after { content: "Hide"; }
+.wp-event.is-quiet .wp-event-title { margin: 0; color: var(--muted); font-weight: var(--font-weight-medium); }
+.wp-quiet-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.wp-quiet-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 0; color: var(--muted); font-size: var(--font-size-xs); scroll-margin-top: 84px; }
+.wp-quiet-list .wp-version { margin: 0 0 0 auto; }
+
+.wp-more { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border); }
+.wp-more > summary { color: var(--heading); cursor: pointer; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.wp-models { margin: 12px 0; color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+
+.wp-foot { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+.wp-foot p { max-width: 62ch; margin: 0 0 12px; }
+.wp-foot a { color: inherit; }
+.wp-foot .wp-cta { color: var(--heading); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); text-decoration: none; }
+
+@media (max-width: 700px) {
+  .wp-shell { width: calc(100% - 32px); padding-top: 26px; }
+  .wp-chart { display: none; }
+  .wp-state { margin-top: 18px; padding: 16px; }
+  .wp-follow { padding: 16px; }
 }
 
 /* ==========================================================================

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="{{ robots_meta }}">
+  {% if is_private %}<meta name="referrer" content="no-referrer">{% endif %}
+  <link rel="canonical" href="{{ canonical_url }}">
+  <!-- Die Frage ist das Keyword und steht vorn; dass die Seite nachgeprüft
+       wird, trägt die Meta-Description. -->
+  <title>{{ question[:70] }} | consens.io</title>
+  <meta name="description" content="{{ meta_description }}">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="{{ question[:70] }}">
+  <meta property="og:description" content="{{ meta_description }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  {% if og_is_card %}<meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">{% endif %}
+  <meta name="twitter:card" content="{% if og_is_card %}summary_large_image{% else %}summary{% endif %}">
+  <meta name="twitter:title" content="{{ question[:70] }}">
+  <meta name="twitter:description" content="{{ meta_description }}">
+  {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
+  <script type="application/ld+json">{{ jsonld | safe }}</script>
+  <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
+  <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
+  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
+  <script defer src="{{ asset_url('/static/js/consensus-anchor.js') }}"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
+  <script defer src="{{ asset_url('/static/js/math-render.js') }}"></script>
+  {% if not is_private %}{% include "partials/analytics.html" %}{% endif %}
+</head>
+<body>
+  {% set public_nav_cta_href = "/app" %}
+  {% set public_nav_cta_label = "Ask your own question" %}
+  {% set public_nav_event = "share_page_cta" %}
+  {% include "partials/public_nav.html" %}
+
+  {#
+    Eine Watch-Seite sagt genau drei Dinge: wie die Antwort heute lautet, ob
+    und wann sie sich bewegt hat, und wie man davon erfährt. Score, Kurven,
+    Modell-Chips und die Positions-Karte standen früher drumherum und haben
+    genau das verdeckt; was davon noch hilft, steht zugeklappt ganz unten.
+  #}
+  {% macro version_link(point, start=false) %}
+  {% if point.run_id and point.run_id == watch_selected_version.id %}<span class="wp-version is-current">Shown above</span>
+  {% elif point.has_snapshot and point.run_id %}<a class="wp-version" href="{{ watch_selected_version.current_url }}?version={{ point.run_id }}">Read this version</a>
+  {% elif start and not watch_selected_version.is_original %}<a class="wp-version" href="{{ watch_selected_version.original_url }}">Read the first answer</a>{% endif %}
+  {% endmacro %}
+
+  {# Die Agreement-Kurve nur auf breiten Bildschirmen (CSS blendet sie unter
+     700 px aus): dort ist Platz, auf dem Handy war sie nur Lärm. Jeder Punkt
+     springt zu seinem Check in der Zeitleiste. #}
+  {% macro agreement_chart(history) %}
+  <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
+       aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}. Select a point to jump to that check.">
+    <line class="watch-grid" x1="38" y1="18" x2="38" y2="160"></line>
+    <line class="watch-grid" x1="38" y1="18" x2="622" y2="18"></line>
+    <line class="watch-grid" x1="38" y1="89" x2="622" y2="89"></line>
+    <line class="watch-grid" x1="38" y1="160" x2="622" y2="160"></line>
+    <text class="watch-axis-label" x="4" y="23">100</text>
+    <text class="watch-axis-label" x="13" y="94">50</text>
+    <text class="watch-axis-label" x="21" y="165">0</text>
+    <path class="watch-chart-line" d="{{ history.path }}"></path>
+    {% for point in history.points if point.y is not none %}
+    <a class="watch-chart-target" href="#watch-run-{{ point.anchor_id }}"
+       aria-label="{{ point.day }}: {{ point.agreement_score }} out of 100 agreement{% if point.trigger == 'changed' and point.change_summary %}. {{ point.change_summary }}{% endif %}">
+      <circle class="watch-chart-point{% if point.trigger == 'changed' %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.trigger == 'changed' %}5{% else %}4{% endif %}">
+        <title>{{ point.day }}: {{ point.agreement_score }}/100{% if point.trigger == 'changed' %} · the answer changed{% endif %}</title>
+      </circle>
+    </a>
+    {% endfor %}
+    <text class="watch-date-label" x="38" y="184">{{ history.start_date }}</text>
+    <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ history.end_date }}</text>
+  </svg>
+  {% endmacro %}
+
+  <main class="page-shell wp-shell" data-math-render>
+    <header class="wp-head">
+      <p class="wp-kicker"><span class="wp-dot is-{{ watch_page.status }}" aria-hidden="true"></span>Watch{% if watch_page.interval %} · checked {{ watch_page.interval }}{% endif %}{% if is_private %} · private{% endif %}</p>
+      <!-- Lange Fragen klappen auf drei Zeilen ein; ohne JS bleibt der volle Text. -->
+      <h1 id="shareQuestion" class="wp-question share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
+      <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
+    </header>
+
+    <section class="wp-state is-{{ watch_state.tone }}" aria-label="What this Watch found">
+      {% if watch_state.headline %}<p class="wp-state-headline"><span class="wp-state-mark" aria-hidden="true"></span>{{ watch_state.headline }}</p>{% endif %}
+      {% if watch_state.text %}<p class="wp-state-text">{{ watch_state.text }}</p>{% endif %}
+      {% if watch_state.sources %}
+      <ul class="wp-evidence" aria-label="Sources behind this">
+        {% for item in watch_state.sources %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if watch_state.back %}<a class="wp-back" href="{{ watch_selected_version.current_url }}">See the current answer &rarr;</a>{% endif %}
+      {% if watch_page.goal and not watch_page.resolution %}<p class="wp-goal"><span>Waiting for</span> {{ watch_page.goal }}</p>{% endif %}
+      {% if watch_state.note %}<p class="wp-note">{{ watch_state.note }}</p>{% endif %}
+      {% if watch_state.facts %}<p class="wp-facts">{{ watch_state.facts | join(" · ") }}</p>{% endif %}
+    </section>
+
+    {% if not watch_awaiting_first_run %}
+    <section class="wp-answer" aria-labelledby="wpAnswerHeading">
+      <h2 id="wpAnswerHeading" class="wp-label">{% if watch_state.back %}The answer then{% elif watch_state.tone == "past" %}First answer{% else %}Current answer{% endif %}</h2>
+      <div class="share-md">{{ consensus_html | safe }}</div>
+      {% if sources %}
+      <h3 class="wp-label wp-sources-label">Sources</h3>
+      <ol id="shareSources" class="share-sources">
+        {% for source in sources %}
+        <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
+          <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
+          {% if source.domain %}<img class="share-source-favicon" src="/api/topics/favicon?d={{ source.domain | urlencode }}" alt="" loading="lazy" width="18" height="18" referrerpolicy="no-referrer">{% endif %}
+          <span class="share-source-body">
+            <a class="share-source-title" href="{{ source.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ source.title }}</a>
+            {% if source.domain and source.domain != source.title %}<span class="share-source-domain">{{ source.domain }}</span>{% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ol>
+      {% if sources | length > 5 %}
+      <button type="button" id="shareSourcesToggle" class="share-sources-toggle" hidden>Show all {{ sources | length }} sources</button>
+      {% endif %}
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if can_follow %}
+    <section class="wp-follow" aria-labelledby="shareFollowHeading">
+      <h2 id="shareFollowHeading">Get an e-mail when this answer changes</h2>
+      <p>Only when a check moves the answer. No account needed.</p>
+      <form id="shareFollowForm" class="share-follow-form">
+        <label class="visually-hidden" for="shareFollowEmail" hidden>E-mail address</label>
+        <input id="shareFollowEmail" type="email" required maxlength="254"
+               placeholder="you@example.com" autocomplete="email" inputmode="email">
+        <button type="submit" class="button-primary" data-umami-event="share_follow_submit">Follow</button>
+      </form>
+      <p class="share-follow-note">Double opt-in &middot; unsubscribe anytime &middot; your address is only used for these updates.</p>
+      <p id="shareFollowDone" class="share-follow-done" role="status" hidden></p>
+    </section>
+    {% endif %}
+
+    {% if watch_history and watch_history.timeline %}
+    <section class="wp-history" aria-labelledby="wpHistoryHeading">
+      <h2 id="wpHistoryHeading" class="wp-label">History</h2>
+      {% if watch_history.points | length > 1 and watch_history.path %}
+      <figure class="wp-chart">
+        {{ agreement_chart(watch_history) }}
+        <figcaption>How strongly the models agree, per check. Filled points mark checks that changed the answer.</figcaption>
+      </figure>
+      {% endif %}
+      <ol class="wp-timeline">
+        {% for entry in watch_history.timeline %}
+        {% set point = entry.points[0] %}
+        {% if entry.kind == "quiet" %}
+        <li class="wp-event is-quiet">
+          <details{% if watch_selected_version.id in entry.run_ids %} open{% endif %}>
+            <summary>
+              <time datetime="{{ entry.points[-1].ts.isoformat() }}">{{ entry.points[-1].day }}{% if entry.points | length > 1 %} – {{ point.day }}{% endif %}</time>
+              <span class="wp-event-title">{% if entry.points | length > 1 %}{{ entry.points | length }} checks, no change{% else %}Checked, no change{% endif %}</span>
+            </summary>
+            <ul class="wp-quiet-list">
+              {% for item in entry.points %}
+              <li id="watch-run-{{ item.anchor_id }}" tabindex="-1"><time datetime="{{ item.ts.isoformat() }}">{{ item.day }}</time>{% if item.restated %}<span>same answer, new wording</span>{% elif item.signal == "held" %}<span>sources did not come up, answer stands</span>{% elif item.signal == "reverted" %}<span>a different reading, set aside</span>{% endif %}{{ version_link(item) }}</li>
+              {% endfor %}
+            </ul>
+          </details>
+        </li>
+        {% else %}
+        <li id="watch-run-{{ point.anchor_id }}" class="wp-event is-{{ entry.kind }}{% if point.run_id and point.run_id == watch_selected_version.id %} is-selected{% endif %}" tabindex="-1">
+          <time datetime="{{ point.ts.isoformat() }}">{{ point.day }}{% if entry.kind == "start" %}, {{ point.ts.year }}{% endif %}</time>
+          {% if entry.kind == "moved" %}
+          <p class="wp-event-title">The answer changed</p>
+          {% if point.change_summary %}<p class="wp-event-text">{{ point.change_summary }}</p>{% endif %}
+          {% if point.evidence_sources %}
+          <ul class="wp-evidence">
+            {% for item in point.evidence_sources[:3] %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
+          </ul>
+          {% endif %}
+          {% elif entry.kind == "start" %}
+          <p class="wp-event-title">Watch started</p>
+          <p class="wp-event-text">The first answer. Every later check is compared with it.</p>
+          {% elif point.signal == "confirming" %}
+          <p class="wp-event-title">Checked: a different reading, re-checking</p>
+          <p class="wp-event-text">It only counts if the next check sees it too.</p>
+          {% elif point.signal == "held" %}
+          <p class="wp-event-title">Checked: the answer stands</p>
+          <p class="wp-event-text">Its sources did not come up this time, and nothing contradicted them.</p>
+          {% elif point.restated %}
+          <p class="wp-event-title">Checked: same answer, new wording</p>
+          {% else %}
+          <p class="wp-event-title">Checked: no change</p>
+          {% endif %}
+          {{ version_link(point, entry.kind == "start") }}
+        </li>
+        {% endif %}
+        {% endfor %}
+      </ol>
+    </section>
+    {% endif %}
+
+    {% if has_differences_view and not watch_awaiting_first_run %}
+    <details class="wp-more">
+      <summary>How the {% if model_count %}{{ model_count }} {% endif %}models compared{% if contradiction_count %} &middot; {{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }}{% endif %}</summary>
+      {% if consulted_models %}<p class="wp-models">{% for m in consulted_models %}{{ m.label }}{% if m.model %} {{ m.model }}{% endif %}{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>{% endif %}
+      {% if differences %}
+      {% for diff in differences %}
+      <article class="diff-card">
+        <span class="diff-type{% if diff.type == 'contradiction' %} diff-type-contradiction{% endif %}">{{ diff.type or "difference" }}{% if diff.severity == 'major' %} &middot; critical{% elif diff.severity == 'minor' %} &middot; minor detail{% endif %}</span>
+        <h3>{{ diff.claim }}</h3>
+        {% for position in diff.positions %}
+        <div class="diff-position">
+          <p class="diff-stance">{{ position.stance }}</p>
+          {% if position.models %}<p class="diff-models">{{ position.models | join(", ") }}</p>{% endif %}
+          {% if position.quote %}<blockquote>&ldquo;{{ position.quote }}&rdquo;</blockquote>{% endif %}
+        </div>
+        {% endfor %}
+        {% if diff.verify %}<p class="diff-verify">How to verify: {{ diff.verify }}</p>{% endif %}
+      </article>
+      {% endfor %}
+      {% elif differences_fallback_html %}
+      <div class="share-md share-differences-md">{{ differences_fallback_html | safe }}</div>
+      {% else %}
+      <p class="wp-models">The models broadly agree; no notable differences.</p>
+      {% endif %}
+    </details>
+    {% endif %}
+
+    <footer class="wp-foot">
+      <p>Several AI models answer this question independently on every check; a judge model compares the result with the previous one and only reports what moved. AI can be wrong, so check the sources. <a href="/consensus-engine">How it works</a></p>
+      <p><a class="wp-cta" href="/app/watches">Watch your own question &rarr;</a></p>
+      {% if not is_private %}<div class="share-report">
+        <button type="button" id="shareReportToggle" class="share-report-toggle">Report this page</button>
+        <form id="shareReportForm" class="share-report-form" hidden>
+          <label for="shareReportReason" class="visually-hidden" hidden>Reason</label>
+          <select id="shareReportReason">
+            <option value="inaccurate">Inaccurate or misleading</option>
+            <option value="harmful">Harmful content</option>
+            <option value="spam">Spam or advertising</option>
+            <option value="copyright">Copyright issue</option>
+            <option value="other">Other</option>
+          </select>
+          <button type="submit">Send report</button>
+        </form>
+        <p id="shareReportDone" hidden>Thanks – this page has been reported for review.</p>
+      </div>{% endif %}
+    </footer>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+
+  <script>
+    // Lange Fragen: auf drei Zeilen einklappen; ist nichts abgeschnitten,
+    // bleibt der Link versteckt.
+    (function () {
+      const question = document.getElementById("shareQuestion");
+      const more = document.getElementById("shareQuestionMore");
+      if (!question || !more) return;
+      question.classList.add("is-clamped");
+      function measure() {
+        const clamped = question.getBoundingClientRect().height;
+        question.classList.remove("is-clamped");
+        const full = question.getBoundingClientRect().height;
+        const clipped = full - clamped > 4;
+        if (clipped) question.classList.add("is-clamped");
+        more.hidden = !clipped;
+      }
+      requestAnimationFrame(measure);
+      more.addEventListener("click", function () {
+        const open = question.classList.toggle("is-clamped") === false;
+        more.setAttribute("aria-expanded", String(open));
+        more.textContent = open ? "Collapse question" : "Show full question";
+      });
+    })();
+
+    // Quellen: eingeklappt starten; Sprünge aus Inline-Zitaten (#src-N)
+    // klappen auf.
+    (function () {
+      const list = document.getElementById("shareSources");
+      const toggle = document.getElementById("shareSourcesToggle");
+      if (!list || !toggle) return;
+      list.classList.add("is-collapsed", "is-short");
+      toggle.hidden = false;
+      function expand() {
+        list.classList.remove("is-collapsed", "is-short");
+        toggle.hidden = true;
+      }
+      toggle.addEventListener("click", expand);
+      function expandForHash() {
+        const hash = window.location.hash || "";
+        if (hash.indexOf("#src-") !== 0) return;
+        expand();
+        const target = document.getElementById(hash.slice(1));
+        if (target) target.scrollIntoView({ block: "center" });
+      }
+      window.addEventListener("hashchange", expandForHash);
+      expandForHash();
+    })();
+
+    // Favicons: fehlende ausblenden; Inline-Zitate bekommen das ihrer Quelle.
+    (function () {
+      document.querySelectorAll(".share-source-favicon").forEach(function (img) {
+        function fail() { img.remove(); }
+        img.addEventListener("error", fail);
+        if (img.complete && img.naturalWidth === 0) fail();
+      });
+      document.querySelectorAll('.share-md a[href^="#src-"]').forEach(function (link) {
+        const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
+        const srcImg = target && target.querySelector(".share-source-favicon");
+        const url = srcImg && srcImg.getAttribute("src");
+        if (!url) return;
+        const fav = document.createElement("img");
+        fav.className = "cite-favicon";
+        fav.setAttribute("src", url);
+        fav.setAttribute("alt", "");
+        fav.setAttribute("aria-hidden", "true");
+        fav.addEventListener("error", function () {
+          fav.remove();
+          link.classList.remove("has-favicon");
+        });
+        link.insertBefore(fav, link.firstChild);
+        link.classList.add("has-favicon");
+      });
+    })();
+
+    // Ein Link auf einen Check (#watch-run-…) in einer zugeklappten Gruppe
+    // ruhiger Checks klappt die Gruppe auf.
+    (function () {
+      function reveal() {
+        const hash = window.location.hash || "";
+        if (hash.indexOf("#watch-run-") !== 0) return;
+        const target = document.getElementById(hash.slice(1));
+        const group = target && target.closest("details");
+        if (!group || group.open) return;
+        group.open = true;
+        target.scrollIntoView({ block: "center" });
+      }
+      window.addEventListener("hashchange", reveal);
+      reveal();
+    })();
+
+    {% if can_follow %}
+    // Follow-Formular: Double-Opt-in-Anfrage, rein serverseitig verarbeitet.
+    (function () {
+      const form = document.getElementById("shareFollowForm");
+      const done = document.getElementById("shareFollowDone");
+      if (!form || !done) return;
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const email = document.getElementById("shareFollowEmail").value.trim();
+        if (!email) return;
+        const button = form.querySelector("button[type=submit]");
+        button.disabled = true;
+        fetch("/api/share/{{ share_id }}/follow", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email })
+        }).then(function (response) {
+          return response.json().catch(function () { return {}; }).then(function (data) {
+            if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+            form.hidden = true;
+            done.textContent = data.message || "Check your inbox and confirm to start following.";
+            done.hidden = false;
+          });
+        }).catch(function (error) {
+          button.disabled = false;
+          alert("Follow request failed: " + error.message);
+        });
+      });
+    })();
+    {% endif %}
+
+    (function () {
+      const toggle = document.getElementById("shareReportToggle");
+      const form = document.getElementById("shareReportForm");
+      const done = document.getElementById("shareReportDone");
+      if (!toggle || !form || !done) return;
+      toggle.addEventListener("click", function () {
+        form.hidden = !form.hidden;
+      });
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const reason = document.getElementById("shareReportReason").value;
+        const submitBtn = form.querySelector("button[type=submit]");
+        submitBtn.disabled = true;
+        fetch("/api/share/{{ share_id }}/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason })
+        }).then(function (response) {
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          form.hidden = true;
+          toggle.hidden = true;
+          done.hidden = false;
+        }).catch(function () {
+          submitBtn.disabled = false;
+          alert("Reporting failed. Please try again later.");
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

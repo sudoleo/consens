@@ -84,8 +84,11 @@ alte Historie wird beim Lesen neu bewertet.
 * Der Agreement-Score löst **kein** Ereignis mehr aus. Er springt zwischen
   festen Stufen (90/84/64/39) und bleibt als `score_event` nur eine Markierung
   in der Kurve.
-* Historie ohne `cause` (vor diesem Modell geschrieben) behält die alte Regel
-  (major oder Score-Band) – kein Backfill.
+* Historie ohne `cause` (vor diesem Modell geschrieben) wird ohne Backfill
+  nach der Note des Judges gelesen: major → `moved`, `changed` + minor →
+  `restated`, sonst `stable`. Das Score-Band zählt nur noch bei Checks ganz
+  ohne Judge-Urteil (`changed` fehlt). Vorher machte ein Score-Sprung aus
+  „die Unterschiede sind reine Formulierung“ eine „Meaningful change“.
 
 ### Bestätigung
 

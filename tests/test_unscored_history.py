@@ -39,9 +39,8 @@ def test_completed_unscored_watch_remains_visible_and_changed():
     points = share_snapshots.list_watch_history(sid, db=query_db)
     assert [p['run_id'] for p in points] == ['old-run', 'new-run']
     drift = _build_watch_drift_view(points, 'new-run')
-    assert drift['label'] == 'Changed since last check'
+    assert drift['trigger'] == 'changed'
     assert drift['summary'] == 'New recommendation.'
-    assert drift['score_delta'] is None
 
 
 def test_history_keeps_unscored_events_and_maps_but_breaks_the_chart_line():

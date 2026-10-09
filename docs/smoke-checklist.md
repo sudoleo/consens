@@ -740,22 +740,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Ohne Watch ist der Morning-Brief-Toggle deaktiviert und erklärt „Create a
       watch first“; ein direkter Aktivierungs-Request wird abgelehnt. Nach dem
       Löschen der letzten Watch ist ein zuvor aktiver Brief ausgeschaltet.
-- [ ] Aktive Watch-Seite erklärt vor dem ersten Vergleich verständlich, dass
-      erst eine Baseline vorliegt; Status bleibt sichtbar, Zeitplan/letzter/
-      nächster Lauf sind über „Schedule and check dates“ erreichbar. Mit History rendert
-      sie den neuesten gespeicherten Consensus statt des ursprünglichen Texts,
-      einen Stable/Changed-Drift-Header; Direction Shift und Agreement Change
-      stehen erst in „advanced change metrics“. Der Drift-Header enthält den
-      kompakten Agreement-Chart; Hover erklärt jeden Punkt, Klick springt zur
-      passenden sichtbaren Run-Zeile. Der Link „View full chart“ öffnet die große
-      SVG-Kurve. Chart, Run-Liste und Position Map funktionieren in Light/Dark
-      ohne Mobile-Overflow. Jede neue Vollversion ist aus ihrer Run-Zeile erreichbar;
-      `?version=original` zeigt unverändert die
-      Ausgangsversion. Eine normale Shared Page ohne Watch bleibt unverändert.
-      Neue History zeigt direkt unter den Quellen die stets offene, mehrdimensionale
-      Position Map mit verständlichen Positionskarten, Modell-Chips und Direction
-      Shift; Provider-Trajektorien sind nachrangig aufklappbar. Alte
-      Punkte ohne `opinion_map` degradieren auf den Agreement-Chart.
+- [ ] Watch-Seite (`/s/…` mit Watch) auf 375 px und Desktop, Light/Dark:
+      oben nur Frage und eine Zustandszeile („Unchanged since …“ / „Changed on …“
+      mit Satz und Belegen / „Waiting for the first check“), darunter die
+      Antwort mit Quellen, dann „History“: neuester Check, jede Bewegung und der
+      Start einzeln, ruhige Checks als aufklappbare Gruppe. Die Agreement-Kurve
+      erscheint nur auf dem Desktop; ein Klick auf einen Punkt springt zum Check
+      (und öffnet dessen Gruppe). Kein Scoreboard, keine Position Map, kein
+      seitliches Scrollen, auch nicht mit sehr langen Beleg-Titeln. „Read this
+      version“ öffnet eine Vollversion, `?version=original` zeigt „Answer from …“
+      mit Rücklink. Eine normale Shared Page ohne Watch bleibt unverändert.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
       ein Check mit `moved` sendet genau eine Multipart-Mail „Moved: …“ als
       Änderungsprotokoll (What changed → Why mit Quellen → What held → Waiting

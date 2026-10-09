@@ -115,14 +115,25 @@ def test_legacy_minor_grade_is_a_restatement_not_a_change():
     assert _signals([_legacy(), _legacy(True, "major", 82)]) == ["stable", "moved"]
 
 
-def test_legacy_score_leaving_the_band_is_still_movement():
-    series = [_legacy(), _legacy(), _legacy(), _legacy(score=64)]
+def test_legacy_score_leaving_the_band_is_movement_only_without_a_verdict():
+    series = [_legacy(), _legacy(), _legacy(), _legacy(None, "", score=64)]
 
     assert _signals(series)[-1] == "moved"
 
 
+def test_legacy_judge_verdict_outranks_a_score_step():
+    """The real GitHub Code Quality watch: the Judge said "the differences are
+    purely in wording" while the score fell from 84 to 64. The page announced
+    a "Meaningful change" above that sentence."""
+    window = [_legacy(score=90), _legacy(score=90), _legacy(score=84)]
+
+    assert _signals(window + [_legacy(False, "minor", 64)])[-1] == "stable"
+    assert _signals(window + [_legacy(True, "minor", 64)])[-1] == "restated"
+
+
 def test_legacy_score_swinging_between_two_cap_steps_reports_the_first_step_only():
-    series = [_legacy(score=84), _legacy(score=64), _legacy(score=84), _legacy(score=64), _legacy(score=84)]
+    series = [_legacy(None, "", score=84), _legacy(None, "", score=64), _legacy(None, "", score=84),
+              _legacy(None, "", score=64), _legacy(None, "", score=84)]
 
     triggers = [point["trigger"] for point in drift_signal.annotate_points(series)]
 
