@@ -2,22 +2,27 @@ import { describe, expect, it } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-function boot() {
+// `served` answers the HEAD probe for a failed same-origin asset: false is a
+// real outage (reported), true a resource the browser refused by itself.
+function boot({ served = false } = {}) {
   const reports = [];
+  const probes = [];
   const loaded = loadScripts(["static/js/error-reporter.js"], {
     before(window) {
-      window.fetch = (_url, options) => {
+      window.fetch = (url, options) => {
+        if (options?.method === "HEAD") { probes.push(String(url)); return Promise.resolve({ ok: served }); }
         reports.push(JSON.parse(options.body));
         return Promise.resolve({ ok: true });
       };
     },
   });
-  return { ...loaded, reports };
+  return { ...loaded, reports, probes };
 }
 
-function fail(window, element) {
+async function fail(window, element) {
   window.document.head.appendChild(element);
   element.dispatchEvent(new window.Event("error"));
+  for (let i = 0; i < 3; i++) await Promise.resolve();
 }
 
 describe("critical resource reporting", () => {
@@ -42,7 +47,7 @@ describe("critical resource reporting", () => {
     expect(JSON.stringify(reports[0]).length).toBeLessThan(8000);
     dom.window.close();
   });
-  it("identifies separate failed app assets without query strings", () => {
+  it("identifies separate failed app assets without query strings", async () => {
     const { window, document, dom, reports } = boot();
     for (const src of [
       "/static/dist/app.012345abcdef.js?token=private",
@@ -52,7 +57,7 @@ describe("critical resource reporting", () => {
     ]) {
       const script = document.createElement("script");
       script.src = src;
-      fail(window, script);
+      await fail(window, script);
     }
     expect(reports.map(report => report.asset)).toEqual([
       "dist/app.012345abcdef.js", "dist/firebase.abcdef012345.js",
@@ -62,11 +67,11 @@ describe("critical resource reporting", () => {
     dom.window.close();
   });
 
-  it("does not send unapproved resource names", () => {
+  it("does not send unapproved resource names", async () => {
     const { window, document, dom, reports } = boot();
     const script = document.createElement("script");
     script.src = "/static/private-user.js";
-    fail(window, script);
+    await fail(window, script);
     expect(reports[0]).not.toHaveProperty("asset");
     dom.window.close();
   });
@@ -198,12 +203,12 @@ describe("critical resource reporting", () => {
     expect(reports).toEqual([]);
   });
 
-  it("reports a failed app script without sending its URL", () => {
+  it("reports a failed app script without sending its URL", async () => {
     const { window, document, reports } = boot();
     const script = document.createElement("script");
     script.src = "/static/dist/app.abc123.js";
 
-    fail(window, script);
+    await fail(window, script);
 
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({
@@ -213,6 +218,28 @@ describe("critical resource reporting", () => {
       path: "/app",
     });
     expect(reports[0]).not.toHaveProperty("details");
+  });
+
+  it("does not alert when the server delivers an asset the browser refused itself", async () => {
+    const { window, document, reports, probes } = boot({ served: true });
+    for (const href of ["/static/dist/app.4f2dceaa1823.css", "/static/vendor/katex/0.17.0/dist/katex.min.css?v=2105ed91f651"]) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      await fail(window, link);
+    }
+    expect(probes).toHaveLength(2);
+    expect(reports).toEqual([]);
+  });
+
+  it("alerts when a same-origin stylesheet is really unavailable", async () => {
+    const { window, document, reports } = boot({ served: false });
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/static/dist/app.4f2dceaa1823.css";
+    await fail(window, link);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ resource_class: "app_bundle", asset: "dist/app.4f2dceaa1823.css" });
   });
 
   it("classifies a failed CDN stylesheet", () => {

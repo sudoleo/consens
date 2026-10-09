@@ -638,7 +638,10 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Dokument-Favicons bleiben bei ihren lokalen Fallbacks. Asset-Alarme senden
   eine allowgelistete Ressourcenklasse und für bekannte lokale Assets zusätzlich
   den geprüften Dateinamen (gehashte Bundles, gepinnte Vendor-Libs, Analytics-Opt-out),
-  keine URL/Query. Client und Server deduplizieren je Asset; unterschiedliche
+  keine URL/Query. Eigene Assets (same-origin) melden seit 2026-10-09 nur, wenn
+  ein ungecachter `HEAD`-Request sie ebenfalls nicht bekommt: Headless-Scraper
+  blockieren Stylesheets selbst und lösten pro Seite zwei Fehlalarme aus; CDN-
+  Ressourcen melden sofort. Client und Server deduplizieren je Asset; unterschiedliche
   Dateien derselben Klasse bleiben damit diagnostizierbar. Erwartete
   `AbortError`-Abbrüche werden ignoriert; Session-Deduplizierung verhindert
   Wiederholungen desselben Fehlers. Runtime-Alarme ergänzen einen allowgelisteten

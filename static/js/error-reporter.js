@@ -229,17 +229,37 @@
     }
   }
 
+  // A browser that refuses a resource type itself fires the same error as an
+  // outage: headless scrapers drop every stylesheet (Render log 2026-10-09: a
+  // proxy swarm fetched all scripts and no CSS, and each page raised two
+  // "critical" alerts). Our own assets are critical only when the server
+  // really does not deliver them, which one uncached HEAD request settles.
+  const SAME_ORIGIN_CLASSES = new Set(["app_bundle", "static_asset", "same_origin_resource"]);
+  function assetUnavailable(target) {
+    const url = target?.src || target?.href || "";
+    if (!url || typeof fetch !== "function") return Promise.resolve(true);
+    try {
+      return fetch(url, { method: "HEAD", cache: "no-store", credentials: "same-origin" })
+        .then(response => !response?.ok, () => true);
+    } catch (_) {
+      return Promise.resolve(true);
+    }
+  }
+
   window.addEventListener("error", function (event) {
     if (event.target && event.target !== window) {
-      const resourceClass = criticalResourceClass(event.target);
+      const target = event.target;
+      const resourceClass = criticalResourceClass(target);
       if (!resourceClass) return;
-      reportCriticalError({
+      const report = () => reportCriticalError({
         type: "resource_load_failed",
         phase: "asset_load",
-        message: `Failed to load ${event.target.tagName || "resource"}`,
+        message: `Failed to load ${target.tagName || "resource"}`,
         resource_class: resourceClass,
-        asset: criticalAssetName(event.target)
+        asset: criticalAssetName(target)
       });
+      if (!SAME_ORIGIN_CLASSES.has(resourceClass)) { report(); return; }
+      assetUnavailable(target).then(unavailable => { if (unavailable) report(); });
       return;
     }
     if (isUnattributableError(event)) return;
