@@ -26,6 +26,8 @@ function boot({ reduced = false, mode = "agent", askAt = 2000 } = {}) {
     }
   });
   const { document } = result;
+  // As in the app (base.css); jsdom's default is 8px.
+  document.body.style.margin = "0";
   const question = document.getElementById("threadAsk");
   question.getClientRects = () => [{}];
   question.getBoundingClientRect = () => ({ top: ask - y, bottom: ask + 40 - y });

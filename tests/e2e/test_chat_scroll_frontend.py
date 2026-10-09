@@ -244,3 +244,41 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
         assert not errors
     finally:
         context.close()
+
+
+# Full-HD windows with a bookmarks bar: the question lands at a fractional
+# position (292.625px), where the reserve and the page height used to swap
+# 1px every frame and the scrollbar flickered for the whole run.
+@pytest.mark.parametrize("height", [929, 1009])
+def test_a_live_short_turn_keeps_the_page_height_still(browser, phase4_server, height):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": 1920, "height": height})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True, "limit": 500}))
+        page.route("**/usage", lambda r: _json(r, {"tier": "pro", "is_pro": True, "remaining": 500, "total_limit": 500}))
+        page.route("**/api/my/memory", lambda r: _json(r, {"memory": {"content": "", "revision": 0}}))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        page.evaluate("""() => {
+          window.streamSSERequest = (_url, _body, signal, handlers) => {
+            window.__streamHandlers = handlers;
+            return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), {once:true}));
+          };
+        }""")
+        page.locator("#questionInput").fill("Is a heat pump worth it in an old building? " * 3)
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => !!window.__streamHandlers")
+        page.wait_for_timeout(800)
+        samples = page.evaluate("""() => new Promise(resolve => {
+          const out = [];
+          const tick = () => { out.push([document.scrollingElement.scrollHeight, document.querySelector('.chat-scroll-reserve')?.style.height]);
+            out.length < 60 ? requestAnimationFrame(tick) : resolve(out); };
+          requestAnimationFrame(tick);
+        })""")
+        assert len({tuple(s) for s in samples}) == 1, samples[:6]
+        # A short turn fits the window: nothing to scroll, so no scrollbar.
+        assert samples[0][0] == height
+    finally:
+        context.close()

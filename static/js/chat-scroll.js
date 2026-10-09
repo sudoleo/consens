@@ -71,12 +71,18 @@
       const style = window.getComputedStyle(column);
       const composer = column.querySelector(".input-section");
       const inFlow = composer && window.getComputedStyle(composer).position !== "fixed";
-      const root = document.scrollingElement || document.documentElement;
-      const columnEnd = column.getBoundingClientRect().bottom + window.scrollY;
-      const below = (parseFloat(style.paddingBottom) || 0) + (inFlow ? composer.offsetHeight : 0)
-        + Math.max(0, root.scrollHeight - columnEnd);
+      // What follows the column in the body, measured in layout pixels. Not
+      // via scrollHeight: that is rounded and includes the reserve itself, so
+      // a fractional layout (a question at 292.625px) made the reserve and the
+      // page height swap 1px every frame, and the scrollbar flickered.
+      const after = Math.max(0, document.body.getBoundingClientRect().bottom - column.getBoundingClientRect().bottom)
+        + (parseFloat(window.getComputedStyle(document.body).marginBottom) || 0);
+      const below = (parseFloat(style.paddingBottom) || 0) + (inFlow ? composer.offsetHeight : 0) + after;
       const turn = reserve.getBoundingClientRect().top - question.getBoundingClientRect().top;
-      height = Math.max(0, Math.ceil(window.innerHeight - landing(question) - turn - below));
+      // Rounded down: a reserve a fraction too tall makes the page scroll by
+      // that fraction; one a fraction short is filled by the column's own
+      // minimum height.
+      height = Math.max(0, Math.floor(window.innerHeight - landing(question) - turn - below));
     }
     const current = parseFloat(reserve.style.height) || 0;
     if (Math.abs(current - height) >= 1) reserve.style.height = `${height}px`;

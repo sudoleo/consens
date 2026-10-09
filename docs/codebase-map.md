@@ -1729,7 +1729,11 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   erst länger, wenn der Turn den Viewport übersteigt. Die Reserve rechnet in
   Dokumentkoordinaten (Frage, Reserve-Oberkante, Composer im Fluss oder
   `padding-bottom` beim fixierten Handy-Composer) und wird bei jedem
-  ResizeObserver-/Resize-/Projektionsdurchlauf nachgeführt.
+  ResizeObserver-/Resize-/Projektionsdurchlauf nachgeführt. Was nach der
+  Spalte kommt, misst sie am Layout (Body- minus Spaltenunterkante), nie über
+  das gerundete `scrollHeight`, und sie rundet ab: sonst tauschten Reserve und
+  Seitenhöhe bei gebrochener Lage (Frage bei 292,625 px, Full-HD-Fenster) in
+  jedem Frame 1 px, und die Scrollleiste flackerte den ganzen Lauf über.
   `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` für einen
   einmaligen sanften Sprung ans Gesprächsende auf (mit Reserve: die letzte
   Frage oben), auch bei noch lokal vorhandenen Runs; mobil schließt dabei die
