@@ -455,3 +455,39 @@ def test_a_container_argument_sent_as_json_text_is_decoded():
     plain = {"function": {"name": "compare_models", "arguments": json.dumps(
         {"question": "[]", "context": "", "reason": "R", "next_step": "answer", "memory": []})}}
     assert registry.validate(plain)[1].question == "[]"
+
+
+def test_refused_tool_calls_say_what_to_change(caplog):
+    # A bare "Tool is not authorized" and pydantic's input echo + docs URL
+    # (cut after two errors) gave Claude nothing to correct: it repeated the
+    # call until "repeated invalid tool requests" ended the turn (2026-10-09).
+    from app.services.agent_comparison import CompareArgs
+    from app.services.agent_delegation import DelegationLoop
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", CompareArgs, lambda a, **kw: {}),
+                             ReadOnlyTool("judge_answer", "Judge", CompareArgs, lambda a, **kw: {})],
+                            argument_limit=24_000)
+    def call(name, arguments):
+        return {"function": {"name": name, "arguments": arguments}}
+    with pytest.raises(ValueError, match="Available tools: compare_models, judge_answer") as unknown:
+        registry.validate(call("open_url", '{"url": "https://consens.io"}'))
+    assert "web pages" in str(unknown.value)
+    with pytest.raises(ValueError, match="not valid JSON"):
+        registry.validate(call("compare_models", ""))
+    secret = "private question text"
+    with pytest.raises(ValueError) as invalid:
+        registry.validate(call("compare_models", json.dumps({"question": secret, "url": "x", "depth": "deep"})))
+    text = str(invalid.value)
+    for problem in ("reason: Field required", "next_step: Field required", "url: Extra inputs", "depth: Input should be"):
+        assert problem in text
+    assert len(text) < 500 and "pydantic.dev" not in text and secret not in text
+    with caplog.at_level("WARNING"):
+        DelegationLoop._log_rejected_call(call("compare_models", json.dumps({"question": secret})), invalid.value)
+    assert "tool=compare_models" in caplog.text and "reason:missing" in caplog.text
+    assert secret not in caplog.text
+
+
+def test_cosmetic_compare_fields_are_shortened_not_refused():
+    from app.services.agent_comparison import CompareArgs
+    args = CompareArgs.model_validate({"question": "Q", "reason": "R" * 900, "next_step": "answer",
+                                       "status_update": "S" * 900})
+    assert (args.context, len(args.status_update), len(args.reason)) == ("", 400, 500)

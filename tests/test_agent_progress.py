@@ -119,7 +119,9 @@ def test_progress_arguments_are_bounded_and_published_only_after_validation(stor
     value = AgentCompletion()
     value.step_id = "completion:0"
     for index, name in enumerate(("compare_models", "judge_answer", "check_contradictions")):
-        args = {"status_update": "x" * 401}
+        # An overlong status alone is shortened now (agent_comparison), so an
+        # unknown field makes each call invalid.
+        args = {"status_update": "x" * 401, "unknown": True}
         if name == "compare_models":
             args.update(question="Q", context="", reason="Compare", next_step="more_work")
         call = {"id": str(index), "function": {"name": name, "arguments": json.dumps(args)}}

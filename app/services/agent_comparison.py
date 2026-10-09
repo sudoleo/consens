@@ -10,7 +10,7 @@ import time
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from app.core import config as cfg
@@ -219,11 +219,23 @@ class ProgressArgs(BaseModel):
         "Short user-facing progress paragraph in the user's language: the concrete current check, "
         "its purpose, or a finding and next step. No private reasoning. Include in every call.")
 
+    # Display-only text: an overlong one is shortened, not refused. Strict
+    # refusal let a too-long paragraph end the whole turn after three tries.
+    @field_validator("status_update", mode="before")
+    @classmethod
+    def _clip_status_update(cls, value):
+        return value[:400] if isinstance(value, str) else value
+
 
 class CompareArgs(ProgressArgs):
     question: str = Field(min_length=1, max_length=2000)
-    context: str = Field(max_length=8000)
+    context: str = Field(default="", max_length=8000)
     reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _clip_reason(cls, value):
+        return value[:500] if isinstance(value, str) else value
     file_ids: list[str] = Field(default_factory=list, max_length=5)
     depth: Literal["quick", "full"] = Field(default="full", description=
         "quick: short factual questions, small follow-ups, rewrites, translations and everyday advice; the "
@@ -764,7 +776,10 @@ class ComparisonTools:
         from app.services.agent_tools import search_family
         loop = self.loop
         loop._check(cancellation)
-        if not self.comparisons or not self.text:
+        if not self.comparisons:
+            raise ValueError("No comparison yet: call compare_models first; the app writes and checks "
+                             "the answer after the last comparison.")
+        if not self.text:
             raise ValueError("First compare models and stream the complete synthesis as assistant text.")
         if self.review is not None:
             if self.review["status"] in {"succeeded", "partial", "failed"}:

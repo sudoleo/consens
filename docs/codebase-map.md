@@ -2806,7 +2806,11 @@ Answer Reader. Wartende Jobs verfolgt `render` selbst (`followSources`): je
 zeichnet Antwortzeile und offenen Reader neu (`refreshContext`). Ein gespeicherter
 Turn spielt seinen Verweis ab und beobachtet den Job erneut; das neueste
 Snapshot je Job (`settledSources`) ersetzt beim erneuten Zeichnen einer älteren
-Kopie den Verweis sofort. `sameBinding` in `source-verification.js` prüft
+Kopie den Verweis sofort. Ein beendeter Beobachter (`stop.stopped()`, z. B.
+noch kein Nutzer beim ersten Zeichnen oder Seite aus dem Back/Forward-Cache)
+startet bei `consensio:auth-state`, `pageshow` und Sichtbarwerden neu
+(`refollowSources`), statt den Job bis zum Reload als "queued" zu zeigen.
+`sameBinding` in `source-verification.js` prüft
 zusätzlich `basis_hash`. `context.mark` baut das markierte DOM nur bei geändertem Text,
 Check, Quellen oder `_agentRenderSerial` neu (sonst würde jede Live-Aktualisierung
 die Animation neu starten); `revealMarks` setzt eine laufende Animation nach einem

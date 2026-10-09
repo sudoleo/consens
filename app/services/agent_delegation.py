@@ -7,13 +7,14 @@ from datetime import datetime, timezone
 import json
 import logging
 import queue
+import re
 import threading
 import time
 from itertools import chain, count
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core import config as cfg
 from app.services.agent_costs import aggregate_usage
@@ -542,6 +543,19 @@ class DelegationLoop(AgentLoop):
             self._state(worker, "question")
         return {"delivered": True, "wait_for_reply": args.kind in {"question", "blocker"}}
 
+    @staticmethod
+    def _log_rejected_call(call, exc):
+        """A call refused before its tool ran leaves no activity event: log the
+        tool name, the failing fields and the argument size - never values."""
+        function = call.get("function") or {}
+        name = re.sub(r"[^A-Za-z0-9_.-]", "?", str(function.get("name") or ""))[:64]
+        raw = function.get("arguments")
+        cause = exc.__cause__
+        fields = (",".join(f"{'.'.join(map(str, error['loc']))}:{error['type']}" for error in cause.errors())
+                  if isinstance(cause, ValidationError) else type(cause or exc).__name__)
+        logging.warning("Agent tool call rejected tool=%s problem=%s argument_chars=%s",
+                        name or "-", fields[:300], len(raw) if isinstance(raw, str) else type(raw).__name__)
+
     def _execute(self, registry, value, cancellation, call=None):
         call = call or value.tool_calls[0]
         identity = (value.step_id, call["id"])
@@ -601,6 +615,8 @@ class DelegationLoop(AgentLoop):
         except (ValueError, TypeError) as exc:
             # A schema/selection error is safe feedback, not a provider retry.
             result = {"error": str(exc)[:500]}
+            if tool is None:
+                self._log_rejected_call(call, exc)
             if tool is not None and tool.name == "update_memory":
                 reason = getattr(exc, "code", None) or "invalid_arguments"
         finally:

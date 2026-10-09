@@ -330,6 +330,20 @@
   // also replaces the stored reference when a saved turn is drawn again.
   const settledSources = new Map();
   const sourceWatches = new WeakMap();
+  // An observer ends without its job settling when no user was signed in yet
+  // at the first paint, on sign-out or when the page went into the
+  // back/forward cache. The job then read "queued" until a reload. These
+  // answers start their observers again once the page can follow them.
+  const followingBodies = new Set();
+  function refollowSources() {
+    for (const body of followingBodies) {
+      if (!body.isConnected) { followingBodies.delete(body); continue; }
+      followSources(body, body._sourceReview.review, body._sourceReview.evidence);
+    }
+  }
+  window.addEventListener('consensio:auth-state', refollowSources);
+  window.addEventListener('pageshow', refollowSources);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refollowSources(); });
   const pendingSource = value => Boolean(value?.job_id) && ['queued', 'running'].includes(value.status);
   function adoptSources(review) {
     for (const check of review?.checks || []) {
@@ -349,7 +363,7 @@
       if (!pendingSource(value)) continue;
       const jobId = value.job_id;
       pending.add(jobId);
-      if (watches.has(jobId)) continue;
+      if (watches.has(jobId) && !watches.get(jobId).stopped?.()) continue;
       const user = window.auth?.currentUser;
       const stop = App.sourceVerification?.observe?.({ snapshot: value,
         auth: { user, uid: user?.uid, generation: App.authState?.generation },
@@ -367,6 +381,7 @@
       watches.set(jobId, stop || (() => {}));
     }
     for (const [jobId, stop] of watches) if (!pending.has(jobId)) { stop(); watches.delete(jobId); }
+    if (pending.size) followingBodies.add(body); else followingBodies.delete(body);
   }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;

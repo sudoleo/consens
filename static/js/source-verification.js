@@ -1223,7 +1223,9 @@
     return stop;
   }
   function observe({ snapshot, auth, isActive, onUpdate, useOwnKeys = false, getOwnKey, onError } = {}) {
-    if (!snapshot?.job_id || !auth?.user || !auth.uid) return () => {};
+    // stop.stopped() tells a caller that this observer ended (no user yet,
+    // signed out, page hidden from the cache) and has to be started again.
+    if (!snapshot?.job_id || !auth?.user || !auth.uid) return Object.assign(() => {}, { stopped: () => true });
     const jobId = snapshot.job_id;
     let stopped = false, stopWatch = null, resumeController = null, attemptedResume = false;
     const active = () => !stopped && window.auth?.currentUser === auth.user
@@ -1284,7 +1286,7 @@
     window.addEventListener('consensio:run-registry-change', validate);
     window.addEventListener('pagehide', stop);
     begin();
-    return stop;
+    return Object.assign(stop, { stopped: () => stopped });
   }
   window.App.sourceVerification = Object.freeze({ render: renderSafe, renderCurrent, clear, openResults, applySourceList, getCitationCheck, watch, observe, refreshDifferences, bindDifferenceCard, brief });
   document.addEventListener("DOMContentLoaded", () => {

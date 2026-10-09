@@ -9,7 +9,7 @@ import json
 import re
 from typing import Callable, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core import config as cfg
 from app.services.llm.engines import web_search_tool
@@ -98,12 +98,19 @@ class ToolRegistry:
         self.schemas = [tool.schema() for tool in tools]
 
     def validate(self, call):
+        # Every refusal names what to change: the model reads only this text,
+        # and a bare "not authorized" let Claude repeat the same call until
+        # the turn ended (2026-10-09).
         function = call.get("function") or {}
         tool = self.tools.get(function.get("name"))
         raw = function.get("arguments")
-        limit = (tool.argument_limit or self.default_argument_limit) if tool else 0
-        if tool is None or not isinstance(raw, str) or len(raw) > limit:
-            raise ValueError("Tool is not authorized")
+        if tool is None:
+            raise ValueError(f"Tool is not authorized: unknown tool. Available tools: {', '.join(self.tools)}. "
+                             "There is no tool that opens web pages.")
+        limit = tool.argument_limit or self.default_argument_limit
+        if not isinstance(raw, str) or len(raw) > limit:
+            raise ValueError(f"Tool is not authorized: {tool.name} arguments must be one JSON object "
+                             f"of at most {limit} characters.")
         # Reject duplicate JSON keys, rather than silently accepting the last.
         def unique(pairs):
             value = {}
@@ -112,10 +119,22 @@ class ToolRegistry:
                     raise ValueError("Duplicate tool argument")
                 value[key] = item
             return value
-        value = json.loads(raw, object_pairs_hook=unique)
+        try:
+            value = json.loads(raw, object_pairs_hook=unique)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{tool.name} arguments are not valid JSON ({exc.msg}); send one JSON object.") from exc
         if isinstance(value, dict):
             value = _decode_stringified(tool.arguments, value, unique)
-        arguments = tool.arguments.model_validate(value)
+        try:
+            arguments = tool.arguments.model_validate(value)
+        except ValidationError as exc:
+            # Field and message only: pydantic's default text repeats the
+            # input and a docs URL per error, and the 500-character cut
+            # dropped every error after the second.
+            problems = "; ".join(
+                f"{'.'.join(str(part) for part in error['loc']) or 'arguments'}: {error['msg']}"
+                for error in exc.errors(include_url=False, include_input=False))
+            raise ValueError(f"Invalid {tool.name} arguments - {problems}") from exc
         return tool, arguments
 
     def result(self, tool, arguments, *, cancellation, limit):

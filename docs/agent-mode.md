@@ -611,6 +611,14 @@ als Protokollstillstand, statt das Tageskontingent mit derselben ungültigen
 Anfrage aufzubrauchen. Gültige Arbeit begrenzen nur die Schutzgrenzen pro
 Nachricht oben.
 
+Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
+(`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
+verfügbaren Tools (und dem Hinweis, dass es kein Seitenöffnen gibt), Feld und
+Meldung je Schemafehler ohne Eingabewerte. Rein anzeigende Felder
+(`status_update`, `reason`) werden gekürzt statt abgelehnt, `context` darf
+fehlen. Abgelehnte Aufrufe loggen Tool, Feldpfade und Argumentlänge
+(`Agent tool call rejected`), nie Inhalte.
+
 ## Recherche, Delegation und Providerprotokoll
 
 ### Websuche

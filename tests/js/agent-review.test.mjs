@@ -475,6 +475,35 @@ it('follows a queued contradiction job after the turn and repaints the answer ev
   expect(watches).toHaveLength(1);
   dom.window.close();
 });
+it('starts a dead observer again instead of showing a queued job forever', () => {
+  // Without a signed-in user at the first paint (or after the page left the
+  // back/forward cache) the observer ended at once and the job read
+  // "Contradiction source check queued" until a reload.
+  const {window: w, document: d, dom} = setup();
+  const observers = [];
+  w.App.sourceVerification = {render: vi.fn(), observe: vi.fn(options => {
+    let ended = !options.auth.user;
+    const stop = Object.assign(vi.fn(() => { ended = true; }), {stopped: () => ended});
+    observers.push({options, stop});
+    return stop;
+  })};
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.checks[0].source_verification = {job_id: 'job-1', status: 'queued', answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1'};
+  w.App.agentReview.render(body, review);
+  expect(observers).toHaveLength(1);
+  w.auth = {currentUser: {uid: 'owner'}};
+  w.dispatchEvent(new w.Event('consensio:auth-state'));
+  expect(observers).toHaveLength(2);
+  expect(observers[1].options.auth.uid).toBe('owner');
+  // A live observer is kept; one that ended on pagehide comes back on pageshow.
+  w.dispatchEvent(new w.Event('pageshow'));
+  expect(observers).toHaveLength(2);
+  observers[1].stop();
+  w.dispatchEvent(new w.Event('pageshow'));
+  expect(observers).toHaveLength(3);
+  dom.window.close();
+});
 it('stops following a job when its answer leaves the page or shows another review', () => {
   const {window: w, document: d, dom} = setup();
   const stops = [];
