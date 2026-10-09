@@ -270,6 +270,9 @@
     const open = wrap.classList.toggle("is-open");
     more.textContent = open ? "Collapse question" : "Show full question";
     more.setAttribute("aria-expanded", String(open));
+    // A folded box starts at its first line, even after focus scrolled it.
+    const text = wrap.querySelector(":scope > .thread-ask-text, :scope > .thread-history-question-text");
+    if (text && !open) text.scrollTop = 0;
   });
 
   // Definition der Modelle und IDs (zentral, von mehreren Clustern genutzt).

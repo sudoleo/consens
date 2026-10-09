@@ -163,8 +163,10 @@
             return markersVisible && !group.spans[0].classList.contains("is-marker-filtered");
           }
 
+          // Marks on a checked user message (passage-check.js, .pc-claim) keep
+          // their own role and label; they only follow the painting.
           function syncMarkerPassageAccess(visible, root) {
-            root.querySelectorAll(".cx-claim").forEach(function (mark) {
+            root.querySelectorAll(".cx-claim:not(.pc-claim)").forEach(function (mark) {
               const accessible = visible && !mark.classList.contains("is-marker-filtered");
               ["role", "tabindex", "aria-label"].forEach(function (attribute) {
                 const dataKey = "markerVisible" + attribute.replace(
@@ -189,7 +191,7 @@
             markersVisible = show;
             document.body.classList.toggle(MARKERS_HIDDEN_CLASS, !show);
             document.body.dataset.consensusHighlightMode = show ? highlightMode : "none";
-            root.querySelectorAll(".cx-claim").forEach(function (mark) {
+            root.querySelectorAll(".cx-claim:not(.pc-claim)").forEach(function (mark) {
               const filtered = !matchesHighlightFilter(mark);
               mark.classList.toggle("is-marker-filtered", filtered);
               const group = mark.cxGroup;
@@ -654,6 +656,12 @@
               const centered = rect.left + rect.width / 2 - width / 2 + window.scrollX;
               pop.style.left = Math.max(minLeft, Math.min(centered, maxLeft)) + "px";
               pop.style.top = (rect.bottom + window.scrollY + 8) + "px";
+              // Near the bottom of the screen (a long checked message, the
+              // composer below) the card opens above its sentence instead.
+              const height = pop.offsetHeight;
+              if (rect.bottom + 8 + height > window.innerHeight && rect.top - 8 - height >= 0) {
+                pop.style.top = (rect.top + window.scrollY - 8 - height) + "px";
+              }
             }
             setTimeout(function () {
               document.addEventListener("click", onDocClick, true);
@@ -2604,7 +2612,7 @@
             // Inline-Markierungen auflösen: Span entfernen, Text an Ort und
             // Stelle lassen. normalize() führt die Textknoten wieder zusammen,
             // damit eine erneute Ankersuche nicht an Fragmenten scheitert.
-            insightRoot.querySelectorAll(".cx-claim").forEach(function (span) {
+            insightRoot.querySelectorAll(".cx-claim:not(.pc-claim)").forEach(function (span) {
               const parent = span.parentNode;
               if (!parent) return;
               while (span.firstChild) parent.insertBefore(span.firstChild, span);

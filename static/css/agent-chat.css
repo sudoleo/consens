@@ -557,8 +557,23 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   white-space: pre-line;
   -webkit-line-clamp: 10;
 }
+/* The answer's mark colours are mixed for the page; on the grey bubble the
+   light ones vanished (contrast 1.02). Light mode mixes them against it. */
+html:not(.dark-mode) .has-passage-check {
+  --cx-mark-agree: color-mix(in srgb, #34c759 16%, var(--chat-surface));
+  --cx-mark-agree-strong: color-mix(in srgb, #34c759 28%, var(--chat-surface));
+  --cx-mark-thin: color-mix(in srgb, var(--ink) 8%, var(--chat-surface));
+  --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 15%, var(--chat-surface));
+  --cx-mark-split: color-mix(in srgb, #ff9f0a 22%, var(--chat-surface));
+  --cx-mark-split-strong: color-mix(in srgb, #ff9f0a 34%, var(--chat-surface));
+  --cx-mark-major: color-mix(in srgb, #ff453a 20%, var(--chat-surface));
+  --cx-mark-major-strong: color-mix(in srgb, #ff453a 32%, var(--chat-surface));
+}
 .pc-claim { cursor: pointer; }
-.pc-claim:hover { --cx-paint: var(--cx-mark-strong); }
+/* Unpainted by the Highlights setting (by default green and grey): plain
+   text that still opens its card and shows itself under pointer and focus. */
+.cx-claim.pc-claim.is-quiet { --cx-paint: transparent; }
+.cx-claim.pc-claim:is(:hover, :focus) { --cx-paint: var(--cx-mark-strong); }
 .passage-check {
   max-width: min(100%, 560px);
   margin: 7px 2px 0 auto;
@@ -587,8 +602,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   text-underline-offset: 3px;
   text-decoration-color: var(--line);
 }
-span.passage-check-count { cursor: default; text-decoration: none; }
-button.passage-check-count:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
+.passage-check-count:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
 .passage-check-count:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 3px; }
 .passage-check-count::before {
   content: "";

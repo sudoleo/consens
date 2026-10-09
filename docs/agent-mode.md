@@ -411,7 +411,9 @@ setzt der Orchestrator in `compare_models` das Feld `check` (erste und letzte
 Wörter der Passage, die Frage, die sie beantwortet). Die Vergleichsmodelle sehen
 die Passage nie: Wer sie vorgelegt bekommt, stimmt ihr eher zu. Sie beantworten
 nur die Frage dahinter; der Server lehnt einen Aufruf ab, dessen Frage oder
-Kontext zwei oder mehr Sätze der Passage wörtlich enthält. Nach dem Vergleich
+Kontext zwei oder mehr Sätze der Passage überwiegend wörtlich enthält (eigene
+Rahmendaten des Nutzers und kurze Sätze zählen nicht). Die Passage darf auch in
+der vorherigen Nachricht stehen (nach einer Rückfrage). Nach dem Vergleich
 prüft der Coverage-Judge jeden Satz der Passage gegen die Antworten (ein Aufruf,
 kein Differences-Judge), bevor die Antwort geschrieben wird; die Antwort liest
 dieselben Urteile (`checked_text`). Die Marken stehen auf der Nachricht des
@@ -421,8 +423,12 @@ diesem Dokument laufen ohne `check`; im Zweifel ohne. Live-Check 2026-10-09
 (Luna, Gemini 3.5 Flash-Lite, DeepSeek V4 Flash, eine Wärmepumpen-Antwort mit
 zwei eingebauten Fehlern): beide Fehler 3/3 widersprochen, die richtigen Sätze
 3/3 gestützt, Zusammenfassen/Übersetzen ohne `check`, rund 0,09 $ und 106 s für
-den ganzen Lauf. Details: [codebase-map.md](codebase-map.md), Abschnitt
-„Eingefügten Text prüfen".
+den ganzen Lauf. Danach hat eine Prüfung mit fünf parallelen Review-Agenten
+(Server, Anweisungen/Sicherheit, Oberfläche, echter Browser, Regression) unter
+anderem falsche Offsets bei Überschriften-Kopien, einen manipulierbaren
+Judge-Text, zu strenge Sperren und unsichtbare Marken im hellen Modus gefunden;
+alles behoben und mit Tests abgedeckt. Details: [codebase-map.md](codebase-map.md),
+Abschnitt „Eingefügten Text prüfen".
 
 ## Tageskontingent
 

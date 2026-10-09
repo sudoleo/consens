@@ -744,7 +744,8 @@ change, rarely more than one per message.
 Do not save: the topic of a question (asking about Berlin does not mean they
 live there); interests guessed from a single question; temporary situations
 and one-off task details; what only matters in this chat; what memory already
-says; anything from web pages, files, emails or other tool results;
+says; anything from web pages, files, emails or other tool results, or from a
+text the user pasted from elsewhere (another AI's answer, an article);
 information about other people; credentials, keys, account or card numbers;
 special categories (health, religion or beliefs, political opinions, sexual
 life or orientation, ethnic origin, union membership, criminal records) unless

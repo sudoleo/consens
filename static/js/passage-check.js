@@ -4,17 +4,20 @@
 // user's own message against independent answers (review.passage_check,
 // see app/services/agent_comparison.py). This module marks that passage
 // sentence by sentence ON THE USER'S MESSAGE and puts one short line
-// under it: how many sentences hold, are split or disputed, and which
-// question the text was checked against.
+// under it: how many sentences are disputed, split, unconfirmed or hold,
+// and which question the text was checked against.
 //
 // Why on the message and not in the answer: the user asked about THEIR
 // text. The answer below explains the verdict; the marks show where.
 // Marks reuse the answer's vocabulary (cx-claim states, the claim popover),
-// so a checked sentence looks and opens like a checked answer sentence.
+// so a checked sentence looks and opens like a checked answer sentence, and
+// they follow the same Highlights setting: by default only red and amber are
+// painted, every sentence still opens its card.
 //
-// The server sends exact character offsets for every sentence, so nothing
-// is searched in the DOM. The bubble normally collapses whitespace; a checked
-// passage keeps its line breaks (a pasted list stays a list).
+// The server sends exact character offsets (code points) for every sentence,
+// so nothing is searched in the DOM. As soon as a check is declared, the
+// passage keeps its line breaks (a pasted list stays a list), so the marks
+// arriving later change colour, never the bubble's size.
 // Exports: window.App.passageCheck.{apply, restore, verdict, from}
 // =====================================================================
 
@@ -25,9 +28,18 @@
 
   const STATES = ["disputed", "split", "unconfirmed", "holds"];
   const MARKS = { disputed: "is-major", split: "is-split", holds: "is-unanimous", unconfirmed: "is-thin" };
+  // Which verdicts each Highlights setting paints (consensus-insights.js).
+  const PAINTED = {
+    all: new Set(STATES),
+    concerns: new Set(["disputed", "split"]),
+    contradictions: new Set(["disputed", "split"]),
+    critical: new Set(["disputed"]),
+    none: new Set()
+  };
   const DONE = new Set(["succeeded", "partial"]);
   const LIVE = new Set(["waiting", "running"]);
   const ANSWER_TO_CHARS = 140;
+  const bubbles = new Set();
 
   // Same reading as the claim popover: two supporting models and no dissent
   // hold; any dissent splits; more dissent than support disputes.
@@ -39,8 +51,12 @@
     return claim.coverage === "supported" || agree >= 2 ? "holds" : "unconfirmed";
   }
 
+  function collapse(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
   function normalize(value) {
-    return String(value || "").normalize("NFKC").replace(/\s+/g, " ").trim();
+    return collapse(String(value || "").normalize("NFKC"));
   }
 
   // A stored check, validated: anything malformed renders as no check at all.
@@ -73,41 +89,75 @@
       answerTo: String(check.answer_to || ""),
       comparisonId: String(check.comparison_id || ""),
       models: Array.isArray(check.models_compared) ? check.models_compared.map(String) : [],
-      issues: Array.isArray(check.issues) ? check.issues : [],
+      issues: (Array.isArray(check.issues) ? check.issues : [])
+        .filter(issue => issue && issue.code).map(issue => ({ code: String(issue.code), count: Number(issue.count) || 0 })),
       claims
     };
   }
 
-  // Pasted Markdown (ChatGPT's copy button) reads as text in a message:
-  // emphasis markers and heading hashes go, list bullets become dots.
-  function displayText(piece, atLineStart) {
-    let text = piece.replace(/\*\*|__/g, "");
-    const lineStart = atLineStart ? /(^|\n)[ \t]*/ : /(\n)[ \t]*/;
-    text = text.replace(new RegExp(lineStart.source + "#{1,6}[ \\t]+", "g"), "$1");
-    text = text.replace(new RegExp(lineStart.source + "[-*+][ \\t]+", "g"), "$1• ");
-    return text.replace(/\n{3,}/g, "\n\n");
+  // What the bubble shows, independent of key order: a saved turn comes back
+  // from Firestore with its maps in another order than the live frames had.
+  function signatureOf(check, question, live) {
+    return JSON.stringify([normalize(question), DONE.has(check.status) ? "done" : live ? "live" : check.status,
+      check.status, check.text, check.answerTo, check.models.slice().sort(),
+      check.issues.map(issue => [issue.code, issue.count]).sort(),
+      check.claims.map(claim => [claim.start, claim.end, verdict(claim), claim.agree.slice().sort(),
+        claim.dissent.map(item => [item.model, item.quote]).sort()])]);
   }
 
-  // "View answer" in the popover opens the comparison answer, once the
-  // answer's evidence row has built its reader context.
+  // Pasted Markdown (ChatGPT's copy button) reads as text in a message: bold
+  // markers, heading hashes and table rules go, list bullets become dots and
+  // table cells are separated by a middle dot. Underscores stay (__init__).
+  function displayText(piece, atLineStart) {
+    const lineStart = atLineStart ? "(^|\\n)" : "(\\n)";
+    return piece
+      .replace(/\*\*/g, "")
+      .replace(new RegExp(lineStart + "[ \\t]*\\|?[ \\t]*:?-{3,}:?[ \\t]*(\\|[ \\t]*:?-{3,}:?[ \\t]*)*\\|?[ \\t]*(?=\\n|$)", "g"), "$1")
+      .replace(new RegExp(lineStart + "[ \\t]*#{1,6}[ \\t]+", "g"), "$1")
+      .replace(new RegExp(lineStart + "[ \\t]*[-*+][ \\t]+", "g"), "$1• ")
+      .replace(new RegExp(lineStart + "[ \\t]*\\|[ \\t]*", "g"), "$1")
+      .replace(/[ \t]*\|[ \t]*(?=\n|$)/g, "")
+      .replace(/[ \t]*\|[ \t]*/g, " · ")
+      .replace(/\n{3,}/g, "\n\n");
+  }
+
+  // "View answer" in the card opens the comparison answer. Until the
+  // answer's own evidence row exists (during the run), a minimal reader
+  // context is built from the review's comparison.
+  function readerContext(wrap) {
+    const review = wrap._passageReview;
+    const id = wrap._passageCheck?.comparisonId;
+    const built = window.App.agentReview?.contextFor?.(review, id);
+    if (built) return built;
+    const comparison = (review?.comparisons || []).find(item => item?.id === id);
+    if (!comparison) return null;
+    return {
+      key: `passage-check:${id}`, question: comparison.question || "", scopeLabel: "Comparison focus",
+      answers: (comparison.answers || []).map(answer => ({
+        provider: answer.provider_label || answer.provider, model: answer.model?.model,
+        label: answer.model?.label || answer.provider_label || answer.provider, text: answer.text || "",
+        sources: [], sourceReferences: "agent", status: "complete"
+      })),
+      renderPanel: () => document.createElement("div")
+    };
+  }
+
   function navigation(wrap) {
-    const context = () => window.App.agentReview?.contextFor?.(wrap._passageReview, wrap._passageCheck?.comparisonId);
     const find = (ctx, name) => (ctx?.answers || []).find(answer =>
       [answer.provider, answer.label].some(value => value?.toLowerCase() === String(name || "").toLowerCase()));
     return {
-      canOpen: name => Boolean(find(context(), name)),
+      canOpen: name => Boolean(find(readerContext(wrap), name)),
       open: (name, quote) => {
-        const ctx = context();
+        const ctx = readerContext(wrap);
         const answer = find(ctx, name);
         if (ctx && answer) window.App.answerReader?.openContext(ctx, { section: "answers", model: answer.provider, quote });
       }
     };
   }
 
-  function openDetails(wrap, span) {
-    const claim = wrap._passageCheck?.claims[Number(span.dataset.claim)];
+  function openDetails(wrap, anchor, claim) {
     if (!claim) return;
-    window.App.claimPopover?.open(claim, span, wrap._passageCheck.models, navigation(wrap));
+    window.App.claimPopover?.open(claim, anchor, wrap._passageCheck.models, navigation(wrap));
   }
 
   function claimLabel(claim) {
@@ -118,39 +168,57 @@
     return `${claim.dissent.length} of ${total} models disagree`;
   }
 
-  function renderText(text, question, check) {
-    const full = normalize(question);
-    const passage = normalize(check.text);
-    const index = passage ? full.indexOf(passage) : -1;
-    if (index < 0) return false;
-    const before = full.slice(0, index).trim();
-    const after = full.slice(index + passage.length).trim();
+  function highlightMode() {
+    return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "concerns";
+  }
+
+  function paint(wrap) {
+    const painted = PAINTED[highlightMode()];
+    wrap.querySelectorAll(".pc-claim").forEach(span => {
+      span.classList.toggle("is-quiet", !painted.has(span.dataset.verdict));
+    });
+  }
+
+  // Where the passage sits in the displayed question. The user's own words
+  // keep their spelling (collapsed whitespace, no NFKC) whenever they can.
+  function split(question, passageText) {
+    for (const form of [collapse, normalize]) {
+      const full = form(question);
+      const passage = form(passageText);
+      const index = passage ? full.indexOf(passage) : -1;
+      if (index >= 0) return [full.slice(0, index).trim(), full.slice(index + passage.length).trim()];
+    }
+    return null;
+  }
+
+  function renderText(text, question, check, marks) {
+    const parts = split(question, check.text);
+    if (!parts) return false;
+    const [before, after] = parts;
     const nodes = [];
-    if (before) nodes.push(document.createTextNode(before + "\n"));
+    if (before) nodes.push(document.createTextNode(before + "\n\n"));
     const body = document.createElement("span");
     body.className = "passage-check-text";
+    const atLine = index => index === 0 || check.text[index - 1] === "\n";
     let cursor = 0;
-    check.claims.forEach((claim, claimIndex) => {
-      if (claim.start > cursor) {
-        body.append(displayText(check.text.slice(cursor, claim.start), cursor === 0 || check.text[cursor - 1] === "\n"));
-      }
+    (marks ? check.claims : []).forEach((claim, claimIndex) => {
+      if (claim.start > cursor) body.append(displayText(check.text.slice(cursor, claim.start), atLine(cursor)));
       const span = document.createElement("span");
       span.className = `cx-claim pc-claim is-interactive ${MARKS[verdict(claim)]}`;
       span.dataset.claim = String(claimIndex);
       span.dataset.verdict = verdict(claim);
       span.tabIndex = 0;
       span.setAttribute("role", "button");
-      span.textContent = displayText(check.text.slice(claim.start, claim.end), false);
+      span.setAttribute("aria-haspopup", "dialog");
+      span.textContent = displayText(check.text.slice(claim.start, claim.end), atLine(claim.start));
       // A button's name replaces its text: the sentence has to be in it.
       span.setAttribute("aria-label", `“${span.textContent}” – ${claimLabel(claim)}. Show details`);
       body.append(span);
       cursor = claim.end;
     });
-    if (cursor < check.text.length) {
-      body.append(displayText(check.text.slice(cursor), cursor === 0 || check.text[cursor - 1] === "\n"));
-    }
+    if (cursor < check.text.length) body.append(displayText(check.text.slice(cursor), atLine(cursor)));
     nodes.push(body);
-    if (after) nodes.push(document.createTextNode("\n" + after));
+    if (after) nodes.push(document.createTextNode("\n\n" + after));
     text.replaceChildren(...nodes);
     return true;
   }
@@ -171,10 +239,11 @@
   function issueNote(check) {
     const notes = [];
     for (const issue of check.issues) {
-      const count = Number(issue?.count) || 0;
-      if (issue?.code === "models_unavailable" && count) notes.push(`${count} model${count === 1 ? "" : "s"} did not answer`);
-      if ((issue?.code === "sentences_unchecked" || issue?.code === "unindexed_sentences") && count) {
-        notes.push(`${count} sentence${count === 1 ? "" : "s"} could not be checked`);
+      if (issue.code === "models_unavailable" && issue.count) {
+        notes.push(`${issue.count} model${issue.count === 1 ? "" : "s"} did not answer`);
+      }
+      if ((issue.code === "sentences_unchecked" || issue.code === "unindexed_sentences") && issue.count) {
+        notes.push(`${issue.count} sentence${issue.count === 1 ? "" : "s"} could not be checked`);
       }
     }
     return notes.length ? notes.join(" · ") + "." : "";
@@ -183,10 +252,10 @@
   function failureText(check, live) {
     if (LIVE.has(check.status) && !live) return "The check of your text did not finish.";
     if (check.status === "cancelled") return "The check of your text was stopped.";
-    if (check.issues.some(issue => issue?.code === "insufficient_answers")) {
+    if (check.issues.some(issue => issue.code === "insufficient_answers")) {
       return "Your text could not be checked: too few models answered.";
     }
-    if (check.issues.some(issue => issue?.code === "no_time")) {
+    if (check.issues.some(issue => issue.code === "no_time")) {
       return "Your text could not be checked: the answer needed the remaining time.";
     }
     return "Your text could not be checked this time.";
@@ -194,7 +263,9 @@
 
   function quotedQuestion(value) {
     const text = normalize(value);
-    return text.length > ANSWER_TO_CHARS ? text.slice(0, ANSWER_TO_CHARS - 1).trimEnd() + "…" : text;
+    const short = text.length > ANSWER_TO_CHARS ? text.slice(0, ANSWER_TO_CHARS - 1).trimEnd() + "…" : text;
+    // "...need?" ends the sentence already; no second full stop after it.
+    return `“${short}”` + (/[.?!…]$/.test(short) ? "" : ".");
   }
 
   function line(className, text) {
@@ -204,7 +275,7 @@
     return node;
   }
 
-  function renderSummary(wrap, check, live, marked) {
+  function renderSummary(wrap, check, live) {
     let summary = wrap.querySelector(":scope > .passage-check");
     if (!summary) {
       summary = document.createElement("div");
@@ -212,54 +283,51 @@
       summary.setAttribute("role", "status");
       wrap.append(summary);
     }
-    summary.dataset.state = DONE.has(check.status) ? "done" : LIVE.has(check.status) && live ? "running" : "failed";
+    const running = LIVE.has(check.status) && live;
+    summary.dataset.state = DONE.has(check.status) ? "done" : running ? "running" : "failed";
     const lines = [];
-    if (LIVE.has(check.status) && live) {
+    if (running) {
       lines.push(line("passage-check-head", check.status === "running"
         ? "Checking each sentence of your text…"
         : "Checking your text against independent answers…"));
     } else if (!DONE.has(check.status)) {
       lines.push(line("passage-check-head", failureText(check, live)));
     } else {
-      // The counts lead: they are what the user came for. Each count with its
-      // separator is one unit, so a narrow line never starts with a dot.
+      // The counts lead: they are what the user came for. Each count carries
+      // the separator after it, so a wrapped line never starts with a dot.
       const head = line("passage-check-head");
       if (!check.claims.length) head.append("No checkable statements found in your text.");
       const tally = counts(check);
-      for (const state of STATES) {
-        if (!tally[state]) continue;
+      const shown = STATES.filter(state => tally[state]);
+      shown.forEach((state, index) => {
         const unit = document.createElement("span");
         unit.className = "passage-check-unit";
-        if (head.childNodes.length) {
-          head.append(" ");
-          unit.append("· ");
-        }
-        // A count jumps to its first sentence, so it is a control only
-        // where the sentences are marked.
-        const chip = document.createElement(marked ? "button" : "span");
+        const chip = document.createElement("button");
+        chip.type = "button";
         chip.className = `passage-check-count is-${state}`;
         chip.dataset.verdict = state;
         chip.textContent = CHIP_LABELS[state](tally[state]);
-        if (marked) {
-          chip.type = "button";
-          chip.setAttribute("aria-label", `${chip.textContent}: show the first one`);
-        }
+        chip.setAttribute("aria-label", `${chip.textContent}: show the first one`);
         unit.append(chip);
+        if (index < shown.length - 1) unit.append(" ·");
         head.append(unit);
-      }
+        if (index < shown.length - 1) head.append(" ");
+      });
       lines.push(head);
     }
-    if (check.answerTo && (DONE.has(check.status) || live)) {
+    if (check.answerTo && (DONE.has(check.status) || running)) {
       const note = issueNote(check);
-      const against = DONE.has(check.status) ? `Checked against ${check.models.length} models as` : "As";
-      lines.push(line("passage-check-note",
-        `${against} an answer to “${quotedQuestion(check.answerTo)}”. `
-        + "The models answered without seeing your text." + (note ? ` ${note}` : "")));
+      lines.push(line("passage-check-note", (running
+        ? `Checking it as an answer to ${quotedQuestion(check.answerTo)} The models answer without seeing your text.`
+        : `Checked against ${check.models.length} models as an answer to ${quotedQuestion(check.answerTo)} `
+          + "The models answered without seeing your text.") + (note ? ` ${note}` : "")));
     }
     summary.replaceChildren(...lines);
   }
 
   function open(wrap) {
+    const text = textElement(wrap);
+    if (text) text.scrollTop = 0;
     if (wrap.classList.contains("is-open")) return;
     wrap.classList.add("is-open");
     const more = wrap.querySelector(":scope > .thread-ask-more");
@@ -269,14 +337,20 @@
     }
   }
 
-  // A count chip jumps to the first sentence with that verdict and opens it.
-  function focusVerdict(wrap, state) {
+  // A count jumps to the first sentence with that verdict and opens its card;
+  // without marks on the bubble, the card opens at the count itself.
+  function focusVerdict(wrap, chip) {
+    const state = chip.dataset.verdict;
     const span = wrap.querySelector(`.pc-claim[data-verdict="${state}"]`);
-    if (!span) return;
+    const check = wrap._passageCheck;
+    if (!span) {
+      openDetails(wrap, chip, check?.claims.find(claim => verdict(claim) === state));
+      return;
+    }
     open(wrap);
     span.scrollIntoView({ block: "center", behavior: "smooth" });
     span.focus({ preventScroll: true });
-    openDetails(wrap, span);
+    openDetails(wrap, span, check?.claims[Number(span.dataset.claim)]);
   }
 
   function bind(wrap) {
@@ -285,20 +359,25 @@
     wrap.addEventListener("click", event => {
       const chip = event.target.closest(".passage-check-count");
       if (chip && wrap.contains(chip)) {
-        focusVerdict(wrap, chip.dataset.verdict);
+        focusVerdict(wrap, chip);
         return;
       }
       const span = event.target.closest(".pc-claim");
       // Selecting pasted text (to copy it, or for the memory toolbar) is not
       // a request for the card.
       if (window.getSelection?.()?.isCollapsed === false) return;
-      if (span && wrap.contains(span)) openDetails(wrap, span);
+      if (span && wrap.contains(span)) openDetails(wrap, span, wrap._passageCheck?.claims[Number(span.dataset.claim)]);
     });
     wrap.addEventListener("keydown", event => {
       const span = event.target.closest?.(".pc-claim");
       if (!span || (event.key !== "Enter" && event.key !== " ")) return;
       event.preventDefault();
-      openDetails(wrap, span);
+      openDetails(wrap, span, wrap._passageCheck?.claims[Number(span.dataset.claim)]);
+    });
+    // A sentence reached with Tab below the fold unfolds the message; the
+    // clamped box must never scroll itself to show it.
+    wrap.addEventListener("focusin", event => {
+      if (event.target.closest?.(".pc-claim")) open(wrap);
     });
   }
 
@@ -308,9 +387,10 @@
 
   function clear(wrap, text) {
     wrap.querySelector(":scope > .passage-check")?.remove();
+    bubbles.delete(wrap);
     if (!wrap.classList.contains("has-passage-check")) return;
     wrap.classList.remove("has-passage-check");
-    if (text) text.textContent = text.dataset.question || normalize(wrap._passageQuestion);
+    if (text) text.textContent = text.dataset.question ?? normalize(wrap._passageQuestion);
     window.App.syncThreadAskClamp?.(wrap);
   }
 
@@ -321,13 +401,11 @@
     text = text || textElement(wrap);
     const check = from(review);
     const live = Boolean(options.live);
-    // A finished check reads the same live or saved; the end of the run must
-    // not redraw it (that dropped focus and an open card's anchor).
-    const signature = check
-      ? JSON.stringify([normalize(question), DONE.has(check.status) ? false : live, review.passage_check]) : "";
+    const signature = check ? signatureOf(check, question, live) : "";
     wrap._passageReview = review || null;
     // Unchanged input changes nothing: the summary is a live region, and
-    // rebuilding it on every streamed chunk would make it speak again.
+    // rebuilding it would make it speak again, drop focus and detach the
+    // anchor of an open card.
     if (wrap._passageSignature === signature) return;
     wrap._passageSignature = signature;
     wrap._passageCheck = check;
@@ -337,11 +415,12 @@
       clear(wrap, text);
       return;
     }
-    const marked = DONE.has(check.status) && check.claims.length && renderText(text, question, check);
-    if (marked) wrap.classList.add("has-passage-check");
-    // No marks yet (or none to show): the plain message, plus the line below.
+    const shown = renderText(text, question, check, DONE.has(check.status));
+    if (shown) wrap.classList.add("has-passage-check");
     else if (wrap.classList.contains("has-passage-check")) clear(wrap, text);
-    renderSummary(wrap, check, live, Boolean(marked));
+    renderSummary(wrap, check, live);
+    paint(wrap);
+    bubbles.add(wrap);
     bind(wrap);
     window.App.syncThreadAskClamp?.(wrap);
   }
@@ -353,12 +432,23 @@
     if (normalize(wrap._passageQuestion) !== normalize(question)) {
       wrap._passageCheck = null;
       wrap._passageSignature = "";
+      wrap._passageQuestion = question;
       clear(wrap, text);
       return;
     }
     const review = wrap._passageReview;
     wrap._passageSignature = "";
     apply(wrap, text, question, review, { live: wrap._passageLive });
+  }
+
+  // The Highlights setting changes which verdicts are painted, live.
+  if (typeof MutationObserver === "function" && document.body) {
+    new MutationObserver(() => {
+      for (const wrap of [...bubbles]) {
+        if (wrap.isConnected) paint(wrap);
+        else bubbles.delete(wrap);
+      }
+    }).observe(document.body, { attributes: true, attributeFilter: ["data-consensus-highlight-mode"] });
   }
 
   window.App.passageCheck = { apply, restore, verdict, from };

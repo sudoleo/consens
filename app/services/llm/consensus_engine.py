@@ -737,14 +737,17 @@ def _table_cell_spans(line: str) -> list:
     return spans
 
 
-def _enumerate_consensus_sentences(consensus_answer: str, limit=MAX_CONSENSUS_SENTENCES):
+def _enumerate_consensus_sentences(consensus_answer: str, limit=MAX_CONSENSUS_SENTENCES, spans=None):
     """Nummeriert die Saetze der Konsensantwort.
 
     Gibt (annotierter Text, Saetze) zurueck. Der annotierte Text ist die
     unveraenderte Antwort mit einem "[n] " vor jedem nummerierten Satz - der
     Judge sieht also weiterhin Ueberschriften, Tabellen und Code im Kontext,
     kann sich auf Fliesstext-Saetze und einzelne Tabellenzellen beziehen.
-    sentences[n-1] ist der exakte Originalausschnitt fuer den Anker."""
+    sentences[n-1] ist der exakte Originalausschnitt fuer den Anker.
+    Eine uebergebene Liste `spans` erhaelt je Satz (start, end) im Text: die
+    Stelle, die die Zerlegung tatsaechlich meint, nicht die erste gleiche
+    Zeichenfolge (eine Ueberschrift oder Kopfzeile kann denselben Wortlaut haben)."""
     text = str(consensus_answer or "")
     sentences = []
     marks = []
@@ -793,6 +796,8 @@ def _enumerate_consensus_sentences(consensus_answer: str, limit=MAX_CONSENSUS_SE
                     absolute = line_start + start + len(line[start:end]) - len(line[start:end].lstrip())
                     sentences.append(fragment)
                     marks.append((absolute, len(sentences)))
+                    if spans is not None:
+                        spans.append((absolute, absolute + len(fragment)))
                 continue
         table_columns = 0
         # Headings and code remain outside the checkable sentence index.
@@ -813,8 +818,12 @@ def _enumerate_consensus_sentences(consensus_answer: str, limit=MAX_CONSENSUS_SE
             absolute = line_start + content_start + start
             # Fuehrende Leerzeichen aus dem Anker halten, ohne den Offset der
             # Marke zu verschieben: markiert wird der Satzanfang.
-            sentences.append(text[absolute:line_start + content_start + end].strip())
+            raw = text[absolute:line_start + content_start + end]
+            sentences.append(raw.strip())
             marks.append((absolute, len(sentences)))
+            if spans is not None:
+                begin = absolute + len(raw) - len(raw.lstrip())
+                spans.append((begin, begin + len(sentences[-1])))
         if limit is not None and len(sentences) >= limit:
             break
 
@@ -2741,21 +2750,14 @@ def query_differences(
         unlink_second()
 
 
-def _sentence_offsets(text: str, sentences) -> list:
-    """(start, end) of each enumerated sentence in `text`, in order.
+# A pasted text is untrusted and goes into the judge prompt as the numbered
+# text. Same-length stand-ins keep every offset valid: "[3]" can no longer pose
+# as a sentence number, "<response ...>" no longer as a model's answer block.
+_PASTED_NUMBER_RE = re.compile(r"\[(\d{1,4})\]")
 
-    The enumeration yields exact, stripped slices of the text in document
-    order, so a forward search from the previous hit finds each one; a slice
-    that is not found (never expected) gets None instead of a wrong place."""
-    offsets, cursor = [], 0
-    for sentence in sentences:
-        start = text.find(sentence, cursor)
-        if start < 0:
-            offsets.append(None)
-            continue
-        offsets.append((start, start + len(sentence)))
-        cursor = start + len(sentence)
-    return offsets
+
+def _judge_copy(text: str) -> str:
+    return _PASTED_NUMBER_RE.sub(r"(\1)", text.replace("<", "\u2039"))
 
 
 @analysis_budgeted
@@ -2775,26 +2777,30 @@ def check_text_coverage(
     answers, while the user asked about THEIR text, sentence by sentence.
     Returns None when the text has no checkable sentence or the judge
     delivered nothing; otherwise the claims in the usual payload form, each
-    with `start`/`end` offsets into `text`, so the browser marks the pasted
-    text without searching for it."""
+    with `start`/`end` offsets into `text` (code points), so the browser marks
+    the pasted text without searching for it."""
+    original = str(text or "")
+    judged = _judge_copy(original)
     context = _build_judge_context(
-        answers, text, None, resolved_question, sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES,
+        answers, judged, None, resolved_question, sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES,
     )
     if context is None or not context.sentences:
         return None
+    spans = []
+    _enumerate_consensus_sentences(judged, limit=CHAT_MAX_CONSENSUS_SENTENCES, spans=spans)
     result, meta = _run_coverage_judge(context, api_keys, judge_model, chat_mode=True)
     if not result:
         return None
-    offsets = _sentence_offsets(str(text or ""), context.sentences)
     claims = _coverage_claims(result, context)
-    _verify_claims(claims, text, context.answers_by_model)
+    _verify_claims(claims, judged, context.answers_by_model)
     located = []
     for claim in claims:
         number = claim.get("sentence_id")
-        span = offsets[number - 1] if isinstance(number, int) and 1 <= number <= len(offsets) else None
-        if span is None:
+        if not isinstance(number, int) or not 1 <= number <= len(spans):
             continue
-        claim["start"], claim["end"] = span
+        claim["start"], claim["end"] = spans[number - 1]
+        # The card quotes what the user pasted, not the judge's copy of it.
+        claim["anchor"] = _clip(original[claim["start"]:claim["end"]], MAX_DIFF_TEXT_CHARS)
         located.append(claim)
     return {
         "claims": located,

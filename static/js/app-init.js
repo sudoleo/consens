@@ -564,9 +564,12 @@
           if (window.App?.runMode?.effective?.() === "agent") {
             const maxChars = Number(APP_LIMITS.consensus_max_question_chars || 8000);
             const message = window.App.quote?.compose?.(text) ?? text;
-            if (message.length > maxChars) {
+            // Counted like the server: code points after NFKC (an emoji is one
+            // character, "…" becomes three).
+            const length = [...String(message).normalize("NFKC").trim()].length;
+            if (length > maxChars) {
               alert(`Your message is longer than ${maxChars.toLocaleString("en-US")} characters `
-                + `(it has ${message.length.toLocaleString("en-US")}). `
+                + `(it has ${length.toLocaleString("en-US")}). `
                 + "Shorten it, or paste only the part you want checked.");
               return false;
             }

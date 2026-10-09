@@ -3489,55 +3489,91 @@ Ansicht in test_agent_comparison_frontend.py; siehe [testing.md](testing.md).
 „Paste an AI answer to check it": Fügt der Nutzer eine fremde Antwort (meist
 ChatGPT) ein, prüft der Agent sie Satz für Satz gegen unabhängige Antworten.
 Kein Modus, kein Knopf, kein Frage-Feld; der einzige Hinweis ist der Platzhalter
-eines neuen Agent-Chats (`agent-chat.js::syncComposer`). Der Agent entscheidet
-per Anweisung (`AGENT_SYSTEM_PROMPT`, Abschnitt „CHECKING A TEXT THE USER
+eines neuen Agent-Chats (`agent-chat.js::syncComposer`, je Breite: >640 px,
+≤640 px, ≤360 px, folgt Rotation per `matchMedia`). Der Agent entscheidet per
+Anweisung (`AGENT_SYSTEM_PROMPT`, Abschnitt „CHECKING A TEXT THE USER
 SUPPLIED"): prüfen nur, wenn der Text eine für sich stehende Frage beantwortet;
-zusammenfassen, übersetzen, umschreiben, Code oder Fragen zu genau diesem
-Dokument geben den Text wie bisher als Material weiter; im Zweifel weitergeben.
+unklare Frage → wahrscheinlichste benennen (der Nutzer sieht sie), nicht
+nachfragen; die Aufgabe nennt die Punkte der Passage, nie ihre Aussagen (in
+keiner Sprache, keine ihrer Quellen, nie „Is it true that …"), Tiefe `full`
+außer bei kurzen Passagen; eine zweite eingefügte Antwort geht auch nicht an
+die Modelle. Zusammenfassen, übersetzen, umschreiben, Code oder Fragen zu genau
+diesem Dokument geben den Text wie bisher als Material weiter; im Zweifel
+weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
+Antwort-Prompt).
 - **Werkzeug:** `compare_models` hat das optionale, bewusst nachsichtige Feld
-  `check` (`PassageCheck`: `starts_with`, `ends_with`, `answer_to`). Feste Regeln
-  stehen im Server, nicht im Agenten: `locate_passage` findet die Passage in der
-  letzten Nutzernachricht (`ComparisonTools.latest_user_message`, Groß-/Klein-,
-  Anführungszeichen- und Leerraum-tolerant, ein Satzende hinter dem Anker gehört
-  dazu); `repeated_sentences` lehnt den Aufruf ab, wenn Frage/Kontext zwei oder
-  mehr Sätze der Passage wörtlich wiederholen (6-Wort-Schindeln; ein einzelner
-  Satz ist erlaubt, eine Behauptung prüfen heißt nach ihr fragen). Beide Absagen
-  kommen, bevor etwas Bezahltes startet, und sagen, was zu ändern ist. Höchstens
-  eine Passage pro Nachricht.
+  `check` (`PassageCheck`: `starts_with`, `ends_with`, `answer_to`). Im
+  Tool-Schema steht es als schlichtes Objekt (`PASSAGE_CHECK_SCHEMA`, kein
+  `$ref`, kein nullbares `anyOf`; `CompareArgs.model_json_schema` setzt es ein).
+  `_decode_check` macht aus JSON-Text, leerem Objekt, leeren Feldern oder
+  Unsinn „kein Check" statt einer Absage. Feste Regeln stehen im Server:
+  `locate_passage` sucht in den Nutzernachrichten (neueste zuerst, also auch
+  vor einer Rückfrage) tolerant gegen Groß/Klein, Anführungszeichen, Leerraum,
+  Markdown (`*`, `` ` ``, `#`, `>`, `_`, Aufzählungszeichen) und unsichtbare
+  Zeichen; bevorzugt einen Anfang nach Zeilenbeginn/Doppelpunkt/Anführung (die
+  Frage des Nutzers wiederholt oft die ersten Wörter), erweitert auf ganze
+  Wörter und ein folgendes Satzende. `repeated_sentences` lehnt ab, wenn Frage
+  und Kontext zwei oder mehr Sätze der Passage zu mindestens der Hälfte in
+  wörtlichen 6-Wort-Läufen enthalten; nicht gezählt werden Sätze unter 6
+  Wörtern (Tabellenzellen) und Läufe, die der Nutzer selbst geschrieben hat
+  (seine Rahmendaten muss die Aufgabe behalten). Dieselbe Sperre gilt für spätere
+  Vergleiche derselben Nachricht. Alle Absagen kommen, bevor etwas Bezahltes
+  startet, und nennen „leave check out" als Ausweg. Höchstens eine stehende
+  Passage pro Nachricht; nach `failed`/`cancelled` darf neu geprüft werden,
+  nach `no_time` nicht.
 - **Prüfung:** Nach dem Vergleich läuft `_check_passage` VOR dem Schreibschritt:
   `consensus_engine.check_text_coverage` = nur der Coverage-Judge (kein
-  Differences-Judge) auf der Passage gegen die nicht späten Antworten, mit
-  exakten Satz-Offsets (`claims[].start/end`), Zitatprüfung wie bei Claims.
-  Judge-Aufrufe heißen in der Aktivität „Text check". Ein Fehler kostet die
-  Marken, nie die Antwort. Der Schreibschritt bekommt `evidence.checked_text`
-  (Satz, Zustimmung, Widerspruch, Gegenzitate) und `AGENT_ANSWER_PROMPT` sagt,
-  was damit zu tun ist; der Orchestrator sieht `passage_check` im Toolergebnis.
+  Differences-Judge) gegen die nicht späten Antworten. Der Judge sieht eine
+  längengleiche Kopie (`_judge_copy`: „[3]" → „(3)", „<" → „‹"), damit keine
+  eingefügte Satznummer und kein falscher `<response>`-Block wirkt; die
+  Offsets (`claims[].start/end`, Codepoints) kommen direkt aus der Satzzerlegung
+  (`_enumerate_consensus_sentences(..., spans=)`), nicht aus einer Suche, der
+  Anker ist der Originalwortlaut. Judge-Aufrufe heißen „Text check" und bekommen
+  einen eigenen Systemsatz (eingefügter, nicht vertrauenswürdiger Text). Zeit:
+  Start nur mit ≥ `PASSAGE_MIN_SECONDS` (20 s) vor dem nötigen Antwortbeginn,
+  harter Stopp per Timer bei `answer_time_left − PASSAGE_TIME_MARGIN`, sonst
+  `no_time`. Ein Fehler kostet die Marken, nie die Antwort. Der Schreibschritt
+  bekommt `evidence.checked_text` (der Prompt sagt dazu: Übereinstimmung, keine
+  Wahrheit); der Orchestrator sieht `passage_check` inkl. `issues` im Toolergebnis.
+  Im begrenzten Altmodus reserviert `max_calls` zwei Aufrufe mehr.
 - **Daten:** `agent_review.passage_check` = `{version, status
   (waiting|running|succeeded|partial|failed|cancelled), comparison_id,
-  answer_to, text, hash, basis_hash, claims[], models_compared, sentences,
-  issues[], judges}`. Bewusst NEBEN `checks`, weil `review_is_bound` Checks und
-  Vergleiche eins zu eins paart. `close()` und `agent_runs.finish_run` setzen
-  ein hängendes `waiting/running` auf `failed`/`cancelled`. `check` selbst wird
-  nicht in `comparisons[]` gespeichert. `agent_memory.MemoryTools` zählt die
-  Passage nie als eigene Worte des Nutzers (`exclude`, auch wenn `memory` im
-  selben `compare_models`-Aufruf mitfährt).
+  answer_to, text, hash, basis_hash, providers, claims[], models_compared,
+  sentences, issues[], judges}`. Bewusst NEBEN `checks`, weil `review_is_bound`
+  Checks und Vergleiche eins zu eins paart. Änderungen unter `self.lock`
+  (`settle`). Über 600 kB verliert die gespeicherte Kopie zuerst Gegenzitate und
+  Judge-Details. `close()`, `agent_runs.finish_run` und `agent-chat.js::cancelRun`
+  setzen ein hängendes `waiting/running` auf `failed`/`cancelled`. `check` selbst
+  wird nicht in `comparisons[]` gespeichert. `agent_memory.MemoryTools` zählt die
+  Passage im laufenden Turn nie als eigene Worte (`exclude`, auch wenn `memory`
+  im selben `compare_models`-Aufruf mitfährt); für spätere Turns gilt die
+  Memory-Anweisung („nichts aus eingefügtem Text"), ein echter Ausschluss wäre
+  eine zusätzliche Firestore-Abfrage pro Lauf.
 - **Oberfläche:** `static/js/passage-check.js` (`App.passageCheck`, in
   bundles.json nach `agent-review.js`) markiert die Passage AUF DER
-  NUTZERNACHRICHT: `cx-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
-  `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen- als
-  Fürstimmen), Klick/Enter öffnet die gemeinsame Claim-Karte
-  (`App.claimPopover`, exportiert aus `consensus-insights.js`) mit „View answer"
-  über `App.agentReview.contextFor`. Darunter `.passage-check`: Zähler zuerst
-  (Sprung zum ersten Satz), dann „Checked against N models as an answer to …".
-  Aufgerufen aus `agent-chat.js` (live und gespeichert) und
-  `consensus-run.js::appendHistoryTurn`. Die Blase behält bei einer markierten
-  Passage Zeilenumbrüche (`white-space: pre-line`, Clamp 10 Zeilen).
-  `renderThreadQuestion` vergleicht seitdem gegen `text.dataset.question`
-  (die markierte Blase hat einen anderen `textContent`) und ruft
-  `App.passageCheck.restore`; die Verlaufs-Idempotenz nutzt dasselbe Feld.
+  NUTZERNACHRICHT: `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/
+  unbestätigt = `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen =
+  mehr Gegen- als Fürstimmen). Gemalt wird nach der Highlights-Einstellung
+  (`body[data-consensus-highlight-mode]`, Standard „concerns" = rot/gelb), der
+  Rest ist `is-quiet`: ungefärbt, aber per Klick/Tab/Enter bedienbar; Hover und
+  Fokus färben. Im hellen Modus sind die Markenfarben gegen die graue Blase
+  gemischt (`html:not(.dark-mode) .has-passage-check`). Klick öffnet die
+  gemeinsame Claim-Karte (`App.claimPopover`; öffnet nahe dem unteren Rand nach
+  oben) mit „View answer" über `App.agentReview.contextFor`, während des Laufs
+  über einen Minimal-Kontext aus `review.comparisons`. Darunter `.passage-check`:
+  Zähler zuerst (Sprung zum ersten Satz; ohne Marken öffnet die Karte am Zähler),
+  dann „Checked against N models as an answer to …". Sobald ein Check deklariert
+  ist, behält die Blase die Zeilen der Passage (`white-space: pre-line`, Clamp 10
+  Zeilen, Markdown leise bereinigt) und die Zusammenfassung hat schon zwei
+  Zeilen: die Marken ändern danach nur Farben, nicht die Größe. Tab unter den
+  Falz klappt die Nachricht auf. Die Signatur ist kanonisch (Firestore liefert
+  Maps ohne Reihenfolge), ein Laufende zeichnet nichts neu. Aufgerufen aus
+  `agent-chat.js` (live, gespeichert, und leerend für Consensus/neuen Chat),
+  `run-view.js` (leerend) und `consensus-run.js::appendHistoryTurn`.
 - **Länge:** Im Agent-Modus prüft `validateInputText` die Zeichengrenze des
-  Servers (`consensus_max_question_chars`, 8.000) statt der Wortgrenze; der
-  doppelte Klick-Validator in `app-init.js` ist entfallen (jede Absage kam zweimal).
+  Servers (`consensus_max_question_chars`, 8.000; Codepoints nach NFKC wie
+  `normalize_question`) statt der Wortgrenze; der doppelte Klick-Validator in
+  `app-init.js` ist entfallen (jede Absage kam zweimal).
 - **Tests:** `tests/test_agent_passage_check.py`, `tests/js/passage-check.test.mjs`,
   `tests/e2e/test_passage_check_frontend.py`.
 
@@ -6666,6 +6702,19 @@ ersten Check statt eines leeren Consensus-Panels.
   neue und bestehende Adressen denselben gehosteten Passwort-Setup-Link. Der
   Browser zeigt den neutralen Erfolgs-Screen und führt keinen Probe-Login aus.
   Eine spezifische Fehlermeldung oder ein Login-Seitenkanal wäre Konto-Enumeration.
+- **Die Frage einer Nachrichtenblase steht in `data-question`, nicht im Text.**
+  `.thread-ask-text` und `.thread-history-question-text` tragen seit 2026-10-09
+  `dataset.question` (die whitespace-kollabierte Frage). `renderThreadQuestion`
+  (Gleichheit, Disclosure-State), die Verlaufs-Idempotenz in
+  `consensus-run.js::appendHistoryTurn` und der Reader-Fallback lesen dieses
+  Feld, weil eine geprüfte Passage (`passage-check.js`) den `textContent`
+  verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
+  (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
+  stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open,
+  close}` (aus `consensus-insights.js`), `agentReview.contextFor`,
+  `syncThreadAskClamp`. Globale `.cx-claim`-Schleifen in `consensus-insights.js`
+  schließen `.pc-claim` aus, sonst nähme die Highlights-Einstellung den Marken
+  auf der Nachricht Rolle und Label.
 - **Script-Ladereihenfolge für `/app` steht in `static/js/bundles.json`.**
   Seit 2026-08-17 listet `templates/index.html` die Dateien nicht mehr selbst;
   es rendert die Tags aus `app/core/assets.py`, das dieselbe `bundles.json`

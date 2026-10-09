@@ -874,9 +874,10 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     // A new chat names the one thing nobody would guess: a pasted AI answer
     // gets checked (the Agent decides; there is no extra mode or button).
-    const narrow = window.matchMedia?.('(max-width: 640px)').matches;
+    const width = window.innerWidth || 1024;
     input.placeholder = running ? 'Write your next message…' : basis?.chatId && !basis.continuationUnavailable
-      ? 'Ask a follow-up' : narrow ? 'Ask, or paste an AI answer to check' : 'Ask anything, or paste an AI answer to check it';
+      ? 'Ask a follow-up' : width <= 360 ? 'Ask or check an AI answer'
+        : width <= 640 ? 'Ask, or paste an AI answer to check' : 'Ask anything, or paste an AI answer to check it';
   }
   // Attachments still in the composer are this run's own when an upload
   // failed (agent-workspace keeps the chips and marks the run).
@@ -1002,7 +1003,15 @@
     context.consensus.status = "canceled";
     context.consensus.error = null;
     context.bookmark.status = "canceled";
-    if (context.metadata.agentReview) context.metadata.agentReview = { ...context.metadata.agentReview, status: "cancelled" };
+    if (context.metadata.agentReview) {
+      const review = { ...context.metadata.agentReview, status: "cancelled" };
+      // A pasted text still being checked reads "stopped" at once, as it
+      // will after a reload (agent_runs.finish_run).
+      if (["waiting", "running"].includes(review.passage_check?.status)) {
+        review.passage_check = { ...review.passage_check, status: "cancelled" };
+      }
+      context.metadata.agentReview = review;
+    }
     else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     // Only the person's Stop ends the turn; a logout or account switch
     // leaves it running to its saved answer.
@@ -1463,6 +1472,10 @@
   // a no-op when nothing the shell shows has changed.
   window.addEventListener("consensio:run-registry-change", () => renderShell());
   window.addEventListener("consensio:run-mode-change", () => renderShell());
+  // The placeholder has a length per width; a rotated phone gets the right one.
+  for (const query of ['(max-width: 360px)', '(max-width: 640px)']) {
+    window.matchMedia?.(query)?.addEventListener?.('change', () => syncComposer());
+  }
   window.addEventListener('consensio:agent-actions-change', () => { syncPendingReview(); window.updateQuestionInputAccess?.(); });
   // Google selection/consent changes (chips, sheet, consent box) change the
   // send blocker, so the notice and Send state must follow immediately.

@@ -77,7 +77,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       zeigt „Ask anything, or paste an AI answer to check it“ (Handy: „Ask, or
       paste an AI answer to check“). Eine ChatGPT-Antwort mit einem bekannten
       Fehler einfügen, „Stimmt das?“ davor → unter der Nachricht zuerst
-      „Checking your text…“, dann Marken auf der eigenen Nachricht, darunter die
+      „Checking your text…“, dann Marken auf der eigenen Nachricht (standardmäßig
+      nur rot/gelb gefärbt, die übrigen Sätze ungefärbt, aber klickbar; die Blase
+      ändert dabei ihre Größe nicht), darunter die
       Zähler und „Checked against N models as an answer to …“; ein Zähler springt
       zum Satz und öffnet die Karte, „View answer“ öffnet die Modellantwort. Die
       Antwort nennt den Fehler. Aktivität: Vergleichsfrage enthält den Text
