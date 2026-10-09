@@ -2682,4 +2682,8 @@
           window.renderStoredDifferenceCards = renderStoredDifferenceCards;
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;
+          // The same card for a checked sentence of the user's own message
+          // (passage-check.js), so both read and close alike.
+          window.App = window.App || {};
+          window.App.claimPopover = { open: openClaimPopover, close: closeClaimPopover };
         })();

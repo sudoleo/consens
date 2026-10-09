@@ -279,10 +279,11 @@
       // A replay of the same completed turn is idempotent. A colliding ID with
       // different content must never make the visible exchange disappear:
       // append it and let the owner-bound transcript remain the authority.
-      if (turnId && Array.from(history.children).some(node => (
-        node.dataset?.turnId === turnId
-        && node.querySelector?.(".thread-history-question-text")?.textContent === normalizedQuestion
-      ))) {
+      if (turnId && Array.from(history.children).some(node => {
+        // A checked passage marks the text; the plain question is kept apart.
+        const text = node.querySelector?.(".thread-history-question-text");
+        return node.dataset?.turnId === turnId && (text?.dataset.question ?? text?.textContent) === normalizedQuestion;
+      })) {
         return false;
       }
 
@@ -295,6 +296,7 @@
       const questionText = document.createElement("div");
       questionText.className = "thread-history-question-text";
       questionText.textContent = normalizedQuestion;
+      questionText.dataset.question = normalizedQuestion;
       question.append(questionText);
 
       // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
@@ -368,6 +370,8 @@
         }
         window.App.agentReview?.render(answerBody, turnData.agent_review,
           {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
+        // A pasted text the Agent checked carries its marks on the message.
+        window.App.passageCheck?.apply(question, questionText, turnData.question, turnData.agent_review);
         window.App.agentMemory?.render(answerBody, { key: turnId, changes: turnData.agent_memory });
         // Documents and mail attachments of this turn stay with its answer;
         // agent-workspace.js fills the row from the chat's file list.

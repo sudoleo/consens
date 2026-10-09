@@ -834,6 +834,13 @@ class MemoryTools:
         self.lock = threading.Lock()
         self.proposed = 0
         self.applied: list[dict] = []
+        # Text the user pasted to have checked (compare_models.check): another
+        # AI's answer or an article, never the user's own words.
+        self.foreign_passages: list[str] = []
+
+    def exclude(self, passage) -> None:
+        if isinstance(passage, str) and passage.strip() and passage not in self.foreign_passages:
+            self.foreign_passages.append(passage)
 
     @property
     def writable(self) -> bool:
@@ -855,9 +862,18 @@ class MemoryTools:
             UpdateMemoryArgs, self.update_memory)]
 
     def _user_messages(self) -> list[str]:
-        """The user's own words only: a quoted answer passage is cut off (``user_words``)."""
-        words = (user_words(message["content"]) for message in getattr(self.loop, "answer_conversation", [])
-                 if message.get("role") == "user" and isinstance(message.get("content"), str))
+        """The user's own words only: a quoted answer passage is cut off
+        (``user_words``) and a passage pasted for checking is removed."""
+        declared = getattr(getattr(self.loop, "comparison", None), "passage", None) or {}
+        foreign = [*self.foreign_passages, *([declared["text"]] if isinstance(declared.get("text"), str) else [])]
+        words = []
+        for message in getattr(self.loop, "answer_conversation", []):
+            if message.get("role") != "user" or not isinstance(message.get("content"), str):
+                continue
+            text = user_words(message["content"])
+            for passage in foreign:
+                text = text.replace(passage, "\n")
+            words.append(text)
         return [text for text in words if text.strip()]
 
     def update_memory(self, args, *, cancellation=None):

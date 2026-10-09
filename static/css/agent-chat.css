@@ -546,3 +546,66 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @media (pointer: coarse) {
   .agent-memory-head button { min-height: 44px; }
 }
+
+/* ---- A pasted text the Agent checked (passage-check.js) --------------------
+   The marks sit on the user's own message, in the same vocabulary as the
+   answer's marks. The passage keeps its line breaks, and the bubble shows
+   more of it before it folds: the marks are the point of the message now.
+   One quiet line under the bubble says what was checked against what; its
+   counts are the only colour there (the traffic-light dot), never a surface. */
+.has-passage-check > :is(.thread-ask-text, .thread-history-question-text) {
+  white-space: pre-line;
+  -webkit-line-clamp: 10;
+}
+.pc-claim { cursor: pointer; }
+.pc-claim:hover { --cx-paint: var(--cx-mark-strong); }
+.passage-check {
+  max-width: min(100%, 560px);
+  margin: 7px 2px 0 auto;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  text-align: right;
+}
+.passage-check p { margin: 0; }
+.passage-check-head { color: var(--ink-2); }
+.passage-check[data-state="failed"] .passage-check-head { color: var(--ink-3); }
+.passage-check-note { margin-top: 2px; }
+.passage-check-unit { white-space: nowrap; }
+.passage-check-count {
+  display: inline;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+}
+span.passage-check-count { cursor: default; text-decoration: none; }
+button.passage-check-count:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
+.passage-check-count:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 3px; }
+.passage-check-count::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--ink-3);
+}
+.passage-check-count.is-disputed::before { background: var(--dispute); }
+.passage-check-count.is-split::before { background: var(--partial); }
+.passage-check-count.is-holds::before { background: var(--agree); }
+@media (prefers-reduced-motion: no-preference) {
+  .passage-check[data-state="running"] .passage-check-head { animation: agent-segment-breathe 1.8s ease-in-out infinite; }
+}
+@media (max-width: 640px) {
+  .has-passage-check > :is(.thread-ask-text, .thread-history-question-text) { max-width: 88%; }
+}

@@ -401,6 +401,8 @@
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
+      App.passageCheck?.apply(document.getElementById("threadAsk"), document.getElementById("threadAskText"),
+        basis.question, basis.currentTurn?.agent_review, { live: basis.currentTurn?.status === "pending" });
       App.agentMemory?.render(document.getElementById('agentAnswerBody'), {
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
       });
@@ -409,7 +411,11 @@
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
     }
-    if (!agent || (!context && !basis)) App.agentDelegation?.project(null);
+    if (!agent || (!context && !basis)) {
+      App.agentDelegation?.project(null);
+      // A saved Consensus turn or a new chat: no passage check on this message.
+      App.passageCheck?.apply(document.getElementById("threadAsk"), null, "", null);
+    }
     window.updateQuestionInputAccess?.();
     syncPendingReview();
   }
@@ -597,6 +603,10 @@
         { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
           key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });
     }
+    // A pasted text the Agent checks: "Checking ..." under the message while
+    // the models answer, its marks as soon as the check is in.
+    App.passageCheck?.apply(document.getElementById("threadAsk"), document.getElementById("threadAskText"),
+      context.question, state.completedTurn?.agent_review || liveReview, { live: running });
     // Memory changes appear as soon as Agent made them, not only at the end.
     App.agentMemory?.render(answerBody, { key: context.runId, running,
       changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });
@@ -862,8 +872,11 @@
     else input.removeAttribute('aria-describedby');
     if (!agent || window.userCanAskQuestions?.() === false) return;
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
+    // A new chat names the one thing nobody would guess: a pasted AI answer
+    // gets checked (the Agent decides; there is no extra mode or button).
+    const narrow = window.matchMedia?.('(max-width: 640px)').matches;
     input.placeholder = running ? 'Write your next message…' : basis?.chatId && !basis.continuationUnavailable
-      ? 'Ask a follow-up' : 'Message Agent';
+      ? 'Ask a follow-up' : narrow ? 'Ask, or paste an AI answer to check' : 'Ask anything, or paste an AI answer to check it';
   }
   // Attachments still in the composer are this run's own when an upload
   // failed (agent-workspace keeps the chips and marks the run).

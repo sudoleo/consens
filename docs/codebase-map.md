@@ -3477,6 +3477,62 @@ fehlende Calls, Abbruch, UTC-Wechsel und atomare Kontingente. Ergänzend bestehe
 Agent-/Consensus-Tests, agent-review.test.mjs sowie die gebaute Desktop-/Mobil-
 Ansicht in test_agent_comparison_frontend.py; siehe [testing.md](testing.md).
 
+### Eingefügten Text prüfen (Agent, seit 2026-10-09)
+„Paste an AI answer to check it": Fügt der Nutzer eine fremde Antwort (meist
+ChatGPT) ein, prüft der Agent sie Satz für Satz gegen unabhängige Antworten.
+Kein Modus, kein Knopf, kein Frage-Feld; der einzige Hinweis ist der Platzhalter
+eines neuen Agent-Chats (`agent-chat.js::syncComposer`). Der Agent entscheidet
+per Anweisung (`AGENT_SYSTEM_PROMPT`, Abschnitt „CHECKING A TEXT THE USER
+SUPPLIED"): prüfen nur, wenn der Text eine für sich stehende Frage beantwortet;
+zusammenfassen, übersetzen, umschreiben, Code oder Fragen zu genau diesem
+Dokument geben den Text wie bisher als Material weiter; im Zweifel weitergeben.
+- **Werkzeug:** `compare_models` hat das optionale, bewusst nachsichtige Feld
+  `check` (`PassageCheck`: `starts_with`, `ends_with`, `answer_to`). Feste Regeln
+  stehen im Server, nicht im Agenten: `locate_passage` findet die Passage in der
+  letzten Nutzernachricht (`ComparisonTools.latest_user_message`, Groß-/Klein-,
+  Anführungszeichen- und Leerraum-tolerant, ein Satzende hinter dem Anker gehört
+  dazu); `repeated_sentences` lehnt den Aufruf ab, wenn Frage/Kontext zwei oder
+  mehr Sätze der Passage wörtlich wiederholen (6-Wort-Schindeln; ein einzelner
+  Satz ist erlaubt, eine Behauptung prüfen heißt nach ihr fragen). Beide Absagen
+  kommen, bevor etwas Bezahltes startet, und sagen, was zu ändern ist. Höchstens
+  eine Passage pro Nachricht.
+- **Prüfung:** Nach dem Vergleich läuft `_check_passage` VOR dem Schreibschritt:
+  `consensus_engine.check_text_coverage` = nur der Coverage-Judge (kein
+  Differences-Judge) auf der Passage gegen die nicht späten Antworten, mit
+  exakten Satz-Offsets (`claims[].start/end`), Zitatprüfung wie bei Claims.
+  Judge-Aufrufe heißen in der Aktivität „Text check". Ein Fehler kostet die
+  Marken, nie die Antwort. Der Schreibschritt bekommt `evidence.checked_text`
+  (Satz, Zustimmung, Widerspruch, Gegenzitate) und `AGENT_ANSWER_PROMPT` sagt,
+  was damit zu tun ist; der Orchestrator sieht `passage_check` im Toolergebnis.
+- **Daten:** `agent_review.passage_check` = `{version, status
+  (waiting|running|succeeded|partial|failed|cancelled), comparison_id,
+  answer_to, text, hash, basis_hash, claims[], models_compared, sentences,
+  issues[], judges}`. Bewusst NEBEN `checks`, weil `review_is_bound` Checks und
+  Vergleiche eins zu eins paart. `close()` und `agent_runs.finish_run` setzen
+  ein hängendes `waiting/running` auf `failed`/`cancelled`. `check` selbst wird
+  nicht in `comparisons[]` gespeichert. `agent_memory.MemoryTools` zählt die
+  Passage nie als eigene Worte des Nutzers (`exclude`, auch wenn `memory` im
+  selben `compare_models`-Aufruf mitfährt).
+- **Oberfläche:** `static/js/passage-check.js` (`App.passageCheck`, in
+  bundles.json nach `agent-review.js`) markiert die Passage AUF DER
+  NUTZERNACHRICHT: `cx-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
+  `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen- als
+  Fürstimmen), Klick/Enter öffnet die gemeinsame Claim-Karte
+  (`App.claimPopover`, exportiert aus `consensus-insights.js`) mit „View answer"
+  über `App.agentReview.contextFor`. Darunter `.passage-check`: Zähler zuerst
+  (Sprung zum ersten Satz), dann „Checked against N models as an answer to …".
+  Aufgerufen aus `agent-chat.js` (live und gespeichert) und
+  `consensus-run.js::appendHistoryTurn`. Die Blase behält bei einer markierten
+  Passage Zeilenumbrüche (`white-space: pre-line`, Clamp 10 Zeilen).
+  `renderThreadQuestion` vergleicht seitdem gegen `text.dataset.question`
+  (die markierte Blase hat einen anderen `textContent`) und ruft
+  `App.passageCheck.restore`; die Verlaufs-Idempotenz nutzt dasselbe Feld.
+- **Länge:** Im Agent-Modus prüft `validateInputText` die Zeichengrenze des
+  Servers (`consensus_max_question_chars`, 8.000) statt der Wortgrenze; der
+  doppelte Klick-Validator in `app-init.js` ist entfallen (jede Absage kam zweimal).
+- **Tests:** `tests/test_agent_passage_check.py`, `tests/js/passage-check.test.mjs`,
+  `tests/e2e/test_passage_check_frontend.py`.
+
 ### Browser-Run-Lifecycle und Sichtwechsel
 
 - Ein Send erzeugt vor dem ersten Netzwerk-`await` genau einen `RunContext` im

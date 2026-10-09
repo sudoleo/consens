@@ -133,6 +133,10 @@
         },
         "static/js/agent-delegation.js",
         "static/js/agent-review.js",
+        {
+          "file": "static/js/passage-check.js",
+          "note": "App.passageCheck: marks a pasted text the Agent checked on the user's message. Uses App.claimPopover (consensus-insights.js) and App.agentReview.contextFor; called by app-core.js, consensus-run.js and agent-chat.js at runtime."
+        },
         "static/js/agent-preferences.js",
         "static/js/agent-memory.js",
         "static/js/consensus-run.js",

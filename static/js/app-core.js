@@ -115,7 +115,10 @@
     if (!wrap || !text) return "";
 
     const normalized = String(question || "").replace(/\s+/g, " ").trim();
-    const unchanged = text.textContent === normalized;
+    // The question is remembered apart from the DOM: a checked passage
+    // (passage-check.js) marks the text, so its textContent no longer
+    // equals the plain question.
+    const unchanged = (text.dataset.question ?? text.textContent) === normalized;
     // Die Multi-Run-Projektion schreibt den sichtbaren Context waehrend des
     // Streamings regelmaessig neu ins DOM. Eine identische Frage ist dabei
     // kein neuer Turn: ihren lokalen Disclosure-State zurueckzusetzen liess
@@ -129,6 +132,7 @@
     }
 
     text.textContent = normalized;
+    text.dataset.question = normalized;
     wrap.hidden = !normalized;
     wrap.classList.remove("is-open", "is-long");
     const more = wrap.querySelector(".thread-ask-more");
@@ -136,6 +140,7 @@
       more.textContent = "Show full question";
       more.setAttribute("aria-expanded", "false");
     }
+    window.App.passageCheck?.restore(wrap, text, question);
     if (!normalized) return "";
 
     requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
@@ -192,7 +197,10 @@
     const wrap = document.getElementById("threadPendingAsk");
     const text = document.getElementById("threadPendingAskText");
     const row = document.getElementById("threadPendingAskAttachments");
-    if (text) text.textContent = "";
+    if (text) {
+      text.textContent = "";
+      delete text.dataset.question;
+    }
     if (wrap) {
       wrap.hidden = true;
       wrap.classList.remove("is-open", "is-long");
@@ -235,6 +243,14 @@
     text.style.webkitLineClamp = previous;
     wrap.classList.toggle("is-long", full > clamped + 2);
   }
+
+  // A checked passage changes how long a question is (line breaks, marks).
+  function refreshThreadAskClamp(wrap) {
+    const text = wrap?.querySelector(":scope > .thread-ask-text, :scope > .thread-history-question-text");
+    if (text) requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
+  }
+
+  window.App.syncThreadAskClamp = refreshThreadAskClamp;
 
   function observeThreadAskWidth(wrap, text) {
     if (typeof ResizeObserver !== "function" || threadAskResizeObservers.has(text)) return;

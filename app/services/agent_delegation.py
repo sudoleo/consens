@@ -590,6 +590,10 @@ class DelegationLoop(AgentLoop):
             # A refused change never stops the comparison; the model reads why.
             memory_result = None
             if registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory":
+                if getattr(args, "check", None) is not None and self.comparison is not None:
+                    # The passage this call checks is pasted text, not evidence
+                    # of what the user says about themselves.
+                    self.memory.exclude(self.comparison.passage_for(args.check))
                 memory_step = f"{value.step_id}:{call['id']}:memory"
                 try:
                     memory_result = self.memory.apply(args.memory)

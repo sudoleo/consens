@@ -2741,6 +2741,73 @@ def query_differences(
         unlink_second()
 
 
+def _sentence_offsets(text: str, sentences) -> list:
+    """(start, end) of each enumerated sentence in `text`, in order.
+
+    The enumeration yields exact, stripped slices of the text in document
+    order, so a forward search from the previous hit finds each one; a slice
+    that is not found (never expected) gets None instead of a wrong place."""
+    offsets, cursor = [], 0
+    for sentence in sentences:
+        start = text.find(sentence, cursor)
+        if start < 0:
+            offsets.append(None)
+            continue
+        offsets.append((start, start + len(sentence)))
+        cursor = start + len(sentence)
+    return offsets
+
+
+@analysis_budgeted
+def check_text_coverage(
+    answers: Mapping[str, str],
+    text: str,
+    api_keys: dict,
+    judge_model: str,
+    *,
+    resolved_question: str = "",
+):
+    """Coverage judge alone on a text consens.io did not write.
+
+    The Agent checks a passage the user pasted (typically another AI's answer)
+    against independent answers to the question behind it. The differences
+    judge is skipped on purpose: it describes disagreements between the
+    answers, while the user asked about THEIR text, sentence by sentence.
+    Returns None when the text has no checkable sentence or the judge
+    delivered nothing; otherwise the claims in the usual payload form, each
+    with `start`/`end` offsets into `text`, so the browser marks the pasted
+    text without searching for it."""
+    context = _build_judge_context(
+        answers, text, None, resolved_question, sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES,
+    )
+    if context is None or not context.sentences:
+        return None
+    result, meta = _run_coverage_judge(context, api_keys, judge_model, chat_mode=True)
+    if not result:
+        return None
+    offsets = _sentence_offsets(str(text or ""), context.sentences)
+    claims = _coverage_claims(result, context)
+    _verify_claims(claims, text, context.answers_by_model)
+    located = []
+    for claim in claims:
+        number = claim.get("sentence_id")
+        span = offsets[number - 1] if isinstance(number, int) and 1 <= number <= len(offsets) else None
+        if span is None:
+            continue
+        claim["start"], claim["end"] = span
+        located.append(claim)
+    return {
+        "claims": located,
+        "models_compared": sorted(context.anon_map.values()),
+        "sentences": len(context.sentences),
+        "evidence_coverage": {
+            "unindexed_sentences": context.unindexed_sentences,
+            "truncated_answers": context.truncated_answers,
+        },
+        "judges": {"coverage": meta} if meta else {},
+    }
+
+
 CHANGE_CAUSES = ("new_evidence", "evidence_missing", "reassessment", "none")
 
 

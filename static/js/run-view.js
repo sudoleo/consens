@@ -393,6 +393,9 @@
     // ohne sie steht auf dem Schirm nur noch die Antwort auf etwas, das
     // nirgends mehr geschrieben steht.
     window.App.setThreadQuestion?.(context.question);
+    // Consensus never checks a pasted text: marks of an Agent turn with the
+    // very same question must not stay on this one.
+    window.App.passageCheck?.apply(document.getElementById("threadAsk"), null, context.question, null);
     window.App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
     syncConversationProjection(context, forcePipeline);
     providers().forEach(provider => renderModel(context, provider, forcePipeline));

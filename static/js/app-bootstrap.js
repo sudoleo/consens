@@ -96,7 +96,8 @@
         greeting.dataset.consensusGreeting = greeting.textContent;
         greeting.textContent = "What can I help you with?";
       }
-      const newChat = !seeded.has("newChat") && document.getElementById("newRunButton");
+      // null, not false, once seeded: `false?.querySelector` throws.
+      const newChat = seeded.has("newChat") ? null : document.getElementById("newRunButton");
       const newChatText = newChat?.querySelector("span");
       if (newChatText) {
         seeded.add("newChat");

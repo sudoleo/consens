@@ -558,6 +558,20 @@
         const APP_LIMITS = window.APP_LIMITS || {};
         function validateInputText() {
           const text = document.getElementById("questionInput").value.trim();
+          // Agent counts characters, as its server does: a pasted answer to
+          // check easily passes the word limit, and the token account (not
+          // the word count) meters what a message costs.
+          if (window.App?.runMode?.effective?.() === "agent") {
+            const maxChars = Number(APP_LIMITS.consensus_max_question_chars || 8000);
+            const message = window.App.quote?.compose?.(text) ?? text;
+            if (message.length > maxChars) {
+              alert(`Your message is longer than ${maxChars.toLocaleString("en-US")} characters `
+                + `(it has ${message.length.toLocaleString("en-US")}). `
+                + "Shorten it, or paste only the part you want checked.");
+              return false;
+            }
+            return true;
+          }
           const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
           // Das Wortlimit hat pro Stufe einen eigenen Admin-Wert und haengt
           // nicht vom Reasoning-Schalter ab (wie serverseitig get_word_limit).
@@ -571,18 +585,10 @@
           }
           return true;
         }
-        // Von query-send.js (window.sendQuestion) mitbenutzt.
+        // Von query-send.js (window.sendQuestion) genutzt: der Senden-Klick
+        // (app-dom-events.js) und Enter pruefen dort genau einmal. Ein
+        // eigener Klick-Listener hier zeigte jede Absage doppelt.
         window.validateInputText = validateInputText;
-
-        document.getElementById("sendButton").addEventListener("click", function (e) {
-          // Laeuft noch etwas (Modelle ODER Consensus), ist der Klick ein
-          // Abbruch — dann nicht gegen die Eingabe validieren.
-          if (window.isRunActive && window.isRunActive()) return;
-          if (window.isQueryRequestRunning && window.isQueryRequestRunning()) return;
-          if (!validateInputText()) {
-            e.preventDefault();
-          }
-        });
 
         // Event-Listener für Eingabefelder und Buttons
         // Desktop: Enter sendet, Shift+Enter macht einen Absatz. Auf kleinen

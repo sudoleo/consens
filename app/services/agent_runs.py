@@ -388,6 +388,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         for comparison in review.get("comparisons", []):
                             if comparison.get("status") == "running":
                                 comparison["status"] = "cancelled" if status == "cancelled" else "failed"
+                        passage = review.get("passage_check")
+                        if isinstance(passage, dict) and passage.get("status") in {"waiting", "running"}:
+                            review["passage_check"] = {**passage, "status": "cancelled" if status == "cancelled" else "failed"}
                         for version in [review, *review.get("versions", [])]:
                             for check in version.get("checks", []):
                                 verification = check.get("source_verification")

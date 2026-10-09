@@ -407,6 +407,7 @@
         error: box.dataset.responseError === "true" ? content?.textContent : "" }];
     });
     const question = String(window.lastQuestion || App.followup?.lastExchange?.question
+      || document.getElementById("threadAskText")?.dataset.question
       || document.getElementById("threadAskText")?.textContent || "");
     return { key: turn ? keyFor(turn) : `dom:${question}`, question, answers, runId: null };
   }

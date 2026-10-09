@@ -404,6 +404,26 @@ Aktivitäten werden beim Anzeigen ebenfalls gekürzt; bestehende Daten werden
 nicht migriert. Private Provider-Fortsetzungsdaten bleiben ausschließlich im
 laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
 
+### Eingefügten Text prüfen (seit 2026-10-09)
+
+Fügt der Nutzer eine fremde Antwort ein („Stimmt das?" oder ganz ohne Zusatz),
+setzt der Orchestrator in `compare_models` das Feld `check` (erste und letzte
+Wörter der Passage, die Frage, die sie beantwortet). Die Vergleichsmodelle sehen
+die Passage nie: Wer sie vorgelegt bekommt, stimmt ihr eher zu. Sie beantworten
+nur die Frage dahinter; der Server lehnt einen Aufruf ab, dessen Frage oder
+Kontext zwei oder mehr Sätze der Passage wörtlich enthält. Nach dem Vergleich
+prüft der Coverage-Judge jeden Satz der Passage gegen die Antworten (ein Aufruf,
+kein Differences-Judge), bevor die Antwort geschrieben wird; die Antwort liest
+dieselben Urteile (`checked_text`). Die Marken stehen auf der Nachricht des
+Nutzers, darunter eine Zeile mit den Zählern und der Frage, gegen die geprüft
+wurde. Zusammenfassen, Übersetzen, Umschreiben, Code-Review oder Fragen zu genau
+diesem Dokument laufen ohne `check`; im Zweifel ohne. Live-Check 2026-10-09
+(Luna, Gemini 3.5 Flash-Lite, DeepSeek V4 Flash, eine Wärmepumpen-Antwort mit
+zwei eingebauten Fehlern): beide Fehler 3/3 widersprochen, die richtigen Sätze
+3/3 gestützt, Zusammenfassen/Übersetzen ohne `check`, rund 0,09 $ und 106 s für
+den ganzen Lauf. Details: [codebase-map.md](codebase-map.md), Abschnitt
+„Eingefügten Text prüfen".
+
 ## Tageskontingent
 
 Seit 2026-10-01 teilt Agent das Tageskonto mit Compare, Consensus und Deep

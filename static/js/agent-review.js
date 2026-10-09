@@ -606,5 +606,13 @@
     }
     contexts.forEach(c => App.answerReader?.refreshContext(c));
   }
-  App.agentReview = { render, renderActivity, failureNote, failureReason };
+  // The reader context of one comparison of a rendered review, e.g. for the
+  // "View answer" link of a checked sentence in the user's message.
+  function contextFor(review, comparisonId) {
+    const key = `agent-evidence:${comparisonId}`;
+    // While a run is live the review row may not be built yet for this exact
+    // review object; the last built context of the comparison still opens.
+    return (review && activityContexts.get(review) || []).find(c => c.key === key) || contextsByKey.get(key) || null;
+  }
+  App.agentReview = { render, renderActivity, failureNote, failureReason, contextFor };
 })();

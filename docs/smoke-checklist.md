@@ -73,6 +73,17 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Network zeigt `POST …/requests/…/stop`. Automatisiert:
       `test_agent_background.py`, `agent-live.test.mjs`,
       `agent-chat.test.mjs` („agent turns that outlive their connection“).
+- [ ] Eingefügten Text prüfen (2026-10-09, echter Provider): neuer Agent-Chat
+      zeigt „Ask anything, or paste an AI answer to check it“ (Handy: „Ask, or
+      paste an AI answer to check“). Eine ChatGPT-Antwort mit einem bekannten
+      Fehler einfügen, „Stimmt das?“ davor → unter der Nachricht zuerst
+      „Checking your text…“, dann Marken auf der eigenen Nachricht, darunter die
+      Zähler und „Checked against N models as an answer to …“; ein Zähler springt
+      zum Satz und öffnet die Karte, „View answer“ öffnet die Modellantwort. Die
+      Antwort nennt den Fehler. Aktivität: Vergleichsfrage enthält den Text
+      nicht. Gegenprobe „Fasse diesen Text zusammen: …“ → keine Marken.
+      Automatisiert: `test_agent_passage_check.py`, `passage-check.test.mjs`,
+      `test_passage_check_frontend.py`.
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,
