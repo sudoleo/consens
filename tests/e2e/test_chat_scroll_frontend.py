@@ -218,7 +218,10 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
         page.screenshot(path=str(capture / f"question-top-{width}-{reduced}.png"))
         # "Latest message" goes to the end as it was when pressed; text that
         # still lands during the jump may leave it within the near-end band.
-        await_bottom = "() => document.documentElement.scrollHeight - innerHeight - scrollY < 81"
+        # The eased jump enters that band before it ends, so wait for the
+        # jump itself to finish before measuring stillness.
+        await_bottom = """() => document.documentElement.scrollHeight - innerHeight - scrollY < 81
+          && !document.body.classList.contains('chat-scroll-following')"""
         latest.click()
         page.wait_for_function(await_bottom)
         expect(latest).not_to_be_visible()
