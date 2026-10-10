@@ -231,7 +231,8 @@ def _fallback_citation_end(text: str, hint: Any) -> int:
     return boundary.end() if boundary else len(text)
 
 
-def _citation_end(text: str, citation: Dict[str, Any]) -> int:
+def citation_end(text: str, citation: Dict[str, Any]) -> int:
+    """End of the claim a citation supports (Consensus tags, Agent evidence)."""
     start = _integer_index(citation.get("start_index"))
     end = _integer_index(citation.get("end_index"))
 
@@ -275,7 +276,7 @@ def insert_source_tags(
             snippet=snippet,
             provider=provider,
         )
-        end = _citation_end(text, citation)
+        end = citation_end(text, citation)
         tags_by_end.setdefault(end, [])
         if source_id not in tags_by_end[end]:
             tags_by_end[end].append(source_id)

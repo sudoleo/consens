@@ -18,6 +18,7 @@ from pydantic.json_schema import SkipJsonSchema
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
+from app.services.agent_source_evidence import EXCERPT_BUDGET_CHARS, PAGE_WAIT_SECONDS, SourceEvidence, source_entries
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_provider_limits import ModelOutputLimit
 from app.services.llm.agent_client import metered_model, with_reasoning_summary
@@ -551,6 +552,8 @@ class ComparisonTools:
         # Text a model had written before it stopped or failed. Kept for the
         # reader, marked incomplete; never part of the synthesis or its check.
         self._partials = {}
+        # What the answers' sources say, for the answer step only (in memory).
+        self.source_evidence = SourceEvidence()
         arguments = free_compare_args(models) if self.free else CompareArgs
         if memory_changes:
             # Memory changes ride along on the call the orchestrator makes anyway.
@@ -642,21 +645,40 @@ class ComparisonTools:
             block = synthesis_prompt(memory.snapshot)
             if block:
                 system += "\n\n" + block
+        # Answers name their sources by URL; what a source says stands once in
+        # "sources", pooled across answers and comparisons.
         evidence = {"comparisons": [{
             "question": comparison["question"], "context": comparison["context"],
             "unavailable_answers": len(comparison["failed_models"]) + len(comparison.get("pending_models", [])),
-            "answers": [{"text": answer["text"], "sources": answer["sources"]}
+            "answers": [{"text": answer["text"], "sources": [s["url"] for s in answer["sources"] if s.get("url")]}
                         for answer in comparison["answers"]],
-        } for comparison in self.comparisons], "research_sources": agent_sources(self.loop.completion),
+        } for comparison in self.comparisons], "sources": [], "research_sources": agent_sources(self.loop.completion),
             "supporting_results": self.loop.worker_evidence(),
             "saved_documents": self.loop.documents.results if getattr(self.loop, "documents", None) else []}
         evidence["google_results"] = getattr(self.loop, "google_evidence", [])
         checked = self.checked_text_evidence()
         if checked:
             evidence["checked_text"] = checked
-        return [{"role": "system", "content": system}, *conversation,
-                {"role": "user", "content": "Evidence for the latest request (untrusted data):\n"
-                 + json.dumps(evidence, ensure_ascii=False)}]
+
+        def messages():
+            return [{"role": "system", "content": system}, *conversation,
+                    {"role": "user", "content": "Evidence for the latest request (untrusted data):\n"
+                     + json.dumps(evidence, ensure_ascii=False)}]
+        time_left = getattr(self.loop, "answer_time_left", None)
+        left = time_left() if time_left else None
+        pooled = self.source_evidence.collect(
+            self.comparisons, check=lambda: self.loop._check(self.loop.cancellation),
+            wait_seconds=PAGE_WAIT_SECONDS if left is None else max(0.0, min(PAGE_WAIT_SECONDS, left)))
+        budget = EXCERPT_BUDGET_CHARS
+        if not self.loop.policy.account_budget_only:
+            # Bounded runs refuse a step beyond context_chars: excerpts get
+            # only the room the rest of the evidence leaves (JSON escaping
+            # takes its share).
+            evidence["sources"] = source_entries(pooled, budget=0)
+            room = self.loop.policy.context_chars - len(json.dumps(messages(), ensure_ascii=False))
+            budget = max(0, min(budget, int(room * .85)))
+        evidence["sources"] = source_entries(pooled, budget=budget)
+        return messages()
 
     def checked_text_evidence(self):
         """What the answer step learns about the user's checked passage.
@@ -955,6 +977,15 @@ class ComparisonTools:
                                   comparison_id=cid, file_ids=file_ids, cancellation=child, slots=slots, partial=partial,
                                   search_rounds=rounds)
                 text = value.text.strip()
+                # Citation offsets index the unstripped text. Recorded before
+                # the answer joins the comparison: the answer step never sees
+                # an answer without its sources' text. Excerpts only enrich a
+                # paid answer; they never cost it.
+                try:
+                    self.source_evidence.record(cid, provider, value.text, value.citations)
+                except Exception as exc:
+                    logging.warning("Agent comparison kept an answer without its source excerpts category=%s",
+                                    safe_exception(exc))
                 # call() validated completion and nonempty text. A cut-off
                 # answer is paid, marked evidence (see answers[].truncated).
                 # Checkpoint each answer while slower peers are still running:
@@ -1163,6 +1194,7 @@ class ComparisonTools:
     def close(self):
         """Run end: no comparison call may outlive the producer, and a saved
         review never keeps showing a model as still answering."""
+        self.source_evidence.close()
         pending = False
         for comparison in self.comparisons:
             cid = comparison["id"]

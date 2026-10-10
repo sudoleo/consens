@@ -204,3 +204,89 @@ def test_reasoning_answer_step_gets_headroom_and_a_lighter_retry_effort():
     assert answer_output_limit(off) == ANSWER_OUTPUT_CEILING
     plain = replace(sonnet, model="anthropic/claude-haiku-4.5", request_config={})
     assert lighter_reasoning(plain) is None
+
+
+SHARED, EXA, NATIVE = "https://example.org/shared", "https://example.org/exa", "https://example.org/native"
+HIGHLIGHT = "\n".join(f"EXA_HIGHLIGHT line {i}: the first option is listed at 100 EUR per month." for i in range(30))
+PAGE = "\n".join(["Navigation and unrelated history."] * 40
+                 + ["PAGE_PASSAGE: The first option costs 100 EUR and includes support."]
+                 + ["Footer text about the weather."] * 40)
+
+
+def _cited_run(store, monkeypatch, *, context_chars=None):
+    """Both comparison answers cite a shared source without text and one of
+    their own: the Exa family with search text, the native one without."""
+    from app.services import agent_source_evidence
+    claim_end = len("The first option costs 100.")
+    fetched = []
+
+    def fetch(url, limits):
+        fetched.append(url)
+        if url != NATIVE:
+            raise ValueError("not_found")
+        return {"text": PAGE, "dates": [{"value": "2026-10-01", "origin": "json-ld:datePublished"}]}
+    monkeypatch.setattr(agent_source_evidence, "fetch_document", fetch)
+    script = Script()
+    base = type(script.factory())
+    captured = []
+
+    class Completion(base):
+        def stream(self, *, model, messages, **kwargs):
+            if self.step_id.startswith("completion:") and not kwargs["tools"]:
+                captured.append(messages)
+            yield from super().stream(model=model, messages=messages, **kwargs)
+            if not self.step_id.startswith("completion:") and not model.request_config.get("response_format"):
+                own = NATIVE if model.model.startswith("anthropic") else EXA
+                self.sources = [{"url": SHARED, "title": "Shared"}, {"url": own, "title": "Own"}]
+                self.citations = [
+                    {"url": SHARED, "content": "", "start_index": 0, "end_index": claim_end, "fallback_end_index": 0},
+                    {"url": own, "content": "" if own == NATIVE else HIGHLIGHT, "start_index": 0,
+                     "end_index": claim_end, "fallback_end_index": 0}]
+
+    loop = make_loop(store, script)
+    if context_chars:
+        loop.policy = replace(loop.policy, context_chars=context_chars)
+    loop.factory = Completion
+    list(loop.run())
+    assert len(captured) == 1
+    return loop, captured[0], fetched
+
+
+def _evidence(messages):
+    return json.loads(messages[-1]["content"].split("\n", 1)[1])
+
+
+def test_answer_step_reads_what_the_cited_sources_say_without_storing_it(store, monkeypatch):
+    """Comparison citations reach the answer step as one pooled source list:
+    search text where the provider sent it, the page where it did not,
+    bound to the sentences the answers support with them."""
+    from app.services import agent_source_evidence
+    loop, messages, fetched = _cited_run(store, monkeypatch)
+    evidence = _evidence(messages)
+    answers = evidence["comparisons"][0]["answers"]
+    assert sorted(answer["sources"][1] for answer in answers) == [EXA, NATIVE]
+    assert all(answer["sources"][0] == SHARED for answer in answers)
+    sources = {source["url"]: source for source in evidence["sources"]}
+    assert list(sources)[0] == SHARED and sources[SHARED]["cited_by"] == 2
+    # No text for the shared source anywhere: listed, citable, without excerpt.
+    assert "excerpt" not in sources[SHARED]
+    assert "EXA_HIGHLIGHT" in sources[EXA]["excerpt"] and sources[EXA]["supports"] == ["The first option costs 100."]
+    # The page is cut to the passage behind the claim and its neighbourhood.
+    assert "PAGE_PASSAGE" in sources[NATIVE]["excerpt"]
+    assert len(sources[NATIVE]["excerpt"]) <= agent_source_evidence.LEAD_EXCERPT_CHARS < len(PAGE)
+    assert sources[NATIVE]["published"] == "2026-10-01"
+    assert sorted(fetched) == sorted([SHARED, NATIVE])
+    # Excerpts are context for one answer step: never saved with the turn.
+    saved = json.dumps(store.get_turn(UID, loop.chat_id, loop.turn_id), default=str)
+    assert "EXA_HIGHLIGHT" not in saved and "PAGE_PASSAGE" not in saved
+    assert '"title": "Own"' in saved
+
+
+def test_bounded_runs_give_excerpts_only_the_context_room_left(store, monkeypatch):
+    loop, messages, _ = _cited_run(store, monkeypatch, context_chars=7000)
+    assert len(json.dumps(messages, ensure_ascii=False)) <= 7000
+    sources = {source["url"]: source for source in _evidence(messages)["sources"]}
+    assert set(sources) == {SHARED, EXA, NATIVE}
+    excerpts = sum(len(source.get("excerpt", "")) for source in sources.values())
+    assert 0 < excerpts < 2 * 1200
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"

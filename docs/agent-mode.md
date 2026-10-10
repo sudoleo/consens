@@ -230,7 +230,8 @@ ungeprüft erhalten; die Judges starten nicht.
 Der Schreibschritt verwendet seit 2026-10-07 den eigenen Antwort-Prompt
 `prompt_defaults.AGENT_ANSWER_PROMPT` (vorher Consensus-Prompt plus
 `SYNTHESIS_PROMPT`) mit der eigenen beratenden Stimme des Chatmodells. Er erhält den tatsächlichen Gesprächs-
-verlauf sowie Vergleichsantworten, Quellen und zuletzt geprüfte Worker-Ergebnisse
+verlauf sowie Vergleichsantworten, Quellen mit Auszügen (siehe „Quellenauszüge
+für die Antwort“) und zuletzt geprüfte Worker-Ergebnisse
 oder deren geprüften Ersatztext. Überarbeitung entzieht alten Ergebnissen die
 Freigabe. Er erhält keine internen Toolgespräche,
 Statusfelder oder Reasoning-Fortsetzungen. Die Agent-Anweisungen steuern weiterhin
@@ -788,6 +789,63 @@ Liefert der Provider am Suchlimit eine Antwort ohne Vergleichs-Toolcall, folgt
 einmalig eine Orchestrierungsrunde mit den gesammelten Quellen und ohne neue
 Websuche. Sie führt die Recherche zurück in den Consensus-Ablauf; nur eine
 unvermeidbare Rückfrage kann den Vergleich aufschieben.
+
+### Quellenauszüge für die Antwort
+
+Seit 2026-10-10 sieht der Antwortschritt nicht nur URL und Titel der zitierten
+Quellen, sondern was dort steht (`agent_source_evidence.py`). Ohne den Text
+konnte er nur abwägen, was die Antworten über ihre Quellen behaupten.
+
+**Woher der Text kommt.** OpenRouter schickt mit jedem `url_citation` den
+Quelltext (`content`) und die Stelle der Antwort, die er stützt
+(`start_index`/`end_index`). `AgentCompletion._annotations` behält bis zu
+`ANSWER_SOURCES_MAX` (10) Quellen je Aufruf (vorher 5; drei Suchrunden à fünf
+Treffer liefen sonst ins Leere) und in `citations` Text (bis 4000 Zeichen) und
+Position. Bei 0/0-Offsets einiger nativer Adapter gilt wie im Consensus-Stream
+die bis dahin gestreamte Textlänge als Anker. Exa-Familien bringen hier echte
+Auszüge (bis `SEARCH_RESULT_CHARACTERS`); ob und wie viel Text die eigene
+Suche von OpenAI, Anthropic und Gemini mitliefert, sagt die OpenRouter-Doku
+nicht („if available“). Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
+Server deshalb die Seite selbst, mit demselben begrenzten, gecachten Abruf wie
+die Quellenprüfung (`source_documents.fetch_document`: nur öffentliche
+Adressen, 5 s, 400 kB). Die Abrufe starten, sobald eine Vergleichsantwort
+eintrifft (die ersten vier Quellen je Antwort, höchstens zwölf je Turn, drei
+parallel), also während langsamere Modelle noch schreiben. Der Antwortschritt
+wartet auf den Rest höchstens `PAGE_WAIT_SECONDS` (4 s) und nie über die
+Zeit hinaus, die er vor dem harten Stopp braucht; ein Stop beendet das Warten
+sofort. Die Metrik `agent_source_evidence:<familie>:search_text|no_search_text`
+zeigt je Familie, wie oft die Suche brauchbaren Text liefert,
+`text:search|page|none` woher der Text der Antwortquellen kam.
+
+**Was der Antwortschritt bekommt.** Im Evidenzblock nennen die Antworten ihre
+Quellen nur noch per URL. `sources` führt jede Quelle einmal, über Antworten
+und Vergleiche gepoolt (kanonische URL), meistzitierte zuerst:
+`cited_by` (Zahl der Familien), `supports` (bis zu zwei Antwortsätze, die die
+Quelle stützt, ohne Linksyntax, je höchstens 240 Zeichen) und `excerpt`:
+Originalpassagen, die `select_passages` für diese Sätze und die Frage aus dem
+Text wählt (Zahlen zählen dreifach, Nachbarabsätze mit Einschränkungen kommen
+mit), nie eine Modellzusammenfassung; bei abgerufenen Seiten zusätzlich
+`published`. Budget: `EXCERPT_BUDGET_CHARS` (16.000 Zeichen, ≈ 4.000 Tokens,
+etwa 1 ct bei 3 $/M Input) für Auszüge und Sätze zusammen; die vier
+meistzitierten Quellen bis 1.200 Zeichen, die übrigen bis 500, unter 200 kein
+Auszug mehr. Jede Quelle bleibt gelistet und zitierbar, auch ohne Auszug.
+Gebundene Läufe (nicht Kontomodus) geben Auszügen nur den Platz, den
+`context_chars` nach dem übrigen Kontext lässt. Kein Modellaufruf, keine
+Suche, keine Kosten außer den Input-Tokens des Antwortschritts.
+
+**Prompt.** `AGENT_ANSWER_PROMPT` erklärt die Felder: Behauptungen der
+Antworten an den Auszügen prüfen; eine Zahl, ein Datum, eine Bedingung im
+Auszug wiegt schwerer als die Paraphrase einer Antwort; was ein Auszug nicht
+zeigt, ist unbestätigt, nicht widerlegt; wo der genaue Wortlaut zählt, ein
+paar Wörter aus dem Auszug in Anführungszeichen mit URL zitieren, nie Wörter,
+die in keinem Auszug stehen. Zitiert wird weiter per URL (keine `[S1]`-Marken).
+
+**Nur im Speicher.** Quelltexte, Seiten und Auszüge leben je Turn in
+`ComparisonTools.source_evidence`; gespeichert, gestreamt und an Judges
+gegeben werden sie nicht. Quellen jenseits der ersten vier je Antwort ruft
+der Antwortschritt nach Zitierhäufigkeit ab, innerhalb derselben Grenzen.
+`ComparisonTools.close` verwirft am Laufende Abrufe, die noch nicht begonnen
+haben. Google-Daten-Chats suchen nicht und haben deshalb keine Auszüge.
 
 ## Persistenz, Stop und Recovery
 

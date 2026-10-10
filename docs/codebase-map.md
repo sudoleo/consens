@@ -2706,6 +2706,13 @@ bleibt nur die ungeprüfte Teilantwort erhalten, ohne gestartete Judges.
 Antwort-Prompt `prompt_defaults.AGENT_ANSWER_PROMPT` (Journalist, Treue zur
 Substanz, Uneinigkeit nur wo sie die Entscheidung ändert, Format/Quellen) plus
 Datum und Modellidentität; der Consensus-Modus-Prompt wirkt hier nicht mehr.
+Seit 2026-10-10 nennen die Antworten im Evidenzblock ihre Quellen nur per URL;
+`sources` führt jede zitierte Quelle einmal mit `cited_by`, `supports`
+(gestützte Antwortsätze) und `excerpt` (Originalauszug), gebaut von
+`agent_source_evidence.py` (siehe agent-mode.md, „Quellenauszüge für die
+Antwort“). `AgentCompletion` behält dafür bis zu `ANSWER_SOURCES_MAX` (10)
+Quellen je Aufruf und in `citations` Zitattext und Position, beides nur im
+Speicher; gespeichert und gestreamt werden weiter nur URL und Titel.
 **Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
 Steuer-Prompt (Vergleichspflicht, Aufgabe formulieren: „was die Frage festlegt,
 nicht was sie beantwortet“, Suche, Tiefe, next_step, status_update); das frühere
@@ -5540,6 +5547,7 @@ app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
+  agent_source_evidence.py   Quellenauszüge für den Agent-Antwortschritt: Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen

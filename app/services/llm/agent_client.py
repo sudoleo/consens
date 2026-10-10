@@ -138,6 +138,17 @@ REASONING_STORAGE_CHARS = 32_000
 # Longer output is cut here and finishes as "length", like a token limit, so a
 # long answer is kept as truncated instead of failing the whole step.
 TEXT_STORAGE_CHARS = 100_000
+# Distinct cited URLs one model call keeps. A comparison answer may search up
+# to three rounds of five results; five sources cut off the evidence of a
+# thorough answer before the synthesis saw it (2026-10-10).
+ANSWER_SOURCES_MAX = 10
+# Source text OpenRouter attaches to a URL citation (``url_citation.content``):
+# Exa highlights up to the requested 2000 characters, other engines measured
+# up to ~4000. Kept in memory for the answer step only, never stored or
+# streamed (see agent_source_evidence).
+CITATION_CONTENT_CHARS = 4000
+# Citation records per call; providers repeat cumulative annotation snapshots.
+CITATIONS_MAX = 40
 
 
 def _metadata(model):
@@ -486,6 +497,10 @@ class AgentCompletion:
         self.step_id = "completion:0"
         self.tool_calls = []
         self.sources = []
+        # Per citation: the cited URL, its source text and where the answer
+        # cites it. Transient evidence for the answer step (see _annotations).
+        self.citations = []
+        self._citation_keys = set()
         self._tool_parts = {}
         self._raw_usage = {}
         self._final_usage_fields = set()
@@ -653,9 +668,33 @@ class AgentCompletion:
                 valid = parsed.scheme in {"https", "http"} and parsed.hostname and not parsed.username and not parsed.password
             except ValueError:
                 valid = False
-            if valid and len(self.sources) < 5 and not any(s["url"] == url for s in self.sources):
+            if not valid:
+                continue
+            known = any(s["url"] == url for s in self.sources)
+            if not known and len(self.sources) < ANSWER_SOURCES_MAX:
                 title = value.get("title")
                 self.sources.append({"url": url, "title": title[:200] if isinstance(title, str) else parsed.hostname})
+                known = True
+            if known:
+                self._citation(url, value)
+
+    def _citation(self, url, value):
+        """Keep where the answer cites ``url`` and the source text sent with it.
+
+        Offsets index the final answer text; some native-search adapters send
+        0/0. The text length seen so far is the fallback anchor, as in the
+        Consensus stream (streaming._stream_openrouter_chat_completion)."""
+        def offset(name):
+            number = value.get(name)
+            return number if type(number) is int and number >= 0 else None
+        key = (url, offset("start_index"), offset("end_index"))
+        if key in self._citation_keys or len(self.citations) >= CITATIONS_MAX:
+            # Repeated cumulative snapshots: the first is closest to its claim.
+            return
+        self._citation_keys.add(key)
+        content = value.get("content")
+        self.citations.append({"url": url, "content": content[:CITATION_CONTENT_CHARS] if isinstance(content, str) else "",
+                               "start_index": key[1], "end_index": key[2], "fallback_end_index": len(self.text)})
 
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
                native_searches=0, allow_tool_calls=False, prompt_cache=True):
