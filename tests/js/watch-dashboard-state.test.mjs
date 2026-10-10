@@ -126,4 +126,56 @@ describe("dashboard render", () => {
     expect(body.textContent).toContain("Why a Watch, not a scheduled prompt");
     expect(body.textContent).not.toMatch(/\/100/);
   });
+
+  it("shows the source's picture beside the question and removes it for good", async () => {
+    const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
+    const { window } = harness;
+    window.history.replaceState(null, "", "/app/watches");
+    window.auth.currentUser.getIdToken = async () => "token";
+    const imageUrl = "/api/watch/WatchImage0001/image/" + "a".repeat(20);
+    const watches = [
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "WatchImage0001", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",
+        image: {
+          url: imageUrl, width: 320, height: 240,
+          source_url: "https://shop.test/p/1", source_host: "shop.test"
+        }
+      }),
+      // Only our own image route is ever rendered.
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "w2", question: "Is GPT-6 Sol better value?", share_path: "/s/b",
+        image: { url: "https://tracker.test/pixel.png", source_url: "https://tracker.test" }
+      })
+    ];
+    const calls = [];
+    window.fetch = vi.fn(async (path, options = {}) => {
+      calls.push([options.method || "GET", String(path)]);
+      return {
+        ok: true,
+        json: async () => String(path).includes("/api/my/watches")
+          ? { watches: watches, limits: { plan: "free", active_count: 2, active_limit: 3 } }
+          : {}
+      };
+    });
+
+    await window.App.watchDashboard.render();
+
+    const body = window.document.getElementById("watchDashBody");
+    const figures = body.querySelectorAll(".wd-image");
+    expect(figures.length).toBe(1);
+    const figure = figures[0];
+    expect(figure.closest(".wd-subject").querySelector(".wd-question a").textContent)
+      .toBe("Adios Pro 4 in 44.5 under 140 euros?");
+    const img = figure.querySelector("img");
+    expect(img.getAttribute("src")).toBe(imageUrl);
+    expect(img.alt).toBe("");
+    const frame = figure.querySelector("a.wd-image-frame");
+    expect(frame.href).toBe("https://shop.test/p/1");
+    expect(frame.rel).toContain("noreferrer");
+    expect(frame.getAttribute("aria-label")).toBe("Image from shop.test");
+
+    figure.querySelector(".wd-image-remove").click();
+    await vi.waitFor(() => expect(body.querySelector(".wd-image")).toBeNull());
+    expect(calls).toContainEqual(["DELETE", "/api/watch/WatchImage0001/image"]);
+  });
 });

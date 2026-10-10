@@ -20,6 +20,7 @@ from app.core.entitlements import TIER_PRO
 from app.core.security import db_firestore
 from app.services import (
     drift_signal, notification_outbox, opinion_map, persistence_guard, share_snapshots,
+    watch_images,
 )
 
 
@@ -295,6 +296,7 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "resolution": _serialize_resolution(data.get("resolution")),
         "last_probe": _serialize_probe(data.get("last_probe")),
         "query_first": data.get("query_first") is True,
+        "image": watch_images.image_view(watch_id, data),
         "awaiting_first_run": bool(
             share.get("awaiting_first_watch_run")
             and not data.get("last_successful_run_id")
@@ -985,6 +987,7 @@ def _delete_watch_record(
     unique_ref = _unique_ref(db, uid, uniqueness_key)
     share_id = str(initial.get("share_id") or "")
     share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
+    image_ref = db.collection(watch_images.WATCH_IMAGES_COLLECTION).document(watch_id)
 
     def remove(transaction):
         if not allow_account_deletion:
@@ -1010,6 +1013,7 @@ def _delete_watch_record(
         active_count = _safe_count((owner_state or {}).get("active_count"))
         was_active = current.get("status") == "active"
         transaction.delete(watch_ref)
+        transaction.delete(image_ref)
         unique_data = unique_snapshot.to_dict() if unique_snapshot.exists else {}
         if str((unique_data or {}).get("watch_id") or "") == watch_id:
             transaction.delete(unique_ref)
@@ -1028,6 +1032,7 @@ def _delete_watch_record(
         return True, revoked
 
     deleted, revoked = _run_transaction(db, remove)
+    watch_images.forget(watch_id)
     if revoked:
         share_snapshots.invalidate_share_cache(share_id)
     return deleted
@@ -1037,6 +1042,29 @@ def delete_watch(uid: str, watch_id: str, db=None):
     db = db if db is not None else db_firestore
     if not _delete_watch_record(watch_id, expected_uid=uid, db=db):
         raise WatchError("not_found", "Watch not found.")
+
+
+def dismiss_watch_image(uid: str, watch_id: str, db=None) -> None:
+    """Der Owner nimmt das Bild weg; für diese Watch wird nie wieder eins gesucht."""
+    db = db if db is not None else db_firestore
+    ref, _data = _owned_watch(uid, watch_id, db)
+    image_ref = db.collection(watch_images.WATCH_IMAGES_COLLECTION).document(watch_id)
+
+    def dismiss(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
+        snapshot = ref.get(transaction=transaction)
+        current = snapshot.to_dict() if snapshot.exists else None
+        if not current or current.get("owner_uid") != uid:
+            raise WatchError("not_found", "Watch not found.")
+        transaction.delete(image_ref)
+        transaction.update(ref, {"image": {
+            "status": watch_images.STATUS_DISMISSED, "dismissed_at": utcnow(),
+        }})
+
+    _run_transaction(db, dismiss)
+    watch_images.forget(watch_id)
 
 
 def pause_watch(uid: str, watch_id: str, db=None) -> dict:
@@ -1159,14 +1187,14 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
         data = doc.to_dict() or {}
         if data.get("status") not in {"active", "paused", "paused_error", WATCH_STATUS_RESOLVED}:
             continue
-        candidates.append(data)
+        candidates.append((doc.id, data))
     if not candidates:
         return None
     candidates.sort(
-        key=lambda data: data.get("created_at") if isinstance(data.get("created_at"), datetime) else datetime.min.replace(tzinfo=timezone.utc),
+        key=lambda item: item[1].get("created_at") if isinstance(item[1].get("created_at"), datetime) else datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
-    data = candidates[0]
+    watch_id, data = candidates[0]
     return {
         "status": data.get("status") or "paused",
         "interval": data.get("interval") or "weekly",
@@ -1186,6 +1214,8 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
         # pages are never rendered for anyone else.
         "condition": str(data.get("condition") or "")[:WATCH_CONDITION_MAX_CHARS],
         "resolution": data.get("resolution") if isinstance(data.get("resolution"), dict) else None,
+        # Nur die Vorschau aus den Quellen; nie Teil von OG-Karte oder JSON-LD.
+        "image": watch_images.image_view(watch_id, data),
     }
 
 

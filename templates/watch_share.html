@@ -91,11 +91,24 @@
   {% endmacro %}
 
   <main class="page-shell wp-shell" data-math-render>
-    <header class="wp-head">
+    {# Das Bild zeigt den Gegenstand, um den es geht (Produktseite unter den
+       Quellen, services/watch_images.py) -- oder es fehlt. Ausgeliefert von
+       consens.io, verlinkt auf seine Quelle; nie in og:image/JSON-LD. #}
+    {% set watch_image = watch_page.image %}
+    <header class="wp-head{% if watch_image %} has-image{% endif %}">
+      <div class="wp-head-text">
       <p class="wp-kicker"><span class="wp-dot is-{{ watch_page.status }}" aria-hidden="true"></span>Watch{% if watch_page.interval %} · checked {{ watch_page.interval }}{% endif %}{% if is_private %} · private{% endif %}</p>
       <!-- Lange Fragen klappen auf drei Zeilen ein; ohne JS bleibt der volle Text. -->
       <h1 id="shareQuestion" class="wp-question share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
       <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
+      </div>
+      {% if watch_image %}
+      <figure class="wp-image">
+        {% if watch_image.source_url %}<a href="{{ watch_image.source_url }}" target="_blank" rel="nofollow noopener noreferrer" title="Image: {{ watch_image.source_host }}" aria-label="Image from {{ watch_image.source_host }}">{% endif %}
+        <img src="{{ watch_image.url }}" alt="" width="{{ watch_image.width }}" height="{{ watch_image.height }}" decoding="async">
+        {% if watch_image.source_url %}</a>{% endif %}
+      </figure>
+      {% endif %}
     </header>
 
     <section class="wp-state is-{{ watch_state.tone }}" aria-label="What this Watch found">

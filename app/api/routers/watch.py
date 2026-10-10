@@ -3,7 +3,7 @@ import html
 import logging
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
@@ -12,7 +12,8 @@ from app.core.entitlements import entitlements_for
 from app.core.security import extract_id_token, get_user_tier, verify_user_token
 from app.core.site import SITE_URL
 from app.services import (
-    mailer, telegram_watch, watch_brief, watch_followers, watch_scheduler, watch_service,
+    mailer, telegram_watch, watch_brief, watch_followers, watch_images, watch_scheduler,
+    watch_service,
 )
 
 
@@ -71,6 +72,13 @@ def create_watch(request: Request, data: dict = Body(...)):
     except Exception as exc:
         logging.error("create_watch failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error creating watch")
+    if not watch.get("query_first"):
+        # Aus einer fertigen Antwort: deren Quellen können das Bild schon jetzt
+        # liefern. Läuft im Hintergrund und kann die Antwort nie verzögern.
+        try:
+            watch_images.schedule_for_new_watch(watch["id"])
+        except Exception as exc:
+            logging.warning("watch image scheduling failed category=%s", safe_exception(exc))
     return {"status": "success", "watch": watch}
 
 
@@ -233,6 +241,45 @@ def remove_watch(request: Request, watch_id: str, data: dict = Body(default={}))
             "Morning Brief cleanup after final watch failed category=%s",
             safe_exception(exc),
         )
+    return {"status": "success"}
+
+
+@router.get("/api/watch/{watch_id}/image/{token}")
+@limiter.limit("120/minute")
+def watch_image(request: Request, watch_id: str, token: str):
+    """Die gespeicherte Vorschau, nur von consens.io (kein Abruf beim Shop).
+
+    Ohne Login, weil <img> keinen Token mitschicken kann; die URL trägt die
+    zufällige Watch-ID plus Inhalts-Token und steht nur dort, wo die Watch
+    ohnehin sichtbar ist. Zwischenspeicher nur im Browser (private).
+    """
+    try:
+        found = watch_images.load_image(watch_id, token)
+    except Exception as exc:
+        logging.warning("watch_image failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Image unavailable")
+    if not found:
+        raise HTTPException(status_code=404, detail="Not found")
+    content, content_type = found
+    return Response(
+        content=content,
+        media_type=content_type,
+        # nosniff und CSP setzt die Security-Middleware für jede Antwort.
+        headers={"Cache-Control": "private, max-age=2592000, immutable"},
+    )
+
+
+@router.delete("/api/watch/{watch_id}/image")
+@limiter.limit("10/minute")
+def dismiss_watch_image(request: Request, watch_id: str, data: dict = Body(default={})):
+    uid = _uid(request, data)
+    try:
+        watch_service.dismiss_watch_image(uid, watch_id)
+    except watch_service.WatchError as exc:
+        _raise(exc)
+    except Exception as exc:
+        logging.error("dismiss_watch_image failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Error removing image")
     return {"status": "success"}
 
 

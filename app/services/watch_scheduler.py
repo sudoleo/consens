@@ -14,7 +14,7 @@ from app.core.observability import correlation_scope, record_metric, safe_except
 from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
     drift_signal, evidence_change, mailer, notification_delivery, notification_outbox, opinion_map,
-    share_snapshots, watch_brief, watch_followers, watch_probe, watch_service,
+    share_snapshots, watch_brief, watch_followers, watch_images, watch_probe, watch_service,
 )
 from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
@@ -476,6 +476,18 @@ async def run_watch_tick() -> int:
                     )
                     continue
                 staged_ids = list(staged.ids)
+                try:
+                    # Bild aus den Quellen dieser Prüfung, im Hintergrund; ein
+                    # Fehler hier darf die gespeicherte Prüfung nie anfassen.
+                    watch_images.schedule_after_run(
+                        watch_id, claimed, result.get("sources") or [],
+                        claimed["question"], claimed.get("condition") or "",
+                    )
+                except Exception as exc:
+                    logging.warning(
+                        "Consensus Watch image scheduling failed category=%s",
+                        safe_exception(exc),
+                    )
             except Exception as exc:
                 logging.error(
                     "Consensus Watch run failed for %s category=%s",

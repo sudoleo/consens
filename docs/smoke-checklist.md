@@ -753,6 +753,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       seitliches Scrollen, auch nicht mit sehr langen Beleg-Titeln. „Read this
       version“ öffnet eine Vollversion, `?version=original` zeigt „Answer from …“
       mit Rücklink. Eine normale Shared Page ohne Watch bleibt unverändert.
+- [ ] Watch-Bild: eine Watch zu einem konkreten Produkt (z. B. ein Laufschuh mit
+      Modellnummer) zeigt nach ihrem ersten Check im Dashboard und auf der
+      Watch-Seite rechts neben der Frage ein Foto des Produkts. Es lädt von
+      `/api/watch/…/image/…` (nicht vom Shop) und verlinkt auf die Quellseite.
+      Auf 375 px steht es auf der Seite neben der Kicker-Zeile, die Frage bleibt
+      voll breit. Eine abstrakte Watch („Is GPT-6 better value …?“) hat kein Bild.
+      Das × im Dashboard (Hover, auf Touch immer sichtbar) entfernt das Bild
+      dauerhaft, auch nach dem nächsten Check. `og:image` und JSON-LD der Seite
+      enthalten das Bild nie.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
       ein Check mit `moved` sendet genau eine Multipart-Mail „Moved: …“ als
       Änderungsprotokoll (What changed → Why mit Quellen → What held → Waiting

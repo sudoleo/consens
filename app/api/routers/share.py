@@ -210,6 +210,7 @@ def _build_watch_page_meta(meta, history_points):
         "created": _watch_datetime_view(meta.get("created_at"), timezone_name),
         "goal": str(meta.get("condition") or ""),
         "resolution": _resolution_view(meta.get("resolution"), timezone_name),
+        "image": meta.get("image") if isinstance(meta.get("image"), dict) else None,
     }
 
 

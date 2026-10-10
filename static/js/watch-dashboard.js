@@ -221,6 +221,54 @@
     return list;
   }
 
+  // The thing the watch is about, when one of its sources is a product (or
+  // similar) page: services/watch_images.py picks it, we only show it. No
+  // image means none was found, which is the normal case for abstract
+  // questions. The × removes it for good.
+  const IMAGE_PATH = /^\/api\/watch\/[A-Za-z0-9]+\/image\/[0-9a-f]{20}$/;
+
+  function buildImage(watch) {
+    const image = watch.image;
+    if (!image || !IMAGE_PATH.test(image.url || "")) return null;
+    const figure = el("figure", "wd-image");
+    const host = image.source_host || hostOf(image.source_url);
+    const frame = el(/^https?:\/\//.test(image.source_url || "") ? "a" : "span", "wd-image-frame");
+    if (frame.tagName === "A") {
+      frame.href = image.source_url;
+      frame.target = "_blank";
+      frame.rel = "noopener noreferrer";
+      frame.setAttribute("aria-label", host ? "Image from " + host : "Image source");
+    }
+    if (host) frame.title = "Image: " + host;
+    const img = el("img");
+    img.src = image.url;
+    img.alt = "";
+    img.decoding = "async";
+    if (image.width && image.height) {
+      img.width = image.width;
+      img.height = image.height;
+    }
+    img.addEventListener("error", () => figure.remove());
+    frame.appendChild(img);
+    figure.appendChild(frame);
+    const remove = ui().makeButton("", "wd-image-remove", async function () {
+      this.disabled = true;
+      try {
+        await ui().api("DELETE", "/api/watch/" + encodeURIComponent(watch.id) + "/image");
+        watch.image = null;
+        figure.remove();
+      } catch (error) {
+        this.disabled = false;
+        ui().popup("Could not remove the image: " + error.message);
+      }
+    });
+    remove.setAttribute("aria-label", "Remove image");
+    remove.title = "Remove image";
+    remove.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
+    figure.appendChild(remove);
+    return figure;
+  }
+
   function scheduleBlock(watch) {
     const side = el("div", "wd-item-side");
     if (watch.status === "active" && watch.next_run_at) {
@@ -281,7 +329,11 @@
     link.target = "_blank";
     link.rel = "noopener";
     question.appendChild(link);
-    main.appendChild(question);
+    const subject = el("div", "wd-subject");
+    subject.appendChild(question);
+    const image = buildImage(watch);
+    if (image) subject.appendChild(image);
+    main.appendChild(subject);
 
     const goal = goalLine(watch);
     if (goal) {

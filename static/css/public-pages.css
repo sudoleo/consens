@@ -1615,6 +1615,25 @@ canvas {
   line-height: var(--line-height-heading);
 }
 
+/* Das Bild des Gegenstands (services/watch_images.py), rechts neben der Frage.
+   Es behält sein Format (hohe Bilder gedeckelt); Weiß nur hinter
+   transparenten Produktfotos. */
+.wp-head.has-image { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: start; }
+.wp-head-text { min-width: 0; }
+.wp-image { width: 136px; margin: 4px 0 0; }
+.wp-image a { display: block; border-radius: var(--radius-md); }
+.wp-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 136px;
+  border-radius: var(--radius-md);
+  background: #fff;
+  outline: 1px solid var(--line-soft);
+  outline-offset: -1px;
+  object-fit: contain;
+}
+
 /* Der Stand: eine Zeile, die sagt, ob sich die Antwort bewegt hat. */
 .wp-state { margin: 22px 0 0; padding: 18px 20px; border-radius: var(--radius-lg); background: var(--raise); }
 .wp-state-headline {
@@ -1740,6 +1759,15 @@ canvas {
 
 @media (max-width: 700px) {
   .wp-shell { width: calc(100% - 32px); padding-top: 26px; }
+  /* Schmal: das Bild steht neben der Kicker-Zeile, die Frage behält die volle
+     Breite (sonst klappt sie wegen des Bildes früher auf drei Zeilen ein). */
+  .wp-head.has-image { column-gap: 14px; row-gap: 0; }
+  .wp-head.has-image .wp-head-text { display: contents; }
+  .wp-head.has-image .wp-kicker { grid-column: 1; grid-row: 1; align-self: center; }
+  .wp-head.has-image .wp-image { grid-column: 2; grid-row: 1; width: 72px; margin: 0; }
+  .wp-head.has-image .wp-question,
+  .wp-head.has-image .share-question-more { grid-column: 1 / -1; justify-self: start; }
+  .wp-image img { max-height: 72px; }
   .wp-chart { display: none; }
   .wp-state { margin-top: 18px; padding: 16px; }
   .wp-follow { padding: 16px; }
