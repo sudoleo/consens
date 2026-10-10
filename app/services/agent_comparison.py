@@ -18,7 +18,8 @@ from pydantic.json_schema import SkipJsonSchema
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
-from app.services.agent_source_evidence import EXCERPT_BUDGET_CHARS, PAGE_WAIT_SECONDS, SourceEvidence, source_entries
+from app.services.agent_source_evidence import (EXCERPT_BUDGET_CHARS, MIN_EXCERPT_CHARS, PAGE_WAIT_SECONDS,
+                                                SourceEvidence, source_entries)
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_provider_limits import ModelOutputLimit
 from app.services.llm.agent_client import metered_model, with_reasoning_summary
@@ -666,18 +667,39 @@ class ComparisonTools:
                      + json.dumps(evidence, ensure_ascii=False)}]
         time_left = getattr(self.loop, "answer_time_left", None)
         left = time_left() if time_left else None
-        pooled = self.source_evidence.collect(
-            self.comparisons, check=lambda: self.loop._check(self.loop.cancellation),
-            wait_seconds=PAGE_WAIT_SECONDS if left is None else max(0.0, min(PAGE_WAIT_SECONDS, left)))
-        budget = EXCERPT_BUDGET_CHARS
-        if not self.loop.policy.account_budget_only:
-            # Bounded runs refuse a step beyond context_chars: excerpts get
-            # only the room the rest of the evidence leaves (JSON escaping
-            # takes its share).
-            evidence["sources"] = source_entries(pooled, budget=0)
-            room = self.loop.policy.context_chars - len(json.dumps(messages(), ensure_ascii=False))
-            budget = max(0, min(budget, int(room * .85)))
-        evidence["sources"] = source_entries(pooled, budget=budget)
+        stopped = []
+
+        def check():
+            try:
+                self.loop._check(self.loop.cancellation)
+            except BaseException:
+                stopped.append(True)
+                raise
+        try:
+            pooled = self.source_evidence.collect(
+                self.comparisons, check=check,
+                wait_seconds=PAGE_WAIT_SECONDS if left is None else max(0.0, min(PAGE_WAIT_SECONDS, left)))
+            budget = EXCERPT_BUDGET_CHARS
+            if not self.loop.policy.account_budget_only:
+                # Bounded runs refuse a step beyond context_chars: excerpts get
+                # only the room the rest of the evidence leaves (JSON escaping
+                # takes its share).
+                evidence["sources"] = source_entries(pooled, budget=0)
+                room = self.loop.policy.context_chars - len(json.dumps(messages(), ensure_ascii=False))
+                budget = max(0, min(budget, int(room * .85)))
+            evidence["sources"] = source_entries(pooled, budget=budget)
+            while (budget and not self.loop.policy.account_budget_only
+                   and len(json.dumps(messages(), ensure_ascii=False)) > self.loop.policy.context_chars):
+                # Escaping inside the evidence string costs more than estimated.
+                budget = budget // 2 if budget >= 2 * MIN_EXCERPT_CHARS else 0
+                evidence["sources"] = source_entries(pooled, budget=budget)
+        except Exception as exc:
+            if stopped:
+                raise
+            # Excerpts only enrich the paid comparisons; the answers still
+            # name every source by URL.
+            logging.warning("Agent answer step continues without source excerpts category=%s", safe_exception(exc))
+            evidence["sources"] = []
         return messages()
 
     def checked_text_evidence(self):

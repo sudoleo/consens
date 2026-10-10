@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 import re
 import threading
 import time
+from urllib.parse import urlsplit
 
 from app.core.observability import record_metric
 from app.services.llm.citations import citation_end
@@ -37,7 +38,7 @@ LEAD_SOURCES, LEAD_EXCERPT_CHARS = 4, 1200
 EXCERPT_CHARS = 500
 MIN_EXCERPT_CHARS = 200
 # Search text shorter than this is a teaser, not evidence: the page is
-# fetched instead.
+# fetched instead. Page text shorter than this is no evidence either.
 MIN_SEARCH_TEXT_CHARS = 200
 CLAIMS_PER_SOURCE, CLAIM_CHARS = 2, 300
 # Page fetches cost no tokens, only time and outbound requests: the first
@@ -51,9 +52,10 @@ _pages = ThreadPoolExecutor(max_workers=3, thread_name_prefix="agent-source-page
 
 _LINK = re.compile(r"!?\[([^\]\n]*)\]\(\s*<?https?://[^\s)>]*>?\s*\)")
 _BARE_URL = re.compile(r"<?https?://[^\s<>()\[\]]+>?")
-# A citation marker: links or URLs and their brackets, as native search puts
-# them after a claim ("([site](url))") or a model writes them ("[1](url)").
-_MARKER = re.compile(rf"[\s(\[,;]*(?:(?:{_LINK.pattern}|{_BARE_URL.pattern})[\s()\[\],;]*)+")
+# What surrounds links and URLs in a citation marker; a longer span is text.
+_MARKER_SEPARATORS = re.compile(r"[\s()\[\],;]+")
+_MARKER_TAIL = re.compile(r"[)\],;]*")
+MARKER_CHARS = 2000
 # Link text that names the source, not the claim: a domain or a number.
 _SOURCE_LABEL = re.compile(r"\d{0,3}|(?:[\w-]+\.)+[^\W\d_]{2,}(?:/\S*)?")
 _BOUNDARY = re.compile(r"([.!?…])[\"'”’)\]}*_]*(?=\s|$)|\n")
@@ -63,22 +65,47 @@ _ABBREVIATION = re.compile(r"(?:^|\W)(?:\d{1,2}|[^\W\d_])$")
 _EMPTY_BRACKETS = re.compile(r"\(\s*[,;]?\s*\)|\[\s*\]")
 _SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+([.,;:!?…])")
 _LEADING_MARKER = re.compile(r"^(?:#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s*)+")
+# Google grounding counts offsets in UTF-8 bytes (2026-10-10); its sources
+# are redirect URLs on this host.
+_BYTE_OFFSET_HOSTS = {"vertexaisearch.cloud.google.com"}
+# Lone surrogates (a page's "&#55357;", text cut inside an emoji) cannot be
+# encoded as UTF-8: the answer step's request would fail with them.
+_SURROGATES = re.compile(r"[\ud800-\udfff]")
 
 
 def _ranged(text, citation):
-    """Whether the citation's own offsets mark a span of the answer text."""
+    """Whether the citation's own offsets mark a span of the answer text.
+
+    A citation without a span marks when search results arrived (Anthropic's
+    own search, Exa; 2026-10-10), never the claim it supports: it binds none."""
     start, end = citation.get("start_index"), citation.get("end_index")
     return type(end) is int and 0 < end <= len(text) and (start is None or (type(start) is int and 0 <= start < end))
 
 
-def _anchored(text, citation):
-    """Whether the citation marks a position inside the answer text."""
-    if _ranged(text, citation):
-        return True
-    hint = citation.get("fallback_end_index")
-    # The stream position helps only inside the text: at its end it would
-    # bind the source to the last sentence, whatever that says.
-    return type(hint) is int and 0 < hint < len(text)
+def _is_marker(span):
+    """Whether a span is only a citation marker: links or URLs and their
+    brackets, as native search puts them after a claim ("([site](url))") or a
+    model writes them ("[1](url)"). Substitution, not one pattern over the
+    span: a pattern would backtrack exponentially on lists of URLs."""
+    if len(span) > MARKER_CHARS:
+        return False
+    rest, links = _LINK.subn("", span)
+    rest, urls = _BARE_URL.subn("", rest)
+    return bool(links + urls) and not _MARKER_SEPARATORS.sub("", rest)
+
+
+def _source_marker_end(text, start, end):
+    """End of the last source marker in text[start:end] (a link naming its
+    source, or a bare URL), or ``start``."""
+    last, links = start, []
+    for match in _LINK.finditer(text, start, end):
+        links.append(match.span())
+        if _SOURCE_LABEL.fullmatch(match.group(1).strip()):
+            last = max(last, _MARKER_TAIL.match(text, match.end(), end).end())
+    for match in _BARE_URL.finditer(text, start, end):
+        if not any(a <= match.start() < b for a, b in links):
+            last = max(last, _MARKER_TAIL.match(text, match.end(), end).end())
+    return last
 
 
 def _boundaries(text, start=0, end=None):
@@ -105,13 +132,13 @@ def cited_claim(text, citation):
     A span that is only a source marker ends the claim where it starts; after
     a completed sentence the claim covers the sentences of its line back to an
     earlier marker, as native search cites a paragraph once at its end. A span
-    of answer text (Google grounding) is the claim and ends its sentence."""
+    of answer text (Google grounding) is the claim and ends its sentence. A
+    marker's claim never reaches back past another source's marker."""
     text = text or ""
-    if not _anchored(text, citation):
+    if not _ranged(text, citation):
         return ""
     start, end = citation.get("start_index"), citation.get("end_index")
-    marker = (_ranged(text, citation) and type(start) is int
-              and _MARKER.fullmatch(text[start:end]) is not None)
+    marker = type(start) is int and _is_marker(text[start:end])
     anchor = len(text[:start].rstrip(" \t([")) if marker else citation_end(text, citation)
     body = len(text[:anchor].rstrip())
     if not body:
@@ -120,16 +147,23 @@ def cited_claim(text, citation):
     after_sentence = any(stop == body for stop, _ in _boundaries(text, max(0, body - 8), body))
     stop = body if after_sentence else next((stop for stop, _ in _boundaries(text, anchor)), len(text))
     floor = max(0, stop - 4 * CLAIM_CHARS)
+    last_word = next((i for i in range(stop - 1, floor - 1, -1) if text[i].isalnum()), floor)
     starts = [(floor, True)] + [(position, line) for position, line in _boundaries(text, floor, stop)
-                                if re.search(r"\w", text[position:stop])]
+                                if position <= last_word]
+    limit = min(anchor, stop)  # the citation's own marker is no earlier source
     index = len(starts) - 1
+    begin = starts[index][0]
     while marker and after_sentence and index > 0 and not starts[index][1]:
         earlier = starts[index - 1][0]
-        between = text[earlier:starts[index][0]]
-        if _LINK.search(between) or _BARE_URL.search(between) or len(_plain(text[earlier:stop])) > CLAIM_CHARS:
+        if len(_plain(text[earlier:stop])) > CLAIM_CHARS:
             break
         index -= 1
-    claim = _plain(text[starts[index][0]:stop])
+        begin = earlier
+        if _source_marker_end(text, earlier, limit) > earlier:
+            break
+    if marker:
+        begin = _source_marker_end(text, begin, limit)
+    claim = _plain(text[begin:stop])
     if len(claim) > CLAIM_CHARS:
         # The citation marks the sentence's end; keep the part next to it.
         tail = claim[-CLAIM_CHARS:]
@@ -138,27 +172,35 @@ def cited_claim(text, citation):
     return claim
 
 
-def _positions(text, citations):
-    """One answer's citations with positions the claims can trust.
+def _scrub(value):
+    """Text the answer step's request can encode (see _SURROGATES)."""
+    if isinstance(value, str):
+        return _SURROGATES.sub("\ufffd", value)
+    if isinstance(value, list):
+        return [_scrub(item) for item in value]
+    return value
 
-    Google grounding counts UTF-8 bytes: an end past the text's characters
-    but within its bytes shows it, and the answer's offsets are converted.
-    A stream position shared by several sources marks when search results
-    arrived, before the answer wrote its claims (Anthropic's own search,
-    2026-10-10): it binds none of them."""
+
+def _host(url):
+    try:
+        return urlsplit(str(url or "")).hostname
+    except ValueError:
+        return None
+
+
+def _positions(text, citations):
+    """One answer's citations with offsets in characters.
+
+    Google grounding counts UTF-8 bytes, known by its redirect host: its
+    offsets are converted. Other providers count characters."""
     items = [citation for citation in citations or [] if isinstance(citation, dict)]
-    encoded = text.encode("utf-8")
-    if len(encoded) > len(text) and any(type(c.get("end_index")) is int and len(text) < c["end_index"] <= len(encoded)
-                                        for c in items):
+    encoded = text.encode("utf-8", "surrogatepass")
+    if len(encoded) > len(text) and any(_host(c.get("url")) in _BYTE_OFFSET_HOSTS for c in items):
         def char(offset):
-            return len(encoded[:offset].decode("utf-8", "ignore")) if type(offset) is int and offset >= 0 else offset
+            return (len(encoded[:offset].decode("utf-8", "ignore")) if type(offset) is int and offset >= 0
+                    else offset)
         items = [{**c, "start_index": char(c.get("start_index")), "end_index": char(c.get("end_index"))} for c in items]
-    arrivals = {}
-    for citation in items:
-        if not _ranged(text, citation):
-            arrivals.setdefault(citation.get("fallback_end_index"), set()).add(citation.get("url"))
-    return [citation if _ranged(text, citation) or len(arrivals[citation.get("fallback_end_index")]) < 2
-            else {**citation, "fallback_end_index": None} for citation in items]
+    return items
 
 
 def answer_citations(text, citations):
@@ -192,13 +234,16 @@ class PooledSource:
     page: dict | None = None
 
     def text(self):
-        """The text excerpts come from, its origin, and a publication date."""
+        """The text excerpts come from, its origin, and a publication date.
+
+        Shorter text is a teaser or a page shell ("Reddit" from a script
+        page, 2026-10-10), not evidence: the source then has no excerpt."""
         if len(self.content) >= MIN_SEARCH_TEXT_CHARS:
             return self.content, "search", ""
         body = str((self.page or {}).get("text") or "").strip()
-        if body:
+        if len(body) >= MIN_SEARCH_TEXT_CHARS:
             return body, "page", _published(self.page)
-        return self.content, "search" if self.content else "none", ""
+        return "", "none", ""
 
 
 def _published(document):
@@ -233,7 +278,7 @@ def source_entries(pooled, budget=EXCERPT_BUDGET_CHARS):
                     entry["published"] = published
                 remaining -= len(excerpt) + claim_chars
                 lead += 1
-        entries.append(entry)
+        entries.append({key: _scrub(value) for key, value in entry.items()})
     return entries
 
 

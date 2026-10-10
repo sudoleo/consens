@@ -259,11 +259,11 @@ def is_search_result(citation: Dict[str, Any]) -> bool:
 
     Measured 2026-10-10 (docs/agent-mode.md, "Quellenauszüge"): Anthropic's
     own search and Exa send every result with 0/0 offsets when the results
-    arrive, before the answer cites them; OpenAI and Gemini cite spans.
+    arrive, before the answer cites them; OpenAI and Gemini cite spans. Only
+    0/0 or missing offsets count: a zero-width or broken span inside the text
+    (50/50) still points at a claim, and text before it must never be dropped.
     """
-    start = _integer_index(citation.get("start_index"))
-    end = _integer_index(citation.get("end_index"))
-    return not (end is not None and end > 0 and (start is None or 0 <= start < end))
+    return not _integer_index(citation.get("start_index")) and not _integer_index(citation.get("end_index"))
 
 
 def presearch_end(text: str, results_at: Any) -> int:
@@ -287,10 +287,10 @@ def shift_citation(citation: Dict[str, Any], cut: int, hint: str = "fallback_end
     moved = dict(citation)
     if not is_search_result(citation):
         start = _integer_index(citation.get("start_index"))
-        end = _integer_index(citation.get("end_index")) - cut
-        if end > 0:
+        end = _integer_index(citation.get("end_index"))
+        if end is not None and end - cut > 0:
             moved["start_index"] = None if start is None else max(0, start - cut)
-            moved["end_index"] = end
+            moved["end_index"] = end - cut
         else:
             moved["start_index"] = moved["end_index"] = 0
     position = _integer_index(citation.get(hint))

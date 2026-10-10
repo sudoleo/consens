@@ -31,10 +31,10 @@ def test_claim_is_the_cited_sentence_without_link_syntax():
     assert cited_claim("A: costs 4.5 EUR. B: costs 3 EUR.", citation(end=17)) == "A: costs 4.5 EUR."
 
 
-def test_claim_uses_the_stream_position_only_inside_the_answer():
-    # Native search adapters send 0/0: the text seen so far anchors the claim.
-    assert cited_claim(ANSWER, citation(start=0, end=0, hint=25)).startswith("The tariff is 4.5%")
-    # Without a position inside the text there is no claim, never the last sentence.
+def test_a_citation_without_span_binds_no_claim():
+    # 0/0 marks when search results arrived (Anthropic's own search, Exa),
+    # before the claims: its stream position names no sentence.
+    assert cited_claim(ANSWER, citation(start=0, end=0, hint=25)) == ""
     assert cited_claim(ANSWER, citation(start=0, end=0, hint=len(ANSWER))) == ""
     assert cited_claim(ANSWER, citation(start=0, end=0)) == ""
     assert cited_claim("", citation(end=3)) == ""
@@ -65,7 +65,10 @@ def test_claim_before_a_source_marker_is_the_cited_statement_not_the_marker():
     # The claim reaches back on its line only to an earlier marker.
     first, second = "([a.org](https://a.org/1))", "([b.org](https://b.org/2))"
     text = f"A holds. {first} B holds. C holds too. {second}"
-    assert cited_claim(text, marker(text, second)) == "C holds too."
+    assert cited_claim(text, marker(text, second)) == "B holds. C holds too."
+    text = f"A gilt. {first} B gilt. {second}"
+    assert cited_claim(text, marker(text, second)) == "B gilt."
+    assert cited_claim(text, marker(text, first)) == "A gilt."
     # Inside a sentence the marker leaves the whole sentence; a link that
     # names the claim keeps its text, one that names the source goes.
     link = "[bundesbank.de](https://www.bundesbank.de/x)"
@@ -78,17 +81,40 @@ def test_claim_before_a_source_marker_is_the_cited_statement_not_the_marker():
 
 
 def test_positions_follow_the_provider_not_the_stream():
-    # Google grounding counts UTF-8 bytes: an end past the characters converts.
+    # Google grounding (its redirect host) counts UTF-8 bytes; read as
+    # characters, a span ends inside the next sentence or past the text.
+    google = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AB1"
     text = "* Der Einlagesatz für Banken: 2,50 %\n* Nächste Zinsentscheidung: 29. Oktober 2026"
     size = len(text.encode())
-    cited = answer_citations(text, [citation("https://g.example/2", end=size, start=size - 30)])
-    assert cited["https://g.example/2"]["claims"] == ["Nächste Zinsentscheidung: 29. Oktober 2026"]
-    # Sources that arrived together came with the search results, before the
-    # claims (Anthropic's own search): their stream position binds none.
+    cited = answer_citations(text, [citation(google, end=size, start=size - 30)])
+    assert cited[google]["claims"] == ["Nächste Zinsentscheidung: 29. Oktober 2026"]
+    text = "The ECB’s deposit rate rose to 2.5%. The next meeting is on 29 October. Fazit: steady."
+    first = len("The ECB’s deposit rate rose to 2.5%.".encode())
+    cited = answer_citations(text, [citation(google, start=0, end=first)])
+    assert cited[google]["claims"] == ["The ECB’s deposit rate rose to 2.5%."]
+    # Other providers count characters, also past an emoji.
+    text = "Rates 😀 rose to 2.5%. Next meeting soon."
+    end = len("Rates 😀 rose to 2.5%.")
+    assert answer_citations(text, [citation("https://o.example/a", start=0, end=end)])[
+        "https://o.example/a"]["claims"] == ["Rates 😀 rose to 2.5%."]
+    # Search results arrive without a span: no claim, their text stays.
     batch = answer_citations(ANSWER, [citation(f"https://example.org/{i}", "text", 0, 0, hint=25) for i in range(3)])
     assert all(entry["claims"] == [] and entry["content"] == "text" for entry in batch.values())
-    single = answer_citations(ANSWER, [citation("https://example.org/a", "text", 0, 0, hint=25)])
-    assert single["https://example.org/a"]["claims"] == ["The tariff is 4.5% since March 2026."]
+
+
+def test_claims_stay_fast_and_excerpts_encodable_on_hostile_text():
+    import time
+    # A span of many comma-separated URLs once backtracked exponentially.
+    urls = ", ".join(f"https://s{i}.com/p" for i in range(60)) + " und mehr."
+    text = "Intro. " + urls
+    started = time.monotonic()
+    assert cited_claim(text, citation(start=7, end=len(text))).endswith("und mehr.")
+    assert time.monotonic() - started < 1
+    # A page's "&#55357;" decodes to a lone surrogate; the request body must encode.
+    body = long_text("the tariff of 4.5 percent \ud83d", 12)
+    entry = source_entries([pooled("https://example.org/a", ["openai"], 0, content=body, claims=["The tariff \udc00"])])[0]
+    json.dumps(entry, ensure_ascii=False).encode("utf-8")
+    assert "\ufffd" in entry["excerpt"] and entry["supports"] == ["The tariff \ufffd"]
 
 
 def test_answer_citations_merge_repeated_urls_by_canonical_form():
@@ -125,6 +151,9 @@ def test_entries_rank_by_families_keep_every_source_and_stay_in_budget():
     assert len(with_excerpt[0]["excerpt"]) <= LEAD_EXCERPT_CHARS
     assert all(line in body for e in with_excerpt for line in e["excerpt"].splitlines())
     assert "excerpt" not in next(e for e in entries if e["url"] == "https://example.org/empty")
+    # A teaser or a script page's shell ("Reddit") is no excerpt.
+    shell = pooled("https://reddit.example/r", ["gemini"], 0, content="Reddit thread", page={"text": "Reddit"})
+    assert shell.text() == ("", "none", "") and "excerpt" not in source_entries([shell])[0]
     assert source_entries(sources, budget=0) == [{k: v for k, v in e.items() if k in {"url", "title", "cited_by"}}
                                                  for e in entries]
 

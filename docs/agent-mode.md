@@ -830,9 +830,8 @@ Quelltext (`content`) und die Stelle der Antwort, die er stützt
 (`start_index`/`end_index`). `AgentCompletion._annotations` behält bis zu
 `ANSWER_SOURCES_MAX` (10) Quellen je Aufruf (vorher 5; drei Suchrunden à fünf
 Treffer liefen sonst ins Leere) und in `citations` Text (bis 4000 Zeichen) und
-Position. Bei 0/0-Offsets gilt wie im Consensus-Stream die bis dahin
-gestreamte Textlänge (einschließlich des Pakets mit der Annotation) als Anker.
-Live gemessen (2026-10-10, EZB-Frage, je eine Antwort):
+Position (`fallback_end_index`: gestreamte Textlänge einschließlich des
+Pakets mit der Annotation, für `shift_citation`). Live gemessen (2026-10-10, EZB-Frage, je eine Antwort):
 
 | Suche | `content` | Position |
 |---|---|---|
@@ -841,13 +840,16 @@ Live gemessen (2026-10-10, EZB-Frage, je eine Antwort):
 | Anthropic eigene | 200–660 Zeichen Originaltext | 0/0, alle Annotationen zusammen beim Eintreffen der Suchergebnisse |
 | Exa (DeepSeek) | 250–380 Zeichen Highlights | 0/0, vor dem ersten Antwortzeichen |
 
-`_positions` rechnet deshalb Byte-Offsets in Zeichen um (ein Ende hinter den
-Zeichen, aber innerhalb der Bytes zeigt sie an) und verwirft einen
-Stream-Anker, den sich mehrere Quellen teilen: Er markiert die Ankunft der
-Suchergebnisse, nicht die gestützte Aussage. Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
+`_positions` rechnet deshalb die Offsets von Google Grounding (erkannt am
+Redirect-Host, nicht an einem Überlauf: OpenAI zählt Zeichen, auch hinter
+Emojis) von Bytes in Zeichen um. Eine Zitation ohne Spanne (0/0) markiert die
+Ankunft der Suchergebnisse, nicht die gestützte Aussage, und bindet keine; ihr
+Text bleibt Auszug. Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
 Server deshalb die Seite selbst, mit demselben begrenzten, gecachten Abruf wie
 die Quellenprüfung (`source_documents.fetch_document`: nur öffentliche
-Adressen, 5 s, 400 kB). Die Abrufe starten, sobald eine Vergleichsantwort
+Adressen, 5 s, 400 kB; einsame Surrogate wie `&#55357;` werden zu U+FFFD, sonst
+scheitert der UTF-8-Request von Judge oder Antwortschritt; `dns_busy` ist eigene
+Kapazität und wird nicht als Fehler der URL gecacht). Die Abrufe starten, sobald eine Vergleichsantwort
 eintrifft (die ersten vier Quellen je Antwort, höchstens zwölf je Turn, drei
 parallel), also während langsamere Modelle noch schreiben. Der Antwortschritt
 wartet auf den Rest höchstens `PAGE_WAIT_SECONDS` (4 s) und nie über die
@@ -868,7 +870,9 @@ Gemini schreiben erst nach der Suche, ihre Annotationen tragen Spannen; Exa
 liefert die Treffer vor dem ersten Zeichen. Daraus eine Regel in
 `citations.py`, im Agent-Stream (`AgentCompletion`) wie im Consensus-Stream
 (`_stream_openrouter_chat_completion`): Eine URL-Zitation ohne Spanne der
-Antwort (`is_search_result`) markiert die Ankunft von Suchergebnissen; was
+Antwort (`is_search_result`: nur 0/0 oder fehlende Offsets; eine
+Null-Breite-Spanne mitten im Text wie 50/50 zeigt auf eine Aussage und löst
+nichts aus) markiert die Ankunft von Suchergebnissen; was
 vorher geschrieben war (Textlänge vor dem Text ihres Pakets), gehört nicht zur
 Antwort (`presearch_end`). Gestrichen wird nur, wenn danach mehr Antwort folgt
 als davor stand: eine aus dem Gedächtnis geschriebene, danach nur bestätigte
@@ -891,18 +895,26 @@ und Vergleiche gepoolt (kanonische URL), meistzitierte zuerst:
 Antwort mit der Quelle belegt, ohne Links und Quellmarken, je höchstens 300
 Zeichen; `cited_claim`: Ist die Spanne nur eine Quellmarke, endet die Aussage
 davor und reicht hinter einem fertigen Satz auf ihrer Zeile bis zur vorigen
-Marke zurück, wie OpenAI einen Absatz einmal am Ende belegt; eine Spanne aus
-Antworttext ist selbst die Aussage. „16. September“ und „z. B.“ beenden keinen
-Satz) und `excerpt`:
+Marke zurück, wie OpenAI einen Absatz einmal am Ende belegt, nie über die Marke
+einer anderen Quelle; eine Spanne aus Antworttext ist selbst die Aussage.
+„16. September“ und „z. B.“ beenden keinen Satz. Ob eine Spanne nur Marke ist,
+prüft `_is_marker` per Ersetzung statt mit einem Muster über die Spanne, das bei
+URL-Listen exponentiell zurückverfolgte und den Prozess einfror) und `excerpt`:
 Originalpassagen, die `select_passages` für diese Sätze und die Frage aus dem
 Text wählt (Zahlen zählen dreifach, Nachbarabsätze mit Einschränkungen kommen
 mit), nie eine Modellzusammenfassung; bei abgerufenen Seiten zusätzlich
 `published`. Budget: `EXCERPT_BUDGET_CHARS` (16.000 Zeichen, ≈ 4.000 Tokens,
 etwa 1 ct bei 3 $/M Input) für Auszüge und Sätze zusammen; die vier
 meistzitierten Quellen bis 1.200 Zeichen, die übrigen bis 500, unter 200 kein
-Auszug mehr. Jede Quelle bleibt gelistet und zitierbar, auch ohne Auszug.
+Auszug mehr. Text unter `MIN_SEARCH_TEXT_CHARS` (Anriss, Skript-Seite wie
+Reddit mit nur „Reddit“) gibt keinen Auszug. Jede Quelle bleibt gelistet und
+zitierbar, auch ohne Auszug. Scheitert das Bündeln der Auszüge unerwartet,
+schreibt der Antwortschritt ohne `sources` weiter (Warnung im Log); nur ein
+Stopp oder das Zeitlimit beendet ihn.
 Gebundene Läufe (nicht Kontomodus) geben Auszügen nur den Platz, den
-`context_chars` nach dem übrigen Kontext lässt. Kein Modellaufruf, keine
+`context_chars` nach dem übrigen Kontext lässt, und halbieren das Budget, bis
+der Schritt tatsächlich passt (Escaping im Evidenz-String kostet doppelt).
+Alle Felder von `sources` laufen durch `_scrub` (Surrogate wie oben). Kein Modellaufruf, keine
 Suche, keine Kosten außer den Input-Tokens des Antwortschritts.
 
 **Prompt.** `AGENT_ANSWER_PROMPT` erklärt die Felder: Behauptungen der

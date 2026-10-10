@@ -290,3 +290,30 @@ def test_bounded_runs_give_excerpts_only_the_context_room_left(store, monkeypatc
     excerpts = sum(len(source.get("excerpt", "")) for source in sources.values())
     assert 0 < excerpts < 2 * 1200
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_a_failing_excerpt_step_never_costs_the_paid_answer(store, monkeypatch):
+    """Excerpts only enrich the answer step: an error while pooling them
+    leaves the answers with their URLs, and the turn completes."""
+    from app.services import agent_source_evidence
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("excerpt bug")
+    monkeypatch.setattr(agent_source_evidence, "select_passages", broken)
+    loop, messages, _ = _cited_run(store, monkeypatch)
+    evidence = _evidence(messages)
+    assert evidence["sources"] == []
+    assert all(answer["sources"][0] == SHARED for answer in evidence["comparisons"][0]["answers"])
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+@pytest.mark.parametrize("context_chars", [6000, 9000, 16000])
+def test_bounded_runs_fit_quote_heavy_excerpts(store, monkeypatch, context_chars):
+    """Quotes and line breaks cost twice in the evidence string: the excerpts
+    shrink until the step fits, instead of failing the paid turn."""
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "HIGHLIGHT", "\n".join(
+        f'EXA_HIGHLIGHT {i}: "the first option" is listed at "100 EUR" per "month" {chr(92)} "net".' for i in range(60)))
+    loop, messages, _ = _cited_run(store, monkeypatch, context_chars=context_chars)
+    assert len(json.dumps(messages, ensure_ascii=False)) <= context_chars
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"

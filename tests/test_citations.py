@@ -160,6 +160,11 @@ class PresearchTextTests(unittest.TestCase):
         self.assertTrue(is_search_result({}))
         self.assertFalse(is_search_result({"start_index": 3, "end_index": 9}))
         self.assertFalse(is_search_result({"end_index": 9}))
+        # A zero-width or broken span inside the text points at a claim: the
+        # text before it is answer, never pre-search narration.
+        self.assertFalse(is_search_result({"start_index": 50, "end_index": 50}))
+        self.assertFalse(is_search_result({"start_index": 60, "end_index": 40}))
+        self.assertFalse(is_search_result({"start_index": 5, "end_index": None}))
 
     def test_cut_needs_text_before_and_more_answer_after(self):
         text = "I will search. The rate is 2.5% since March."
@@ -181,6 +186,7 @@ class PresearchTextTests(unittest.TestCase):
                                         "_stream_text_end_index"),
                          {"start_index": 0, "end_index": 0, "_stream_text_end_index": 0})
         self.assertEqual(shift_citation({"start_index": None, "end_index": 12}, cut), {"start_index": None, "end_index": 2})
+        self.assertEqual(shift_citation({"start_index": 5, "end_index": None}, cut), {"start_index": 0, "end_index": 0})
 
 
 if __name__ == "__main__":

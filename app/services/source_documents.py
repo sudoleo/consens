@@ -176,6 +176,10 @@ def extract_document(url, content, kind, headers, truncated, limits):
             node.insert_after('\n')
         decoded = soup.get_text(' ', strip=False)
     text = '\n'.join(' '.join(line.split()) for line in decoded.splitlines() if line.strip())
+    # Numeric references to surrogates ("&#55357;") decode to lone surrogates,
+    # which no UTF-8 request body (judge, Agent answer step) can carry.
+    text, title = (re.sub('[\ud800-\udfff]', '\ufffd', value) for value in (text, title))
+    dates = [{key: re.sub('[\ud800-\udfff]', '\ufffd', value) for key, value in item.items()} for item in dates]
     if headers.get('last-modified'):
         dates.append({'value': headers['last-modified'][:160], 'origin': 'http:last-modified'})
     return {'url': url, 'title': title, 'retrieved_at': datetime.now(timezone.utc).isoformat(),
@@ -262,8 +266,11 @@ def fetch_document(url, limits):
         return copy.deepcopy(result)
     except Exception as exc:
         code = fetch_failure_code(exc)
-        with _lock:
-            _cache[cache_key] = (time.monotonic(), None, code)
+        if code != 'dns_busy':
+            # dns_busy is this process's lookup capacity, not the URL's fault:
+            # the next fetch of the same URL may try again at once.
+            with _lock:
+                _cache[cache_key] = (time.monotonic(), None, code)
         future.set_exception(ValueError(code))
         _metric(code, outcome='timeout' if code == 'fetch_timeout' else 'failure')
         raise ValueError(code) from None
