@@ -3942,9 +3942,7 @@ body.is-hero .consensus-section::before {
    surface scale from the start; these are the dialog parts that predate it.
    -------------------------------------------------------------------------- */
 .watch-success-card,
-.watch-limit-summary,
-.watch-question-preview,
-.watch-setup-summary {
+.watch-limit-summary {
   border: 0;
   background: var(--raise);
   box-shadow: none;
@@ -3952,48 +3950,16 @@ body.is-hero .consensus-section::before {
   -webkit-backdrop-filter: none;
 }
 
-/* The rest of the watch surfaces: the plan pill, the dialog, the per-card
-   disclosure, the setup fields. They were the last things on this page still
-   drawing a rectangle (several of them an accent-tinted one) around content
-   that the tone already separates. */
+/* The rest of the watch surfaces: the plan pill and the dialog's limit
+   notice. They were the last things on this page still drawing a rectangle
+   (several of them an accent-tinted one) around content that the tone
+   already separates. */
 .watch-limit-plan,
-.watch-limit-summary.is-dialog,
-.watch-advanced-settings {
+.watch-limit-summary.is-dialog {
   border: 0;
   background: var(--raise);
   color: var(--ink-2);
   box-shadow: none;
-}
-
-/* The defaults block is the one place a reader decides whether this dialog is
-   configurable at all. Both the "Edit" switch and the three value chips are
-   therefore filled surfaces you can tell apart from the label above them —
-   frameless, but not flat text. */
-.watch-setup-edit,
-.watch-setup-chip {
-  border: 0;
-  background: var(--well);
-  color: var(--ink);
-  box-shadow: none;
-}
-
-.watch-setup-edit:hover,
-.watch-setup-chip:hover {
-  border: 0;
-  background: var(--line);
-  color: var(--ink);
-}
-
-/* Input fields are wells, like the composer — not bordered boxes. */
-.watch-delivery-field {
-  border: 0;
-  background: var(--well);
-  color: var(--ink);
-}
-
-.watch-delivery-field:focus {
-  outline: none;
-  box-shadow: 0 0 0 1px var(--line);
 }
 
 .watch-page {
@@ -4223,13 +4189,13 @@ body:not(.dark-mode) #proFeatureModal .btn-free:is(:hover, :focus-visible) {
 
 body :is(.attach-trigger, .model-picker-display, .auth-top-login,
   .claim-jump-link, .diff-resolve-btn, .share-secondary-btn,
-  .watch-setup-edit, .watch-setup-chip, .memory-edit-cancel) {
+  .memory-edit-cancel) {
   background: var(--app-surface);
 }
 
 body :is(.attach-trigger, .model-picker-display, .auth-top-login,
   .claim-jump-link, .diff-resolve-btn, .share-secondary-btn,
-  .watch-setup-edit, .watch-setup-chip, .memory-edit-cancel):is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]) {
+  .memory-edit-cancel):is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]) {
   background: var(--app-surface-hover);
 }
 

@@ -681,16 +681,19 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Startbildschirm klappen nie ein.
 
 ## Consensus Watch
-- [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung
-      verlangt die explizite Wahl zwischen privater Eigentümer-Seite und öffentlicher,
-      nicht indexierter Link-Seite und bietet Weekly/Monthly. Ein Klick auf „Start
-      watching“ markiert fehlende Pflichtangaben direkt am jeweiligen Feld und scrollt
-      zum ersten Fehler. Der Dialog bleibt auf iPhone-Größen vollständig im sichtbaren
-      Bereich. Private Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
-- [ ] „Schedule and alerts“ trägt rechts einen „Edit“-Schalter, die drei
-      Werte-Chips öffnen selbst ihr Feld (Fokus liegt danach darin), und
-      „Customize schedule and alerts“ steht direkt darunter — über den
-      Zustellkanälen, nicht am Dialogende.
+- [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; der Dialog
+      zeigt die Frage, „What are you waiting for?“ als Optionsliste und darunter
+      eine Einstellungszeile (Default privat, wöchentlich, E-Mail). Ein Klick auf
+      „Start watching“ markiert fehlende Pflichtangaben direkt am jeweiligen Feld,
+      klappt die Einstellungen dafür selbst auf und scrollt zum ersten Fehler. Der
+      Dialog bleibt auf iPhone-Größen vollständig im sichtbaren Bereich. Private
+      Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
+- [ ] Zielvorschläge laden als zwei Platzhalterzeilen und erscheinen dann als
+      Optionen; die erste ist sichtbar ausgewählt, solange man nichts anderes
+      gewählt hat. Tippen in „Something else…“ wählt diese Zeile, „Any change to
+      the answer“ legt keinen Abschluss fest. „Change“ an der Einstellungszeile
+      klappt Zeitplan, Alerts, Kanäle und Sichtbarkeit auf, die Zeile zeigt jede
+      Änderung sofort.
 - [ ] Lokale Run-Uhrzeit ist bei Erstellung wählbar und zeigt die erkannte Zeitzone;
       Weekly bietet auch Free-Nutzern einen Wochentag-Picker und startet standardmäßig
       am morgigen Wochentag statt erst nach einer vollen Woche. „Watched“ erlaubt eine

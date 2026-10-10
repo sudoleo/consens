@@ -1831,21 +1831,30 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   sonst „Consensus“), Icon und Thumb bleiben. Ein kurzer, auf zwei Zyklen
   begrenzter Puls weist dort dezent auf Watches hin, verschwindet beim ersten
   Öffnen lokal dauerhaft und respektiert `prefers-reduced-motion`.
-  **Create-Dialog**: Schritt 1 die Frage (Query-first) bzw. direkt Schritt 2 für
-  einen fertigen Consensus. Schritt 2 beginnt mit **„What are you waiting
-  for?“** (`#watchGoal`, ≤ 500 Zeichen, gespeichert als `condition`): bis zu drei
-  Zielvorschläge kommen asynchron von `POST /api/watch/goal-suggestions` als
-  `.watch-goal-chip` (Klick füllt/leert das Feld, ein Fehler blendet sie nur aus).
-  Darunter die Defaults-Zusammenfassung mit `#watchEditDefaults` und den drei
-  `.watch-setup-chip`-Buttons, die per `data-edit-field` das Panel
-  `#watchAdvancedSettings` öffnen (liegt bewusst **über** den Zustellkanälen),
-  dann Kanäle und „Start watching“. Alert-Regeln: „When it moves (or resolves)“
-  (`changes_only`), „Only when it resolves“ (`condition`, braucht ein Ziel),
-  „After every check“ (`every_run`). `POST /api/watch` akzeptiert alternativ zu
-  `result_id`/`share_id` ein exklusives `question`-Feld; der Pfad startet keinen
-  App-Consensus. Dashboard und Dialog zeigen vor der Aktion den serverseitigen
-  Plan, aktive Watches/Limit und freie Plätze; am Limit wird die Create-Aktion
-  vor dem Request deaktiviert. Nach dem dritten speicherbaren Consensus zeigt
+  **Create-Dialog** (seit 2026-10-10 entschlackt): ohne bekannte Frage zuerst
+  das Fragefeld („What should we keep checking?“, Enter = Continue); eine
+  bekannte Frage (Dashboard-Beispiel, Nudge „customize“, fertiger Consensus)
+  springt direkt zum Ziel, die Frage steht oben mit `#watchQuestionEdit`.
+  Kern ist **„What are you waiting for?“** als Radioliste
+  (`name="watchGoalChoice"`): bis zu drei Vorschläge von `POST
+  /api/watch/goal-suggestions` (pro Frage im Dialog gecacht; ein Fehler lässt
+  nur sie weg), ein vorgegebenes Ziel als erste Zeile, „Something else…“
+  (`#watchGoalCustomChoice` + Textfeld `#watchGoal`, ≤ 500 Zeichen) und „Any
+  change to the answer“ (`#watchGoalNone`). Solange der Nutzer nichts gewählt
+  hat, ist die erste Zeile **vorausgewählt** (Vorschläge als Chips über einem
+  leeren Feld wurden nicht als „noch anklicken“ erkannt); gespeichert wird die
+  Wahl als `condition`. Darunter **eine** Zeile `#watchSettingsSummary`
+  („Weekly on Sunday at 09:00 · E-mail · Private“) in `<details
+  id="watchAdvancedSettings">`, „Change“ klappt Intervall/Tag/Zeit, Alert-Regel,
+  Kanäle (Telegram nur, wenn der Bot konfiguriert ist) und Sichtbarkeit auf;
+  Validierungsfehler öffnen es selbst. Alert-Regeln: „When it moves (or
+  resolves)“ (`changes_only`), „Only when it resolves“ (`condition`, braucht ein
+  Ziel), „After every check“ (`every_run`). `POST /api/watch` akzeptiert
+  alternativ zu `result_id`/`share_id` ein exklusives `question`-Feld; der Pfad
+  startet keinen App-Consensus. Das Limit zeigt der Dialog nur, wenn es
+  erreicht ist (`#watchDialogLimit`), dann ist die Create-Aktion vor dem
+  Request deaktiviert; Zahl und freie Plätze stehen im Dashboard-Kopf und in
+  der Sidebar. Nach dem dritten speicherbaren Consensus zeigt
   `window.App.watch.*` einmalig einen Hinweis am Watch-Button mit der **Aktion
   selbst** („Watch this question“, `nudgeWatchDefaults()`: wöchentlich, morgiger
   Wochentag, 09:00 lokal, privat, E-Mail nur auf Belege); „Add a goal or change

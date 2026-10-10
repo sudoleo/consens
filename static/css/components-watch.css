@@ -205,126 +205,76 @@
 /* ==========================================================================
    Create / confirm dialog (inside the shared modal)
    ========================================================================== */
-.watch-step-label {
-  margin-bottom: 8px;
-  color: var(--accent);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-.watch-question-input { min-height: 122px; }
+.watch-question-input { min-height: 84px; }
+.watch-question-field .watch-goal-hint { margin-bottom: 10px; }
 .watch-question-preview {
-  margin: 13px 0 4px;
-  padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 5%, var(--input-bg));
-}
-.watch-question-preview span,
-.watch-question-preview strong { display: block; }
-.watch-question-preview span { margin-bottom: 4px; color: var(--sidebar-text-muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: var(--tracking-wide); }
-.watch-question-preview strong { font-size: var(--font-size-sm); line-height: var(--line-height-ui); overflow-wrap: anywhere; }
-.watch-setup-summary {
-  margin-top: 12px;
-  padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--sidebar-border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 5%, var(--input-bg));
-}
-.watch-setup-summary-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.watch-setup-summary-label { display: block; color: var(--sidebar-text-muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); letter-spacing: var(--tracking-wide); text-transform: uppercase; }
-.watch-setup-edit {
-  flex: none;
-  min-height: 26px;
-  padding: 3px 11px;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
-  border-radius: 999px;
-  background: var(--input-bg);
-  color: var(--text-color);
-  font: inherit;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  cursor: pointer;
-}
-.watch-setup-edit:hover { border-color: var(--accent); }
-.watch-setup-edit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-.watch-setup-summary-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.watch-setup-summary-chips > span,
-.watch-setup-chip {
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--text-color);
-  font-family: inherit;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-}
-.watch-setup-chip {
-  min-height: 26px;
-  border: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--sidebar-border));
-  cursor: pointer;
-}
-.watch-setup-chip:hover { border-style: solid; border-color: var(--accent); }
-.watch-setup-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-.watch-setup-summary-hint { margin: 8px 0 0; color: var(--sidebar-text-muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
-.watch-delivery-field {
-  padding: 12px;
-  border: 1px solid var(--line-soft);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: var(--raise);
 }
-.watch-delivery-field .share-link-btn[hidden] { display: none; }
-.watch-advanced-settings {
-  margin-top: 13px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 76%, transparent);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+.watch-question-preview strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+  overflow-wrap: anywhere;
 }
-.watch-advanced-settings > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 42px;
-  padding: 0 12px;
-  color: var(--text-color);
+.watch-question-edit {
+  flex: none;
+  min-height: 0;
+  padding: 1px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.watch-question-edit:hover { color: var(--ink); }
+.watch-question-edit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+/* Schedule, alerts, channels and page: one line until "Change". */
+.watch-settings { margin-top: 4px; border-radius: var(--radius-sm); background: var(--raise); }
+.watch-settings > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 8px 12px;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
   cursor: pointer;
   list-style: none;
 }
-.watch-advanced-settings > summary::-webkit-details-marker { display: none; }
-.watch-advanced-settings > summary::after {
-  content: "";
-  width: 7px;
-  height: 7px;
-  margin-left: auto;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  color: var(--sidebar-text-muted);
-  transform: translateY(-2px) rotate(45deg);
-  transition: transform var(--dur-state) var(--ease-standard);
+.watch-settings > summary::-webkit-details-marker { display: none; }
+.watch-settings > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-sm); }
+.watch-settings-summary { flex: 1 1 auto; min-width: 0; }
+.watch-settings-toggle {
+  flex: none;
+  color: var(--ink);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
-.watch-advanced-settings[open] > summary { border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent); }
-.watch-advanced-settings[open] > summary::after { transform: translateY(2px) rotate(225deg); }
-.watch-advanced-settings > summary small { color: var(--sidebar-text-muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-medium); }
-.watch-advanced-settings-body { padding: 0 12px 13px; }
-.watch-success-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1px solid color-mix(in srgb, var(--agree) 28%, var(--sidebar-border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--agree) 6%, var(--input-bg)); }
+.watch-settings[open] > summary { border-bottom: 1px solid var(--line-soft); }
+.watch-settings-body { padding: 0 12px 14px; }
+.watch-settings .watch-config-grid { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.watch-channel-options [hidden] { display: none; }
+.watch-success-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border-radius: var(--radius-md); background: var(--raise); }
 .watch-success-card > div { min-width: 0; }
 .watch-success-icon { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--agree) 17%, transparent); color: var(--agree); font-weight: var(--font-weight-bold); }
 .watch-success-card strong { display: block; font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
 .watch-success-card p { margin: 5px 0 0; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
-.watch-question-guidance {
-  margin-top: 12px;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-}
-.watch-question-guidance summary { cursor: pointer; color: var(--text-color); font-weight: var(--font-weight-semibold); }
-.watch-question-guidance ul { margin: 8px 0 0; padding-left: 20px; }
-.watch-question-guidance li + li { margin-top: 3px; }
 
 /* ==========================================================================
    Dashboard (watch-dashboard.js)
@@ -784,43 +734,71 @@
 
 /* ==========================================================================
    Dialog: "What are you waiting for?"
+   One radio list: suggested events, "Something else", "Any change". The
+   checked row carries the ink ring, so a picked suggestion reads as picked.
    ========================================================================== */
-.watch-goal { margin: 4px 0 16px; }
-.watch-goal-label { display: block; color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
-.watch-goal-hint { margin: 4px 0 10px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
-.watch-goal-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.watch-goal-suggestions[hidden] { display: none; }
-.watch-goal-chip {
-  display: inline-flex;
+.watch-goal { min-width: 0; margin: 0 0 16px; padding: 0; border: 0; }
+.watch-goal-label { display: block; margin: 0 0 8px; padding: 0; color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.watch-goal-hint { margin: 8px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
+.watch-goal-hint:empty { display: none; }
+.watch-goal-options,
+.watch-goal-suggestions,
+.watch-goal-loading { display: grid; gap: 6px; }
+.watch-goal-suggestions:empty { display: none; }
+.watch-goal-option {
+  display: flex;
   align-items: center;
-  min-height: 30px;
-  max-width: 100%;
-  padding: 5px 12px;
-  border: 0;
-  border-radius: 999px;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
   background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--ink);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.3;
-  text-align: left;
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
   cursor: pointer;
 }
-.watch-goal-chip:hover { box-shadow: inset 0 0 0 1px var(--ink-3); }
-.watch-goal-chip[aria-pressed="true"] { background: var(--ink); box-shadow: none; color: var(--ground); }
-.watch-goal-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-.watch-goal-chip.is-loading {
-  width: 140px;
+.watch-goal-option:hover { box-shadow: inset 0 0 0 1px var(--line); }
+.watch-goal-option:has(input[type="radio"]:checked) {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+  font-weight: var(--font-weight-semibold);
+}
+.watch-goal-option:has(input[type="radio"]:focus-visible) { outline: var(--focus-ring); outline-offset: 2px; }
+.watch-goal-option input[type="radio"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.watch-goal-option > span { min-width: 0; overflow-wrap: anywhere; }
+/* The row is the field: the global input[type="text"] frame would draw a
+   box inside the box. */
+.watch-goal-option input.watch-goal-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: var(--font-weight-regular);
+}
+.watch-goal-option input.watch-goal-input::placeholder { color: var(--ink-3); }
+.watch-goal-option.is-custom:has(.watch-goal-input[aria-invalid="true"]) { box-shadow: inset 0 0 0 1.5px var(--dispute); }
+.watch-goal-option.is-loading {
   background: linear-gradient(90deg, var(--raise), var(--well), var(--raise));
   background-size: 200% 100%;
-  box-shadow: none;
   animation: wdShimmer 1.2s ease-in-out infinite;
   cursor: default;
 }
+.watch-goal-option.is-loading:hover { box-shadow: none; }
 @keyframes wdShimmer { to { background-position: -200% 0; } }
-.watch-goal-input { min-height: 64px; }
 
 /* ==========================================================================
    Responsive + motion
@@ -853,5 +831,5 @@
   .view-switch-thumb { transition: none; }
   .is-rechecking .wd-dot,
   .wd-tick.is-confirming,
-  .watch-goal-chip.is-loading { animation: none; }
+  .watch-goal-option.is-loading { animation: none; }
 }
