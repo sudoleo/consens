@@ -391,6 +391,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         passage = review.get("passage_check")
                         if isinstance(passage, dict) and passage.get("status") in {"waiting", "running"}:
                             review["passage_check"] = {**passage, "status": "cancelled" if status == "cancelled" else "failed"}
+                        # A page read (read_source) the run ended during.
+                        review["read_sources"] = [
+                            {**read, "status": "failed", "error": "stopped" if status == "cancelled" else "unavailable"}
+                            if isinstance(read, dict) and read.get("status") == "running" else read
+                            for read in review.get("read_sources") or []]
+                        if not review["read_sources"]:
+                            review.pop("read_sources")
                         for version in [review, *review.get("versions", [])]:
                             for check in version.get("checks", []):
                                 verification = check.get("source_verification")

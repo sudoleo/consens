@@ -318,6 +318,19 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("lists the helper that read a source as a session, not as a voice in the model stack", async () => {
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [], status: "succeeded" }) }));
+    const helper = { ...agent(1, "completed", "b".repeat(32)), kind: "source", title: "Read source · arxiv.org",
+      model: { model: "openai/gpt-6-luna", label: "GPT-6 Luna" } };
+    receive(w, agent()); receive(w, helper);
+    w.App.agentDelegation.project({ chatId, turnId });
+    expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(1);
+    expect(d.querySelector(".agent-inline-model").title).toContain("Haiku");
+    expect(d.querySelectorAll(".agent-session")).toHaveLength(2);
+    expect(d.querySelector(".agent-session-list").textContent).toContain("Read source · arxiv.org");
+    dom.window.close();
+  });
+
   it("distinguishes same-model agents and restores saved state without starting any model request", async () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); receive(w, { ...agent(2, "waiting", "b".repeat(32)), title: "Check France" });

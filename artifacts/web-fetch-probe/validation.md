@@ -2,7 +2,9 @@
 
 Skript: `scripts/probe_web_fetch.py --live` (echter OpenRouter-Aufruf, Agent-Payload
 mit `provider.zdr: true`). Rohdaten (ohne Schlüssel) liegen als JSON daneben
-(gitignored). Modelle: Claude Sonnet 5.5, GPT-6 Luna, Gemini 3.5 Flash-Lite;
+(gitignored). Modelle: Claude Sonnet 5.5, GPT-6 Luna (`openai/gpt-6-luna`, direkt
+angefragt; der Helfer im Produkt ist der konfigurierte OpenAI-Standard-Judge, im
+Live-Smoke GPT-5.6 Luna), Gemini 3.5 Flash-Lite;
 Dokumente: HTML (peps.python.org/pep-0020) und PDF (arxiv.org/pdf/1706.03762).
 54 Aufrufe, zusammen rund 0,13 $.
 
@@ -16,6 +18,10 @@ Dokumente: HTML (peps.python.org/pep-0020) und PDF (arxiv.org/pdf/1706.03762).
    - **Responses API (`/api/v1/responses`): ja.** Ein Output-Item
      `{"type": "openrouter:web_fetch", "status", "url", "title", "content", "httpStatus", "error"}`
      trägt den gelesenen Text. Bei Fehlern `status: "incomplete"` plus `error`.
+     Gestreamt: `response.output_item.added` (`in_progress`) beim Start,
+     `response.output_item.done` mit vollem `content` (PDF bei 4.000 Tokens:
+     15.893 Zeichen) nach 1,7 s, `response.completed` mit Usage und `cost` nach
+     3,0 s (GPT-6 Luna, 4.063 Input-Tokens, 0,052 ct).
 2. **Usage/Kosten:** Kein `web_fetch_requests`. `server_tool_use_details` zählt
    alle Server-Tool-Aufrufe, auch gescheiterte (3 requested / 3 executed bei 1
    erfolgreichem Fetch), und würde sich mit der Websuche mischen. In `usage.cost`
@@ -56,3 +62,9 @@ Umsetzbar sind:
 - **Eigenes Client-Tool über `fetch_document`** (Rückfall laut Auftrag):
   ohne Dritte und gratis, aber 8 von 21 typischen Quellen nicht oder kaum lesbar
   und ohne PDF.
+
+## Entscheidung und Umsetzung
+
+Max hat am 2026-10-10 den ersten Weg gewählt: `app/services/agent_read_source.py`,
+beschrieben in docs/agent-mode.md, Abschnitt „Quellen nachlesen“, dort auch die
+Ergebnisse des Live-Smokes.

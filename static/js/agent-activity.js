@@ -7,6 +7,7 @@
   // Unknown future tools fall back to a neutral label instead of a raw name.
   const tools = {
     web_search: ['Web search', 'Searching the web…', 'Searched the web'],
+    read_source: ['Read source', 'Reading a source…', 'Read source'],
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
     judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
     check_contradictions: ['Contradiction source check', 'Checking contradictions against sources…', 'Checked contradictions against sources'],
@@ -50,6 +51,18 @@
     const count = Number.isInteger(item.count) && item.count > 0 ? item.count : 0;
     return count ? `Searched the web · ${count} ${count === 1 ? 'search' : 'searches'}` : 'Searched the web';
   }
+  // "Read source · arxiv.org" only when the page was really read (the server
+  // sends `read` from the fetch result); a failed or refused read says so.
+  function readSummary(item) {
+    const host = typeof item.host === 'string' && /^[\w.-]{1,253}$/.test(item.host) ? item.host : '';
+    if (item.status === 'running') return host ? `Reading ${host}…` : tools.read_source[1];
+    if (item.status === 'succeeded' && item.read === 'completed') return host ? `Read source · ${host}` : 'Read source';
+    if (item.status === 'succeeded' && item.read === 'already_read') return host ? `Already read · ${host}` : 'Already read';
+    if (item.status === 'succeeded' && item.read === 'failed') return host ? `Could not read · ${host}` : 'Could not read the source';
+    // Refused before any fetch (not cited, limit, no time left): nothing was read.
+    if (item.status === 'succeeded' && item.read === 'refused') return 'Read source · Skipped';
+    return null;
+  }
   // A turn whose only check was that of a pasted text (saved on 2026-10-09
   // before the answer of such a turn was judged too): the answer judges and
   // the source check of their contradictions did not run.
@@ -60,6 +73,7 @@
   }
   function stepLabel(item, textOnly = false) {
     if (item.status === 'succeeded' && textOnly && textOnlySteps[item.name]) return textOnlySteps[item.name];
+    if (item.name === 'read_source' && readSummary(item)) return readSummary(item);
     if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
     if (item.status === 'succeeded' && item.name === 'web_search') return searchSummary(item);
     if (item.status === 'succeeded') return tools[item.name]?.[2] || `${toolName(item.name)} · Completed`;
@@ -448,7 +462,10 @@
           const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Skipped · budget reserve", cancelled: "Stopped", unknown: "Usage unavailable" };
           const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
           title.textContent = item.status === 'succeeded' && textOnly && textOnlySteps[item.name]
-            ? textOnlySteps[item.name] : `${toolName(item.name)} · ${toolStatus[item.status] || "Details"}${count}`;
+            ? textOnlySteps[item.name]
+            // A read source names its host; "Completed" would hide a page that could not be read.
+            : (item.name === 'read_source' && readSummary(item))
+              || `${toolName(item.name)} · ${toolStatus[item.status] || "Details"}${count}`;
           node.replaceChildren(title);
           if (item.text) {
             const text = document.createElement("p");

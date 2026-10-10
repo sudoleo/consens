@@ -311,6 +311,15 @@ class CompareArgs(ProgressArgs):
         return schema
 
 
+# CompareArgs.next_step with read_source on (ComparisonTools(read_sources=True)).
+READ_NEXT_STEP = (
+    "answer: this is the last comparison; the app writes and checks the answer immediately after it, and no "
+    "source can be read. more_work: you still need another comparison, a document or an action preparation, or "
+    "you may need to read a cited source after seeing the answers (the user reports conflicting information, "
+    "asks to verify a claim or for exact wording, or the answer hinges on one precise figure, date, price or "
+    "rule that sources often state differently).")
+
+
 def free_compare_args(models):
     """compare_models with a model choice, for Agent freedom "free".
 
@@ -531,7 +540,7 @@ def comparison_selection(value=None):
 
 class ComparisonTools:
     def __init__(self, loop, models, *, check_sources=False, source_limits=None, preferences=None,
-                 memory_changes=False):
+                 memory_changes=False, read_sources=False):
         self.loop, self.models = loop, models
         self.preferences = preferences or AgentPreferences()
         self.comparisons, self.versions = [], []
@@ -555,11 +564,19 @@ class ComparisonTools:
         self._partials = {}
         # What the answers' sources say, for the answer step only (in memory).
         self.source_evidence = SourceEvidence()
+        # Cited pages the orchestrator opened (agent_read_source.SourceReader),
+        # set by the loop when read_source is on.
+        self.reader = None
         arguments = free_compare_args(models) if self.free else CompareArgs
         if memory_changes:
             # Memory changes ride along on the call the orchestrator makes anyway.
             from app.services.agent_memory import memory_field
             arguments = create_model("MemoryCompareArgs", __base__=arguments, memory=memory_field())
+        if read_sources:
+            # next_step is chosen while this schema is filled in, before the
+            # answers arrive: it names reading (agent_read_source) right there.
+            arguments = create_model("ReadCompareArgs", __base__=arguments, next_step=(
+                Literal["answer", "more_work"], Field(description=READ_NEXT_STEP)))
         compare = (ReadOnlyTool("compare_models", "Get independent answers from the families you choose (at least two) before synthesizing and checking the answer. Every substantive answer needs at least one comparison.", arguments, self.compare)
                    if self.free else
                    ReadOnlyTool("compare_models", "Start the Consensus pipeline for every user question or task. Get independent answers from the selected models before synthesizing and checking the answer.", arguments, self.compare))
@@ -593,6 +610,8 @@ class ComparisonTools:
             data["checks"] = self.review["checks"]
         if self.passage:
             data["passage_check"] = self.passage
+        if self.reader is not None and self.reader.reads:
+            data["read_sources"] = self.reader.snapshot()
         return data
 
     def user_messages(self):
@@ -660,6 +679,11 @@ class ComparisonTools:
         checked = self.checked_text_evidence()
         if checked:
             evidence["checked_text"] = checked
+        read = self.reader.evidence() if self.reader is not None else []
+        if read:
+            # Pages the orchestrator opened (read_source): what the answer may
+            # quote beyond the excerpts, also shown to the Coverage judge.
+            evidence["read_sources"] = read
 
         def messages():
             return [{"role": "system", "content": system}, *conversation,
@@ -823,6 +847,14 @@ class ComparisonTools:
                     for item in claim.get("dissent") or []:
                         item["quote"] = ""
                 encoded = json.dumps(data, ensure_ascii=False)
+            if len(encoded.encode("utf-8")) > 600_000 and data.get("read_sources"):
+                # Then the saved text of read pages: the answer step and the
+                # judges keep their full text in memory.
+                from app.services.agent_read_source import READ_TRIM_CHARS
+                for read in data["read_sources"]:
+                    if len(read.get("text") or "") > READ_TRIM_CHARS:
+                        read.update(text=read["text"][:READ_TRIM_CHARS], text_trimmed=True)
+                encoded = json.dumps(data, ensure_ascii=False)
             if len(encoded.encode("utf-8")) > 600_000:
                 raise ValueError("Comparison review storage budget reached")
         self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id, self.loop.run_token, data, self.text)
@@ -917,6 +949,12 @@ class ComparisonTools:
             raise ValueError("Files are not available")
         if self.text:
             raise ValueError("The synthesis is already fixed. Finish its required checks without another comparison.")
+        if self.reader is not None and any(r.get("status") == "completed" for r in self.reader.reads):
+            # Page text is in the orchestrator's context now: a new task could
+            # carry its findings (or what a page tells it) to the answer models,
+            # which must answer independently.
+            raise ValueError("A source was read in this message, so no further comparison is possible. Call "
+                             "judge_answer: the app writes the answer from the comparisons and what you read.")
         if not loop.policy.account_budget_only and (len(self.comparisons) >= BOUNDED_COMPARISONS or self.versions):
             raise ValueError("Complete all comparisons before writing the synthesis (maximum three).")
         limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
@@ -1074,6 +1112,11 @@ class ComparisonTools:
         else:
             instruction = ("Complete any further comparisons, then call judge_answer without answer text. The app lets you "
                            "stream the complete synthesis in a dedicated step before any judge starts.")
+        if self.reader is not None and not self.ready_to_answer and self.reader.cited():
+            # The orchestrator now sees the answers: the moment to decide on a read.
+            instruction = ("If these answers disagree on a fact that matters, or the answer needs exact wording, first read "
+                           "the cited source that decides it with read_source (only URLs listed in the answers' sources); "
+                           "otherwise do not read. After a read, no further comparison is possible. " + instruction)
         # Routing needs the gist; the synthesis receives the complete answers.
         limit = loop.policy.result_chars
         routed = [{**a, "text": a["text"][:limit], **({"text_shortened_for_routing": True} if len(a["text"]) > limit else {})}
@@ -1286,6 +1329,9 @@ class ComparisonTools:
                         "next_tool": None if self.finalized else "check_contradictions"}
             raise ValueError("The fixed answer's review has not completed.")
         self.finish_comparisons()
+        # Pages the orchestrator read: part of the Coverage judge's basis as
+        # their own blocks, never a vote (consensus_engine._with_read_sources).
+        read_sources = self.reader.judge_sources() if self.reader is not None else None
         self.review = {"status": "running", "checks": []}
         self.checkpoint("running")
         try:
@@ -1313,7 +1359,8 @@ class ComparisonTools:
                 with bind_task_transport(transport), bind_provider_cancellation(cancellation):
                     _, data = query_differences({cfg.provider_label(a["provider"]): a["text"] for a in checked},
                         self.text, {"OpenRouter": loop.api_key}, differences_model=self._judge_reference(),
-                        resolved_question=comparison["question"], chat_mode=True, passes=DIFFERENCES_PASSES)
+                        resolved_question=comparison["question"], chat_mode=True, passes=DIFFERENCES_PASSES,
+                        read_sources=read_sources)
                 loop._check(cancellation)
                 if isinstance(data, dict):
                     check["differences_data"] = data

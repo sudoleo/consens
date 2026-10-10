@@ -17,7 +17,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core import config as cfg
-from app.services.agent_costs import aggregate_usage
+from app.services.agent_costs import aggregate_usage, fetch_bounds
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
@@ -165,7 +165,7 @@ class Worker:
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  check_sources=False, source_limits=None, file_context=None, google_selection=None, google_data_consent=False,
-                 agent_preferences=None, memory=None, **kwargs):
+                 agent_preferences=None, memory=None, google_data=False, **kwargs):
         super().__init__(**kwargs)
         # Freeze the actual conversation before runtime instructions, tool
         # transcripts or private continuation data are appended to messages.
@@ -228,8 +228,12 @@ class DelegationLoop(AgentLoop):
         self.comparison = None
         if comparison_models is not None:
             from app.services.agent_comparison import BOUNDED_COMPARISONS, ComparisonTools, preference_prompt
+            from app.services import agent_read_source
+            read_sources = (agent_read_source.enabled() and self.policy.account_budget_only
+                            and not google_selection and not google_data)
             self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
-                                              preferences=agent_preferences, memory_changes=self.memory.writable)
+                                              preferences=agent_preferences, memory_changes=self.memory.writable,
+                                              read_sources=read_sources)
             limit = self.policy.turn_comparisons if self.policy.account_budget_only else BOUNDED_COMPARISONS
             # The steering prompt (messages[0]) carries the workflow. The app writes
             # the answer in its own step and runs every check itself (_finish_review).
@@ -241,6 +245,19 @@ class DelegationLoop(AgentLoop):
                     "Plan them: put related subquestions into one comparison instead of repeating similar ones.")
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
+            if read_sources:
+                # Reading cited sources after a comparison (docs/agent-mode.md,
+                # "Quellen nachlesen"). Registered for the whole turn: a tool
+                # list that changes between steps would rewrite the prompt cache.
+                from app.services.prompt_defaults import AGENT_READ_SOURCE_PROMPT, AGENT_READ_SOURCE_REPLACEMENTS
+                self.comparison.reader = agent_read_source.SourceReader(self, self.comparison)
+                content = self.messages[0]["content"]
+                for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
+                    content = content.replace(old, new)
+                self.messages[0]["content"] = content + "\n\n" + AGENT_READ_SOURCE_PROMPT.format(
+                    limit=agent_read_source.READS_PER_MESSAGE)
+                self.registry = ToolRegistry([*self.registry.tools.values(), self.comparison.reader.tool],
+                                             argument_limit=24_000)
 
         if self.file_context:
             from app.services.agent_files import UNTRUSTED
@@ -566,7 +583,7 @@ class DelegationLoop(AgentLoop):
             self.tools_used += 1
             if not self.policy.account_budget_only and self.tools_used > self.policy.max_tools:
                 raise AnalysisBudgetExceeded("Shared tool limit reached")
-        tool = None
+        tool = args = result = None
         status = "failed"
         reason = None
         def publish(status):
@@ -574,6 +591,13 @@ class DelegationLoop(AgentLoop):
                 # A refused update_memory keeps a content-free reason code
                 # (never the evidence or the memory text) for later audits.
                 extra = {"reason": reason} if reason else {}
+                if tool.activity and args is not None:
+                    # Tool-owned trace fields, e.g. the host read_source opened.
+                    # Display only: a failure here never replaces the tool result.
+                    try:
+                        extra.update(tool.activity(args, None if status == "running" else result) or {})
+                    except Exception:
+                        logging.warning("Agent tool activity fields failed tool=%s", tool.name)
                 self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, status, **extra))
         try:
             tool, args = registry.validate(call)
@@ -628,7 +652,7 @@ class DelegationLoop(AgentLoop):
         return {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
 
     def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
-                         clamp_floor=None):
+                         clamp_floor=None, server_tools=()):
         """Retry admission, never generation. All successful claims stay atomic.
 
         Contention is backpressure, not exhaustion. Wait for active receipts,
@@ -654,7 +678,7 @@ class DelegationLoop(AgentLoop):
         delay, recovered_at = .1, time.monotonic()
         while True:
             self._check(cancellation)
-            tools = [*registry.schemas, *search_tools(model, searches)]
+            tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
             if not searches:
                 room = model.context_length - input_estimate(messages, tools, model.request_config)
                 if room < minimum_output(model):
@@ -675,6 +699,11 @@ class DelegationLoop(AgentLoop):
                 if isinstance(exc, AgentTokenBudgetExceeded):
                     inputs = input_estimate(messages, tools, model.request_config)
                     minimum = inputs + minimum_output(model)
+                    if fetch_bounds(tools)[0]:
+                        # A page read's tokens do not shrink with the output
+                        # allowance: the smallest reservation still holds them.
+                        minimum = self.costs.estimate(replace(model, max_output_tokens=minimum_output(model)),
+                                                      messages, tools)[0]
                     if exc.reserved and not (clamp_floor and reserved) and (
                             (not reserved and minimum <= exc.remaining + exc.reserved)
                             or (reserved and exc.required <= exc.remaining + exc.reserved)):
@@ -707,7 +736,10 @@ class DelegationLoop(AgentLoop):
                     if not reserved:
                         inputs = input_estimate(messages, tools, model.request_config)
                         output = min(model.max_output_tokens, exc.remaining - inputs)
-                        if output < minimum_output(model):
+                        # Nothing smaller to try (a page read's reservation does
+                        # not shrink with its output): the same request again
+                        # would only spin on the ledger.
+                        if output < minimum_output(model) or output >= model.max_output_tokens:
                             raise
                         model = replace(model, max_output_tokens=output)
                         continue
@@ -724,13 +756,17 @@ class DelegationLoop(AgentLoop):
                     "Use existing evidence, state uncertainty, and do not imply new web research."}
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
-              answer_step=False, search_rounds=1, retry_rate_limit=False, check_cooldown=True):
+              answer_step=False, search_rounds=1, retry_rate_limit=False, check_cooldown=True,
+              server_tools=(), completion=None):
         """One claimed, metered model call.
 
         ``retry_rate_limit``: a free 429 (_free_rate_limit) returns the settled
         step with ``value.rate_limited`` instead of raising, so the caller can
         claim its one retry. ``check_cooldown=False`` is that retry, after its
-        wait (the 429 itself set the process cooldown)."""
+        wait (the 429 itself set the process cooldown). ``server_tools`` are
+        further OpenRouter tools of this call (a page read's web_fetch, which
+        the reservation counts), ``completion`` replaces the loop's factory
+        (agent_read_source.PageFetch)."""
         self._check(cancellation)
         if (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data"):
             from app.services.google_connections import restricted_model, GoogleError
@@ -759,7 +795,7 @@ class DelegationLoop(AgentLoop):
         if self.file_context:
             ids = getattr(worker, "file_ids", []) if worker else self.file_context.selection()
             messages = self.file_context.messages(messages, model, file_ids=ids, query=str(messages[-1].get("content", ""))[-500:])
-        tools = [*registry.schemas, *search_tools(model, searches)]
+        tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
         reservation = None
         try:
             if not self.policy.account_budget_only:
@@ -770,7 +806,7 @@ class DelegationLoop(AgentLoop):
             raise
         claimed = False
         provider_attempted = False
-        value = self.factory()
+        value = completion if completion is not None else self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         value.tool_call_limit = 4
         # A comparison answer's line is quoted live in the chat while the main
@@ -790,7 +826,8 @@ class DelegationLoop(AgentLoop):
                     clamp_floor = (cfg.MAX_TOKENS if answer_step or getattr(worker, "kind", None) == "comparison"
                                    else None)
                     model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(
-                        model, messages, step, registry, cancellation, searches, claim_policy, worker, clamp_floor)
+                        model, messages, step, registry, cancellation, searches, claim_policy, worker, clamp_floor,
+                        server_tools=server_tools)
                 else:
                     claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
                         run_token=self.run_token, policy=claim_policy, reservation=reservation)
@@ -804,7 +841,7 @@ class DelegationLoop(AgentLoop):
                 with self.condition:
                     self.search_remaining += searches
                 searches = 0
-                tools = registry.schemas
+                tools = [*registry.schemas, *server_tools]
                 messages = [*messages]
                 messages[0] = {**messages[0], "content": messages[0]["content"] +
                     "\nWeb search is unavailable for this step because its token reservation exceeds the remaining daily allowance. "

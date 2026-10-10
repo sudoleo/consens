@@ -188,11 +188,17 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
     answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
         "text": "### Recommendation\n\nChoose the **smaller plan**.\n\n- Monthly billing\n- Confirm the seat limit\n\n[Plan details](https://example.org/pricing)", "sources": []} for p, label, model, name in models]
     activity = [{"version": 1, "id": "search", "kind": "tool", "name": "web_search", "status": "succeeded",
-                 "sources": [{"url": "https://example.org/pricing", "title": "Plan details"}]}]
+                 "sources": [{"url": "https://example.org/pricing", "title": "Plan details"}]},
+                # The orchestrator read a cited page after the comparison (read_source).
+                {"version": 1, "id": "read", "kind": "tool", "name": "read_source", "status": "succeeded",
+                 "host": "example.org", "read": "completed", "sources": [{"url": "https://example.org/terms", "title": "Seat terms"}]}]
     agents = [{"id": f"{i + 10:032x}", "seq": i + 1, "status": "completed", "kind": "comparison", "title": a["model"]["label"], "model": a["model"], "duration_ms": 3100,
                "comparison_id": "c1", "progress_text": "Checking seat limits and monthly billing.", "progress_kind": "excerpt"} for i, a in enumerate(answers)]
     agents.append({"id": f"{30:032x}", "seq": 7, "status": "completed", "kind": "judge", "title": "Differences judge",
                    "model": answers[0]["model"], "duration_ms": 2100})
+    # The helper that opened the page: a row in the panel, never a voice in the model stack.
+    agents.append({"id": f"{31:032x}", "seq": 8, "status": "completed", "kind": "source", "title": "Read source · example.org",
+                   "model": {"model": "openai/gpt-6-luna", "label": "GPT-6 Luna"}, "duration_ms": 1800})
     review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
         "versions": [{"id": 1, "text": text, "hash": digest, "status": "succeeded"}],
         "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Which plan suits a team of five?", "reason": "Compare cost and flexibility",
@@ -202,6 +208,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
                 {"models": ["OpenAI"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
                 {"models": ["DeepSeek"], "stance": "The seat limit needs confirmation.", "quote": "Confirm the seat limit"}]}], "models_compared": [m[1] for m in models]}}]}
     review["check_sources"] = True
+    review["read_sources"] = [{"id": 1, "url": "https://example.org/terms", "host": "example.org", "title": "Seat terms",
+                               "status": "completed", "text": "The smaller plan includes five seats."}]
     difference = review["checks"][0]["differences_data"]["differences"][0]
     difference["factual_check"] = {"checkable": True, "question": "Are five seats included?"}
     review["checks"][0]["source_verification"] = {
@@ -284,7 +292,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert requests[0]['check_sources'] is True
         assert requests[0]['reasoning_effort'] == 'high'
         expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^56% of today'))
-        expect(page.locator('.agent-evidence-link[data-section="sources"]')).to_have_text('Sources2')
+        expect(page.locator('.agent-evidence-link[data-section="sources"]')).to_have_text('Sources3')
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         evidence_links = page.locator('#agentAnswer .agent-evidence-link')
         expect(evidence_links.locator('svg[aria-hidden="true"]')).to_have_count(3)
@@ -346,6 +354,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(insights).to_contain_text('6 model answers')
         expect(insights).to_contain_text('Disagreement: Whether the smaller plan includes five seats')
         expect(insights).to_contain_text('Source checks: 1 of 1 disagreements checked.')
+        expect(details.locator('.agent-activity-history')).to_contain_text('Read source · example.org')
         expect(insights).to_have_css('opacity', '1')
         page.wait_for_function("""() => {
           const host = document.getElementById('agentAnswerActivity');
@@ -388,6 +397,10 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         _snapshot(page, f"comparison-answer-{width}")
         page.locator('#answerReaderSections [data-section="sources"]').click()
         expect(page.locator('#answerReaderInspector a[href="https://example.org/pricing"]')).to_be_visible()
+        read_marks = page.locator('#answerReaderInspector .agent-source-read')
+        expect(read_marks).to_have_count(1)
+        expect(page.locator('#answerReaderInspector li', has=page.locator('.agent-source-read'))).to_contain_text('Seat terms')
+        expect(read_marks).to_have_text('Read by the agent')
         page.keyboard.press('Escape')
         expect(page.locator('#modelAnswerReader')).not_to_be_visible()
         expect(marker).to_be_focused()

@@ -2731,6 +2731,24 @@ Suchergebnissen“). Die Suchzahl liest `measured_usage` über
 bricht nichts ab: Die echte Zahl wird gebucht, gebundene Suchbudgets werden
 negativ, und `/health/metrics` zählt `search_overrun:<modell>` (agent-mode.md,
 „Websuche“).
+Mit `AGENT_READ_SOURCES=1` kommt das Orchestrator-Tool `read_source` hinzu
+(`agent_read_source.SourceReader`, nur Kontomodus, nicht bei Google-Daten):
+Es öffnet nach einem Vergleich eine von einer Vergleichsantwort zitierte URL
+über einen abgerechneten Helferschritt (`DelegationLoop._step(...,
+server_tools=[engines.web_fetch_tool(...)], completion=PageFetch())`, Responses
+API, Text aus dem Output-Item `openrouter:web_fetch`; über Chat Completions
+käme er nicht an). Der Text geht als Toolergebnis an den Orchestrator, als
+`read_sources` in Review-Snapshot und Antwort-Evidenz und als eigene
+`<page label="Page n">`-Blöcke an den Coverage-Judge
+(`query_differences(read_sources=...)`, `claims[].read_sources`, keine Stimme).
+Ablehnungen und nicht lesbare Seiten sind Ergebnisse (`refused`/`failed`), keine
+Toolfehler, damit sie nicht als `invalid_tool_rounds` den Turn beenden; nach
+einem gelesenen Abruf lehnt `compare_models` ab. `ReadOnlyTool.activity` liefert
+dem Tool-Ereignis `host`/`read`/`sources`; `agent_costs.fetch_bounds` reserviert
+die Seite, `_admit_chat_step` rechnet bei einem Abruf mit der vollen kleinsten
+Reservierung. Mit dem Schalter beschreibt `compare_models` `next_step` anders
+(`ComparisonTools(read_sources=True)`, `READ_NEXT_STEP`). Details:
+[agent-mode.md](agent-mode.md), „Quellen nachlesen“.
 **Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
 Steuer-Prompt (Vergleichspflicht, Aufgabe formulieren: „was die Frage festlegt,
 nicht was sie beantwortet“, Suche, Tiefe, next_step, status_update); das frühere
@@ -3523,6 +3541,8 @@ Zeit- und Wiederholungsgrenzen pro Turn (`AgentPolicy.turn_*`, oben bei
 
 Agent nutzt den gemeinsamen `engines.web_search_tool`-Builder mit derselben
 Engine-Wahl wie Consensus (Details: [agent-mode.md](agent-mode.md), „Websuche“).
+`engines.web_fetch_tool` (Engine `exa`, `max_uses`, `max_content_tokens`,
+`allowed_domains`) dient nur dem Helferschritt von `read_source`.
 Es gibt keinen neuen Suchdienst. Provider-Routing/ZDR bleiben bestehen.
 Nur bestätigte Zähler/Quellen erzeugen Suchaktivität. Kosten-/Tokenwerte bleiben
 bei unvollständiger Provider-Usage ausdrücklich unvollständig.
@@ -5568,6 +5588,7 @@ app/services/
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_source_evidence.py   Quellenauszüge für den Agent-Antwortschritt: Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
+  agent_read_source.py       Tool read_source (AGENT_READ_SOURCES=1): Orchestrator liest nach dem Vergleich eine zitierte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Evidenz read_sources für Antwortschritt, Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
@@ -7384,6 +7405,10 @@ Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur be
 ist das Ergebnis der Checks (`completed`, sobald jeder Check einmal fertig ist;
 `failed` nennt die nicht ausführbaren Checks), Tokens sind die Summe der
 gemessenen Judge-Aufrufe. Chip-Zähler und Modell-Icons zählen Judges nicht mit.
+Der Helfer eines Quellen-Abrufs (`kind: "source"`, „Read source · host“) ist
+eine eigene Zeile mit Modell, Tokens und ggf. Grund und zählt im Chip und in
+„n of m done“ mit, bekommt aber kein Modell-Icon (er ist keine Stimme der
+Antwort).
 Lief bisher nur der Judge eines eingefügten Texts („Text check"; die
 Antwort-Judges folgen nach dem Schreiben, gespeicherte Turns vom 2026-10-09
 haben keine), heißt die Zeile „Text check" und verweist auf die Karte über der

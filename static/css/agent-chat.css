@@ -319,6 +319,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-evidence-focus { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--ink-3); }
 .agent-evidence-focus select { min-width: 0; max-width: 260px; background: transparent; color: var(--ink-2); border: 0; font: inherit; padding: 6px 0; }
 .agent-evidence-panel { font-size: var(--font-size-ui); line-height: 1.7; overflow-wrap: anywhere; }
+/* A source the agent opened itself (read_source): metadata, not a link. */
+.agent-source-read { color: var(--ink-3); font-size: var(--font-size-xs); white-space: nowrap; }
 .agent-evidence-status { font-weight: 550; margin-top: 0; }
 .agent-evidence-context { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; color: var(--ink-2); }
 .agent-evidence-context > summary { cursor: pointer; color: var(--ink-3); min-height: 32px; }

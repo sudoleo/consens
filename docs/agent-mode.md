@@ -640,7 +640,8 @@ Nachricht oben.
 
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
-verfügbaren Tools (und dem Hinweis, dass es kein Seitenöffnen gibt), Feld und
+verfügbaren Tools (und dem Hinweis, dass es kein Seitenöffnen gibt, mit
+`read_source` nur für zitierte URLs), Feld und
 Meldung je Schemafehler ohne Eingabewerte. Rein anzeigende Felder
 (`status_update`, `reason`) werden gekürzt statt abgelehnt, `context` darf
 fehlen. Abgelehnte Aufrufe loggen Tool, Feldpfade und Argumentlänge
@@ -697,7 +698,9 @@ Produktentscheidung, keine Modell-Sonderlösung:
   Pflicht. Endet die Server-Suche mit einer Rechercheantwort, führt
   `_consensus_search_handoff` ohne Quellenliste zum Vergleich zurück. Nach
   einem Vergleich höchstens eine Runde pro Schritt, etwa um einen konkreten
-  Widerspruch zu klären. Seit 2026-10-07 kommen alle Prompts aus dem Code;
+  Widerspruch zu klären; eine zitierte Quelle selbst lesen kann er mit
+  `read_source` (siehe „Quellen nachlesen“, Schalter standardmäßig aus). Seit
+  2026-10-07 kommen alle Prompts aus dem Code;
   ein gespeicherter Admin-Prompt mit der alten Anweisung wirkt nicht mehr.
 - Judges und der Antwortschritt suchen nie.
 
@@ -935,6 +938,173 @@ gegeben werden sie nicht. Quellen jenseits der ersten vier je Antwort ruft
 der Antwortschritt nach Zitierhäufigkeit ab, innerhalb derselben Grenzen.
 `ComparisonTools.close` verwirft am Laufende Abrufe, die noch nicht begonnen
 haben. Google-Daten-Chats suchen nicht und haben deshalb keine Auszüge.
+
+### Quellen nachlesen (read_source, seit 2026-10-10)
+
+Nach einem Vergleich darf das Chatmodell (Orchestrator) eine Quelle, die eine
+Vergleichsantwort zitiert hat, selbst öffnen: um einen konkreten Widerspruch
+zwischen den Antworten zu klären oder den genauen Wortlaut einer Kernaussage
+(Zahl, Definition, offizielle Aussage) zu holen. Schalter: `AGENT_READ_SOURCES=1`
+(Env), Standard aus. Code: `agent_read_source.py`.
+
+**Warum ein eigenes Tool.** Der naheliegende Weg, OpenRouters Server-Tool
+`openrouter:web_fetch` direkt in den Steuerschritt zu hängen, scheitert an der
+Prüfbarkeit: Über Chat Completions (unser Transport) kommt der gelesene Text nie
+beim Client an, nur ein Zähler in `usage.server_tool_use_details`
+(`tool_calls_requested`/`tool_calls_executed`, auch für gescheiterte Abrufe).
+Antwortschritt und Judges hätten nie gesehen, was der Orchestrator gelesen hat,
+das Problem, an dem die Worker-Delegation scheiterte. Die Responses API liefert
+den Text dagegen als Output-Item `{"type": "openrouter:web_fetch", url, title,
+content, httpStatus, error}` (Live-Probe `scripts/probe_web_fetch.py`, Ergebnis
+`artifacts/web-fetch-probe/validation.md`). Deshalb ruft der Orchestrator das
+Client-Tool `read_source(url, purpose, point)`; der Server öffnet die Seite mit
+OpenRouters Fetch in einem kleinen Responses-API-Aufruf (`PageFetch`) des
+Standard-Judges (Luna, bei Ausfall der Gemini-Standard-Judge, jeweils mit der
+leichtesten Denkstufe) und nimmt den Text aus dem Output-Item; die eigene
+Antwort des Helfers („OK“) wird verworfen.
+
+**Grenzen.**
+- Nur nach einem Vergleich und vor der Antwort. Das Tool steht während des
+  ganzen Turns in der Registry (eine zwischen Schritten wechselnde Toolliste
+  würde den Prompt-Cache neu schreiben) und lehnt davor bzw. danach ab.
+- Nur URLs, die eine Vergleichsantwort dieser Nachricht als Quelle führt
+  (`answers[].sources`, kanonisch verglichen wie `url_key`: Schema, Host-
+  Schreibweise und Schrägstrich am Ende egal, nur http(s)). Strenger als eine
+  Domainliste: kein anderer Artikel derselben Seite, keine URL aus der eigenen
+  Suche oder aus einem Seitentext. Der Fetch läuft mit `allowed_domains` = genau
+  dieser Host (IDN in ASCII-Form), Engine `exa` fest (nur Exa, Parallel und
+  OpenRouters eigener Abruf halten Domainfilter und Tokendeckel zuverlässig ein;
+  `auto` landete in der Probe ohnehin auf Exa). Meldet der Abruf eine andere
+  Seite als die zitierte (anderer Pfad; Exas Normalisierung von Schema, „www.“,
+  Schrägstrich und Query zählt als dieselbe), gilt er als gescheitert.
+- Gemini zitiert Googles Weiterleitung (`vertexaisearch.cloud.google.com`), nicht
+  die Seite. Ein Request an genau diesen Host liest das Ziel aus dem
+  `Location`-Header (`resolve_redirect`, ohne Weiterleitung zu folgen, Ziel nach
+  denselben Regeln wie zitierte URLs geprüft), dann liest Exa die Zielseite;
+  gespeichert werden Ziel (`url`) und Zitat (`cited_url`).
+- Höchstens `READS_PER_MESSAGE` (5) Abrufe je Nachricht (auch gescheiterte
+  zählen), `READS_PER_STEP` (3) je Steuerschritt, `READ_CONTENT_TOKENS` (4.000)
+  je Seite (`max_uses: 1`, `max_content_tokens`); gespeichert bis
+  `READ_TEXT_CHARS` (24.000 Zeichen). Eine schon gelesene URL (auch über ihre
+  Weiterleitung) liefert `already_read` ohne neuen Abruf, eine gescheiterte wird
+  nicht erneut versucht.
+- Zeit: Ein Abruf endet samt Weiterleitung und Ersatz-Helfer nach höchstens
+  `READ_SECONDS` (60 s, eigene, mit dem Turn verkettete Abbruchquelle); unter
+  `READ_MIN_SECONDS` (45 s) bis zum spätesten Start des Antwortschritts
+  (`answer_time_left`) beginnt keiner. Nur der eigene Zeitgeber macht einen
+  Abbruch zum `timeout` des Abrufs; jeder andere Stop (Nutzer, Server) beendet
+  den Turn wie sonst. Ohne diese Grenze hätte ein hängender Abruf bis zur
+  Stall-Frist (180 s) die Zeit der Antwort aufgezehrt.
+- Nach einem gelesenen Abruf lehnt `compare_models` ab: Der Seitentext steht
+  im Kontext des Orchestrators und darf weder als Fund noch als Anweisung einer
+  Seite in eine neue Aufgabe an die unabhängigen Vergleichsmodelle geraten.
+- Nie für Vergleichsmodelle, Antwortschritt, Judges oder Worker, nie in
+  gebundenen Läufen (nur Kontomodus) und nie in Chats mit Google-Daten
+  (Router-Flag `google_data`, Google-Zugriff für die Nachricht, zusätzlich
+  Prüfung des Chats beim Aufruf).
+
+**Ergebnisse statt Toolfehler.** Ablehnungen (nicht zitiert, zu früh oder zu
+spät, Grenze erreicht, Google-Daten, schon gescheitert) kommen als
+`{"status": "refused", "reason"}`, nicht lesbare Seiten als
+`{"status": "failed", "reason"}`, beide ohne `error`-Schlüssel. Drei Toolfehler
+in Folge beenden einen Turn ohne Antwort (`DelegationLoop.run`,
+`invalid_tool_rounds`); eine Paywall, ein 403 oder ein falsch kopierter Link
+dürfen die bezahlten Vergleiche nicht um ihre Antwort bringen. Ein Toolergebnis
+beginnt mit `status` und `note` (untrusted data, nächster Schritt), der
+Seitentext steht danach in `untrusted_page_text`.
+
+**Kosten.** Der Helfer ist ein gewöhnlicher, beanspruchter und abgerechneter
+Modellschritt (`DelegationLoop._step` mit `server_tools=[web_fetch]` und
+eigener Completion, Generation-ID im Beleg für die spätere Usage-Abstimmung):
+Die Reservierung zählt die Seite mit (`agent_costs.fetch_bounds`:
+`max_content_tokens` × 1,25 plus eine Fortsetzung, dazu 0,1 ct Exa-Gebühr);
+gebucht werden die gemessene Usage und, weil OpenRouters `usage.cost` sie nicht
+enthält, die Exa-Gebühr für eine gelesene Seite. Reicht das Tageskonto nicht,
+scheitert nur dieser Abruf (`token_budget`), der Turn läuft weiter; Überziehen
+dürfen Abrufe nicht. Weil die Seitentokens nicht mit dem Ausgabelimit
+schrumpfen, rechnet `_admit_chat_step` bei einem Abruf mit der vollen kleinsten
+Reservierung und gibt auf, sobald ein kleineres Ausgabelimit nichts mehr bringt
+(vorher drehte die Zulassung bei knappem Konto ohne Pause Runden auf dem
+Ledger). Gemessen in der Probe: ein Abruf mit Luna 0,007–0,066 ct und
+2,6–3,9 s. Der gelesene Text steht danach im Verlauf jedes weiteren
+Steuerschritts, deshalb verlangt der Prompt höchstens die ein bis zwei
+entscheidenden Seiten.
+
+**Wohin der Text geht.**
+- Als Toolergebnis an den Orchestrator (`untrusted_page_text`).
+- In den Review-Snapshot als `read_sources` (Ziel-URL, ggf. `cited_url` und
+  `fetched_url`, Host, Titel, Text, Zeichen, `retrieved_at`, `purpose`, `point`,
+  `cited_by` mit Vergleich und Familie, `model`; bei Fehlern `status: failed` und
+  `error`, nie Inhalt). Wird der Snapshot zu groß (600 kB), entfallen zuerst die
+  Teiltexte abgebrochener Antworten, dann Judge-Details und Gegenzitate der
+  Textprüfung; danach werden die gespeicherten Seitentexte auf 2.000 Zeichen
+  gekürzt (`text_trimmed`), im Speicher bleiben sie vollständig. Endet der Lauf
+  während eines Abrufs, setzt `finish_run` einen gespeicherten „running“-Eintrag
+  auf `failed`.
+- In die Evidenz des Antwortschritts als `read_sources` (`url`, `title`,
+  `read_for` = der Punkt, für den gelesen wurde, `text`, `text_cut`,
+  `retrieved_at`, `cited_by`; gescheiterte als `{"url", "status": "not read"}`).
+  `AGENT_ANSWER_PROMPT` erlaubt wörtliche Zitate daraus wie aus Auszügen und
+  verbietet, eine nicht gelesene Quelle als gelesen auszugeben.
+- An den Coverage-Judge als eigene `<page label="Page n" url="…">`-Blöcke
+  (`query_differences(read_sources=...)`, zusammen höchstens 40.000 Zeichen).
+  „Page“, nicht „Source“: Die Coverage-Regeln lassen den Judge Quellenmarken in
+  den Antworten ignorieren. `<page>`- und `<response>`-Tags im Seiten- wie im
+  Antworttext werden entschärft, die URL im Attribut kodiert. Der Judge gibt
+  jeder Seite je Satz eine Stance wie einem Modell; sie steht als
+  `claims[].read_sources` (`url`, `stance`, Zitat nur wenn es als ganze Wörter
+  auf der Seite steht) und zählt nie als Stimme: `agree`/`dissent`,
+  Coverage-Zustand und Score bleiben die der Modelle. Der Differences-Judge sieht
+  die Seiten nicht.
+
+**Prompt.** Nur bei eingeschaltetem Feature: der Block `AGENT_READ_SOURCE_PROMPT`,
+vier angepasste Sätze (`AGENT_READ_SOURCE_REPLACEMENTS`: Seiten öffnen, Konflikt
+erst per gelesener Quelle statt Suche klären, `more_work` fürs Lesen,
+`status_update` auch bei `read_source`) und eine eigene Beschreibung von
+`next_step` im Schema von `compare_models` (`agent_comparison.READ_NEXT_STEP`).
+Der Haken: `next_step` wählt das Modell beim Aufruf von `compare_models`, also
+bevor es die Antworten sieht; mit `"answer"` springt der Server direkt zur
+Synthese und es kann nichts mehr lesen. Im Live-Smoke setzte Sonnet deshalb bei
+der ersten Prompt-Fassung („wer lesen will, setzt more_work“) zweimal
+`"answer"`, obwohl der Judge danach fünf Abweichungen fand. Seitdem verlangen
+Prompt und Schema, vorauszuplanen: `"more_work"`, wenn der Nutzer
+widersprüchliche Angaben meldet, Prüfung oder genauen Wortlaut verlangt, oder
+wenn die Antwort an einer genauen Zahl, einem Datum, Preis oder einer Regel
+hängt, die Quellen oft unterschiedlich angeben. Der Auslöser ist bewusst eng:
+Jedes `more_work` kostet einen zusätzlichen Steuerschritt, auch wenn danach
+nichts gelesen wird. Vor dem Einschalten die `more_work`-Quote messen. Mit den
+Antworten vor Augen liest das Modell nur, was die Antwort ändert; das Ergebnis
+von `compare_models` erinnert daran, nur wenn eine Antwort überhaupt Quellen
+nennt („If these answers disagree … read_source (only URLs listed in the
+answers' sources); otherwise do not read“).
+
+**Live-Smoke 2026-10-10** (echte Läufe über die API, Sonnet 5.5, Standard-Preset,
+Prod-Firestore; Stand vor dem Review, dessen Änderungen der Auslöser enger machten):
+- Grundfreibetrag 2026 mit Wunsch nach wörtlichem Zitat, erste Prompt-Fassung:
+  kein Abruf (`next_step: answer`), 0,14 $.
+- Eiffelturm-Höhe („überall andere Zahlen“), zweite Fassung: `more_work`, der
+  Agent sah die Antworten (alle 330 m) und las richtigerweise nicht, 0,29 $
+  (Tiefe `full`).
+- Grundfreibetrag, zweite Fassung: Abruf von gesetze-im-internet.de/estg/__32a
+  (`exact_wording`, 2.828 Zeichen, Helfer GPT-5.6 Luna – der konfigurierte
+  OpenAI-Standard-Judge – 1.302 Input-Tokens, 0,037 ct); das Gesetzeszitat der
+  Antwort steht Wort für Wort im gelesenen Text; Differences und Coverage
+  liefen, die Seite stützte 8 Aussagen (`claims[].read_sources`); 0,18 $ für den
+  ganzen Turn (gleiche Frage ohne Abruf 0,14 $: Mehrkosten vor allem durch den
+  zusätzlichen Steuerschritt).
+
+**Anzeige.** Die Aktivität zeigt „Reading example.org…“ (Host nur bei einer
+zitierten URL, nie für Googles Weiterleitung) und danach „Read source ·
+example.org“ nur, wenn der Abruf Text geliefert hat (`read: completed` im
+Tool-Ereignis); sonst „Could not read · example.org“, „Already read ·
+example.org“, „Read source · Skipped“ (abgelehnt) oder „Read source · Stopped“
+bzw. „· Failed“. Dieselbe Beschriftung steht im aufgeklappten Verlauf. Der
+Helfer erscheint als eigene Sitzung („Read source · host“ mit Modell, Tokens und
+bei nicht lesbarer Seite dem Grund) in der Seitenleiste und zählt dort in
+„n of m done“ mit, nicht aber im Modellstapel über der Antwort. Die
+Quellenansicht markiert gelesene Quellen mit „Read by the agent“, verglichen
+wie `url_key` und auch über die zitierte Weiterleitung. `MOCK_LLM` liefert eine
+feste Seite ohne Abruf (`mock_llm.mock_fetched_page`).
 
 ## Persistenz, Stop und Recovery
 
