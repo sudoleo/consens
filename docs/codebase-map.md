@@ -1318,16 +1318,18 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Google-Daten, `DelegationLoop(google_data=…)`) prüft Frage/Ziele/Intervall,
   fragt lesend `watch_service.creation_outlook` (schon beobachtet: jede Watch
   mit gleichem `question_hash`; freie Slots; Daily) und speichert einen
-  Vorschlag als `turn.agent_watch` (`question`, `goals[≤3]`, `interval`; nur
-  bei `pending`). SSE `watch`, Evidence `prepared_watch` und
-  `SYNTHESIS_PROMPT` für den Antwortschritt; `_free_floor` erlaubt eine reine
-  „beobachte das“-Antwort ohne Vergleich. `App.agentWatch.render(body,
-  {key, proposal, running})` zeigt die Karte erst unter der fertigen
-  Antwort: „Start watching“ = `POST /api/watch` mit `App.watchUi.watchDefaults`
+  Vorschlag als `turn.agent_watch` (`question` ≤ 200, `goals[≤3]`, `interval`;
+  nur bei `pending`). Evidence `prepared_watch` und `SYNTHESIS_PROMPT` für den
+  Antwortschritt; kein eigenes SSE-Event. `App.agentWatch.render(body,
+  {key, proposal})` zeigt die Karte unter einer abgeschlossenen Antwort
+  (`agent-chat.js` reicht den Vorschlag nur bei `status: completed` durch):
+  „Start watching“ = `POST /api/watch` mit `App.watchUi.watchDefaults`
   plus Frage und erstem Ziel, „Adjust“ = `openWatchDialog("create", {question,
   goals, goal, interval, source: "agent"})`. Den Zustand (watching/paused/
-  resolved/full) liest die Karte live über `App.watch.watchedFor` und
-  `App.watchState.limits` und folgt `consensio:watches-changed`. Ein Turn mit
+  resolved/full) liest die Karte über `App.watch.watchedFor` und
+  `App.watchState.limits` und folgt `consensio:watches-changed`, das
+  `watchUi.receiveWatchList` bei jeder Antwort von `/api/my/watches` sendet
+  (Dialog, Hinweis, Dashboard). Ein Turn mit
   Vorschlag bekommt keinen `offerWatch`-Hinweis. Ablauf und Begründung:
   [agent-mode.md](agent-mode.md) „Watch vorschlagen“. `MOCK_LLM`: „Watch:
   <Frage>“ bereitet einen Vorschlag vor.
@@ -1881,8 +1883,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   the schedule“ öffnet den vollen Dialog, ein 429 ebenfalls.
   `openWatchDialog("create", options)` nimmt `question`, `goal` (vorgewählt),
   `goals` (Vorschläge des Aufrufers, dann kein `goal-suggestions`-Call),
-  `interval` und `source` (Analytics). `loadWatchLimits` hält neben den Limits
-  die Watch-Liste (`watchState.watches`) und meldet `consensio:watches-changed`;
+  `interval` und `source` (Analytics). `receiveWatchList` (aus
+  `loadWatchLimits` und dem Dashboard) hält neben den Limits die Watch-Liste
+  (`watchState.watches`) und meldet `consensio:watches-changed`;
   `App.watch.watchedFor(question)` vergleicht wie `question_hash`
   (Groß/Klein, Leerraum, Schluss-„?!.“). Der Hinweis ist ein
   eigener Viewport-Layer unter `<body>` und übermalt nie den Composer.
@@ -3093,7 +3096,7 @@ Speicher (`FRAME_OVERHEAD_BYTES` = 256 je Frame plus der für Nachzügler
 aufgehobene Text). Frames werden als gültiges JSON gespeichert (NaN → `null`,
 einzelne Surrogates ersetzt). Liest jemand hinter dem behaltenen Fenster,
 bekommt er zuerst die neuesten verworfenen Frames mit bleibendem Zustand
-(`STICKY_TYPES`: accepted, started, review, memory, quota, resources, watch) und dann
+(`STICKY_TYPES`: accepted, started, review, memory, quota, resources) und dann
 `reset` mit dem Antworttext bis dorthin (Deltas angehängt, bei `activity`
 `status` + `clear_response` geleert), im Tail als eigene Frames bzw.
 `event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert nichts

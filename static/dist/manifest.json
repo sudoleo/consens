@@ -1,5 +1,5 @@
 {
-  "sources": "980b5db2ee95",
+  "sources": "a4aae8ca29ea",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -63,6 +63,7 @@
     "static/js/agent-mode.js",
     "static/js/agent-preferences.js",
     "static/js/agent-review.js",
+    "static/js/agent-watch.js",
     "static/js/agent-workspace.js",
     "static/js/app-bootstrap.js",
     "static/js/app-core.js",
@@ -186,7 +187,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.c63fe502be8f.js",
+      "src": "/static/dist/head.10871dfaa201.js",
       "module": false,
       "defer": false
     },
@@ -210,25 +211,25 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.577d9bba0296.js",
+      "src": "/static/dist/app.fdb2920b6119.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.8030bfa3846b.css"
+    "app": "/static/dist/app.39f9b6382463.css"
   },
   "previous_assets": [
+    "app.8030bfa3846b.css",
     "app.258f9f7d83e2.css",
-    "app.e143530f2112.css",
+    "app.577d9bba0296.js",
     "app.b332a01d8372.js",
-    "app.c48eb4b447f8.js",
     "auth.5e487d1e2570.js",
     "demo.3165094e7e81.js",
     "demo.0ae29ba9ea95.js",
     "firebase.a637d57a03c8.js",
     "firebase.9d4fb8bf3096.js",
-    "head.e04aa138352e.js",
-    "head.a96159d254ab.js"
+    "head.c63fe502be8f.js",
+    "head.e04aa138352e.js"
   ]
 }

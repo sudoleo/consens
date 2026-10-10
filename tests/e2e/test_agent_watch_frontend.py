@@ -55,8 +55,7 @@ def test_agent_watch_card_starts_the_prepared_watch_and_adjust_opens_the_dialog(
                 "agent_activity": [{"id": "s1:call_watch", "kind": "tool", "name": "prepare_watch", "status": "succeeded"}],
                 "agent_settings": {"model_id": CATALOG["default_model_id"], "label": "DeepSeek V4.1 Flash"}}
         meta = {"id": body["bookmark_id"], "title": "GPT-6", "query": body["question"], "mode": "Agent", "has_consensus": True}
-        stream = "event: watch\ndata: " + json.dumps({"proposal": proposal}) + "\n\n"
-        stream += "event: delta\ndata: " + json.dumps({"text": text}) + "\n\n"
+        stream = "event: delta\ndata: " + json.dumps({"text": text}) + "\n\n"
         stream += "event: final\ndata: " + json.dumps({"chat_id": chat_id, "turn_id": turn_id, "response": text,
                                                        "turn": turn, "bookmark_meta": meta}) + "\n\n"
         route.fulfill(content_type="text/event-stream", body=stream)

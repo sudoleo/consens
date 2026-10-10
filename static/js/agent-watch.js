@@ -1,11 +1,12 @@
 // The Watch the Agent prepared (agent_watch.py) as a card under the answer.
 // The Agent only proposes: the card starts the Watch through the create
 // dialog's own POST /api/watch, in one click with the dialog's defaults
-// (watch.js watchDefaults), or "Adjust" opens that dialog prefilled. Whether
-// the question is already watched or no slot is free comes live from the
-// account's watch list (watch.js), never from the saved turn, so the card
-// stays true after a reload, a second tab or a Watch paused on /app/watches.
-// The card appears once the answer is final: the answer points to it.
+// (watch.js watchDefaults), or "Adjust" opens that dialog prefilled. The card
+// belongs to a completed answer, which points to it; agent-chat.js passes the
+// saved turn's proposal only then. Whether the question is already watched or
+// no slot is free comes from the account's watch list (watch.js
+// receiveWatchList: every load of /api/my/watches in this page, the
+// dashboard's too), never from the saved turn.
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -93,21 +94,24 @@
     const limits = App.watchState?.limits;
     const full = !watch && Boolean(limits?.atLimit);
     const state = watch ? 'watching' : full ? 'full' : 'proposal';
+    // Paused by the user or after failed checks ("paused_error") alike.
+    const paused = Boolean(watch) && !['active', 'resolved'].includes(watch.status);
     view.card.dataset.state = state;
     view.title.textContent = !watch ? 'Watch this question'
-      : watch.status === 'paused' ? 'Watch paused'
-        : watch.status === 'resolved' ? 'Watch resolved' : 'Watching';
+      : paused ? 'Watch paused' : watch.status === 'resolved' ? 'Watch resolved' : 'Watching';
     view.question.textContent = watch?.question || proposal.question;
     const goal = watch ? line(watch.condition) : proposal.goals[0] || '';
     view.goal.textContent = !goal ? 'Any change to the answer'
       : `${watch?.status === 'resolved' ? 'Waited for' : 'Waiting for'}: ${goal}`;
     view.settings.hidden = Boolean(watch);
     if (!watch && ui) view.settings.textContent = ui.settingsSummary(ui.watchDefaults(proposal.interval));
-    view.status.textContent = view.message
-      || (watch && watch.status === 'active' && ui ? `Checks ${ui.formatWatchSchedule(watch)}.`
-        : watch?.status === 'paused' ? 'You already watch this question. The Watch is paused.'
-          : watch?.status === 'resolved' ? 'This Watch found what it waited for.'
-            : full && ui ? ui.limitMessage(limits) : '');
+    // A failed start speaks only while starting is still the next step: an
+    // existing Watch or a full account says what holds now.
+    view.status.textContent = state === 'proposal' ? view.message
+      : paused ? 'You already watch this question. The Watch is paused.'
+        : watch?.status === 'resolved' ? 'This Watch found what it waited for.'
+          : watch && ui ? `Checks ${ui.formatWatchSchedule(watch)}.`
+            : full && ui ? ui.limitMessage(limits) : '';
     view.status.hidden = !view.status.textContent;
     view.start.hidden = view.adjust.hidden = Boolean(watch);
     view.start.disabled = view.busy || full;
@@ -131,8 +135,10 @@
       App.trackAppEvent?.('app_watch_created', { interval: data.watch.interval, source: 'agent',
         has_goal: Boolean(payload.condition), goal_source: payload.condition ? 'suggested' : 'none' });
     } catch (error) {
-      // Already watched or no free slot: the refreshed list below says so.
-      if (error.status !== 409 && error.status !== 429) view.message = `Watch could not be started: ${error.message}`;
+      // Already watched (409) or no free slot (429) is then said by the
+      // refreshed list below; any other refusal, the request rate limit
+      // included, keeps its reason while Start is still offered.
+      view.message = `Watch could not be started: ${error.message}`;
     } finally {
       view.busy = false;
       sync(view);
@@ -147,10 +153,10 @@
     App.watchUi?.openWatchDialog?.('create', { question, goals, goal: goals[0] || '', interval, source: 'agent' });
   }
 
-  function render(body, { key = '', proposal = null, running = false } = {}) {
+  function render(body, { key = '', proposal = null } = {}) {
     if (!body) return;
     let view = views.get(body);
-    const value = running ? null : normalize(proposal);
+    const value = normalize(proposal);
     if (view && (!value || view.key !== key)) {
       view.card.remove();
       shown.delete(view);

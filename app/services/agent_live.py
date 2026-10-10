@@ -51,7 +51,7 @@ TAIL_INTERVAL_SECONDS = 0.1
 TAIL_KEEPALIVE_SECONDS = 15.0
 # Frames whose newest instance stays meaningful after it scrolled out of the
 # window: a late reader receives them with its reset (agent-chat.js handlers).
-STICKY_TYPES = frozenset({"accepted", "started", "review", "memory", "quota", "resources", "watch"})
+STICKY_TYPES = frozenset({"accepted", "started", "review", "memory", "quota", "resources"})
 
 
 def _text_effect(event_type, data):

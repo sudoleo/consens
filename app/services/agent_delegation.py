@@ -1146,9 +1146,11 @@ class DelegationLoop(AgentLoop):
         Its direct text is not published yet; ask once to confirm or compare."""
         if (not self.comparison or not self.comparison.free or self.comparison.comparisons
                 or self.floor_reminded or value.tool_calls or not value.text.strip()
-                # A message that only asked to remember or forget something,
-                # or to watch a question this chat already answered.
-                or self.memory.changed or self.watch_proposal):
+                # A message that only asked to remember or forget something.
+                # Not a prepared Watch: "tell me when X, is it out yet?" asks
+                # for the current state too, and the reminder lets a mere
+                # acknowledgement through on the second try.
+                or self.memory.changed):
             return False
         self.floor_reminded = True
         self.messages.append({"role": "user", "content":

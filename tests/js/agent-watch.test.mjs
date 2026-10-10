@@ -55,9 +55,10 @@ function tomorrow(window) {
 }
 
 describe("Agent Watch card", () => {
-  it("waits for the final answer, then shows the question, the goal and the defaults", async () => {
+  it("shows the question, the goal and the defaults of a completed answer's proposal", async () => {
     const { window, render, card } = boot();
-    render({ proposal: PROPOSAL, running: true });
+    // agent-chat.js passes a proposal only for a completed turn.
+    render({ proposal: null });
     expect(card()).toBeNull();
 
     render({ proposal: PROPOSAL });
@@ -101,6 +102,35 @@ describe("Agent Watch card", () => {
     expect(card().querySelector(".agent-watch-title").textContent).toBe("Watch paused");
     expect(card().querySelector(".agent-watch-status").textContent).toBe("You already watch this question. The Watch is paused.");
     expect(card().querySelector(".agent-watch-start").hidden).toBe(true);
+  });
+
+  it("treats a Watch paused after failed checks as paused", async () => {
+    const { render, card } = boot({ watches: [{ id: "w8", status: "paused_error", question: QUESTION }] });
+    render({ proposal: PROPOSAL });
+    await settle();
+    expect(card().querySelector(".agent-watch-title").textContent).toBe("Watch paused");
+  });
+
+  it("follows a watch list the dashboard loaded", async () => {
+    const { window, render, card } = boot();
+    render({ proposal: PROPOSAL });
+    await settle();
+    expect(card().dataset.state).toBe("proposal");
+    window.App.watchUi.receiveWatchList({ watches: [{ id: "w4", status: "active", question: QUESTION,
+      interval: "monthly", run_time: "08:00" }], limits: { plan: "free", active_count: 1, active_limit: 3 } });
+    expect(card().dataset.state).toBe("watching");
+    expect(card().querySelector(".agent-watch-status").textContent).toBe("Checks monthly at 08:00.");
+  });
+
+  it("keeps the reason of a refused start that leaves Start the next step", async () => {
+    const { render, card } = boot({ create: { status: 429, data: { error: "Rate limit exceeded: 5 per 1 minute" } } });
+    render({ proposal: PROPOSAL });
+    await settle();
+    card().querySelector(".agent-watch-start").click();
+    await settle();
+    expect(card().dataset.state).toBe("proposal");
+    expect(card().querySelector(".agent-watch-status").textContent)
+      .toBe("Watch could not be started: Rate limit exceeded: 5 per 1 minute");
   });
 
   it("explains a full account instead of offering a button that fails", async () => {
