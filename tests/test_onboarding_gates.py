@@ -167,9 +167,9 @@ def test_watch_nudge_starts_a_watch_directly_and_says_when_it_writes():
     counter = counter[:counter.index("function showWatchFeatureNudge(")]
     assert "localStorage.setItem(FEATURE_NUDGE_RUNS_STORAGE_KEY" in counter
 
-    defaults = watch[watch.index("function nudgeWatchDefaults()"):]
+    defaults = watch[watch.index("function watchDefaults("):]
     defaults = defaults[:defaults.index("async function startWatchFromNudge")]
-    assert 'interval: "weekly"' in defaults
+    assert 'function watchDefaults(interval = "weekly")' in defaults
     assert 'email_mode: "changes_only"' in defaults
     assert 'visibility: "private"' in defaults
 

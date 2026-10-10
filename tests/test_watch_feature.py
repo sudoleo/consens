@@ -576,6 +576,31 @@ class WatchCrudTests(unittest.TestCase):
         with self.assertRaisesRegex(WatchError, "already watched"):
             watch_service.create_watch("u1", **kwargs)
 
+    def test_creation_outlook_mirrors_the_create_rules_without_writing(self):
+        """What the Agent asks before it offers a Watch card (agent_watch.py)."""
+        empty = watch_service.creation_outlook("u1", "Has the EU AI Act guidance changed?", "free", db=self.db)
+        self.assertEqual(empty, {"already_watched": False, "active_count": 0, "active_limit": 1,
+                                 "limit_reached": False, "daily_allowed": False})
+        watch_service.create_watch("u1", question="Has the EU AI Act guidance changed?",
+                                   interval="weekly", tier="free", db=self.db)
+        stores = {name: dict(store) for name, store in self.db.stores.items()}
+        # The same uniqueness as create_watch: case, spacing and the final "?" do not matter.
+        outlook = watch_service.creation_outlook("u1", "has the EU AI act  guidance changed", "free", db=self.db)
+        self.assertEqual((outlook["already_watched"], outlook["active_count"], outlook["limit_reached"]),
+                         (True, 1, True))
+        other = watch_service.creation_outlook("u1", "Is GPT-6 out yet?", "pro", db=self.db)
+        self.assertEqual((other["already_watched"], other["limit_reached"], other["daily_allowed"]),
+                         (False, False, True))
+        self.assertFalse(watch_service.creation_outlook("u2", "Is GPT-6 out yet?", "free", db=self.db)["already_watched"])
+        self.assertEqual({name: dict(store) for name, store in self.db.stores.items()}, stores)
+        # A watch started from a consensus asks its share's question.
+        consensus_share = "B" * 16
+        self.db.stores["shares"][consensus_share] = {
+            **share(owner="u3"), "question_hash": share_snapshots.question_hash("Will this consensus change?")}
+        watch_service.create_watch("u3", share_id=consensus_share, interval="weekly", tier="pro", db=self.db)
+        self.assertTrue(watch_service.creation_outlook("u3", "Will this consensus change", "pro",
+                                                       db=self.db)["already_watched"])
+
     def test_query_first_watch_requires_a_complete_text_question(self):
         with self.assertRaisesRegex(WatchError, "complete question"):
             watch_service.create_watch(
@@ -2101,9 +2126,9 @@ class WatchFrontendContractTests(unittest.TestCase):
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         share_source = Path("templates/watch_share.html").read_text(encoding="utf-8")
-        self.assertIn('renderQuestionStep(options?.question, modalIntent, options?.goal)', source)
-        # A known question (example, chat) skips straight to the goal.
-        self.assertIn('renderConfirm({ question: knownQuestion, goal: options?.goal }, modalIntent)', source)
+        self.assertIn('renderQuestionStep(setup.question, modalIntent, setup)', source)
+        # A known question (example, chat, Agent proposal) skips straight to the goal.
+        self.assertIn('renderConfirm({ ...setup, question: knownQuestion }, modalIntent)', source)
         self.assertIn('payload.question = directQuestion', source)
         self.assertIn('id="watchDashCreate"', html_source)
         self.assertIn("watch_awaiting_first_run", share_source)

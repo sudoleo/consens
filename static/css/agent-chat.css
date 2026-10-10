@@ -547,6 +547,39 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-memory-head button { min-height: 44px; }
 }
 
+/* ---- A Watch the Agent prepared (agent-watch.js) ----------------------------
+   One raised block under the answer: what would be watched, for what, on
+   which schedule, and the one button that starts it. Frameless like the
+   shell; the state lives in the words ("Watching", "Watch paused"), not in
+   a colour. */
+.agent-watch-card {
+  max-width: 66ch;
+  margin: 14px 0 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+.agent-watch-card p { margin: 0; }
+.agent-watch-card [hidden] { display: none; }
+.agent-watch-head { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-watch-head svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.agent-watch-title { font-weight: var(--font-weight-medium); }
+.agent-watch-card[data-state="watching"] .agent-watch-head { color: var(--ink-2); }
+.agent-watch-card .agent-watch-question { margin-top: 6px; color: var(--ink); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
+.agent-watch-card .agent-watch-goal { margin-top: 2px; overflow-wrap: anywhere; }
+.agent-watch-card :is(.agent-watch-settings, .agent-watch-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
+.agent-watch-start { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.agent-watch-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-watch-link:hover { color: var(--ink); }
+.agent-watch-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .agent-watch-link { min-height: 44px; }
+}
+
 /* ---- A pasted text the Agent checked (passage-check.js) --------------------
    One section at the top of the answer; the user's message stays as it was
    sent. No box, no uppercase label, no grey filler (house rules): the result

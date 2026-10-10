@@ -688,6 +688,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       klappt die Einstellungen dafür selbst auf und scrollt zum ersten Fehler. Der
       Dialog bleibt auf iPhone-Größen vollständig im sichtbaren Bereich. Private
       Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
+- [ ] Agent: „Sag mir Bescheid, wenn <etwas Kommendes> passiert“ beantwortet den
+      aktuellen Stand und zeigt darunter eine Watch-Karte (Frage, „Waiting for: …“,
+      „Weekly on … · E-mail · Private“). Erst „Start watching“ legt die Watch an
+      (Karte: „Watching“, Sidebar-Zähler steigt); „Adjust“ öffnet den Dialog mit
+      den Zielen des Agenten, das erste gewählt. Eine schon beobachtete Frage
+      zeigt „Watching“/„Watch paused“, ein volles Konto den Limit-Satz statt
+      eines Knopfs. In einem Chat mit Gmail/Kalender-Daten schlägt der Agent
+      keine Watch vor.
 - [ ] Zielvorschläge laden als zwei Platzhalterzeilen und erscheinen dann als
       Optionen; die erste ist sichtbar ausgewählt, solange man nichts anderes
       gewählt hat. Tippen in „Something else…“ wählt diese Zeile, „Any change to

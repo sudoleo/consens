@@ -139,6 +139,10 @@
         },
         "static/js/agent-preferences.js",
         "static/js/agent-memory.js",
+        {
+          "file": "static/js/agent-watch.js",
+          "note": "App.agentWatch: the Watch card under an Agent answer. Uses App.watch and App.watchUi (watch.js) at runtime; agent-chat.js renders it."
+        },
         "static/js/consensus-run.js",
         "static/js/agent-workspace.js",
         "static/js/agent-google.js",

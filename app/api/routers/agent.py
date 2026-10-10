@@ -372,7 +372,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
                          completion_factory=AgentCompletion, policy=policy, file_context=file_context,
                          google_selection=payload.google_selection,
-                         google_data_consent=payload.google_data_consent,
+                         google_data_consent=payload.google_data_consent, google_data=google_data,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
                          source_limits=source_limits, agent_preferences=payload.agent_preferences, memory=memory,
