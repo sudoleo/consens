@@ -2721,7 +2721,11 @@ Seit 2026-10-10 nennen die Antworten im Evidenzblock ihre Quellen nur per URL;
 `agent_source_evidence.py` (siehe agent-mode.md, „Quellenauszüge für die
 Antwort“). `AgentCompletion` behält dafür bis zu `ANSWER_SOURCES_MAX` (10)
 Quellen je Aufruf und in `citations` Zitattext und Position, beides nur im
-Speicher; gespeichert und gestreamt werden weiter nur URL und Titel.
+Speicher; gespeichert und gestreamt werden weiter nur URL und Titel. Text vor
+dem Eintreffen der ersten Suchergebnisse (Claudes „Ich suche nach …“) streicht
+`AgentCompletion` am Stream-Ende samt Offset-Verschiebung
+(`citations.presearch_end`/`shift_citation`; agent-mode.md, „Text vor den
+Suchergebnissen“).
 **Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
 Steuer-Prompt (Vergleichspflicht, Aufgabe formulieren: „was die Frage festlegt,
 nicht was sie beantwortet“, Suche, Tiefe, next_step, status_update); das frühere
@@ -3755,7 +3759,9 @@ Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
    defensiv die beim Streaming erreichte Textposition und die naechste
    Satz-/Absatzgrenze; ohne brauchbaren Anker landen sie am Antwortende, niemals
    vor dem ersten Wort. Wiederholte kumulative Annotation-Snapshots werden im
-   Stream dedupliziert.
+   Stream dedupliziert. Was das Modell vor den ersten Suchergebnissen schrieb
+   (Zitation ohne Spanne, `citations.is_search_result`), fehlt im `final`
+   (`presearch_end`, gleiche Regel wie im Agent-Stream).
    Nicht-SSE-Antworten werden zuerst als Text gelesen und, falls möglich, als
    JSON geparst; Plain-Text-/Proxy-/HTTP-Fehler bleiben dadurch sichtbar und
    werden nicht mehr zur generischen „No response received“-Meldung.
@@ -5548,7 +5554,7 @@ app/services/llm/
   consensus_scoring.py       Deterministischer Agreement-Score und Schwellen
   coverage_judge.py          Schema/Prompt/Parsing des Coverage-Judges (rein, ohne LLM-Call)
   resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
-  citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
+  citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result), Text vor Suchergebnissen (presearch_end)
   attachments.py             Attachment-Validierung/Aufbereitung
   usage_meter.py             Token-Meter der Transportschicht (ContextVar; Usage je OpenRouter-Request, Schaetzung bei fehlender Usage)
   provider_dispatch.py       Klassifikator "Request nie beim Provider angekommen" (Connect-Fehler, Abbruch vor Dispatch) -> kostenlos statt Schaetzung

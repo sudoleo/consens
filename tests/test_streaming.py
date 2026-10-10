@@ -433,6 +433,23 @@ class OpenRouterStreamTests(unittest.TestCase):
 
         self.assertEqual(events[-1]["result"]["text"].count("[S1]"), 1)
 
+    def test_text_before_the_search_results_is_not_part_of_the_answer(self):
+        # Recorded shape of Claude Haiku 4.5 with its own search (2026-10-10):
+        # the announcement, then content-free chunks with every result at 0/0.
+        def result(url):
+            return {"type": "url_citation", "url_citation": {"url": url, "start_index": 0, "end_index": 0}}
+        answer = "Basierend auf den Suchergebnissen: Der Einlagesatz beträgt 2,50 %."
+        events, _, _ = self._run([
+            {"choices": [{"delta": {"content": "Ich werde die aktuellen Informationen recherchieren."}}]},
+            {"choices": [{"delta": {"content": "", "annotations": [result("https://example.com/a")]}}]},
+            {"choices": [{"delta": {"content": "", "annotations": [result("https://example.com/b")]}}]},
+            {"choices": [{"delta": {"content": answer}, "finish_reason": "stop"}]},
+        ], provider="anthropic")
+
+        # The live card showed it; the final answer replaces it, sources at its end.
+        self.assertTrue(events[0]["text"].startswith("Ich werde"))
+        self.assertEqual(events[-1]["result"]["text"], answer + " [S1, S2]")
+
     def test_reasoning_only_length_cutoff_is_a_structured_error(self):
         events, _, _ = self._run([
             {"choices": [{"delta": {"reasoning": "thinking"}}]},

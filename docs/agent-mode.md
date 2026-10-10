@@ -827,6 +827,34 @@ sofort. Die Metrik `agent_source_evidence:<familie>:search_text|no_search_text`
 zeigt je Familie, wie oft die Suche brauchbaren Text liefert,
 `text:search|page|none` woher der Text der Antwortquellen kam.
 
+**Text vor den Suchergebnissen.** Claude kündigt seine Suche an („Ich werde
+… recherchieren.“), und OpenRouter hängt die Antwort ohne Trenner an
+(„…recherchieren.Basierend auf …“); das stand vorne in Vergleichsantwort,
+Karte, Evidenz und Judges und im Consensus vor einer Reihe `[S…]`-Marken.
+Rohstream live mitgeschnitten (2026-10-10, Haiku 4.5, je eine Suche erlaubt):
+erst der Ankündigungssatz, dann nur `: OPENROUTER PROCESSING`-Kommentare,
+während die Suche läuft, dann Pakete ohne Text mit allen Treffern als
+`url_citation` 0/0, dann die Antwort. OpenAI (Reasoning während der Suche) und
+Gemini schreiben erst nach der Suche, ihre Annotationen tragen Spannen; Exa
+liefert die Treffer vor dem ersten Zeichen. Daraus eine Regel in
+`citations.py`, im Agent-Stream (`AgentCompletion`) wie im Consensus-Stream
+(`_stream_openrouter_chat_completion`): Eine URL-Zitation ohne Spanne der
+Antwort (`is_search_result`) markiert die Ankunft von Suchergebnissen; was
+vorher geschrieben war (Textlänge vor dem Text ihres Pakets), gehört nicht zur
+Antwort (`presearch_end`). Gestrichen wird nur, wenn danach mehr Antwort folgt
+als davor stand: eine aus dem Gedächtnis geschriebene, danach nur bestätigte
+Antwort bleibt ganz. Offsets und Stream-Anker wandern mit (`shift_citation`);
+die Treffer des Pakets liegen danach bei 0, binden keine Aussage und stehen im
+Consensus am Antwortende. Live-Deltas zeigten den Satz schon; gespeicherter
+Text bzw. `final` ersetzen ihn, auch bei abgebrochenem Stream. Metrik
+`presearch_text:<modell>` (processed = gestrichene Zeichen). Grenzen: Sucht
+ein Modell mehrmals (Haiku trotz `max_uses` 1 bis zu dreimal), bringt nur die
+erste Suche einen Trefferblock, eine zweite Ankündigung („Let me search for
+…:“) bleibt stehen. Die Pausen-Kommentare markieren sie zwar, aber auch ein
+Hänger mitten in der Antwort erzeugt sie, und dann fiele echter Antworttext.
+Ohne Stream (`engines.query_model`: Watches, API-Consensus) gibt es keine
+Ankunftsposition; dort bleibt der Satz.
+
 **Was der Antwortschritt bekommt.** Im Evidenzblock nennen die Antworten ihre
 Quellen nur noch per URL. `sources` führt jede Quelle einmal, über Antworten
 und Vergleiche gepoolt (kanonische URL), meistzitierte zuerst:

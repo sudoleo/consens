@@ -278,3 +278,83 @@ def test_client_keeps_citation_text_and_offsets_in_memory_only(monkeypatch):
     assert citations[-1]["start_index"] is None and len(citations[-1]["content"]) == 4000
     # Source text is evidence for the answer step, never an event or stored activity.
     assert "x" * 100 not in json.dumps(events) + json.dumps(completion.activity)
+
+
+# Text a model writes before its search results arrive is no part of the answer.
+
+NARRATION = "Ich werde die aktuellen Informationen zur EZB-Geldpolitik für Sie recherchieren."
+REPLY = ("Basierend auf den Suchergebnissen:\n\n**Einlagesatz:** 2,50 % seit dem 16. September 2026. "
+         "Die nächste Zinsentscheidung ist am 29. Oktober 2026.")
+
+
+def search_result(url, start=0, end=0, content="Original text of the page."):
+    return {"type": "url_citation", "url_citation": {"url": url, "title": "T", "content": content,
+                                                     "start_index": start, "end_index": end}}
+
+
+def stream_answer(monkeypatch, packets):
+    from app.services.llm.agent_client import AgentCompletion, resolve_agent_model
+    from test_agent_loop import transport
+    transport(monkeypatch, [packets])
+    completion = AgentCompletion()
+    events = []
+    try:
+        for event in completion.stream(model=resolve_agent_model("claude-haiku-4-5"),
+                                       messages=[{"role": "user", "content": "Question"}], api_key="test"):
+            events.append(event)
+    except RuntimeError as exc:
+        events.append(exc)
+    return completion, events
+
+
+def test_client_drops_what_the_model_wrote_before_its_search_results(monkeypatch):
+    from test_agent_loop import packet, usage
+    # Recorded shape of Claude Haiku 4.5 with its own search (2026-10-10): the
+    # announcement streams, OpenRouter searches, then content-free chunks
+    # bring every result with 0/0 offsets, then the answer.
+    completion, events = stream_answer(monkeypatch, [
+        packet({"content": NARRATION[:30]}), packet({"content": NARRATION[30:]}),
+        *[packet({"content": "", "annotations": [search_result(f"https://example.org/{i}")]}) for i in range(3)],
+        packet({"content": REPLY[:40]}), packet({"content": REPLY[40:]}), packet(finish="stop", usage=usage(1))])
+    assert completion.text == REPLY
+    # Live deltas showed it; the answer, its card and the evidence do not.
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == NARRATION + REPLY
+    assert [c["fallback_end_index"] for c in completion.citations] == [0, 0, 0]
+    assert all((c["start_index"], c["end_index"]) == (0, 0) for c in completion.citations)
+    cited = answer_citations(completion.text, completion.citations)
+    assert all(entry["claims"] == [] and entry["content"] for entry in cited.values())
+
+
+def test_client_keeps_text_when_no_results_preceded_it(monkeypatch):
+    from test_agent_loop import packet, usage
+    # OpenAI cites spans while it writes, Gemini after the answer: no arrival.
+    first, claim = "Der Einlagesatz beträgt 2,50 %.\n\n", "Er gilt seit dem 16. September 2026."
+    completion, _ = stream_answer(monkeypatch, [
+        packet({"content": first}),
+        packet({"content": claim, "annotations": [search_result("https://example.org/a", len(first),
+                                                                len(first) + len(claim))]}),
+        packet({"content": " " + REPLY}),
+        packet({"annotations": [search_result("https://example.org/b", 0, len(first) - 2)]}),
+        packet(finish="stop", usage=usage(1))])
+    assert completion.text == first + claim + " " + REPLY
+    assert [(c["start_index"], c["end_index"]) for c in completion.citations] == [
+        (len(first), len(first) + len(claim)), (0, len(first) - 2)]
+    # Exa: results before the first word.
+    completion, _ = stream_answer(monkeypatch, [
+        packet({"content": "", "annotations": [search_result("https://example.org/a")]}),
+        packet({"content": REPLY}), packet(finish="stop", usage=usage(1))])
+    assert completion.text == REPLY
+    # An answer from memory that the search merely confirms stays whole.
+    completion, _ = stream_answer(monkeypatch, [
+        packet({"content": REPLY}), packet({"content": "", "annotations": [search_result("https://example.org/a")]}),
+        packet({"content": " Confirmed."}), packet(finish="stop", usage=usage(1))])
+    assert completion.text == REPLY + " Confirmed."
+
+
+def test_client_drops_it_from_a_partial_answer_too(monkeypatch):
+    from test_agent_loop import packet
+    completion, events = stream_answer(monkeypatch, [
+        packet({"content": NARRATION}), packet({"content": "", "annotations": [search_result("https://example.org/a")]}),
+        packet({"content": REPLY}), RuntimeError("connection reset")])
+    assert isinstance(events[-1], RuntimeError)
+    assert completion.text == REPLY

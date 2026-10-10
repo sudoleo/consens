@@ -2,9 +2,12 @@ import unittest
 
 from app.services.llm.citations import (
     SOURCE_SNIPPET_MAX_CHARS,
+    is_search_result,
     parse_openrouter_response,
+    presearch_end,
     result_sources,
     result_text,
+    shift_citation,
 )
 
 
@@ -149,6 +152,35 @@ class OpenRouterCitationParsingTests(unittest.TestCase):
         )
 
         self.assertEqual(result_text(parsed), "Eine belegte [S1] Aussage.")
+
+
+class PresearchTextTests(unittest.TestCase):
+    def test_only_citations_without_a_span_mark_arriving_results(self):
+        self.assertTrue(is_search_result({"start_index": 0, "end_index": 0}))
+        self.assertTrue(is_search_result({}))
+        self.assertFalse(is_search_result({"start_index": 3, "end_index": 9}))
+        self.assertFalse(is_search_result({"end_index": 9}))
+
+    def test_cut_needs_text_before_and_more_answer_after(self):
+        text = "I will search. The rate is 2.5% since March."
+        self.assertEqual(presearch_end(text, 14), 14)
+        for results_at in (None, 0, len(text), len(text) + 5):
+            self.assertEqual(presearch_end(text, results_at), 0)
+        self.assertEqual(presearch_end("   " + text, 3), 0)
+        # An answer from memory, merely confirmed afterwards, stays whole.
+        self.assertEqual(presearch_end(text + " Confirmed.", len(text)), 0)
+
+    def test_shifted_citation_follows_the_text(self):
+        cut = 10
+        moved = shift_citation({"start_index": 14, "end_index": 20, "fallback_end_index": 25}, cut)
+        self.assertEqual(moved, {"start_index": 4, "end_index": 10, "fallback_end_index": 15})
+        # Arriving results keep 0/0; a span inside the cut is gone.
+        self.assertEqual(shift_citation({"start_index": 0, "end_index": 0, "fallback_end_index": 10}, cut),
+                         {"start_index": 0, "end_index": 0, "fallback_end_index": 0})
+        self.assertEqual(shift_citation({"start_index": 2, "end_index": 8, "_stream_text_end_index": 9}, cut,
+                                        "_stream_text_end_index"),
+                         {"start_index": 0, "end_index": 0, "_stream_text_end_index": 0})
+        self.assertEqual(shift_citation({"start_index": None, "end_index": 12}, cut), {"start_index": None, "end_index": 2})
 
 
 if __name__ == "__main__":

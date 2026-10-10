@@ -254,6 +254,51 @@ def citation_end(text: str, citation: Dict[str, Any]) -> int:
     return end
 
 
+def is_search_result(citation: Dict[str, Any]) -> bool:
+    """Whether a URL citation marks no span of the answer: search results arriving.
+
+    Measured 2026-10-10 (docs/agent-mode.md, "Quellenauszüge"): Anthropic's
+    own search and Exa send every result with 0/0 offsets when the results
+    arrive, before the answer cites them; OpenAI and Gemini cite spans.
+    """
+    start = _integer_index(citation.get("start_index"))
+    end = _integer_index(citation.get("end_index"))
+    return not (end is not None and end > 0 and (start is None or 0 <= start < end))
+
+
+def presearch_end(text: str, results_at: Any) -> int:
+    """Length of what a model wrote before its first search results arrived, or 0.
+
+    The server-side search runs inside the stream. Some models announce it
+    first ("Ich suche nach ...") and OpenRouter joins that text to the answer.
+    It is only dropped when more answer follows than precedes the results:
+    an answer written from memory and then merely confirmed stays whole.
+    """
+    if type(results_at) is not int or not 0 < results_at < len(text or ""):
+        return 0
+    before, after = text[:results_at].strip(), text[results_at:].strip()
+    return results_at if before and len(before) < len(after) else 0
+
+
+def shift_citation(citation: Dict[str, Any], cut: int, hint: str = "fallback_end_index") -> Dict[str, Any]:
+    """The citation for ``text[cut:]``: a span moves with the text, a span inside the cut is gone."""
+    if not cut:
+        return citation
+    moved = dict(citation)
+    if not is_search_result(citation):
+        start = _integer_index(citation.get("start_index"))
+        end = _integer_index(citation.get("end_index")) - cut
+        if end > 0:
+            moved["start_index"] = None if start is None else max(0, start - cut)
+            moved["end_index"] = end
+        else:
+            moved["start_index"] = moved["end_index"] = 0
+    position = _integer_index(citation.get(hint))
+    if position is not None:
+        moved[hint] = max(0, position - cut)
+    return moved
+
+
 def insert_source_tags(
     text: str,
     citations: Iterable[Dict[str, Any]],

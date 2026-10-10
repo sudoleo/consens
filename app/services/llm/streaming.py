@@ -16,10 +16,13 @@ from fastapi.responses import StreamingResponse
 from starlette.requests import ClientDisconnect
 
 import app.core.config as cfg
-from app.core.observability import safe_exception
+from app.core.observability import record_metric, safe_exception
 from app.services.llm.citations import (
     coerce_text,
+    is_search_result,
     parse_openrouter_response,
+    presearch_end,
+    shift_citation,
     source_response,
 )
 from app.services.llm import completion, usage_meter
@@ -322,7 +325,8 @@ def _metered_openrouter_chunks(api_key, request_payload, metered) -> Iterator[St
                 yield {"type": "reasoning"}
             annotations = delta.get("annotations") or delta.get("citations")
             if annotations:
-                yield {"type": "annotations", "annotations": annotations}
+                # chunk_chars: the text of the same chunk, yielded just before.
+                yield {"type": "annotations", "annotations": annotations, "chunk_chars": len(text)}
             if choice.get("finish_reason"):
                 yield {"type": "finish", "reason": choice["finish_reason"]}
 
@@ -337,6 +341,8 @@ def _stream_openrouter_chat_completion(
     text_length = 0
     annotations: list = []
     annotation_keys: set[tuple] = set()
+    # Text length when the first search results arrived (see presearch_end).
+    results_at = None
     finish_reason = None
     terminated = False
     for event in _iter_openrouter_chunks(api_key=api_key, payload=payload):
@@ -358,6 +364,8 @@ def _stream_openrouter_chat_completion(
                 citation = annotation.get("url_citation")
                 if isinstance(citation, dict):
                     citation = dict(citation)
+                    if results_at is None and citation.get("url") and is_search_result(citation):
+                        results_at = text_length - int(event.get("chunk_chars") or 0)
                     # Native-search providers do not all return trustworthy
                     # offsets.  Preserve the amount of text seen when the
                     # annotation arrived so citations with a 0/0 range can be
@@ -381,6 +389,17 @@ def _stream_openrouter_chat_completion(
 
     state = completion.completion_state(finish_reason, terminated=terminated)
     answer = "".join(text_parts)
+    # What the model wrote before its search results arrived is no part of
+    # the answer; the final result replaces the streamed text in the card.
+    cut = presearch_end(answer, results_at)
+    if cut:
+        answer = answer[cut:]
+        annotations = [
+            {**item, "url_citation": shift_citation(item["url_citation"], cut, "_stream_text_end_index")}
+            if isinstance(item.get("url_citation"), dict) else item
+            for item in annotations
+        ]
+        record_metric("presearch_text", str(payload.get("model") or provider), processed=cut)
     if not answer.strip():
         message = (
             "The model ran out of output tokens while reasoning and never produced an answer. "

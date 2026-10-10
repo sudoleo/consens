@@ -9,10 +9,12 @@ import re
 from urllib.parse import urlsplit
 
 from app.core import config as cfg
+from app.core.observability import record_metric
 from app.services.agent_provider_limits import ModelOutputLimit
 from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
 from app.services.llm import agent_model_metadata
 
+from app.services.llm.citations import is_search_result, presearch_end, shift_citation
 from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, _ProviderHTTPStatusError, _ProviderResponseError, openrouter_headers
 from app.services.llm.provider_dispatch import never_reached_provider
 from app.services.llm.provider_runtime import (
@@ -501,6 +503,8 @@ class AgentCompletion:
         # cites it. Transient evidence for the answer step (see _annotations).
         self.citations = []
         self._citation_keys = set()
+        # Text length when the first search results arrived (see _drop_presearch_text).
+        self._results_at = None
         self._tool_parts = {}
         self._raw_usage = {}
         self._final_usage_fields = set()
@@ -653,7 +657,8 @@ class AgentCompletion:
                     raise ValueError("Tool call exceeds argument limit")
                 output[key] += fragment
 
-    def _annotations(self, raw):
+    def _annotations(self, raw, before):
+        """URL citations of one chunk; ``before`` is the text length ahead of its own text."""
         if not isinstance(raw, list):
             return
         for annotation in raw[:20]:
@@ -670,6 +675,8 @@ class AgentCompletion:
                 valid = False
             if not valid:
                 continue
+            if self._results_at is None and is_search_result(value):
+                self._results_at = before
             known = any(s["url"] == url for s in self.sources)
             if not known and len(self.sources) < ANSWER_SOURCES_MAX:
                 title = value.get("title")
@@ -695,6 +702,21 @@ class AgentCompletion:
         content = value.get("content")
         self.citations.append({"url": url, "content": content[:CITATION_CONTENT_CHARS] if isinstance(content, str) else "",
                                "start_index": key[1], "end_index": key[2], "fallback_end_index": len(self.text)})
+
+    def _drop_presearch_text(self, model):
+        """Drop what the model wrote before its first search results arrived.
+
+        Claude announces its server-side search ("Ich suche nach ...",
+        2026-10-10) and OpenRouter joins that text to the answer, where it
+        opened the comparison answer, its card and the evidence of synthesis
+        and judges. Live deltas already showed it; text and citation offsets
+        are moved together (see citations.presearch_end)."""
+        cut = presearch_end(self.text, self._results_at)
+        self._results_at = None
+        if cut:
+            self.text = self.text[cut:]
+            self.citations = [shift_citation(citation, cut) for citation in self.citations]
+            record_metric("presearch_text", model.model, processed=cut)
 
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
                native_searches=0, allow_tool_calls=False, prompt_cache=True):
@@ -805,6 +827,7 @@ class AgentCompletion:
                         if choice.get("index", 0) != 0:
                             raise ValueError("Unexpected parallel completion")
                         delta = choice.get("delta") or {}
+                        before = len(self.text)
                         if allow_tool_calls:
                             self._preserve_reasoning(delta)
                         if delta.get("tool_calls"):
@@ -826,10 +849,11 @@ class AgentCompletion:
                             yield {"type": "delta", "text": chunk}
                         # After the text of the same chunk: a citation's stream
                         # position includes the claim it arrived with.
-                        self._annotations(delta.get("annotations"))
-                        self._annotations((choice.get("message") or {}).get("annotations"))
+                        self._annotations(delta.get("annotations"), before)
+                        self._annotations((choice.get("message") or {}).get("annotations"), before)
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
+                self._drop_presearch_text(model)
                 if text_capped and self.finish_reason == "stop":
                     self.finish_reason = "length"
                 if self.finish_reason == "tool_calls" and allow_tool_calls:
@@ -846,3 +870,5 @@ class AgentCompletion:
                     raise RuntimeError("Agent stream ended without a completed answer")
             finally:
                 lines.close()
+                # Also the partial text of a stream that broke off.
+                self._drop_presearch_text(model)
