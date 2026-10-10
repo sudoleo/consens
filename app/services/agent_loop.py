@@ -73,7 +73,8 @@ class AgentLoop:
                     # Native searches have a provider-owned schema and execute
                     # inside this exact call. Reserve ALL remaining search uses
                     # upfront; missing usage can never authorize another search.
-                    searches = self.remaining_tools if "web_search" in tools_for_model(self.model) else 0
+                    # A provider overrun leaves the budget negative.
+                    searches = max(0, self.remaining_tools) if "web_search" in tools_for_model(self.model) else 0
                     schemas = self.registry.schemas if supports_client_tools(self.model) else []
                     allow_client = bool(schemas) and self.remaining_tools > 0 and index + 1 < self.policy.max_calls
                     tools = [*schemas, *search_tools(self.model, searches)]
@@ -128,7 +129,9 @@ class AgentLoop:
                         self.completion.usage = self.costs.total()
                         self.completion.reasoning_truncated |= value.reasoning_truncated
                         count = value.usage.get("web_search_requests") if value.usage else None
-                        known = type(count) is int and 0 <= count <= searches
+                        # May exceed ``searches``: OpenRouter does not enforce
+                        # the limit for every model (see _record_search_overrun).
+                        known = type(count) is int and count >= 0
                         if searches and step_status != "succeeded" and ((known and count) or value.sources):
                             self.tool_event(f"{step}:web_search", "web_search", "unknown", sources=value.sources,
                                             count=count if known else None,

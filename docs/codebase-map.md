@@ -2725,7 +2725,12 @@ Speicher; gespeichert und gestreamt werden weiter nur URL und Titel. Text vor
 dem Eintreffen der ersten Suchergebnisse (Claudes „Ich suche nach …“) streicht
 `AgentCompletion` am Stream-Ende samt Offset-Verschiebung
 (`citations.presearch_end`/`shift_citation`; agent-mode.md, „Text vor den
-Suchergebnissen“).
+Suchergebnissen“). Die Suchzahl liest `measured_usage` über
+`reported_searches` aus `usage.server_tool_use_details` (die alte Form
+`server_tool_use` gilt weiter). Sucht ein Modell öfter als `max_uses` erlaubt,
+bricht nichts ab: Die echte Zahl wird gebucht, gebundene Suchbudgets werden
+negativ, und `/health/metrics` zählt `search_overrun:<modell>` (agent-mode.md,
+„Websuche“).
 **Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
 Steuer-Prompt (Vergleichspflicht, Aufgabe formulieren: „was die Frage festlegt,
 nicht was sie beantwortet“, Suche, Tiefe, next_step, status_update); das frühere

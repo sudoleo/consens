@@ -752,7 +752,8 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             if not self.policy.account_budget_only and worker and self.costs.calls >= self.policy.max_calls - 2:
                 raise AnalysisBudgetExceeded("Remaining calls are reserved for the orchestrator")
-            searches = (search_rounds if self.policy.account_budget_only else min(search_rounds, self.search_remaining)) if searches_enabled else 0
+            # A provider overrun leaves search_remaining negative (see below).
+            searches = (search_rounds if self.policy.account_budget_only else max(0, min(search_rounds, self.search_remaining))) if searches_enabled else 0
             if not self.policy.account_budget_only:
                 self.search_remaining -= searches
         if self.file_context:
@@ -929,7 +930,10 @@ class DelegationLoop(AgentLoop):
                     pass
                 elif not claimed:
                     self.search_remaining += searches
-                elif type(count) is int and 0 <= count <= searches:
+                elif type(count) is int and count >= 0:
+                    # The real count, also beyond the reserved rounds: OpenRouter
+                    # does not enforce the limit for every model. The overrun is
+                    # debt the next reservations see.
                     self.search_remaining += searches - count
             if (answer_step and value.text and self.comparison and self.comparison.comparisons
                     and not value.tool_calls and not value._tool_parts

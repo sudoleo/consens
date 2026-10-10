@@ -332,8 +332,20 @@ def test_native_endpoint_replay_uses_receipt_and_does_not_search_again(api, monk
     assert client.post("/agent", json={**payload, "tools": ["shell"]}, headers=AUTH).status_code == 422
 
 
-def test_known_search_charge_survives_missing_tokens_without_inventing_zero_tokens(store, monkeypatch):
-    transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage={"server_tool_use": {"web_search_requests": 1}})]])
+def search_usage(searches, field):
+    """Both shapes OpenRouter has used to report native searches."""
+    if field == "server_tool_use_details":
+        # Live 2026-10-10: tool_calls_* count every server tool, not only searches.
+        return {field: {"web_search_requests": searches, "tool_calls_requested": searches, "tool_calls_executed": searches}}
+    return {field: {"web_search_requests": searches}}
+
+
+SEARCH_FIELDS = ["server_tool_use_details", "server_tool_use"]
+
+
+@pytest.mark.parametrize("field", SEARCH_FIELDS)
+def test_known_search_charge_survives_missing_tokens_without_inventing_zero_tokens(store, monkeypatch, field):
+    transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=search_usage(1, field))]])
     loop = loop_for(store)
     list(loop.run())
     assert loop.completion.usage["input_tokens"] is None
@@ -345,13 +357,38 @@ def test_known_search_charge_survives_missing_tokens_without_inventing_zero_toke
     assert totals(store)["estimated_cost_nano_usd"] == 10_000_000
 
 
-def test_reported_native_limit_violation_is_accounted_and_stops(store, monkeypatch):
-    transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=usage(3))]])
+@pytest.mark.parametrize("field", SEARCH_FIELDS)
+def test_known_search_count_returns_the_unused_search_budget(store, monkeypatch, field):
+    transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop",
+                                    usage={"prompt_tokens": 100, "completion_tokens": 20, **search_usage(1, field)})]])
     loop = loop_for(store)
-    with pytest.raises(RuntimeError, match="native search limit"):
-        list(loop.run())
+    events = list(loop.run())
+    assert loop.completion.usage["web_search_requests"] == 1
+    assert loop.remaining_tools == 1  # Two reserved, one used.
+    tool = next(e for e in events if e and e.get("name") == "web_search")
+    assert tool["status"] == "succeeded" and tool["count"] == 1
+
+
+@pytest.mark.parametrize("field", SEARCH_FIELDS)
+def test_search_overrun_is_booked_and_never_fails_the_answer(store, monkeypatch, field):
+    # OpenRouter does not enforce max_uses for every model (Haiku 4.5 searched
+    # 2-3 times, Gemini 3.5 Flash-Lite 3 times at a limit of 1, 2026-10-10).
+    metrics = []
+    monkeypatch.setattr(agent_client, "record_metric", lambda *args, **kwargs: metrics.append((*args, kwargs)))
+    requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop",
+        usage={"prompt_tokens": 100, "completion_tokens": 20, **search_usage(3, field)})]])
+    loop = loop_for(store)
+    events = list(loop.run())
+    assert requests[0]["max_tool_calls"] == 2
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+    assert loop.completion.text == "Answer"
+    # All three searches are booked (catalog price, no provider cost here).
+    assert loop.completion.usage["web_search_requests"] == 3
     assert totals(store)["estimated_cost_nano_usd"] == 30_200_000
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "failed"
+    assert loop.remaining_tools == -1
+    tool = next(e for e in events if e and e.get("name") == "web_search")
+    assert tool["status"] == "succeeded" and tool["count"] == 3
+    assert metrics == [("search_overrun", loop.model.model, {"processed": 1})]
 
 
 def test_usage_beyond_total_budget_stops_after_accounting(store, monkeypatch):
@@ -410,9 +447,10 @@ def test_normalized_input_output_usage_aliases():
     assert value["input_tokens"] == 100 and value["output_tokens"] == 20
 
 
-def test_search_and_token_usage_in_separate_chunks_are_merged_once(store, monkeypatch):
+@pytest.mark.parametrize("field", SEARCH_FIELDS)
+def test_search_and_token_usage_in_separate_chunks_are_merged_once(store, monkeypatch, field):
     transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop",
-        usage={"server_tool_use": {"web_search_requests": 1}}),
+        usage=search_usage(1, field)),
         packet(usage={"prompt_tokens": 100, "completion_tokens": 20})]])
     loop = loop_for(store)
     list(loop.run())

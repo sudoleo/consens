@@ -450,6 +450,28 @@ def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remain
     assert loop.search_remaining == 1
 
 
+@pytest.mark.parametrize("reported,remaining", [(0, 1), (1, 0), (3, -2)])
+def test_search_budget_books_the_reported_count_including_an_overrun(store, reported, remaining):
+    calls = []
+    class Completion(AgentCompletion):
+        def stream(self, *, model, messages, **kwargs):
+            calls.append(kwargs["native_searches"])
+            self.text, self.finish_reason = "Answer.", "stop"
+            self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .001,
+                "server_tool_use_details": {"web_search_requests": reported}}, model, searches_enabled=True)
+            yield {"type": "delta", "text": self.text}
+    # Room for the search reservation in the daily allowance.
+    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": 5_000_000})
+    loop = make_loop(store, Script())
+    loop.factory = Completion
+    loop.search_remaining = 1
+    list(loop.run())
+    assert calls == [1]
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+    # The overrun is debt: later reservations get no search until it is paid.
+    assert loop.search_remaining == remaining
+
+
 def test_unknown_terminal_usage_releases_admission_and_utc_day_is_separate(store, monkeypatch):
     loop = make_loop(store, Script())
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")

@@ -6,7 +6,7 @@ import pytest
 
 from app.api.routers import agent
 from app.services import agent_loop
-from app.services.agent_costs import RunCosts, provider_cost_nanos
+from app.services.agent_costs import RunCosts, provider_cost_nanos, search_cost_nanos, token_cost_nanos
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import ProviderCooldowns, AgentProviderCooldown
 from app.services.llm.agent_client import AgentCompletion, agent_models, measured_usage, resolve_agent_model
@@ -30,6 +30,51 @@ def test_provider_total_wins_over_catalog_including_search_cache_and_reasoning(m
     # different providers, context tiers, tool charges and discounted tokens.
     expensive = replace(model, input_usd_per_million="100", output_usd_per_million="200")
     assert measured_usage(raw, expensive, searches_enabled=True) == measured
+
+
+@pytest.mark.parametrize("raw,expected", [
+    # OpenRouter's current shape (live 2026-10-10) and the earlier one.
+    ({"server_tool_use_details": {"web_search_requests": 3, "tool_calls_requested": 3, "tool_calls_executed": 3}}, 3),
+    ({"server_tool_use": {"web_search_requests": 2}}, 2),
+    ({"server_tool_use_details": {"web_search_requests": 1}, "server_tool_use": {"web_search_requests": 4}}, 1),
+    # Server tool calls also count web_fetch and failed attempts: not searches.
+    ({"server_tool_use_details": {"tool_calls_requested": 3, "tool_calls_executed": 3}}, None),
+    ({"server_tool_use_details": {"web_search_requests": "3"}}, None),
+    ({}, None),
+])
+def test_search_count_is_read_from_both_usage_shapes(raw, expected):
+    model = resolve_agent_model("claude-haiku-4-5")
+    measured = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, **raw}, model, searches_enabled=True)
+    assert measured["web_search_requests"] == expected
+    # Without a provider total, the catalog books every reported search.
+    assert measured["cost_complete"] is (expected is not None)
+    searches = (expected or 0) * search_cost_nanos(model)
+    assert measured["estimated_cost_nano_usd"] == token_cost_nanos(model, 100, 20, 0) + searches
+
+
+def test_comparison_answer_that_overruns_its_search_limit_completes(monkeypatch):
+    """A paid, valid answer never breaks the run because the provider
+    searched more often than asked (2026-10-10: Haiku 4.5 3x at limit 1)."""
+    from app.services.agent_tools import search_tools
+    from app.services.llm import agent_client
+    model = resolve_agent_model("claude-haiku-4-5")
+    metrics = []
+    monkeypatch.setattr(agent_client, "record_metric", lambda *args, **kwargs: metrics.append((*args, kwargs)))
+    requests, _, _ = transport(monkeypatch, [[
+        packet({"content": "Answer with sources."}, finish="stop"),
+        packet(usage={"prompt_tokens": 900, "completion_tokens": 50, "cost": .031,
+                      "server_tool_use_details": {"web_search_requests": 3, "tool_calls_requested": 3,
+                                                  "tool_calls_executed": 3}}),
+    ]])
+    completion = AgentCompletion()
+    list(completion.stream(model=model, messages=[{"role": "user", "content": "Q"}], api_key="key",
+                           tools=search_tools(model, 1), native_searches=1))
+    assert requests[0]["max_tool_calls"] == 1
+    assert completion.text == "Answer with sources." and completion.finish_reason == "stop"
+    assert completion.usage["web_search_requests"] == 3
+    assert completion.usage["estimated_cost_nano_usd"] == 31_000_000 and completion.usage["cost_source"] == "provider"
+    # Counted once per answer and model: two searches beyond the limit.
+    assert metrics == [("search_overrun", "anthropic/claude-haiku-4.5", {"processed": 2})]
 
 
 @pytest.mark.parametrize("value", [True, False, -1, "NaN", "Infinity", 1e100, "no", {}, None])

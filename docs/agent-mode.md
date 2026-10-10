@@ -725,6 +725,35 @@ Modells, sonst gilt die Exa-Pauschale. Passt eine Reservierung nicht, stuft
 `smaller_search` ab (mehrere Runden → eine → keine); Vergleichsantworten nur,
 wenn das Kontextfenster die Suche nicht fasst.
 
+**Suchzähler.** OpenRouter meldet die Suchen eines Aufrufs im Usage-Paket als
+`usage.server_tool_use_details.web_search_requests` (live 2026-10-10);
+`agent_client.reported_searches` liest daneben weiter die frühere Form
+`usage.server_tool_use`. `tool_calls_requested`/`tool_calls_executed` im selben
+Objekt zählen jedes Server-Tool, auch `web_fetch` und gescheiterte Versuche,
+und gelten nicht als Suchzahl. Bis 2026-10-11 las der Code nur die alte Form:
+Die Zahl war in Prod immer unbekannt, jeder gebundene Schritt verbrauchte sein
+ganzes Suchbudget, und eine Suche ohne Quellenannotation zeigte keine Aktivität.
+
+**Mehr Suchen als erlaubt.** `max_uses` und `max_tool_calls` gehen weiter mit,
+aber OpenRouter setzt sie nicht für jedes Modell durch: Bei Limit 1 suchten
+Claude Haiku 4.5 zwei- bis dreimal, Gemini 3.5 Flash-Lite dreimal, GPT-5.6 Luna
+einmal (Probe 2026-10-10). Diese Suchen sind gelaufen und bezahlt, die Antwort
+ist gültig, also bricht nichts ab (früher `RuntimeError("Provider exceeded the
+native search limit")`, der mit dem richtigen Feld jede solche Vergleichsantwort
+verworfen hätte). Stattdessen:
+
+- Gebucht wird die echte Zahl: maßgeblich ist `cost` des Providers (enthält die
+  Suchen); fehlt er, Katalog-Suchgebühr × Zahl (`measured_usage`).
+- `AgentCompletion._record_search_overrun` zählt einmal je Aufruf
+  `search_overrun:<modell>` in `/health/metrics` (`processed` = Suchen über dem
+  Limit).
+- Gebundene Läufe: `search_remaining` (Delegation) und `remaining_tools`
+  (`AgentLoop`) dürfen negativ werden. Die Überschreitung ist Schuld; spätere
+  Schritte bekommen bis zum Ausgleich keine Suche (`max(0, …)` bei der
+  Reservierung). Im Kontomodus gilt nur das Tokenkonto, und die Suchtreffer
+  stecken in den gemessenen Input-Tokens.
+- Die Aktivität zeigt die echte Zahl („3 searches“).
+
 **Messung 2026-10-01** (echter Vergleichs-Prompt, ZDR, Exa gegen eigene Suche):
 Faktenfragen („neuestes Modell von X“, Preise) beantworteten Gemini 3.5
 Flash-Lite, Gemini 3.8 Flash und Claude Haiku 4.5 mit beiden Wegen zu 100 %

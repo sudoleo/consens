@@ -400,6 +400,23 @@ def _resolve_effort(model, metadata, reasoning_effort):
     return replace(model, request_config=config, reasoning_effort=reasoning_effort)
 
 
+SERVER_TOOL_USAGE_FIELDS = ("server_tool_use_details", "server_tool_use")
+
+
+def reported_searches(raw: dict):
+    """The web searches a usage object reports, unvalidated, or None.
+
+    OpenRouter reports them in ``server_tool_use_details`` (live 2026-10-10);
+    ``server_tool_use`` is the earlier shape. Only ``web_search_requests``
+    counts searches: ``tool_calls_executed`` counts every server tool, web_fetch
+    and failed attempts included."""
+    for field in SERVER_TOOL_USAGE_FIELDS:
+        value = raw.get(field)
+        if isinstance(value, dict) and "web_search_requests" in value:
+            return value["web_search_requests"]
+    return None
+
+
 def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) -> dict | None:
     """Missing counts are unknown, never estimated or silently set to zero."""
     if not isinstance(raw, dict):
@@ -419,8 +436,7 @@ def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) ->
     cached = cached if tokens_known and valid(cached) and cached <= prompt else 0
     written = written if tokens_known and valid(written) and written <= prompt - cached else 0
     reasoning = reasoning if tokens_known and valid(reasoning) and reasoning <= completion else 0
-    server_use = raw.get("server_tool_use")
-    searches = server_use.get("web_search_requests") if isinstance(server_use, dict) else None
+    searches = reported_searches(raw)
     searches_known = valid(searches)
     source = "provider" if cost is not None else "catalog"
     cost_complete = tokens_known
@@ -718,6 +734,17 @@ class AgentCompletion:
             self.citations = [shift_citation(citation, cut) for citation in self.citations]
             record_metric("presearch_text", model.model, processed=cut)
 
+    def _record_search_overrun(self, model, limit):
+        """Count searches beyond the requested limit, per model.
+
+        OpenRouter does not enforce ``max_uses``/``max_tool_calls`` for every
+        search: at a limit of 1, Claude Haiku 4.5 searched 2-3 times and Gemini
+        3.5 Flash-Lite 3 times (2026-10-10). Those searches ran and are paid;
+        usage books the real count. An overrun never fails the answer."""
+        count = (self.usage or {}).get("web_search_requests")
+        if limit and type(count) is int and count > limit:
+            record_metric("search_overrun", model.model, processed=count - limit)
+
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
                native_searches=0, allow_tool_calls=False, prompt_cache=True):
         payload = {
@@ -790,14 +817,13 @@ class AgentCompletion:
                                     self._raw_usage[field] = {**(previous if isinstance(previous, dict) else {}), **reported[field]}
                                 else:
                                     self._raw_usage[field] = reported[field]
-                        server_use = reported.get("server_tool_use")
-                        if isinstance(server_use, dict) and "web_search_requests" in server_use:
-                            self._raw_usage["server_tool_use"] = {"web_search_requests": server_use["web_search_requests"]}
+                        for field in SERVER_TOOL_USAGE_FIELDS:
+                            server_use = reported.get(field)
+                            if isinstance(server_use, dict) and "web_search_requests" in server_use:
+                                self._raw_usage[field] = {"web_search_requests": server_use["web_search_requests"]}
                     usage = measured_usage(self._raw_usage, model, searches_enabled=bool(native_searches)) if isinstance(reported, dict) else None
-                    known = False
                     if native_searches and isinstance(reported, dict):
-                        server_use = self._raw_usage.get("server_tool_use")
-                        count = server_use.get("web_search_requests") if isinstance(server_use, dict) else None
+                        count = reported_searches(self._raw_usage)
                         known = type(count) is int and 0 <= count <= 10_000
                         if usage is None and known:
                             # Search cost can be known even if token usage is not.
@@ -819,8 +845,6 @@ class AgentCompletion:
                             usage["cost_complete"] = False
                         self.usage = usage
                         yield self.event("usage", "usage", usage=usage)
-                        if native_searches and known and count > native_searches:
-                            raise RuntimeError("Provider exceeded the native search limit")
                     if data.get("error"):
                         raise _ProviderResponseError(data["error"])
                     for choice in data.get("choices") or []:
@@ -872,3 +896,4 @@ class AgentCompletion:
                 lines.close()
                 # Also the partial text of a stream that broke off.
                 self._drop_presearch_text(model)
+                self._record_search_overrun(model, native_searches)
