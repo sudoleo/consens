@@ -39,7 +39,7 @@ MIN_EXCERPT_CHARS = 200
 # Search text shorter than this is a teaser, not evidence: the page is
 # fetched instead.
 MIN_SEARCH_TEXT_CHARS = 200
-CLAIMS_PER_SOURCE, CLAIM_CHARS = 2, 240
+CLAIMS_PER_SOURCE, CLAIM_CHARS = 2, 300
 # Page fetches cost no tokens, only time and outbound requests: the first
 # sources of each answer, bounded per turn.
 PAGE_FETCHES_PER_ANSWER, PAGE_FETCHES_PER_TURN = 4, 12
@@ -49,17 +49,31 @@ PAGE_WAIT_SECONDS = 4.0
 # The source documents' DNS gate admits four lookups at once (dns_busy beyond).
 _pages = ThreadPoolExecutor(max_workers=3, thread_name_prefix="agent-source-page")
 
-_SENTENCE_END = re.compile(r"[.!?…](?:[\"'”’)\]}]+)?\s+|\n")
-_MARKDOWN_LINK = re.compile(r"!?\[([^\]\n]*)\]\(\s*<?https?://[^\s)>]*>?\s*\)")
+_LINK = re.compile(r"!?\[([^\]\n]*)\]\(\s*<?https?://[^\s)>]*>?\s*\)")
 _BARE_URL = re.compile(r"<?https?://[^\s<>()\[\]]+>?")
+# A citation marker: links or URLs and their brackets, as native search puts
+# them after a claim ("([site](url))") or a model writes them ("[1](url)").
+_MARKER = re.compile(rf"[\s(\[,;]*(?:(?:{_LINK.pattern}|{_BARE_URL.pattern})[\s()\[\],;]*)+")
+# Link text that names the source, not the claim: a domain or a number.
+_SOURCE_LABEL = re.compile(r"\d{0,3}|(?:[\w-]+\.)+[^\W\d_]{2,}(?:/\S*)?")
+_BOUNDARY = re.compile(r"([.!?…])[\"'”’)\]}*_]*(?=\s|$)|\n")
+# A full stop after a day or rank ("16. September") or a single letter
+# ("z. B.", "U.S.") ends no sentence.
+_ABBREVIATION = re.compile(r"(?:^|\W)(?:\d{1,2}|[^\W\d_])$")
 _EMPTY_BRACKETS = re.compile(r"\(\s*[,;]?\s*\)|\[\s*\]")
+_SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+([.,;:!?…])")
 _LEADING_MARKER = re.compile(r"^(?:#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s*)+")
+
+
+def _ranged(text, citation):
+    """Whether the citation's own offsets mark a span of the answer text."""
+    start, end = citation.get("start_index"), citation.get("end_index")
+    return type(end) is int and 0 < end <= len(text) and (start is None or (type(start) is int and 0 <= start < end))
 
 
 def _anchored(text, citation):
     """Whether the citation marks a position inside the answer text."""
-    start, end = citation.get("start_index"), citation.get("end_index")
-    if type(end) is int and 0 < end <= len(text) and (start is None or (type(start) is int and 0 <= start < end)):
+    if _ranged(text, citation):
         return True
     hint = citation.get("fallback_end_index")
     # The stream position helps only inside the text: at its end it would
@@ -67,20 +81,55 @@ def _anchored(text, citation):
     return type(hint) is int and 0 < hint < len(text)
 
 
+def _boundaries(text, start=0, end=None):
+    """Sentence ends in text[start:end]: (position after it, whether a line ends)."""
+    for match in _BOUNDARY.finditer(text, start, len(text) if end is None else end):
+        if match.group(1) == ".":
+            if _ABBREVIATION.search(text[max(0, match.start() - 3):match.start()]):
+                continue
+            if text[match.end():match.end() + 4].lstrip()[:1].islower():
+                continue
+        yield match.end(), match.group(1) is None
+
+
+def _plain(text):
+    """Claim text without link syntax, source markers and Markdown emphasis."""
+    text = _LINK.sub(lambda m: "" if _SOURCE_LABEL.fullmatch(m.group(1).strip()) else m.group(1), text)
+    text = _EMPTY_BRACKETS.sub("", _BARE_URL.sub("", text)).replace("**", "").replace("__", "")
+    return _LEADING_MARKER.sub("", _SPACE_BEFORE_PUNCTUATION.sub(r"\1", " ".join(text.split()))).strip()
+
+
 def cited_claim(text, citation):
-    """The answer sentence a citation supports, as plain text, or ""."""
+    """The answer statement a citation supports, as plain text, or "".
+
+    A span that is only a source marker ends the claim where it starts; after
+    a completed sentence the claim covers the sentences of its line back to an
+    earlier marker, as native search cites a paragraph once at its end. A span
+    of answer text (Google grounding) is the claim and ends its sentence."""
     text = text or ""
     if not _anchored(text, citation):
         return ""
-    end = citation_end(text, citation)
-    head = text[:end]
-    stop = len(head.rstrip()) - 1  # the sentence's own end is not its start
-    start = 0
-    for match in _SENTENCE_END.finditer(head, 0, max(0, stop)):
-        start = match.end()
-    claim = _MARKDOWN_LINK.sub(r"\1", head[start:])
-    claim = _EMPTY_BRACKETS.sub("", _BARE_URL.sub("", claim))
-    claim = _LEADING_MARKER.sub("", " ".join(claim.split())).strip()
+    start, end = citation.get("start_index"), citation.get("end_index")
+    marker = (_ranged(text, citation) and type(start) is int
+              and _MARKER.fullmatch(text[start:end]) is not None)
+    anchor = len(text[:start].rstrip(" \t([")) if marker else citation_end(text, citation)
+    body = len(text[:anchor].rstrip())
+    if not body:
+        return ""
+    # A marker after a completed sentence cites what precedes it on its line.
+    after_sentence = any(stop == body for stop, _ in _boundaries(text, max(0, body - 8), body))
+    stop = body if after_sentence else next((stop for stop, _ in _boundaries(text, anchor)), len(text))
+    floor = max(0, stop - 4 * CLAIM_CHARS)
+    starts = [(floor, True)] + [(position, line) for position, line in _boundaries(text, floor, stop)
+                                if re.search(r"\w", text[position:stop])]
+    index = len(starts) - 1
+    while marker and after_sentence and index > 0 and not starts[index][1]:
+        earlier = starts[index - 1][0]
+        between = text[earlier:starts[index][0]]
+        if _LINK.search(between) or _BARE_URL.search(between) or len(_plain(text[earlier:stop])) > CLAIM_CHARS:
+            break
+        index -= 1
+    claim = _plain(text[starts[index][0]:stop])
     if len(claim) > CLAIM_CHARS:
         # The citation marks the sentence's end; keep the part next to it.
         tail = claim[-CLAIM_CHARS:]
@@ -89,12 +138,34 @@ def cited_claim(text, citation):
     return claim
 
 
+def _positions(text, citations):
+    """One answer's citations with positions the claims can trust.
+
+    Google grounding counts UTF-8 bytes: an end past the text's characters
+    but within its bytes shows it, and the answer's offsets are converted.
+    A stream position shared by several sources marks when search results
+    arrived, before the answer wrote its claims (Anthropic's own search,
+    2026-10-10): it binds none of them."""
+    items = [citation for citation in citations or [] if isinstance(citation, dict)]
+    encoded = text.encode("utf-8")
+    if len(encoded) > len(text) and any(type(c.get("end_index")) is int and len(text) < c["end_index"] <= len(encoded)
+                                        for c in items):
+        def char(offset):
+            return len(encoded[:offset].decode("utf-8", "ignore")) if type(offset) is int and offset >= 0 else offset
+        items = [{**c, "start_index": char(c.get("start_index")), "end_index": char(c.get("end_index"))} for c in items]
+    arrivals = {}
+    for citation in items:
+        if not _ranged(text, citation):
+            arrivals.setdefault(citation.get("fallback_end_index"), set()).add(citation.get("url"))
+    return [citation if _ranged(text, citation) or len(arrivals[citation.get("fallback_end_index")]) < 2
+            else {**citation, "fallback_end_index": None} for citation in items]
+
+
 def answer_citations(text, citations):
     """Per canonical URL of one answer: its longest source text and its claims."""
+    text = text or ""
     cited = {}
-    for citation in citations or []:
-        if not isinstance(citation, dict):
-            continue
+    for citation in _positions(text, citations):
         url = canonical_source_url(citation.get("url"))
         if not url:
             continue

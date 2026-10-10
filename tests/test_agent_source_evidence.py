@@ -42,11 +42,53 @@ def test_claim_uses_the_stream_position_only_inside_the_answer():
 
 def test_claim_drops_list_markers_bare_urls_and_keeps_the_end_of_long_sentences():
     text = "- **Rate**: 4.5% (https://example.org/a)\n- Next"
-    assert cited_claim(text, citation(end=text.index("\n"))) == "**Rate**: 4.5%"
+    assert cited_claim(text, citation(end=text.index("\n"))) == "Rate: 4.5%"
     sentence = "Word " * 100 + "the decisive figure is 7%."
     claim = cited_claim(sentence, citation(end=len(sentence)))
     assert claim.startswith("…") and claim.endswith("the decisive figure is 7%.")
     assert len(claim) <= evidence.CLAIM_CHARS + 1
+
+
+def marker(text, link):
+    start = text.index(link)
+    return citation(start=start, end=start + len(link))
+
+
+def test_claim_before_a_source_marker_is_the_cited_statement_not_the_marker():
+    # Recorded shape of OpenAI's own search (2026-10-10): one marker after a
+    # paragraph, its span covering only "([site](url))".
+    link = "([ecb.europa.eu](https://www.ecb.europa.eu/press/pr/2026.html))"
+    text = ("Der Einlagesatz beträgt 2,50 %.\n\n- **Seit wann:** Er gilt seit dem **16. September 2026**. "
+            f"Die EZB hatte ihn um 25 Basispunkte angehoben. {link}  \n- Next")
+    assert cited_claim(text, marker(text, link)) == ("Seit wann: Er gilt seit dem 16. September 2026. "
+                                                     "Die EZB hatte ihn um 25 Basispunkte angehoben.")
+    # The claim reaches back on its line only to an earlier marker.
+    first, second = "([a.org](https://a.org/1))", "([b.org](https://b.org/2))"
+    text = f"A holds. {first} B holds. C holds too. {second}"
+    assert cited_claim(text, marker(text, second)) == "C holds too."
+    # Inside a sentence the marker leaves the whole sentence; a link that
+    # names the claim keeps its text, one that names the source goes.
+    link = "[bundesbank.de](https://www.bundesbank.de/x)"
+    text = f"Prices rose. The rate is 2.5 % {link} and applies since March. Next."
+    assert cited_claim(text, marker(text, link)) == "The rate is 2.5 % and applies since March."
+    link = "[4.5 percent](https://example.org/a)"
+    text = f"Prices rose. The tariff is {link} since March. Next."
+    assert cited_claim(text, marker(text, link)) == "The tariff is 4.5 percent since March."
+    assert cited_claim(f"{first} Rest.", marker(f"{first} Rest.", first)) == ""
+
+
+def test_positions_follow_the_provider_not_the_stream():
+    # Google grounding counts UTF-8 bytes: an end past the characters converts.
+    text = "* Der Einlagesatz für Banken: 2,50 %\n* Nächste Zinsentscheidung: 29. Oktober 2026"
+    size = len(text.encode())
+    cited = answer_citations(text, [citation("https://g.example/2", end=size, start=size - 30)])
+    assert cited["https://g.example/2"]["claims"] == ["Nächste Zinsentscheidung: 29. Oktober 2026"]
+    # Sources that arrived together came with the search results, before the
+    # claims (Anthropic's own search): their stream position binds none.
+    batch = answer_citations(ANSWER, [citation(f"https://example.org/{i}", "text", 0, 0, hint=25) for i in range(3)])
+    assert all(entry["claims"] == [] and entry["content"] == "text" for entry in batch.values())
+    single = answer_citations(ANSWER, [citation("https://example.org/a", "text", 0, 0, hint=25)])
+    assert single["https://example.org/a"]["claims"] == ["The tariff is 4.5% since March 2026."]
 
 
 def test_answer_citations_merge_repeated_urls_by_canonical_form():
@@ -228,8 +270,9 @@ def test_client_keeps_citation_text_and_offsets_in_memory_only(monkeypatch):
     assert all(set(s) == {"url", "title"} for s in completion.sources)
     citations = completion.citations
     assert [c["url"] for c in citations[:10]] == [s["url"] for s in completion.sources]
+    # The stream position includes the text of the chunk the citation came with.
     assert citations[0] == {"url": "https://example.org/0", "content": "text", "start_index": 0, "end_index": 6,
-                            "fallback_end_index": 0}
+                            "fallback_end_index": len("Answer.")}
     # Repeated snapshots are dropped; an invalid offset becomes no offset.
     assert len(citations) == 11
     assert citations[-1]["start_index"] is None and len(citations[-1]["content"]) == 4000

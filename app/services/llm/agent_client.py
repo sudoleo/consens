@@ -811,8 +811,6 @@ class AgentCompletion:
                             if not allow_tool_calls:
                                 raise RuntimeError("Unexpected tool call")
                             self._tool_delta(delta["tool_calls"])
-                        self._annotations(delta.get("annotations"))
-                        self._annotations((choice.get("message") or {}).get("annotations"))
                         yield from self.reasoning_events(delta)
                         chunk = delta.get("content")
                         if isinstance(chunk, str) and chunk and len(self.text) >= TEXT_STORAGE_CHARS:
@@ -826,6 +824,10 @@ class AgentCompletion:
                                 chunk, text_capped = chunk[:TEXT_STORAGE_CHARS - len(self.text)], True
                             self.text += chunk
                             yield {"type": "delta", "text": chunk}
+                        # After the text of the same chunk: a citation's stream
+                        # position includes the claim it arrived with.
+                        self._annotations(delta.get("annotations"))
+                        self._annotations((choice.get("message") or {}).get("annotations"))
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
                 if text_capped and self.finish_reason == "stop":

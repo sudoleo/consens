@@ -801,11 +801,21 @@ Quelltext (`content`) und die Stelle der Antwort, die er stützt
 (`start_index`/`end_index`). `AgentCompletion._annotations` behält bis zu
 `ANSWER_SOURCES_MAX` (10) Quellen je Aufruf (vorher 5; drei Suchrunden à fünf
 Treffer liefen sonst ins Leere) und in `citations` Text (bis 4000 Zeichen) und
-Position. Bei 0/0-Offsets einiger nativer Adapter gilt wie im Consensus-Stream
-die bis dahin gestreamte Textlänge als Anker. Exa-Familien bringen hier echte
-Auszüge (bis `SEARCH_RESULT_CHARACTERS`); ob und wie viel Text die eigene
-Suche von OpenAI, Anthropic und Gemini mitliefert, sagt die OpenRouter-Doku
-nicht („if available“). Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
+Position. Bei 0/0-Offsets gilt wie im Consensus-Stream die bis dahin
+gestreamte Textlänge (einschließlich des Pakets mit der Annotation) als Anker.
+Live gemessen (2026-10-10, EZB-Frage, je eine Antwort):
+
+| Suche | `content` | Position |
+|---|---|---|
+| OpenAI eigene | leer | Spanne nur über der Marke `([site](url))` hinter dem Absatz |
+| Gemini Grounding | leer | Spanne über dem Antwortsatz, in UTF-8-**Bytes**; URLs sind `vertexaisearch…/grounding-api-redirect/…` |
+| Anthropic eigene | 200–660 Zeichen Originaltext | 0/0, alle Annotationen zusammen beim Eintreffen der Suchergebnisse |
+| Exa (DeepSeek) | 250–380 Zeichen Highlights | 0/0, vor dem ersten Antwortzeichen |
+
+`_positions` rechnet deshalb Byte-Offsets in Zeichen um (ein Ende hinter den
+Zeichen, aber innerhalb der Bytes zeigt sie an) und verwirft einen
+Stream-Anker, den sich mehrere Quellen teilen: Er markiert die Ankunft der
+Suchergebnisse, nicht die gestützte Aussage. Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
 Server deshalb die Seite selbst, mit demselben begrenzten, gecachten Abruf wie
 die Quellenprüfung (`source_documents.fetch_document`: nur öffentliche
 Adressen, 5 s, 400 kB). Die Abrufe starten, sobald eine Vergleichsantwort
@@ -820,8 +830,13 @@ zeigt je Familie, wie oft die Suche brauchbaren Text liefert,
 **Was der Antwortschritt bekommt.** Im Evidenzblock nennen die Antworten ihre
 Quellen nur noch per URL. `sources` führt jede Quelle einmal, über Antworten
 und Vergleiche gepoolt (kanonische URL), meistzitierte zuerst:
-`cited_by` (Zahl der Familien), `supports` (bis zu zwei Antwortsätze, die die
-Quelle stützt, ohne Linksyntax, je höchstens 240 Zeichen) und `excerpt`:
+`cited_by` (Zahl der Familien), `supports` (bis zu zwei Aussagen, die eine
+Antwort mit der Quelle belegt, ohne Links und Quellmarken, je höchstens 300
+Zeichen; `cited_claim`: Ist die Spanne nur eine Quellmarke, endet die Aussage
+davor und reicht hinter einem fertigen Satz auf ihrer Zeile bis zur vorigen
+Marke zurück, wie OpenAI einen Absatz einmal am Ende belegt; eine Spanne aus
+Antworttext ist selbst die Aussage. „16. September“ und „z. B.“ beenden keinen
+Satz) und `excerpt`:
 Originalpassagen, die `select_passages` für diese Sätze und die Frage aus dem
 Text wählt (Zahlen zählen dreifach, Nachbarabsätze mit Einschränkungen kommen
 mit), nie eine Modellzusammenfassung; bei abgerufenen Seiten zusätzlich
@@ -837,8 +852,13 @@ Suche, keine Kosten außer den Input-Tokens des Antwortschritts.
 Antworten an den Auszügen prüfen; eine Zahl, ein Datum, eine Bedingung im
 Auszug wiegt schwerer als die Paraphrase einer Antwort; was ein Auszug nicht
 zeigt, ist unbestätigt, nicht widerlegt; wo der genaue Wortlaut zählt, ein
-paar Wörter aus dem Auszug in Anführungszeichen mit URL zitieren, nie Wörter,
-die in keinem Auszug stehen. Zitiert wird weiter per URL (keine `[S1]`-Marken).
+paar Wörter aus dem Auszug in Anführungszeichen mit URL zitieren und nie Wörter
+als Quellenzitat ausgeben, die nicht in deren Auszug stehen (Zitate aus dem
+geprüften Text oder den Antworten bleiben erlaubt). Zitiert wird weiter per URL
+(keine `[S1]`-Marken). Live-Gegenprobe 2026-10-10 (Sonnet 5.5 auf den vier
+Antworten oben): beide wörtlichen Zitate standen in Auszügen, und die Antwort
+erkannte aus einem Auszug, dass das Handelsblatt den Beschlusstag (10.9.) statt
+des Wirksamkeitstags (16.9.) nennt.
 
 **Nur im Speicher.** Quelltexte, Seiten und Auszüge leben je Turn in
 `ComparisonTools.source_evidence`; gespeichert, gestreamt und an Judges
