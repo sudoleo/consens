@@ -1817,6 +1817,12 @@ def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
     expect(app_page.locator("#watchGoalError")).to_be_hidden()
     expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Only when it resolves")
 
+    # The custom row answers a click on its padding like the label rows.
+    app_page.click("#watchGoalNone")
+    app_page.locator(".watch-goal-option.is-custom").click(position={"x": 4, "y": 4})
+    expect(app_page.locator("#watchGoalCustomChoice")).to_be_checked()
+    expect(app_page.locator("#watchGoal")).to_be_focused()
+
 
 def test_query_first_watch_guides_question_then_configuration(app_page):
     """Das Watch-Dashboard startet einen Query-first-Flow, ohne vorherigen

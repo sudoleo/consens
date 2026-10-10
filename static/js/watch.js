@@ -896,6 +896,11 @@
       customChoice.checked = true;
       onGoalChange();
     });
+    // The custom row is a div (two controls), so its padding answers clicks
+    // like the label rows around it.
+    goalInput.closest(".watch-goal-option").addEventListener("click", event => {
+      if (event.target === event.currentTarget) goalInput.focus();
+    });
 
     renderGoalOptions([]);
     if (watchedQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
