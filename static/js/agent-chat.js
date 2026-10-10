@@ -407,6 +407,9 @@
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
       });
       App.agentMemory?.nudge(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}` });
+      App.agentWatch?.render(document.getElementById('agentAnswerBody'), {
+        key: `${basis.chatId}:${basis.turnId}`, proposal: basis.currentTurn?.agent_watch,
+        running: basis.currentTurn?.status === 'pending' });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -415,6 +418,7 @@
       App.agentDelegation?.project(null);
       // A saved Consensus turn or a new chat: no check of a pasted text.
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
+      App.agentWatch?.render(document.getElementById("agentAnswerBody"), {});
     }
     window.updateQuestionInputAccess?.();
     syncPendingReview();
@@ -611,6 +615,9 @@
       changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });
     App.agentMemory?.nudge(answerBody, { key: context.runId,
       finished: !running && state.completedTurn?.status === 'completed', memory: state.completedTurn?.agent_settings?.memory });
+    // A Watch the Agent prepared: its card once the answer that points to it is final.
+    App.agentWatch?.render(answerBody, { key: context.runId, running,
+      proposal: state.completedTurn?.agent_watch || context.metadata.agentWatch });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
@@ -656,12 +663,13 @@
   // Agent has no Watch button: a finished answer may offer to keep itself
   // current (watch.js owns the card, the counter and "dismissed"). Only a
   // first message qualifies, because a watch re-asks the bare question, and
-  // only one built on sources, because those are what can change.
+  // only one built on sources, because those are what can change. A turn
+  // whose Agent already prepared a Watch has its own card (agent-watch.js).
   function offerWatch(context) {
     if (!registry.isVisible(context.runId) || !registry.isAuthCurrent(context)) return;
     const turn = context.consensus.completedTurn;
     App.watch?.showFeatureNudge?.({
-      eligible: turn?.status !== "failed" && context.historyTurns.length === 0
+      eligible: turn?.status !== "failed" && context.historyTurns.length === 0 && !turn?.agent_watch
         && Array.isArray(turn?.sources) && turn.sources.length > 0,
       question: context.question,
       anchor: document.getElementById("agentWatchAnchor"),
@@ -1146,6 +1154,11 @@
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         context.metadata.agentMemory = App.agentMemory?.receive(context.metadata.agentMemory || [], event) || [];
         registry.update(context.runId, () => {});
+      } },
+      // The latest Watch proposal of this turn; its card waits for the answer.
+      watch: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        context.metadata.agentWatch = event.proposal || null;
       } },
       review: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;

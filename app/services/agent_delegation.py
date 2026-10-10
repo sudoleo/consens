@@ -165,7 +165,7 @@ class Worker:
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  check_sources=False, source_limits=None, file_context=None, google_selection=None, google_data_consent=False,
-                 agent_preferences=None, memory=None, **kwargs):
+                 agent_preferences=None, memory=None, google_data=False, **kwargs):
         super().__init__(**kwargs)
         # Freeze the actual conversation before runtime instructions, tool
         # transcripts or private continuation data are appended to messages.
@@ -177,6 +177,9 @@ class DelegationLoop(AgentLoop):
         self.memory = MemoryTools(self, memory if memory is not None else MemorySnapshot())
         self.file_context = file_context
         self.documents = None
+        self.watch_tools = None
+        # The latest Watch this turn prepared (agent_watch.py), for the answer step.
+        self.watch_proposal = None
         self.google_evidence = []
         self.google_data_consent = google_data_consent
         self.config = dict(delegation_config)
@@ -283,6 +286,16 @@ class DelegationLoop(AgentLoop):
                  if writes_enabled() else
                  "Google is a read-only source here: you cannot send email, create Gmail drafts or change calendars. If the user asks for that, "
                  "write the proposed text or event details in your answer for them to use themselves, and say that Consens does not send or change anything in Google."))
+        # A Watch the user asks for is prepared, never started (agent_watch.py):
+        # only on their own account-mode turns, never with Google data. The
+        # condition holds for a whole chat, so the prompt stays cacheable.
+        if (self.comparison is not None and self.policy.account_budget_only
+                and not google_selection and not google_data):
+            from app.services.agent_watch import ORCHESTRATOR_PROMPT, WatchTools
+            self.watch_tools = WatchTools(self)
+            self.messages[0]["content"] += "\n\n" + ORCHESTRATOR_PROMPT
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.watch_tools.tools()],
+                                         argument_limit=max(self.registry.argument_limit, 24_000))
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
@@ -1133,8 +1146,9 @@ class DelegationLoop(AgentLoop):
         Its direct text is not published yet; ask once to confirm or compare."""
         if (not self.comparison or not self.comparison.free or self.comparison.comparisons
                 or self.floor_reminded or value.tool_calls or not value.text.strip()
-                # A message that only asked to remember or forget something.
-                or self.memory.changed):
+                # A message that only asked to remember or forget something,
+                # or to watch a question this chat already answered.
+                or self.memory.changed or self.watch_proposal):
             return False
         self.floor_reminded = True
         self.messages.append({"role": "user", "content":
@@ -1293,6 +1307,8 @@ class DelegationLoop(AgentLoop):
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
                 if self.mock_answer is not None and self.answer_conversation:
                     self.memory.mock_turn(self.answer_conversation[-1]["content"])
+                    if self.watch_tools:
+                        self.watch_tools.mock_turn(self.answer_conversation[-1]["content"])
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
                 value = None
                 for index in steps:

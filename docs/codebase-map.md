@@ -1312,6 +1312,25 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `consensio:memory-changed` lässt eine geladene Settings-Liste nachladen.
   `MOCK_LLM`: eine Agent-Frage „Remember: <Fakt>“ speichert den Fakt, damit der
   Ablauf ohne Provider im Browser prüfbar ist.
+- **Agent-Watch (`app/services/agent_watch.py`, `agent-watch.js`, seit
+  2026-10-11)**: Der Agent legt keine Watch an, er bereitet sie vor.
+  `prepare_watch` (registriert nur in Account-Mode-Turns mit Vergleich und ohne
+  Google-Daten, `DelegationLoop(google_data=…)`) prüft Frage/Ziele/Intervall,
+  fragt lesend `watch_service.creation_outlook` (schon beobachtet: jede Watch
+  mit gleichem `question_hash`; freie Slots; Daily) und speichert einen
+  Vorschlag als `turn.agent_watch` (`question`, `goals[≤3]`, `interval`; nur
+  bei `pending`). SSE `watch`, Evidence `prepared_watch` und
+  `SYNTHESIS_PROMPT` für den Antwortschritt; `_free_floor` erlaubt eine reine
+  „beobachte das“-Antwort ohne Vergleich. `App.agentWatch.render(body,
+  {key, proposal, running})` zeigt die Karte erst unter der fertigen
+  Antwort: „Start watching“ = `POST /api/watch` mit `App.watchUi.watchDefaults`
+  plus Frage und erstem Ziel, „Adjust“ = `openWatchDialog("create", {question,
+  goals, goal, interval, source: "agent"})`. Den Zustand (watching/paused/
+  resolved/full) liest die Karte live über `App.watch.watchedFor` und
+  `App.watchState.limits` und folgt `consensio:watches-changed`. Ein Turn mit
+  Vorschlag bekommt keinen `offerWatch`-Hinweis. Ablauf und Begründung:
+  [agent-mode.md](agent-mode.md) „Watch vorschlagen“. `MOCK_LLM`: „Watch:
+  <Frage>“ bereitet einen Vorschlag vor.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,stripMath,render}`.
@@ -1856,9 +1875,16 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Request deaktiviert; Zahl und freie Plätze stehen im Dashboard-Kopf und in
   der Sidebar. Nach dem dritten speicherbaren Consensus zeigt
   `window.App.watch.*` einmalig einen Hinweis am Watch-Button mit der **Aktion
-  selbst** („Watch this question“, `nudgeWatchDefaults()`: wöchentlich, morgiger
-  Wochentag, 09:00 lokal, privat, E-Mail nur auf Belege); „Add a goal or change
-  the schedule“ öffnet den vollen Dialog, ein 429 ebenfalls. Der Hinweis ist ein
+  selbst** („Watch this question“, `watchDefaults()`: wöchentlich, morgiger
+  Wochentag, 09:00 lokal, privat, E-Mail nur auf Belege; dieselben Defaults
+  nimmt die Agent-Watch-Karte); „Add a goal or change
+  the schedule“ öffnet den vollen Dialog, ein 429 ebenfalls.
+  `openWatchDialog("create", options)` nimmt `question`, `goal` (vorgewählt),
+  `goals` (Vorschläge des Aufrufers, dann kein `goal-suggestions`-Call),
+  `interval` und `source` (Analytics). `loadWatchLimits` hält neben den Limits
+  die Watch-Liste (`watchState.watches`) und meldet `consensio:watches-changed`;
+  `App.watch.watchedFor(question)` vergleicht wie `question_hash`
+  (Groß/Klein, Leerraum, Schluss-„?!.“). Der Hinweis ist ein
   eigener Viewport-Layer unter `<body>` und übermalt nie den Composer.
   `window.App.watch.resetAfterLogout()` leert das Dashboard beim Session-Ende;
   auf einem direkten `/app/watches`-Deep-Link wechselt die Seite deterministisch
@@ -3067,7 +3093,7 @@ Speicher (`FRAME_OVERHEAD_BYTES` = 256 je Frame plus der für Nachzügler
 aufgehobene Text). Frames werden als gültiges JSON gespeichert (NaN → `null`,
 einzelne Surrogates ersetzt). Liest jemand hinter dem behaltenen Fenster,
 bekommt er zuerst die neuesten verworfenen Frames mit bleibendem Zustand
-(`STICKY_TYPES`: accepted, started, review, memory, quota, resources) und dann
+(`STICKY_TYPES`: accepted, started, review, memory, quota, resources, watch) und dann
 `reset` mit dem Antworttext bis dorthin (Deltas angehängt, bei `activity`
 `status` + `clear_response` geleert), im Tail als eigene Frames bzw.
 `event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert nichts
@@ -5576,6 +5602,7 @@ app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
+  agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompts für Orchestrator/Antwortschritt; startet nie eine Watch
   agent_source_evidence.py   Quellenauszüge für den Agent-Antwortschritt: Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
@@ -6009,7 +6036,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Collection-Group-Index für `cleanup_memory_change_logs` (stündlicher
   Retention-Loop). Agent-Turns tragen `agent_memory` (welche Erinnerung
   geändert wurde: `change_id`, `op`, `item_id`, `undone`, seit 2026-10-08 ohne
-  Text); gelöscht mit Chat bzw. Konto.
+  Text); gelöscht mit Chat bzw. Konto. Seit 2026-10-11 kann ein Agent-Turn
+  `agent_watch` tragen (`question`, `goals`, `interval`: der Watch-Vorschlag,
+  siehe §3 „Agent-Watch“; ob er gestartet wurde, steht nur in `watches`).
 - `chat_deletion_jobs/{sha256(uid:chat)[:40]}` — dauerhafte, idempotente
   Einzelchat-Löschaufträge (`uid`, `chat_id`, `status`, `attempts`,
   `last_error`-Kategorie, `next_attempt_at`), angelegt atomar mit dem

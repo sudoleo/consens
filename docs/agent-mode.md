@@ -431,6 +431,63 @@ Judge-Text, zu strenge Sperren und unsichtbare Marken im hellen Modus gefunden;
 alles behoben und mit Tests abgedeckt. Details: [codebase-map.md](codebase-map.md),
 Abschnitt „Eingefügten Text prüfen".
 
+## Watch vorschlagen (seit 2026-10-11)
+
+Bittet der Nutzer, ihm Bescheid zu geben, wenn sich etwas ändert oder eintritt
+(„sag mir, wenn GPT-6 erscheint“), ruft der Agent `prepare_watch`
+(`app/services/agent_watch.py`), und zwar vor dem Vergleich, der den aktuellen
+Stand wie gewohnt beantwortet. Das Tool legt **nichts** an:
+
+- Es prüft eine eigenständig formulierte Frage (8–500 Zeichen), bis zu drei
+  beobachtbare Ziele (je ≤ 120 Zeichen, z. B. „GPT-6 is officially released“)
+  und das Intervall. Daily ohne Berechtigung wird Weekly, mit Hinweis an das
+  Modell.
+- Es fragt lesend `watch_service.creation_outlook`: Ist die Frage schon
+  beobachtet (jede Watch des Kontos mit demselben `question_hash`, jeder
+  Status, auch eine aus einem Consensus), ist ein Slot frei, ist Daily
+  erlaubt? Das Modell erhält `prepared`, `already_watched` oder
+  `limit_reached`.
+- Es speichert genau einen Vorschlag am laufenden Turn
+  (`agent_watch: {question, goals, interval}`; der letzte gewinnt, nur solange
+  der Turn `pending` ist) und sendet das SSE-Event `watch` (sticky in
+  `agent_live`).
+- Der Antwortschritt bekommt den Vorschlag als `prepared_watch` in der
+  Evidence und `agent_watch.SYNTHESIS_PROMPT`. Er verweist in einem Satz auf die
+  Karte und sagt nie, die Watch sei aktiv.
+
+Die Karte (`static/js/agent-watch.js`) erscheint unter der fertigen Antwort. Sie
+zeigt die Frage, „Waiting for: <erstes Ziel>“ (ohne Ziel „Any change to the
+answer“) und die Einstellungszeile der Dialog-Defaults.
+
+- **„Start watching“** ruft `POST /api/watch` mit `watchDefaults(interval)` und
+  der Zeitzone des Browsers. Das ist derselbe validierte, rate-limitierte Pfad
+  wie im Erstell-Dialog; was dort nach dem Anlegen passiert, gilt auch hier.
+- **„Adjust“** öffnet den Erstell-Dialog mit allen Zielen, das erste gewählt,
+  ohne zweiten Aufruf für Zielvorschläge.
+- Ob die Frage schon beobachtet wird oder kein Slot frei ist, liest die Karte
+  live aus `/api/my/watches` (`App.watch.watchedFor`, dieselbe Regel wie
+  `creation_outlook`), nie aus dem gespeicherten Turn.
+
+**Warum keine direkte Anlage:** Inhalte aus Seiten, Mails oder Dateien dürfen
+keine wiederkehrenden Checks auf dem Plattform-Key starten, keinen Free-Slot
+belegen und keine Mails auslösen. Außerdem kennt der Server die Zeitzone des
+Nutzers nicht.
+
+**Gating:**
+- Das Tool gibt es nur in Account-Mode-Turns mit Vergleich und ohne
+  Google-Daten (`DelegationLoop(google_data=…)`). Eine Frage aus privater Post
+  soll kein geplanter Check werden.
+- Eine reine „beobachte das“-Nachricht braucht keinen Vergleich (Ausnahme in
+  `_free_floor`, wie bei Memory).
+- Ein Turn mit eigenem Vorschlag zeigt den allgemeinen Hinweis
+  „Watch this question“ (`offerWatch`) nicht.
+- Unter `MOCK_LLM` bereitet „Watch: <Frage>“ einen Vorschlag vor (für
+  Browser-Tests).
+
+**Kosten:** Das Tool ruft kein Modell. Die Checks einer gestarteten Watch
+laufen wie bei jeder Watch auf dem Server-Key (global
+`watch_max_runs_per_day`), nicht auf dem Agent-Tokenkonto.
+
 ## Tageskontingent
 
 Seit 2026-10-01 teilt Agent das Tageskonto mit Compare, Consensus und Deep
@@ -795,7 +852,8 @@ behalten Nutzerfrage und gespeicherte Antwort, mit einem ausdrücklichen Hinweis
 auf ihren möglicherweise unvollständigen oder ungeprüften Stand. Toolargumente,
 Antworten und Quellen sind untrusted data, keine Berechtigungen. Strikte Schemas,
 servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
-über Toolergebnisse. Dateien, Share und Watch sind weiterhin nicht freigeschaltet.
+über Toolergebnisse. Dateien und Share sind weiterhin nicht freigeschaltet; eine
+Watch bereitet der Agent nur vor (Abschnitt „Watch vorschlagen“).
 
 Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
 consens.io. Jede Nutzerfrage und jeder Bearbeitungsauftrag geht durch

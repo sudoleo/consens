@@ -646,6 +646,10 @@ class ComparisonTools:
             block = synthesis_prompt(memory.snapshot)
             if block:
                 system += "\n\n" + block
+        watch = getattr(self.loop, "watch_proposal", None)
+        if watch:
+            from app.services.agent_watch import SYNTHESIS_PROMPT
+            system += "\n\n" + SYNTHESIS_PROMPT
         # Answers name their sources by URL; what a source says stands once in
         # "sources", pooled across answers and comparisons.
         evidence = {"comparisons": [{
@@ -657,6 +661,8 @@ class ComparisonTools:
             "supporting_results": self.loop.worker_evidence(),
             "saved_documents": self.loop.documents.results if getattr(self.loop, "documents", None) else []}
         evidence["google_results"] = getattr(self.loop, "google_evidence", [])
+        if watch:
+            evidence["prepared_watch"] = watch
         checked = self.checked_text_evidence()
         if checked:
             evidence["checked_text"] = checked

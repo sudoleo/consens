@@ -541,6 +541,31 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
     return _serialize_watch(stored_watch_id, stored_doc, share)
 
 
+def creation_outlook(uid: str, question: str, tier, db=None) -> dict:
+    """Whether a query-first watch of ``question`` could start now. Reads only.
+
+    The Agent asks before it offers a Watch card (agent_watch.py), so its
+    answer can say "already watched" or "no free slot" instead of offering a
+    button that fails. create_watch stays the only writer and decides again
+    in its transaction. "Already watched" is any of the user's watches with
+    the same question (question_hash, any status, also one started from a
+    consensus): create_watch would allow a second query-first watch next to
+    such a one, but two watches of one question are never what the user means.
+    The card in the browser applies the same rule (watch.js watchedFor).
+    """
+    db = db if db is not None else db_firestore
+    expected = share_snapshots.question_hash(question)
+    active = 0
+    watched = False
+    for snapshot in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
+        data = snapshot.to_dict() or {}
+        active += data.get("status") == "active"
+        watched = watched or str(data.get("question_hash") or "") == expected
+    limit = cfg.get_watch_active_limit(tier)
+    return {"already_watched": watched, "active_count": active, "active_limit": limit,
+            "limit_reached": active >= limit, "daily_allowed": cfg.is_watch_daily_allowed(tier)}
+
+
 def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dict]:
     """Compact, JSON-safe view of the newest history points (ascending).
 

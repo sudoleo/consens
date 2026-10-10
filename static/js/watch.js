@@ -196,12 +196,14 @@
 
   // Ein Klick, fertige Voreinstellungen: woechentlich, morgen, 09:00 lokal,
   // privat, E-Mail nur bei materieller Aenderung. Genau die Werte, die der
-  // Dialog ohnehin vorschlaegt — der Dialog bleibt fuer alles andere da
-  // ("Pick a different schedule").
-  function nudgeWatchDefaults() {
+  // Dialog ohnehin vorschlaegt — der Dialog bleibt fuer alles andere da.
+  // Der Hinweis und die Agent-Karte (agent-watch.js) starten damit; Daily
+  // faellt ohne Berechtigung auf Weekly zurueck, ein Wochentag nur bei Weekly.
+  function watchDefaults(interval = "weekly") {
+    const chosen = interval === "monthly" || (interval === "daily" && dailyIntervalAllowed()) ? interval : "weekly";
     return {
-      interval: "weekly",
-      run_weekday: browserTomorrowWeekday(),
+      interval: chosen,
+      run_weekday: chosen === "weekly" ? browserTomorrowWeekday() : "",
       email_mode: "changes_only",
       email_enabled: true,
       telegram_enabled: false,
@@ -231,7 +233,7 @@
         if (!resultId) throw new Error("This consensus is not saved yet.");
         origin = { result_id: resultId };
       }
-      const payload = Object.assign(nudgeWatchDefaults(), origin);
+      const payload = Object.assign(watchDefaults(), origin);
       const data = await api("POST", "/api/watch", payload);
       watchState.setLimits(null);
       window.App?.trackAppEvent?.("app_watch_created", {
@@ -386,8 +388,12 @@
     if (watchState.limitRequest && !force) return watchState.limitRequest;
     const request = api("GET", "/api/my/watches")
       .then(data => {
-        watchState.setLimits(normalizeWatchLimits(data.limits, data.watches));
+        const watches = Array.isArray(data.watches) ? data.watches : [];
+        watchState.setLimits(normalizeWatchLimits(data.limits, watches));
+        watchState.setWatches(watches);
         renderSidebarWatchQuota(watchState.limits);
+        // Agent Watch cards follow slots and watched questions.
+        window.dispatchEvent(new CustomEvent("consensio:watches-changed"));
         return watchState.limits;
       })
       .finally(() => {
@@ -437,6 +443,16 @@
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
   }
 
+  // Why no new Watch can start: the create dialog and the Agent card say the
+  // same sentence.
+  function limitMessage(limits) {
+    return limits.activeLimit > 1
+      ? `All ${limits.activeLimit} Watch slots are in use. Pause one to start a new Watch.`
+      : limits.activeLimit === 1
+        ? "Your Watch slot is in use. Pause that Watch to start a new one."
+        : "Watches are not available for your account yet.";
+  }
+
   // The dialog only mentions the limit when it blocks: the sidebar and the
   // dashboard already carry the count, the dialog is about the question.
   function renderDialogWatchLimit(target, limits) {
@@ -446,11 +462,7 @@
       return;
     }
     const isFree = (window.App.normalizeTier?.(limits.plan) || "free") === "free";
-    const message = limits.activeLimit > 1
-      ? `All ${limits.activeLimit} Watch slots are in use. Pause one to start a new Watch.`
-      : limits.activeLimit === 1
-        ? "Your Watch slot is in use. Pause that Watch to start a new one."
-        : "Watches are not available for your account yet.";
+    const message = limitMessage(limits);
     target.hidden = false;
     target.classList.add("is-full");
     target.innerHTML = `<span>${escapeHtml(message)}</span>${isFree
@@ -545,6 +557,40 @@
     return WATCH_WEEKDAYS.map(day =>
       `<option value="${day}"${day === current ? " selected" : ""}>${day[0].toUpperCase() + day.slice(1)}</option>`
     ).join("");
+  }
+
+  // "Weekly on Sunday at 09:00 · E-mail · Private": schedule, channels,
+  // alert rule (only when not the default) and page of a Watch's settings,
+  // in the create dialog and on the Agent card.
+  function settingsSummary(settings) {
+    const interval = settings.interval;
+    let schedule = interval === "daily" ? "Daily" : interval === "monthly" ? "Monthly" : "Weekly";
+    if (interval === "weekly" && WATCH_WEEKDAYS.includes(settings.run_weekday)) {
+      schedule += " on " + settings.run_weekday[0].toUpperCase() + settings.run_weekday.slice(1);
+    }
+    if (settings.run_time) schedule += " at " + settings.run_time;
+    const channels = [
+      settings.email_enabled ? "E-mail" : "",
+      settings.telegram_enabled ? "Telegram" : ""
+    ].filter(Boolean).join(" + ") || "No channel";
+    const parts = [schedule, channels];
+    if (settings.email_mode === "every_run") parts.push("Every check");
+    if (settings.email_mode === "condition") parts.push("Only when it resolves");
+    parts.push(settings.visibility === "public" ? "Public" : "Private");
+    return parts.join(" · ");
+  }
+
+  // share_snapshots.question_hash in words: case, spacing and a final "?",
+  // "!" or "." do not make another question.
+  function questionKey(value) {
+    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[?!. ]+$/, "");
+  }
+
+  // The account's Watch of this question, if any (status included): the rule
+  // of watch_service.creation_outlook, from the list loadWatchLimits keeps.
+  function watchedFor(question) {
+    const key = questionKey(question);
+    return (watchState.watches || []).find(watch => questionKey(watch.question) === key) || null;
   }
 
   function formatWatchSchedule(watch) {
@@ -646,12 +692,16 @@
       return;
     }
     // A question that is already known (an example, the chat's last
-    // question) goes straight to the goal; "Edit" leads back to the field.
-    const knownQuestion = normalizeWatchQuestion(options?.question);
+    // question, an Agent proposal) goes straight to the goal; "Edit" leads
+    // back to the field. Options: question, goal (the preset choice), goals
+    // (suggestions the caller already has, so none are fetched), interval and
+    // source (analytics).
+    const setup = options || {};
+    const knownQuestion = normalizeWatchQuestion(setup.question);
     if (knownQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
-      renderConfirm({ question: knownQuestion, goal: options?.goal }, modalIntent);
+      renderConfirm({ ...setup, question: knownQuestion }, modalIntent);
     } else {
-      renderQuestionStep(options?.question, modalIntent, options?.goal);
+      renderQuestionStep(setup.question, modalIntent, setup);
     }
   }
 
@@ -659,7 +709,7 @@
     return String(value || "").replace(/\s+/g, " ").trim();
   }
 
-  function renderQuestionStep(initialQuestion, modalIntent, pendingGoal) {
+  function renderQuestionStep(initialQuestion, modalIntent, setup = {}) {
     const { title, body } = els();
     if (!body) return;
     title.textContent = "New Watch";
@@ -687,8 +737,11 @@
         focusWatchField(input);
         return;
       }
+      // Goals belong to the question they were written for; schedule and
+      // origin carry over.
       const sameQuestion = question === normalizeWatchQuestion(initialQuestion);
-      renderConfirm({ question: question, goal: sameQuestion ? pendingGoal || "" : "" }, modalIntent);
+      renderConfirm({ interval: setup.interval, source: setup.source,
+        ...(sameQuestion ? { goal: setup.goal, goals: setup.goals } : {}), question }, modalIntent);
     });
     // A question is one line; Enter moves on, Shift+Enter still breaks.
     input.addEventListener("keydown", event => {
@@ -721,6 +774,9 @@
   function renderConfirm(options, modalIntent) {
     const directQuestion = normalizeWatchQuestion(options?.question);
     const presetGoal = normalizeWatchQuestion(options?.goal);
+    const suppliedGoals = Array.isArray(options?.goals)
+      ? options.goals.map(normalizeWatchQuestion).filter(Boolean) : null;
+    const presetInterval = watchDefaults(options?.interval).interval;
     const watchedQuestion = directQuestion || normalizeWatchQuestion(window.lastQuestion);
     const { title, body } = els();
     if (!body) return;
@@ -756,7 +812,7 @@
           <div class="watch-config-grid">
             <div class="watch-config-field">
               <label class="watch-interval-label" for="watchInterval">How often</label>
-              <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
+              <select id="watchInterval" class="watch-interval-select">${intervalOptions(presetInterval)}</select>
             </div>
             <div id="watchWeekdayWrap" class="watch-config-field">
               <label class="watch-interval-label" for="watchWeekday">Day</label>
@@ -903,7 +959,9 @@
     });
 
     renderGoalOptions([]);
-    if (watchedQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
+    if (suppliedGoals) {
+      renderGoalOptions(suppliedGoals, true);
+    } else if (watchedQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
       const loading = document.createElement("div");
       loading.className = "watch-goal-loading";
       loading.innerHTML = '<span class="watch-goal-option is-loading" aria-hidden="true"></span>'.repeat(2)
@@ -921,25 +979,25 @@
     }
 
     document.getElementById("watchQuestionEdit")?.addEventListener("click", () => {
-      renderQuestionStep(directQuestion, modalIntent, selectedGoal() || presetGoal);
+      renderQuestionStep(directQuestion, modalIntent,
+        { ...options, goal: selectedGoal() || presetGoal, interval: intervalSelect.value });
     });
 
     // --- Schedule, alerts, channels, page: one line until "Change" -------
+    // The fields as POST /api/watch takes them; the summary line reads the same.
+    function currentSettings() {
+      return {
+        interval: intervalSelect.value,
+        run_weekday: intervalSelect.value === "weekly" ? weekdaySelect.value : "",
+        email_mode: emailModeSelect.value,
+        email_enabled: emailEnabledInput.checked,
+        telegram_enabled: telegramEnabledInput.checked,
+        visibility: visibilitySelect.value,
+        run_time: runTimeInput.value
+      };
+    }
     function updateSetupSummary() {
-      const interval = intervalSelect.value;
-      const weekdayLabel = weekdaySelect.options[weekdaySelect.selectedIndex]?.textContent.trim() || "";
-      let schedule = interval === "daily" ? "Daily" : interval === "monthly" ? "Monthly" : "Weekly";
-      if (interval === "weekly" && weekdayLabel) schedule += " on " + weekdayLabel;
-      if (runTimeInput.value) schedule += " at " + runTimeInput.value;
-      const channels = [
-        emailEnabledInput.checked ? "E-mail" : "",
-        telegramEnabledInput.checked ? "Telegram" : ""
-      ].filter(Boolean).join(" + ") || "No channel";
-      const parts = [schedule, channels];
-      if (emailModeSelect.value === "every_run") parts.push("Every check");
-      if (emailModeSelect.value === "condition") parts.push("Only when it resolves");
-      parts.push(visibilitySelect.value === "public" ? "Public" : "Private");
-      document.getElementById("watchSettingsSummary").textContent = parts.join(" · ");
+      document.getElementById("watchSettingsSummary").textContent = settingsSummary(currentSettings());
     }
     function syncAlertLabels() {
       const selected = emailModeSelect.value;
@@ -1028,17 +1086,7 @@
       this.disabled = true;
       this.textContent = "Starting…";
       try {
-        const payload = {
-          interval: intervalSelect.value,
-          run_weekday: intervalSelect.value === "weekly" ? weekdaySelect.value : "",
-          email_mode: emailMode,
-          email_enabled: emailEnabledInput.checked,
-          telegram_enabled: telegramEnabledInput.checked,
-          condition: goal,
-          visibility: visibility,
-          run_time: runTime,
-          timezone: browserTimezone()
-        };
+        const payload = { ...currentSettings(), condition: goal, timezone: browserTimezone() };
         if (directQuestion) payload.question = directQuestion;
         else payload.result_id = resultId;
         const data = await api(
@@ -1048,11 +1096,12 @@
           () => watchModalIntentIsCurrent(modalIntent)
         );
         if (!watchModalIntentIsCurrent(modalIntent)) return;
-        watchState.setLimits(null);
+        // Sidebar count and Agent cards follow the new Watch.
+        loadWatchLimits(true).catch(() => {});
         const checked = checkedGoalChoice();
         window.App?.trackAppEvent?.("app_watch_created", {
           interval: data.watch.interval,
-          source: directQuestion ? "query_first" : "consensus",
+          source: options?.source || (directQuestion ? "query_first" : "consensus"),
           has_goal: Boolean(goal),
           goal_source: checked ? checked.value : "none"
         });
@@ -1325,11 +1374,18 @@
   window.App.watch = Object.assign(window.App.watch || {}, {
     showFeatureNudge: showWatchFeatureNudge,
     refreshQuota: () => loadWatchLimits(true),
+    // Slots and watched questions, loaded once per session (Agent cards).
+    loadState: () => loadWatchLimits(false),
+    watchedFor: watchedFor,
     resetAfterLogout: resetAfterLogout
   });
-  // Shared with watch-dashboard.js, which renders /app/watches.
+  // Shared with watch-dashboard.js, which renders /app/watches, and with
+  // agent-watch.js, the Watch card under an Agent answer.
   window.App.watchUi = {
     api: api,
+    watchDefaults: watchDefaults,
+    settingsSummary: settingsSummary,
+    limitMessage: limitMessage,
     popup: popup,
     escapeHtml: escapeHtml,
     makeButton: makeButton,

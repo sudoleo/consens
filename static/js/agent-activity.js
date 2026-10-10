@@ -8,6 +8,7 @@
   const tools = {
     web_search: ['Web search', 'Searching the web…', 'Searched the web'],
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
+    prepare_watch: ['Watch', 'Preparing a Watch…', 'Prepared a Watch for you to start'],
     judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
     check_contradictions: ['Contradiction source check', 'Checking contradictions against sources…', 'Checked contradictions against sources'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],

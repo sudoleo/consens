@@ -39,12 +39,14 @@ _ENTRIES = (
     ("agent", "Agent: steering instructions",
      "System prompt of the user's selected Agent model while it steers the run (comparisons, depth, memory, "
      "tools). At runtime the comparison settings, the per-message comparison limit and the file, document, "
-     "Google and memory instructions are appended (in chats with Google data also a no-web-search note); date, "
+     "Google, Watch (agent_watch.py, not in chats with Google data) and memory instructions are appended (in "
+     "chats with Google data also a no-web-search note); date, "
      "reference time and selected model travel with the latest user message.",
      "prompt_defaults.py:AGENT_SYSTEM_PROMPT", lambda: _defaults("agent")),
     ("agent_answer", "Agent: answer step",
      "System prompt of the step that writes the answer the user reads (same model, no tools, fresh context). "
-     "At runtime the date context, selected model and memory block (if enabled) are appended; the "
+     "At runtime the date context, selected model, memory block (if enabled) and, after a prepared Watch, "
+     "the Watch card note are appended; the "
      "conversation and the evidence message (comparison answers with sources) follow.",
      "prompt_defaults.py:AGENT_ANSWER_PROMPT", _agent_answer),
     ("comparison", "Agent: comparison models",
