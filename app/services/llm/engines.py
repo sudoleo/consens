@@ -63,6 +63,20 @@ def web_search_tool(provider: str, *, max_uses: int, **limits) -> dict:
     }}
 
 
+def web_fetch_tool(*, max_uses: int, max_content_tokens: int, allowed_domains) -> dict:
+    """OpenRouter's page reader (beta) for the Agent's read_source.
+
+    Pinned to Exa: only Exa, Parallel and OpenRouter's own fetcher promise to
+    honour the domain filter and the token cap, a provider's native fetch does
+    not. Exa is what "auto" chose for every model in the probe of 2026-10-10
+    (artifacts/web-fetch-probe/validation.md): 21 of 21 typical source pages
+    and PDFs read under ZDR, the cleanest extract, $0.001 per page."""
+    return {"type": "openrouter:web_fetch", "parameters": {
+        "engine": "exa", "max_uses": max_uses, "max_content_tokens": max_content_tokens,
+        "allowed_domains": list(allowed_domains),
+    }}
+
+
 class _ProviderHTTPStatusError(RuntimeError):
     """Content-free upstream status error for metrics and retry policy."""
 

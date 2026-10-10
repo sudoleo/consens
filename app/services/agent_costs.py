@@ -43,6 +43,27 @@ def search_cost_nanos(model):
     return provider_cost_nanos(model.web_search_usd_per_request) or 7_000_000
 
 
+# A page read (openrouter:web_fetch, agent_read_source) adds at most its
+# max_content_tokens to the input of the continuation that reads it; the cap
+# is approximate, hence the margin (live 2026-10-10: a PDF cut at 4,000 tokens
+# arrived as 4,063 input tokens with the prompt). Exa charges $0.001 per page,
+# outside the cost OpenRouter reports for the call.
+FETCH_TOKEN_MARGIN = 1.25
+FETCH_COST_NANOS = 1_000_000
+
+
+def fetch_bounds(tools):
+    """(pages, input tokens) the page-reading tools of one call may add."""
+    pages = tokens = 0
+    for tool in tools or ():
+        if isinstance(tool, dict) and tool.get("type") == "openrouter:web_fetch":
+            parameters = tool.get("parameters") or {}
+            uses = int(parameters.get("max_uses") or 1)
+            pages += uses
+            tokens += int(uses * int(parameters.get("max_content_tokens") or 0) * FETCH_TOKEN_MARGIN)
+    return pages, tokens
+
+
 def input_bound(messages, tools=()):
     # UTF-8 bytes plus generous protocol/schema overhead, not a tokenizer.
     return len(json.dumps([messages, tools], ensure_ascii=False).encode("utf-8")) + 1024
@@ -91,20 +112,21 @@ class RunCosts:
         initial_inputs = inputs
         if inputs + model.max_output_tokens > model.context_length:
             raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
-        if native_searches:
+        pages, fetched = fetch_bounds(tools)
+        if native_searches or pages:
             # A provider can never add more than the window still holds.
             room = model.context_length - model.max_output_tokens - inputs
             if room <= 0:
                 raise AnalysisBudgetExceeded("The selected model's search context limit was reached.")
-            if soft_search:
+            if soft_search and not pages:
                 tokens, cost = self.estimate(model, messages, tools)
                 return tokens, cost + native_searches * (search_cost_nanos(model) or 10_000_000)
-            inputs += min(native_searches * SEARCH_INPUT_TOKENS, room)
+            inputs += min(native_searches * SEARCH_INPUT_TOKENS + fetched, room)
         # Account conservatively for native model continuations hidden behind
         # the provider API. Do not advertise max_results as a native input cap.
-        segments = native_searches + 1 if native_searches else 1
+        segments = native_searches + pages + 1
         total_inputs = inputs * segments
-        if self.policy.account_budget_only and native_searches:
+        if self.policy.account_budget_only and (native_searches or pages):
             # Search results do not exist in the pre-search generation. Each
             # result enters only its subsequent continuations.
             total_inputs = initial_inputs * segments + (inputs - initial_inputs) * segments // 2
@@ -116,7 +138,7 @@ class RunCosts:
                     ).quantize(Decimal("1"), rounding=ROUND_CEILING))
         if native_searches:
             cost += native_searches * (search_cost_nanos(model) or 10_000_000)
-        return tokens, cost
+        return tokens, cost + pages * FETCH_COST_NANOS
 
     def reconcile(self, reservation, usage):
         with self._lock:

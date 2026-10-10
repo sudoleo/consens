@@ -52,6 +52,9 @@ class ReadOnlyTool:
     execute: Callable
     # Optional per-tool cap on raw JSON arguments; defaults to the registry's.
     argument_limit: Optional[int] = None
+    # Optional activity(arguments, result) -> extra fields of the tool's trace
+    # event (result is None while it runs), e.g. the host read_source opens.
+    activity: Optional[Callable] = None
 
     def schema(self):
         if (not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.name)
@@ -105,8 +108,9 @@ class ToolRegistry:
         tool = self.tools.get(function.get("name"))
         raw = function.get("arguments")
         if tool is None:
-            raise ValueError(f"Tool is not authorized: unknown tool. Available tools: {', '.join(self.tools)}. "
-                             "There is no tool that opens web pages.")
+            pages = ("read_source opens only URLs that comparison answers cited." if "read_source" in self.tools
+                     else "There is no tool that opens web pages.")
+            raise ValueError(f"Tool is not authorized: unknown tool. Available tools: {', '.join(self.tools)}. {pages}")
         limit = tool.argument_limit or self.default_argument_limit
         if not isinstance(raw, str) or len(raw) > limit:
             raise ValueError(f"Tool is not authorized: {tool.name} arguments must be one JSON object "

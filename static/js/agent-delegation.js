@@ -549,7 +549,9 @@
       }
       const models = new Map();
       for (const agent of view.agents.values()) {
-        if (agent.kind === "judge") continue;
+        // Judges and the helper that opens a source (read_source) are not
+        // voices of the answer: no icon in the stack, a row in the panel.
+        if (agent.kind === "judge" || agent.kind === "source") continue;
         const key = agent.model?.model || agent.id;
         if (!models.has(key)) models.set(key, []);
         models.get(key).push(agent);

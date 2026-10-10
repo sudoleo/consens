@@ -256,12 +256,36 @@
     }
     return [...sources.values()];
   }
-  function sourcePanel(sources) {
+  // The server's match form of a URL (agent_read_source.url_key): any
+  // scheme as https, host case-insensitive, no trailing slash, no fragment.
+  function readKey(value) {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol)) return '';
+      return `https://${url.host.toLowerCase()}${url.pathname.replace(/\/+$/, '') || '/'}${url.search}`;
+    } catch (_) { return ''; }
+  }
+  // Sources the agent opened itself (read_source) and really read, also by
+  // the grounding redirect an answer cited.
+  function readUrls(review) {
+    const keys = new Set();
+    for (const item of Array.isArray(review?.read_sources) ? review.read_sources : []) {
+      if (item?.status !== 'completed') continue;
+      for (const url of [item.url, item.cited_url]) {
+        const key = readKey(url);
+        if (key) keys.add(key);
+      }
+    }
+    return keys;
+  }
+  function sourcePanel(sources, read = new Set()) {
     const panel = node('div', 'agent-evidence-panel');
     const list = node('ol', 'answer-reader-sources');
     for (const source of sources) {
       const li = node('li'); const link = node('a', '', source.title);
-      link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; li.append(link); list.append(li);
+      link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; li.append(link);
+      if (read.size && read.has(readKey(source.url))) li.append(' ', node('span', 'agent-source-read', 'Read by the agent'));
+      list.append(li);
     }
     panel.append(sources.length ? list : node('p', 'agent-review-note', 'No source URLs were supplied for this answer.'));
     return panel;
@@ -483,7 +507,7 @@
       context.renderPanel = kind => {
         const panel = node("div", "agent-evidence-panel");
         if (kind === "sources") {
-          return sourcePanel(sources);
+          return sourcePanel(sources, readUrls(review));
         }
         const localIssues = checkIssues(comparison, check);
         panel.append(evidenceStatus(comparison, answers, check, state, localIssues));

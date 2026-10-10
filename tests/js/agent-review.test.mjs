@@ -140,6 +140,27 @@ it('collects chat search, answer links and comparison citations into one source 
     'https://example.org/search', 'https://example.org/chat', 'https://example.org/plan', 'https://example.org/']);
   dom.window.close();
 });
+it('marks the sources the agent read itself, only when the read completed', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.comparisons[0].answers[0].sources = [{url: 'https://example.org/report', title: 'Report'},
+    {url: 'https://example.org/missing', title: 'Missing'},
+    // Another spelling of the read page, and the Google redirect it was cited by.
+    {url: 'http://Example.org/report/', title: 'Report again'},
+    {url: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/x', title: 'gov.example'}];
+  review.read_sources = [{url: 'https://example.org/report#top', status: 'completed'},
+    {url: 'https://example.org/missing', status: 'failed'}, {url: 'javascript:bad()', status: 'completed'},
+    {url: 'https://gov.example/page', cited_url: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/x', status: 'completed'}];
+  w.App.agentReview.render(body, review);
+  d.querySelector('[data-section="sources"]').click();
+  const items = [...w.App.answerReader.openContext.mock.calls[0][0].renderPanel('sources').querySelectorAll('li')];
+  const marked = items.filter(li => li.querySelector('.agent-source-read')).map(li => li.querySelector('a').href);
+  expect(marked).toEqual(['https://example.org/report', 'http://example.org/report/',
+    'https://vertexaisearch.cloud.google.com/grounding-api-redirect/x']);
+  expect(items.find(li => li.querySelector('.agent-source-read')).textContent).toContain('Read by the agent');
+  dom.window.close();
+});
 it('makes search sources available without a comparison, including saved legacy activities', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer');

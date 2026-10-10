@@ -57,6 +57,14 @@ MOCK_CONSENSUS_TEXT = (
 )
 
 
+def mock_fetched_page(url: str) -> dict:
+    """The page read_source (agent_read_source) opens, without a fetch or cost.
+
+    Settles the fixture's contradiction: the page states SHARED_FACT."""
+    return {"status": "completed", "url": url, "title": "Mock source page", "http_status": 200, "error": "",
+            "text": f"# Mock source page\n\n{SHARED_FACT} The opening was on 31 March 1889."}
+
+
 def _record_usage(prompt: str, text: str) -> None:
     """Ein plausibler gemessener Call, damit lokale Mock-Laeufe das
     Tokenkonto bewegen (Ring/Panel sind sonst im Test nie sichtbar belastet)."""

@@ -926,18 +926,56 @@ class _JudgeContext:
     resolved_question: str
     unindexed_sentences: int = 0
     truncated_answers: int = 0
+    # Pages the Agent read (read_source), for the Coverage judge only:
+    # ((label, url, text), ...) and their <page> blocks. Never a vote.
+    sources: tuple = ()
+    sources_text: str = ""
 
 
 # Also "< /response>" or "</ Response>": a judge would read those as a tag too.
-_RESPONSE_TAG = re.compile(r"<\s*/?\s*response\b", re.IGNORECASE)
+# A read page's <page> block likewise: neither an answer nor a page can forge
+# the other's block.
+_RESPONSE_TAG = re.compile(r"<\s*/?\s*(?:response|page)\b", re.IGNORECASE)
+
+
+def _defused(text: str) -> str:
+    return _RESPONSE_TAG.sub(lambda match: match.group(0).replace("<", "&lt;"), text or "")
+
+
+def _with_read_sources(context: "_JudgeContext", read_sources) -> "_JudgeContext":
+    """The judge context plus the pages the Agent read, as "Page n" blocks.
+
+    Only the Coverage judge sees them; the Differences judge keeps comparing
+    the model responses alone. "Page", not "Source": the Coverage rules tell
+    the judge to ignore source labels and citation markers in the answers."""
+    sources, blocks = [], []
+    for item in read_sources or ():
+        text = str((item or {}).get("text") or "").strip()
+        url = str((item or {}).get("url") or "")
+        if not text or not url:
+            continue
+        label = f"Page {len(sources) + 1}"
+        sources.append((label, url, text))
+        attribute = "".join("%{:02X}".format(ord(c)) if c in '"<>&' else c for c in _clip(url, 500))
+        blocks.append(f'<page label="{label}" url="{attribute}">\n{_defused(text)}\n</page>')
+    if not sources:
+        return context
+    from dataclasses import replace
+    return replace(context, sources=tuple(sources), sources_text="\n\n".join(blocks))
+
+
+def _source_quote_found(quote: str, text: str) -> bool:
+    """A page quote counts only as whole words of the page, in order."""
+    words = lambda value: " ".join(re.findall(r"\w+", str(value or "").casefold()))
+    quote = words(quote)
+    return bool(quote) and f" {quote} " in f" {words(text)} "
 
 
 def _response_block(label: str, text: str) -> str:
     """One model response, fenced so that its own lists or a line such as
     "- Model B: ..." can never pass for another response. A tag inside the
     text is defused; quotes are still verified against the original text."""
-    body = _RESPONSE_TAG.sub(lambda match: match.group(0).replace("<", "&lt;"), text or "")
-    return f'<response label="{label}">\n{body}\n</response>'
+    return f'<response label="{label}">\n{_defused(text)}\n</response>'
 
 
 def _build_judge_context(
@@ -2153,7 +2191,7 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
     ids = list(missing)[:coverage.MAX_COVERAGE_REPAIR_IDS]
     if not ids:
         return {}
-    labels = list(context.labels)
+    labels = _coverage_labels(context)
     prompt = coverage.build_coverage_prompt(
         labels=labels,
         responses_text=context.responses_text,
@@ -2161,6 +2199,7 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
         ids=ids,
         resolved_question=context.resolved_question,
         missing_only=True,
+        sources_text=context.sources_text,
     )
     try:
         raw = _call_coverage_engine(
@@ -2243,8 +2282,13 @@ def _run_coverage_windows(context, api_keys, attempts, ids):
     return parsed, meta
 
 
+def _coverage_labels(context) -> list:
+    """Model labels, then the labels of read pages (never votes)."""
+    return [*context.labels, *(label for label, _, _ in context.sources)]
+
+
 def _run_coverage_window(context, api_keys, attempts, ids):
-    labels = list(context.labels)
+    labels = _coverage_labels(context)
     schema = coverage.build_coverage_schema(labels, ids)
     prompt = coverage.build_coverage_prompt(
         labels=labels,
@@ -2252,6 +2296,7 @@ def _run_coverage_window(context, api_keys, attempts, ids):
         numbered_answer=context.numbered_answer,
         ids=ids,
         resolved_question=context.resolved_question,
+        sources_text=context.sources_text,
     )
 
     skip_retries_for = set()
@@ -2367,6 +2412,20 @@ def _coverage_claims(coverage_result: dict, context: _JudgeContext) -> list:
                 len(agree), len(dissent), MIN_SCORED_CLAIM_SUPPORT
             ),
         }
+        # What a page the Agent read says about the sentence: shown with the
+        # claim, never counted in agree/dissent, coverage state or score.
+        read = []
+        for label, url, text in context.sources:
+            stance = stances.get(label)
+            if stance not in coverage.SUPPORTING_STANCES | coverage.OPPOSING_STANCES:
+                continue
+            page = {"url": url, "stance": stance}
+            quote = _clip(quotes.get(label), MAX_DIFF_QUOTE_CHARS)
+            if quote and _source_quote_found(quote, text):
+                page["quote"] = quote
+            read.append(page)
+        if read:
+            claim["read_sources"] = read
         if sentence_id is not None:
             claim["sentence_id"] = sentence_id
             claim["anchor_occurrence"] = occurrence
@@ -2566,6 +2625,7 @@ def query_differences(
     output_language: str = "",
     statement_claims: bool = False,
     passes: int = 1,
+    read_sources=None,
 ) -> tuple:
     """
     Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
@@ -2583,6 +2643,9 @@ def query_differences(
     parallel laufen und fuehrt die Funde zusammen (merge_difference_passes):
     ein Lauf findet rund zwei Drittel der echten Streitpunkte, zwei rund vier
     Fuenftel (Judge-Audit 2026-10-07).
+    `read_sources` (Agent, [{url, title, text}]): Seiten, die der Agent
+    nachgelesen hat. Nur der Coverage-Judge sieht sie, als eigene Bloecke;
+    ihr Votum steht als claims[].read_sources und zaehlt nie als Stimme.
     Gibt (legacy_text, structured_data | None) zurück.
     """
     passes = 2 if passes and int(passes) > 1 else 1
@@ -2603,6 +2666,8 @@ def query_differences(
 
     differences_prompt = _build_differences_prompt_from(
         context, output_language=output_language, statement_claims=statement_claims)
+    # After the differences prompt: it never sees the read pages.
+    context = _with_read_sources(context, read_sources)
     anon_map = context.anon_map
     answers_by_model = context.answers_by_model
     sentences = list(context.sentences)

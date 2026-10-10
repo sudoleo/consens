@@ -758,6 +758,39 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('says which source the agent read, and "read" only for a real read', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    const step = event => {
+      w.App.agentActivity.render(host, {running:true, events:[event]});
+      return [...host.querySelectorAll('.agent-progress-step')].map(p => p.textContent)[0];
+    };
+    const read = {id:'r', kind:'tool', name:'read_source', host:'arxiv.org'};
+    expect(step({...read, status:'succeeded', read:'completed', sources:[{url:'https://arxiv.org/pdf/1706.03762'}]}))
+      .toBe('Read source · arxiv.org');
+    expect(step({...read, status:'succeeded', read:'failed'})).toBe('Could not read · arxiv.org');
+    expect(step({...read, status:'succeeded', read:'already_read'})).toBe('Already read · arxiv.org');
+    // A refused call never read anything.
+    expect(step({id:'r', kind:'tool', name:'read_source', status:'succeeded', read:'refused'})).toBe('Read source · Skipped');
+    expect(step({...read, status:'failed'})).toBe('Read source · Failed');
+    // The host is display text from the server, never markup.
+    expect(step({...read, host:'<img src=x>', status:'succeeded', read:'completed'})).toBe('Read source');
+    w.App.agentActivity.render(host, {running:true, events:[{...read, status:'running'}]});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Reading arxiv.org…');
+    w.App.agentActivity.render(host, {running:true, events:[{id:'r', kind:'tool', name:'read_source', status:'running'}]});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Reading a source…');
+    // The saved history names the host too, and never calls a failed read "Completed".
+    const history = event => {
+      w.App.agentActivity.render(host, {running:false, events:[event]});
+      return host.querySelector('.agent-activity-tool strong').textContent;
+    };
+    expect(history({...read, status:'succeeded', read:'completed', sources:[{url:'https://arxiv.org/a', title:'Paper'}]}))
+      .toBe('Read source · arxiv.org');
+    expect(host.querySelector('.agent-activity-tool a').textContent).toBe('Paper');
+    expect(history({...read, id:'r2', status:'succeeded', read:'failed'})).toBe('Could not read · arxiv.org');
+    dom.window.close();
+  });
+
   it('does not claim to write the answer while a preamble led into a tool step', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');
