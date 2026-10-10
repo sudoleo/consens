@@ -1719,10 +1719,10 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
 
-def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_goal(app_page):
-    """Watch-Erstellung startet kompakt mit sicheren Defaults, fragt zuerst,
-    worauf der Nutzer wartet, haelt Telegram sichtbar und blendet erweiterte
-    Felder nur bei Bedarf ein."""
+def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
+    """Watch-Erstellung: zuerst "What are you waiting for?" als Radioliste mit
+    vorausgewaehltem Vorschlag, darunter EINE Zeile mit sicheren Defaults, die
+    per "Change" aufklappt (Zeitplan, Alerts, Kanaele inkl. Telegram, Seite)."""
     app_page.route('**/api/my/telegram', lambda route: route.fulfill(
         json={'telegram': {'configured': True, 'connected': False}}))
     _send_question(app_page)
@@ -1743,48 +1743,37 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_g
     app_page.click("#consensusWatchButton")
     app_page.locator("#shareModal").click(position={"x": 2, "y": 2})
     expect(app_page.locator("#watchConfirmBtn")).to_be_visible()
-    # "What are you waiting for?" leads the dialog, above the defaults.
-    expect(app_page.locator("#watchGoal")).to_be_visible()
+    expect(app_page.locator("#shareModalTitle")).to_have_text("Watch this answer")
+
+    # Suggestions are options, and the first one is already picked.
+    suggestions = app_page.locator("#watchGoalSuggestions input[type=radio]")
+    expect(suggestions.first).to_be_checked(timeout=10000)
+    expect(app_page.locator("#watchGoalSuggestions label").first).to_have_text(
+        "It is officially announced"
+    )
+    expect(app_page.locator("#watchGoalHint")).to_contain_text("the Watch ends")
     expect(app_page.locator("#watchGoal")).to_have_attribute("maxlength", "500")
-    goal_box = app_page.locator("#watchGoal").bounding_box()
-    defaults_box = app_page.locator(".watch-setup-summary").bounding_box()
-    assert goal_box is not None and defaults_box is not None
-    assert goal_box["y"] < defaults_box["y"]
-    expect(app_page.locator(".watch-delivery-field")).to_be_visible()
-    expect(app_page.locator("#watchTelegramEnabled")).to_be_visible()
-    expect(app_page.locator("#watchTelegramConnect")).to_be_visible()
+    goal_box = app_page.locator(".watch-goal").bounding_box()
+    settings_box = app_page.locator("#watchAdvancedSettings").bounding_box()
+    assert goal_box is not None and settings_box is not None
+    assert goal_box["y"] < settings_box["y"]
+
     expect(app_page.locator("#watchAdvancedSettings")).not_to_have_attribute("open", "")
     expect(app_page.locator("#watchVisibility")).to_be_hidden()
+    assert app_page.locator("#watchVisibility").input_value() == "private"
+    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("E-mail · Private")
     dialog_box = app_page.locator("#shareModal .share-modal-content").bounding_box()
     assert dialog_box is not None
     assert dialog_box["y"] >= 0
     assert dialog_box["y"] + dialog_box["height"] <= 844.5
-    assert app_page.locator("#watchVisibility").input_value() == "private"
-    expect(app_page.locator("#watchVisibilitySummary")).to_have_text("Private page")
-
-    # Die Defaults sahen aus wie feste Fakten. Der Weg zum Verstellen muss
-    # deshalb IN der Zusammenfassung stehen und ueber der Zustellzeile liegen —
-    # nicht als letzte Zeile des Dialogs, wo ihn niemand gesehen hat.
-    edit_box = app_page.locator("#watchEditDefaults").bounding_box()
-    summary_label_box = app_page.locator(".watch-setup-summary-label").bounding_box()
-    advanced_box = app_page.locator("#watchAdvancedSettings").bounding_box()
-    delivery_box = app_page.locator(".watch-delivery-field").bounding_box()
-    assert edit_box is not None and summary_label_box is not None
-    assert advanced_box is not None and delivery_box is not None
-    assert abs(edit_box["y"] - summary_label_box["y"]) < 20
-    assert advanced_box["y"] < delivery_box["y"]
-
-    # Jeder Chip ist selbst der Weg zu seinem Feld.
-    app_page.click("#watchScheduleSummary")
-    expect(app_page.locator("#watchAdvancedSettings")).to_have_attribute("open", "")
-    expect(app_page.locator("#watchInterval")).to_be_focused()
-    expect(app_page.locator("#watchEditDefaults")).to_have_text("Done")
-    app_page.click("#watchEditDefaults")
-    expect(app_page.locator("#watchAdvancedSettings")).not_to_have_attribute("open", "")
-    expect(app_page.locator("#watchEditDefaults")).to_have_text("Edit")
 
     app_page.click("#watchAdvancedSettings > summary")
+    expect(app_page.locator("#watchAdvancedSettings")).to_have_attribute("open", "")
+    expect(app_page.locator("#watchSettingsToggle")).to_have_text("Done")
     expect(app_page.locator("#watchVisibility")).to_be_visible()
+    expect(app_page.locator("#watchTelegramEnabled")).to_be_visible()
+    expect(app_page.locator("#watchTelegramEnabled")).to_be_disabled()
+    expect(app_page.locator("#watchTelegramConnect")).to_be_visible()
     expect(app_page.locator("#watchRunTime")).to_have_value("09:00")
     expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
     tomorrow_weekday = app_page.evaluate("""() => {
@@ -1795,7 +1784,7 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_g
     }""")
     expect(app_page.locator("#watchWeekday")).to_have_value(tomorrow_weekday)
     app_page.select_option("#watchWeekday", "friday")
-    expect(app_page.locator("#watchWeekday")).to_have_value("friday")
+    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Weekly on Friday at 09:00")
     app_page.select_option("#watchInterval", "monthly")
     expect(app_page.locator("#watchWeekdayWrap")).to_be_hidden()
     app_page.select_option("#watchInterval", "weekly")
@@ -1804,7 +1793,7 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_g
     assert app_page.locator("#watchTimezoneLabel").text_content()
 
     app_page.select_option("#watchVisibility", "public")
-    expect(app_page.locator("#watchVisibilitySummary")).to_have_text("Public page")
+    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Public")
 
     app_page.fill("#watchRunTime", "")
     app_page.click("#watchConfirmBtn")
@@ -1815,6 +1804,8 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_g
     app_page.fill("#watchRunTime", "09:00")
 
     # "Only when it resolves" needs a goal to resolve on.
+    app_page.click("#watchGoalNone")
+    expect(app_page.locator("#watchGoalHint")).to_contain_text("whenever a source changes")
     app_page.select_option("#watchEmailMode", "condition")
     app_page.click("#watchConfirmBtn")
     expect(app_page.locator("#watchGoalError")).to_have_text(
@@ -1822,7 +1813,9 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_g
     )
     expect(app_page.locator("#watchGoal")).to_have_attribute("aria-invalid", "true")
     app_page.fill("#watchGoal", "An official date is announced")
-    expect(app_page.locator("#watchAlertSummary")).to_have_text("Only when it resolves")
+    expect(app_page.locator("#watchGoalCustomChoice")).to_be_checked()
+    expect(app_page.locator("#watchGoalError")).to_be_hidden()
+    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Only when it resolves")
 
 
 def test_query_first_watch_guides_question_then_configuration(app_page):
@@ -1883,11 +1876,9 @@ def test_query_first_watch_guides_question_then_configuration(app_page):
 
     app_page.click("#watchDashCreate")
     expect(app_page.locator("#watchQuestion")).to_be_visible()
-    expect(app_page.locator("#watchDialogLimit")).to_contain_text("1 slot available")
+    # A free slot is not news: the dialog only speaks about the limit at it.
+    expect(app_page.locator("#watchDialogLimit")).to_be_hidden()
     expect(app_page.locator("#watchQuestionNext")).to_have_text("Continue")
-    expect(app_page.locator("#shareModalBody")).to_contain_text(
-        "No model run starts until the Watch reaches its scheduled check."
-    )
 
     app_page.fill("#watchQuestion", "Short")
     app_page.click("#watchQuestionNext")
@@ -1895,16 +1886,14 @@ def test_query_first_watch_guides_question_then_configuration(app_page):
 
     question = "Has the EU guidance for general-purpose AI models changed?"
     app_page.fill("#watchQuestion", question)
-    app_page.click("#watchQuestionNext")
+    app_page.press("#watchQuestion", "Enter")
     expect(app_page.locator(".watch-question-preview strong")).to_have_text(question)
-    expect(app_page.locator(".watch-setup-summary")).to_be_visible()
-    expect(app_page.locator(".watch-delivery-field")).to_be_visible()
-    expect(app_page.locator("#watchTelegramEnabled")).to_be_visible()
+    expect(app_page.locator("#watchSettingsSummary")).to_be_visible()
     expect(app_page.locator("#watchVisibility")).to_be_hidden()
     expect(app_page.locator("#watchVisibility")).to_have_value("private")
-    expect(app_page.locator("#watchCancelBtn")).to_have_text("Back")
+    expect(app_page.locator("#watchCancelBtn")).to_have_text("Cancel")
 
-    app_page.click("#watchCancelBtn")
+    app_page.click("#watchQuestionEdit")
     expect(app_page.locator("#watchQuestion")).to_have_value(question)
 
 
@@ -1937,8 +1926,9 @@ def test_watch_limit_is_explained_before_creation(app_page):
 
     app_page.click("#watchDashCreate")
     expect(app_page.locator("#watchDialogLimit")).to_contain_text(
-        "limited during early access"
+        "Your Watch slot is in use"
     )
+    expect(app_page.locator("#watchDialogLimit")).to_contain_text("About early access")
     expect(app_page.locator("#watchQuestionNext")).to_be_disabled()
     expect(app_page.locator("#watchQuestionNext")).to_have_text("Watch limit reached")
 

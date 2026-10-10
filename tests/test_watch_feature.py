@@ -2102,8 +2102,9 @@ class WatchFrontendContractTests(unittest.TestCase):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         share_source = Path("templates/watch_share.html").read_text(encoding="utf-8")
         self.assertIn('renderQuestionStep(options?.question, modalIntent, options?.goal)', source)
+        # A known question (example, chat) skips straight to the goal.
+        self.assertIn('renderConfirm({ question: knownQuestion, goal: options?.goal }, modalIntent)', source)
         self.assertIn('payload.question = directQuestion', source)
-        self.assertIn('No model run starts until the Watch reaches its scheduled check.', source)
         self.assertIn('id="watchDashCreate"', html_source)
         self.assertIn("watch_awaiting_first_run", share_source)
 
@@ -2120,32 +2121,38 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn(".wd-empty-actions", css)
         self.assertIn(".wd-compare", css)
 
-    def test_watch_setup_offers_editing_next_to_the_defaults_it_describes(self):
-        """Die Defaults lasen sich wie feste Fakten: das Aufklapp-Feld stand als
-        letztes Element im Dialog und wurde uebersehen. Der Weg zum Verstellen
-        gehoert an die Zusammenfassung — und damit VOR die Zustellkanaele."""
+    def test_watch_setup_is_a_goal_choice_and_one_settings_line(self):
+        """Der Dialog war zu verschachtelt: Defaults-Kasten mit Chips, Hinweise,
+        Kanaele als eigener Block. Jetzt: Frage, "What are you waiting for?" als
+        Radioliste, darunter EINE Zeile mit Zeitplan/Kanal/Sichtbarkeit, die per
+        "Change" aufklappt. Zielvorschlaege waren Chips ueber einem leeren Feld,
+        und man sah nicht, dass man sie anklicken muss — jetzt sind sie
+        Optionen, und die erste ist vorausgewaehlt."""
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+        # Ziel vor den Einstellungen, Einstellungen zugeklappt in einer Zeile.
+        self.assertLess(source.index('id="watchGoal"'), source.index('id="watchAdvancedSettings"'))
+        self.assertIn('<details id="watchAdvancedSettings" class="watch-settings">', source)
+        self.assertIn('id="watchSettingsSummary"', source)
         self.assertLess(
             source.index('id="watchAdvancedSettings"'),
             source.index('id="watchTelegramEnabled"'),
         )
-        self.assertLess(
-            source.index('id="watchEditDefaults"'),
-            source.index('id="watchAdvancedSettings"'),
-        )
-        # Jeder Chip ist selbst der Weg zu seinem Feld.
-        for field in ("watchInterval", "watchEmailMode", "watchVisibility"):
-            self.assertIn(f'data-edit-field="{field}"', source)
-        self.assertIn('.watch-setup-chip', css)
-        self.assertIn('<option value="private" selected>', source)
-        self.assertIn('class="watch-advanced-settings"', source)
-        self.assertIn('Schedule and alerts', source)
-        self.assertIn('weekdayOptions(browserTomorrowWeekday())', source)
-        # "What are you waiting for?" leads the dialog, with suggested goals.
-        self.assertLess(source.index('id="watchGoal"'), source.index('id="watchAdvancedSettings"'))
+        # Vorschlaege sind Radio-Optionen mit "Something else" und "Any change".
         self.assertIn('"/api/watch/goal-suggestions"', source)
+        self.assertIn('name="watchGoalChoice"', source)
+        self.assertIn('id="watchGoalCustomChoice"', source)
+        self.assertIn('id="watchGoalNone"', source)
+        self.assertIn("Any change to the answer", source)
+        self.assertIn("if (radios[0]) radios[0].checked = true;", source)
         self.assertIn("condition: goal", source)
+        self.assertIn('.watch-goal-option:has(input[type="radio"]:checked)', css)
+        # Weg sind Step-Label, Guidance-Aufklapper und Defaults-Chips.
+        for gone in ("Step 1 of 2", "watch-question-guidance", "watch-setup-chip",
+                     "watch-goal-chip", "watch-config-assurance"):
+            self.assertNotIn(gone, source)
+        self.assertIn('<option value="private" selected>', source)
+        self.assertIn('weekdayOptions(browserTomorrowWeekday())', source)
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         # The agreement score is not what a watch reports.
         self.assertNotIn("/100", dashboard)

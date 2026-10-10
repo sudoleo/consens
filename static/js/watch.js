@@ -437,10 +437,31 @@
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
   }
 
+  // The dialog only mentions the limit when it blocks: the sidebar and the
+  // dashboard already carry the count, the dialog is about the question.
+  function renderDialogWatchLimit(target, limits) {
+    if (!limits.atLimit) {
+      target.hidden = true;
+      target.textContent = "";
+      return;
+    }
+    const isFree = (window.App.normalizeTier?.(limits.plan) || "free") === "free";
+    const message = limits.activeLimit > 1
+      ? `All ${limits.activeLimit} Watch slots are in use. Pause one to start a new Watch.`
+      : limits.activeLimit === 1
+        ? "Your Watch slot is in use. Pause that Watch to start a new one."
+        : "Watches are not available for your account yet.";
+    target.hidden = false;
+    target.classList.add("is-full");
+    target.innerHTML = `<span>${escapeHtml(message)}</span>${isFree
+      ? ' <button type="button" class="watch-limit-upgrade">About early access</button>' : ""}`;
+    target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
+  }
+
   function applyDialogWatchLimit(limits) {
     const target = document.getElementById("watchDialogLimit");
     if (!target || !limits) return;
-    renderWatchLimit(target, limits);
+    renderDialogWatchLimit(target, limits);
     const action = document.getElementById("watchQuestionNext")
       || document.getElementById("watchConfirmBtn");
     if (!action || !limits.atLimit) return;
@@ -599,6 +620,8 @@
     field.addEventListener(eventName, () => clearWatchFieldError(field));
   }
 
+  const WATCH_QUESTION_MIN_CHARS = 8;
+
   function openWatchDialog(view, options) {
     if (!window.auth?.currentUser) {
       popup("Please log in to use Consensus Watch.");
@@ -618,8 +641,18 @@
       modal.classList.add("is-watch-dialog");
       modal.style.display = "flex";
     }
-    if (view === "create") renderQuestionStep(options?.question, modalIntent, options?.goal);
-    else renderConfirm(undefined, modalIntent);
+    if (view !== "create") {
+      renderConfirm(undefined, modalIntent);
+      return;
+    }
+    // A question that is already known (an example, the chat's last
+    // question) goes straight to the goal; "Edit" leads back to the field.
+    const knownQuestion = normalizeWatchQuestion(options?.question);
+    if (knownQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
+      renderConfirm({ question: knownQuestion, goal: options?.goal }, modalIntent);
+    } else {
+      renderQuestionStep(options?.question, modalIntent, options?.goal);
+    }
   }
 
   function normalizeWatchQuestion(value) {
@@ -629,262 +662,303 @@
   function renderQuestionStep(initialQuestion, modalIntent, pendingGoal) {
     const { title, body } = els();
     if (!body) return;
-    title.textContent = "Create a Consensus Watch";
+    title.textContent = "New Watch";
     body.innerHTML = `
-      <div class="watch-step-label">Step 1 of 2 · Question</div>
-      <p class="watch-config-intro">Ask about something that will change: a release, a decision, a price, a rule. Next you tell us what you are waiting for.</p>
-      <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite"><span>Checking Watch availability…</span></div>
-      <div class="watch-config-field watch-question-field">
-        <label class="watch-interval-label" for="watchQuestion">What do you want to monitor?</label>
-        <textarea id="watchQuestion" class="watch-condition-input watch-question-input" maxlength="2000" rows="5" placeholder="Example: Has the EU guidance for general-purpose AI models changed?" aria-describedby="watchQuestionNote watchQuestionError">${escapeHtml(initialQuestion || "")}</textarea>
-        <p id="watchQuestionNote" class="watch-data-note">Phrase it as a complete, neutral question. You can be specific about a market, policy, product, or time horizon.</p>
+      <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite" hidden></div>
+      <div class="watch-question-field">
+        <label class="watch-goal-label" for="watchQuestion">What should we keep checking?</label>
+        <p id="watchQuestionNote" class="watch-goal-hint">One question about something that will change: a release, a decision, a price.</p>
+        <textarea id="watchQuestion" class="watch-condition-input watch-question-input" maxlength="2000" rows="3" placeholder="Example: When will OpenAI release GPT-6?" aria-describedby="watchQuestionNote watchQuestionError">${escapeHtml(initialQuestion || "")}</textarea>
         <p id="watchQuestionError" class="watch-field-error" role="alert" hidden></p>
       </div>
-      <details class="watch-question-guidance">
-        <summary>What makes a useful watch question?</summary>
-        <ul>
-          <li>Focus on one decision, claim, or development.</li>
-          <li>Add relevant scope, such as a country, audience, or timeframe.</li>
-          <li>Avoid asking several unrelated questions at once.</li>
-        </ul>
-      </details>
-      <p class="watch-config-assurance"><span aria-hidden="true">✓</span> No model run starts until the Watch reaches its scheduled check.</p>
       <div class="share-modal-actions">
         <button type="button" id="watchQuestionNext" class="share-primary-btn">Continue</button>
         <button type="button" id="watchCancelBtn" class="share-secondary-btn">Cancel</button>
-        <button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>
       </div>`;
     const input = document.getElementById("watchQuestion");
+    const next = document.getElementById("watchQuestionNext");
     bindWatchFieldErrorReset(input, "input");
     document.getElementById("watchCancelBtn").addEventListener("click", closeDialog);
-    document.getElementById("watchListLink").addEventListener("click", () => {
-      closeDialog();
-      openWatchDashboard();
-    });
-    document.getElementById("watchQuestionNext").addEventListener("click", () => {
+    next.addEventListener("click", () => {
       clearWatchFieldError(input);
       const question = normalizeWatchQuestion(input.value);
-      if (question.length < 8) {
+      if (question.length < WATCH_QUESTION_MIN_CHARS) {
         setWatchFieldError(input, "Enter a complete question so the models know what to evaluate.");
         focusWatchField(input);
         return;
       }
-      renderConfirm({ question: question, goal: pendingGoal || "" }, modalIntent);
+      const sameQuestion = question === normalizeWatchQuestion(initialQuestion);
+      renderConfirm({ question: question, goal: sameQuestion ? pendingGoal || "" : "" }, modalIntent);
+    });
+    // A question is one line; Enter moves on, Shift+Enter still breaks.
+    input.addEventListener("keydown", event => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      if (!next.disabled) next.click();
     });
     refreshDialogWatchLimit();
     requestAnimationFrame(() => input.focus());
   }
 
+  // Suggestions cost a Judge call; going back to edit the question and
+  // returning must not ask again for the same text.
+  const goalSuggestionCache = new Map();
+
+  function loadGoalSuggestions(question, intentIsCurrent) {
+    if (goalSuggestionCache.has(question)) {
+      return Promise.resolve(goalSuggestionCache.get(question));
+    }
+    return api("POST", "/api/watch/goal-suggestions", { question: question }, intentIsCurrent)
+      .then(data => {
+        const goals = Array.isArray(data.goals)
+          ? data.goals.map(normalizeWatchQuestion).filter(Boolean) : [];
+        if (goalSuggestionCache.size >= 20) goalSuggestionCache.clear();
+        goalSuggestionCache.set(question, goals);
+        return goals;
+      });
+  }
+
   function renderConfirm(options, modalIntent) {
     const directQuestion = normalizeWatchQuestion(options?.question);
     const presetGoal = normalizeWatchQuestion(options?.goal);
-    const suggestionQuestion = directQuestion || normalizeWatchQuestion(window.lastQuestion);
+    const watchedQuestion = directQuestion || normalizeWatchQuestion(window.lastQuestion);
     const { title, body } = els();
     if (!body) return;
-    title.textContent = directQuestion ? "Set up your Watch" : "Watch this answer";
+    title.textContent = directQuestion ? "New Watch" : "Watch this answer";
     body.innerHTML = `
-      ${directQuestion ? '<div class="watch-step-label">Step 2 of 2 · Goal and delivery</div>' : ""}
-      <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite"><span>Checking Watch availability…</span></div>
-      ${directQuestion ? `<div class="watch-question-preview"><span>Question</span><strong>${escapeHtml(directQuestion)}</strong></div>` : ""}
-      <section class="watch-goal" aria-labelledby="watchGoalLabel">
-        <label id="watchGoalLabel" class="watch-goal-label" for="watchGoal">What are you waiting for?</label>
-        <p class="watch-goal-hint">Name the event you want to hear about. When a source confirms it, the watch closes and shows you the proof. Optional: without a goal you hear about every change on evidence.</p>
-        <div id="watchGoalSuggestions" class="watch-goal-suggestions" aria-live="polite" hidden></div>
-        <textarea id="watchGoal" class="watch-condition-input watch-goal-input" maxlength="500" rows="2" placeholder="Example: An official release date is announced" aria-describedby="watchGoalError">${escapeHtml(presetGoal)}</textarea>
-        <p id="watchGoalError" class="watch-field-error" role="alert" hidden></p>
-      </section>
-      <div class="watch-setup-summary" aria-label="Watch defaults">
-        <div class="watch-setup-summary-head">
-          <span class="watch-setup-summary-label">Schedule and alerts</span>
-          <button type="button" id="watchEditDefaults" class="watch-setup-edit"
-            aria-controls="watchAdvancedSettings" aria-expanded="false">Edit</button>
-        </div>
-        <div class="watch-setup-summary-chips">
-          <button type="button" class="watch-setup-chip" id="watchScheduleSummary" data-edit-field="watchInterval" title="Change interval, run day and run time"></button>
-          <button type="button" class="watch-setup-chip" id="watchAlertSummary" data-edit-field="watchEmailMode" title="Change when you get alerted"></button>
-          <button type="button" class="watch-setup-chip" id="watchVisibilitySummary" data-edit-field="watchVisibility" title="Change page visibility"></button>
-        </div>
-        <p class="watch-setup-summary-hint">A daily scan between checks pulls the next check forward when a new source appears.</p>
-      </div>
-      <details id="watchAdvancedSettings" class="watch-advanced-settings">
-        <summary><span>Customize schedule and alerts</span><small>Optional</small></summary>
-        <div class="watch-advanced-settings-body">
-          <div class="watch-config-field">
-            <label class="watch-interval-label" for="watchVisibility">Page visibility</label>
-            <select id="watchVisibility" class="watch-interval-select" required aria-describedby="watchVisibilityNote watchVisibilityError">
-              <option value="private" selected>Private, only my account</option>
-              <option value="public">Public, anyone with the link</option>
-            </select>
-            <p id="watchVisibilityNote" class="watch-data-note">Public pages are read-only, show the goal, and stay off Google unless you nominate them.</p>
-            <p id="watchVisibilityError" class="watch-field-error" role="alert" hidden></p>
+      <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite" hidden></div>
+      ${watchedQuestion ? `<div class="watch-question-preview">
+        <strong>${escapeHtml(watchedQuestion)}</strong>
+        ${directQuestion ? '<button type="button" id="watchQuestionEdit" class="watch-question-edit">Edit</button>' : ""}
+      </div>` : ""}
+      <fieldset class="watch-goal" aria-describedby="watchGoalHint">
+        <legend id="watchGoalLabel" class="watch-goal-label">What are you waiting for?</legend>
+        <div class="watch-goal-options">
+          <div id="watchGoalSuggestions" class="watch-goal-suggestions" aria-live="polite"></div>
+          <div class="watch-goal-option is-custom">
+            <input type="radio" name="watchGoalChoice" id="watchGoalCustomChoice" value="custom" aria-label="Something else">
+            <input type="text" id="watchGoal" class="watch-goal-input" maxlength="500" placeholder="Something else…" aria-label="Something else: the event you are waiting for" aria-describedby="watchGoalError" autocomplete="off">
           </div>
+          <label class="watch-goal-option">
+            <input type="radio" name="watchGoalChoice" id="watchGoalNone" value="none">
+            <span>Any change to the answer</span>
+          </label>
+        </div>
+        <p id="watchGoalHint" class="watch-goal-hint"></p>
+        <p id="watchGoalError" class="watch-field-error" role="alert" hidden></p>
+      </fieldset>
+      <details id="watchAdvancedSettings" class="watch-settings">
+        <summary>
+          <span id="watchSettingsSummary" class="watch-settings-summary"></span>
+          <span id="watchSettingsToggle" class="watch-settings-toggle">Change</span>
+        </summary>
+        <div class="watch-settings-body">
           <div class="watch-config-grid">
             <div class="watch-config-field">
-              <label class="watch-interval-label" for="watchInterval">Interval ${dailyIntervalAllowed() ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
+              <label class="watch-interval-label" for="watchInterval">How often</label>
               <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
-              <div id="watchWeekdayWrap" class="watch-weekday-wrap">
-                <label class="watch-interval-label" for="watchWeekday">Run day</label>
-                <select id="watchWeekday" class="watch-interval-select">${weekdayOptions(browserTomorrowWeekday())}</select>
-              </div>
+            </div>
+            <div id="watchWeekdayWrap" class="watch-config-field">
+              <label class="watch-interval-label" for="watchWeekday">Day</label>
+              <select id="watchWeekday" class="watch-interval-select">${weekdayOptions(browserTomorrowWeekday())}</select>
             </div>
             <div class="watch-config-field">
-              <label class="watch-interval-label" for="watchRunTime">Run time</label>
+              <label class="watch-interval-label" for="watchRunTime">Time</label>
               <input id="watchRunTime" class="watch-time-input" type="time" value="09:00" required aria-describedby="watchRunTimeNote watchRunTimeError">
-              <p id="watchRunTimeNote" class="watch-data-note"><span id="watchTimezoneLabel"></span> · checks may begin up to 30 minutes later</p>
+              <p id="watchRunTimeNote" class="watch-data-note"><span id="watchTimezoneLabel"></span></p>
               <p id="watchRunTimeError" class="watch-field-error" role="alert" hidden></p>
             </div>
           </div>
           <div class="watch-config-field">
-            <label class="watch-interval-label" for="watchEmailMode">Alerts</label>
+            <label class="watch-interval-label" for="watchEmailMode">Notify me</label>
             <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only", Boolean(presetGoal))}</select>
-            <p class="watch-data-note">“After every check” includes the full answer; “resolves” means a source confirmed your goal.</p>
+          </div>
+          <div class="watch-config-field">
+            <span class="watch-interval-label">Send to</span>
+            <div class="watch-channel-options">
+              <label class="watch-channel-option"><input type="checkbox" id="watchEmailEnabled" checked> E-mail</label>
+              <label id="watchTelegramOption" class="watch-channel-option"><input type="checkbox" id="watchTelegramEnabled" disabled> Telegram</label>
+              <button type="button" id="watchTelegramConnect" class="share-link-btn" hidden>Connect Telegram</button>
+            </div>
+            <p id="watchChannelsError" class="watch-field-error" role="alert" hidden></p>
+          </div>
+          <div class="watch-config-field">
+            <label class="watch-interval-label" for="watchVisibility">Watch page</label>
+            <select id="watchVisibility" class="watch-interval-select" required aria-describedby="watchVisibilityError">
+              <option value="private" selected>Private, only you</option>
+              <option value="public">Public, anyone with the link</option>
+            </select>
+            <p id="watchVisibilityError" class="watch-field-error" role="alert" hidden></p>
           </div>
         </div>
       </details>
-      <div class="watch-config-field watch-delivery-field">
-        <span class="watch-interval-label">Delivery channels</span>
-        <div class="watch-channel-options">
-          <label class="watch-channel-option"><input type="checkbox" id="watchEmailEnabled" checked> E-mail</label>
-          <label class="watch-channel-option"><input type="checkbox" id="watchTelegramEnabled" disabled> Telegram</label>
-          <button type="button" id="watchTelegramConnect" class="share-link-btn">Connect Telegram</button>
-        </div>
-        <p id="watchTelegramNote" class="watch-data-note">Checking Telegram connection…</p>
-        <p id="watchChannelsError" class="watch-field-error" role="alert" hidden></p>
-      </div>
       <div class="share-modal-actions">
         <button type="button" id="watchConfirmBtn" class="share-primary-btn">Start watching</button>
-        <button type="button" id="watchCancelBtn" class="share-secondary-btn">${directQuestion ? "Back" : "Cancel"}</button>
-        <button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>
+        <button type="button" id="watchCancelBtn" class="share-secondary-btn">Cancel</button>
       </div>`;
-    document.getElementById("watchCancelBtn").addEventListener("click", () => {
-      if (directQuestion) renderQuestionStep(directQuestion, modalIntent, goalInput.value);
-      else closeDialog();
-    });
-    document.getElementById("watchListLink").addEventListener("click", () => {
-      closeDialog();
-      openWatchDashboard();
-    });
+    document.getElementById("watchCancelBtn").addEventListener("click", closeDialog);
     const visibilitySelect = document.getElementById("watchVisibility");
     const intervalSelect = document.getElementById("watchInterval");
     const weekdaySelect = document.getElementById("watchWeekday");
     const runTimeInput = document.getElementById("watchRunTime");
     const emailModeSelect = document.getElementById("watchEmailMode");
     const goalInput = document.getElementById("watchGoal");
+    const customChoice = document.getElementById("watchGoalCustomChoice");
+    const noneChoice = document.getElementById("watchGoalNone");
+    const goalHint = document.getElementById("watchGoalHint");
+    const suggestions = document.getElementById("watchGoalSuggestions");
     const emailEnabledInput = document.getElementById("watchEmailEnabled");
+    const telegramOption = document.getElementById("watchTelegramOption");
     const telegramEnabledInput = document.getElementById("watchTelegramEnabled");
     const telegramConnect = document.getElementById("watchTelegramConnect");
-    const telegramNote = document.getElementById("watchTelegramNote");
     const channelsError = document.getElementById("watchChannelsError");
+    const advanced = document.getElementById("watchAdvancedSettings");
+    const settingsToggle = document.getElementById("watchSettingsToggle");
     document.getElementById("watchTimezoneLabel").textContent = browserTimezone();
     bindWeekdayVisibility(intervalSelect, document.getElementById("watchWeekdayWrap"));
 
+    // --- What are you waiting for? -------------------------------------
+    // One visible choice instead of chips above an empty field: suggestions
+    // looked like decoration, and nothing showed that one still had to be
+    // clicked. The first row (a preset goal, else the first suggestion) is
+    // picked for the reader as long as they have not chosen anything.
+    let goalTouched = false;
+
+    function checkedGoalChoice() {
+      return body.querySelector('input[name="watchGoalChoice"]:checked');
+    }
+    function selectedGoal() {
+      const checked = checkedGoalChoice();
+      if (!checked || checked.value === "none") return "";
+      if (checked.value === "custom") return normalizeWatchQuestion(goalInput.value);
+      return checked.dataset.goal || "";
+    }
+    function syncGoalHint() {
+      const checked = checkedGoalChoice();
+      goalHint.textContent = !checked
+        ? ""
+        : checked.value === "none"
+          ? "You hear from us whenever a source changes the answer."
+          : "When a source confirms it, you get the proof and the Watch ends.";
+    }
+    function onGoalChange(keepError) {
+      if (!keepError) clearWatchFieldError(goalInput);
+      syncGoalHint();
+      syncAlertLabels();
+    }
+    function goalOption(goal) {
+      const option = document.createElement("label");
+      option.className = "watch-goal-option";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "watchGoalChoice";
+      radio.value = "suggested";
+      radio.dataset.goal = goal;
+      const text = document.createElement("span");
+      text.textContent = goal;
+      option.append(radio, text);
+      return option;
+    }
+    function renderGoalOptions(goals, settled) {
+      const current = selectedGoal();
+      const offered = presetGoal ? [presetGoal] : [];
+      goals.forEach(goal => {
+        if (goal && !offered.includes(goal)) offered.push(goal);
+      });
+      suggestions.innerHTML = "";
+      offered.forEach(goal => suggestions.appendChild(goalOption(goal)));
+      const radios = Array.from(suggestions.querySelectorAll('input[name="watchGoalChoice"]'));
+      const keep = radios.find(radio => radio.dataset.goal === current);
+      if (keep) keep.checked = true;
+      else if (!goalTouched && !checkedGoalChoice()) {
+        if (radios[0]) radios[0].checked = true;
+        else if (settled) noneChoice.checked = true;
+      }
+      onGoalChange();
+    }
+
+    body.querySelector(".watch-goal").addEventListener("change", event => {
+      if (event.target.name !== "watchGoalChoice") return;
+      goalTouched = true;
+      if (event.target === customChoice) goalInput.focus();
+      onGoalChange();
+    });
+    // Focus alone selects the row but keeps a validation message: the
+    // dialog itself focuses this field to show "Name the goal".
+    goalInput.addEventListener("focus", () => {
+      if (customChoice.checked) return;
+      customChoice.checked = true;
+      goalTouched = true;
+      onGoalChange(true);
+    });
+    goalInput.addEventListener("input", () => {
+      goalTouched = true;
+      customChoice.checked = true;
+      onGoalChange();
+    });
+
+    renderGoalOptions([]);
+    if (watchedQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
+      const loading = document.createElement("div");
+      loading.className = "watch-goal-loading";
+      loading.innerHTML = '<span class="watch-goal-option is-loading" aria-hidden="true"></span>'.repeat(2)
+        + '<span class="watch-sr-only">Finding events you may be waiting for…</span>';
+      suggestions.appendChild(loading);
+      loadGoalSuggestions(watchedQuestion, () => watchModalIntentIsCurrent(modalIntent))
+        .then(goals => {
+          if (suggestions.isConnected) renderGoalOptions(goals, true);
+        })
+        .catch(() => {
+          if (suggestions.isConnected) renderGoalOptions([], true);
+        });
+    } else {
+      renderGoalOptions([], true);
+    }
+
+    document.getElementById("watchQuestionEdit")?.addEventListener("click", () => {
+      renderQuestionStep(directQuestion, modalIntent, selectedGoal() || presetGoal);
+    });
+
+    // --- Schedule, alerts, channels, page: one line until "Change" -------
     function updateSetupSummary() {
-      const intervalLabel = intervalSelect.options[intervalSelect.selectedIndex]?.textContent.trim() || "Weekly";
+      const interval = intervalSelect.value;
       const weekdayLabel = weekdaySelect.options[weekdaySelect.selectedIndex]?.textContent.trim() || "";
-      const scheduleParts = [intervalLabel];
-      if (intervalSelect.value === "weekly" && weekdayLabel) scheduleParts.push(weekdayLabel);
-      if (runTimeInput.value) scheduleParts.push(runTimeInput.value);
-      document.getElementById("watchScheduleSummary").textContent = scheduleParts.join(" · ");
-      document.getElementById("watchAlertSummary").textContent =
-        emailModeSelect.options[emailModeSelect.selectedIndex]?.textContent.trim() || "When it moves on evidence";
-      document.getElementById("watchVisibilitySummary").textContent =
-        visibilitySelect.value === "public" ? "Public page" : "Private page";
+      let schedule = interval === "daily" ? "Daily" : interval === "monthly" ? "Monthly" : "Weekly";
+      if (interval === "weekly" && weekdayLabel) schedule += " on " + weekdayLabel;
+      if (runTimeInput.value) schedule += " at " + runTimeInput.value;
+      const channels = [
+        emailEnabledInput.checked ? "E-mail" : "",
+        telegramEnabledInput.checked ? "Telegram" : ""
+      ].filter(Boolean).join(" + ") || "No channel";
+      const parts = [schedule, channels];
+      if (emailModeSelect.value === "every_run") parts.push("Every check");
+      if (emailModeSelect.value === "condition") parts.push("Only when it resolves");
+      parts.push(visibilitySelect.value === "public" ? "Public" : "Private");
+      document.getElementById("watchSettingsSummary").textContent = parts.join(" · ");
     }
     function syncAlertLabels() {
       const selected = emailModeSelect.value;
-      emailModeSelect.innerHTML = emailModeOptions(selected, Boolean(goalInput.value.trim()));
+      emailModeSelect.innerHTML = emailModeOptions(selected, Boolean(selectedGoal()));
       updateSetupSummary();
     }
-    [visibilitySelect, intervalSelect, weekdaySelect, emailModeSelect].forEach(input => {
+    [visibilitySelect, intervalSelect, weekdaySelect, emailModeSelect,
+      emailEnabledInput, telegramEnabledInput].forEach(input => {
       input.addEventListener("change", updateSetupSummary);
     });
     runTimeInput.addEventListener("input", updateSetupSummary);
-    goalInput.addEventListener("input", () => {
-      clearWatchFieldError(goalInput);
-      syncGoalChips();
-      syncAlertLabels();
+    advanced.addEventListener("toggle", () => {
+      settingsToggle.textContent = advanced.open ? "Done" : "Change";
     });
     updateSetupSummary();
 
-    // Suggested goals turn "What are you waiting for?" into one tap. They
-    // are a convenience: without them (or on failure) the field just works.
-    const suggestions = document.getElementById("watchGoalSuggestions");
-    function syncGoalChips() {
-      const current = goalInput.value.trim();
-      suggestions.querySelectorAll(".watch-goal-chip").forEach(chip => {
-        chip.setAttribute("aria-pressed", String(chip.dataset.goal === current));
-      });
-    }
-    function renderGoalChips(goals) {
-      suggestions.innerHTML = "";
-      if (!goals.length) {
-        suggestions.hidden = true;
-        return;
-      }
-      goals.forEach(goal => {
-        const chip = makeButton(goal, "watch-goal-chip", () => {
-          goalInput.value = goalInput.value.trim() === goal ? "" : goal;
-          goalInput.dispatchEvent(new Event("input"));
-        });
-        chip.dataset.goal = goal;
-        suggestions.appendChild(chip);
-      });
-      suggestions.hidden = false;
-      syncGoalChips();
-    }
-    if (suggestionQuestion.length >= 8) {
-      suggestions.hidden = false;
-      suggestions.innerHTML = '<span class="watch-goal-chip is-loading" aria-hidden="true"></span>'.repeat(3)
-        + '<span class="watch-sr-only">Loading suggested goals…</span>';
-      api("POST", "/api/watch/goal-suggestions", { question: suggestionQuestion },
-        () => watchModalIntentIsCurrent(modalIntent))
-        .then(data => {
-          if (suggestions.isConnected) renderGoalChips(Array.isArray(data.goals) ? data.goals : []);
-        })
-        .catch(() => {
-          if (suggestions.isConnected) renderGoalChips([]);
-        });
-    }
-
-    // Die Voreinstellungen sahen aus wie feste Fakten: das Aufklapp-Feld stand
-    // ganz unten und wurde schlicht uebersehen ("man kann nichts verstellen").
-    // Deshalb steht der Schalter jetzt IN der Zusammenfassung, und jeder Chip
-    // ist selbst der Weg zu seinem Feld.
-    const advanced = document.getElementById("watchAdvancedSettings");
-    const editToggle = document.getElementById("watchEditDefaults");
-    function syncEditToggle() {
-      editToggle.textContent = advanced.open ? "Done" : "Edit";
-      editToggle.setAttribute("aria-expanded", String(advanced.open));
-    }
-    function openAdvanced(focusId) {
-      advanced.open = true;
-      syncEditToggle();
-      const target = focusId ? document.getElementById(focusId) : null;
-      (target || advanced).scrollIntoView({ block: "nearest" });
-      if (target) requestAnimationFrame(() => target.focus());
-    }
-    advanced.addEventListener("toggle", syncEditToggle);
-    editToggle.addEventListener("click", () => {
-      if (advanced.open) {
-        advanced.open = false;
-        syncEditToggle();
-        return;
-      }
-      openAdvanced("watchInterval");
-    });
-    body.querySelectorAll(".watch-setup-chip").forEach(chip => {
-      chip.addEventListener("click", () => openAdvanced(chip.dataset.editField));
-    });
-    syncEditToggle();
-
     function syncTelegram(state) {
+      // Without a configured bot the option is noise; unconnected, it offers
+      // the connection next to it.
+      telegramOption.hidden = !state.configured;
       telegramEnabledInput.disabled = !state.connected;
       telegramConnect.hidden = !!state.connected || !state.configured;
-      telegramNote.textContent = !state.configured
-        ? "Telegram notifications are not available yet."
-        : state.connected
-          ? `Connected${state.telegram_username ? " as @" + state.telegram_username : ""}.`
-          : "Connect Telegram to enable this channel.";
+      telegramOption.title = state.connected && state.telegram_username
+        ? "Connected as @" + state.telegram_username : "";
     }
     loadTelegramState().then(syncTelegram).catch(() => {
       syncTelegram({ configured: false, connected: false });
@@ -918,10 +992,17 @@
       if (!directQuestion && !resultId) return;
       const visibility = visibilitySelect.value;
       const emailMode = emailModeSelect.value;
-      const goal = normalizeWatchQuestion(goalInput.value);
+      const goal = selectedGoal();
       const runTime = runTimeInput.value;
       [visibilitySelect, runTimeInput, goalInput].forEach(clearWatchFieldError);
       const invalidFields = [];
+      if (customChoice.checked && !goal) {
+        setWatchFieldError(goalInput, "Describe the event, or pick one of the options.");
+        invalidFields.push(goalInput);
+      } else if (emailMode === "condition" && !goal) {
+        setWatchFieldError(goalInput, "Name the goal, or choose a different alert rule.");
+        invalidFields.push(goalInput);
+      }
       if (!visibility) {
         setWatchFieldError(visibilitySelect, "Choose whether this page should be private or public.");
         invalidFields.push(visibilitySelect);
@@ -929,10 +1010,6 @@
       if (!runTime) {
         setWatchFieldError(runTimeInput, "Choose a run time for the automatic check.");
         invalidFields.push(runTimeInput);
-      }
-      if (emailMode === "condition" && !goal) {
-        setWatchFieldError(goalInput, "Name the goal, or choose a different alert rule.");
-        invalidFields.push(goalInput);
       }
       if (!emailEnabledInput.checked && !telegramEnabledInput.checked) {
         channelsError.textContent = "Keep at least one delivery channel enabled.";
@@ -967,10 +1044,12 @@
         );
         if (!watchModalIntentIsCurrent(modalIntent)) return;
         watchState.setLimits(null);
+        const checked = checkedGoalChoice();
         window.App?.trackAppEvent?.("app_watch_created", {
           interval: data.watch.interval,
           source: directQuestion ? "query_first" : "consensus",
-          has_goal: Boolean(goal)
+          has_goal: Boolean(goal),
+          goal_source: checked ? checked.value : "none"
         });
         renderSuccess(data.watch, modalIntent);
       } catch (error) {
@@ -990,41 +1069,34 @@
     if (!watchModalIntentIsCurrent(modalIntent)) return;
     const { title, body } = els();
     title.textContent = "Your Watch is active";
-    const url = window.location.origin + (watch.share_path || "");
+    const onWatchPage = onWatchPagePath();
     body.innerHTML = `
       <div class="watch-success-card">
         <span class="watch-success-icon" aria-hidden="true">✓</span>
         <div>
           <strong id="watchStartSummary"></strong>
           <p id="watchMailSummary"></p>
-          <div id="watchSuccessChips" class="watch-setup-summary-chips"></div>
         </div>
       </div>
       <div class="share-modal-actions">
-        <a id="watchOpenLink" class="share-secondary-btn" target="_blank" rel="noopener">Open history page</a>
-        <button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>
+        <button type="button" id="watchDoneBtn" class="share-primary-btn">Done</button>
+        ${onWatchPage ? "" : '<button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>'}
       </div>`;
-    document.getElementById("watchStartSummary").textContent = watch.query_first
-      ? `First check: ${formatWatchSchedule(watch)}`
-      : `Next check: ${formatWatchSchedule(watch)}`;
+    document.getElementById("watchStartSummary").textContent = "Checks " + formatWatchSchedule(watch);
     const goal = String(watch.condition || "").trim();
     document.getElementById("watchMailSummary").textContent = watch.email_mode === "every_run"
-      ? "You will get every check, including the answer."
+      ? "You get every check, including the answer."
       : goal
-        ? `Waiting for: ${goal}. ${watch.email_mode === "condition" ? "You hear from us when a source confirms it." : "You also hear about every change on evidence."}`
-        : "You hear from us only when a source moves the answer.";
-    const successChips = document.getElementById("watchSuccessChips");
-    [
-      watch.visibility === "private" ? "Private page" : "Public page",
-      watch.email_enabled ? "E-mail" : "",
-      watch.telegram_enabled ? "Telegram" : ""
-    ].filter(Boolean).forEach(label => {
-      const chip = document.createElement("span");
-      chip.textContent = label;
-      successChips.appendChild(chip);
+        ? (watch.email_mode === "condition"
+          ? `We write when a source confirms “${goal}”.`
+          : `We write when a source confirms “${goal}”, and whenever the answer changes before that.`)
+        : "We write only when a source changes the answer.";
+    // On the Watch page the list behind the dialog must show the new Watch.
+    document.getElementById("watchDoneBtn").addEventListener("click", () => {
+      if (onWatchPagePath()) openWatchDashboard();
+      else closeDialog();
     });
-    document.getElementById("watchOpenLink").href = url;
-    document.getElementById("watchListLink").addEventListener("click", () => {
+    document.getElementById("watchListLink")?.addEventListener("click", () => {
       closeDialog();
       openWatchDashboard();
     });

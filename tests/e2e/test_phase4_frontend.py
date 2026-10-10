@@ -2067,7 +2067,6 @@ def test_late_watch_create_cannot_overwrite_newer_share_modal(browser, phase4_se
               });
             }"""
         )
-        page.click("#watchQuestionNext")
         page.click("#watchConfirmBtn")
         page.wait_for_function("() => typeof window.__resolveWatchCreate === 'function'")
 
@@ -2106,7 +2105,7 @@ def test_watch_create_is_not_sent_after_modal_changes_during_token_wait(
               question: "Has this policy changed since last week?"
             })"""
         )
-        page.click("#watchQuestionNext")
+        page.wait_for_selector("#watchConfirmBtn")
         page.evaluate(
             """() => {
               let release;
