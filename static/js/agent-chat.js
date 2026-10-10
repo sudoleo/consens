@@ -407,9 +407,8 @@
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
       });
       App.agentMemory?.nudge(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}` });
-      App.agentWatch?.render(document.getElementById('agentAnswerBody'), {
-        key: `${basis.chatId}:${basis.turnId}`, proposal: basis.currentTurn?.agent_watch,
-        running: basis.currentTurn?.status === 'pending' });
+      App.agentWatch?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
+        proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -615,9 +614,9 @@
       changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });
     App.agentMemory?.nudge(answerBody, { key: context.runId,
       finished: !running && state.completedTurn?.status === 'completed', memory: state.completedTurn?.agent_settings?.memory });
-    // A Watch the Agent prepared: its card once the answer that points to it is final.
-    App.agentWatch?.render(answerBody, { key: context.runId, running,
-      proposal: state.completedTurn?.agent_watch || context.metadata.agentWatch });
+    // A Watch the Agent prepared: its card under the completed answer that points to it.
+    App.agentWatch?.render(answerBody, { key: context.runId,
+      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
@@ -1154,11 +1153,6 @@
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         context.metadata.agentMemory = App.agentMemory?.receive(context.metadata.agentMemory || [], event) || [];
         registry.update(context.runId, () => {});
-      } },
-      // The latest Watch proposal of this turn; its card waits for the answer.
-      watch: { receive(event) {
-        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-        context.metadata.agentWatch = event.proposal || null;
       } },
       review: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;

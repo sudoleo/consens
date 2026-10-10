@@ -383,19 +383,23 @@
     };
   }
 
+  // The one place that takes an answer of /api/my/watches (this file and the
+  // dashboard): limits, the list Agent Watch cards compare their question to,
+  // the sidebar count, and the event those cards follow.
+  function receiveWatchList(data) {
+    const watches = Array.isArray(data?.watches) ? data.watches : [];
+    watchState.setLimits(normalizeWatchLimits(data?.limits, watches));
+    watchState.setWatches(watches);
+    renderSidebarWatchQuota(watchState.limits);
+    window.dispatchEvent(new CustomEvent("consensio:watches-changed"));
+    return watchState.limits;
+  }
+
   async function loadWatchLimits(force) {
-    if (watchState.limits && !force) return watchState.limits;
+    if (watchState.limits && watchState.watches && !force) return watchState.limits;
     if (watchState.limitRequest && !force) return watchState.limitRequest;
     const request = api("GET", "/api/my/watches")
-      .then(data => {
-        const watches = Array.isArray(data.watches) ? data.watches : [];
-        watchState.setLimits(normalizeWatchLimits(data.limits, watches));
-        watchState.setWatches(watches);
-        renderSidebarWatchQuota(watchState.limits);
-        // Agent Watch cards follow slots and watched questions.
-        window.dispatchEvent(new CustomEvent("consensio:watches-changed"));
-        return watchState.limits;
-      })
+      .then(receiveWatchList)
       .finally(() => {
         if (watchState.limitRequest === request) watchState.setLimitRequest(null);
       });
@@ -1386,6 +1390,7 @@
     watchDefaults: watchDefaults,
     settingsSummary: settingsSummary,
     limitMessage: limitMessage,
+    receiveWatchList: receiveWatchList,
     popup: popup,
     escapeHtml: escapeHtml,
     makeButton: makeButton,

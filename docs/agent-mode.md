@@ -438,7 +438,8 @@ Bittet der Nutzer, ihm Bescheid zu geben, wenn sich etwas ändert oder eintritt
 (`app/services/agent_watch.py`), und zwar vor dem Vergleich, der den aktuellen
 Stand wie gewohnt beantwortet. Das Tool legt **nichts** an:
 
-- Es prüft eine eigenständig formulierte Frage (8–500 Zeichen), bis zu drei
+- Es prüft eine eigenständig formulierte Frage (8–200 Zeichen: so viel zeigt
+  die Watch-Liste, über die die Karte eine gestartete Watch erkennt), bis zu drei
   beobachtbare Ziele (je ≤ 120 Zeichen, z. B. „GPT-6 is officially released“)
   und das Intervall. Daily ohne Berechtigung wird Weekly, mit Hinweis an das
   Modell.
@@ -449,24 +450,28 @@ Stand wie gewohnt beantwortet. Das Tool legt **nichts** an:
   `limit_reached`.
 - Es speichert genau einen Vorschlag am laufenden Turn
   (`agent_watch: {question, goals, interval}`; der letzte gewinnt, nur solange
-  der Turn `pending` ist) und sendet das SSE-Event `watch` (sticky in
-  `agent_live`).
+  der Turn `pending` ist). Ein Speicherfehler wird wie ein Fehler der
+  Vorabprüfung zur lesbaren Ablehnung an das Modell und beendet den Turn nie.
 - Der Antwortschritt bekommt den Vorschlag als `prepared_watch` in der
   Evidence und `agent_watch.SYNTHESIS_PROMPT`. Er verweist in einem Satz auf die
   Karte und sagt nie, die Watch sei aktiv.
 
-Die Karte (`static/js/agent-watch.js`) erscheint unter der fertigen Antwort. Sie
-zeigt die Frage, „Waiting for: <erstes Ziel>“ (ohne Ziel „Any change to the
-answer“) und die Einstellungszeile der Dialog-Defaults.
+Die Karte (`static/js/agent-watch.js`) erscheint nur unter einer abgeschlossenen
+Antwort (`status: completed`), die auf sie verweist. Den Vorschlag liest sie aus
+dem gespeicherten Turn, ein eigenes SSE-Event gibt es nicht. Sie zeigt die
+Frage, „Waiting for: <erstes Ziel>“ (ohne Ziel „Any change to the answer“) und
+die Einstellungszeile der Dialog-Defaults.
 
 - **„Start watching“** ruft `POST /api/watch` mit `watchDefaults(interval)` und
   der Zeitzone des Browsers. Das ist derselbe validierte, rate-limitierte Pfad
   wie im Erstell-Dialog; was dort nach dem Anlegen passiert, gilt auch hier.
 - **„Adjust“** öffnet den Erstell-Dialog mit allen Zielen, das erste gewählt,
   ohne zweiten Aufruf für Zielvorschläge.
-- Ob die Frage schon beobachtet wird oder kein Slot frei ist, liest die Karte
-  live aus `/api/my/watches` (`App.watch.watchedFor`, dieselbe Regel wie
-  `creation_outlook`), nie aus dem gespeicherten Turn.
+- Ob die Frage schon beobachtet wird (auch pausiert oder erledigt) oder kein
+  Slot frei ist, liest die Karte aus `/api/my/watches` (`App.watch.watchedFor`,
+  dieselbe Regel wie `creation_outlook`), nie aus dem gespeicherten Turn. Jede
+  Antwort dieses Endpunkts in der Seite, auch die des Dashboards, läuft durch
+  `watch.js receiveWatchList` und aktualisiert offene Karten.
 
 **Warum keine direkte Anlage:** Inhalte aus Seiten, Mails oder Dateien dürfen
 keine wiederkehrenden Checks auf dem Plattform-Key starten, keinen Free-Slot
@@ -477,8 +482,10 @@ Nutzers nicht.
 - Das Tool gibt es nur in Account-Mode-Turns mit Vergleich und ohne
   Google-Daten (`DelegationLoop(google_data=…)`). Eine Frage aus privater Post
   soll kein geplanter Check werden.
-- Eine reine „beobachte das“-Nachricht braucht keinen Vergleich (Ausnahme in
-  `_free_floor`, wie bei Memory).
+- Eine reine „beobachte das“-Nachricht beantwortet der Agent mit einer kurzen
+  Bestätigung. Im freien Modus fragt `_free_floor` dabei einmal nach: Eine
+  vorbereitete Watch ist bewusst keine Ausnahme, weil „sag mir, wenn X, ist es
+  schon draußen?“ auch nach dem aktuellen Stand fragt.
 - Ein Turn mit eigenem Vorschlag zeigt den allgemeinen Hinweis
   „Watch this question“ (`offerWatch`) nicht.
 - Unter `MOCK_LLM` bereitet „Watch: <Frage>“ einen Vorschlag vor (für

@@ -7,7 +7,6 @@ from app.services import agent_watch, watch_service
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
-from app.services.agent_live import STICKY_TYPES
 from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import turn_detail
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
@@ -47,7 +46,7 @@ class WatchScript(Script):
                 if self.step_id == "completion:0":
                     script.system = messages[0]["content"]
                     script.tools = [tool["function"]["name"] for tool in tools if tool.get("type") == "function"]
-                if self.step_id in {"completion:0", "completion:1"} and (
+                if self.step_id.startswith("completion:") and (
                         self.step_id == "completion:0" or script.direct_reply is not None):
                     script.calls.append((self.step_id, model.model))
                     self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
@@ -103,12 +102,12 @@ def evidence(messages):
 def test_a_requested_watch_is_prepared_saved_and_handed_to_the_answer(store):
     script = WatchScript()
     loop = watch_loop(store, script)
-    events = list(loop.run())
+    list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed"
     proposal = {"question": QUESTION, "goals": WATCH["goals"], "interval": "weekly"}
+    # The card reads the proposal from the completed turn; nothing else carries it.
     assert saved["agent_watch"] == proposal
-    assert [event["proposal"] for event in events if event.get("type") == "watch"] == [proposal]
     result = tool_results(loop)[0]
     assert result["status"] == "prepared" and "nothing is watched yet" in result["instruction"]
     # The orchestrator learns the rules once; the tool is offered with the comparison.
@@ -149,7 +148,7 @@ def test_an_existing_watch_or_a_full_account_is_said_not_offered(store, fields, 
 
 @pytest.mark.usefixtures("no_watch_writes")
 @pytest.mark.parametrize("autonomy", ["guided", "free"])
-def test_a_watch_only_message_needs_no_comparison(store, autonomy):
+def test_a_watch_only_message_ends_with_an_acknowledgement(store, autonomy):
     script = WatchScript(direct_reply="I prepared a Watch for this question below.")
     loop = watch_loop(store, script, question="Can you watch that for me?",
                       preferences=AgentPreferences(autonomy=autonomy))
@@ -159,8 +158,11 @@ def test_a_watch_only_message_needs_no_comparison(store, autonomy):
     assert saved["consensus"] == "I prepared a Watch for this question below."
     assert saved["agent_watch"]["question"] == QUESTION
     assert not (saved.get("agent_review") or {}).get("comparisons")
-    # No "app rule" reminder pushed a comparison after a watch-only message.
-    assert not any("App rule" in str(m.get("content")) for m in loop.messages)
+    # A prepared Watch is no licence to answer without a comparison: "tell me
+    # when X, is it out yet?" asks for the current state too. Free mode asks
+    # once; a mere acknowledgement then goes through unchanged.
+    reminders = [m for m in loop.messages if "App rule" in str(m.get("content"))]
+    assert len(reminders) == (1 if autonomy == "free" else 0)
 
 
 def test_no_watch_tool_with_google_data_or_without_comparisons(store):
@@ -174,6 +176,7 @@ def test_no_watch_tool_with_google_data_or_without_comparisons(store):
 
 @pytest.mark.parametrize("arguments,problem", [
     ({"question": "GPT-6?"}, "question"),
+    ({"question": "When " + "x" * 200 + "?"}, "question"),
     ({"question": QUESTION, "goals": ["a", "b", "c", "d"]}, "goals"),
     ({"question": QUESTION, "goals": ["x" * 121]}, "goals"),
     ({"question": QUESTION, "interval": "hourly"}, "interval"),
@@ -193,13 +196,18 @@ def test_goals_are_clean_distinct_lines():
 
 
 @pytest.mark.usefixtures("no_watch_writes")
-def test_a_finished_turn_takes_no_proposal_and_an_outage_is_a_readable_refusal(store):
+def test_a_finished_turn_takes_no_proposal_and_outages_are_readable_refusals(store):
     loop = watch_loop(store, WatchScript())
     args = agent_watch.PrepareWatch(question=QUESTION)
     loop.watch_tools.outlook = lambda uid, question: (_ for _ in ()).throw(RuntimeError("firestore down"))
     with pytest.raises(ValueError, match="cannot be prepared right now"):
         loop.watch_tools.prepare(args)
     loop.watch_tools.outlook = outlook()
+    original = loop.watch_tools._save
+    loop.watch_tools._save = lambda proposal: (_ for _ in ()).throw(RuntimeError("contention"))
+    with pytest.raises(ValueError, match="could not be prepared right now"):
+        loop.watch_tools.prepare(args)
+    loop.watch_tools._save = original
     store.db.turns(UID, loop.chat_id)[loop.turn_id]["status"] = "completed"
     with pytest.raises(ValueError, match="already finished"):
         loop.watch_tools.prepare(args)
@@ -215,10 +223,8 @@ def test_the_mock_run_prepares_a_watch_for_browser_tests(store):
         "question": "When will the next iPhone ship?", "goals": ["It is officially announced"], "interval": "weekly"}
 
 
-def test_saved_turns_and_late_readers_keep_the_proposal():
+def test_saved_turns_keep_the_proposal():
     proposal = {"question": QUESTION, "goals": [], "interval": "weekly"}
     detail = turn_detail("t1", {"execution_mode": "agent", "assistant_response": "Answer.",
                                 "agent_watch": proposal}, {})
     assert detail["agent_watch"] == proposal
-    # A reader that joins late still gets the card (agent_live sticky frames).
-    assert "watch" in STICKY_TYPES

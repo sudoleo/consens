@@ -899,7 +899,7 @@
       ]);
       if (!isCurrent()) return;
       watches = watchData.watches || [];
-      watchState.setLimits(ui().normalizeWatchLimits(watchData.limits, watches));
+      ui().receiveWatchList(watchData);
       ui().renderWatchLimit(limitTarget, watchState.limits);
       brief = briefData.brief || {};
       telegram = telegramData.telegram || telegram;
