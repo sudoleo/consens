@@ -64,6 +64,14 @@
     return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
+  // The footer line names the time zone only when it is not the viewer's own.
+  function shortSchedule(watch) {
+    const text = schedule(watch);
+    let own = "";
+    try { own = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { /* no Intl */ }
+    return own && watch.timezone === own ? text.replace(" (" + own + ")", "") : text;
+  }
+
   function hostOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch (_) { return ""; }
   }
@@ -227,10 +235,15 @@
   // questions. The × removes it for good.
   const IMAGE_PATH = /^\/api\/watch\/[A-Za-z0-9]+\/image\/[0-9a-f]{20}$/;
 
-  function buildImage(watch) {
+  function buildImage(watch, item) {
     const image = watch.image;
     if (!image || !IMAGE_PATH.test(image.url || "")) return null;
-    const figure = el("figure", "wd-image");
+    // A product shot is shown whole on white; an article photo fills the tile.
+    const figure = el("figure", "wd-image is-" + (image.kind === "article" ? "article" : "item"));
+    const drop = () => {
+      figure.remove();
+      item?.classList.remove("has-image");
+    };
     const host = image.source_host || hostOf(image.source_url);
     const frame = el(/^https?:\/\//.test(image.source_url || "") ? "a" : "span", "wd-image-frame");
     if (frame.tagName === "A") {
@@ -248,7 +261,7 @@
       img.width = image.width;
       img.height = image.height;
     }
-    img.addEventListener("error", () => figure.remove());
+    img.addEventListener("error", drop);
     frame.appendChild(img);
     figure.appendChild(frame);
     const remove = ui().makeButton("", "wd-image-remove", async function () {
@@ -256,7 +269,7 @@
       try {
         await ui().api("DELETE", "/api/watch/" + encodeURIComponent(watch.id) + "/image");
         watch.image = null;
-        figure.remove();
+        drop();
       } catch (error) {
         this.disabled = false;
         ui().popup("Could not remove the image: " + error.message);
@@ -276,7 +289,9 @@
       const strong = el("strong", "wd-side-value", relativeTime(watch.next_run_at));
       strong.title = formatDateTime(watch.next_run_at);
       side.appendChild(strong);
-      side.appendChild(el("span", "wd-side-note", schedule(watch)));
+      const note = el("span", "wd-side-note", shortSchedule(watch));
+      note.title = schedule(watch);
+      side.appendChild(note);
     } else if (watch.status === "resolved") {
       side.appendChild(el("span", "wd-side-label", "Closed"));
       side.appendChild(el("strong", "wd-side-value", formatDay(watch.resolution?.at) || "Done"));
@@ -284,7 +299,9 @@
     } else {
       side.appendChild(el("span", "wd-side-label", "Schedule"));
       side.appendChild(el("strong", "wd-side-value", "Paused"));
-      side.appendChild(el("span", "wd-side-note", schedule(watch)));
+      const note = el("span", "wd-side-note", shortSchedule(watch));
+      note.title = schedule(watch);
+      side.appendChild(note);
     }
     const probe = watch.last_probe;
     if (watch.status === "active" && probe && probe.at) {
@@ -296,6 +313,11 @@
           : `Daily scan: nothing new (${relativeTime(probe.at)})`;
       side.appendChild(note);
     }
+    // How the watch is set up belongs with its schedule, not in the status line.
+    const meta = [];
+    if (watch.visibility === "public") meta.push("Public page");
+    if (watch.telegram_enabled) meta.push("Telegram");
+    if (meta.length) side.appendChild(el("span", "wd-side-meta", meta.join(" · ")));
     return side;
   }
 
@@ -309,17 +331,24 @@
     item.dataset.state = state.key;
 
     const main = el("div", "wd-item-main");
+    // The picture floats top right and the text flows around it, so a card
+    // with a picture is no taller and its question no narrower than needed.
+    const image = buildImage(watch, item);
+    if (image) {
+      main.appendChild(image);
+      item.classList.add("has-image");
+    }
     const status = el("div", "wd-status");
     status.appendChild(el("span", "wd-dot"));
     status.appendChild(el("span", "wd-status-label", state.label));
-    if (state.when) {
+    // A pending first check's time is the next check, which the side column
+    // already shows; saying it twice only crowds the line.
+    if (state.when && state.key !== "waiting") {
       const time = el("time", "wd-status-time", relativeTime(state.when));
       time.dateTime = state.when;
       time.title = formatDateTime(state.when);
       status.appendChild(time);
     }
-    if (watch.visibility === "public") status.appendChild(el("span", "wd-tag", "Public"));
-    if (watch.telegram_enabled) status.appendChild(el("span", "wd-tag", "Telegram"));
     main.appendChild(status);
 
     const question = el("h3", "wd-question");
@@ -329,11 +358,7 @@
     link.target = "_blank";
     link.rel = "noopener";
     question.appendChild(link);
-    const subject = el("div", "wd-subject");
-    subject.appendChild(question);
-    const image = buildImage(watch);
-    if (image) subject.appendChild(image);
-    main.appendChild(subject);
+    main.appendChild(question);
 
     const goal = goalLine(watch);
     if (goal) {

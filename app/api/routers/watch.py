@@ -245,7 +245,7 @@ def remove_watch(request: Request, watch_id: str, data: dict = Body(default={}))
 
 
 @router.get("/api/watch/{watch_id}/image/{token}")
-@limiter.limit("120/minute")
+@limiter.limit("60/minute")
 def watch_image(request: Request, watch_id: str, token: str):
     """Die gespeicherte Vorschau, nur von consens.io (kein Abruf beim Shop).
 

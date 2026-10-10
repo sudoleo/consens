@@ -483,11 +483,14 @@
 .wd-section-note { color: var(--ink-3); font-size: var(--font-size-xs); }
 .wd-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 
+/* One text column across the card; the schedule sits in the footer next to
+   the actions instead of taking a column of its own. */
 .wd-item {
   --wd-tone: var(--ink-3);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 176px;
-  gap: 4px 32px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "main main" "actions side" "settings settings";
+  gap: 0 24px;
   padding: 20px 22px 14px;
   border-radius: var(--radius-lg);
   background: var(--raise);
@@ -497,7 +500,7 @@
 .wd-item.is-resolved { --wd-tone: var(--agree); }
 .wd-item.is-error { --wd-tone: var(--dispute); }
 .wd-item.is-rechecking { --wd-tone: var(--ink-2); }
-.wd-item-main { min-width: 0; }
+.wd-item-main { grid-area: main; min-width: 0; }
 
 .wd-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: var(--font-size-xs); }
 .wd-dot {
@@ -517,15 +520,6 @@
 .is-resolved .wd-status-label { color: var(--agree); }
 .is-error .wd-status-label { color: var(--dispute); }
 .wd-status-time { color: var(--ink-3); }
-.wd-tag {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-medium);
-}
 .wd-question { margin: 8px 0 0; font-size: var(--font-size-read); font-weight: var(--font-weight-semibold); line-height: 1.38; text-align: left; }
 .wd-question a {
   display: -webkit-box;
@@ -540,27 +534,24 @@
 .is-paused .wd-question a,
 .is-error .wd-question a { color: var(--ink-2); }
 
-/* The question and, when a source is a product page, a picture of the thing
-   (services/watch_images.py). The picture keeps its own shape (capped for
-   tall ones); white only shows behind transparent product shots. The ×
-   shows on hover/focus, always on touch. */
-.wd-subject { display: flex; align-items: flex-start; gap: 18px; }
-.wd-subject .wd-question { flex: 1 1 auto; min-width: 0; }
-.wd-image { position: relative; flex: 0 0 auto; width: 92px; margin: 8px 0 0; }
-.wd-image-frame { display: block; border-radius: var(--radius-sm); }
-.wd-image img {
+/* The picture of the thing or the topic (services/watch_images.py) floats top
+   right; status, question and goal flow around it, so the card grows no
+   taller. A product shot is shown whole on white, an article photo fills the
+   tile. The × shows on hover/focus, always on touch. */
+.wd-image { position: relative; float: right; width: 132px; margin: 2px 0 10px 22px; }
+.wd-image-frame {
   display: block;
-  width: 100%;
-  height: auto;
-  max-height: 92px;
+  overflow: hidden;
+  aspect-ratio: 3 / 2;
   border-radius: var(--radius-sm);
   background: #fff;
   outline: 1px solid var(--line-soft);
   outline-offset: -1px;
-  object-fit: contain;
 }
-.is-paused .wd-image img,
-.is-error .wd-image img { opacity: .72; }
+.wd-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.wd-image.is-article img { object-fit: cover; }
+.is-paused .wd-image-frame,
+.is-error .wd-image-frame { opacity: .72; }
 .wd-image-remove {
   position: absolute;
   top: -7px;
@@ -651,7 +642,18 @@
 .wd-tick.is-reverted { background: color-mix(in srgb, var(--ink-3) 35%, transparent); height: 8px; }
 .wd-tick.is-resolved { background: var(--agree); }
 
-.wd-item-side { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding-top: 2px; min-width: 0; }
+.wd-item-side {
+  grid-area: side;
+  display: flex;
+  flex-wrap: wrap;
+  align-self: center;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 2px 8px;
+  min-width: 0;
+  margin-top: 12px;
+  text-align: right;
+}
 .wd-side-label {
   color: var(--ink-3);
   font-size: var(--font-size-micro);
@@ -659,12 +661,15 @@
   letter-spacing: .06em;
   text-transform: uppercase;
 }
-.wd-side-value { color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.wd-side-value { color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
 .wd-side-note { color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.45; }
-.wd-side-probe { margin-top: 8px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.45; }
+.wd-side-probe,
+.wd-side-meta { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.45; }
+.wd-side-probe::before,
+.wd-side-meta::before { content: "·"; margin-right: 8px; }
 
 .wd-actions {
-  grid-column: 1 / -1;
+  grid-area: actions;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -702,7 +707,7 @@
 .wd-action-toggle[aria-expanded="true"]::after { transform: translateY(1px) rotate(225deg); }
 
 .wd-settings {
-  grid-column: 1 / -1;
+  grid-area: settings;
   display: grid;
   gap: 18px;
   margin-top: 8px;
@@ -851,20 +856,25 @@
    Responsive + motion
    ========================================================================== */
 @media (max-width: 760px) {
-  .wd-item { grid-template-columns: minmax(0, 1fr); padding: 18px 16px 12px; }
-  .wd-subject { gap: 12px; }
-  .wd-image { width: 72px; }
-  .wd-image img { max-height: 72px; }
+  .wd-item {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "main" "side" "actions" "settings";
+    padding: 18px 16px 12px;
+  }
+  .wd-image { width: 72px; margin-left: 12px; }
+  /* Beside the picture the question is narrower; a fourth line keeps its end. */
+  .wd-item.has-image .wd-question a { -webkit-line-clamp: 4; }
   .wd-item-side {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 2px 8px;
+    justify-content: flex-start;
     margin-top: 10px;
     padding-top: 10px;
     border-top: 1px solid var(--line-soft);
+    text-align: left;
   }
-  .wd-side-probe { margin-top: 0; width: 100%; }
+  .wd-side-probe,
+  .wd-side-meta { width: 100%; }
+  .wd-side-probe::before,
+  .wd-side-meta::before { content: none; }
   .wd-explainer-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .wd-example-list { grid-template-columns: minmax(0, 1fr); }
   .wd-summary { gap: 8px 22px; }

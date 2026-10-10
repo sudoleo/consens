@@ -754,14 +754,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       version“ öffnet eine Vollversion, `?version=original` zeigt „Answer from …“
       mit Rücklink. Eine normale Shared Page ohne Watch bleibt unverändert.
 - [ ] Watch-Bild: eine Watch zu einem konkreten Produkt (z. B. ein Laufschuh mit
-      Modellnummer) zeigt nach ihrem ersten Check im Dashboard und auf der
-      Watch-Seite rechts neben der Frage ein Foto des Produkts. Es lädt von
-      `/api/watch/…/image/…` (nicht vom Shop) und verlinkt auf die Quellseite.
-      Auf 375 px steht es auf der Seite neben der Kicker-Zeile, die Frage bleibt
-      voll breit. Eine abstrakte Watch („Is GPT-6 better value …?“) hat kein Bild.
-      Das × im Dashboard (Hover, auf Touch immer sichtbar) entfernt das Bild
-      dauerhaft, auch nach dem nächsten Check. `og:image` und JSON-LD der Seite
-      enthalten das Bild nie.
+      Modellnummer) zeigt nach ihrem ersten Check ein Foto des Produkts ganz auf
+      Weiß; eine Themen-Watch (z. B. EU AI Act) das Vorschaubild eines passenden
+      Quellartikels, kachelfüllend. Es lädt von `/api/watch/…/image/…` (nicht von
+      der Quelle) und verlinkt auf die Quellseite. Dashboard: Bild oben rechts,
+      Text fließt herum, die Karte wird nicht höher; Zeitplan, Tages-Scan und
+      „Public page · Telegram“ stehen im Fuß rechts neben „Open page/Settings“,
+      die Zeitzone nur, wenn sie nicht die eigene ist. 375 px: Bild klein, die
+      Frage bleibt ganz lesbar (bis 4 Zeilen); auf der Watch-Seite steht das Bild
+      neben der Kicker-Zeile, die Frage bleibt voll breit. Eine Frage ohne
+      passende Quelle hat kein Bild. Das × im Dashboard (Hover, auf Touch immer
+      sichtbar) entfernt das Bild dauerhaft, auch nach dem nächsten Check.
+      `og:image` und JSON-LD der Seite enthalten das Bild nie.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
       ein Check mit `moved` sendet genau eine Multipart-Mail „Moved: …“ als
       Änderungsprotokoll (What changed → Why mit Quellen → What held → Waiting

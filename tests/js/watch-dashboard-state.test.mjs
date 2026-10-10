@@ -136,6 +136,7 @@ describe("dashboard render", () => {
     const watches = [
       active({ signal: "stable", trigger: "stable" }, {
         id: "WatchImage0001", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",
+        visibility: "public",
         image: {
           url: imageUrl, width: 320, height: 240,
           source_url: "https://shop.test/p/1", source_host: "shop.test"
@@ -164,8 +165,13 @@ describe("dashboard render", () => {
     const figures = body.querySelectorAll(".wd-image");
     expect(figures.length).toBe(1);
     const figure = figures[0];
-    expect(figure.closest(".wd-subject").querySelector(".wd-question a").textContent)
-      .toBe("Adios Pro 4 in 44.5 under 140 euros?");
+    const card = figure.closest(".wd-item");
+    expect(card.classList.contains("has-image")).toBe(true);
+    expect(figure.classList.contains("is-item")).toBe(true);
+    expect(card.querySelector(".wd-question a").textContent).toBe("Adios Pro 4 in 44.5 under 140 euros?");
+    // Setup details moved from the status line into the schedule footer.
+    expect(card.querySelector(".wd-status").textContent).not.toContain("Public");
+    expect(card.querySelector(".wd-side-meta").textContent).toBe("Public page");
     const img = figure.querySelector("img");
     expect(img.getAttribute("src")).toBe(imageUrl);
     expect(img.alt).toBe("");
@@ -177,5 +183,34 @@ describe("dashboard render", () => {
     figure.querySelector(".wd-image-remove").click();
     await vi.waitFor(() => expect(body.querySelector(".wd-image")).toBeNull());
     expect(calls).toContainEqual(["DELETE", "/api/watch/WatchImage0001/image"]);
+    expect(card.classList.contains("has-image")).toBe(false);
+  });
+
+  it("lets an article photo fill its tile and keeps a pending card's time in the footer only", async () => {
+    const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
+    const { window } = harness;
+    window.history.replaceState(null, "", "/app/watches");
+    window.auth.currentUser.getIdToken = async () => "token";
+    const watches = [{
+      id: "WatchTopic0002", status: "active", awaiting_first_run: true, history: [],
+      next_run_at: "2026-10-12T07:00:00+00:00", question: "Has the EU AI Act guidance changed?",
+      share_path: "/s/c", visibility: "private", telegram_enabled: true,
+      image: { url: "/api/watch/WatchTopic0002/image/" + "c".repeat(20), kind: "article",
+               width: 320, height: 206, source_url: "https://news.test/eu", source_host: "news.test" }
+    }];
+    window.fetch = vi.fn(async (path) => ({
+      ok: true,
+      json: async () => String(path).includes("/api/my/watches")
+        ? { watches: watches, limits: { plan: "free", active_count: 1, active_limit: 3 } }
+        : {}
+    }));
+
+    await window.App.watchDashboard.render();
+
+    const card = window.document.querySelector(".wd-item");
+    expect(card.querySelector(".wd-image").classList.contains("is-article")).toBe(true);
+    expect(card.querySelector(".wd-status time")).toBeNull();
+    expect(card.querySelector(".wd-item-side .wd-side-value")).not.toBeNull();
+    expect(card.querySelector(".wd-side-meta").textContent).toBe("Telegram");
   });
 });

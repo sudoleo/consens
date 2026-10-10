@@ -82,30 +82,54 @@ class FakeFetch:
 
 class MatchTests(unittest.TestCase):
     def setUp(self):
-        self.context = watch_images._tokens(QUESTION) | watch_images._tokens(GOAL)
+        self.shoe = watch_images.Question(QUESTION, GOAL)
+
+    def score(self, name, question=None):
+        return watch_images.match_score(name, question or self.shoe)
 
     def test_the_shop_name_of_the_watched_shoe_matches(self):
         for name in (
             "adidas Adizero Adios Pro 4 Laufschuhe für Herren - SS26",
             "ADIZERO ADIOS PRO 4 SCHUH",
             "adidas Adizero Adios Pro 4 Carbon Run White JR1094 | eBay",
+            "Adizero Adios Pro 4",
+            # Another size of the same shoe is the same picture.
+            "adidas Adizero Adios Pro 4 – Herren – 42 2/3",
+            "adidas Adizero Adios Pro 4 Gr. 42",
+            "Adidas Adizero Adios Pro 4 (2026)",
         ):
-            self.assertGreater(watch_images.match_score(name, self.context), 0, name)
+            self.assertGreater(self.score(name), 0, name)
 
-    def test_another_model_number_or_another_thing_does_not(self):
+    def test_another_model_a_sibling_or_an_accessory_does_not(self):
         for name in (
             "adidas Adizero Adios Pro 3 Laufschuhe",
             "Nike Vaporfly 3",
             "adidas Laufschuhe Herren",
-            "adidas Adizero Adios Pro 4 Gr. 42",
+            "adidas Adizero Socken",
+            "Adizero Pro Shorts",
+            "adidas Adizero Evo SL",
+            "Adios Pro 4 Schnürsenkel",
         ):
-            self.assertEqual(watch_images.match_score(name, self.context), 0, name)
+            self.assertEqual(self.score(name), 0, name)
 
-    def test_years_only_count_when_the_question_names_one(self):
-        self.assertGreater(watch_images.match_score("Adidas Adizero Adios Pro 4 (2026)", self.context), 0)
-        context = watch_images._tokens("Is the MacBook Air M4 2025 under 900 euros?")
-        self.assertEqual(watch_images.match_score("MacBook Air M4 2024", context), 0)
-        self.assertGreater(watch_images.match_score("MacBook Air M4 2025", context), 0)
+    def test_storage_and_size_numbers_do_not_exclude_but_a_model_number_does(self):
+        iphone = watch_images.Question("Wann kommt das iPhone 17 Pro nach Deutschland?")
+        self.assertGreater(self.score("Apple iPhone 17 Pro 256 GB", iphone), 0)
+        self.assertEqual(self.score("Apple iPhone 16 Pro 256 GB", iphone), 0)
+        self.assertEqual(self.score("iPhone 17 Pro Hülle Silikon", iphone), 0)
+        macbook = watch_images.Question("Is the MacBook Air M4 under 900 euros?")
+        self.assertGreater(self.score("Apple MacBook Air 13 M4 16GB 512GB", macbook), 0)
+        dated = watch_images.Question("Is the MacBook Air M4 2025 under 900 euros?")
+        self.assertEqual(self.score("MacBook Air M4 2024", dated), 0)
+        self.assertGreater(self.score("MacBook Air M4 2025", dated), 0)
+        sony = watch_images.Question("Sinkt der Preis der Sony WH-1000XM6 unter 300 Euro?")
+        self.assertEqual(self.score("Sony WH-1000XM6 Ohrpolster Ersatz", sony), 0)
+        tesla = watch_images.Question("Wann wird das Tesla Model Y Juniper günstiger?")
+        self.assertEqual(self.score("Tesla Model Y Juniper Fußmatten", tesla), 0)
+
+    def test_an_accessory_the_question_asks_for_is_fine(self):
+        case = watch_images.Question("Gibt es die Apple iPhone 17 Pro Hülle aus FineWoven wieder?")
+        self.assertGreater(self.score("Apple iPhone 17 Pro FineWoven Hülle", case), 0)
 
 
 class PageItemTests(unittest.TestCase):
@@ -126,6 +150,35 @@ class PageItemTests(unittest.TestCase):
             watch_images.page_items(html, "https://shop.test/a/b"),
             [("Adios Pro 4", ["https://shop.test/img/shoe.jpg"])],
         )
+
+    def test_a_product_inside_a_review_or_list_never_inherits_the_page_image(self):
+        review = """<html><head><meta property="og:type" content="article">
+        <meta property="og:image" content="https://news.test/hero-runner-on-track.jpg">
+        <script type="application/ld+json">{"@type": "Review",
+          "itemReviewed": {"@type": "Product", "name": "Adidas Adizero Adios Pro 4"}}</script></head></html>"""
+        self.assertEqual(watch_images.page_items(review, "https://news.test/r"),
+                         [("Adidas Adizero Adios Pro 4", [])])
+        listing = """<html><head><meta property="og:image" content="https://shop.test/category-banner.jpg">
+        <script type="application/ld+json">{"@type": "ItemList", "itemListElement": [
+          {"@type": "ListItem", "item": {"@type": "Product", "name": "Adios Pro 4"}}]}</script></head></html>"""
+        self.assertEqual(watch_images.page_items(listing, "https://shop.test/c"), [("Adios Pro 4", [])])
+        video = """<html><head><meta property="og:image" content="https://video.test/thumb.jpg">
+        <script type="application/ld+json">{"@type": "VideoObject", "name": "Live",
+          "publication": {"@type": "BroadcastEvent", "name": "Adios Pro 4 launch"}}</script></head></html>"""
+        self.assertEqual(watch_images.page_items(video, "https://video.test/v"), [])
+        main_entity = """<html><head><meta property="og:image" content="https://shop.test/p4.jpg">
+        <script type="application/ld+json">{"@type": "WebPage",
+          "mainEntity": {"@type": "Product", "name": "Adios Pro 4"}}</script></head></html>"""
+        self.assertEqual(watch_images.page_items(main_entity, "https://shop.test/p"),
+                         [("Adios Pro 4", ["https://shop.test/p4.jpg"])])
+
+    def test_microdata_takes_its_own_name_not_the_brand(self):
+        html = """<div itemscope itemtype="https://schema.org/Product">
+          <div itemprop="brand" itemscope itemtype="https://schema.org/Brand"><span itemprop="name">adidas</span>
+            <img itemprop="image" src="/brand-logo.jpg"></div>
+          <h1 itemprop="name">Adizero Adios Pro 4</h1><img itemprop="image" src="/p4.jpg"></div>"""
+        self.assertEqual(watch_images.page_items(html, "https://shop.test/x"),
+                         [("Adizero Adios Pro 4", ["https://shop.test/p4.jpg"])])
 
     def test_og_item_and_microdata_count_articles_do_not(self):
         og = """<html><head><meta property="og:type" content="ebay-objects:item">
@@ -149,6 +202,12 @@ class PageItemTests(unittest.TestCase):
 
 
 class CandidateTests(unittest.TestCase):
+    def test_google_store_is_not_skipped_with_google_search(self):
+        self.assertEqual(
+            watch_images.candidate_urls([{"url": "https://store.google.com/product/pixel_10"}]),
+            ["https://store.google.com/product/pixel_10"],
+        )
+
     def test_cited_twice_first_one_host_per_round_and_no_social_sites(self):
         sources = [
             {"url": "https://www.reddit.com/r/running/1"},
@@ -157,6 +216,7 @@ class CandidateTests(unittest.TestCase):
             {"url": "https://shop-b.test/p/9#reviews"},
             {"url": "https://shop-b.test/p/9"},
             {"url": "https://docs.test/manual.pdf"},
+            {"url": "https://www.google.com/search?q=adios"},
             {"url": "javascript:alert(1)"},
             "not a dict",
         ]
@@ -173,6 +233,51 @@ class ThumbnailTests(unittest.TestCase):
         self.assertLessEqual(len(data), watch_images.STORED_MAX_BYTES)
         with Image.open(io.BytesIO(data)) as image:
             self.assertEqual(image.format, "WEBP")
+
+    def test_unusual_modes_and_broken_files_never_raise(self):
+        for mode, fmt in (("CMYK", "JPEG"), ("I;16", "PNG"), ("LA", "PNG"), ("P", "GIF")):
+            image = Image.frombytes("RGB", (400, 300), random.Random(3).randbytes(400 * 300 * 3)).convert(
+                "RGB" if mode == "I;16" else mode)
+            if mode == "I;16":
+                image = Image.new("I;16", (400, 300))
+            buffer = io.BytesIO()
+            image.save(buffer, fmt)
+            watch_images.make_thumbnail(buffer.getvalue())  # must not raise
+        data = photo_bytes()
+        self.assertIsNone(watch_images.make_thumbnail(data[: len(data) // 3]))
+        self.assertIsNone(watch_images.make_thumbnail(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64))
+
+    def test_a_huge_jpeg_is_decoded_small(self):
+        buffer = io.BytesIO()
+        Image.frombytes("RGB", (64, 64), random.Random(5).randbytes(64 * 64 * 3)).resize(
+            (6000, 4000)).save(buffer, "JPEG", quality=70)
+        opened = []
+        real_open = Image.open
+
+        def spy(*args, **kwargs):
+            image = real_open(*args, **kwargs)
+            opened.append(image)
+            return image
+
+        with patch.object(watch_images.Image, "open", side_effect=spy):
+            data, size = watch_images.make_thumbnail(buffer.getvalue())
+        self.assertEqual(size, (320, 213))
+        # draft() made the decoder work at a fraction of 6000 x 4000.
+        self.assertLessEqual(max(opened[0].size), 1500)
+
+    def test_a_huge_png_is_not_decoded_at_all(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (4000, 3000)).save(buffer, "PNG")
+        self.assertIsNone(watch_images.make_thumbnail(buffer.getvalue()))
+
+    def test_exif_orientation_is_applied(self):
+        image = Image.frombytes("RGB", (600, 300), random.Random(9).randbytes(600 * 300 * 3))
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        buffer = io.BytesIO()
+        image.save(buffer, "JPEG", exif=exif)
+        _data, size = watch_images.make_thumbnail(buffer.getvalue())
+        self.assertEqual(size, (160, 320))
 
     def test_logos_icons_strips_and_non_images_are_rejected(self):
         self.assertIsNone(watch_images.make_thumbnail(flat_bytes()))
@@ -218,6 +323,63 @@ class FindImageTests(unittest.TestCase):
             fetch=FakeFetch(pages={"https://news.test/a": ARTICLE_PAGE.encode()}),
         ))
 
+    def test_a_topic_gets_the_preview_image_of_a_matching_article(self):
+        question = "Has the EU AI Act guidance for general-purpose AI changed?"
+        article = """<html><head><meta property="og:type" content="article">
+        <meta property="og:image" content="https://news.test/img/2026/10/eu-ai-act-brussels.jpg">
+        <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [
+          {"@type": "WebPage", "name": "News"},
+          {"@type": "NewsArticle", "headline": "EU AI Act: Commission issues new guidance for general-purpose AI",
+           "image": "https://news.test/img/other.jpg"}]}</script></head></html>"""
+        unrelated = """<html><head><meta property="og:type" content="article">
+        <meta property="og:title" content="The best laptops for students">
+        <meta property="og:image" content="https://blog.test/laptops.jpg"></head></html>"""
+        fetch = FakeFetch(
+            pages={"https://blog.test/a": unrelated.encode(), "https://news.test/eu": article.encode()},
+            images={
+                "https://blog.test/laptops.jpg": photo_bytes(seed=1),
+                "https://news.test/img/2026/10/eu-ai-act-brussels.jpg": photo_bytes(seed=2),
+            },
+        )
+        found = watch_images.find_image(
+            [{"url": "https://blog.test/a"}, {"url": "https://news.test/eu"}], question, fetch=fetch,
+        )
+        self.assertEqual(found["kind"], "article")
+        self.assertEqual(found["source_url"], "https://news.test/eu")
+        self.assertNotIn(("image", "https://blog.test/laptops.jpg"), fetch.calls)
+        self.assertEqual(
+            watch_images.page_article(article, "https://news.test/eu")[1][0],
+            "https://news.test/img/2026/10/eu-ai-act-brussels.jpg",
+        )
+
+    def test_a_site_default_share_image_is_not_the_topic(self):
+        article = """<html><head><meta property="og:type" content="article">
+        <meta property="og:title" content="EU AI Act guidance for general-purpose AI explained">
+        <meta property="og:image" content="https://news.test/static/og-default.jpg"></head></html>"""
+        fetch = FakeFetch(
+            pages={"https://news.test/eu": article.encode()},
+            images={"https://news.test/static/og-default.jpg": photo_bytes()},
+        )
+        self.assertIsNone(watch_images.find_image(
+            [{"url": "https://news.test/eu"}], "Has the EU AI Act guidance changed?", fetch=fetch,
+        ))
+        self.assertEqual(fetch.calls, [("page", "https://news.test/eu")])
+
+    def test_headline_matching_needs_a_name_from_the_question(self):
+        question = "Is GPT-6 Sol actually better value than Claude Opus 5.5 for coding?"
+        context, entities = watch_images._tokens(question), watch_images.entity_tokens(question)
+        self.assertTrue({"gpt", "6", "sol", "claude", "opus"} <= entities)
+        self.assertNotIn("coding", entities)
+        self.assertGreater(watch_images.article_score("Introducing GPT-6 Sol", context, entities), 0)
+        self.assertGreater(watch_images.article_score(
+            "Claude Opus 5.5 vs GPT-6 Sol: 92% on SWE-bench", context, entities), 0)
+        self.assertEqual(watch_images.article_score("The best AI coding tools in 2026", context, entities), 0)
+        self.assertEqual(watch_images.article_score("Better value coding tips", context, entities), 0)
+        german = "Wann kommt das neue iPhone 17 Pro nach Deutschland?"
+        self.assertGreater(watch_images.article_score(
+            "iPhone 17 Pro: Marktstart in Deutschland", watch_images._tokens(german),
+            watch_images.entity_tokens(german)), 0)
+
     def test_a_logo_or_placeholder_is_not_the_product(self):
         fetch = FakeFetch(
             pages={"https://shop.test/p/1": product_page(
@@ -257,6 +419,7 @@ class StoreTests(unittest.TestCase):
         token = self.watch()["image"]["token"]
         self.assertEqual(view["url"], f"/api/watch/{WATCH_ID}/image/{token}")
         self.assertEqual(view["source_host"], "shop.test")
+        self.assertEqual(view["kind"], "item")
         self.assertEqual(watch_images.load_image(WATCH_ID, token, db=self.db)[1], "image/webp")
         self.assertIsNone(watch_images.load_image(WATCH_ID, "0" * 20, db=self.db))
         self.assertIsNone(watch_images.load_image("../etc", token, db=self.db))
@@ -281,6 +444,75 @@ class StoreTests(unittest.TestCase):
             "skipped",
         )
         self.assertIsNone(watch_service.list_watches("u1", db=self.db)[0]["image"])
+
+    def test_blocked_sources_do_not_use_up_attempts_but_are_capped(self):
+        sources = [{"url": "https://blocked-shop.test/p"}]
+        for _ in range(watch_images.MAX_TRIES - 1):
+            self.assertEqual(watch_images.refresh_for_watch(
+                WATCH_ID, self.watch(), sources, QUESTION, db=self.db, fetch=FakeFetch(),
+            ), "none")
+        self.assertEqual(self.watch()["image"]["attempts"], 0)
+        self.assertTrue(watch_images.needs_image(self.watch()))
+        watch_images.refresh_for_watch(WATCH_ID, self.watch(), sources, QUESTION, db=self.db, fetch=FakeFetch())
+        self.assertEqual(self.watch()["image"]["tries"], watch_images.MAX_TRIES)
+        self.assertFalse(watch_images.needs_image(self.watch()))
+
+    def test_a_read_page_without_a_match_counts_as_an_attempt(self):
+        fetch = FakeFetch(pages={"https://news.test/a": ARTICLE_PAGE.encode()})
+        watch_images.refresh_for_watch(
+            WATCH_ID, self.watch(), [{"url": "https://news.test/a"}],
+            "Is GPT-6 Sol actually better value than Claude Opus 5.5 for coding?", db=self.db, fetch=fetch,
+        )
+        self.assertEqual(self.watch()["image"]["attempts"], 1)
+
+    def test_a_dismissal_during_a_read_does_not_leave_the_image_cached(self):
+        watch_images.store_result(WATCH_ID, self.found, db=self.db)
+        token = self.watch()["image"]["token"]
+        real_collection = self.db.collection
+
+        def collection(name):
+            if name == watch_images.WATCH_IMAGES_COLLECTION:
+                watch_images.forget(WATCH_ID)  # a dismiss commits mid-read
+            return real_collection(name)
+
+        with patch.object(self.db, "collection", side_effect=collection):
+            self.assertIsNotNone(watch_images.load_image(WATCH_ID, token, db=self.db))
+        self.assertNotIn(WATCH_ID, watch_images._CACHE)
+
+    def test_an_unknown_watch_costs_one_read_whatever_the_token(self):
+        reads = []
+        real_collection = self.db.collection
+
+        def collection(name):
+            reads.append(name)
+            return real_collection(name)
+
+        with patch.object(self.db, "collection", side_effect=collection):
+            for token in ("1" * 20, "2" * 20, "3" * 20):
+                self.assertIsNone(watch_images.load_image("NoSuchWatch01", token, db=self.db))
+        self.assertEqual(reads, [watch_images.WATCH_IMAGES_COLLECTION])
+
+    def test_an_unexpected_search_error_counts_as_a_try(self):
+        with patch.object(watch_images, "search", side_effect=RuntimeError("parser bug")):
+            outcome = watch_images.refresh_for_watch(
+                WATCH_ID, self.watch(), [{"url": "https://shop.test/p/1"}], QUESTION, db=self.db,
+            )
+        self.assertEqual(outcome, "none")
+        self.assertEqual(self.watch()["image"]["tries"], 1)
+        self.assertEqual(self.watch()["image"]["attempts"], 0)
+
+    def test_a_failed_thread_start_frees_the_slot(self):
+        with patch.object(watch_images.threading, "Thread", side_effect=RuntimeError("no threads")):
+            self.assertFalse(watch_images._submit(WATCH_ID, lambda: None))
+        self.assertNotIn(WATCH_ID, watch_images._PENDING)
+
+    def test_a_wrong_token_for_a_known_image_costs_no_read(self):
+        watch_images.store_result(WATCH_ID, self.found, db=self.db)
+        token = self.watch()["image"]["token"]
+        self.assertIsNotNone(watch_images.load_image(WATCH_ID, token, db=self.db))
+        with patch.object(self.db, "collection", side_effect=AssertionError("no read expected")):
+            self.assertIsNotNone(watch_images.load_image(WATCH_ID, token, db=self.db))
+            self.assertIsNone(watch_images.load_image(WATCH_ID, "f" * 20, db=self.db))
 
     def test_sources_without_candidates_do_not_count_as_an_attempt(self):
         outcome = watch_images.refresh_for_watch(
@@ -401,7 +633,7 @@ class WatchPageTests(unittest.TestCase):
         template = open("templates/watch_share.html", encoding="utf-8").read()
         og_block = template.split("<script type=\"application/ld+json\">")[0]
         self.assertNotIn("watch_image", og_block)
-        self.assertIn('class="wp-image"', template)
+        self.assertIn('class="wp-image is-', template)
 
 
 if __name__ == "__main__":
