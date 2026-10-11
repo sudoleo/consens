@@ -211,7 +211,7 @@ Folgefragen, Ladehinweise, Entwurfsrettung und die direkte Auswahlkorrektur bei
 
 `tests/js/agent-chat.test.mjs` prüft abwechselnde Fortschrittsabsätze und bestätigte Schritte, stabile DOM-Knoten,
 HTML-Escaping, vollständigen Verlauf über das Hilfsereignisfenster hinaus,
-automatisches Zuklappen beim Abschluss sowie erneutes manuelles Öffnen. Laufzeit-
+einen beim Abschluss geöffnet bleibenden Verlauf sowie erneutes manuelles Öffnen. Laufzeit-
 Tests decken Minutengrenzen, Token-Warten, Stop, Timer-Cleanup und gespeicherte
 Endzeitstempel inklusive ungültiger/fehlender Zeitangaben ab. Ungültige
 Vergleichsauswahl (0/1/7 Modelle) erhält den Entwurf und startet keine Requests;
@@ -223,8 +223,8 @@ Legacy-Reasoning und die Reasoning-Ebene im Chatmodell-Picker bleiben abgedeckt.
 `tests/e2e/test_agent_status_frontend.py` prüft die gebaute App mit offenem SSE-
 Stream bei 1280/390/320 px: Schritt-Reihenfolge, laufende/eingefrorene Uhr,
 Absatzabstände, dezente Absatzfarben und kontrastreiche Schritte im hellen/dunklen
-Modus, Abschluss mit geöffnetem Verlauf, Aufklappen per Tastatur und vollständigen
-Verlauf ohne inneren Scrollkasten.
+Modus, Abschluss mit geöffnetem (bleibt offen) und geschlossenem Verlauf, Zu- und
+Aufklappen per Tastatur und vollständigen Verlauf ohne inneren Scrollkasten.
 Sie öffnet den Verlauf auch während des ersten „Thinking…“ und lädt einen
 abgeschlossenen Turn erneut. `test_agent_comparison_frontend.py` prüft die
 zusätzlichen Details und Leser-Links live, gespeichert und in archivierten Turns,

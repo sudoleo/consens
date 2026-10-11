@@ -1140,7 +1140,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Forced Colors zeigen Zeichen und Text vollständig deckend.
   Frühere Absätze und Arbeitsschritte bleiben erhalten;
   Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
-  verschwinden die Live-Absätze und ein geöffneter Verlauf klappt zu. Pfeil/Enter
+  verschwinden die Live-Absätze; ein geöffneter Verlauf bleibt offen, solange er
+  im Bild ist (nichts springt). Pfeil/Enter klappt ihn zu und
   öffnet danach alle gespeicherten Absätze und Toolschritte in ihrer Reihenfolge,
   ohne inneren Scrollkasten. Auch bei 320/390 px keine abgeschnittenen Texte.
 - [ ] Duration-Verlauf auch direkt beim Abschluss und nach erneutem Öffnen prüfen:

@@ -3281,8 +3281,9 @@ Die Live-Absätze verwenden stabile DOM-Knoten in einem höflich angekündigten
 `role=log`; die rotierende 64er-Grenze für Hilfsereignisse entfernt keine
 Fortschrittsmeldungen oder bestätigten Toolschritte. Token-Warten ergänzt einen
 sichtbaren Hinweis.
-Bei Abschluss, Fehler oder Stop verschwindet die Live-Anzeige und auch ein zuvor
-geöffneter Verlauf klappt zu. Anschließendes manuelles Öffnen über Pfeil/Enter
+Bei Abschluss, Fehler oder Stop verschwindet die Live-Anzeige; ein vom Leser
+geöffneter Verlauf bleibt offen, solange er im Bild ist, und klappt nur oberhalb
+des Viewports zu (siehe „Keine Verschiebung“). Manuelles Öffnen über Pfeil/Enter
 zeigt die vollständigen Absätze, bestätigte Tools und Usage; spätere Projektionen
 erhalten diese Wahl. Der Verlauf fließt ohne verschachtelten Scrollkasten im Chat.
 Schon während des Nachdenkens ergänzt der geöffnete Verlauf Chatmodell,

@@ -151,12 +151,20 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(page.locator("#agentAnswerBody")).to_have_text("Die erste Option passt zu deinem Budget.")
         page.evaluate("sparse => window.__finishProgress(sparse)", width == 320)
         expect(page.locator("#agentAnswerBody")).to_have_text("Die erste Option passt zu deinem Budget.")
-        expect(details).not_to_have_attribute("open", "")
+        # A history the reader opened stays open on screen: closing it would pull
+        # the answer up under the eye. The live paragraphs still give way.
+        reader_opened = width != 320
+        if reader_opened:
+            expect(details).to_have_attribute("open", "")
+        else:
+            expect(details).not_to_have_attribute("open", "")
         expect(preview).not_to_be_visible()
         expect(preview.locator("p")).to_have_count(0)
         expect(title).to_have_text('Thought for 1m 13s')
         page.evaluate("() => App.agentChat.project(App.runRegistry.visible())")
         expect(title).to_have_text('Thought for 1m 13s')
+        if reader_opened:
+            expect(details).to_have_attribute("open", "")
         assert page.evaluate("document.querySelector('#agentAnswerActivity')._agentActivity.clockTimer === null")
         assert page.evaluate("__agentMotion.filter(m => m.target.id === 'agentAnswerBody').length") == (1 if quiet == "none" else 0)
         if quiet == "none":
@@ -167,7 +175,11 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             assert page.evaluate("__agentMotion.length") == 0
         _snapshot(page, f"agent-progress-final-{snapshot_variant}")
         summary.focus()
+        if reader_opened:
+            page.keyboard.press("Enter")
+            expect(details).not_to_have_attribute("open", "")
         page.keyboard.press("Enter")
+        expect(details).to_have_attribute("open", "")
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
         expect(details.locator(".agent-activity-update").first).to_be_visible()
         page.wait_for_function("""() => {
