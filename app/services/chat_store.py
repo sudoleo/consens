@@ -113,6 +113,17 @@ TURN_PAGE_SIZE_MAX = 100
 MAX_CHATS_PER_OWNER = 200
 MAX_TURNS_PER_CHAT = 500
 
+# A chat no bookmark points to is out of reach: the bookmark is its only
+# handle in the app. The browser creates the chat before the first turn, so an
+# Agent message refused up front (premium model, rate limit, Stop right after
+# sending) or a run that failed before anything was saved leaves one behind.
+# They counted against MAX_CHATS_PER_OWNER, so a user was told to delete a
+# visible conversation while invisible ones held the quota. When the limit is
+# hit, such chats are deleted first. The age keeps a chat whose first run is
+# still on its way (Agent runs end within minutes) out of reach.
+UNREACHABLE_CHAT_MIN_AGE = timedelta(hours=1)
+UNREACHABLE_CHAT_RECLAIM_LIMIT = 25
+
 CHAT_STATUS_DELETING = "deleting"
 # Durable single-chat deletion jobs. The job is written in the SAME transaction
 # that tombstones the chat (status "deleting", counter decremented once), so a
@@ -648,9 +659,57 @@ class ChatStore:
                 "updated_at": firestore.SERVER_TIMESTAMP,
             })
 
-        self._transaction(operation)
+        try:
+            self._transaction(operation)
+        except ChatQuotaExceeded as limit_reached:
+            try:
+                freed = self.reclaim_unreachable_chats(uid)
+            except Exception as exc:
+                logging.warning(
+                    "unreachable chat reclaim failed category=%s", safe_exception(exc)
+                )
+                freed = 0
+            if not freed:
+                raise limit_reached
+            self._transaction(operation)
         snapshot = ref.get()
         return chat_metadata(snapshot.id, snapshot.to_dict() or {})
+
+    def reclaim_unreachable_chats(
+        self, uid: str, *, now: datetime | None = None
+    ) -> int:
+        """Delete the owner's chats no bookmark leads to; return how many.
+
+        Only called when the chat limit refuses a new chat. Each chat takes the
+        regular durable deletion (tombstone, counter, job in one transaction);
+        the retention loop runs the cascade, so this stays one write per chat.
+        """
+        now = now or datetime.now(timezone.utc)
+        bookmarks = self.db.collection("users").document(uid).collection("bookmarks")
+        reachable = {
+            str((snapshot.to_dict() or {}).get("chat_id") or "")
+            for snapshot in bookmarks.select(["chat_id"]).stream()
+        }
+        candidates = []
+        for snapshot in self._chats_ref(uid).select(["status", "updated_at"]).stream():
+            data = snapshot.to_dict() or {}
+            updated_at = data.get("updated_at")
+            if (
+                snapshot.id in reachable
+                or data.get("status") != CHAT_STATUS_ACTIVE
+                or not isinstance(updated_at, datetime)
+                or now - updated_at < UNREACHABLE_CHAT_MIN_AGE
+            ):
+                continue
+            candidates.append((updated_at, snapshot.id))
+        freed = 0
+        for _updated_at, chat_id in sorted(candidates)[:UNREACHABLE_CHAT_RECLAIM_LIMIT]:
+            try:
+                self.request_chat_deletion(uid, chat_id)
+            except ChatNotFound:
+                continue
+            freed += 1
+        return freed
 
     def get_chat(self, uid: str, chat_id: str) -> dict:
         ref = self._chat_ref(uid, chat_id)
@@ -1699,18 +1758,25 @@ def _decode_chat_cursor(
     payload = _decode_cursor_payload(cursor, kind="chats", owner_scope=owner_scope)
     if set(payload) != {"v", "k", "updated_at", "id"}:
         raise InvalidChatCursor("Invalid chat cursor")
-    timestamp_text = payload.get("updated_at")
-    if not isinstance(timestamp_text, str) or not _CURSOR_TIMESTAMP_RE.fullmatch(
-        timestamp_text
-    ):
-        raise InvalidChatCursor("Invalid chat cursor")
     try:
-        timestamp = _CursorTimestamp.from_rfc3339(timestamp_text)
+        timestamp = parse_cursor_timestamp(payload.get("updated_at"))
     except (TypeError, ValueError) as exc:
         raise InvalidChatCursor("Invalid chat cursor") from exc
-    if _timestamp_to_cursor(timestamp) != timestamp_text:
-        raise InvalidChatCursor("Invalid chat cursor")
     return timestamp, payload["id"]
+
+
+def parse_cursor_timestamp(text: object) -> DatetimeWithNanoseconds:
+    """Read back a ``format_cursor_timestamp`` value, losslessly.
+
+    Raises ValueError for anything that is not exactly such a value, so a
+    page cursor can never start a query at a rounded or shifted position.
+    """
+    if not isinstance(text, str) or not _CURSOR_TIMESTAMP_RE.fullmatch(text):
+        raise ValueError("invalid cursor timestamp")
+    timestamp = _CursorTimestamp.from_rfc3339(text)
+    if _timestamp_to_cursor(timestamp) != text:
+        raise ValueError("non-canonical cursor timestamp")
+    return timestamp
 
 
 def _decode_turn_cursor(cursor: str, *, owner_scope: str) -> tuple[int, str]:
@@ -1770,6 +1836,10 @@ def _timestamp_to_cursor(value: object) -> str:
         return value.rfc3339()
     normalized = value.astimezone(timezone.utc)
     return normalized.isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+# The text form of a Firestore timestamp in a page cursor (bookmark list too).
+format_cursor_timestamp = _timestamp_to_cursor
 
 
 def _valid_turn_position(value: object) -> bool:

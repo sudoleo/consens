@@ -1,4 +1,7 @@
+import base64
+import json
 import unicodedata
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +15,7 @@ from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
 from app.services import share_snapshots
 from app.services.chat_store import ChatCursorUnavailable, InvalidChatCursor
+from test_chat_history import FakeChatDatabase
 
 
 class FakeSnapshot:
@@ -88,35 +92,9 @@ class FakeListRef:
         return FakeListSnapshot(self.id, self.collection.items.get(self.id))
 
 
-class FakeListQuery:
-    def __init__(self, collection):
-        self.collection = collection
-        self.after_id = None
-        self.page_limit = None
-
-    def start_after(self, snapshot):
-        self.after_id = snapshot.id
-        return self
-
-    def limit(self, value):
-        self.page_limit = value
-        return self
-
-    def stream(self):
-        ids = list(self.collection.items)
-        if self.after_id in ids:
-            ids = ids[ids.index(self.after_id) + 1:]
-        if self.page_limit is not None:
-            ids = ids[:self.page_limit]
-        return [FakeListSnapshot(item_id, self.collection.items[item_id]) for item_id in ids]
-
-
 class FakeListCollection:
     def __init__(self, items):
         self.items = items
-
-    def order_by(self, *_args, **_kwargs):
-        return FakeListQuery(self)
 
     def document(self, bookmark_id):
         return FakeListRef(self, bookmark_id)
@@ -1189,35 +1167,116 @@ def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
     assert 'id="agentModePanel"' not in (root / "templates" / "index.html").read_text(encoding="utf-8")
 
 
-def test_bookmark_list_is_compact_and_cursor_paginated():
-    items = {
-        "first_id": {"query": "First", "mode": "Normal", "responses": {"OpenAI": "large", "consensus": "full"}},
-        "second_id": {"query": "Second", "responses": {"Gemini": "large"}},
-        "third_id": {"query": "Third", "responses": {"Grok": "large"}},
-    }
-    fake_db = FakeBookmarkDatabase({"uid-1": items})
+LIST_START = datetime(2026, 10, 11, 12, 0, tzinfo=timezone.utc)
+
+
+def _seed_bookmarks(database, items, *, uid="uid-1"):
+    """Store bookmarks newest first: the first item has the latest timestamp."""
+    for index, (bookmark_id, data) in enumerate(items.items()):
+        database.documents[("users", uid, "bookmarks", bookmark_id)] = {
+            "timestamp": LIST_START - timedelta(minutes=index), **data,
+        }
+
+
+def _list_bookmarks(database, path):
+    limiter._storage.reset()
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(bookmarks_router.router)
     with patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"), \
-            patch.object(bookmarks_router, "db_firestore", fake_db):
-        client = TestClient(app)
-        first = client.get("/bookmarks?limit=2", headers={"Authorization": "Bearer token"})
-        cursor = first.json()["next_cursor"]
-        second = client.get(
-            "/bookmarks?limit=2&cursor=" + cursor,
-            headers={"Authorization": "Bearer token"},
-        )
-    assert first.status_code == 200
-    assert [item["id"] for item in first.json()["bookmarks"]] == ["first_id", "second_id"]
+            patch.object(bookmarks_router, "db_firestore", database):
+        return TestClient(app).get(path, headers={"Authorization": "Bearer token"})
+
+
+def _ids(response):
+    assert response.status_code == 200, response.text
+    return [item["id"] for item in response.json()["bookmarks"]]
+
+
+def test_bookmark_list_is_compact_and_cursor_paginated():
+    database = FakeChatDatabase()
+    _seed_bookmarks(database, {
+        "first_id": {"query": "First", "mode": "Normal", "responses": {"OpenAI": "large", "consensus": "full"}},
+        "second_id": {"query": "Second", "responses": {"Gemini": "large"}},
+        "third_id": {"query": "Third", "responses": {"Grok": "large"}},
+    })
+    first = _list_bookmarks(database, "/bookmarks?limit=2")
+    second = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + first.json()["next_cursor"])
+
+    assert _ids(first) == ["first_id", "second_id"]
     assert "responses" not in first.json()["bookmarks"][0]
     assert first.json()["bookmarks"][0]["has_consensus"] is True
-    assert second.json()["bookmarks"] == [{
+    [third] = second.json()["bookmarks"]
+    assert third.pop("timestamp").startswith("2026-10-11T11:58:00")
+    assert third == {
         "id": "third_id", "query": "Third", "title": "Third", "title_source": "", "mode": "",
-        "timestamp": None, "has_consensus": False, "model_count": 1,
+        "has_consensus": False, "model_count": 1,
         "source_count": 0, "attachment_count": 0,
-    }]
+    }
     assert second.json()["has_more"] is False
+
+
+def test_next_bookmark_page_survives_its_boundary_row_being_deleted():
+    """Lokaler Test 2026-10-11: "Load more" antwortete 400 "Bookmark cursor
+    expired", weil der Cursor nur das Dokument der letzten Zeile nannte und
+    genau dieses Bookmark inzwischen geloescht war."""
+    database = FakeChatDatabase()
+    _seed_bookmarks(database, {f"b{index}": {"query": f"Q{index}"} for index in range(1, 6)})
+    first = _list_bookmarks(database, "/bookmarks?limit=2")
+    assert _ids(first) == ["b1", "b2"]
+
+    del database.documents[("users", "uid-1", "bookmarks", "b2")]
+    after = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + first.json()["next_cursor"])
+
+    assert _ids(after) == ["b3", "b4"]
+    assert after.json()["has_more"] is True
+
+
+def test_next_bookmark_page_continues_when_its_boundary_row_moves_up():
+    # An Agent turn saves its bookmark with a new timestamp. The next page
+    # still starts where the list stood instead of again at the top.
+    database = FakeChatDatabase()
+    _seed_bookmarks(database, {f"b{index}": {"query": f"Q{index}"} for index in range(1, 6)})
+    first = _list_bookmarks(database, "/bookmarks?limit=2")
+
+    database.documents[("users", "uid-1", "bookmarks", "b2")]["timestamp"] = LIST_START + timedelta(hours=1)
+    after = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + first.json()["next_cursor"])
+
+    assert _ids(after) == ["b3", "b4"]
+
+
+def test_bookmark_pages_split_equal_timestamps_without_losing_a_row():
+    database = FakeChatDatabase()
+    for bookmark_id in ("b1", "b2", "b3", "b4"):
+        database.documents[("users", "uid-1", "bookmarks", bookmark_id)] = {
+            "query": bookmark_id, "timestamp": LIST_START,
+        }
+    first = _list_bookmarks(database, "/bookmarks?limit=2")
+    second = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + first.json()["next_cursor"])
+
+    assert _ids(first) + _ids(second) == ["b4", "b3", "b2", "b1"]
+
+
+def _cursor(payload):
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+
+
+@pytest.mark.parametrize("cursor", [
+    "garbage",
+    # The previous format named only a document, which is no position.
+    _cursor({"id": "b2"}),
+    # A timestamp that does not round-trip would start at a shifted position.
+    _cursor({"t": "2026-10-11T12:00:00Z", "id": "b2"}),
+    _cursor({"t": "2026-10-11T12:00:00.000000Z", "id": "b2/../x"}),
+])
+def test_an_unusable_bookmark_cursor_is_a_client_error(cursor):
+    database = FakeChatDatabase()
+    _seed_bookmarks(database, {"b1": {"query": "Q1"}})
+
+    response = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + cursor)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid bookmark cursor"
 
 
 def test_bookmark_detail_is_owner_scoped_and_frontend_loads_on_open():

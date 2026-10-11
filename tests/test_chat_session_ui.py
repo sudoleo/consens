@@ -595,6 +595,13 @@ const run = (overrides = {{}}) => session.beginRun({{
   session.reset();
   assert.strictEqual(session.lastPersistenceError, "");
 
+  // Agent legt seinen Chat selbst an (agent-chat.js) und nutzt dieselben
+  // Texte - auch in der Form, in die main.py das detail verpackt.
+  assert.ok(/maximum number of saved conversations/.test(App.chatPersistenceErrorMessage({{
+    error: {{ error: "At most 200 chats per account", error_code: "chat_limit_reached" }}
+  }})));
+  assert.strictEqual(App.chatPersistenceErrorMessage({{ error: "Authentication failed" }}), "");
+
   console.log("OK");
 }})().catch(error => {{
   console.error(error);
@@ -614,6 +621,15 @@ def test_query_send_shows_the_real_reason_instead_of_a_dead_end_retry():
     assert "context.chatSession.lastPersistenceError" in send
     # Der generische Hinweis bleibt der Fallback, nicht die einzige Antwort.
     assert '|| "The conversation turn could not be prepared. Please retry."' in send
+
+
+def test_agent_chat_creation_reports_the_chat_limit_like_consensus():
+    """Lokaler Test 2026-10-11: POST /chats endete im Agent mit 403
+    chat_limit_reached, der Lauf zeigte nur "At most 200 chats per account"."""
+    agent = (ROOT / "static" / "js" / "agent-chat.js").read_text(encoding="utf-8")
+    creation = agent.split('fetch("/chats", {', 1)[1].split("chatId = data.chat.id;", 1)[0]
+
+    assert "App.chatPersistenceErrorMessage?.(data) || apiError(data)" in creation
 
 
 def test_archived_turns_render_the_same_difference_cards_as_the_live_run():

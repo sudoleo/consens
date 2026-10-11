@@ -100,6 +100,10 @@ class FakeCollectionRef:
     def where(self, filter=None):
         return FakeQuery(self, [], filters=[filter])
 
+    def select(self, _field_paths):
+        # Projection only trims the payload; the fake returns whole documents.
+        return FakeQuery(self, [])
+
     def limit(self, value):
         # Echte CollectionReference kann das auch ohne vorheriges order_by.
         return FakeQuery(self, []).limit(value)
@@ -1826,6 +1830,57 @@ def test_chat_count_is_capped_per_owner_and_scoped_to_that_owner(chat_api, monke
     victim = next(iter(database.chats("owner-uid")))
     assert client.delete(f"/chats/{victim}", headers=AUTH_OWNER).status_code == 200
     assert client.post("/chats", json={}, headers=AUTH_OWNER).status_code == 201
+
+
+def test_chat_limit_first_frees_chats_no_bookmark_leads_to(chat_api, monkeypatch):
+    """Lokaler Test 2026-10-11: POST /chats endete mit 403 chat_limit_reached.
+
+    Der Browser legt den Chat vor dem ersten Turn an; wird die Nachricht dann
+    abgelehnt, bekommt der Chat nie ein Bookmark. Solche Chats sieht und
+    loescht niemand, sie belegten aber das Limit.
+    """
+    monkeypatch.setattr(chat_store, "MAX_CHATS_PER_OWNER", 3)
+    client, database = chat_api
+    visible = create_chat(client)
+    unreachable = create_chat(client)
+    starting = create_chat(client)
+    database.documents[("users", "owner-uid", "bookmarks", "b_visible")] = {
+        "chat_id": visible["id"], "timestamp": database.clock,
+    }
+    for chat in (visible, unreachable):
+        database.documents[("users", "owner-uid", "chats", chat["id"])]["updated_at"] -= timedelta(hours=2)
+
+    created = client.post("/chats", json={}, headers=AUTH_OWNER)
+
+    assert created.status_code == 201
+    chats = database.chats("owner-uid")
+    assert chats[unreachable["id"]]["status"] == "deleting"
+    assert chats[visible["id"]]["status"] == "active"
+    # Young enough to still get its first answer and bookmark.
+    assert chats[starting["id"]]["status"] == "active"
+    assert database.documents[("users", "owner-uid", "chat_state", "quota")]["active_count"] == 3
+    # The regular durable deletion finishes the cascade.
+    assert any(path[0] == chat_store.CHAT_DELETION_JOBS_COLLECTION for path in database.documents)
+
+    # Nothing left to free: the limit holds.
+    blocked = client.post("/chats", json={}, headers=AUTH_OWNER)
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["error_code"] == "chat_limit_reached"
+
+
+def test_a_failing_reclaim_keeps_the_chat_limit_answer(chat_api, monkeypatch):
+    monkeypatch.setattr(chat_store, "MAX_CHATS_PER_OWNER", 1)
+    client, _database = chat_api
+    create_chat(client)
+
+    def unavailable(self, uid, *, now=None):
+        raise RuntimeError("bookmark scan unavailable")
+
+    monkeypatch.setattr(chat_store.ChatStore, "reclaim_unreachable_chats", unavailable)
+    blocked = client.post("/chats", json={}, headers=AUTH_OWNER)
+
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["error_code"] == "chat_limit_reached"
 
 
 def test_chat_count_falls_back_to_a_bounded_scan_without_aggregation(

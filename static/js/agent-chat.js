@@ -1412,7 +1412,8 @@
           });
           return { response, data: await response.json() };
         }, { signal });
-        if (!response.ok) throw new Error(apiError(data));
+        // The chat limit says what to do ("Delete one…"), not the raw server text.
+        if (!response.ok) throw new Error(App.chatPersistenceErrorMessage?.(data) || apiError(data));
         chatId = data.chat.id;
       }
       if (!registry.isAuthCurrent(context) || signal.aborted) return;

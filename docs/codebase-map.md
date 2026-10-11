@@ -2296,6 +2296,11 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   Account-Menü neu zu laden. `/usage` läuft beim Start nur noch, wenn
   `/user_status` scheiterte (gleiche Nutzlast).
   Die paginierte Liste hält nur kompakte Metadaten in `window.bookmarksData`;
+  `GET /bookmarks` sortiert nach `timestamp` und Dokument-ID (absteigend, kein
+  eigener Index) und gibt als `next_cursor` die Sortierwerte der letzten Zeile
+  aus (seit 2026-10-11): Wird dieses Bookmark gelöscht oder wandert es durch
+  einen neuen Agent-Turn nach oben, setzt „Load more“/die Suche trotzdem dort
+  fort, wo die Liste stand (vorher 400 „Bookmark cursor expired“).
   Vollinhalte kommen erst beim Öffnen über `GET /bookmarks/{id}` und nur das
   aktuell geöffnete Detail bleibt im Cache. Suche lädt bei Bedarf weitere
   Metadatenseiten, nicht deren Antworten. Saves reduzieren das serverseitige
@@ -5726,6 +5731,14 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     Owner-Bestand. Create und das Setzen von `status=deleting` erhöhen bzw.
     verringern ihn in derselben Transaktion. Erst danach löscht die idempotente
     Kaskade Turns, Modellantworten, Context-Versionen und zuletzt den Chat.
+    Bei erreichtem Limit (`MAX_CHATS_PER_OWNER`, 403 `chat_limit_reached`)
+    räumt `create_chat` seit 2026-10-11 zuerst Chats ab, auf die kein Bookmark
+    zeigt und die älter als 1 h sind (`reclaim_unreachable_chats`, max. 25,
+    reguläre Löschung per `request_chat_deletion`). Solche Chats entstehen, weil
+    der Browser den Chat vor dem ersten Turn anlegt (abgelehnte Agent-Nachricht,
+    Stop, Lauf ohne gespeicherte Antwort); ohne Bookmark sieht und löscht sie
+    niemand. Erst wenn nichts frei wird, bleibt es bei 403; Agent zeigt dann wie
+    Consensus den Text aus `App.chatPersistenceErrorMessage` (chat-session.js).
   - `chats/{chat_id}/turns/{turn_id}` — `schema_version`, monoton aus dem
     Chat-Zähler vergebene `position`, `status=pending|completed|failed`, begrenzte `question` und
     `mode`, boolesches `deep_search`, begrenzte/normalisierte

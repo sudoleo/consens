@@ -9,6 +9,7 @@ import logging
 import unicodedata
 from typing import Any, Literal
 from firebase_admin import firestore
+from google.cloud.firestore_v1.field_path import FieldPath
 from fastapi import APIRouter, Request, Body, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
@@ -30,6 +31,8 @@ from app.services.chat_store import (
     ChatStore,
     InvalidChatCursor,
     derive_title,
+    format_cursor_timestamp,
+    parse_cursor_timestamp,
 )
 from app.services.share_snapshots import sanitize_differences_data
 from app.services.chat_titles import generate_title
@@ -372,20 +375,31 @@ def _bookmark_meta(bookmark_id, data):
     }
 
 
-def _encode_bookmark_cursor(bookmark_id):
-    raw = json.dumps({"id": str(bookmark_id)}, separators=(",", ":")).encode("utf-8")
+def _encode_bookmark_cursor(boundary):
+    """Where the next page starts: the last row's sort values, not its document.
+
+    A cursor that only named the document failed with 400 once that bookmark
+    was deleted, and restarted the list at the top once an Agent turn moved it
+    up. The values stay valid whatever happens to the row itself.
+    """
+    raw = json.dumps({
+        "t": format_cursor_timestamp((boundary.to_dict() or {}).get("timestamp")),
+        "id": str(boundary.id),
+    }, separators=(",", ":")).encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def _decode_bookmark_cursor(cursor):
     try:
         raw = base64.urlsafe_b64decode(str(cursor) + "=" * (-len(str(cursor)) % 4))
-        bookmark_id = str(json.loads(raw.decode("utf-8")).get("id") or "")
+        payload = json.loads(raw.decode("utf-8"))
+        bookmark_id = str(payload.get("id") or "")
+        timestamp = parse_cursor_timestamp(payload.get("t"))
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid bookmark cursor") from exc
     if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
         raise HTTPException(status_code=400, detail="Invalid bookmark cursor")
-    return bookmark_id
+    return timestamp, bookmark_id
 
 
 def sanitize_attachment_meta(raw):
@@ -409,18 +423,22 @@ def load_bookmarks(
     uid = _bookmark_uid(request)
     try:
         bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
-        query_ref = bookmarks_ref.order_by("timestamp", direction=firestore.Query.DESCENDING)
+        # The document ID breaks timestamp ties, so the cursor values name
+        # exactly one position. Same order as the implicit one: no extra index.
+        query_ref = bookmarks_ref.order_by(
+            "timestamp", direction=firestore.Query.DESCENDING
+        ).order_by(FieldPath.document_id(), direction=firestore.Query.DESCENDING)
         if cursor:
-            cursor_id = _decode_bookmark_cursor(cursor)
-            cursor_snapshot = bookmarks_ref.document(cursor_id).get()
-            if not cursor_snapshot.exists:
-                raise HTTPException(status_code=400, detail="Bookmark cursor expired")
-            query_ref = query_ref.start_after(cursor_snapshot)
+            timestamp, cursor_id = _decode_bookmark_cursor(cursor)
+            query_ref = query_ref.start_after({
+                "timestamp": timestamp,
+                FieldPath.document_id(): cursor_id,
+            })
         docs = list(query_ref.limit(limit + 1).stream())
         has_more = len(docs) > limit
         page = docs[:limit]
         bookmarks = [_bookmark_meta(doc.id, doc.to_dict() or {}) for doc in page]
-        next_cursor = _encode_bookmark_cursor(page[-1].id) if has_more and page else None
+        next_cursor = _encode_bookmark_cursor(page[-1]) if has_more and page else None
         return {
             "status": "success",
             "bookmarks": bookmarks,

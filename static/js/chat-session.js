@@ -592,4 +592,6 @@
   const chatSession = createChatSession();
   window.App.createChatSession = createChatSession;
   window.App.chatSession = chatSession;
+  // Agent creates its chats itself (agent-chat.js) and shows the same texts.
+  window.App.chatPersistenceErrorMessage = persistenceErrorMessage;
 })();
