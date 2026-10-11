@@ -299,7 +299,7 @@ _CONSENSUS_ENGINE_MODELS = {
     "DeepSeek": cfg.DEFAULT_DEEPSEEK_MODEL,
     "DeepSeek-Pro": "deepseek-v4-pro",
     "Grok": cfg.DEFAULT_GROK_MODEL,
-    "Grok-Pro": "grok-4.3",
+    "Grok-Pro": cfg.GROK_PRO_MODEL,
     "Kimi": cfg.KIMI_BASE_MODEL,
     "Kimi-Pro": cfg.KIMI_PRO_MODEL,
     "GLM": cfg.GLM_BASE_MODEL,

@@ -50,6 +50,9 @@ def count_words(text: Optional[str]) -> int:
     return len((text or "").strip().split())
 
 def validate_model(model: str, allowed: set, provider: str, is_pro: bool = False):
+    # Checks the current form of a migrated ID (grok-4.3-no-reasoning ->
+    # grok-4.3, 2026-10-11); the request itself resolves it the same way.
+    model = cfg.canonical_model_id(model) if model else model
     if model and model not in allowed:
         raise HTTPException(
             status_code=400,

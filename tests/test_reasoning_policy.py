@@ -134,3 +134,56 @@ def test_stream_and_json_engine_send_same_capped_policy():
         with mock.patch("app.services.llm.streaming.stream_chat_completion_text", return_value=iter([])) as stream:
             list(engine._stream_engine_text(*args, **kwargs))
             assert stream.call_args.kwargs["request_config"]["reasoning"] == {"effort": "low"}
+
+
+def _load(document):
+    db = mock.Mock()
+    snapshot = db.collection.return_value.document.return_value.get.return_value
+    snapshot.exists = True
+    snapshot.to_dict.return_value = document
+    with mock.patch("app.core.security.db_firestore", db):
+        assert cfg.load_models_from_db(strict=True, persist_backfill=False)
+
+
+def test_a_retired_override_never_blocks_the_model_config():
+    """grok-4.3 was a savings model until it became the free base Grok
+    (2026-10-11). A stored override for it must not leave prod on code
+    defaults; admin saves still refuse unknown models."""
+    stale = {"profile": "economy", "models": {"grok-4.3": "existing", cfg.OPENAI_PRO_MODEL: "existing"}}
+    _load({**model_document(), "reasoning_policy": stale})
+    assert cfg.get_reasoning_policy() == {"profile": "economy", "models": {cfg.OPENAI_PRO_MODEL: "existing"}}
+    with pytest.raises(ValueError, match="Unsupported reasoning override: grok-4.3"):
+        cfg.validate_reasoning_policy(stale)
+
+
+def _pre_merge_document():
+    document = model_document()
+    document["grok"] = ["grok-4.3-no-reasoning", "grok-4.20-non-reasoning", "grok-4.3", "grok-4.20", "grok-4.7"]
+    document["premium"] = sorted({*document["premium"], "grok-4.3", "grok-4.20"})
+    document["defaults"] = {**document["defaults"], "grok": "grok-4.3-no-reasoning"}
+    return document
+
+
+def test_a_pre_merge_document_frees_grok_43_in_runtime_and_admin_alike():
+    """Prod still lists grok-4.3 (formerly "· Reasoning") as Pro."""
+    document = _pre_merge_document()
+    assert cfg.predates_grok_merge(document)
+    _load(document)
+    assert cfg.get_ordered_models("grok") == ["grok-4.3", "grok-4.7"]
+    assert "grok-4.3" not in cfg.PREMIUM_MODELS and "grok-4.7" in cfg.PREMIUM_MODELS
+    assert cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["grok"] == "grok-4.3"
+    normalized = admin.normalize_models_document(document)
+    assert normalized["grok"] == ["grok-4.3", "grok-4.7"]
+    assert "grok-4.3" not in normalized["premium"] and normalized["defaults"]["grok"] == "grok-4.3"
+
+
+def test_after_the_merge_the_admin_may_make_grok_43_pro_again():
+    document = _pre_merge_document()
+    document["grok"] = ["grok-4.3", "grok-4.7"]
+    document["defaults"] = {**document["defaults"], "grok": "grok-4.3"}
+    document["premium"] = sorted({*document["premium"]} - {"grok-4.20"})
+    assert not cfg.predates_grok_merge(document)
+    _load(document)
+    assert "grok-4.3" in cfg.PREMIUM_MODELS
+    # The admin view keeps that choice too (no silent revert on save).
+    assert "grok-4.3" in admin.normalize_models_document(document)["premium"]

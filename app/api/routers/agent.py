@@ -366,7 +366,8 @@ def run_agent(request: Request, payload: AgentRequest):
         if turn["status"] == "completed":
             lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
-        messages = store.messages(uid, payload.chat_id, turn, model=model, config=config)
+        chat_sources = []
+        messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources)
         cancellation = ProviderCancellation()
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
@@ -376,6 +377,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
                          source_limits=source_limits, agent_preferences=payload.agent_preferences, memory=memory,
+                         chat_sources=chat_sources,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)

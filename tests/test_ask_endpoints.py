@@ -123,6 +123,21 @@ def test_reasoning_switch_is_open_to_every_tier_and_keeps_the_selected_model(tie
     )
 
 
+@pytest.mark.parametrize("legacy", ["grok-4.3-no-reasoning", "grok-4.20-non-reasoning", "grok-4.20"])
+def test_a_migrated_grok_id_runs_as_grok_43_instead_of_failing_the_allowlist(legacy):
+    """Requests may still carry the former Grok variants (2026-10-11)."""
+    client = make_client()
+    p1, p2 = auth_patches(tier="free")
+    with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
+        response = client.post(
+            "/ask_grok",
+            headers=AUTH_HEADER,
+            json={"question": "hello", "model": legacy, "useOwnKeys": True, "openrouter_key": "sk-user-key"},
+        )
+    assert response.status_code == 200
+    assert run.call_args.kwargs["model"] == "grok-4.3"
+
+
 def test_plus_cannot_ask_a_premium_model():
     client = make_client()
     premium = next(

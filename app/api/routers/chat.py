@@ -1008,6 +1008,10 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     id_token = extract_id_token(request, data)
     api_key = str(data.get("openrouter_key") or "").strip()
     model = data.get("model")
+    if isinstance(model, str) and model:
+        # A request may still carry a migrated ID (grok-4.3-no-reasoning,
+        # 2026-10-11); it would otherwise fail the allowlist below.
+        model = cfg.canonical_model_id(model, provider.key)
 
     tier = TIER_FREE
     entitlements = entitlements_for(tier)

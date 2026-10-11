@@ -635,6 +635,19 @@ GROK_MODEL_MIGRATIONS = {
     )
 }
 DEPRECATED_GROK_MODELS = set(GROK_MODEL_MIGRATIONS)
+# Ein Dokument, das noch eine dieser Varianten fuehrt, stammt von vor der
+# Zusammenlegung: sein "grok-4.3" in "premium" meint die fruehere Pro-Variante
+# "· Reasoning", nicht das heutige freie Grok 4.3. Nur dann faellt es aus der
+# Premium-Liste; danach entscheidet der Admin wieder frei.
+_PRE_MERGE_GROK_IDS = frozenset({GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning", "grok-4.20"})
+
+
+def predates_grok_merge(document) -> bool:
+    """Whether a stored models document still lists a pre-2026-10-11 Grok variant."""
+    data = document if isinstance(document, dict) else {}
+    defaults = data.get("defaults") if isinstance(data.get("defaults"), dict) else {}
+    stored = [*(data.get("grok") or []), *(data.get("premium") or []), defaults.get("grok")]
+    return any(model in _PRE_MERGE_GROK_IDS for model in stored if isinstance(model, str))
 REMOVED_MODEL_IDS = {
     # Nicht mehr im OpenRouter-Katalog vorhandene Legacy-IDs. Die Tombstones
     # verhindern, dass alte Firestore-Konfigurationen sie erneut aktivieren.
@@ -955,7 +968,11 @@ def reasoning_savings_models() -> set[str]:
     }
 
 
-def validate_reasoning_policy(value) -> dict:
+def validate_reasoning_policy(value, *, drop_retired: bool = False) -> dict:
+    """``drop_retired`` (stored documents): an override of a model that is no
+    savings model any more is dropped instead of failing the whole load. The
+    admin table offered one for grok-4.3 until it became the free base Grok
+    (2026-10-11); a stale entry must not leave prod on code defaults."""
     if not isinstance(value, dict) or set(value) != {"profile", "models"}:
         raise ValueError("reasoning_policy requires profile and models")
     if value["profile"] not in ("existing", "economy"):
@@ -963,10 +980,14 @@ def validate_reasoning_policy(value) -> dict:
     overrides = value["models"]
     if not isinstance(overrides, dict) or len(overrides) > 100:
         raise ValueError("reasoning_policy.models must be a model mapping")
+    kept = {}
     for model, setting in overrides.items():
+        if model not in reasoning_savings_models() and drop_retired:
+            continue
         if model not in reasoning_savings_models() or setting not in ("existing", "economy"):
             raise ValueError(f"Unsupported reasoning override: {model}")
-    return {"profile": value["profile"], "models": dict(overrides)}
+        kept[model] = setting
+    return {"profile": value["profile"], "models": kept}
 
 
 def get_reasoning_policy() -> dict:
@@ -974,7 +995,8 @@ def get_reasoning_policy() -> dict:
 
 
 def apply_reasoning_policy(value=None) -> None:
-    policy = validate_reasoning_policy(value if value is not None else {"profile": "existing", "models": {}})
+    policy = validate_reasoning_policy(value if value is not None else {"profile": "existing", "models": {}},
+                                       drop_retired=True)
     REASONING_POLICY.update(policy)
 
 
@@ -1255,7 +1277,7 @@ def apply_judge_models(overrides: dict | None) -> None:
     (Modul-Aliasse in consensus_engine/resolve_engine bleiben live)."""
     data = overrides if isinstance(overrides, dict) else {}
     for provider, base in _BASE_DIFFERENCES_JUDGE_BY_PROVIDER.items():
-        chosen = str(data.get(provider) or "").strip()
+        chosen = canonical_model_id(str(data.get(provider) or "").strip(), provider)
         if not (chosen and is_valid_judge_model(provider, chosen)):
             allowed = _provider_allowed_sets().get(provider, set())
             chosen = next(
@@ -1282,7 +1304,7 @@ def apply_pro_judge_models(overrides: dict | None) -> None:
     zurueck. Mutiert das dict in-place."""
     data = overrides if isinstance(overrides, dict) else {}
     for provider, base in _BASE_PRO_JUDGE_BY_PROVIDER.items():
-        chosen = str(data.get(provider) or "").strip()
+        chosen = canonical_model_id(str(data.get(provider) or "").strip(), provider)
         if not (chosen and is_valid_judge_model(provider, chosen)):
             allowed = _provider_allowed_sets().get(provider, set())
             ordered = get_ordered_models(provider)
@@ -1310,7 +1332,7 @@ def apply_chat_memory_models(overrides: dict | None) -> None:
     fallen je Provider auf die Basis zurueck. Mutiert das dict in-place."""
     data = overrides if isinstance(overrides, dict) else {}
     for provider, base in _BASE_CHAT_MEMORY_MODEL_BY_PROVIDER.items():
-        chosen = str(data.get(provider) or "").strip()
+        chosen = canonical_model_id(str(data.get(provider) or "").strip(), provider)
         if not (chosen and is_valid_judge_model(provider, chosen)):
             allowed = _provider_allowed_sets().get(provider, set())
             chosen = next(
@@ -1968,10 +1990,8 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 for deprecated in PROVIDER_DEPRECATED_MODELS.values():
                     PREMIUM_MODELS.difference_update(deprecated)
                 PREMIUM_MODELS.intersection_update(_all_allowed_models())
-                # Das Basismodell einer Familie ist ihr guenstiger Free-Default.
-                # Ein aelteres Dokument fuehrt es evtl. noch als Pro: Grok 4.3
-                # war bis 2026-10-11 die Pro-Variante "· Reasoning".
-                PREMIUM_MODELS.difference_update(_BASE_FREE_DEFAULTS.values())
+                if predates_grok_merge(data):
+                    PREMIUM_MODELS.discard(GROK_BASE_MODEL)
                 # Der <Familie>-Pro-Alias ist ein harter Produktvertrag. Bei
                 # neuen Registry-Familien kennt ein altes Firestore-Dokument
                 # deren Pro-Modell noch nicht; es darf dadurch nicht Free sein.

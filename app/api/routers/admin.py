@@ -668,6 +668,7 @@ def normalize_models_document(data: dict) -> dict:
     missing_provider_keys = [
         provider for provider in PROVIDER_KEYS if provider not in (data or {})
     ]
+    pre_merge_grok = cfg.predates_grok_merge(data)
     normalized = dict(data or {})
     # Provider-Listen behalten ihre (Admin-)Reihenfolge bei. Alte IDs werden
     # migriert, entfernte/stillgelegte bei jedem Admin-Read/-Save bereinigt.
@@ -693,6 +694,9 @@ def normalize_models_document(data: dict) -> dict:
     for deprecated in cfg.PROVIDER_DEPRECATED_MODELS.values():
         premium.difference_update(deprecated)
     premium.intersection_update(configured_models)
+    if pre_merge_grok:
+        # Same rule as cfg.load_models_from_db: "grok-4.3" was the Pro variant.
+        premium.discard(cfg.GROK_BASE_MODEL)
     premium.update(
         cfg.PROVIDERS[provider].pro_model
         for provider in PROVIDER_KEYS
@@ -1274,7 +1278,8 @@ def get_models(request: Request):
         if doc.exists:
             raw_data = doc.to_dict() or {}
             data = normalize_models_document(raw_data)
-            data["reasoning_policy"] = cfg.validate_reasoning_policy(raw_data.get("reasoning_policy", {"profile": "existing", "models": {}}))
+            data["reasoning_policy"] = cfg.validate_reasoning_policy(
+                raw_data.get("reasoning_policy", {"profile": "existing", "models": {}}), drop_retired=True)
             data["limits"] = normalize_limits_config(raw_data.get("limits"))
             data["memory_edit"] = cfg.normalize_memory_edit_config(
                 raw_data.get("memory_edit")

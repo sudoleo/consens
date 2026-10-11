@@ -117,7 +117,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0{step}".encode()).hexdigest()
         return self.db.collection("users").document(uid).collection("llm_calls").document(key)
 
-    def messages(self, uid, chat_id, target, model=None, config=None):
+    def messages(self, uid, chat_id, target, model=None, config=None, sources=None):
+        """The conversation for the target turn. ``sources``, a list, receives
+        the saved sources of the earlier turns it includes (read_source may
+        open them; agent_read_source, "Sources from the chat itself")."""
         config = config or prompt_config.get_config()
         system_prompt = config["prompts"]["agent"]
         messages = [{"role": "system", "content": system_prompt}]
@@ -142,6 +145,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     raise ValueError("This conversation is too long. Start a new chat.")
                 messages.extend([{"role": "user", "content": question},
                                  {"role": "assistant", "content": answer}])
+                if sources is not None:
+                    sources.extend(source for source in turn.get("sources") or [] if isinstance(source, dict))
             cursor = page.get("next_cursor") or ""
             if not cursor:
                 break

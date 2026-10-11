@@ -165,8 +165,10 @@ class Worker:
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  check_sources=False, source_limits=None, file_context=None, google_selection=None, google_data_consent=False,
-                 agent_preferences=None, memory=None, google_data=False, **kwargs):
+                 agent_preferences=None, memory=None, google_data=False, chat_sources=None, **kwargs):
         super().__init__(**kwargs)
+        # Saved sources of the chat's earlier messages: read_source may open them.
+        self.chat_sources = list(chat_sources or [])
         # Freeze the actual conversation before runtime instructions, tool
         # transcripts or private continuation data are appended to messages.
         # The answer step has its own clock; the app context block is not the user's text.

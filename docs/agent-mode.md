@@ -1033,12 +1033,16 @@ Nach einem Vergleich darf das Chatmodell (Orchestrator) eine Quelle, die eine
 Vergleichsantwort zitiert hat, selbst öffnen: um einen konkreten Widerspruch
 zwischen den Antworten zu klären, eine Quelle zu prüfen, nach der der Nutzer
 fragt, oder den genauen Wortlaut einer Kernaussage (Zahl, Definition, offizielle
-Aussage) zu holen. Seit 2026-10-11 zählen auch Links, die im Chat selbst stehen:
-in Nachrichten des Nutzers und in früheren Antworten (`chat_urls`, Label „your
-message“/„an earlier answer“). Vorher fand „kannst du eine Quelle direkt
-nachlesen?“ nach einer Antwort mit tri247.com-Links nichts, was es öffnen durfte.
-Erfinden kann der Orchestrator eine URL weiterhin nicht: jede steht im Gespräch,
-eine gelesene Seite kann keinen Abruf auf eine eigene URL lenken. Schalter:
+Aussage) zu holen. Seit 2026-10-11 zählen auch die gespeicherten Quellen früherer
+Nachrichten des Chats (`turn.sources`, über `AgentRunStore.messages(sources=…)` →
+`DelegationLoop.chat_sources`, Label „an earlier message's sources“) und URLs, die
+der Nutzer selbst geschrieben hat (`user_urls`, Label „your message“). Vorher fand
+„kannst du eine Quelle direkt nachlesen?“ nach einer Antwort mit tri247.com-Links
+nichts, was es öffnen durfte. **Nicht** lesbar sind Links, die nur im Text einer
+früheren Antwort stehen: Der Antwortschritt schreibt aus nicht vertrauenswürdiger
+Evidenz, eine präparierte Seite könnte ihn eine URL mit Chat-Inhalt schreiben
+lassen, die ein späterer Turn ohne Klick abrufen würde (Review 2026-10-11).
+Gespeicherte Quellen sind Provider-Zitate oder bereits gelesene Seiten. Schalter:
 `AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
 Code: `agent_read_source.py`.
 

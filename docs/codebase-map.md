@@ -2782,8 +2782,9 @@ negativ, und `/health/metrics` zählt `search_overrun:<modell>` (agent-mode.md,
 Das Orchestrator-Tool `read_source` (seit 2026-10-11 standardmäßig an,
 `AGENT_READ_SOURCES=0` schaltet ab; `agent_read_source.SourceReader`, nur
 Kontomodus, nicht bei Google-Daten) öffnet nach einem Vergleich eine von einer
-Vergleichsantwort zitierte URL oder einen Link, der im Chat steht (Nachrichten
-des Nutzers, frühere Antworten: `chat_urls` über `loop.answer_conversation`),
+Vergleichsantwort zitierte URL, eine gespeicherte Quelle früherer Nachrichten
+(`AgentRunStore.messages(sources=…)` → `DelegationLoop.chat_sources`) oder eine
+URL aus den Nachrichten des Nutzers (`user_urls`; nie Links nur aus Antworttext),
 über einen abgerechneten Helferschritt (`DelegationLoop._step(...,
 server_tools=[engines.web_fetch_tool(...)], completion=PageFetch())`, Responses
 API, Text aus dem Output-Item `openrouter:web_fetch`; über Chat Completions
@@ -6400,9 +6401,15 @@ seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
 Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten
 `grok-4.3-no-reasoning`, `grok-4.20-non-reasoning` und `grok-4.20` migrieren
 beim Laden und in `comparison_selection`/`resolve_agent_model` auf `grok-4.3`
-(`GROK_MODEL_MIGRATIONS`); der Grok-Pro-Alias ist `grok-4.7`. Weil das alte
-Dokument `grok-4.3` noch unter `premium` führt, nimmt der Loader die
-Basis-Free-Defaults (`_BASE_FREE_DEFAULTS`) immer aus `PREMIUM_MODELS`.
+(`GROK_MODEL_MIGRATIONS`), ebenso in `base.validate_model`/`handle_ask` (`/ask_*`)
+und den Judge-/Chat-Memory-Zuordnungen; der Grok-Pro-Alias ist `grok-4.7`. Ein
+Dokument von vor der Zusammenlegung (`predates_grok_merge`: führt noch eine der
+alten Varianten) meint mit `grok-4.3` unter `premium` die frühere Pro-Variante;
+Loader und `admin.normalize_models_document` nehmen es dann aus der Pro-Liste.
+Danach entscheidet der Admin wieder frei. Eine gespeicherte Reasoning-Ausnahme
+für ein Modell, das kein Sparmodell mehr ist, verwirft das Laden
+(`validate_reasoning_policy(drop_retired=True)`) statt die ganze Konfiguration
+abzulehnen; Admin-Saves bleiben strikt.
   Presets dürfen ausschließlich bereits konfigurierte Provider-Modelle
   referenzieren; sie fügen selbst keine Providerzeilen hinzu.
   `cfg.virtual_model_ids()` listet alle internen IDs, deren API-Modell

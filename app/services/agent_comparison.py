@@ -1128,8 +1128,8 @@ class ComparisonTools:
             # The orchestrator now sees the answers: the moment to decide on a read.
             instruction = ("If the user asked you to read or check a source, if these answers disagree on a fact that "
                            "matters, or if the answer needs exact wording, first read the source that decides it with "
-                           "read_source (only URLs listed in the answers' sources or linked in this chat); otherwise do "
-                           "not read. After a read, no further comparison is possible. " + instruction)
+                           "read_source (only URLs listed in the answers' or earlier messages' sources, or written by "
+                           "the user); otherwise do not read. After a read, no further comparison is possible. " + instruction)
         # Routing needs the gist; the synthesis receives the complete answers.
         limit = loop.policy.result_chars
         routed = [{**a, "text": a["text"][:limit], **({"text_shortened_for_routing": True} if len(a["text"]) > limit else {})}

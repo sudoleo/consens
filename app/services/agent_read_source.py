@@ -13,8 +13,8 @@ standard judge model (the fetched text arrives there as an output item). The
 text becomes the tool result, answer evidence (``read_sources``) and part of
 the Coverage judge's basis, and it is saved with the review.
 
-Bounds: only URLs that a comparison answer of this message cited or that stand
-in the chat itself (the user's messages, earlier answers), only after a
+Bounds: only URLs that a comparison answer of this message cited, that an
+earlier message of the chat saved as a source, or that the user wrote, only after a
 comparison and before the answer, at most READS_PER_MESSAGE pages per message
 and READS_PER_STEP per routing step, READ_CONTENT_TOKENS per page. Never for
 comparison models, the answer step or the judges, never in chats with Google
@@ -96,39 +96,45 @@ def url_key(value):
     return urlunsplit(("https", parts.netloc, path, parts.query, ""))
 
 
-# Links in the chat itself (2026-10-11): asked "kannst du eine Quelle direkt
-# nachlesen?" after an answer citing tri247.com, the Agent could open nothing,
-# because only this message's comparison answers counted. A URL the user wrote
-# or an earlier answer cited stands in the conversation, so the orchestrator
-# still cannot make one up (a page cannot steer a read to a URL of its own).
+# Sources from the chat itself (2026-10-11): asked "kannst du eine Quelle
+# direkt nachlesen?" after an answer citing tri247.com, the Agent could open
+# nothing, because only this message's comparison answers counted. Two more
+# kinds are readable now, neither of which a page can steer:
+# * the sources saved with the chat's earlier messages (provider citations,
+#   pages read before; DelegationLoop.chat_sources from AgentRunStore.messages);
+# * URLs the user wrote (user_urls). Links in earlier answer TEXT are not: the
+#   answer step writes from untrusted evidence, and an injected page could
+#   make it write a URL carrying chat content for a later, click-free fetch.
 # One character class, no nested quantifier: linear on any text.
 _CHAT_URL = re.compile(r"https?://[^\s<>\"'`\[\]{}|\\^]+")
-_URL_TRAILING = ".,;:!?*_~"
+_URL_TRAILING = ".,;:!?*"
 CHAT_URLS_MAX = 60
-CHAT_LABELS = {"user": "your message", "assistant": "an earlier answer"}
+LABEL_USER = "your message"
+LABEL_EARLIER = "an earlier message's sources"
 
 
-def chat_urls(conversation):
-    """URLs in the chat's messages, latest message first: [(url, role)].
+def user_urls(conversation):
+    """URLs in the user's messages, latest message first.
 
     Markdown links and bare URLs alike; trailing punctuation and an
     unbalanced closing parenthesis (the end of "[text](url)") are cut."""
     found, seen = [], set()
     for message in reversed(conversation or []):
         content = message.get("content") if isinstance(message, dict) else None
-        role = message.get("role") if isinstance(message, dict) else None
-        if not isinstance(content, str) or role not in CHAT_LABELS:
+        if not isinstance(content, str) or message.get("role") != "user":
             continue
         for match in _CHAT_URL.finditer(content):
             url = match.group(0)
-            if len(url) > 2100:  # _safe_url refuses over 2048; keeps the trim below short
+            if len(url) > 2100:  # _safe_url refuses over 2048
                 continue
-            while url and (url[-1] in _URL_TRAILING or (url[-1] == ")" and url.count(")") > url.count("("))):
+            opened, closed = url.count("("), url.count(")")
+            while url and (url[-1] in _URL_TRAILING or (url[-1] == ")" and closed > opened)):
+                closed -= url[-1] == ")"
                 url = url[:-1]
             key = url_key(url) if _safe_url(url) else ""
             if key and key not in seen:
                 seen.add(key)
-                found.append((url, role))
+                found.append(url)
                 if len(found) >= CHAT_URLS_MAX:
                     return found
     return found
@@ -203,8 +209,8 @@ def resolve_redirect(url):
 
 class ReadSourceArgs(ProgressArgs):
     url: str = Field(min_length=1, max_length=2048, description=
-        "One URL exactly as it appears in the sources of a comparison answer of this message, in the user's "
-        "messages or in an earlier answer of this chat.")
+        "One URL exactly as it appears in the sources of a comparison answer of this message, in the sources "
+        "of an earlier message of this chat or in the user's messages.")
     purpose: Literal["settle_contradiction", "exact_wording"] = Field(description=
         "settle_contradiction: the answers disagree on a fact that matters and this source decides it. "
         "exact_wording: the answer will quote a key figure, definition or official statement from it.")
@@ -328,10 +334,11 @@ class SourceReader:
         self.reads = []
         self.lock = threading.Lock()
         self._steps = {}
+        self._user_urls = None
         self.tool = ReadOnlyTool(
             "read_source",
-            "After compare_models: open one source that a comparison answer of this message cited, or a page "
-            "linked in the user's messages or an earlier answer of this chat, to settle a concrete contradiction, "
+            "After compare_models: open one source that a comparison answer of this message cited, a source of "
+            "an earlier message of this chat or a page the user linked, to settle a concrete contradiction, "
             "to check a source the user asks about or to get the exact wording of a key figure, definition or "
             f"statement. At most {READS_PER_MESSAGE} per message; returns the page text.",
             ReadSourceArgs, self.read, activity=self.activity)
@@ -339,7 +346,8 @@ class SourceReader:
     # --- What may be read -------------------------------------------------
     def cited(self):
         """Canonical URL -> {url, title, cited_by}: every source of every
-        answer of this message, then the links in the chat (chat_urls)."""
+        answer of this message, then the chat's earlier sources and the
+        user's links (see _CHAT_URL)."""
         cited = {}
         for comparison in self.comparison.comparisons:
             for answer in comparison.get("answers") or []:
@@ -353,9 +361,17 @@ class SourceReader:
                           "label": answer.get("provider_label") or answer.get("provider")}
                     if by not in entry["cited_by"]:
                         entry["cited_by"].append(by)
-        for url, role in chat_urls(getattr(self.loop, "answer_conversation", None)):
+        for source in getattr(self.loop, "chat_sources", None) or ():
+            url = source.get("url") if isinstance(source, dict) else None
+            key = url_key(url) if _safe_url(url) else ""
+            if key:
+                cited.setdefault(key, {"url": url, "title": str(source.get("title") or ""), "cited_by": [
+                    {"comparison_id": None, "provider": "chat", "label": LABEL_EARLIER}]})
+        if self._user_urls is None:
+            self._user_urls = user_urls(getattr(self.loop, "answer_conversation", None))
+        for url in self._user_urls:
             cited.setdefault(url_key(url), {"url": url, "title": "", "cited_by": [
-                {"comparison_id": None, "provider": "chat", "label": CHAT_LABELS[role]}]})
+                {"comparison_id": None, "provider": "chat", "label": LABEL_USER}]})
         return cited
 
     def _refuse(self, args):
@@ -414,8 +430,8 @@ class SourceReader:
                 entry = self.cited().get(key) if key else None
                 if entry is None:
                     raise ValueError("read_source opens only a URL listed in the sources of a comparison answer of "
-                                     "this message or linked in the user's messages or an earlier answer of this "
-                                     "chat, copied exactly; not URLs from your own search or from a page.")
+                                     "this message or of an earlier message of this chat, or one the user wrote, "
+                                     "copied exactly; not URLs from your own search, an answer's text or a page.")
                 tried = next((r for r in self.reads if r["status"] in {"completed", "failed"}
                               and key in {url_key(r["url"]), url_key(r.get("cited_url"))}), None)
                 if tried is not None and tried["status"] == "failed":
