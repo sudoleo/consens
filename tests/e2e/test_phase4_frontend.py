@@ -649,34 +649,35 @@ def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server)
         context.close()
 
 
-def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, phase4_server):
+@pytest.mark.parametrize("width", [1280, 1000])
+def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, phase4_server, width):
     """Regression fuer den ersten Watch-Hinweis am fertigen Consensus-Fuss.
 
     Der Hinweis muss selbst ueber dem Composer schweben. Die Antwort-Huelle
     darf dafuer keinen hoeheren Stacking-Level bekommen, sonst uebermalt ihr
     Text das fixe Eingabefeld, bis der Hinweis geschlossen wird.
+
+    1280 px: der Watch-Knopf steht im Antwort-Fuss direkt ueber dem Composer
+    (der urspruengliche Fehlerfall). Bis 1099 px zieht mobile-header.js ihn in
+    die Kopfzeile. Die Antwort wird ueber den echten Weg aufgedeckt: von Hand
+    gesetzte Klassen liessen `is-hidden` stehen, die Kopfzeile versteckte den
+    Knopf, und der Hinweis blendet sich ohne sichtbaren Anker zu Recht aus.
     """
 
     context, page = _real_firebase_page(browser, phase4_server)
     try:
-        page.set_viewport_size({"width": 1000, "height": 800})
+        page.set_viewport_size({"width": width, "height": 800})
         page.evaluate(
             """() => {
               localStorage.removeItem("consensio.watchFeatureNudge.dismissed.v1");
               localStorage.removeItem("consensio.watchFeatureNudge.runs.v1");
               window.exitHeroMode();
-              const output = document.getElementById("consensusOutput");
-              const response = document.getElementById("consensusResponse");
-              const footer = document.getElementById("runProvenance");
-              output.hidden = false;
-              output.style.display = "block";
-              output.classList.add("visible");
-              response.hidden = false;
-              footer.hidden = false;
+              window.revealConsensusOutput();
               document.getElementById("consensusAnswerBody").innerHTML =
                 Array.from({ length: 20 }, (_, index) =>
                   `<p>Consensus answer line ${index + 1}: enough content to make the thread scroll.</p>`
                 ).join("");
+              window.App.consensusPipeline.onConsensusEnd();
               window.App.state.set("lastShareResultId", "phase4-nudge-result", "share");
               // Der Hinweis kommt erst ab der dritten abgeschlossenen Frage.
               window.App.watch.showFeatureNudge();
@@ -684,7 +685,37 @@ def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, ph
               window.App.watch.showFeatureNudge();
             }"""
         )
+        expect(page.locator("#runProvenance")).to_be_visible()
+        expect(page.locator("#consensusWatchButton")).to_be_visible()
         expect(page.locator("#watchFeatureNudge")).to_be_visible(timeout=3000)
+        # Der Hinweis gehoert zum Watch-Knopf der Consensus-Antwort, nicht zum
+        # Agent-Anker (#agentWatchAnchor) mit derselben Klasse.
+        expect(page.locator(".watch-feature-anchor:has(#consensusWatchButton)")).to_have_class(
+            re.compile(r"\bhas-feature-nudge\b")
+        )
+        # Beim Lesen laeuft die Antwort unter dem fixen Composer durch. Genau
+        # dort zeigt sich eine angehobene Antwort-Huelle: ihr Text malt dann
+        # ueber dem Eingabefeld. Am Ende des Threads liegt nichts darunter.
+        reading = page.evaluate(
+            """() => {
+              const inputElement = document.querySelector(".input-section");
+              const answerElement = document.getElementById("consensusAnswerBody");
+              const before = answerElement.getBoundingClientRect();
+              window.scrollBy(0, before.top + before.height / 2 - inputElement.getBoundingClientRect().top);
+              const input = inputElement.getBoundingClientRect();
+              const answer = answerElement.getBoundingClientRect();
+              const x = Math.max(input.left, answer.left) + 10;
+              const y = Math.max(input.top, answer.top) + 8;
+              const painted = document.elementFromPoint(x, y);
+              return {
+                answerRunsUnderComposer: answer.top < input.top && answer.bottom > input.top + 8
+                  && answer.left < input.right && answer.right > input.left,
+                composerOwnsPaint: inputElement === painted || inputElement.contains(painted),
+              };
+            }"""
+        )
+        assert reading["answerRunsUnderComposer"] is True
+        assert reading["composerOwnsPaint"] is True
         page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
         page.wait_for_timeout(100)
 
