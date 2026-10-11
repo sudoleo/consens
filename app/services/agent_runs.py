@@ -379,7 +379,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     patch["agent_failure"] = getattr(completion, "failure", None) or {
                         "code": "cancelled" if status == "cancelled" else "agent_failed",
                         "error": "Response stopped. Available results have been saved." if status == "cancelled" else "The response could not be completed. Available results have been saved."}
-                    if completion.text and not review:
+                    # Without a comparison (a direct answer that read pages
+                    # has a review too) the streamed text is all there is.
+                    if completion.text and not (review or {}).get("comparisons"):
                         patch["assistant_response"] = completion.text
                     if review:
                         # A crash/stop cannot leave a saved review looking live.

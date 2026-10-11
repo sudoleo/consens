@@ -513,14 +513,14 @@ def test_refused_tool_calls_say_what_to_change(caplog):
         registry.validate(call("compare_models", ""))
     secret = "private question text"
     with pytest.raises(ValueError) as invalid:
-        registry.validate(call("compare_models", json.dumps({"question": secret, "url": "x", "depth": "deep"})))
+        registry.validate(call("compare_models", json.dumps({"context": secret, "url": "x", "depth": "deep"})))
     text = str(invalid.value)
-    for problem in ("reason: Field required", "next_step: Field required", "url: Extra inputs", "depth: Input should be"):
+    for problem in ("question: Field required", "url: Extra inputs", "depth: Input should be"):
         assert problem in text
     assert len(text) < 500 and "pydantic.dev" not in text and secret not in text
     with caplog.at_level("WARNING"):
         DelegationLoop._log_rejected_call(call("compare_models", json.dumps({"question": secret})), invalid.value)
-    assert "tool=compare_models" in caplog.text and "reason:missing" in caplog.text
+    assert "tool=compare_models" in caplog.text and "question:missing" in caplog.text
     assert secret not in caplog.text
 
 
@@ -528,4 +528,5 @@ def test_cosmetic_compare_fields_are_shortened_not_refused():
     from app.services.agent_comparison import CompareArgs
     args = CompareArgs.model_validate({"question": "Q", "reason": "R" * 900, "next_step": "answer",
                                        "status_update": "S" * 900})
-    assert (args.context, len(args.status_update), len(args.reason)) == ("", 400, 500)
+    # status_update is shortened; the retired fields are ignored, not refused.
+    assert (args.context, len(args.status_update), args.reason, args.next_step) == ("", 400, "", "")

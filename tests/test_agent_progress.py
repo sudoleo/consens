@@ -98,7 +98,7 @@ def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, 
             yield from stream(**kwargs)
             if value.step_id.startswith("completion:") and value.tool_calls:
                 from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
-                assert "Include status_update in every compare_models, judge_answer and check_contradictions call" in AGENT_SYSTEM_PROMPT
+                assert "Include status_update in every compare_models, check_text and answer call" in AGENT_SYSTEM_PROMPT
                 for call in value.tool_calls:
                     args = json.loads(call["function"]["arguments"])
                     args["status_update"] = updates[int(value.step_id.split(":")[-1])]
@@ -128,12 +128,12 @@ def test_progress_arguments_are_bounded_and_published_only_after_validation(stor
     from app.services.llm.agent_client import AgentCompletion
     value = AgentCompletion()
     value.step_id = "completion:0"
-    for index, name in enumerate(("compare_models", "judge_answer", "check_contradictions")):
+    for index, name in enumerate(("compare_models", "check_text", "answer")):
         # An overlong status alone is shortened now (agent_comparison), so an
         # unknown field makes each call invalid.
         args = {"status_update": "x" * 401, "unknown": True}
-        if name == "compare_models":
-            args.update(question="Q", context="", reason="Compare", next_step="more_work")
+        if name != "answer":
+            args.update(question="Q", context="")
         call = {"id": str(index), "function": {"name": name, "arguments": json.dumps(args)}}
         result = loop._execute(loop.registry, value, loop.cancellation, call)
         assert "error" in json.loads(result["content"])

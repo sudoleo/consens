@@ -1221,7 +1221,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Nothing was saved.“ — vorher schlug der ganze Agent-Turn mit der
   irreführenden Provider-Meldung fehl. Eine Nachricht, die nur
   ums Merken/Vergessen bittet, nutzt das Tool `update_memory` und antwortet
-  danach direkt; `_free_floor` lässt diese Direktantwort im freien Modus zu.
+  danach mit kurzem Klartext. Sonst fährt die Pflichtentscheidung `memory` auf
+  `answer` mit (seit 2026-10-11, vorher auf `compare_models`): jede beantwortete
+  Nachricht endet mit `answer`, also bleibt es eine Entscheidung pro Nachricht.
   Serverseitige Verträge: (1) jede Agent-Änderung trägt `evidence`, ein
   wörtliches Zitat, das in einer **Nutzer**-Nachricht des Chats vorkommen muss
   (`evidence_matches`, normalisiert nur Groß-/Kleinschreibung, Leerraum,
@@ -2609,17 +2611,22 @@ Reasoning-/Signaturblöcke für Tool-Fortsetzungen zurück; verschlüsselte Blö
 werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikation
 stehen in [agent-delegation.md](agent-delegation.md).
 
-**Vergleich und Prüfung.** agent_comparison.py registriert compare_models und
-judge_answer mit strikten Pydantic-Argumenten. `ToolRegistry.validate` nimmt ein
+**Vergleich und Prüfung.** agent_comparison.py registriert für den Orchestrator
+`compare_models` (Frage, Kontext, Tiefe; frei: Familien), `check_text` (wie
+`compare_models` plus Passage) und `answer` mit strikten Pydantic-Argumenten, in
+fester Reihenfolge (Prompt-Cache). `judge_answer` und `check_contradictions` sind
+`ComparisonTools.app_tools`: der Server führt sie über
+`DelegationLoop.app_registry` aus (`_finish_review`, `_execute_stream(..., registry)`),
+das Modell sieht sie nicht. `ToolRegistry.validate` nimmt ein
 Array-/Objekt-Argument, das als JSON-Text kommt (Sonnet schickte `"memory": "[]"`
 und scheiterte dreimal an der Validierung), als den deklarierten Container
 (`_decode_stringified`); alles andere lehnt die Validierung ab. Seit 2026-10-07 steuert allein
 der Code-Prompt `prompt_defaults.AGENT_SYSTEM_PROMPT` (gespeicherte Admin-Prompts
-wirken nicht mehr): jede Nachricht mit einer Aufgabe geht durch `compare_models`,
-auch Folgefragen, Produktfragen und Textumformung/Übersetzung; direkt beantwortet
-werden nur Nachrichten ohne Aufgabe (Gruß, Dank), wirklich nötige Rückfragen und
-Memory-Bitten nach den Memory-Regeln. Sonst mit begründeten Annahmen
-weiterarbeiten. Die Schreibregeln (Journalist, Treue zur Substanz, eigene
+wirken nicht mehr). Seit 2026-10-11 entscheidet der Orchestrator nach „COMPARE OR
+ANSWER DIRECTLY“, ob er vergleicht (Fakten, Aktuelles, Rat, Strittiges, Recherche,
+auf Wunsch; im Zweifel ja) oder direkt antwortet (Chat/App/frühere Antworten,
+Umformulieren/Übersetzen, Gruß/Rückfrage, Watch, eine gezeigte Seite lesen);
+beides in guided und free. Sonst mit begründeten Annahmen weiterarbeiten. Die Schreibregeln (Journalist, Treue zur Substanz, eigene
 Beraterstimme, keine Superlative, Uneinigkeit nur wo sie die Entscheidung ändert)
 stehen im Antwort-Prompt `AGENT_ANSWER_PROMPT`, weil die sichtbare Antwort im
 eigenen Schritt entsteht (unten). Antwortschritt, Judges und eine eingeschaltete
@@ -2647,9 +2654,11 @@ Bezüge wie „davon“ aufzulösen und relevante frühere Anforderungen in Frag
 zu übernehmen; unabhängige Fragen brauchen keinen unnötigen Gesprächsrückblick.
 Im freien Modus (`AgentPreferences.autonomy == "free"`) wählt es zusätzlich pro
 Vergleich die Familien (`free_compare_args`: Enum der Turn-Auswahl, mindestens zwei,
-Duplikate in `_choose`; jeder Vergleich speichert `asked`), und `DelegationLoop._free_floor` schickt eine
-Direktantwort ohne Vergleich einmal zurück, damit jede Sachantwort auf zwei
-Familien und den Judges beruht.
+Duplikate in `_choose`; jeder Vergleich speichert `asked`).
+`DelegationLoop._direct_reply_reminder` (beide Modi; bis 2026-10-11 `_free_floor`
+nur im freien) hält eine Klartext-Antwort im Steuerschritt einmal zurück, wenn sie
+länger als `DIRECT_REPLY_CHARS` (800) oder am Limit abgeschnitten ist: dafür ist
+`answer` da. Kurze Grüße und Rückfragen bleiben Klartext.
 `ComparisonTools.compare` startet alle gefragten Vergleichsmodelle gleichzeitig in eigenen
 Threads (`compare_slots`, je Aufruf eine `ComparisonCancellation`) und wartet nur
 bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`);
@@ -2695,10 +2704,21 @@ Strukturierte Transportfehler werden am Fehlerfeld erkannt, nicht am Wort
 „Error“ im Antworttext; nur Legacy-Stringadapter behalten ihre Fehlerkonvention.
 Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
 
-Nach den Vergleichen fordert das Chatmodell mit `judge_answer` die Antwortphase
-an; nach `compare_models(next_step="answer")` erkennt `DelegationLoop._answer_ready`
-das Ende der Vergleiche und springt ohne weitere Orchestrierungsrunde direkt in
-Schreibschritt und `_finish_review`. Der Schreibschritt nutzt
+Nach den Vergleichen fordert das Chatmodell mit `answer` die Antwortphase an.
+`answer` markiert nur (`ComparisonTools.answer_requested`); nach dem Batch springt
+`_answer_ready` ohne weitere Runde in den Schreibschritt, und `_finish_review` führt
+`judge_answer` über `app_registry` als eigene sichtbare Zeile aus („Checked the
+answer“). `next_step` gibt es seit 2026-10-11 nicht mehr: nach jedem Vergleich
+sieht der Orchestrator die Antworten und entscheidet (`CompareArgs` ignoriert
+`reason`/`next_step` versteckt). `answer` ohne Vergleich setzt zusätzlich
+`ComparisonTools.direct`: Schreibschritt mit `AGENT_DIRECT_ANSWER_PROMPT`, ohne
+Judges; `capture()` fixiert den Text ohne Version, eine Review (`snapshot`-Status
+`direct`, Standard ohne Vergleiche) entsteht nur mit gelesenen Seiten. `answer`
+ohne Vergleich lehnt als Ergebnis ab, wenn im selben Batch ein `compare_models`/
+`check_text` scheiterte oder abgelehnt wurde (`DelegationLoop.compare_failed`:
+sonst ginge die Antwort still ungeprüft raus) oder wenn der Orchestrator selbst
+gesucht und keine Seite gelesen hat (nach einem Read ist kein Vergleich mehr
+möglich, die gelesene Seite trägt die Antwort). Der Schreibschritt nutzt
 `answer_output_limit` (Completion-Grenze des Chatmodells; denkende Modelle
 bekommen seit 2026-10-07 `ANSWER_REASONING_HEADROOM` obendrauf, weil Reasoning
 im selben Budget zählt und adaptives Denken bei Claude weder Effort noch
@@ -2797,12 +2817,13 @@ Toolfehler, damit sie nicht als `invalid_tool_rounds` den Turn beenden; nach
 einem gelesenen Abruf lehnt `compare_models` ab. `ReadOnlyTool.activity` liefert
 dem Tool-Ereignis `host`/`read`/`sources`; `agent_costs.fetch_bounds` reserviert
 die Seite, `_admit_chat_step` rechnet bei einem Abruf mit der vollen kleinsten
-Reservierung. Mit dem Schalter beschreibt `compare_models` `next_step` anders
-(`ComparisonTools(read_sources=True)`, `READ_NEXT_STEP`). Details:
-[agent-mode.md](agent-mode.md), „Quellen nachlesen“.
+Reservierung. Lesen geht seit 2026-10-11 auch ohne Vergleich (`purpose:
+"user_request"`, dann `answer` direkt); danach bleibt `compare_models` gesperrt.
+Details: [agent-mode.md](agent-mode.md), „Quellen nachlesen“.
 **Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
-Steuer-Prompt (Vergleichspflicht, Aufgabe formulieren: „was die Frage festlegt,
-nicht was sie beantwortet“, Suche, Tiefe, next_step, status_update); das frühere
+Steuer-Prompt (Vergleichen oder direkt antworten, Aufgabe formulieren: „was die
+Frage festlegt, nicht was sie beantwortet“, Suche, Tiefe, `check_text`,
+status_update); das frühere
 zweite Protokoll `agent_comparison.PROMPT`, `SYNTHESIS_PROMPT` und der
 Widerspruchs-Hinweis `agent_contradictions.PROMPT` sind entfallen, weil der
 Server Antwortschritt und Prüfungen selbst startet (`_finish_review`).
@@ -2977,9 +2998,9 @@ Eine gewünschte Überarbeitung beginnt mit einer neuen Nutzernachricht.
 Tool-Begleittext bleibt Planung und öffnet keine Syntheseversion; dies gilt auch
 für Einleitungen neben einem vorzeitigen Judge-Aufruf. Weitere Teilvergleiche
 bleiben vor der dedizierten Synthese möglich.
-Beendet das Chatmodell die Orchestrierung ohne erforderlichen Judge-Toolcall,
-führt der Server nach der Synthese `judge_answer` und gegebenenfalls
-`check_contradictions` über dieselbe Tool-Registry aus. Abrechnung, Bindungen und
+Beendet das Chatmodell die Orchestrierung nach Vergleichen ohne `answer`, führt
+der Server nach der Synthese `judge_answer` und gegebenenfalls
+`check_contradictions` über `app_registry` aus. Abrechnung, Bindungen und
 bestehende Fallback-Judges bleiben identisch; zusätzliche Erinnerungsrunden sind
 nicht nötig. Drei aufeinanderfolgende Tool-Batches ohne einen gültig ausgeführten
 Toolcall brechen als Protokollstillstand ab; gültige Arbeit begrenzen nur die
@@ -3242,8 +3263,8 @@ zu abgeschlossenen Schritten; ohne aktives Tool steht der aktuelle Thinking-/
 Writing-/Review-Status am Ende. Fortschrittsabsätze sind im hellen Modus dunkelgrau
 und im dunklen hellgrau, damit sie sich von der Antwort abheben. Arbeitsschritte
 bleiben schwarz bzw. weiß; in Forced Colors gilt für beide `CanvasText`.
-`ProgressArgs.status_update` ergänzt die bestehenden Tools
-`compare_models`, `judge_answer` und `check_contradictions` um maximal 400 Zeichen;
+`ProgressArgs.status_update` ergänzt die Tools
+`compare_models`, `check_text`, `answer` und `read_source` um maximal 400 Zeichen;
 für ältere Aufrufer ist das Feld optional. Der injizierte Produktprompt verlangt
 es bei jedem dieser Aufrufe: ein bis zwei konkrete Sätze in der Sprache der
 aktuellen Frage bzw. der gewünschten Antwort, mit Arbeitszweck oder Befund und
@@ -3620,12 +3641,13 @@ die Modelle. Zusammenfassen, übersetzen, umschreiben, Code oder Fragen zu genau
 diesem Dokument geben den Text wie bisher als Material weiter; im Zweifel
 weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
 Antwort-Prompt).
-- **Werkzeug:** `compare_models` hat das optionale, bewusst nachsichtige Feld
-  `check` (`PassageCheck`: `starts_with`, `ends_with`, `answer_to`). Im
-  Tool-Schema steht es als schlichtes Objekt (`PASSAGE_CHECK_SCHEMA`, kein
-  `$ref`, kein nullbares `anyOf`; `CompareArgs.model_json_schema` setzt es ein).
-  `_decode_check` macht aus JSON-Text, leerem Objekt, leeren Feldern oder
-  Unsinn „kein Check" statt einer Absage. Feste Regeln stehen im Server:
+- **Werkzeug:** seit 2026-10-11 das eigene Tool `check_text` (`CheckTextArgs`:
+  die Felder von `compare_models` plus flache Pflichtfelder `starts_with`,
+  `ends_with`, `answer_to`; `ComparisonTools.check_text` ruft `compare(...,
+  check=PassageCheck(...))`). Bis dahin ein optionales Feld `check` von
+  `compare_models`, das GPT-6 Luna mit der eigenen Frage des Nutzers füllte.
+  `own_request` lehnt vor jedem bezahlten Aufruf als Ergebnis ab: nur Fragen,
+  oder die ganze Nachricht als ein Satz ohne Aussage-Ende. Feste Regeln stehen im Server:
   `locate_passage` sucht in den Nutzernachrichten (neueste zuerst, also auch
   vor einer Rückfrage) tolerant gegen Groß/Klein, Anführungszeichen, Leerraum,
   Markdown (`*`, `` ` ``, `#`, `>`, `_`, Aufzählungszeichen) und unsichtbare
@@ -3686,10 +3708,10 @@ Antwort-Prompt).
   Checks und Vergleiche eins zu eins paart. Änderungen unter `self.lock`
   (`settle`). Über 600 kB verliert die gespeicherte Kopie zuerst Gegenzitate und
   Judge-Details. `close()`, `agent_runs.finish_run` und `agent-chat.js::cancelRun`
-  setzen ein hängendes `waiting/running` auf `failed`/`cancelled`. `check` selbst
+  setzen ein hängendes `waiting/running` auf `failed`/`cancelled`. Die Passage
   wird nicht in `comparisons[]` gespeichert. `agent_memory.MemoryTools` zählt die
-  Passage im laufenden Turn nie als eigene Worte (`exclude`, auch wenn `memory`
-  im selben `compare_models`-Aufruf mitfährt); für spätere Turns gilt die
+  Passage im laufenden Turn nie als eigene Worte (`_user_messages` lässt die
+  deklarierte Passage weg; `memory` fährt auf dem späteren `answer` mit); für spätere Turns gilt die
   Memory-Anweisung („nichts aus eingefügtem Text"), ein echter Ausschluss wäre
   eine zusätzliche Firestore-Abfrage pro Lauf.
 - **Oberfläche (seit 2026-10-09 eine Karte über der Antwort):**

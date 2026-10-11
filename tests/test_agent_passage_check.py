@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.agent_comparison import (PassageCheck, locate_passage, repeated_sentences, review_is_bound)
+from app.services.agent_comparison import (PassageCheck, locate_passage, own_request, repeated_sentences,
+                                          review_is_bound)
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from test_agent_comparison import THREE, make_loop
 from test_agent_runs import UID, api, pending, store  # noqa: F401  (fixtures)
@@ -22,9 +23,10 @@ ANSWER = "Heat pumps work in old buildings with low flow temperatures. Larger ra
 
 
 class Script:
-    """Orchestrator steps from a list of compare_models argument dicts; answers
-    and judges are deterministic. The coverage judge of the passage check says
-    one model contradicts the underfloor heating sentence."""
+    """Orchestrator steps from a list of comparison argument dicts (one with a
+    "check" becomes a check_text call); answers and judges are deterministic.
+    The coverage judge of the passage check says one model contradicts the
+    underfloor heating sentence."""
 
     def __init__(self, compares, *, fail_coverage=False, fail_model=False):
         self.compares = list(compares)
@@ -48,11 +50,13 @@ class Script:
                         return
                     index = int(self.step_id.split(":")[-1])
                     if index < len(script.compares):
-                        action, args = "compare_models", script.compares[index]
+                        args = dict(script.compares[index])
+                        passage = args.pop("check", None)
+                        action, args = ("check_text", {**args, **passage}) if passage else ("compare_models", args)
                     else:
                         self.text = ANSWER
                         yield {"type": "delta", "text": self.text}
-                        action, args = "judge_answer", {}
+                        action, args = "answer", {}
                     self.tool_calls = [{"id": f"call_{index}", "type": "function",
                                         "function": {"name": action, "arguments": json.dumps(args)}}]
                     self.finish_reason = "tool_calls"
@@ -138,10 +142,28 @@ def test_a_repeated_phrase_ends_the_passage_at_its_first_occurrence_after_the_st
     assert passage == "the price rises. Later the price rises again."
 
 
-def test_check_sent_as_json_text_is_accepted():
+def test_compare_models_has_no_hidden_check_any_more():
+    """Until 2026-10-11 an optional field of compare_models; GPT-6 Luna filled
+    it with the user's own question. Now its own tool, check_text."""
+    from pydantic import ValidationError
     from app.services.agent_comparison import CompareArgs
-    args = CompareArgs.model_validate({**NEUTRAL, "check": json.dumps(CHECK)})
-    assert args.check.starts_with == CHECK["starts_with"]
+    with pytest.raises(ValidationError, match="check"):
+        CompareArgs.model_validate({**NEUTRAL, "check": CHECK})
+
+
+@pytest.mark.parametrize("passage,message,refused", [
+    # Live cases: the user's own question, and a request without punctuation.
+    ("Wer hat die Ironman-WM 2026 in Kona gewonnen?", "Wer hat die Ironman-WM 2026 in Kona gewonnen?", True),
+    ("kannst du den waqtch bite für mich starte", "kannst du den waqtch bite für mich starte", True),
+    ("Is it true? Really?", "ChatGPT asked me: Is it true? Really?", True),
+    # A pasted answer, and a bare pasted claim that ends like a statement.
+    (PASTED, MESSAGE, False),
+    ("The Eiffel Tower is 330 metres tall.", "The Eiffel Tower is 330 metres tall.", False),
+])
+def test_the_users_own_question_or_request_is_no_text_to_check(passage, message, refused):
+    from app.services.llm.consensus_engine import _enumerate_consensus_sentences
+    _, sentences = _enumerate_consensus_sentences(passage, limit=None)
+    assert bool(own_request(passage, sentences, message)) is refused
 
 
 def test_a_passage_without_a_checkable_sentence_is_refused():
@@ -362,9 +384,7 @@ def test_pasted_text_is_never_evidence_of_the_users_own_words():
                            comparison=SimpleNamespace(passage=None), store=SimpleNamespace(db=None))
     memory = MemoryTools(loop, SimpleNamespace(writable=True), repository=object())
     assert any("underfloor" in text for text in memory._user_messages())
-    memory.exclude(PASTED)
-    assert memory._user_messages() == ["Is this right?\n\n\n"]
-    memory.foreign_passages.clear()
+    # Declared by check_text: from then on never the user's own words.
     loop.comparison.passage = {"text": PASTED}
     assert all("underfloor" not in text for text in memory._user_messages())
 
@@ -404,25 +424,26 @@ def test_injected_judge_markup_never_reaches_the_judge_as_markup(store):
     assert all(c["anchor"] == pasted[c["start"]:c["end"]][:len(c["anchor"])] for c in claims)
 
 
-@pytest.mark.parametrize("value", [{}, "", "not json", {"answer_to": None}, {"starts_with": " ", "ends_with": "", "answer_to": ""},
-                                   "null", None])
-def test_a_blank_or_malformed_check_is_no_check(value):
-    from app.services.agent_comparison import CompareArgs
-    assert CompareArgs.model_validate({**NEUTRAL, "check": value}).check is None
+def test_check_text_takes_the_passage_as_flat_required_fields(store):
+    from app.services.agent_comparison import AgentPreferences
+    for preferences in (AgentPreferences(), AgentPreferences(autonomy="free")):
+        loop = make_loop(store, Script([]), preferences=preferences)
+        schema = loop.registry.tools["check_text"].schema()["function"]["parameters"]
+        assert {"starts_with", "ends_with", "answer_to", "question"} <= set(schema["required"])
+        assert "$ref" not in json.dumps(schema) and "check" not in schema["properties"]
+        # The same task fields as compare_models, the model choice in free mode too.
+        compare = loop.registry.tools["compare_models"].schema()["function"]["parameters"]["properties"]
+        assert set(compare) <= set(schema["properties"])
 
 
-def test_tool_schemas_carry_check_as_a_plain_object():
-    from app.services.agent_comparison import CompareArgs, comparison_selection, free_compare_args
-    from app.services.agent_memory import memory_field
-    from pydantic import create_model
-    variants = [CompareArgs, free_compare_args(comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))]
-    variants.append(create_model("MemoryCompareArgs", __base__=CompareArgs, memory=memory_field()))
-    for model in variants:
-        schema = model.model_json_schema()
-        check = schema["properties"]["check"]
-        assert check["type"] == "object" and "anyOf" not in check and "$ref" not in json.dumps(check)
-        assert "PassageCheck" not in json.dumps(schema.get("$defs", {}))
-        assert "check" not in schema.get("required", [])
+def test_a_check_of_the_users_own_question_is_refused_before_anything_is_paid(store):
+    question = "Wer hat die Ironman-WM 2026 in Kona gewonnen?"
+    script = Script([{**NEUTRAL, "check": {"starts_with": "Wer hat die Ironman-WM", "ends_with": "in Kona gewonnen?",
+                                           "answer_to": "Wer hat die Ironman-WM 2026 gewonnen?"}}])
+    loop, _, saved = run(store, script, message=question)
+    refused = json.loads(next(m["content"] for m in loop.messages if m.get("role") == "tool"))
+    assert refused["status"] == "refused" and "error" not in refused
+    assert not script.prompts and "passage_check" not in (saved.get("agent_review") or {})
 
 
 def test_markdown_bullets_and_invisible_characters_do_not_hide_the_passage():

@@ -43,11 +43,11 @@ class SourceScript(Script):
                         return
                     index = int(self.step_id.split(":")[-1])
                     if index == 0:
-                        action, args = "compare_models", {"question": "Price?", "context": "Compare published prices.", "reason": "Conflicting prices", "next_step": "more_work"}
+                        action, args = "compare_models", {"question": "Price?", "context": "Compare published prices.", "status_update": "Conflicting prices"}
                     elif index == 1 or (script.revise and index == 4):
                         self.text = CONSENSUS + (" Check the applicable date." if index == 4 else "")
                         yield {"type": "delta", "text": self.text}
-                        action, args = "judge_answer", {"finalize": True}
+                        action, args = "answer", {}
                     else:
                         if script.rewrite_during_check:
                             self.text = 'Here is a completely rewritten answer.'
@@ -55,7 +55,8 @@ class SourceScript(Script):
                         if script.missing:
                             self.finish_reason = "stop"
                             return
-                        action, args = "check_contradictions", {"finalize": not ((script.repeat or script.revise) and index == 3)}
+                        # The app runs the source check itself; the model can only end.
+                        action, args = "answer", {}
                     self.tool_calls = [{"id": f"call_{index}", "type": "function", "function": {"name": action, "arguments": json.dumps(args)}}]
                     self.finish_reason = "tool_calls"
                     return
@@ -121,7 +122,8 @@ def run(store, queue, script=None, **kwargs):
 def test_turn_finalizes_with_a_bound_job_and_the_worker_settles_it(store, queue):
     script = SourceScript()
     loop, events, saved = run(store, queue, script)
-    assert "check_contradictions" in loop.registry.tools
+    # The app's own tool, never the model's.
+    assert "check_contradictions" in loop.app_registry.tools and "check_contradictions" not in loop.registry.tools
     review = saved["agent_review"]
     comparison, check = review["comparisons"][0], review["checks"][0]
     verification = check["source_verification"]
@@ -160,7 +162,7 @@ def test_turn_finalizes_with_a_bound_job_and_the_worker_settles_it(store, queue)
 
 def test_disabled_tool_never_queues_and_keeps_model_agreement_review(store, queue):
     loop = make_loop(store, SourceScript(), check_sources=False)
-    assert "check_contradictions" not in loop.registry.tools
+    assert "check_contradictions" not in loop.app_registry.tools
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
@@ -247,7 +249,7 @@ def test_source_check_is_queued_once_even_when_model_requests_more_rounds(store,
     assert review_is_bound(saved["agent_review"], saved["consensus"])
     assert len(saved["agent_review"]["versions"]) == 1
     assert saved['consensus'] == CONSENSUS
-    # Compare, judge_answer, the answer step; the app then queues the source
+    # Compare, answer, the answer step; the app then queues the source
     # check itself, so the model gets no further steering step to ask again.
     assert [step for step, _ in script.calls if step.startswith('completion:')] == [
         'completion:0', 'completion:1', 'completion:2']

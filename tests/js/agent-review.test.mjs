@@ -59,6 +59,24 @@ it('counts a disagreement the source check could not take up instead of showing 
   w.App.agentReview.renderActivity(details, review, 'Exact answer.');
   expect(details.textContent).toContain('Source checks: 0 of 1 disagreements checked · 1 not checkable.');
   expect(details.textContent).not.toContain('0 of 0');
+  // Nothing detected (only minor differences): no line at all.
+  review.checks[0].source_verification.scope = {checked_contradictions:0,contradictions:0,detected_contradictions:0,excluded_contradictions:0};
+  w.App.agentReview.renderActivity(details, structuredClone(review), 'Exact answer.');
+  expect(details.textContent).not.toContain('Source checks:');
+  dom.window.close();
+});
+it('marks pages read for an answer without a comparison in its sources', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'The winner finished in 7:47:27.';
+  const review = {status: 'direct', comparisons: [], versions: [],
+    read_sources: [{url: 'https://www.tri247.com/live', status: 'completed'}]};
+  w.App.agentReview.render(body, review, {sources: [{url: 'https://www.tri247.com/live', title: 'Live'}], key: 't1', question: 'Q'});
+  const button = d.querySelector('.agent-evidence-link');
+  expect(button).not.toBeNull();
+  button.click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel();
+  expect(panel.textContent).toContain('Read by the agent');
   dom.window.close();
 });
 it('shows the live comparison purpose while its answers and checks are still pending', () => {

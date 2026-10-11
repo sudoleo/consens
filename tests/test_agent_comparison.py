@@ -44,11 +44,18 @@ class Script:
                         if script.compares > 1:
                             self.text = f"I will compare perspective {index + 1}."
                             yield {"type": "delta", "text": self.text}
-                        args = {"question": f"Evaluate option {index + 1}", "context": "Budget is 100. Source: https://example.org/report", "reason": "Compare trade-offs",
-                                "next_step": "answer" if script.direct and index == script.compares - 1 else "more_work",
+                        args = {"question": f"Evaluate option {index + 1}", "context": "Budget is 100. Source: https://example.org/report",
+                                "status_update": "Compare trade-offs",
                                 **({"depth": script.depth} if script.depth else {}),
                                 **({"models": script.pick} if script.pick is not None else {})}
                         action = "compare_models"
+                        if script.direct and index == script.compares - 1:
+                            # The last comparison and answer in one batch: no
+                            # further routing round before the answer.
+                            self.tool_calls = [{"id": f"call_{index}", "type": "function", "function": {"name": action, "arguments": json.dumps(args)}},
+                                               {"id": f"call_{index}_answer", "type": "function", "function": {"name": "answer", "arguments": "{}"}}]
+                            self.finish_reason = "tool_calls"
+                            return
                     else:
                         self.text = "The first option costs 100."
                         if script.revise and index > script.compares:
@@ -57,7 +64,7 @@ class Script:
                         if script.missing:
                             self.finish_reason = "stop"
                             return
-                        action, args = "judge_answer", {"finalize": not script.revise or index > script.compares}
+                        action, args = "answer", {}
                     self.tool_calls = [{"id": f"call_{index}", "type": "function", "function": {"name": action, "arguments": json.dumps(args)}}]
                     self.finish_reason = "tool_calls"
                     return
@@ -127,6 +134,9 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
     assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
     tools = [e for e in events if e.get("kind") == "tool" and e.get("name") == "compare_models"]
     assert [e["status"] for e in tools] == [s for _ in range(compares) for s in ("running", "succeeded")]
+    # The app's answer check stays a visible step ("Checked the answer").
+    assert [e["status"] for e in events if e.get("kind") == "tool" and e.get("name") == "judge_answer"] == [
+        "running", "succeeded"]
     assert sum(e["type"] == "delta" for e in events) == 1
     assert len([step for step, _ in script.calls if step.startswith('completion:')]) == compares + 2
     assert all("I will compare" not in v["text"] for v in review["versions"])
@@ -147,7 +157,7 @@ def test_fixed_answer_cannot_be_reopened_by_false_finalize_or_late_comparison(st
     loop.comparison.capture('A rewritten answer must never replace the checked one.')
     result = loop.comparison.judge(JudgeArgs(finalize=False), cancellation=loop.cancellation)
     assert result['finalized'] is True
-    with pytest.raises(ValueError, match='synthesis is already fixed'):
+    with pytest.raises(ValueError, match='already being written'):
         loop.comparison.compare(CompareArgs(question='Compare again?', context='', reason='Retry', next_step='answer'),
                                 cancellation=loop.cancellation)
     assert json.dumps(loop.comparison.snapshot(), sort_keys=True) == original
@@ -614,11 +624,12 @@ def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(stor
 def test_later_run_failure_keeps_finished_review_result(store):
     """A failure after the judges finished must not relabel the checked answer."""
     loop = make_loop(store, Script())
-    judge = loop.registry.tools["judge_answer"]
+    # The app runs the answer check itself (app_registry, _finish_review).
+    judge = loop.app_registry.tools["judge_answer"]
     def judge_then_fail(*args, **kwargs):
         judge.execute(*args, **kwargs)
         raise RuntimeError("late provider failure")
-    loop.registry.tools["judge_answer"] = replace(judge, execute=judge_then_fail)
+    loop.app_registry.tools["judge_answer"] = replace(judge, execute=judge_then_fail)
     with pytest.raises(RuntimeError):
         list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
@@ -632,7 +643,7 @@ def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
     loop = make_loop(store, Script(missing=True))
     def failed_review(*args, **kwargs):
         raise AnalysisBudgetExceeded("Review admission unavailable")
-    loop.registry.tools["judge_answer"] = replace(loop.registry.tools["judge_answer"], execute=failed_review)
+    loop.app_registry.tools["judge_answer"] = replace(loop.app_registry.tools["judge_answer"], execute=failed_review)
     with pytest.raises(AnalysisBudgetExceeded):
         list(loop.run())
     payload = {"chat_id": loop.chat_id, "question": "Question one", "client_request_id": "one",
@@ -910,11 +921,21 @@ def test_depth_sets_the_answer_models_length_guidance(store, depth, expected):
     assert review["comparisons"][0]["depth"] == (depth or "full")
 
 
-def test_next_step_is_a_required_decision():
-    from pydantic import ValidationError
+def test_compare_models_offers_only_question_context_and_depth():
+    """next_step and reason were retired (2026-10-11): the orchestrator sees
+    each comparison's answers and then decides. A model that still sends them
+    is not refused for it."""
     from app.services.agent_comparison import CompareArgs
-    with pytest.raises(ValidationError):
-        CompareArgs(question="Q?", context="", reason="R")
+    assert set(CompareArgs.model_json_schema()["properties"]) == {"status_update", "question", "context", "file_ids", "depth"}
+    args = CompareArgs.model_validate({"question": "Q?", "reason": "R", "next_step": "answer"})
+    assert args.reason == "" and args.next_step == ""
+
+
+def test_the_orchestrator_sees_only_its_own_tools_and_the_app_runs_the_checks(store):
+    loop = make_loop(store, Script(), check_sources=True)
+    assert list(loop.registry.tools)[:3] == ["compare_models", "check_text", "answer"]
+    assert not {"judge_answer", "check_contradictions"} & set(loop.registry.tools)
+    assert set(loop.app_registry.tools) == {"judge_answer", "check_contradictions"}
 
 
 def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store, quick_quorum):
@@ -945,16 +966,13 @@ def test_answer_allowance_respects_the_saved_review_size(store):
     assert share <= REVIEW_ANSWER_CHARS // 6 // CHARS_PER_TOKEN
 
 
-def test_only_an_accepted_last_comparison_skips_the_routing_round(store):
-    from app.services.llm.agent_client import AgentCompletion
+def test_only_an_accepted_answer_skips_the_routing_round(store):
     loop = make_loop(store, Script())
-    loop.comparison.ready_to_answer = True
-    value = AgentCompletion()
-    value.tool_calls = [{"id": "1", "type": "function", "function": {"name": "compare_models", "arguments": "{}"}}]
-    assert loop._answer_ready(value, True)
-    assert not loop._answer_ready(value, False)
-    loop.google_actions = True
-    assert not loop._answer_ready(value, True)
+    assert not loop._answer_ready()
+    loop.comparison.answer_requested = True
+    assert loop._answer_ready()
+    loop.comparison.text = "Already written."
+    assert not loop._answer_ready()
 
 
 def test_a_depth_fixed_in_settings_overrides_the_orchestrator(store):
@@ -1100,9 +1118,9 @@ def test_free_mode_keeps_the_two_family_floor(store):
 class DirectFirst(Script):
     """The orchestrator first replies without a tool; `repeat` replies again."""
 
-    def __init__(self, *, repeat=False, **kwargs):
+    def __init__(self, *, repeat=False, reply="Hello! How can I help?", **kwargs):
         super().__init__(direct=True, **kwargs)
-        self.repeat = repeat
+        self.repeat, self.reply = repeat, reply
 
     def factory(self):
         base = type(super().factory())
@@ -1113,7 +1131,7 @@ class DirectFirst(Script):
                     index = int(self.step_id.split(":")[-1])
                     if index == 0 or (script.repeat and index == 1):
                         script.calls.append((self.step_id, model.model))
-                        self.text, self.finish_reason = "Hello! How can I help?", "stop"
+                        self.text, self.finish_reason = script.reply, "stop"
                         yield {"type": "delta", "text": self.text}
                         return
                     self.step_id = f"completion:{index - 1}"
@@ -1121,29 +1139,138 @@ class DirectFirst(Script):
         return Completion()
 
 
-def test_free_mode_sends_a_direct_answer_back_through_a_comparison(store):
+LONG_REPLY = "The first option costs 100 euros a month. " * 30
+
+
+@pytest.mark.parametrize("autonomy", ["guided", "free"])
+def test_a_long_plain_reply_is_held_back_once_in_both_modes(store, autonomy):
+    """Plain text is for greetings and clarification questions: not streamed,
+    small allowance, no answer prompt. A long one is sent back once."""
     from app.services.agent_comparison import AgentPreferences
-    script = DirectFirst(pick=["openai", "anthropic"])
-    loop = make_loop(store, script, preferences=AgentPreferences(autonomy="free"))
+    script = DirectFirst(reply=LONG_REPLY, **({"pick": ["openai", "anthropic"]} if autonomy == "free" else {}))
+    loop = make_loop(store, script, preferences=AgentPreferences(autonomy=autonomy))
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert sum("App rule: every substantive answer" in m["content"] for m in loop.messages if m["role"] == "user") == 1
-    assert saved["status"] == "completed"
-    assert saved["agent_review"]["status"] == "succeeded"
-    # The unchecked direct reply never reached the reader.
-    assert not any(e.get("type") == "delta" and "How can I help" in e.get("text", "") for e in events)
+    assert sum("App rule: your reply above is not sent" in m["content"] for m in loop.messages if m["role"] == "user") == 1
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
+    # The unchecked reply never reached the reader.
+    assert not any(e.get("type") == "delta" and LONG_REPLY in e.get("text", "") for e in events)
 
 
-def test_free_mode_accepts_a_confirmed_greeting_and_guided_mode_never_asks(store):
+def test_a_greeting_is_sent_as_plain_text_in_both_modes(store):
     from app.services.agent_comparison import AgentPreferences
-    loop = make_loop(store, DirectFirst(repeat=True, pick=["openai", "anthropic"]), preferences=AgentPreferences(autonomy="free"))
+    for preferences in (AgentPreferences(autonomy="free"), AgentPreferences()):
+        loop = make_loop(store, DirectFirst(pick=["openai", "anthropic"] if preferences.autonomy == "free" else None),
+                         preferences=preferences)
+        list(loop.run())
+        assert loop.completion.text == "Hello! How can I help?"
+        assert not loop.comparison.comparisons
+        assert not any("App rule" in m["content"] for m in loop.messages if m["role"] == "user")
+
+
+class DirectAnswer(Script):
+    """The orchestrator calls `answer` without a comparison (`first` before it)."""
+
+    def __init__(self, *, first=(), later=(("answer", {}),), search=False, **kwargs):
+        super().__init__(**kwargs)
+        self.first, self.later, self.search = list(first), list(later), search
+        self.answer_messages = None
+
+    def factory(self):
+        base = type(super().factory())
+        script = self
+        class Completion(base):
+            def stream(self, *, model, messages, **kwargs):
+                if self.step_id.startswith("completion:") and kwargs["tools"]:
+                    index = int(self.step_id.split(":")[-1])
+                    script.calls.append((self.step_id, model.model))
+                    self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                    if index == 0 and script.search:
+                        self.sources = [{"url": "https://example.org/found", "title": "Found"}]
+                    calls = [*script.first, ("answer", {"status_update": "Answering from the chat."})] if index == 0 else script.later
+                    self.tool_calls = [{"id": f"call_{index}_{n}", "type": "function",
+                                        "function": {"name": name, "arguments": json.dumps(args)}}
+                                       for n, (name, args) in enumerate(calls)]
+                    self.finish_reason = "tool_calls"
+                    return
+                if self.step_id.startswith("completion:"):
+                    script.answer_messages = messages
+                yield from super().stream(model=model, messages=messages, **kwargs)
+        return Completion()
+
+
+def test_answer_without_a_comparison_streams_an_unchecked_answer(store):
+    script = DirectAnswer()
+    loop = make_loop(store, script, check_sources=True)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["assistant_response"] == "The first option costs 100."
+    # Nothing compared, nothing checked, no review.
+    assert "agent_review" not in saved and not script.prompts
+    assert not any(e.get("kind") == "tool" and e.get("name") in {"judge_answer", "check_contradictions"} for e in events)
+    # The answer step wrote it, streamed, with the prompt for direct answers.
+    assert [e["text"] for e in events if e.get("type") == "delta"] == ["The first option costs 100."]
+    assert "No model comparison ran" in script.answer_messages[0]["content"]
+    evidence = script.answer_messages[-1]["content"]
+    assert '"comparisons"' not in evidence and '"research_sources"' not in evidence
+    # Routing step, answer step: no further round.
+    assert [step for step, _ in script.calls] == ["completion:0", "completion:1"]
+
+
+def test_a_comparison_after_answer_is_refused_and_nothing_is_paid(store):
+    script_calls = [("answer", {}), ("compare_models", {"question": "Q?"})]
+
+    class Both(DirectAnswer):
+        def factory(self):
+            base = type(super().factory())
+            class Completion(base):
+                def stream(self, *, model, messages, **kwargs):
+                    if self.step_id == "completion:0" and kwargs["tools"]:
+                        self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                        self.tool_calls = [{"id": f"c{n}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+                                           for n, (name, args) in enumerate(script_calls)]
+                        self.finish_reason = "tool_calls"
+                        return
+                    yield from super().stream(model=model, messages=messages, **kwargs)
+            return Completion()
+
+    both = Both()
+    loop = make_loop(store, both)
     list(loop.run())
-    assert loop.completion.text == "Hello! How can I help?"
-    assert not loop.comparison.comparisons
-    guided = make_loop(store, DirectFirst(repeat=True))
-    list(guided.run())
-    assert guided.completion.text == "Hello! How can I help?"
-    assert not any("App rule" in m["content"] for m in guided.messages if m["role"] == "user")
+    refused = next(json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool" and m["tool_call_id"] == "c1")
+    assert "already being written" in refused["error"]
+    assert not loop.comparison.comparisons and not both.prompts
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_a_failed_comparison_and_answer_in_one_step_never_answer_unchecked(store):
+    """Review 2026-10-11: [compare_models (refused or invalid), answer] in one
+    batch made an unchecked direct answer; the orchestrator never saw why."""
+    script = DirectAnswer(first=[("compare_models", {"question": "Who won?", "depth": "deep"})],
+                          later=[("compare_models", {"question": "Who won?"}), ("answer", {})])
+    loop = make_loop(store, script)
+    list(loop.run())
+    results = {m["tool_call_id"]: json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"}
+    assert "error" in results["call_0_0"]
+    assert results["call_0_1"]["status"] == "refused" and "did not run" in results["call_0_1"]["reason"]
+    # Next step: corrected and compared, then a checked answer.
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert not loop.comparison.direct and saved["agent_review"]["status"] == "succeeded"
+
+
+def test_a_researched_question_cannot_be_answered_directly(store):
+    """The answer step would only get the search's URLs: research is what a
+    comparison is for."""
+    script = DirectAnswer(search=True, later=[("compare_models", {"question": "What does option one cost?"}),
+                                              ("answer", {})])
+    loop = make_loop(store, script)
+    list(loop.run())
+    refused = next(json.loads(m["content"]) for m in loop.messages
+                   if m.get("role") == "tool" and m["tool_call_id"] == "call_0_0")
+    assert refused["status"] == "refused" and "goes through a comparison" in refused["reason"]
+    # The orchestrator then compares, and the answer is checked.
+    assert not loop.comparison.direct and len(loop.comparison.comparisons) == 1
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["status"] == "succeeded"
 
 
 def test_settings_saved_before_the_freedom_field_still_match_on_recovery():

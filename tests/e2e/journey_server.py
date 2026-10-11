@@ -62,10 +62,13 @@ class Completion(AgentCompletion):
         calls.append({'uid': uid, 'model': model.model, 'step': self.step_id})
         self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 50}, model)
         if self.step_id == 'completion:0':
+            # Comparison and answer in one step: the app writes the answer
+            # right after the comparison, without another routing round.
             self.tool_calls = [{'id': 'compare', 'type': 'function', 'function': {
                 'name': 'compare_models', 'arguments': json.dumps({'question': 'Compare evidence for ' + uid,
-                    'context': 'Use the supplied question.', 'reason': 'Independent perspectives',
-                    'depth': 'full', 'next_step': 'answer'})}}]
+                    'context': 'Use the supplied question.', 'status_update': 'Independent perspectives',
+                    'depth': 'full'})}},
+                {'id': 'answer', 'type': 'function', 'function': {'name': 'answer', 'arguments': '{}'}}]
             self.finish_reason = 'tool_calls'
             return
         self.text = 'Saved partial answer for ' + uid

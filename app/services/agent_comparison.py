@@ -141,9 +141,8 @@ subquestion to selected families when answers disagree, evidence is thin or one
 aspect needs depth, and a broader panel for decisions with real consequences. If a family fails and fewer than two
 answers remain, ask other families instead of answering from one. Do not ask
 more models or rounds than improve the answer: every call spends the user's
-tokens. Fixed by the app, not by you: every substantive answer rests on at least
-one comparison with independent answers from at least two families, and the
-judges always check the final answer."""
+tokens. Fixed by the app, not by you: every comparison asks at least two
+families, and the judges always check an answer that rests on comparisons."""
 
 
 def preference_prompt(preferences, max_comparisons=BOUNDED_COMPARISONS):
@@ -219,6 +218,9 @@ COMPARISON_FAILURES = {
 }
 
 
+PASSAGE_ANSWER_TO_CHARS = 300
+
+
 class ProgressArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     status_update: str = Field(default="", max_length=400, description=
@@ -233,11 +235,7 @@ class ProgressArgs(BaseModel):
         return value[:400] if isinstance(value, str) else value
 
 
-# Deliberately lenient, like memory changes (agent_memory.MemoryChange): this
-# rides inside compare_models, where a schema error rejects the whole call and
-# three rejected rounds end the turn. A blank or malformed check counts as no
-# check (_decode_check); every other rule lives in locate_passage(), whose
-# refusals say what to change.
+# The passage of a check_text call, as the internal locator reads it.
 class PassageCheck(BaseModel):
     """A passage of the user's messages to check against independent answers."""
     model_config = ConfigDict(extra="ignore")
@@ -247,77 +245,46 @@ class PassageCheck(BaseModel):
 
 
 PASSAGE_CHECK_FIELDS = ("starts_with", "ends_with", "answer_to")
-# Inlined into the tool schema: a plain object, no $ref and no nullable anyOf,
-# which some providers translate badly. Leaving the field out means no check.
-PASSAGE_CHECK_SCHEMA = {
-    "type": "object",
-    "description": (
-        "Only when the user wants a text they supplied checked (for example another AI's answer) and it "
-        "answers a question that stands on its own. The comparison models then must not see the passage: "
-        "question and context ask only that question, and the app checks every sentence of the passage "
-        "against their answers. Leave it out when the task needs the text itself."),
-    "properties": {
-        "starts_with": {"type": "string", "description":
-            "The passage's first words (about 5 to 12), copied exactly from the user's message."},
-        "ends_with": {"type": "string", "description":
-            "The passage's last words (about 5 to 12), copied exactly from the user's message."},
-        "answer_to": {"type": "string", "description":
-            "The question the passage answers, short and in the user's language. The user sees it "
-            "as \"Checked as an answer to: ...\"."},
-    },
-    "required": list(PASSAGE_CHECK_FIELDS),
-}
 
 
 class CompareArgs(ProgressArgs):
     question: str = Field(min_length=1, max_length=2000)
     context: str = Field(default="", max_length=8000)
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("reason", mode="before")
-    @classmethod
-    def _clip_reason(cls, value):
-        return value[:500] if isinstance(value, str) else value
-    check: SkipJsonSchema[Optional[PassageCheck]] = None
-
-    # Some models send an object argument as its JSON text, fill optional
-    # objects with empty values or nulls. None of that may cost the comparison.
-    @field_validator("check", mode="before")
-    @classmethod
-    def _decode_check(cls, value):
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except ValueError:
-                return None
-        if not isinstance(value, dict):
-            return value if isinstance(value, PassageCheck) else None
-        fields = {key: value.get(key) for key in PASSAGE_CHECK_FIELDS}
-        fields = {key: item if isinstance(item, str) else "" for key, item in fields.items()}
-        return fields if any(item.strip() for item in fields.values()) else None
     file_ids: list[str] = Field(default_factory=list, max_length=5)
     depth: Literal["quick", "full"] = Field(default="full", description=
-        "quick: short factual questions, small follow-ups, rewrites, translations and everyday advice; the "
-        "answer models reply briefly and the answer starts as soon as most of them are in. full: analysis, "
-        "decisions, high-stakes topics (health, law, money), long-form output or when the user wants depth.")
-    next_step: Literal["answer", "more_work"] = Field(description=
-        "answer: this is the last comparison; the app writes and checks the answer immediately after it. "
-        "more_work: you still need another comparison, a document or an action preparation before the answer.")
+        "quick: short factual questions, small follow-ups and everyday advice; the answer models reply briefly "
+        "and the answer starts as soon as most of them are in. full: analysis, decisions, high-stakes topics "
+        "(health, law, money), long-form output or when the user wants depth.")
+    # Fields of the tool until 2026-10-11, no longer offered: a model that
+    # still sends them is not refused for it (strict validation would cost the
+    # round). The orchestrator now sees every comparison's answers and then
+    # decides itself (answer, read a source, compare again), instead of
+    # guessing the next step up front; the purpose line is status_update.
+    reason: SkipJsonSchema[str] = ""
+    next_step: SkipJsonSchema[str] = ""
 
+    @field_validator("reason", "next_step", mode="before")
     @classmethod
-    def model_json_schema(cls, *args, **kwargs):
-        schema = super().model_json_schema(*args, **kwargs)
-        schema.setdefault("properties", {})["check"] = json.loads(json.dumps(PASSAGE_CHECK_SCHEMA))
-        return schema
+    def _ignore_retired(cls, value):
+        return ""
 
 
-# CompareArgs.next_step with read_source on (ComparisonTools(read_sources=True)).
-READ_NEXT_STEP = (
-    "answer: this is the last comparison; the app writes and checks the answer immediately after it, and no "
-    "source can be read. more_work: you still need another comparison, a document or an action preparation, or "
-    "you may need to read a source after seeing the answers (the user asks you to read or check a source, "
-    "reports conflicting information, asks to verify a claim or for exact wording, or the answer hinges on one "
-    "precise figure, date, price or rule that sources often state differently).")
+# check_text: compare_models plus the passage to check. Until 2026-10-11 an
+# optional field `check` of compare_models; GPT-6 Luna filled it with the
+# user's own question, and the app ran an empty sentence check of it.
+CHECK_TEXT_FIELDS = {
+    "starts_with": (str, Field(min_length=1, max_length=300, description=
+        "The pasted text's first words (about 5 to 12), copied exactly from the user's message.")),
+    "ends_with": (str, Field(min_length=1, max_length=300, description=
+        "The pasted text's last words (about 5 to 12), copied exactly from the user's message.")),
+    "answer_to": (str, Field(min_length=1, max_length=PASSAGE_ANSWER_TO_CHARS, description=
+        "The question the pasted text answers, short and in the user's language. The user sees it as "
+        "\"Checked as an answer to: ...\". The comparison models answer exactly this question.")),
+}
+
+
+class AnswerArgs(ProgressArgs):
+    """Ends the steering: the app writes the answer, checked when compared."""
 
 
 def free_compare_args(models):
@@ -335,7 +302,6 @@ def free_compare_args(models):
 # The answers are the evidence only while they stay independent: a model shown
 # the text tends to agree with it. So the passage never reaches a comparison
 # model, and the Coverage judge checks it sentence by sentence afterwards.
-PASSAGE_ANSWER_TO_CHARS = 300
 # The check (one Coverage call, typically 5-15 s) only starts with at least
 # this much time left before the answer step must begin, and it is stopped
 # once that time is used up.
@@ -517,8 +483,32 @@ def _word_form(text):
     return " ".join(re.findall(r"\w+", _search_form(text)[0]))
 
 
+_QUESTION_ENDS = ("?", "\uff1f")
+_STATEMENT_ENDS = (".", "!", "\u2026", '"', "\u201c", "\u201d", "\u00bb", "'", ")")
+
+
+def own_request(passage, sentences, message):
+    """Why a declared passage is the user's own question or request, or None.
+
+    check_text is for a text pasted from elsewhere. Live (2026-10-11) the
+    orchestrator declared the user's own question ("Wer hat die Ironman-WM
+    2026 gewonnen?") and a request without punctuation ("kannst du den watch
+    bitte für mich starten") as such a text. A pasted answer states something;
+    a bare pasted claim of one sentence still ends like a statement."""
+    texts = [str(sentence).strip() for sentence in sentences if str(sentence).strip()]
+    if texts and all(text.endswith(_QUESTION_ENDS) for text in texts):
+        return ("This text only asks questions: it is the user's question, not a text to check. Answer it: "
+                "compare_models when independent answers add value, otherwise answer.")
+    whole = _word_form(passage) == _word_form(message)
+    if whole and len(texts) <= 1 and not passage.rstrip().endswith(_STATEMENT_ENDS + _QUESTION_ENDS):
+        return ("This is the user's own request, not a text pasted from elsewhere. Handle the request: "
+                "compare_models when independent answers add value, otherwise answer.")
+    return None
+
+
 class JudgeArgs(ProgressArgs):
-    """Hands off to the answer phase; the checks always run on the fixed answer."""
+    """The app's own call of the answer check (DelegationLoop._finish_review);
+    no longer offered to the orchestrator, whose tool is `answer`."""
     # Former revision switch, no longer offered to the model. Still accepted and
     # ignored so a call from an older client or a running turn does not fail.
     finalize: SkipJsonSchema[bool] = True
@@ -559,7 +549,11 @@ class ComparisonTools:
         # Comparison answers run all at once; judges have their own slots.
         # The loop's slots stay with delegated workers.
         self.judge_slots = threading.BoundedSemaphore(JUDGE_PARALLEL)
-        self.ready_to_answer = False
+        # Set by the answer tool without any comparison: the app writes the
+        # answer from the conversation and pages read, and checks nothing.
+        self.direct = False
+        # answer was accepted: the app writes the answer next (no more tools).
+        self.answer_requested = False
         self._raw, self._failures, self._running = {}, {}, {}
         # Text a model had written before it stopped or failed. Kept for the
         # reader, marked incomplete; never part of the synthesis or its check.
@@ -570,25 +564,28 @@ class ComparisonTools:
         # set by the loop when read_source is on.
         self.reader = None
         arguments = free_compare_args(models) if self.free else CompareArgs
+        answer_args = AnswerArgs
         if memory_changes:
-            # Memory changes ride along on the call the orchestrator makes anyway.
+            # The memory decision rides on the call that ends every answered
+            # message: required, so that it is made (agent_memory.memory_field).
             from app.services.agent_memory import memory_field
-            arguments = create_model("MemoryCompareArgs", __base__=arguments, memory=memory_field())
-        if read_sources:
-            # next_step is chosen while this schema is filled in, before the
-            # answers arrive: it names reading (agent_read_source) right there.
-            arguments = create_model("ReadCompareArgs", __base__=arguments, next_step=(
-                Literal["answer", "more_work"], Field(description=READ_NEXT_STEP)))
-        compare = (ReadOnlyTool("compare_models", "Get independent answers from the families you choose (at least two) before synthesizing and checking the answer. Every substantive answer needs at least one comparison.", arguments, self.compare)
+            answer_args = create_model("MemoryAnswerArgs", __base__=AnswerArgs, memory=memory_field())
+        check_args = create_model("CheckTextArgs", __base__=arguments, **CHECK_TEXT_FIELDS)
+        compare = (ReadOnlyTool("compare_models", "Ask the families you choose (at least two) the same neutral task and get their independent answers. Use it when independent answers add value; afterwards you see the answers.", arguments, self.compare)
                    if self.free else
-                   ReadOnlyTool("compare_models", "Start the Consensus pipeline for every user question or task. Get independent answers from the selected models before synthesizing and checking the answer.", arguments, self.compare))
+                   ReadOnlyTool("compare_models", "Ask the user's selected models the same neutral task and get their independent answers. Use it when independent answers add value; afterwards you see the answers.", arguments, self.compare))
+        # The orchestrator's tools, in a fixed order (prompt cache). The app
+        # runs the answer check and the source check of contradictions itself
+        # once the answer is written (app_tools, DelegationLoop._finish_review).
         self.tools = [compare,
-                      ReadOnlyTool("judge_answer", "Finish comparisons: the app first streams your complete answer in a dedicated tool-free step, then checks that exact visible text with Differences and Coverage judges. Do not write a preamble alongside this call.", JudgeArgs, self.judge)]
+                      ReadOnlyTool("check_text", "Check a text the user pasted from elsewhere, such as another AI's answer: the models answer the question it answers without seeing it, and the app checks every sentence of the text against their answers. Never for the user's own question or request.", check_args, self.check_text),
+                      ReadOnlyTool("answer", "Finish this message: the app writes the user-facing answer in a dedicated step. After comparisons it is checked against them; without one it rests on the conversation, pages you read and the model's own knowledge. Do not write the answer yourself alongside this call.", answer_args, self.answer)]
+        self.app_tools = [ReadOnlyTool("judge_answer", "Check the fixed answer with the Differences and Coverage judges.", JudgeArgs, self.judge)]
         self.contradictions = None
         if check_sources:
             from app.services.agent_contradictions import ContradictionChecks
             self.contradictions = ContradictionChecks(self, JudgeArgs, source_limits)
-            self.tools.append(self.contradictions.tool)
+            self.app_tools.append(self.contradictions.tool)
 
     @property
     def free(self):
@@ -604,7 +601,10 @@ class ComparisonTools:
         return chosen
 
     def snapshot(self, status=None):
-        data = {"version": 1, "status": status or (self.review or {}).get("status", "required"),
+        # A direct answer is saved only with pages it read; "direct" is never
+        # a review result (no comparison, nothing checked).
+        default = "direct" if not self.comparisons else (self.review or {}).get("status", "required")
+        data = {"version": 1, "status": status or default,
                 "answer_hash": answer_hash(self.text), "answer_version": len(self.versions),
                 "comparisons": self.comparisons, "versions": self.versions,
                 "check_sources": self.contradictions is not None}
@@ -625,14 +625,6 @@ class ComparisonTools:
     def latest_user_message(self):
         messages = self.user_messages()
         return messages[0] if messages else ""
-
-    def passage_for(self, check):
-        """The passage a check would cover, or None; never refuses (memory uses
-        it to keep pasted text from counting as the user's own words)."""
-        try:
-            return locate_passage(self.user_messages(), check)[0] if check is not None else None
-        except ValueError:
-            return None
 
     def _own_words(self, passage):
         """What the user wrote themselves around the passage, for the leak test."""
@@ -656,13 +648,14 @@ class ComparisonTools:
         from app.services.agent_runs import agent_sources
         from app.services.llm.base import get_date_context
         from app.services.prompt_defaults import (AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_PROMPT, AGENT_ANSWER_READ_FACT,
-                                                  AGENT_ANSWER_WATCH_FACT)
+                                                  AGENT_ANSWER_WATCH_FACT, AGENT_DIRECT_ANSWER_PROMPT)
         config = prompt_config.get_config()
         self.freeze_for_synthesis()
+        direct = self.direct and not self.comparisons
         # What the answer may say about the app: only what this turn can do.
         facts = [AGENT_ANSWER_APP_FACTS, *([AGENT_ANSWER_READ_FACT] if self.reader is not None else []),
                  *([AGENT_ANSWER_WATCH_FACT] if getattr(self.loop, "watch_tools", None) is not None else [])]
-        system = (AGENT_ANSWER_PROMPT + "\n\n" + " ".join(facts) + "\n\n"
+        system = ((AGENT_DIRECT_ANSWER_PROMPT if direct else AGENT_ANSWER_PROMPT) + "\n\n" + " ".join(facts) + "\n\n"
                   + get_date_context(config["reference_timezone"])
                   + f"\nSelected model: {self.loop.model.label} ({self.loop.model.model}).")
         memory = getattr(self.loop, "memory", None)
@@ -696,6 +689,10 @@ class ComparisonTools:
             # Pages the orchestrator opened (read_source): what the answer may
             # quote beyond the excerpts, also shown to the Coverage judge.
             evidence["read_sources"] = read
+        if direct:
+            # No model answers to weigh: only what this message really has.
+            for key in ("comparisons", "sources", "research_sources"):
+                evidence.pop(key, None)
 
         def messages():
             return [{"role": "system", "content": system}, *conversation,
@@ -711,6 +708,8 @@ class ComparisonTools:
             except BaseException:
                 stopped.append(True)
                 raise
+        if direct:
+            return messages()
         try:
             pooled = self.source_evidence.collect(
                 self.comparisons, check=check,
@@ -875,7 +874,17 @@ class ComparisonTools:
     def capture(self, text):
         # The visible synthesis is immutable within a turn. Subsequent assistant
         # text can accompany required tool calls but cannot invalidate its review.
-        if not self.comparisons or not text.strip() or self.text:
+        if not text.strip() or self.text:
+            return
+        if not self.comparisons:
+            if self.direct:
+                # A direct answer: nothing to check. Saved with the review only
+                # when pages were read (the review holds read_sources).
+                with self.lock:
+                    self.text = text
+                    self.finalized = True
+                    if self.reader is not None and self.reader.reads:
+                        self.checkpoint()
             return
         with self.lock:
             self.text = text
@@ -949,9 +958,8 @@ class ComparisonTools:
             loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed", message, failure)
             raise
 
-    def compare(self, args, *, cancellation):
+    def compare(self, args, *, cancellation, check=None):
         loop = self.loop
-        self.ready_to_answer = False
         loop._check(cancellation)
         file_ids = args.file_ids or (loop.file_context.selection() if getattr(loop, "file_context", None) else [])
         if getattr(loop, "file_context", None):
@@ -959,35 +967,35 @@ class ComparisonTools:
                 loop.file_context.files.get(loop.uid, loop.chat_id, fid)
         elif file_ids:
             raise ValueError("Files are not available")
-        if self.text:
-            raise ValueError("The synthesis is already fixed. Finish its required checks without another comparison.")
+        if self.text or self.answer_requested:
+            raise ValueError("The answer is already being written. Do not call further tools.")
         if self.reader is not None and any(r.get("status") == "completed" for r in self.reader.reads):
             # Page text is in the orchestrator's context now: a new task could
             # carry its findings (or what a page tells it) to the answer models,
             # which must answer independently.
-            raise ValueError("A source was read in this message, so no further comparison is possible. Call "
-                             "judge_answer: the app writes the answer from the comparisons and what you read.")
+            raise ValueError("A source was read in this message, so no comparison is possible any more. Call "
+                             "answer: the app writes the answer from what you have.")
         if not loop.policy.account_budget_only and (len(self.comparisons) >= BOUNDED_COMPARISONS or self.versions):
             raise ValueError("Complete all comparisons before writing the synthesis (maximum three).")
         limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
         if limit and len(self.comparisons) >= limit:
             # Nothing paid starts; the existing comparisons carry the answer.
-            raise ValueError(f"This message already has its maximum of {limit} comparisons. Do not call "
-                             "compare_models again: call judge_answer now. The app writes the answer from the "
-                             "comparisons you already have and checks it.")
+            raise ValueError(f"This message already has its maximum of {limit} comparisons. Do not compare "
+                             "again: call answer now. The app writes the answer from the comparisons you already "
+                             "have and checks it.")
         asked = self._choose(args)
         passage = None
         standing = self.passage is not None and self.passage["status"] not in {"failed", "cancelled"}
-        if args.check is not None:
+        if check is not None:
             # A check that failed or was stopped may be tried again; one that
             # runs or has a result stands. Without time left it stays failed.
             if standing:
-                raise ValueError("This message already checks a passage in an earlier comparison. Leave check out "
-                                 "of further comparisons.")
+                raise ValueError("This message already checks a passage. Use compare_models for further "
+                                 "comparisons.")
             if self.passage and any(i.get("code") == "no_time" for i in self.passage.get("issues") or []):
-                raise ValueError("There is no time left to check the passage. Leave check out; the answer still "
+                raise ValueError("There is no time left to check the passage. Use compare_models; the answer still "
                                  "judges the text from the comparisons.")
-            passage, sentences, _ = locate_passage(self.user_messages(), args.check)
+            passage, sentences, _ = locate_passage(self.user_messages(), check)
             self._refuse_repeated_passage(args, sentences, passage, declaring=True)
         elif self.passage is not None:
             # Later comparisons of this message must not show the passage
@@ -1005,14 +1013,16 @@ class ComparisonTools:
         if not loop.policy.account_budget_only and (loop.costs.calls + len(asked) + 4 + 2 * len(self.comparisons)
                                                     + (2 if passage is not None else 0)) > loop.policy.max_calls:
             raise ValueError("Remaining calls are reserved for synthesis and judges")
-        comparison = {"id": uuid4().hex, **args.model_dump(exclude={"status_update", "models", "memory", "check"}),
+        comparison = {"id": uuid4().hex, **args.model_dump(include={"question", "context", "file_ids", "depth"}),
+                      # The purpose line under "Comparison n" is the progress paragraph.
+                      "reason": " ".join(args.status_update.split())[:500],
                       "asked": asked, "status": "running", "answers": [], "failed_models": []}
         self.comparisons.append(comparison)
         if passage is not None:
             # Visible above the answer from now on ("Checking ..."), not
             # only once the judge has finished.
             self.passage = {"version": 1, "status": "waiting", "comparison_id": comparison["id"],
-                            "answer_to": " ".join(args.check.answer_to.split())[:PASSAGE_ANSWER_TO_CHARS],
+                            "answer_to": " ".join(check.answer_to.split())[:PASSAGE_ANSWER_TO_CHARS],
                             "text": passage, "hash": answer_hash(passage)}
         # New evidence invalidates even an unchanged synthesis's earlier check.
         self.review = None
@@ -1101,7 +1111,6 @@ class ComparisonTools:
             with self.lock:
                 self._rebuild(comparison)
             loop._check(cancellation)
-            self.ready_to_answer = args.next_step == "answer" and len(comparison["answers"]) >= 2
         except BaseException:
             self._stop_running(cid)
             with self.lock:
@@ -1115,16 +1124,13 @@ class ComparisonTools:
             self.checkpoint()
         if passage is not None:
             self._check_passage(comparison, cancellation)
-        if self.ready_to_answer:
-            instruction = "The app now writes your answer from these results and checks it. Do not call further tools."
-        elif limit and len(self.comparisons) >= limit:
+        if limit and len(self.comparisons) >= limit:
             instruction = ("This was the last comparison allowed for this message. Complete any document or action "
-                           "preparation, then call judge_answer without answer text. The app lets you stream the "
-                           "complete synthesis in a dedicated step before any judge starts.")
+                           "preparation, then call answer. The app writes the answer in a dedicated step and checks it.")
         else:
-            instruction = ("Complete any further comparisons, then call judge_answer without answer text. The app lets you "
-                           "stream the complete synthesis in a dedicated step before any judge starts.")
-        if self.reader is not None and not self.ready_to_answer and self.reader.cited():
+            instruction = ("Call answer when these answers suffice: the app writes the answer in a dedicated step and "
+                           "checks it. Compare again only for what is still missing.")
+        if self.reader is not None and self.reader.cited():
             # The orchestrator now sees the answers: the moment to decide on a read.
             instruction = ("If the user asked you to read or check a source, if these answers disagree on a fact that "
                            "matters, or if the answer needs exact wording, first read the source that decides it with "
@@ -1326,15 +1332,59 @@ class ComparisonTools:
             cancellation=current_provider_cancellation())
         return value.text
 
+    def check_text(self, args, *, cancellation):
+        """check_text: compare_models plus the sentence check of a pasted text.
+
+        The locator's refusals stay tool errors (they say what to copy); the
+        user's own question or request is a result, not an error: it must
+        not end the turn after three tries (DelegationLoop.run)."""
+        check = PassageCheck(starts_with=args.starts_with, ends_with=args.ends_with, answer_to=args.answer_to)
+        messages = self.user_messages()
+        passage, sentences, index = locate_passage(messages, check)
+        refusal = own_request(passage, sentences, messages[index])
+        if refusal:
+            return {"status": "refused", "reason": refusal}
+        return self.compare(args, cancellation=cancellation, check=check)
+
+    def answer(self, args, *, cancellation):
+        """The orchestrator is done. The app then writes the answer in its
+        own step and, after comparisons, checks it (DelegationLoop.run,
+        _finish_review: the check stays a visible step of its own). Without a
+        comparison the answer is direct and nothing is checked."""
+        self.loop._check(cancellation)
+        if self.comparisons:
+            self.answer_requested = True
+            return {"status": "accepted",
+                    "instruction": "The app now writes the answer and checks it. Do not call further tools."}
+        if getattr(self.loop, "compare_failed", False):
+            # [compare_models (refused or invalid), answer] in one step: the
+            # orchestrator never saw the refusal, and the answer would go out
+            # unchecked (review 2026-10-11, the live Ironman question).
+            return {"status": "refused", "reason": "Your comparison in this step did not run; its result says why. "
+                    "Decide again: correct it, or call answer alone if no comparison is needed."}
+        read = self.reader is not None and any(r.get("status") == "completed" for r in self.reader.reads)
+        # DelegationLoop._step reports a search of the orchestrator only when
+        # it found something (sources or a count).
+        searched = any(item.get("kind") == "tool" and item.get("name") == "web_search"
+                       and item.get("status") == "succeeded"
+                       for item in getattr(self.loop.completion, "activity", None) or [])
+        if searched and not read:
+            # The answer step would only get the URLs of that search, not
+            # what it found: research is what a comparison is for. After a
+            # read no comparison is possible, so the read page carries it.
+            return {"status": "refused", "reason": "You searched the web for this message: a question that needed "
+                    "research goes through a comparison. Call compare_models with a neutral task, then answer."}
+        self.direct = self.answer_requested = True
+        return {"status": "accepted", "instruction": "The app now writes the answer. Do not call further tools."}
+
     def judge(self, args, *, cancellation):
         from app.services.llm.consensus_engine import query_differences
         loop = self.loop
         loop._check(cancellation)
         if not self.comparisons:
-            raise ValueError("No comparison yet: call compare_models first; the app writes and checks "
-                             "the answer after the last comparison.")
+            raise ValueError("No comparison ran for this message: there is nothing to check.")
         if not self.text:
-            raise ValueError("First compare models and stream the complete synthesis as assistant text.")
+            raise ValueError("The answer has not been written yet.")
         if self.review is not None:
             if self.review["status"] in {"succeeded", "partial", "failed"}:
                 self.finalized = not self.contradictions or self.contradictions.complete()

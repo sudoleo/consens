@@ -318,7 +318,8 @@ def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey
     wid = wid_response.json()['watch']['id']
     assert j.request('DELETE', '/api/share/' + share['share_id'], {}, uid='journey-'+'f'*32).status == 403
     j.page.goto(j.base + share['path'])
-    expect(j.page.locator('#consensusView .share-md')).to_contain_text('Mock consensus')
+    # With a Watch the share renders the Watch page (watch_share.html).
+    expect(j.page.locator('.wp-answer .share-md')).to_contain_text('Mock consensus')
     j.page.locator('#shareFollowForm input[type=email]').fill(j.uid + '@example.invalid')
     j.page.locator('#shareFollowForm button[type=submit]').click()
     expect(j.page.locator('#shareFollowDone')).to_contain_text('Check your inbox')
@@ -330,12 +331,12 @@ def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey
     version = advanced['run']['run_id']
     assert version and advanced['share']['latest_watch_run_id'] == version
     j.page.goto(j.base + share['path'] + '?version=' + version)
-    expect(j.page.locator(f'.watch-version-link[href$="?version={version}"]').locator('xpath=ancestor::li')).to_have_class(re.compile('is-selected'))
-    expect(j.page.locator('#consensusView .share-md')).to_contain_text('Mock consensus')
-    expect(j.page.locator('#consensusView .share-md')).to_contain_text('Watch revision ' + version)
+    expect(j.page.locator('.wp-version.is-current')).to_have_text('Shown above')
+    expect(j.page.locator('.wp-answer .share-md')).to_contain_text('Mock consensus')
+    expect(j.page.locator('.wp-answer .share-md')).to_contain_text('Watch revision ' + version)
     j.page.goto(j.base + share['path'] + '?version=original')
-    expect(j.page.locator('#consensusView').get_by_role('heading', name='Original consensus', exact=True)).to_be_visible()
-    expect(j.page.locator('#consensusView .share-md')).not_to_contain_text('Watch revision ' + version)
+    expect(j.page.locator('#wpAnswerHeading')).to_have_text('The answer then')
+    expect(j.page.locator('.wp-answer .share-md')).not_to_contain_text('Watch revision ' + version)
     history = j.control('state')['global_owned']['shares'][share['share_id']]['children']['watch_history']
     assert version in history and 'Watch revision ' + version in history[version]['data']['consensus_md']
 

@@ -29,8 +29,9 @@ Contracts that are design, not convenience:
    text. The bounded change log for Undo lives in the same document and is
    trimmed on every write and by the hourly retention loop (30 days).
 4. **No extra model call.** Agent proposes changes inside a tool call it makes
-   anyway (``compare_models``) or, for a message that only asks to remember or
-   forget, through ``update_memory``. The server applies them atomically.
+   anyway (``answer``, which ends every answered message) or, for a plain-text
+   reply such as a confirmation, through ``update_memory``. The server applies
+   them atomically.
 """
 
 from __future__ import annotations
@@ -207,8 +208,8 @@ def validate_text(text: object) -> str:
 # --- Change requests --------------------------------------------------------
 
 # Deliberately lenient (the docstring below is the schema text the model reads,
-# so the reason lives here): this model rides inside ``compare_models``, and a
-# schema error there rejects the whole comparison; three rejected rounds end
+# so the reason lives here): this model rides inside ``answer``, and a
+# schema error there rejects the whole call; three rejected rounds end
 # the turn. ``id: null`` on add, a text that is too long or an unknown op must
 # come back as a refused memory change instead, so every rule lives in
 # ``MemoryTools.apply``/``normalize_change``. Enum and ``required`` in the JSON
@@ -730,9 +731,9 @@ relevance test for this task, as the user's stated background or preference
 
 MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user switched on "Let Agent update memory", so you decide
 what to remember across chats, like an attentive assistant keeping brief notes.
-Decide on EVERY message before your first compare_models call: its `memory`
-field is required. Most messages reveal nothing new: then pass []. Without a
-comparison, use update_memory instead.
+Decide on EVERY message when you call answer: its `memory` field is
+required. Most messages reveal nothing new: then pass []. When you reply with
+plain text instead, use update_memory.
 The test: would knowing this make a noticeably better answer in a future,
 unrelated chat? Save what the user states about themselves, also in passing
 while asking something else ("I'm vegetarian, how do I get more protein?" ->
@@ -810,7 +811,7 @@ def synthesis_prompt(snapshot: MemorySnapshot) -> str:
 # --- Agent tools ------------------------------------------------------------
 
 def memory_field():
-    """The ``memory`` field that rides along on compare_models.
+    """The ``memory`` field that rides along on answer.
 
     Required on purpose: an optional field was simply left out while the
     orchestrator concentrated on the comparison (2026-10-04, "ich lebe
@@ -835,13 +836,6 @@ class MemoryTools:
         self.lock = threading.Lock()
         self.proposed = 0
         self.applied: list[dict] = []
-        # Text the user pasted to have checked (compare_models.check): another
-        # AI's answer or an article, never the user's own words.
-        self.foreign_passages: list[str] = []
-
-    def exclude(self, passage) -> None:
-        if isinstance(passage, str) and passage.strip() and passage not in self.foreign_passages:
-            self.foreign_passages.append(passage)
 
     @property
     def writable(self) -> bool:
@@ -858,15 +852,17 @@ class MemoryTools:
         return [ReadOnlyTool(
             "update_memory",
             "Save, update or delete the user's persistent memories. Each change needs an exact quote of "
-            "the user's own words as evidence. Use it alone only when the message needs no comparison; "
-            "otherwise put the changes into compare_models.memory.",
+            "the user's own words as evidence. Use it only when you reply with plain text; when you call "
+            "answer, put the changes into its memory field.",
             UpdateMemoryArgs, self.update_memory)]
 
     def _user_messages(self) -> list[str]:
         """The user's own words only: a quoted answer passage is cut off
         (``user_words``) and a passage pasted for checking is removed."""
         declared = getattr(getattr(self.loop, "comparison", None), "passage", None) or {}
-        foreign = [*self.foreign_passages, *([declared["text"]] if isinstance(declared.get("text"), str) else [])]
+        # Text the user pasted to have checked (check_text): another AI's
+        # answer or an article, never the user's own words.
+        foreign = [declared["text"]] if isinstance(declared.get("text"), str) else []
         words = []
         for message in getattr(self.loop, "answer_conversation", []):
             if message.get("role") != "user" or not isinstance(message.get("content"), str):

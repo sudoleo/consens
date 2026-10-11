@@ -161,11 +161,49 @@ def test_a_watch_only_message_ends_with_an_acknowledgement(store, autonomy):
     assert saved["consensus"] == "I prepared a Watch for this question below."
     assert saved["agent_watch"]["question"] == QUESTION
     assert not (saved.get("agent_review") or {}).get("comparisons")
-    # A prepared Watch is no licence to answer without a comparison: "tell me
-    # when X, is it out yet?" asks for the current state too. Free mode asks
-    # once; a mere acknowledgement then goes through unchanged.
+    # A short acknowledgement is plain text in both modes (no reminder).
     reminders = [m for m in loop.messages if "App rule" in str(m.get("content"))]
-    assert len(reminders) == (1 if autonomy == "free" else 0)
+    assert reminders == []
+
+
+class WatchThenAnswer(WatchScript):
+    """prepare_watch and answer in one step: no comparison (2026-10-11,
+    "kannst du den Watch für mich starten?" ran six models)."""
+
+    def factory(self):
+        script = self
+        base = type(super().factory())
+
+        class Completion(base):
+            def stream(self, *, model, messages, **kwargs):
+                tools = kwargs.get("tools") or []
+                if self.step_id == "completion:0":
+                    script.system = messages[0]["content"]
+                    script.calls.append((self.step_id, model.model))
+                    self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                    self.tool_calls = [{"id": "call_watch", "type": "function", "function": {
+                        "name": "prepare_watch", "arguments": json.dumps(script.watch)}},
+                        {"id": "call_answer", "type": "function", "function": {"name": "answer", "arguments": "{}"}}]
+                    self.finish_reason = "tool_calls"
+                    return
+                if self.step_id.startswith("completion:") and not tools:
+                    script.answer_messages.append(messages)
+                yield from super().stream(model=model, messages=messages, **kwargs)
+        return Completion()
+
+
+@pytest.mark.usefixtures("no_watch_writes")
+def test_starting_an_earlier_watch_prepares_it_again_and_answers_without_a_comparison(store):
+    script = WatchThenAnswer()
+    loop = watch_loop(store, script, question="Kannst du den Watch bitte für mich starten?")
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["agent_watch"]["question"] == QUESTION
+    assert not loop.comparison.comparisons and loop.comparison.direct
+    answer = script.answer_messages[-1]
+    # The card stands below this answer, and the answer step knows it.
+    assert agent_watch.SYNTHESIS_PROMPT in answer[0]["content"]
+    assert evidence(answer)["prepared_watch"]["question"] == QUESTION
 
 
 def test_a_reminder_request_counts_and_the_answer_never_denies_reminders():
@@ -174,7 +212,10 @@ def test_a_reminder_request_counts_and_the_answer_never_denies_reminders():
     and the answer said consens.io could not notify anyone."""
     prompt = agent_watch.ORCHESTRATOR_PROMPT
     assert "to remind, notify or alert them" in prompt and "there is no other way to reach them later" in prompt
-    assert "call prepare_watch once, before the comparison" in prompt
+    assert "call prepare_watch once, about whatever can still happen or change" in prompt
+    # A follow-up "start the Watch" gets a new card: the old one is gone.
+    assert "to start or set up a Watch prepared earlier, call prepare_watch with that question" in prompt
+    assert "never point to a card otherwise" in AGENT_ANSWER_WATCH_FACT
     assert "Never say that you or consens.io cannot remind or notify the user." in AGENT_ANSWER_WATCH_FACT
 
 

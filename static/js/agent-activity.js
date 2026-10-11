@@ -9,6 +9,7 @@
     web_search: ['Web search', 'Searching the web…', 'Searched the web'],
     read_source: ['Read source', 'Reading a source…', 'Read source'],
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
+    check_text: ['Text check', 'Checking your text against independent answers…', 'Checked your text against independent answers'],
     prepare_watch: ['Watch', 'Preparing a Watch…', 'Prepared a Watch for you to start'],
     judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
     check_contradictions: ['Contradiction source check', 'Checking contradictions against sources…', 'Checked contradictions against sources'],
@@ -328,7 +329,8 @@
       && ["text", "summary"].includes(item.format) && item.text);
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
-    const tools = events.filter(item => item.kind === "tool" && !(item.name === "web_search"
+    // `answer` only ends the steering; the answer itself is what follows.
+    const tools = events.filter(item => item.kind === "tool" && item.name !== "answer" && !(item.name === "web_search"
       && item.status === "unknown" && (item.server_tool || item.provider_native)
       && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
@@ -372,7 +374,7 @@
     if (running && (!activeTool || waiting || reconnecting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
     // While the comparison models answer, the main model is silent: one quiet
     // line quotes the reasoning of the model that reported last.
-    const comparing = reviewStage === 'Comparing perspectives…' || activeTool?.name === 'compare_models';
+    const comparing = reviewStage === 'Comparing perspectives…' || ['compare_models', 'check_text'].includes(activeTool?.name);
     if (running && !waiting && !reconnecting && comparing && highlight?.text) {
       // quiet: true keeps the frequent changes out of the screen reader log;
       // the agent panel offers the same highlights per model.

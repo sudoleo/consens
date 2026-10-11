@@ -213,7 +213,7 @@ def test_consensus_default_overrides_legacy_prompt_and_disabled_workers_are_not_
     # The workflow lives in the code-owned steering prompt; the loop appends no
     # second protocol and no worker catalog while delegation is off.
     from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
-    assert "every message with a task goes through a comparison" in AGENT_SYSTEM_PROMPT
+    assert "COMPARE OR ANSWER DIRECTLY" in AGENT_SYSTEM_PROMPT and "When in doubt, compare." in AGENT_SYSTEM_PROMPT
     assert "Do not pass on what answers it" in AGENT_SYSTEM_PROMPT
     assert "orchestrator in consens.io Agent Beta" not in system and "judge_answer once" not in system
     assert "Available worker models" not in system

@@ -378,6 +378,21 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('shows no step for answer and names a text check like a comparison', () => {
+    // `answer` only ends the steering (no marker on answers without a comparison).
+    const {window:w,document:d,dom} = boot();
+    const host = d.querySelector('#agentAnswerActivity');
+    const events = [{kind:'tool',id:'c',name:'check_text',status:'succeeded'},
+      {kind:'tool',id:'a',name:'answer',status:'succeeded'}];
+    w.App.agentActivity.render(host, {events});
+    expect(host.textContent).toContain('Text check · Completed');
+    expect(host.textContent).not.toContain('Tool ·');
+    const highlight = {id:'h', label:'Gemini', text:'Checking the figures.'};
+    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'c',name:'check_text',status:'running'}], highlight});
+    expect(host.querySelector('.agent-progress').textContent).toContain('Gemini: Checking the figures.');
+    dom.window.close();
+  });
+
   it('explains allowance waiting outside the collapsed activity details', () => {
     const {window:w,document:d,dom} = boot();
     const host = d.querySelector('#agentAnswerActivity');

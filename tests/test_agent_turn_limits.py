@@ -58,7 +58,7 @@ def test_prompt_states_the_per_message_comparison_limit(store, autonomy):
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(autonomy=autonomy))
     system = loop.messages[0]["content"]
-    assert "At most 4 comparisons per message before the single checked answer." in system
+    assert "At most 4 comparisons per message." in system
     assert "no elapsed-time limit" not in system
     assert ("at most 4 for this message" in system) == (autonomy == "free")
     bounded = make_loop(store, Script(), preferences=AgentPreferences(autonomy=autonomy))
@@ -78,7 +78,7 @@ def test_fifth_comparison_is_refused_and_the_answer_uses_the_first_four(store):
     assert "last comparison allowed" in tool_result(loop, "call_3")["instruction"]
     for refused in ("call_4", "call_5"):
         error = tool_result(loop, refused)["error"]
-        assert "maximum of 4 comparisons" in error and "judge_answer" in error
+        assert "maximum of 4 comparisons" in error and "call answer now" in error
     # Nothing paid started for the refused calls: four comparisons of two answers.
     assert len([s for s, _ in script.calls if not s.startswith("completion:")]) == 4 * 2 + 4 * 2
 

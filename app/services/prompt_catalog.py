@@ -24,6 +24,11 @@ def _agent_answer():
     return AGENT_ANSWER_PROMPT
 
 
+def _agent_direct_answer():
+    from app.services.prompt_defaults import AGENT_DIRECT_ANSWER_PROMPT
+    return AGENT_DIRECT_ANSWER_PROMPT
+
+
 def _comparison():
     from app.services.agent_comparison import SEARCH_ROUNDS, comparison_system_prompt
     return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, comparison_system_prompt("full", SEARCH_ROUNDS["full"]), count=1)
@@ -51,6 +56,12 @@ _ENTRIES = (
      "the Watch card note are appended; the "
      "conversation and the evidence message (comparison answers with sources) follow.",
      "prompt_defaults.py:AGENT_ANSWER_PROMPT", _agent_answer),
+    ("agent_direct_answer", "Agent: answer step without comparison",
+     "Replaces the answer-step prompt when the Agent answered without a comparison (tool answer, no model "
+     "answers, no check), e.g. for questions about the chat, rewrites or a page the user asked to read. The "
+     "same app facts, date, model, memory and Watch additions follow; the evidence holds only pages read "
+     "and a prepared Watch.",
+     "prompt_defaults.py:AGENT_DIRECT_ANSWER_PROMPT", _agent_direct_answer),
     ("comparison", "Agent: comparison models",
      "System prompt of each independent comparison model, shown for depth \"full\" (3 search rounds). "
      "Quick depth allows one search round and adds brief-answer guidance instead. The date line is "

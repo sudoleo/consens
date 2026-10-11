@@ -214,7 +214,8 @@
           // hid disagreements that had no checkable claim (2026-10-11).
           const total = Number.isInteger(scope.detected_contradictions) ? scope.detected_contradictions : scope.contradictions;
           const excluded = Number.isInteger(scope.excluded_contradictions) ? scope.excluded_contradictions : 0;
-          card.append(node('p', '', `Source checks: ${scope.checked_contradictions} of ${total} disagreements checked`
+          // "0 of 0" said nothing: no disagreement needed a source check.
+          if (total > 0) card.append(node('p', '', `Source checks: ${scope.checked_contradictions} of ${total} disagreements checked`
             + (excluded ? ` · ${excluded} not checkable.` : '.')));
         }
       } else if (review.check_sources === false) {
@@ -442,11 +443,13 @@
         host?.remove(); body._agentReview = null; return;
       }
       if (!host?.isConnected) { host = node('section', 'agent-review'); body.after(host); body._agentReview = host; }
-      const signature = JSON.stringify([evidence.key, evidence.question, turnSources]);
+      // An answer without a comparison may still rest on pages the agent read.
+      const read = readUrls(review);
+      const signature = JSON.stringify([evidence.key, evidence.question, turnSources, [...read]]);
       if (host.dataset.signature === signature) return;
       host.dataset.signature = signature; host._hasReview = false; host.hidden = false;
       const context = { key: `agent-sources:${evidence.key || body.id || evidence.question}`, question: evidence.question || 'Answer sources',
-        answers: [], sections: ['sources'], renderPanel: () => sourcePanel(turnSources) };
+        answers: [], sections: ['sources'], renderPanel: () => sourcePanel(turnSources, read) };
       const nav = node('nav', 'consensus-footer-tabs agent-evidence-links');
       nav.setAttribute('aria-label', 'Explore answer evidence');
       const button = evidenceButton('sources', 'Sources', turnSources.length);

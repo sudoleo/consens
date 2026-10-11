@@ -35,8 +35,8 @@ def enabled(monkeypatch):
 
 
 def compare():
-    return "compare_models", {"question": "What does option one cost?", "context": "", "reason": "Compare",
-                              "next_step": "more_work"}
+    return "compare_models", {"question": "What does option one cost?", "context": "",
+                              "status_update": "Comparing the price."}
 
 
 def read_call(url=CITED):
@@ -45,7 +45,7 @@ def read_call(url=CITED):
 
 
 class Plan:
-    """Scripted routing steps (lists of tool calls), then judge_answer; records every step."""
+    """Scripted routing steps (lists of tool calls), then answer; records every step."""
 
     def __init__(self, steps=None, cited=(CITED, "https://example.net/other")):
         self.script = steps if steps is not None else [[compare()], [read_call()]]
@@ -65,7 +65,7 @@ class Plan:
                 if self.step_id.startswith("completion:") and tools:
                     plan.steps.append(("routing", names))
                     index = int(self.step_id.split(":")[-1])
-                    calls = plan.script[index] if index < len(plan.script) else [("judge_answer", {})]
+                    calls = plan.script[index] if index < len(plan.script) else [("answer", {})]
                     self.tool_calls = [{"id": f"call_{index}_{n}", "type": "function",
                                         "function": {"name": name, "arguments": json.dumps(args)}}
                                        for n, (name, args) in enumerate(calls)]
@@ -263,27 +263,26 @@ def test_prompt_explains_reading_only_when_on(store, enabled):
     loop = chat_loop(store, Plan())
     content = loop.messages[0]["content"]
     assert "read_source" in loop.registry.tools
-    assert "READING CITED SOURCES" in content and f"at most {READS_PER_MESSAGE} pages per message" in content
-    # next_step is chosen before the answers arrive: the prompt says to plan for a read.
-    assert ('set next_step="more_work" when the user asks you to read or check a source, reports conflicting '
-            'information') in content
-    assert "a source of an earlier message of this chat (the links in earlier answers), or a page the user linked" in content
+    assert "READING SOURCES" in content and f"at most {READS_PER_MESSAGE} pages per message" in content
+    # Reading before a comparison closes the door to one: the prompt says when.
+    assert "when the user only wants to know what a page says, read it and call answer without a comparison" in content
+    assert "an earlier message of this chat (the links in earlier answers), or a page the user linked" in content
     for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
         assert AGENT_SYSTEM_PROMPT.count(old) == 1 and old not in content and new in content
     # The answer step may quote what was read, and must not claim a failed read.
     assert "read_sources" in AGENT_ANSWER_PROMPT and '"not read"' in AGENT_ANSWER_PROMPT
 
 
-def test_the_next_step_field_names_reading_only_when_on(store, monkeypatch):
-    description = lambda loop: loop.registry.tools["compare_models"].schema()["function"]["parameters"][
-        "properties"]["next_step"]["description"]
+def test_the_tool_list_is_the_same_with_and_without_reading_except_read_source(store, monkeypatch):
+    """No planning field any more (next_step): the orchestrator decides on a
+    read once it sees the answers."""
     monkeypatch.setenv("AGENT_READ_SOURCES", "0")
-    assert "read a source" not in description(chat_loop(store, Plan()))
+    off = chat_loop(store, Plan())
     monkeypatch.setenv("AGENT_READ_SOURCES", "1")
     on = chat_loop(store, Plan())
-    assert "the user asks you to read or check a source" in description(on)
-    # Still the full compare_models schema: the passage check is not lost.
-    assert "check" in on.registry.tools["compare_models"].schema()["function"]["parameters"]["properties"]
+    assert set(on.registry.tools) - set(off.registry.tools) == {"read_source"}
+    assert on.registry.tools["compare_models"].schema() == off.registry.tools["compare_models"].schema()
+    assert "next_step" not in on.registry.tools["compare_models"].schema()["function"]["parameters"]["properties"]
 
 
 def comparison_ready(store, *, urls=(CITED,)):
@@ -306,9 +305,10 @@ def refused(result, match):
     assert result["status"] == "refused" and match in result["reason"] and "error" not in result, result
 
 
-def test_refused_before_a_comparison_for_uncited_urls_and_after_the_answer(store, monkeypatch, enabled):
+def test_refused_for_uncited_urls_and_after_the_answer(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
-    refused(read(chat_loop(store, Plan())), "only after compare_models")
+    # Before any comparison nothing is cited yet: only chat sources and user links.
+    refused(read(chat_loop(store, Plan())), "listed in the sources")
     loop = comparison_ready(store)
     for url in ("https://evil.example/steal?data=1", "ftp://example.org/report", "javascript:alert(1)",
                 "https://example.org/report/deeper", "https://user@example.org/report"):
@@ -396,7 +396,7 @@ def test_refused_in_a_chat_that_holds_google_data(store, monkeypatch, enabled):
 def test_a_refused_call_before_the_comparison_costs_nothing_and_the_run_goes_on(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
     loop, events, saved = run(store, Plan(steps=[[read_call()], [compare()]]))
-    refused(results(loop)[0], "read_source works only after compare_models")
+    refused(results(loop)[0], "listed in the sources")
     assert calls == [] and saved["status"] == "completed"
     running, done = tool_events(events)
     # No host for a URL nobody cited, and a refusal is no tool error.
@@ -421,8 +421,41 @@ def test_no_comparison_after_a_read(store, monkeypatch, enabled):
     loop, _, saved = run(store, Plan(steps=[[compare()], [read_call()], [compare()]]))
     blocked = next(json.loads(m["content"]) for m in loop.messages
                    if m.get("role") == "tool" and m["tool_call_id"] == "call_2_0")
-    assert "no further comparison" in blocked["error"]
+    assert "no comparison is possible any more" in blocked["error"]
     assert len(saved["agent_review"]["comparisons"]) == 1 and saved["status"] == "completed"
+
+
+def test_after_a_read_a_search_does_not_force_a_comparison_any_more(store, enabled):
+    """Review 2026-10-11: search, then read, then answer looped between two
+    refusals (answer: you searched; compare: a page was read)."""
+    from app.services.agent_comparison import AnswerArgs
+    loop = chat_loop(store, Plan())
+    loop.completion.activity.append({"kind": "tool", "name": "web_search", "status": "succeeded"})
+    refused(loop.comparison.answer(AnswerArgs(), cancellation=loop.cancellation), "goes through a comparison")
+    loop.comparison.reader.reads.append({"status": "completed", "url": CITED})
+    accepted = loop.comparison.answer(AnswerArgs(), cancellation=loop.cancellation)
+    assert accepted["status"] == "accepted" and loop.comparison.direct
+
+
+def test_reads_a_page_the_user_points_to_and_answers_without_a_comparison(store, monkeypatch, enabled):
+    """2026-10-11: "Lies die erste Quelle nach und sag mir die Siegerzeit" ran
+    six models on a page they could not see. Now: read, then answer."""
+    calls = fake_fetch(monkeypatch)
+    earlier = "https://www.tri247.com/live-kona"
+    conversation = [{"role": "user", "content": "Who won?"},
+                    {"role": "assistant", "content": f"Vincent Luis ([tri247]({earlier}))."},
+                    {"role": "user", "content": "Lies die Quelle nach und sag mir die Siegerzeit."}]
+    plan = Plan(steps=[[read_call(earlier)]])
+    loop, events, saved = run(store, plan, conversation=conversation,
+                              chat_sources=[{"url": earlier, "title": "Live"}])
+    assert len(calls) == 1 and not loop.comparison.comparisons and loop.comparison.direct
+    assert saved["status"] == "completed" and saved["assistant_response"] == "The first option costs 100 euros per month."
+    # Saved with the read page, never as a checked review.
+    review = saved["agent_review"]
+    assert review["status"] == "direct" and not review["comparisons"] and review["read_sources"][0]["url"] == earlier
+    assert not any(step[0] in {"comparison", "coverage", "differences"} for step in plan.steps)
+    system, evidence = plan.answer_messages[0]["content"], plan.answer_messages[-1]["content"]
+    assert "No model comparison ran" in system and PAGE in evidence
 
 
 def test_no_read_hint_when_no_answer_cited_a_source(store, monkeypatch, enabled):

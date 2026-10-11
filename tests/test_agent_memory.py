@@ -247,12 +247,14 @@ def test_ask_profile_includes_saved_memories():
 # --- Agent turn ---------------------------------------------------------------
 
 class MemoryScript(Script):
-    """compare_models with optional memory changes, or a memory-only message."""
+    """A comparison, then answer carrying the memory changes; or a
+    memory-only message through update_memory."""
 
     def __init__(self, *, memory=None, standalone=None, **kwargs):
         super().__init__(**kwargs)
         self.memory, self.standalone = memory, standalone
         self.omit_memory = False
+        self.memory_sent = False
         self.system_prompts = []
 
     def factory(self):
@@ -276,14 +278,16 @@ class MemoryScript(Script):
                     yield {"type": "delta", "text": self.text}
                     return
                 yield from super().stream(model=model, messages=messages, **kwargs)
-                compare = next((tool for tool in kwargs.get("tools") or []
-                                if tool.get("function", {}).get("name") == "compare_models"), None)
-                required = "memory" in ((compare or {}).get("function", {}).get("parameters", {}).get("required") or [])
-                if self.tool_calls and self.tool_calls[0]["function"]["name"] == "compare_models" and (
-                        script.memory is not None or (required and not script.omit_memory)):
-                    call = self.tool_calls[0]["function"]
-                    memory = script.memory if script.memory is not None and self.step_id == "completion:0" else []
-                    call["arguments"] = json.dumps({**json.loads(call["arguments"]), "memory": memory})
+                answer = next((tool for tool in kwargs.get("tools") or []
+                               if tool.get("function", {}).get("name") == "answer"), None)
+                required = "memory" in ((answer or {}).get("function", {}).get("parameters", {}).get("required") or [])
+                for call in self.tool_calls or []:
+                    if call["function"]["name"] != "answer" or not (
+                            script.memory is not None or (required and not script.omit_memory)):
+                        continue
+                    memory = script.memory if script.memory is not None and not script.memory_sent else []
+                    script.memory_sent = True
+                    call["function"]["arguments"] = json.dumps({**json.loads(call["function"]["arguments"]), "memory": memory})
         return Completion()
 
 
@@ -313,7 +317,13 @@ def orchestrator_steps(script):
     return [step for step, _ in script.calls if step.startswith("completion:")]
 
 
-def test_memory_changes_ride_on_compare_models_without_an_extra_step(store):
+def memory_result(loop):
+    """The memory outcome on the answer call (the first tool result that has one)."""
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    return next(result["memory"] for result in results if "memory" in result)
+
+
+def test_memory_changes_ride_on_answer_without_an_extra_step(store):
     baseline = MemoryScript()
     list(memory_loop(store, baseline).run())
     snapshot = writable_snapshot(store, ["Lives in Berlin."])
@@ -332,11 +342,24 @@ def test_memory_changes_ride_on_compare_models_without_an_extra_step(store):
     assert memory_events and memory_events[0]["changes"][0]["text"] == "Lives in Munich (since October 2026)."
     # Memory changes are not part of the saved comparison or its hash basis.
     assert "memory" not in saved["agent_review"]["comparisons"][0]
-    # Memory closes the system prompt and the compare schema offers the field.
+    # Memory closes the system prompt and answer offers the field, not compare_models.
     assert script.system_prompts[0].rstrip().endswith(agent_memory.MEMORY_WRITE_PROMPT.splitlines()[-1])
+    answer = next(tool for tool in script.tools if tool["name"] == "answer")
     compare = next(tool for tool in script.tools if tool["name"] == "compare_models")
-    assert "memory" in compare["parameters"]["properties"]
+    assert "memory" in answer["parameters"]["properties"] and "memory" not in compare["parameters"]["properties"]
     assert any(tool["name"] == "update_memory" for tool in script.tools)
+
+
+def test_memory_sent_as_json_text_on_answer_is_saved(store):
+    """Haiku 5.5 sends the field as JSON text ("memory": "[...]"), live probe
+    2026-10-11; the registry decodes it instead of rejecting the answer."""
+    snapshot = writable_snapshot(store)
+    script = MemoryScript(memory=json.dumps([{"op": "add", "text": "Lives in Munich.",
+                                              "evidence": "I moved to Munich last week"}]))
+    loop = memory_loop(store, script, snapshot=snapshot)
+    list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+    assert [item["text"] for item in repo(store).get(UID)[0]] == ["Lives in Munich."]
 
 
 def test_memory_from_anything_but_the_users_words_is_refused(store):
@@ -348,15 +371,14 @@ def test_memory_from_anything_but_the_users_words_is_refused(store):
     assert repo(store).get(UID)[0] == []
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and not saved.get("agent_memory")
-    tool_results = [m for m in loop.messages if m.get("role") == "tool"]
-    assert "exact quote of the user's own words" in json.loads(tool_results[0]["content"])["memory"]["error"]
+    assert "exact quote of the user's own words" in memory_result(loop)["error"]
     # The refusal stays diagnosable in the saved activity, without memory content.
     blocked = [event for event in saved["agent_activity"]
                if event.get("name") == "update_memory" and event.get("status") == "blocked"]
     assert blocked and "evil.example" not in json.dumps(blocked)
 
 
-def test_the_memory_decision_is_required_on_every_comparison(store):
+def test_the_memory_decision_is_required_on_every_answer(store):
     """An optional field was left out in practice; [] must be an explicit choice."""
     snapshot = writable_snapshot(store)
     script = MemoryScript()
@@ -365,9 +387,10 @@ def test_the_memory_decision_is_required_on_every_comparison(store):
     with pytest.raises(Exception):
         list(loop.run())
     rejected = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
-    assert "memory" in rejected[0]["error"] and "Field required" in rejected[0]["error"]
-    compare = next(tool for tool in script.tools if tool["name"] == "compare_models")
-    assert "memory" in compare["parameters"]["required"]
+    first_error = next(result["error"] for result in rejected if "error" in result)
+    assert "memory" in first_error and "Field required" in first_error
+    answer = next(tool for tool in script.tools if tool["name"] == "answer")
+    assert "memory" in answer["parameters"]["required"]
     assert "vegetarian" in script.system_prompts[0]
 
 
@@ -396,8 +419,8 @@ def test_without_the_opt_in_agent_reads_memory_but_gets_no_write_tools(store):
     prompt = script.system_prompts[0]
     assert "Prefers metric units." in prompt and "read-only" in prompt
     assert not any(tool["name"] == "update_memory" for tool in script.tools)
-    compare = next(tool for tool in script.tools if tool["name"] == "compare_models")
-    assert "memory" not in compare["parameters"]["properties"]
+    answer = next(tool for tool in script.tools if tool["name"] == "answer")
+    assert "memory" not in answer["parameters"]["properties"]
 
 
 def test_switching_auto_memory_off_mid_run_stops_the_next_write(store):
@@ -556,8 +579,7 @@ def test_a_storage_error_while_saving_memory_never_fails_the_turn(store, caplog)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed"
-    memory = json.loads(next(m for m in loop.messages if m.get("role") == "tool")["content"])["memory"]
-    assert memory == {"error": "Memory could not be saved right now. Nothing was saved."}
+    assert memory_result(loop) == {"error": "Memory could not be saved right now. Nothing was saved."}
     blocked = [event for event in saved["agent_activity"] if event.get("name") == "update_memory"]
     assert blocked and blocked[0]["status"] == "blocked" and blocked[0]["reason"] == "unavailable"
     # Only the category is logged, never memory text.
@@ -606,7 +628,8 @@ def test_a_malformed_memory_change_never_rejects_the_comparison(store, change, c
     assert saved["status"] == "completed" and saved["agent_review"]["comparisons"]
     assert repo(store).get(UID)[0] == []
     tool_results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
-    assert "error" not in tool_results[0] and "Nothing was saved." in tool_results[0]["memory"]["error"]
+    assert not any("error" in result for result in tool_results)
+    assert "Nothing was saved." in memory_result(loop)["error"]
     blocked = [event for event in saved["agent_activity"] if event.get("name") == "update_memory"]
     assert blocked[0]["reason"] == code
     # Neither the model's free text in the id field nor the memory text is saved.
@@ -620,8 +643,7 @@ def test_more_changes_than_one_call_allows_are_refused_not_rejected(store):
     loop = memory_loop(store, script, snapshot=snapshot)
     list(loop.run())
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
-    memory = json.loads(next(m for m in loop.messages if m.get("role") == "tool")["content"])["memory"]
-    assert f"At most {agent_memory.MAX_CHANGES_PER_CALL}" in memory["error"]
+    assert f"At most {agent_memory.MAX_CHANGES_PER_CALL}" in memory_result(loop)["error"]
 
 
 def test_the_memory_schema_still_guides_the_model():
@@ -660,8 +682,7 @@ def test_agent_cannot_save_a_passage_the_user_only_quoted(store):
     loop = memory_loop(store, script, snapshot=snapshot, question=question)
     list(loop.run())
     assert repo(store).get(UID)[0] == []
-    memory = json.loads(next(m for m in loop.messages if m.get("role") == "tool")["content"])["memory"]
-    assert "exact quote of the user's own words" in memory["error"]
+    assert "exact quote of the user's own words" in memory_result(loop)["error"]
     # The models still see the question with the passage.
     assert loop.answer_conversation[-1]["content"] == question
 

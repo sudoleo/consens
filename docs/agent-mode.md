@@ -1,15 +1,33 @@
 # Agent · Beta
 
 Agent · Beta ist ein eigener Chatmodus für Pro-Nutzer und Admins. Das ausgewählte
-Chatmodell schickt jede Nutzerfrage und jeden Bearbeitungsauftrag durch die Consensus-Pipeline:
-unabhängige Vergleichsantworten, eigene Synthese und anschließende Prüfung.
-Websuche darf die Frage und aktuelle Belege vorbereiten. Nur reine Begrüßungen,
-Bestätigungen ohne Frage/Auftrag und unvermeidbare Rückfragen bleiben direkt möglich.
-Eine Nutzerbestätigung ist dafür nicht nötig; bei sinnvoll lösbaren Unklarheiten
-arbeitet das Modell mit begründeten Annahmen weiter.
-Vor jeder inhaltlichen Antwort wartet es auf die Vergleichsergebnisse und bildet
-daraus die Synthese. Es darf keine eigene Antwort vorwegnehmen und nachträglich
-nur bestätigen lassen. Alle Antworten werden anhand ihrer Begründung, Belege und
+Chatmodell (Orchestrator) entscheidet seit 2026-10-11 je Nachricht, ob es die
+Vergleichsmodelle befragt (Max' Entscheidung nach dem Ironman-Test: „Wenn es
+Mehrwert bietet oder der User das verlangt“):
+
+- **Vergleichen** (`compare_models`): Fakten, die Modelle verschieden kennen oder
+  die sich ändern (Aktuelles, Preise, Regeln, Zahlen), Einschätzung, Rat,
+  Entscheidung, Analyse, hohe Tragweite, Strittiges, alles mit Recherche, und
+  immer, wenn der Nutzer Vergleich, Prüfung oder andere Modelle verlangt.
+  **Im Zweifel vergleichen.** Eigene Recherche führt immer in einen Vergleich.
+- **Direkt antworten** (`answer` ohne Vergleich): Fragen zum Chat, zur App oder
+  zu früheren Antworten, Umformulieren/Kürzen/Übersetzen/Erklären von Text aus
+  dem Chat, Gruß, Dank, Rückfrage, Watch vorbereiten oder erklären, eine Seite
+  lesen, auf die der Nutzer zeigt, und daraus antworten.
+
+Das gilt im geführten und im freien Modus gleich. Direkte Antworten sind nicht
+gekennzeichnet (Max); sie haben keinen Score und keine Prüfung, nur gegebenenfalls
+den Sources-Knopf. Die Werkzeuge des Orchestrators: `compare_models` (Frage,
+Kontext, Tiefe; im freien Modus die Familien), `check_text` (eingefügten fremden
+Text prüfen), `read_source`, `prepare_watch`, Memory und `answer` (beendet die
+Steuerung; die App schreibt die Antwort und prüft sie, wenn verglichen wurde).
+`judge_answer` und `check_contradictions` führt die App selbst aus
+(`ComparisonTools.app_tools`, `DelegationLoop.app_registry`); das Modell sieht sie
+nicht. Nach einem Vergleich bekommt der Orchestrator immer die Antworten zu sehen
+und entscheidet dann (`next_step` gibt es nicht mehr: das Vorausplanen vor den
+Antworten war fehleranfällig; Preis ist ein kurzer Steuerschritt mehr, mit Luna
+etwa 1–3 s). Bei sinnvoll lösbaren Unklarheiten arbeitet das Modell mit
+begründeten Annahmen weiter. Alle Antworten werden anhand ihrer Begründung, Belege und
 Aktualität abgewogen, statt nach Modellnamen oder Stimmenmehrheit. Fehlende
 Ergebnisse werden nicht durch unbelegte Erinnerungen ersetzt; verbleibende
 Unsicherheit wird inhaltlich erklärt. Der freigegebene Agent-Systemprompt steht
@@ -151,30 +169,30 @@ Zwei Regeln setzt der Server durch, nicht der Prompt:
   Familie an `ComparisonTools._choose` – jeweils als Toolfehler vor jedem bezahlten
   Aufruf. Damit hat jeder Vergleich etwas, das Differences und Coverage
   gegeneinander prüfen können.
-- **Keine ungeprüfte Sachantwort.** Antwortet das Chatmodell im freien Modus ohne
-  jeden Vergleich direkt, veröffentlicht der Server den Text nicht, sondern
-  verlangt einmal (`DelegationLoop._free_floor`) einen Vergleich oder die
-  Bestätigung, dass es nur ein Gruß, eine Quittung oder eine nötige Rückfrage ist.
-  Bestätigt es, gilt die Antwort wie im geführten Modus als direkte Antwort.
+- **Lange Klartext-Antworten gehen durch den Antwortschritt.** Klartext im
+  Steuerschritt ist für Gruß, Quittung und Rückfrage gedacht: nicht gestreamt,
+  kleines Ausgabebudget, ohne Antwort-Prompt. Ist er länger als
+  `DIRECT_REPLY_CHARS` (800) oder am Limit abgeschnitten, hält der Server ihn
+  einmal zurück (`DelegationLoop._direct_reply_reminder`, beide Modi, nicht unter
+  MOCK_LLM): `answer` aufrufen oder erst vergleichen. Bis 2026-10-11 verlangte
+  `_free_floor` im freien Modus für jede direkte Antwort einen Vergleich.
 
 Danach laufen Synthese und Judges unverändert; der Judge kommt in beiden Modi
 immer am Ende. Ältere Turns ohne `autonomy` gelten bei der Recovery-Identität als
 `guided` (`stored_preferences`).
 
-`compare_models` hat zwei Entscheidungsfelder. `depth` (Standard `full`) steuert
+`compare_models` hat ein Entscheidungsfeld: `depth` (Standard `full`) steuert
 die Längenvorgabe der Vergleichsmodelle: `quick` für kurze Sachfragen, kleine
-Folgefragen, Umformulierungen und Alltagsrat (etwa 1500 Zeichen, falls die Aufgabe
-nicht mehr braucht), `full` für Analysen, Entscheidungen, Gesundheit, Recht, Geld
-und ausführliche Ausgaben (keine Längenvorgabe). Im geführten Modus antworten alle
+Folgefragen und Alltagsrat (etwa 1500 Zeichen, falls die Aufgabe nicht mehr
+braucht), `full` für Analysen, Entscheidungen, Gesundheit, Recht, Geld und
+ausführliche Ausgaben (keine Längenvorgabe). Im geführten Modus antworten alle
 gewählten Vergleichsmodelle in beiden Stufen; die Auswahl im Compare-Picker wird nicht
 still verkleinert. Im freien Modus wählt das Chatmodell sie pro Vergleich (`models`).
-`next_step` ist Pflicht: `answer` beim letzten Vergleich lässt den Server direkt
-Synthese und Prüfung ausführen, ohne weitere Orchestrierungsrunde, die nur
-`judge_answer` aufrufen würde. `more_work` gilt, wenn noch ein Vergleich, ein
-Dokument oder eine Aktionsvorbereitung folgt; danach ruft das Chatmodell wie
-bisher `judge_answer` auf. Der direkte Weg gilt nur, wenn der letzte Toolaufruf
-ein angenommener Vergleich war, alle Worker geprüft sind und für die Nachricht
-kein Google-Zugriff freigegeben ist.
+Die Zeile unter „Comparison n“ ist das `status_update` des Aufrufs. Die Felder
+`reason` und `next_step` (bis 2026-10-11) nimmt das Schema noch versteckt an und
+ignoriert sie, damit ein Modell, das sie aus Gewohnheit schickt, keinen Toolfehler
+bekommt. Kommen `compare_models` und `answer` im selben Schritt, schreibt der
+Server die Antwort direkt nach dem Vergleich (wie früher `next_step="answer"`).
 
 Alle Vergleichsmodelle laufen gleichzeitig (eigener Semaphore je Vergleich,
 unabhängig von `max_parallel` der Worker-Delegation); Differences und Coverage
@@ -218,7 +236,7 @@ erzeugen würde (wie unterbrochene Antworten im Consensus-Modus).
 
 ## Antwortversionen und Prüfungen
 
-Nach den Vergleichen leitet `judge_answer` in die Antwortphase über. Vor seiner
+Nach den Vergleichen leitet `answer` in die Antwortphase über. Vor seiner
 Ausführung streamt dasselbe Chatmodell die vollständige Synthese in einem eigenen
 Schritt ohne Tools und Suche. Vorherige Tools im selben Batch werden zuerst
 ausgeführt, ebenso die Prüfung aller unterstützenden Agenten. Erst wenn dieser
@@ -291,7 +309,35 @@ OpenAI-Standard-Judge. Beide Prüfungen behalten die niedrige Judge-Denkstufe;
 die Pro-Tabelle und weitere Modellfamilien werden nicht als Ausweichstufen genutzt.
 
 Bei eingeschaltetem „Check contradictions“ folgt `check_contradictions`; der
-Server ruft es nach `judge_answer` selbst auf (`_finish_review`).
+Server ruft es nach der Antwortprüfung selbst auf (`_finish_review`).
+
+**Ablauf von `answer`.** `answer` beendet nur die Steuerung
+(`ComparisonTools.answer_requested`); weitere Werkzeuge lehnt die App danach ab.
+Nach dem Batch schreibt `DelegationLoop.run` die Antwort ohne weitere
+Steuerrunde (`_answer_ready`). Nach Vergleichen prüft `_finish_review` sie danach
+mit `judge_answer` (und gegebenenfalls `check_contradictions`) über
+`app_registry`; die Prüfung bleibt eine eigene sichtbare Zeile („Checked the
+answer“).
+
+**Antwort ohne Vergleich (seit 2026-10-11).** Ruft der Orchestrator `answer`
+ohne jeden Vergleich, setzt `ComparisonTools.answer` zusätzlich das Flag `direct`, und
+`DelegationLoop.run` schreibt die Antwort im normalen Antwortschritt
+(`_write_synthesis`: gestreamt, volles Ausgabebudget, App-Fakten, Memory-Block,
+`prepared_watch`, `read_sources`) mit `AGENT_DIRECT_ANSWER_PROMPT` statt
+`AGENT_ANSWER_PROMPT`; die Evidence enthält keine leeren Vergleichsfelder. Es
+laufen keine Judges, und keine Review wird „succeeded“. Eine Review wird nur
+gespeichert, wenn Seiten gelesen wurden (Status `direct`, `capture()` fixiert den
+Text ohne Version). Hat der Orchestrator in dieser Nachricht selbst gesucht
+und keine Seite gelesen, lehnt `answer` als Ergebnis ab: Der Antwortschritt
+bekäme nur die URLs, nicht die Funde; Recherche ist Sache eines Vergleichs. Nach
+einem Read ist kein Vergleich mehr möglich, also trägt die gelesene Seite die
+Antwort. Ebenso lehnt `answer` ab, wenn ein `compare_models`/`check_text` im
+selben Batch scheiterte oder abgelehnt wurde (`DelegationLoop.compare_failed`):
+Der Orchestrator hat die Absage noch nicht gesehen, und die Antwort ginge still
+ungeprüft raus. Er entscheidet dann neu. Der Antwortschritt darf wie nach
+Vergleichen überziehen (`_admit_chat_step`). Bricht er ab, bleibt der gestreamte
+Teiltext als Antwort (`finish_run` nutzt `completion.text`, solange die Review
+keine Vergleiche hat).
 Es verwendet den bestehenden Contradiction Judge für große, faktisch prüfbare
 Widersprüche und bereits vorhandene Originalquellen. Seit 2026-10-03 läuft die
 Prüfung als Hintergrundjob in derselben Queue wie in Consensus
@@ -420,8 +466,16 @@ laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
 ### Eingefügten Text prüfen (seit 2026-10-09)
 
 Fügt der Nutzer eine fremde Antwort ein („Stimmt das?" oder ganz ohne Zusatz),
-setzt der Orchestrator in `compare_models` das Feld `check` (erste und letzte
-Wörter der Passage, die Frage, die sie beantwortet). Die Vergleichsmodelle sehen
+ruft der Orchestrator `check_text`: die Felder von `compare_models` plus
+`starts_with`/`ends_with` (erste und letzte Wörter der Passage) und `answer_to`
+(die Frage, die sie beantwortet). Bis 2026-10-11 war das ein optionales Feld
+`check` von `compare_models`; GPT-6 Luna füllte es zweimal mit Max' eigener Frage
+(„Wer hat die Ironman-WM gewonnen?“, „kannst du den watch … starten“), und die
+App prüfte sie als fremden Text. Seitdem lehnt `own_request` (als Ergebnis, nicht
+als Toolfehler, vor jedem bezahlten Aufruf) eine Passage ab, die nur aus Fragen
+besteht, oder die die ganze Nachricht ist, nur einen Satz hat und nicht wie eine
+Aussage endet. Eine reine eingefügte Behauptung („Der Eiffelturm ist 330 m hoch.“)
+bleibt prüfbar. Die Vergleichsmodelle sehen
 die Passage nie: Wer sie vorgelegt bekommt, stimmt ihr eher zu. Sie beantworten
 nur die Frage dahinter; der Server lehnt einen Aufruf ab, dessen Frage oder
 Kontext zwei oder mehr Sätze der Passage überwiegend wörtlich enthält (eigene
@@ -432,7 +486,7 @@ kein Differences-Judge), bevor die Antwort geschrieben wird; die Antwort liest
 dieselben Urteile (`checked_text`). Die Marken stehen auf der Nachricht des
 Nutzers, darunter eine Zeile mit den Zählern und der Frage, gegen die geprüft
 wurde. Zusammenfassen, Übersetzen, Umschreiben, Code-Review oder Fragen zu genau
-diesem Dokument laufen ohne `check`; im Zweifel ohne. Live-Check 2026-10-09
+diesem Dokument laufen ohne `check_text`; im Zweifel ohne. Live-Check 2026-10-09
 (Luna, Gemini 3.5 Flash-Lite, DeepSeek V4 Flash, eine Wärmepumpen-Antwort mit
 zwei eingebauten Fehlern): beide Fehler 3/3 widersprochen, die richtigen Sätze
 3/3 gestützt, Zusammenfassen/Übersetzen ohne `check`, rund 0,09 $ und 106 s für
@@ -505,10 +559,13 @@ Nutzers nicht.
 - Das Tool gibt es nur in Account-Mode-Turns mit Vergleich und ohne
   Google-Daten (`DelegationLoop(google_data=…)`). Eine Frage aus privater Post
   soll kein geplanter Check werden.
-- Eine reine „beobachte das“-Nachricht beantwortet der Agent mit einer kurzen
-  Bestätigung. Im freien Modus fragt `_free_floor` dabei einmal nach: Eine
-  vorbereitete Watch ist bewusst keine Ausnahme, weil „sag mir, wenn X, ist es
-  schon draußen?“ auch nach dem aktuellen Stand fragt.
+- Eine reine „beobachte das“-Nachricht oder „starte die Watch“ zu einer früher
+  vorbereiteten: `prepare_watch` (erneut) und `answer` ohne Vergleich. Die Karte
+  steht nur unter der neuesten Antwort (`agent-watch.js` hängt an
+  `#agentAnswerBody`; der Verlauf zeigt sie nicht, Max: in Ordnung); der
+  Antwortschritt verweist laut `AGENT_ANSWER_WATCH_FACT` nur auf eine Karte, wenn
+  `prepared_watch` in seiner Evidence steht. Live 2026-10-11 hatte die Antwort auf
+  eine verschwundene Karte verwiesen.
 - Ein Turn mit eigenem Vorschlag zeigt den allgemeinen Hinweis
   „Watch this question“ (`offerWatch`) nicht.
 - Unter `MOCK_LLM` bereitet „Watch: <Frage>“ einen Vorschlag vor (für
@@ -689,7 +746,7 @@ sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
 
 | Schutzgrenze pro Nachricht | Standard | Verhalten |
 |---|---|---|
-| Vergleiche (`turn_comparisons`) | 4 | Der fünfte `compare_models` liefert einen Tool-Fehler („call judge_answer now“), nichts Bezahltes startet; der vierte meldet „last comparison allowed“. |
+| Vergleiche (`turn_comparisons`) | 4 | Der fünfte `compare_models` liefert einen Tool-Fehler („call answer now“), nichts Bezahltes startet; der vierte meldet „last comparison allowed“. |
 | Orchestrierungsschritte (`turn_steps`) | 24 | Vor dem 25. Routing-Schritt: Wrap-up (siehe unten). |
 | Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. Seit 2026-10-08 kommt der Wrap-up früher, wenn bis zum harten Stopp weniger als `ANSWER_RESERVE_SECONDS` der Denkstufe bleibt (max 10 min, high 6 min, low 2,5 min); ebenso endet dann das Warten auf Nachzügler. |
 | Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (ohne `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
@@ -889,14 +946,13 @@ servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 Watch bereitet der Agent nur vor (Abschnitt „Watch vorschlagen“).
 
 Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
-consens.io. Jede Nutzerfrage und jeder Bearbeitungsauftrag geht durch
-`compare_models`; Antwortschritt, `judge_answer` und (wenn aktiviert)
-`check_contradictions` startet danach der Server. Websuche darf vorher aktuelle Fakten oder
-die Fragestellung klären; jedes Vergleichsmodell kennt das Datum und sucht bei
-zeitabhängigen Fakten selbst einmal (siehe „Websuche“). Das gilt auch für einfache, subjektive und Folgefragen,
-Fragen zu consens.io sowie Textumformung/Übersetzung. Nur reine Begrüßungen und
-Bestätigungen ohne Frage/Auftrag sowie unvermeidbare Rückfragen dürfen direkt
-beantwortet werden. Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine
+consens.io. Ob eine Nachricht durch `compare_models` geht, entscheidet der
+Orchestrator nach der Regel „COMPARE OR ANSWER DIRECTLY“ im Steuer-Prompt (siehe
+Anfang); Antwortschritt, Antwortprüfung und (wenn aktiviert) Quellenabgleich der
+Widersprüche startet danach der Server. Websuche darf vorher die Fragestellung
+klären; eine Frage, die Recherche brauchte, geht immer durch einen Vergleich. Jedes
+Vergleichsmodell kennt das Datum und sucht bei zeitabhängigen Fakten selbst einmal
+(siehe „Websuche“). Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine
 nützliche Antwort möglich ist; sonst mit begründeten Annahmen weiterarbeiten.
 Diese Entscheidung bleibt promptgesteuert; ein zweiter Router oder eine
 sprachabhängige Keyword-Klassifikation erzwingt den Vergleich nicht.
@@ -907,8 +963,8 @@ Seit 2026-10-07 kommen die Prompts nur noch aus dem Code; gespeicherte
 Admin-Prompts wirken nicht mehr.
 Liefert der Provider am Suchlimit eine Antwort ohne Vergleichs-Toolcall, folgt
 einmalig eine Orchestrierungsrunde mit den gesammelten Quellen und ohne neue
-Websuche. Sie führt die Recherche zurück in den Consensus-Ablauf; nur eine
-unvermeidbare Rückfrage kann den Vergleich aufschieben.
+Websuche (`_consensus_search_handoff`). Sie führt die Recherche in einen Vergleich;
+nur eine unvermeidbare Rückfrage kann ihn aufschieben.
 
 ### Quellenauszüge für die Antwort
 
@@ -1156,26 +1212,24 @@ entscheidenden Seiten.
   Coverage-Zustand und Score bleiben die der Modelle. Der Differences-Judge sieht
   die Seiten nicht.
 
-**Prompt.** Nur bei eingeschaltetem Feature: der Block `AGENT_READ_SOURCE_PROMPT`,
-vier angepasste Sätze (`AGENT_READ_SOURCE_REPLACEMENTS`: Seiten öffnen, Konflikt
-erst per gelesener Quelle statt Suche klären, `more_work` fürs Lesen,
-`status_update` auch bei `read_source`) und eine eigene Beschreibung von
-`next_step` im Schema von `compare_models` (`agent_comparison.READ_NEXT_STEP`).
-Der Haken: `next_step` wählt das Modell beim Aufruf von `compare_models`, also
-bevor es die Antworten sieht; mit `"answer"` springt der Server direkt zur
-Synthese und es kann nichts mehr lesen. Im Live-Smoke setzte Sonnet deshalb bei
-der ersten Prompt-Fassung („wer lesen will, setzt more_work“) zweimal
-`"answer"`, obwohl der Judge danach fünf Abweichungen fand. Seitdem verlangen
-Prompt und Schema, vorauszuplanen: `"more_work"`, wenn der Nutzer
-widersprüchliche Angaben meldet, Prüfung oder genauen Wortlaut verlangt, oder
-wenn die Antwort an einer genauen Zahl, einem Datum, Preis oder einer Regel
-hängt, die Quellen oft unterschiedlich angeben. Der Auslöser ist bewusst eng:
-Jedes `more_work` kostet einen zusätzlichen Steuerschritt, auch wenn danach
-nichts gelesen wird. Vor dem Einschalten die `more_work`-Quote messen. Mit den
-Antworten vor Augen liest das Modell nur, was die Antwort ändert; das Ergebnis
-von `compare_models` erinnert daran, nur wenn eine Antwort überhaupt Quellen
-nennt („If these answers disagree … read_source (only URLs listed in the
-answers' sources); otherwise do not read“).
+**Prompt.** Nur bei eingeschaltetem Feature: der Block `AGENT_READ_SOURCE_PROMPT`
+(„READING SOURCES“) und vier angepasste Sätze (`AGENT_READ_SOURCE_REPLACEMENTS`:
+Seiten lesen statt URL weitergeben, Konflikt erst per gelesener Quelle statt Suche
+klären, „eine Seite lesen, auf die der Nutzer zeigt“ als direkte Antwort,
+`status_update` auch bei `read_source`). Seit 2026-10-11 gibt es kein
+Vorausplanen mehr: Bis dahin wählte das Modell `next_step` beim Aufruf von
+`compare_models`, also bevor es die Antworten sah, und mit `"answer"` konnte es
+nichts mehr lesen (Live-Smoke 2026-10-10: Sonnet setzte zweimal `"answer"`, obwohl
+der Judge danach fünf Abweichungen fand). Jetzt sieht der Orchestrator nach jedem
+Vergleich die Antworten und liest nur, was die Antwort ändert; das Ergebnis von
+`compare_models` erinnert daran, wenn eine Antwort Quellen nennt („If the user
+asked you to read or check a source, if these answers disagree … read_source …;
+otherwise do not read“). Lesen geht auch ohne Vergleich (`purpose:
+"user_request"`): „Lies die Quelle nach“ liest und antwortet direkt. Nach einem
+Lesen bleibt `compare_models` gesperrt (die Modelle müssen unabhängig antworten);
+will der Nutzer die Aussagen einer Seite geprüft haben, erst vergleichen, dann
+lesen. Live 2026-10-11 hatte „Lies die erste Quelle nach und sag mir die
+Siegerzeit“ noch sechs Modelle nach einer Seite gefragt, die sie nicht sehen.
 
 **Live-Smoke 2026-10-10** (echte Läufe über die API, Sonnet 5.5, Standard-Preset,
 Prod-Firestore; Stand vor dem Review, dessen Änderungen der Auslöser enger machten):
