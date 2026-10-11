@@ -48,6 +48,19 @@ it('explains the recorded comparison in the duration disclosure and opens its or
     expect.objectContaining({section:'differences'}));
   dom.window.close();
 });
+it('counts a disagreement the source check could not take up instead of showing 0 of 0', () => {
+  const {window: w, document: d, dom} = setup();
+  const details = d.createElement('div');
+  const review = snapshot();
+  review.checks[0].differences_data.differences = [{type:'contradiction',claim:'Start times differ'}];
+  review.checks[0].source_verification = {answer_version:'answer-hash',run_id:'c1',basis_hash:'b1',
+    reason_code:'contradiction_inputs_unavailable', status:'skipped',
+    scope:{checked_contradictions:0,contradictions:0,detected_contradictions:1,excluded_contradictions:1}};
+  w.App.agentReview.renderActivity(details, review, 'Exact answer.');
+  expect(details.textContent).toContain('Source checks: 0 of 1 disagreements checked · 1 not checkable.');
+  expect(details.textContent).not.toContain('0 of 0');
+  dom.window.close();
+});
 it('shows the live comparison purpose while its answers and checks are still pending', () => {
   const {window: w, document: d, dom} = setup();
   const host = d.createElement('div');

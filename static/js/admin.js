@@ -129,7 +129,7 @@ function labelFor(model) { return (meta().labels || {})[model] || ''; }
 // behauptet, statt faelschlich "laeuft" oder "laeuft nicht" anzuzeigen.
 function providerCredentials() { return meta().provider_credentials || {}; }
 // Virtuelle IDs senden ein anderes API-Modell (z. B.
-// grok-4.3-no-reasoning -> grok-4.3). Sichtbar machen, sonst sieht man
+// claude-haiku-4-5 -> claude-haiku-4.5). Sichtbar machen, sonst sieht man
 // zwei fast gleich aussehende Eintraege ohne erkennbaren Unterschied.
 function apiModelFor(model) { return (meta().api_models || {})[model] || ''; }
 function optionTextFor(model) {

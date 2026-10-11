@@ -40,7 +40,7 @@ def model_document():
     ("meta", cfg.MUSE_BASE_MODEL, {"effort": "low"}),
     ("kimi", cfg.KIMI_PRO_MODEL, {"enabled": True}),
     ("kimi", cfg.KIMI_BASE_MODEL, {"enabled": False}),
-    ("grok", cfg.GROK_NO_REASONING_MODEL, {"effort": "none"}),
+    ("glm", cfg.GLM_BASE_MODEL, {"effort": "low"}),
 ])
 def test_savings_reaches_answers_and_engine_aliases_without_breaking_protection(provider, model, expected):
     cfg.apply_reasoning_policy({"profile": "economy", "models": {}})

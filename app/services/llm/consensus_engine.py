@@ -1949,9 +1949,9 @@ def _judge_engine_tuple(provider: str, judge: str):
     """(provider, api_model, model_ref) für eine konfigurierte Judge-Modell-ID.
 
     Judge-Werte aus der Admin-Konfiguration sind INTERNE Modell-IDs. Für die
-    meisten Modelle ist die interne ID gleich dem API-Modell, aber virtuelle
-    Varianten weichen ab (z. B. grok-4.3-no-reasoning -> API-Modell grok-4.3
-    mit reasoning.effort=none). Ungeprüft durchgereicht quittiert der Provider
+    meisten Modelle ist die interne ID gleich dem API-Modell, aber manche
+    weichen ab (z. B. claude-haiku-4-5 -> API-Modell claude-haiku-4.5).
+    Ungeprüft durchgereicht quittiert der Provider
     sie mit "Model not found", was den kompletten Differences-Schritt kippt.
     Deshalb wird hier dieselbe Auflösung wie in _resolve_engine erzwungen."""
     if not judge:

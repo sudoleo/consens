@@ -1156,7 +1156,7 @@ def _admin_meta(data: dict) -> dict:
     for model in cfg.ALL_ALLOWED_MODELS:
         labels.setdefault(model, cfg.get_model_label(model))
     # Nur virtuelle Modelle, deren API-Modell von der internen ID abweicht
-    # (z. B. grok-4.3-no-reasoning -> grok-4.3). Die Admin-UI blendet das ein,
+    # (z. B. claude-haiku-4-5 -> claude-haiku-4.5). Die Admin-UI blendet das ein,
     # damit sichtbar ist, was tatsaechlich beim Provider ankommt.
     api_models = {
         model: api_model

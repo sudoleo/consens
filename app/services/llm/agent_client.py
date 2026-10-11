@@ -165,7 +165,7 @@ def reasoning_active(model, metadata=None):
 
     Off when the catalog knows no reasoning, the effort is "none", the
     registry switches it off (Kimi K2.6: ``enabled: false``), or the model
-    reasons only on request and none is made (Grok 4.20 "No reasoning")."""
+    reasons only on request and none is made."""
     metadata = _metadata(model) if metadata is None else metadata
     catalog = metadata.get("reasoning")
     if not catalog:
@@ -331,7 +331,8 @@ def metered_model(model_id, *, max_tokens=2048):
 
 def resolve_agent_model(model_id=None, reasoning_effort="default"):
     models = agent_models()
-    wanted = model_id or models[0][0].selection_id
+    # A saved chat model may carry a migrated ID (grok-4.3-no-reasoning).
+    wanted = cfg.canonical_model_id(model_id) if model_id else models[0][0].selection_id
     for model, metadata in models:
         # Older clients may still send the default by its OpenRouter ID.
         if wanted not in (model.selection_id, model.model):

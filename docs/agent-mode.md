@@ -235,14 +235,26 @@ für die Antwort“) und zuletzt geprüfte Worker-Ergebnisse
 oder deren geprüften Ersatztext. Überarbeitung entzieht alten Ergebnissen die
 Freigabe. Er erhält keine internen Toolgespräche,
 Statusfelder oder Reasoning-Fortsetzungen. Die Agent-Anweisungen steuern weiterhin
-die Orchestrierung. Modell und gewählte Denkstufe bleiben erhalten. Seit 2026-10-07
+die Orchestrierung. Modell und gewählte Denkstufe bleiben erhalten.
+
+**Was der Antwortschritt über die App weiß (seit 2026-10-11).** Weil er den
+Steuer-Prompt nie sieht, behauptete er auf Fragen wie „kannst du die Quellen
+lesen?“ oder „erinnere mich, wenn …“, consens.io könne weder Quellen lesen noch
+benachrichtigen. Hinter `AGENT_ANSWER_PROMPT` steht deshalb
+`AGENT_ANSWER_APP_FACTS` (Vergleichsmodelle recherchieren selbst, Auszüge
+zitierter Quellen kommen unter `sources`), dazu nur, was der Turn wirklich kann:
+`AGENT_ANSWER_READ_FACT` mit `read_source`, `AGENT_ANSWER_WATCH_FACT` mit dem
+Watch-Tool (`agent_comparison.synthesis_messages`). Das sind Fakten, keine
+Stilvorgaben.
+
+Seit 2026-10-07
 zeigt der Schreibschritt während des Denkens kurze Auszüge aus dem Provider-
 Reasoning als eine laufend ersetzte Fortschrittszeile (sonst wirkten Minuten bei
 hoher Denkstufe wie ein hängender Lauf); in Antwort und Kontext gelangt davon
 nichts. Seit 2026-10-08 laufen die Auszüge auch nach 32.000 Reasoning-Zeichen
 weiter (gespeichert wird nur bis dahin). Denkende Modelle bekommen zusätzlichen
 Platz im Ausgabebudget; Modelle, deren Reasoning abgeschaltet ist (Effort `none`,
-Kimi K2.6, Grok 4.20 „No reasoning“), nicht. Verbraucht ein Modell trotzdem alles
+Kimi K2.6), nicht. Verbraucht ein Modell trotzdem alles
 fürs Denken, ohne ein Wort zu schreiben (oder hört nach dem Denken ohne Text auf),
 schreibt die App die Antwort einmal mit leichterer Denkstufe neu: bewusst zuerst
 `low` (live in 15 s bei gleicher Qualität), nur ohne diese Stufe `minimal` oder
@@ -433,10 +445,19 @@ Abschnitt „Eingefügten Text prüfen".
 
 ## Watch vorschlagen (seit 2026-10-11)
 
-Bittet der Nutzer, ihm Bescheid zu geben, wenn sich etwas ändert oder eintritt
-(„sag mir, wenn GPT-6 erscheint“), ruft der Agent `prepare_watch`
+Bittet der Nutzer, ihn zu erinnern oder ihm Bescheid zu geben, wenn sich etwas
+ändert oder eintritt („sag mir, wenn GPT-6 erscheint“, „erinnere mich, wann der
+Sieger feststeht“), ruft der Agent `prepare_watch`
 (`app/services/agent_watch.py`), und zwar vor dem Vergleich, der den aktuellen
-Stand wie gewohnt beantwortet. Das Tool legt **nichts** an:
+Stand wie gewohnt beantwortet. Der Steuer-Prompt (`agent_watch.ORCHESTRATOR_PROMPT`)
+nennt Erinnern ausdrücklich und sagt, dass eine Watch der einzige Weg der App
+ist, den Nutzer später zu erreichen: Am 2026-10-11 las GPT-6 Luna „kannst du
+mich erinnern, wann der Sieger der Ironman-WM feststeht?“ nach einer Websuche
+als Frage nach dem Termin, bereitete keine Watch vor, und die Antwort behauptete,
+consens.io könne niemanden benachrichtigen (Live-Probe mit Suche: alter Prompt
+in einem von drei Läufen ohne Watch, neuer drei von drei mit; „Wann steht der
+Sieger fest?“ und „erinnere mich an die Formel“ bleiben ohne). Das Tool legt
+**nichts** an:
 
 - Es prüft eine eigenständig formulierte Frage (8–200 Zeichen: so viel zeigt
   die Watch-Liste, über die die Karte eine gestartete Watch erkennt), bis zu drei
@@ -454,7 +475,9 @@ Stand wie gewohnt beantwortet. Das Tool legt **nichts** an:
   Vorabprüfung zur lesbaren Ablehnung an das Modell und beendet den Turn nie.
 - Der Antwortschritt bekommt den Vorschlag als `prepared_watch` in der
   Evidence und `agent_watch.SYNTHESIS_PROMPT`. Er verweist in einem Satz auf die
-  Karte und sagt nie, die Watch sei aktiv.
+  Karte und sagt nie, die Watch sei aktiv. Unabhängig davon kennt er aus
+  `AGENT_ANSWER_WATCH_FACT` (Abschnitt „Was der Antwortschritt über die App
+  weiß“), dass es Watches gibt, und sagt nie, die App könne nicht erinnern.
 
 Die Karte (`static/js/agent-watch.js`) erscheint nur unter einer abgeschlossenen
 Antwort (`status: completed`), die auf sie verweist. Den Vorschlag liest sie aus
@@ -763,7 +786,7 @@ Produktentscheidung, keine Modell-Sonderlösung:
   `_consensus_search_handoff` ohne Quellenliste zum Vergleich zurück. Nach
   einem Vergleich höchstens eine Runde pro Schritt, etwa um einen konkreten
   Widerspruch zu klären; eine zitierte Quelle selbst lesen kann er mit
-  `read_source` (siehe „Quellen nachlesen“, Schalter standardmäßig aus). Seit
+  `read_source` (siehe „Quellen nachlesen“, standardmäßig an). Seit
   2026-10-07 kommen alle Prompts aus dem Code;
   ein gespeicherter Admin-Prompt mit der alten Anweisung wirkt nicht mehr.
 - Judges und der Antwortschritt suchen nie.
@@ -1008,9 +1031,16 @@ haben. Google-Daten-Chats suchen nicht und haben deshalb keine Auszüge.
 
 Nach einem Vergleich darf das Chatmodell (Orchestrator) eine Quelle, die eine
 Vergleichsantwort zitiert hat, selbst öffnen: um einen konkreten Widerspruch
-zwischen den Antworten zu klären oder den genauen Wortlaut einer Kernaussage
-(Zahl, Definition, offizielle Aussage) zu holen. Schalter: `AGENT_READ_SOURCES=1`
-(Env), Standard aus. Code: `agent_read_source.py`.
+zwischen den Antworten zu klären, eine Quelle zu prüfen, nach der der Nutzer
+fragt, oder den genauen Wortlaut einer Kernaussage (Zahl, Definition, offizielle
+Aussage) zu holen. Seit 2026-10-11 zählen auch Links, die im Chat selbst stehen:
+in Nachrichten des Nutzers und in früheren Antworten (`chat_urls`, Label „your
+message“/„an earlier answer“). Vorher fand „kannst du eine Quelle direkt
+nachlesen?“ nach einer Antwort mit tri247.com-Links nichts, was es öffnen durfte.
+Erfinden kann der Orchestrator eine URL weiterhin nicht: jede steht im Gespräch,
+eine gelesene Seite kann keinen Abruf auf eine eigene URL lenken. Schalter:
+`AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
+Code: `agent_read_source.py`.
 
 **Warum ein eigenes Tool.** Der naheliegende Weg, OpenRouters Server-Tool
 `openrouter:web_fetch` direkt in den Steuerschritt zu hängen, scheitert an der

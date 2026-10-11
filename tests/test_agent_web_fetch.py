@@ -1,8 +1,9 @@
 """read_source: the orchestrator reads a cited page through OpenRouter's web_fetch.
 
-Only after a comparison, only for the orchestrator, only cited URLs, bounded,
-metered, kept as evidence for the answer step and the Coverage judge, and
-never for comparison models, the answer step, the judges or Google-data chats.
+Only after a comparison, only for the orchestrator, only cited URLs or links in
+the chat itself, bounded, metered, kept as evidence for the answer step and the
+Coverage judge, and never for comparison models, the answer step, the judges or
+Google-data chats. On unless AGENT_READ_SOURCES=0.
 """
 import json
 
@@ -15,12 +16,13 @@ from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_read_source import (READ_CONTENT_TOKENS, READS_PER_MESSAGE, READS_PER_STEP, PageFetch,
-                                            ReadSourceArgs, resolve_redirect, url_key)
+                                            ReadSourceArgs, chat_urls, resolve_redirect, url_key)
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.engines import web_fetch_tool
 from app.services.llm.provider_runtime import ProviderCancellation
-from app.services.prompt_defaults import (AGENT_ANSWER_PROMPT, AGENT_READ_SOURCE_PROMPT,
-                                          AGENT_READ_SOURCE_REPLACEMENTS, AGENT_SYSTEM_PROMPT)
+from app.services.prompt_defaults import (AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_PROMPT, AGENT_ANSWER_READ_FACT,
+                                          AGENT_READ_SOURCE_PROMPT, AGENT_READ_SOURCE_REPLACEMENTS,
+                                          AGENT_SYSTEM_PROMPT)
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
 CITED = "https://example.org/report"
@@ -114,12 +116,13 @@ def fake_fetch(monkeypatch, *, page=PAGE, status="completed", error="", fail_mod
     return calls
 
 
-def chat_loop(store, plan, *, google_selection=None, google_data=False, policy=None):
+def chat_loop(store, plan, *, google_selection=None, google_data=False, policy=None, conversation=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False}
     return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
-        messages=[{"role": "system", "content": AGENT_SYSTEM_PROMPT}, {"role": "user", "content": "Price?"}],
+        messages=[{"role": "system", "content": AGENT_SYSTEM_PROMPT},
+                  *(conversation or [{"role": "user", "content": "Price?"}])],
         api_key="test", cancellation=ProviderCancellation(), policy=policy or AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=plan.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
@@ -177,7 +180,8 @@ def test_reads_a_cited_page_after_the_comparison_and_keeps_it_as_evidence(store,
     # With the answers in front of it, the orchestrator is reminded that it may read.
     compared = next(json.loads(m["content"]) for m in loop.messages
                     if m.get("role") == "tool" and m["tool_call_id"] == "call_0_0")
-    assert compared["instruction"].startswith("If these answers disagree") and "read_source" in compared["instruction"]
+    assert compared["instruction"].startswith("If the user asked you to read or check a source, if these answers "
+                                              "disagree") and "read_source" in compared["instruction"]
     # The helper is a metered session of its own, not a voice of the answer.
     agents = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     [helper] = [a for a in agents if a.get("kind") == "source"]
@@ -231,10 +235,19 @@ class Selection:
         return {"calendar": False, "gmail": False}
 
 
+def test_on_unless_switched_off(monkeypatch):
+    """Off by default until 2026-10-11, when the Agent told users it could not
+    read any source."""
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    assert agent_read_source.enabled()
+    for value, on in (("0", False), (" 0 ", False), ("1", True), ("", True)):
+        monkeypatch.setenv("AGENT_READ_SOURCES", value)
+        assert agent_read_source.enabled() is on, value
+
+
 @pytest.mark.parametrize("case", ["off", "google_selection", "google_data", "bounded"])
 def test_absent_when_switched_off_in_google_chats_and_bounded_runs(store, monkeypatch, case):
-    if case != "off":
-        monkeypatch.setenv("AGENT_READ_SOURCES", "1")
+    monkeypatch.setenv("AGENT_READ_SOURCES", "0" if case == "off" else "1")
     kwargs = ({"google_selection": Selection()} if case == "google_selection"
               else {"google_data": True} if case == "google_data" else {})
     if case == "bounded":
@@ -251,7 +264,9 @@ def test_prompt_explains_reading_only_when_on(store, enabled):
     assert "read_source" in loop.registry.tools
     assert "READING CITED SOURCES" in content and f"at most {READS_PER_MESSAGE} pages per message" in content
     # next_step is chosen before the answers arrive: the prompt says to plan for a read.
-    assert 'set next_step="more_work" when the user reports conflicting information' in content
+    assert ('set next_step="more_work" when the user asks you to read or check a source, reports conflicting '
+            'information') in content
+    assert "linked in the user's messages or in an earlier answer of this chat" in content
     for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
         assert AGENT_SYSTEM_PROMPT.count(old) == 1 and old not in content and new in content
     # The answer step may quote what was read, and must not claim a failed read.
@@ -261,10 +276,11 @@ def test_prompt_explains_reading_only_when_on(store, enabled):
 def test_the_next_step_field_names_reading_only_when_on(store, monkeypatch):
     description = lambda loop: loop.registry.tools["compare_models"].schema()["function"]["parameters"][
         "properties"]["next_step"]["description"]
-    assert "read a cited source" not in description(chat_loop(store, Plan()))
+    monkeypatch.setenv("AGENT_READ_SOURCES", "0")
+    assert "read a source" not in description(chat_loop(store, Plan()))
     monkeypatch.setenv("AGENT_READ_SOURCES", "1")
     on = chat_loop(store, Plan())
-    assert "read a cited source" in description(on)
+    assert "the user asks you to read or check a source" in description(on)
     # Still the full compare_models schema: the passage check is not lost.
     assert "check" in on.registry.tools["compare_models"].schema()["function"]["parameters"]["properties"]
 
@@ -299,6 +315,46 @@ def test_refused_before_a_comparison_for_uncited_urls_and_after_the_answer(store
     loop.comparison.text = "The fixed answer."
     refused(read(loop), "already written")
     assert calls == [] and loop.comparison.reader.reads == []
+
+
+def test_chat_urls_are_the_links_of_the_users_messages_and_earlier_answers():
+    conversation = [
+        {"role": "user", "content": "Check https://example.org/a. And (https://example.org/b), ok?"},
+        {"role": "assistant", "content": "Ditlev leads ([live](https://www.tri247.com/live-kona?x=1)), "
+                                         "see **https://example.org/c**; also javascript:alert(1)"},
+        {"role": "system", "content": "https://example.org/never"},
+        {"role": "user", "content": "kannst du eine Quelle nachlesen? https://www.tri247.com/live-kona?x=1."},
+    ]
+    found = chat_urls(conversation)
+    # Latest message first, each page once, punctuation and the link's ")" cut.
+    assert found == [("https://www.tri247.com/live-kona?x=1", "user"), ("https://example.org/c", "assistant"),
+                     ("https://example.org/a", "user"), ("https://example.org/b", "user")]
+    assert chat_urls([{"role": "user", "content": "https://en.wikipedia.org/wiki/Kona_(Hawaii)."}]) == [
+        ("https://en.wikipedia.org/wiki/Kona_(Hawaii)", "user")]
+    assert chat_urls(None) == [] and chat_urls([{"role": "user", "content": None}]) == []
+    # Linear on hostile text: no backtracking on a long run of URL characters.
+    assert chat_urls([{"role": "user", "content": "https://" + "a" * 200_000}]) == []
+
+
+def test_reads_a_page_linked_earlier_in_the_chat(store, monkeypatch, enabled):
+    """2026-10-11: "kannst du eine Quelle direkt nachlesen?" after an answer
+    citing tri247.com could open nothing; only this message's answers counted."""
+    calls = fake_fetch(monkeypatch)
+    earlier = "https://www.tri247.com/live-kona"
+    conversation = [{"role": "user", "content": "Who leads?"},
+                    {"role": "assistant", "content": f"Ditlev leads ([tri247]({earlier}))."},
+                    {"role": "user", "content": "kannst du eine Quelle direkt nachlesen?"}]
+    plan = Plan(steps=[[compare()], [read_call(earlier), read_call("https://www.tri247.com/other")]])
+    loop, _, saved = run(store, plan, conversation=conversation)
+    done, other = results(loop)
+    assert done["status"] == "completed" and done["cited_by"] == ["an earlier answer"]
+    # Still nothing outside the chat and this message's answers.
+    refused(other, "linked in the user's messages")
+    assert len(calls) == 1 and calls[0]["messages"][0]["content"].endswith("URL: " + earlier)
+    assert [r["url"] for r in saved["agent_review"]["read_sources"]] == [earlier]
+    # The answer step knows that the app reads pages (it denied it before).
+    system = plan.answer_messages[0]["content"]
+    assert AGENT_ANSWER_APP_FACTS in system and AGENT_ANSWER_READ_FACT in system
 
 
 def test_refused_in_a_chat_that_holds_google_data(store, monkeypatch, enabled):

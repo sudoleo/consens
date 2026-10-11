@@ -525,21 +525,26 @@ class ModelConfigurationTests(unittest.TestCase):
             "grok": ["grok-4-fast-reasoning-latest", "grok-4-1-fast-non-reasoning-latest"],
             "premium": ["grok-4-fast-reasoning-latest"],
         })
-        self.assertIn("grok-4.3", normalized["grok"])
-        self.assertIn(cfg.GROK_NO_REASONING_MODEL, normalized["grok"])
+        self.assertEqual(normalized["grok"], ["grok-4.3"])
         self.assertNotIn("grok-4-fast-reasoning-latest", normalized["grok"])
+        # The former reasoning variants of 4.3 and 4.20 (2026-10-11) as well.
+        normalized = normalize_models_document({
+            "grok": [cfg.GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning", "grok-4.20", "grok-4.3"],
+            "premium": ["grok-4.20"],
+        })
+        self.assertEqual(normalized["grok"], ["grok-4.3"])
 
-    def test_grok_no_reasoning_and_high_reasoning_payloads(self):
-        no_reasoning = build_provider_payload(
+    def test_grok_reasoning_follows_the_reasoning_switch(self):
+        default = build_provider_payload(
             "grok", question="q", system_prompt="s",
             model_override=cfg.GROK_NO_REASONING_MODEL, max_output_tokens=123,
         )
-        self.assertEqual(no_reasoning["api_model"], "x-ai/grok-4.3")
-        self.assertEqual(no_reasoning["payload"]["reasoning"], {"effort": "none"})
+        self.assertEqual(default["api_model"], "x-ai/grok-4.3")
+        self.assertNotIn("reasoning", default["payload"])
 
         high = build_provider_payload(
             "grok", question="q", system_prompt="s",
-            model_override="grok-4.3", max_output_tokens=123,
+            model_override="grok-4.3", deep_search=True, max_output_tokens=123,
         )
         self.assertEqual(high["payload"]["reasoning"], {"effort": "high"})
 
@@ -594,8 +599,12 @@ class ModelConfigurationTests(unittest.TestCase):
 
     def test_effective_reasoning_policy_matches_answer_payload_precedence(self):
         self.assertEqual(
-            cfg.effective_model_reasoning("grok", cfg.GROK_PRO_MODEL),
-            ({"effort": "high"}, "MODEL_REQUEST_CONFIG"),
+            cfg.effective_model_reasoning("grok", "grok-4.3"),
+            (None, "provider default"),
+        )
+        self.assertEqual(
+            cfg.effective_model_reasoning("grok", "grok-4.3", reasoning=True),
+            ({"effort": "high"}, "REASONING_EFFORT_ON"),
         )
         self.assertEqual(
             cfg.effective_model_reasoning("mistral", cfg.MISTRAL_PRO_MODEL),

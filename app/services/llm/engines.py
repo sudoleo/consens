@@ -216,7 +216,8 @@ def build_provider_payload(
     system = system_prompt if system_prompt is not None else get_system_prompt()
 
     default_model = _DEFAULT_MODEL_BY_PROVIDER[provider_key]
-    internal_model = model_override or default_model
+    # A saved selection may carry a migrated ID (grok-4.3-no-reasoning).
+    internal_model = cfg.canonical_model_id(model_override or default_model, provider_key)
     api_model, model_config = cfg.resolve_api_model(
         internal_model,
         default_model,

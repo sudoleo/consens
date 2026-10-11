@@ -210,7 +210,12 @@
           && verification?.basis_hash === comparison.basis_hash) {
         const scope = verification.scope;
         if (Number.isInteger(scope?.checked_contradictions) && Number.isInteger(scope?.contradictions)) {
-          card.append(node('p', '', `Source checks: ${scope.checked_contradictions} of ${scope.contradictions} disagreements checked.`));
+          // Count what the judges found, like source-verification.js: "0 of 0"
+          // hid disagreements that had no checkable claim (2026-10-11).
+          const total = Number.isInteger(scope.detected_contradictions) ? scope.detected_contradictions : scope.contradictions;
+          const excluded = Number.isInteger(scope.excluded_contradictions) ? scope.excluded_contradictions : 0;
+          card.append(node('p', '', `Source checks: ${scope.checked_contradictions} of ${total} disagreements checked`
+            + (excluded ? ` · ${excluded} not checkable.` : '.')));
         }
       } else if (review.check_sources === false) {
         card.append(node('p', '', 'Contradiction source checks were off for this message.'));

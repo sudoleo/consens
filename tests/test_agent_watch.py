@@ -11,6 +11,7 @@ from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import turn_detail
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation
+from app.services.prompt_defaults import AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_WATCH_FACT
 from test_agent_comparison import Script
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
@@ -116,6 +117,8 @@ def test_a_requested_watch_is_prepared_saved_and_handed_to_the_answer(store):
     # The answer step knows the card exists and what it says, and must not claim more.
     answer = script.answer_messages[-1]
     assert agent_watch.SYNTHESIS_PROMPT in answer[0]["content"]
+    # It also knows that the app can watch and remind, card or not.
+    assert AGENT_ANSWER_APP_FACTS in answer[0]["content"] and AGENT_ANSWER_WATCH_FACT in answer[0]["content"]
     assert evidence(answer)["prepared_watch"] == {**proposal, "status": "prepared"}
     assert saved["agent_review"]["comparisons"], "the current state is still compared and checked"
     steps = [event for event in saved["agent_activity"] if event.get("name") == "prepare_watch"]
@@ -163,6 +166,16 @@ def test_a_watch_only_message_ends_with_an_acknowledgement(store, autonomy):
     # once; a mere acknowledgement then goes through unchanged.
     reminders = [m for m in loop.messages if "App rule" in str(m.get("content"))]
     assert len(reminders) == (1 if autonomy == "free" else 0)
+
+
+def test_a_reminder_request_counts_and_the_answer_never_denies_reminders():
+    """2026-10-11: GPT-6 Luna read "kannst du mich erinnern, wann der Sieger
+    feststeht?" after a search as a question about the date, prepared nothing,
+    and the answer said consens.io could not notify anyone."""
+    prompt = agent_watch.ORCHESTRATOR_PROMPT
+    assert "to remind, notify or alert them" in prompt and "there is no other way to reach them later" in prompt
+    assert "call prepare_watch once, before the comparison" in prompt
+    assert "Never say that you or consens.io cannot remind or notify the user." in AGENT_ANSWER_WATCH_FACT
 
 
 def test_no_watch_tool_with_google_data_or_without_comparisons(store):

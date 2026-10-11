@@ -154,14 +154,21 @@ DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
 # ist, steht es ausdruecklich da -- Preset "thorough", Alias "DeepSeek-Pro",
 # judge_models_pro und die Benchmark-Matrix.
 DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_FLASH_MODEL
-GROK_NO_REASONING_MODEL = "grok-4.3-no-reasoning"
-GROK_FAST_MODEL = GROK_NO_REASONING_MODEL
-DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
+# Grok 4.3 ist ein Eintrag wie jedes andere Modell: es denkt von sich aus
+# ("low"), der Reasoning-Schalter und das Reasoning-Menue des Agenten setzen
+# die Stufe. Die frueheren Varianten "Grok 4.3/4.20 · No reasoning" und
+# "· Reasoning" stellten eine Einstellung als eigenes Modell dar (Max,
+# 2026-10-11: "No reasoning" hinter dem Namen ist nicht mehr zeitgemaess);
+# ihre IDs migrieren hierher (GROK_MODEL_MIGRATIONS).
+GROK_BASE_MODEL = "grok-4.3"
+GROK_NO_REASONING_MODEL = "grok-4.3-no-reasoning"  # alte ID, migriert
+GROK_FAST_MODEL = GROK_BASE_MODEL
+DEFAULT_GROK_MODEL = GROK_BASE_MODEL
 # Modelle hinter den "<Familie>-Pro"-Aliassen, soweit sie nicht schon oben
 # stehen. Bewusst benannt, damit die Provider-Registry ohne Stringliterale
 # auskommt.
 OPENAI_PRO_MODEL = "gpt-5.5"
-GROK_PRO_MODEL = "grok-4.3"
+GROK_PRO_MODEL = "grok-4.7"
 KIMI_BASE_MODEL = "kimi-k2.6"
 KIMI_PRO_MODEL = "kimi-k3"
 GLM_BASE_MODEL = "glm-5.3-flash"
@@ -324,10 +331,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         ),
         _provider(
             "grok", "Grok", "x-ai/", DEFAULT_GROK_MODEL, GROK_PRO_MODEL,
-            {
-                GROK_NO_REASONING_MODEL, "grok-4.20", DEFAULT_GROK_MODEL,
-                GROK_PRO_MODEL,
-            },
+            {GROK_BASE_MODEL, GROK_PRO_MODEL},
             icon_class="grok-logo",
         ),
         _provider(
@@ -511,7 +515,7 @@ _BASE_CONSENSUS_PRESET_MODELS = {
             "anthropic": ANTHROPIC_PRO_MODEL,
             "gemini": GEMINI_PRO_MODEL,
             "deepseek": DEEPSEEK_PRO_MODEL,
-            "grok": "grok-4.3",
+            "grok": GROK_PRO_MODEL,
         },
         "consensus": "Gemini-Pro",
     },
@@ -614,24 +618,21 @@ DEPRECATED_MISTRAL_MODELS = {
     "mistral-large-2411", "pixtral-large-2411", "pixtral-large-latest",
 }
 
-# Alte xAI-Aliasse, die seit Mai 2026 ohnehin auf Grok 4.3 umgeleitet werden.
-# Beim Laden bestehender Admin-Daten werden sie auf unsere expliziten
-# Reasoning-Varianten migriert, damit keine doppelten/irrefuehrenden Zeilen
-# im Picker und in der Admin-DB verbleiben.
+# Alte xAI-Aliasse, die seit Mai 2026 ohnehin auf Grok 4.3 umgeleitet werden,
+# und seit 2026-10-11 die Reasoning-Varianten von Grok 4.3 und 4.20 (gleicher
+# Preis, 4.20 ist aelter). Beim Laden bestehender Admin-Daten und gespeicherter
+# Auswahlen werden sie auf Grok 4.3 migriert, damit keine doppelten Zeilen im
+# Picker und in der Admin-DB verbleiben.
 GROK_MODEL_MIGRATIONS = {
-    "grok-4-1-fast-non-reasoning": GROK_NO_REASONING_MODEL,
-    "grok-4-1-fast-non-reasoning-latest": GROK_NO_REASONING_MODEL,
-    "grok-4-fast-non-reasoning": GROK_NO_REASONING_MODEL,
-    "grok-4-fast-non-reasoning-latest": GROK_NO_REASONING_MODEL,
-    "grok-3": GROK_NO_REASONING_MODEL,
-    "grok-3-latest": GROK_NO_REASONING_MODEL,
-    "grok-4-1-fast-reasoning": "grok-4.3",
-    "grok-4-1-fast-reasoning-latest": "grok-4.3",
-    "grok-4-fast-reasoning": "grok-4.3",
-    "grok-4-fast-reasoning-latest": "grok-4.3",
-    "grok-4-0709": "grok-4.3",
-    "grok-4": "grok-4.3",
-    "grok-4-latest": "grok-4.3",
+    legacy: GROK_BASE_MODEL for legacy in (
+        "grok-4-1-fast-non-reasoning", "grok-4-1-fast-non-reasoning-latest",
+        "grok-4-fast-non-reasoning", "grok-4-fast-non-reasoning-latest",
+        "grok-3", "grok-3-latest",
+        "grok-4-1-fast-reasoning", "grok-4-1-fast-reasoning-latest",
+        "grok-4-fast-reasoning", "grok-4-fast-reasoning-latest",
+        "grok-4-0709", "grok-4", "grok-4-latest",
+        GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning", "grok-4.20",
+    )
 }
 DEPRECATED_GROK_MODELS = set(GROK_MODEL_MIGRATIONS)
 REMOVED_MODEL_IDS = {
@@ -729,7 +730,7 @@ PREMIUM_MODELS = {
     MISTRAL_PRO_MODEL,
     GEMINI_PRO_MODEL, GEMINI_35_FLASH_MODEL, "gemini-2.5-pro",
     DEEPSEEK_PRO_MODEL,
-    "grok-4.20", GROK_PRO_MODEL,
+    GROK_PRO_MODEL,
 }
 # Die Pro-Modelle der Registry sind per Definition Premium.
 PREMIUM_MODELS.update(provider.pro_model for provider in PROVIDERS.values())
@@ -747,12 +748,7 @@ MODEL_LABEL_OVERRIDES = {
     DEFAULT_OPENAI_MODEL: "GPT-5.4 mini",
     DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 4.5",
     DEFAULT_GEMINI_MODEL: "Gemini 3.5 Flash-Lite",
-    # Grok-Labels bewusst nach einem Schema: "<Version> · <Reasoning-Zustand>".
-    # Die frueheren Mischformen ("High reasoning" vs. "Reasoning") legten nahe,
-    # es handle sich um verschiedene Modelle statt um Reasoning-Varianten
-    # desselben Modells.
-    DEFAULT_GROK_MODEL: "Grok 4.20 · No reasoning",
-    GROK_NO_REASONING_MODEL: "Grok 4.3 · No reasoning",
+    # Grok ohne Reasoning-Zusatz: die Stufe ist eine Einstellung, kein Modell.
     "grok-4.5": "Grok 4.5",
     "mistral-small-latest": "Mistral Small 4",
     MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
@@ -760,8 +756,6 @@ MODEL_LABEL_OVERRIDES = {
     GEMINI_36_FLASH_MODEL: "Gemini 3.6 Flash",
     GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
     GEMINI_PRO_MODEL: "Gemini 3.1",
-    "grok-4.20": "Grok 4.20 · Reasoning",
-    "grok-4.3": "Grok 4.3 · Reasoning",
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
     KIMI_BASE_MODEL: "Kimi K2.6",
@@ -777,8 +771,6 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {}
 # Request-Zusaetze je Modell-ID. Reine Daten: eine Reasoning-Variante ist ein
 # Eintrag hier, kein Sonderfall in rebuild_model_configs.
 MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
-    GROK_NO_REASONING_MODEL: {"reasoning": {"effort": "none"}},
-    GROK_PRO_MODEL: {"reasoning": {"effort": "high"}},
     # Live probes: automatic routing can emit tool syntax as answer text.
     # Moonshot preserves model-directed search; do not fall back to other hosts.
     KIMI_BASE_MODEL: {
@@ -811,8 +803,9 @@ OPENROUTER_MODEL_ALIASES = {
     ("mistral", "mistral-small-latest"): "mistral-small-2603",
     ("anthropic", "claude-haiku-4-5"): "claude-haiku-4.5",
     ("anthropic", "claude-opus-4-8"): "claude-opus-4.8",
+    # Alte Grok-Varianten (migriert): falls eine ID ungeprueft durchkommt.
     ("grok", GROK_NO_REASONING_MODEL): "grok-4.3",
-    ("grok", DEFAULT_GROK_MODEL): "grok-4.20",
+    ("grok", "grok-4.20-non-reasoning"): "grok-4.3",
 }
 
 
@@ -919,8 +912,8 @@ def rebuild_model_configs():
 def virtual_model_ids() -> dict[str, str]:
     """Interne IDs -> API-Modell, wo beide voneinander abweichen.
 
-    Reasoning-Varianten wie grok-4.3-no-reasoning sind reine Produkt-IDs; beim
-    Provider existieren sie nicht. Jede Stelle, die eine konfigurierte Modell-ID
+    Produkt-IDs wie claude-haiku-4-5 heissen beim Provider anders
+    (claude-haiku-4.5). Jede Stelle, die eine konfigurierte Modell-ID
     in einen Request schreibt, muss sie vorher hierueber aufloesen.
     """
     return {
@@ -1975,6 +1968,10 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 for deprecated in PROVIDER_DEPRECATED_MODELS.values():
                     PREMIUM_MODELS.difference_update(deprecated)
                 PREMIUM_MODELS.intersection_update(_all_allowed_models())
+                # Das Basismodell einer Familie ist ihr guenstiger Free-Default.
+                # Ein aelteres Dokument fuehrt es evtl. noch als Pro: Grok 4.3
+                # war bis 2026-10-11 die Pro-Variante "· Reasoning".
+                PREMIUM_MODELS.difference_update(_BASE_FREE_DEFAULTS.values())
                 # Der <Familie>-Pro-Alias ist ein harter Produktvertrag. Bei
                 # neuen Registry-Familien kennt ein altes Firestore-Dokument
                 # deren Pro-Modell noch nicht; es darf dadurch nicht Free sein.

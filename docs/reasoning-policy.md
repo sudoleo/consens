@@ -14,7 +14,7 @@ guess for newly added models:
 |---|---|---|
 | GPT-5.5 | `effort: low` | Reduce the documented medium default |
 | Mistral Small / Medium 3.5 | `effort: none` | Supported none/high control; none means minimal thinking |
-| Grok 4.3 reasoning variant | `effort: low` | Reduce the existing high policy |
+| Grok 4.7 (Grok-Pro alias; until 2026-10-11 the Grok 4.3 reasoning variant) | `effort: low` | Reduce its high default |
 | GLM 5.3 Flash / 5.3, Muse Glimmer / Spark | Existing low | Already reduced; Muse cannot disable reasoning |
 | Kimi K2.6 / K3 | Existing disabled / enabled | Preserve the verified search and Moonshot routing contracts |
 | All other models | Existing behavior | No verified savings rule; provider default is not synonymous with off |
@@ -44,6 +44,8 @@ Verified sources (2026-09-05):
 - [GPT-5.5 model guidance: medium default](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.5)
 - [OpenRouter reasoning effort support](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens)
 - [Grok 4.3 supported efforts](https://docs.x.ai/developers/models/grok-4.3)
+- Grok 4.7: OpenRouter catalog `reasoning.supported_efforts` lists `low`
+  (checked 2026-10-11, when it became the Grok-Pro alias)
 
 GLM, Muse and Kimi preserve the repository's existing verified model policies.
 Recheck compatibility before adding models to `reasoning_savings_models()`.

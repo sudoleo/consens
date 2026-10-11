@@ -128,8 +128,8 @@ def _build_resolve_prompt(question: str, claim: str, own_position: dict, opposin
 def _query_resolve_model(model_label: str, question: str, claim: str,
                          own_position: dict, opposing: list, api_keys: dict) -> dict:
     provider = PROVIDER_BY_LABEL[model_label]
-    # Interne Judge-ID -> API-Modell aufloesen; virtuelle Varianten wie
-    # grok-4.3-no-reasoning existieren beim Provider nicht unter diesem Namen.
+    # Interne Judge-ID -> API-Modell aufloesen; IDs wie claude-haiku-4-5
+    # heissen beim Provider anders (claude-haiku-4.5).
     _judge_provider, judge_api_model, judge_model = _standard_judge_engine(provider)
     result = {"model": model_label, "decision": "error", "position": "", "reason": ""}
 

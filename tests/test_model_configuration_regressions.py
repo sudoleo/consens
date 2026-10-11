@@ -93,7 +93,14 @@ class ExistingModelFlowTests(unittest.TestCase):
             "anthropic/claude-opus-4.8",
         )
 
-    def test_grok_43_no_reasoning_uses_canonical_api_model_and_none_effort(self):
+    def test_grok_43_is_one_free_model_whose_reasoning_the_switch_sets(self):
+        """Seit 2026-10-11 kein "Grok 4.3 · No reasoning"/"· Reasoning" mehr:
+        die Stufe ist eine Einstellung, kein eigenes Modell. Alte IDs migrieren."""
+        for legacy in (cfg.GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning", "grok-4.20"):
+            with self.subTest(model=legacy):
+                self.assertEqual(cfg.canonical_model_id(legacy, "grok"), "grok-4.3")
+                self.assertEqual(cfg.canonical_model_id(legacy), "grok-4.3")
+                self.assertNotIn(legacy, cfg.ALLOWED_GROK_MODELS)
         request = build_provider_payload(
             "grok",
             question="payload dry run",
@@ -101,22 +108,25 @@ class ExistingModelFlowTests(unittest.TestCase):
             model_override=cfg.GROK_NO_REASONING_MODEL,
             max_output_tokens=123,
         )
-        self.assertEqual(request["internal_model"], cfg.GROK_NO_REASONING_MODEL)
+        self.assertEqual(request["internal_model"], "grok-4.3")
         self.assertEqual(request["api_model"], "x-ai/grok-4.3")
-        self.assertEqual(request["payload"]["reasoning"], {"effort": "none"})
-        self.assertFalse(request["is_low_reasoning"])
-        self.assertNotIn(cfg.GROK_NO_REASONING_MODEL, cfg.PREMIUM_MODELS)
+        # No pinned level: the model's own default ("low" at OpenRouter).
+        self.assertNotIn("reasoning", request["payload"])
+        self.assertNotIn("grok-4.3", cfg.PREMIUM_MODELS)
+        self.assertEqual(cfg.DEFAULT_MODEL_BY_PROVIDER["grok"], "grok-4.3")
 
-        high_request = build_provider_payload(
+        reasoning_request = build_provider_payload(
             "grok",
             question="payload dry run",
             system_prompt="system",
             model_override="grok-4.3",
+            deep_search=True,
             max_output_tokens=123,
         )
-        self.assertEqual(high_request["api_model"], "x-ai/grok-4.3")
-        self.assertEqual(high_request["payload"]["reasoning"], {"effort": "high"})
-        self.assertIn("grok-4.3", cfg.PREMIUM_MODELS)
+        self.assertEqual(reasoning_request["payload"]["reasoning"], {"effort": cfg.REASONING_EFFORT_ON})
+        # The Pro alias moved to the current Pro Grok.
+        self.assertEqual(cfg.PROVIDERS["grok"].pro_model, "grok-4.7")
+        self.assertIn("grok-4.7", cfg.PREMIUM_MODELS)
 
     def test_mistral_defaults_use_supported_reasoning_models(self):
         default_request = build_provider_payload(
@@ -278,10 +288,11 @@ class ExistingModelFlowTests(unittest.TestCase):
 
         snapshot = cfg.get_chat_memory_models()
         try:
+            cfg.apply_chat_memory_models({"grok": "grok-4.7"})
+            self.assertEqual(cfg.get_chat_memory_model("grok"), "grok-4.7")
+            # A migrated ID becomes its current model.
             cfg.apply_chat_memory_models({"grok": cfg.GROK_NO_REASONING_MODEL})
-            self.assertEqual(
-                cfg.get_chat_memory_model("grok"), cfg.GROK_NO_REASONING_MODEL
-            )
+            self.assertEqual(cfg.get_chat_memory_model("grok"), "grok-4.3")
             # Provider ohne Eintrag behalten ihre Basis.
             self.assertEqual(
                 cfg.get_chat_memory_model("openai"),
@@ -334,10 +345,11 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_judge_engines_resolve_virtual_ids_to_their_api_model(self):
         """Judge-IDs sind interne IDs; der Request muss das API-Modell tragen.
 
-        grok-4.3-no-reasoning existiert bei xAI nicht unter diesem Namen. Wurde
-        die interne ID ungeprueft als api_model durchgereicht, quittierte der
-        Provider das mit HTTP 400 "Model not found" und der komplette
-        Differences-Schritt (und damit ein Publisher-Run) schlug fehl.
+        claude-haiku-4-5 heisst bei OpenRouter claude-haiku-4.5 (frueher auch
+        grok-4.3-no-reasoning). Wurde die interne ID ungeprueft als api_model
+        durchgereicht, quittierte der Provider das mit HTTP 400 "Model not
+        found" und der komplette Differences-Schritt (und damit ein
+        Publisher-Run) schlug fehl.
         """
         from app.services.llm import consensus_engine
 
@@ -345,15 +357,18 @@ class ExistingModelFlowTests(unittest.TestCase):
         pro_snapshot = cfg.get_pro_judge_models()
         all_keys = {"OpenRouter": "key"}
         try:
+            cfg.apply_judge_models({"anthropic": "claude-haiku-4-5"})
+            cfg.apply_pro_judge_models({"anthropic": "claude-haiku-4-5"})
+            expected = ("anthropic", "anthropic/claude-haiku-4.5", "claude-haiku-4-5")
+
+            self.assertEqual(consensus_engine._standard_judge_engine("anthropic"), expected)
+            self.assertEqual(consensus_engine._judge_engine("anthropic", "standard"), expected)
+            self.assertEqual(consensus_engine._judge_engine("anthropic", "pro"), expected)
+
+            # A migrated Grok judge ID resolves to the one Grok 4.3 entry.
             cfg.apply_judge_models({"grok": cfg.GROK_NO_REASONING_MODEL})
-            cfg.apply_pro_judge_models({"grok": cfg.GROK_NO_REASONING_MODEL})
-            expected = ("grok", "x-ai/grok-4.3", cfg.GROK_NO_REASONING_MODEL)
-
-            self.assertEqual(consensus_engine._standard_judge_engine("grok"), expected)
-            self.assertEqual(consensus_engine._judge_engine("grok", "standard"), expected)
-            self.assertEqual(consensus_engine._judge_engine("grok", "pro"), expected)
-
-            # Direct Grok judge resolution still uses the virtual API model.
+            self.assertEqual(consensus_engine._standard_judge_engine("grok"),
+                             ("grok", "x-ai/grok-4.3", "grok-4.3"))
 
             # Jeder Attempt im Differences-Plan traegt ein echtes API-Modell.
             for (provider, api_model, _ref), _retry, _tier in (
@@ -365,15 +380,14 @@ class ExistingModelFlowTests(unittest.TestCase):
             cfg.apply_judge_models(snapshot)
             cfg.apply_pro_judge_models(pro_snapshot)
 
-    def test_grok_reasoning_labels_are_consistent(self):
-        """"High reasoning" neben "Reasoning" las sich wie zwei Modelle."""
-        for model_id in ("grok-4.3", "grok-4.20"):
+    def test_grok_labels_name_the_model_not_a_reasoning_setting(self):
+        """"Grok 4.3 · No reasoning" neben dem Reasoning-Menue (Max, 2026-10-11)."""
+        for model_id in ("grok-4.3", cfg.GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning"):
             with self.subTest(model=model_id):
-                self.assertEqual(cfg.get_model_label(model_id).split(" · ")[-1], "Reasoning")
-        for model_id in (cfg.GROK_NO_REASONING_MODEL, cfg.DEFAULT_GROK_MODEL):
+                self.assertEqual(cfg.get_model_label(model_id), "Grok 4.3")
+        for model_id in ("grok-4.5", "grok-4.7"):
             with self.subTest(model=model_id):
-                self.assertEqual(cfg.get_model_label(model_id).split(" · ")[-1], "No reasoning")
-        # Ohne Label faellt die UI auf die rohe ID zurueck.
+                self.assertNotIn("reasoning", cfg.get_model_label(model_id).lower())
         self.assertEqual(cfg.get_model_label("grok-4.5"), "Grok 4.5")
 
     def test_unknown_allowed_style_ids_get_public_product_labels(self):
@@ -397,9 +411,8 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_admin_meta_exposes_virtual_api_models(self):
         """Die UI muss zeigen koennen, was tatsaechlich beim Provider ankommt."""
         meta = _admin_meta({})
-        self.assertEqual(meta["api_models"].get(cfg.GROK_NO_REASONING_MODEL), "x-ai/grok-4.3")
-        self.assertEqual(meta["api_models"]["grok-4.3"], "x-ai/grok-4.3")
-        self.assertEqual(meta["api_models"][cfg.DEFAULT_GROK_MODEL], "x-ai/grok-4.20")
+        self.assertEqual(meta["api_models"]["claude-haiku-4-5"], "anthropic/claude-haiku-4.5")
+        self.assertNotIn(cfg.GROK_NO_REASONING_MODEL, meta["api_models"])
 
     def test_admin_meta_exposes_the_effective_reasoning_policy(self):
         data = {
@@ -411,9 +424,9 @@ class ExistingModelFlowTests(unittest.TestCase):
         data["chat_memory_models"] = cfg.get_chat_memory_models()
         reasoning = _admin_meta(data)["reasoning"]
 
-        grok = reasoning["model_answers"]["grok"][cfg.GROK_NO_REASONING_MODEL]
-        self.assertEqual(grok["reasoning"], {"effort": "none"})
-        self.assertEqual(grok["source"], "MODEL_REQUEST_CONFIG")
+        kimi = reasoning["model_answers"]["kimi"][cfg.KIMI_BASE_MODEL]
+        self.assertEqual(kimi["reasoning"], {"enabled": False})
+        self.assertEqual(kimi["source"], "MODEL_REQUEST_CONFIG")
         self.assertNotIn("deep_think_answers", reasoning)
         openai_control = next(
             control for control in reasoning["controls"]

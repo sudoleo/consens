@@ -413,7 +413,10 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     models = {item["id"]: item for item in response.json()["models"]}
     assert models["deepseek/deepseek-v4.1-flash"]["reasoning_efforts"] == ["default", "low", "high", "max"]
     assert "none" not in models[cfg.DEFAULT_GEMINI_MODEL]["reasoning_efforts"]
-    assert models[cfg.GROK_NO_REASONING_MODEL]["reasoning_efforts"] == ["default"]
+    # Grok 4.3 is one entry whose level the menu sets (no "No reasoning" variant).
+    assert cfg.GROK_NO_REASONING_MODEL not in models
+    assert models["grok-4.3"]["label"] == "Grok 4.3"
+    assert models["grok-4.3"]["reasoning_efforts"] == ["default", "none", "low", "medium", "high"]
     expected = set(cfg.ALL_ALLOWED_MODELS)
     assert set(models) == expected | {"deepseek/deepseek-v4.1-flash"}
     assert len(response.json()["models"]) == len(models)

@@ -1313,7 +1313,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `MOCK_LLM`: eine Agent-Frage „Remember: <Fakt>“ speichert den Fakt, damit der
   Ablauf ohne Provider im Browser prüfbar ist.
 - **Agent-Watch (`app/services/agent_watch.py`, `agent-watch.js`, seit
-  2026-10-11)**: Der Agent legt keine Watch an, er bereitet sie vor.
+  2026-10-11)**: Der Agent legt keine Watch an, er bereitet sie vor, auch auf
+  „erinnere mich, wenn …“ (`ORCHESTRATOR_PROMPT` nennt Erinnern; eine Watch ist
+  der einzige Weg, den Nutzer später zu erreichen).
   `prepare_watch` (registriert nur in Account-Mode-Turns mit Vergleich und ohne
   Google-Daten, `DelegationLoop(google_data=…)`) prüft Frage/Ziele/Intervall,
   fragt lesend `watch_service.creation_outlook` (schon beobachtet: jede Watch
@@ -2190,8 +2192,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Schritts weg (`_plan_only`: ≤ 40 Zeichen, beginnt mit „I'll/Let me/I should…"
   oder „No search needed"): GLM zeigte sonst nach der Such-Entscheidung
   „I'll answer directly." als einzige Live-Zeile.
-  Modelle ohne Reasoning (z. B. Haiku, Mistral Small, Grok 4.20 im
-  Standard-Preset) liefern keine Zeile.
+  Modelle ohne Reasoning (z. B. Haiku, Mistral Small) liefern keine Zeile.
   Die Landing-Schiene (`.lp-scene-rail`) zeichnet weiter die alte Linie.
   Reduzierte Bewegung: kein Pulsieren, kein Aufleuchten. Alles Drückbare gibt
   beim Druck auf 97 % nach (`base.css`, Spezifität 0, eigene Transforms
@@ -2425,7 +2426,7 @@ ohne Pro als Medium, wo das Modell Medium anbietet: Auto schickt sonst keine
 Stufe, und Sonnet 5.5 denkt dann mit seinem Standard „high“, einer Pro-Stufe.
 `agent_client.free_default_effort(model_id)` entscheidet (Registry-Einträge mit
 fester niedriger Einstellung wie Kimi aus / GLM low behalten sie, eine fest
-eingetragene Pro-Stufe wie Grok 4.3 „high“ wird Medium; ohne Medium bleibt
+eingetragene Pro-Stufe („high“) wird Medium; ohne Medium bleibt
 Auto), `run_agent` löst damit auf, die gespeicherte Auswahl und die
 Request-Identität behalten „default“. `/agent/models` meldet je Modell
 `free_default_effort`; `agent-chat.js` (`autoEffort`/`visibleEfforts`/`effortFor`)
@@ -2699,7 +2700,7 @@ im selben Budget zählt und adaptives Denken bei Claude weder Effort noch
 `reasoning.max_tokens` einhält). Seit 2026-10-08 entscheidet
 `agent_client.reasoning_active` über den Zuschlag: kein Headroom bei Effort
 `none`, `reasoning.enabled=false` (Kimi K2.6) oder Modellen, die nur auf
-Anfrage denken (`default_enabled=false`, Grok 4.20 „No reasoning“), sonst
+Anfrage denken (`default_enabled=false`), sonst
 verdoppelten Reservierung und Stop-Schätzung (`unknown_estimate`) sich grundlos.
 Endet ein Orchestrator-Schritt ohne verwertbares Ergebnis (`_output_limited`:
 `length` ohne Text, `length` mit halb geschriebenem Toolcall, oder nach Reasoning
@@ -2753,6 +2754,10 @@ bleibt nur die ungeprüfte Teilantwort erhalten, ohne gestartete Judges.
 Antwort-Prompt `prompt_defaults.AGENT_ANSWER_PROMPT` (Journalist, Treue zur
 Substanz, Uneinigkeit nur wo sie die Entscheidung ändert, Format/Quellen) plus
 Datum und Modellidentität; der Consensus-Modus-Prompt wirkt hier nicht mehr.
+Seit 2026-10-11 folgt dem Antwort-Prompt `AGENT_ANSWER_APP_FACTS` plus, nur wenn
+der Turn es kann, `AGENT_ANSWER_READ_FACT` (`read_source`) und
+`AGENT_ANSWER_WATCH_FACT` (Watch-Tool): Fakten über die App, damit die Antwort
+nicht behauptet, consens.io könne weder Quellen lesen noch erinnern.
 Seit 2026-10-10 nennen die Antworten im Evidenzblock ihre Quellen nur per URL;
 `sources` führt jede zitierte Quelle einmal mit `cited_by`, `supports`
 (gestützte Antwortsätze) und `excerpt` (Originalauszug), gebaut von
@@ -2769,9 +2774,11 @@ Suchergebnissen“). Die Suchzahl liest `measured_usage` über
 bricht nichts ab: Die echte Zahl wird gebucht, gebundene Suchbudgets werden
 negativ, und `/health/metrics` zählt `search_overrun:<modell>` (agent-mode.md,
 „Websuche“).
-Mit `AGENT_READ_SOURCES=1` kommt das Orchestrator-Tool `read_source` hinzu
-(`agent_read_source.SourceReader`, nur Kontomodus, nicht bei Google-Daten):
-Es öffnet nach einem Vergleich eine von einer Vergleichsantwort zitierte URL
+Das Orchestrator-Tool `read_source` (seit 2026-10-11 standardmäßig an,
+`AGENT_READ_SOURCES=0` schaltet ab; `agent_read_source.SourceReader`, nur
+Kontomodus, nicht bei Google-Daten) öffnet nach einem Vergleich eine von einer
+Vergleichsantwort zitierte URL oder einen Link, der im Chat steht (Nachrichten
+des Nutzers, frühere Antworten: `chat_urls` über `loop.answer_conversation`),
 über einen abgerechneten Helferschritt (`DelegationLoop._step(...,
 server_tools=[engines.web_fetch_tool(...)], completion=PageFetch())`, Responses
 API, Text aus dem Output-Item `openrouter:web_fetch`; über Chat Completions
@@ -5627,7 +5634,7 @@ app/services/
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompts für Orchestrator/Antwortschritt; startet nie eine Watch
   agent_source_evidence.py   Quellenauszüge für den Agent-Antwortschritt: Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
-  agent_read_source.py       Tool read_source (AGENT_READ_SOURCES=1): Orchestrator liest nach dem Vergleich eine zitierte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Evidenz read_sources für Antwortschritt, Review und Coverage-Judge
+  agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Evidenz read_sources für Antwortschritt, Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
@@ -6374,19 +6381,23 @@ Firestore `preset_models` speichert pro Daily/Balanced/High Quality (ID:
 `thorough`) unter `answers` genau sechs unterschiedliche Familienmodelle plus
 `consensus`; das alte Top-Level-Provider-Schema wird beim Laden migriert.
 Daily/Balanced bleiben Free-faehig und
-High Quality bleibt unabhaengig von der Konfiguration Pro-only. Grok-Alt-Aliasse
-(u. a. 4.1 Fast) werden beim Laden auf explizite interne Grok-4.3-Varianten
-migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
-`reasoning.effort=none` und bleibt Free, während das Pro-Modell `grok-4.3`
-  explizit `high` nutzt, sofern die Admin-Premium-Zuordnung es Pro-gated.
+High Quality bleibt unabhaengig von der Konfiguration Pro-only. Grok 4.3 ist
+seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
+(OpenRouter-Standard „low“; Reasoning-Schalter und Agent-Menü setzen die Stufe).
+Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten
+`grok-4.3-no-reasoning`, `grok-4.20-non-reasoning` und `grok-4.20` migrieren
+beim Laden und in `comparison_selection`/`resolve_agent_model` auf `grok-4.3`
+(`GROK_MODEL_MIGRATIONS`); der Grok-Pro-Alias ist `grok-4.7`. Weil das alte
+Dokument `grok-4.3` noch unter `premium` führt, nimmt der Loader die
+Basis-Free-Defaults (`_BASE_FREE_DEFAULTS`) immer aus `PREMIUM_MODELS`.
   Presets dürfen ausschließlich bereits konfigurierte Provider-Modelle
   referenzieren; sie fügen selbst keine Providerzeilen hinzu.
   `cfg.virtual_model_ids()` listet alle internen IDs, deren API-Modell
   abweicht. Jede Stelle, die eine konfigurierte Modell-ID in einen
   Provider-Request schreibt, muss vorher über `get_model_config(...).api_model`
   auflösen — die Judge-/Fallback-Pfade der Differences-, Resolve- und
-  Consensus-Engine taten das früher nicht und quittierten
-  `grok-4.3-no-reasoning` mit HTTP 400 „Model not found“. Das Admin-Dashboard
+  Consensus-Engine taten das früher nicht und quittierten die damalige
+  Variante `grok-4.3-no-reasoning` mit HTTP 400 „Model not found“. Das Admin-Dashboard
   blendet die Auflösung als `→ <api_model>` hinter dem Optionsnamen ein.
   Die Admin-Dropdowns blenden Premium-Modelle in Free-Kontexten (Free Watch,
   Daily/Balanced-Preset) nicht mehr aus, sondern zeigen sie deaktiviert mit dem

@@ -315,9 +315,9 @@ class CompareArgs(ProgressArgs):
 READ_NEXT_STEP = (
     "answer: this is the last comparison; the app writes and checks the answer immediately after it, and no "
     "source can be read. more_work: you still need another comparison, a document or an action preparation, or "
-    "you may need to read a cited source after seeing the answers (the user reports conflicting information, "
-    "asks to verify a claim or for exact wording, or the answer hinges on one precise figure, date, price or "
-    "rule that sources often state differently).")
+    "you may need to read a source after seeing the answers (the user asks you to read or check a source, "
+    "reports conflicting information, asks to verify a claim or for exact wording, or the answer hinges on one "
+    "precise figure, date, price or rule that sources often state differently).")
 
 
 def free_compare_args(models):
@@ -526,6 +526,8 @@ class JudgeArgs(ProgressArgs):
 
 def comparison_selection(value=None):
     chosen = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]["answers"]) if value is None else dict(value)
+    # A browser may still hold a migrated ID (grok-4.3-no-reasoning, 2026-10-11).
+    chosen = {provider: cfg.canonical_model_id(model_id, provider) for provider, model_id in chosen.items()}
     if not 2 <= len(chosen) <= cfg.MAX_RUN_FAMILIES:
         raise ValueError(f"Select between two and {cfg.MAX_RUN_FAMILIES} comparison models")
     for provider, model_id in chosen.items():
@@ -653,10 +655,14 @@ class ComparisonTools:
         from app.services import prompt_config
         from app.services.agent_runs import agent_sources
         from app.services.llm.base import get_date_context
-        from app.services.prompt_defaults import AGENT_ANSWER_PROMPT
+        from app.services.prompt_defaults import (AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_PROMPT, AGENT_ANSWER_READ_FACT,
+                                                  AGENT_ANSWER_WATCH_FACT)
         config = prompt_config.get_config()
         self.freeze_for_synthesis()
-        system = (AGENT_ANSWER_PROMPT + "\n\n"
+        # What the answer may say about the app: only what this turn can do.
+        facts = [AGENT_ANSWER_APP_FACTS, *([AGENT_ANSWER_READ_FACT] if self.reader is not None else []),
+                 *([AGENT_ANSWER_WATCH_FACT] if getattr(self.loop, "watch_tools", None) is not None else [])]
+        system = (AGENT_ANSWER_PROMPT + "\n\n" + " ".join(facts) + "\n\n"
                   + get_date_context(config["reference_timezone"])
                   + f"\nSelected model: {self.loop.model.label} ({self.loop.model.model}).")
         memory = getattr(self.loop, "memory", None)
@@ -1120,9 +1126,10 @@ class ComparisonTools:
                            "stream the complete synthesis in a dedicated step before any judge starts.")
         if self.reader is not None and not self.ready_to_answer and self.reader.cited():
             # The orchestrator now sees the answers: the moment to decide on a read.
-            instruction = ("If these answers disagree on a fact that matters, or the answer needs exact wording, first read "
-                           "the cited source that decides it with read_source (only URLs listed in the answers' sources); "
-                           "otherwise do not read. After a read, no further comparison is possible. " + instruction)
+            instruction = ("If the user asked you to read or check a source, if these answers disagree on a fact that "
+                           "matters, or if the answer needs exact wording, first read the source that decides it with "
+                           "read_source (only URLs listed in the answers' sources or linked in this chat); otherwise do "
+                           "not read. After a read, no further comparison is possible. " + instruction)
         # Routing needs the gist; the synthesis receives the complete answers.
         limit = loop.policy.result_chars
         routed = [{**a, "text": a["text"][:limit], **({"text_shortened_for_routing": True} if len(a["text"]) > limit else {})}
