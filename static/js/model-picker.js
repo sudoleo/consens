@@ -329,9 +329,14 @@
     return presets.some(preset => preset.id === configured) ? configured : presets[0].id;
   }
 
+  // Ein Preset, das nur gezeigt wird (die Demo), ohne die Wahl des Nutzers
+  // zu werden: gilt bis zum Neuladen oder zur naechsten eigenen Wahl.
+  let previewPresetId = null;
+
   function getActiveConsensusPresetId() {
     const presets = getConsensusPresets();
     if (!presets.length) return "custom";
+    if (previewPresetId && presets.some(preset => preset.id === previewPresetId)) return previewPresetId;
     const stored = settings.get("consensus_preset");
     if (stored === "custom") return "custom";
     if (stored && presets.some(preset => preset.id === stored)) {
@@ -372,8 +377,8 @@
   }
 
   function applyConsensusPreset(select, presetId) {
-    // Kein change-Event: die Preset-Aufloesung darf pref_select_consensus
-    // nicht ueberschreiben.
+    // Kein change-Event: die Preset-Aufloesung darf die gespeicherte
+    // Engine-Wahl (consensus_model) nicht ueberschreiben.
     const value = resolveConsensusPresetValue(select, presetId);
     if (!value) return null;
     const preset = getConsensusPresets().find(entry => entry.id === presetId);
@@ -411,6 +416,7 @@
       window.App.showProFeatureModal?.(`${preset.label || "High Quality"} mode`);
       return;
     }
+    previewPresetId = null;
     settings.set("consensus_preset", presetId);
     applyConsensusPreset(select, presetId);
     window.App.trackAppEvent("app_consensus_preset_changed", { preset: presetId });
@@ -418,18 +424,38 @@
     syncCustomModelPicker(select);
   }
 
-  // Eine ausdrueckliche Modellwahl verlaesst die Preset-Ebene: die aktuelle
-  // Auswahl aller Familien und der Consensus-Engine wird zur eigenen Wahl.
-  function markConsensusPresetCustom() {
+  function previewConsensusPreset(presetId) {
+    const select = document.getElementById("consensusModelDropdown");
+    if (!applyConsensusPreset(select, presetId)) return false;
+    previewPresetId = presetId;
+    syncCustomModelPicker(select);
+    return true;
+  }
+
+  // Eine ausdrueckliche Modellwahl verlaesst die Preset-Ebene. Wer ein Preset
+  // verlaesst, behaelt die Aufstellung auf dem Schirm: alle Familien und die
+  // Engine werden zur eigenen Wahl. Innerhalb von Custom wird nur das
+  // Geaenderte gespeichert (change.family / change.engine), dazu Familien ohne
+  // gespeichertes Modell. So bleibt eine gespeicherte Wahl erhalten, deren
+  // Option gerade nicht angeboten wird (ein Pro-Modell, bevor die Stufe
+  // bekannt ist).
+  function markConsensusPresetCustom(change = {}) {
+    const leavingPreset = getActiveConsensusPresetId() !== "custom";
+    previewPresetId = null;
     settings.set("consensus_preset", "custom");
+    const stored = storedFamilies();
     const models = {};
     window.App.modelPrefs.forEach(pref => {
-      const select = document.getElementById(pref.selectId);
-      if (select?.value) models[pref.key] = { model: select.value };
+      const value = document.getElementById(pref.selectId)?.value;
+      if (value && (leavingPreset || pref === change.family || stored[pref.key]?.model === undefined)) {
+        models[pref.key] = { model: value };
+      }
     });
     saveFamilies(models);
     const consensus = document.getElementById("consensusModelDropdown");
-    if (consensus?.value) settings.set("consensus_model", consensus.value);
+    if (consensus?.value && (leavingPreset || change.engine === true || settings.get("consensus_model") === undefined)) {
+      settings.set("consensus_model", consensus.value);
+    }
     window.syncCustomModelPickers?.();
   }
 
@@ -449,6 +475,10 @@
     applyTierDefaultModels(window.isUserPro === true);
     window.restoreModelSelections();
     window.syncCustomModelPickers?.();
+    // Wie nach einem Stufenwechsel: Ueberschriften eines sichtbaren Laufs
+    // gehoeren dessen Modellen, und Anhaenge passen zur neuen Auswahl.
+    window.App.updateReasoningUI?.();
+    window.App.attachments?.refreshCompatibility?.();
   }
 
   settings.onChange(["compare_models", "consensus_model", "consensus_preset"], detail => {
@@ -1490,6 +1520,7 @@
 
   // --- Exporte fuer das in initApp verbliebene Wiring + andere Module ---
   window.App.selectConsensusPreset = presetId => selectConsensusPreset(document.getElementById('consensusModelDropdown'), presetId);
+  window.App.previewConsensusPreset = previewConsensusPreset;
   window.App.applyTierDefaultModels = applyTierDefaultModels;
   window.App.setModelSelectionState = setModelSelectionState;
   window.App.setRunModelBlock = setRunModelBlock;

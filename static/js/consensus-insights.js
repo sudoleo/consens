@@ -144,7 +144,9 @@
           function readMarkerPreferences() {
             const stored = settings.get("consensus_highlights");
             markersVisible = stored !== "none";
-            highlightMode = Object.hasOwn(MARKER_FILTERS, stored) ? stored : "all";
+            // hasOwnProperty, not Object.hasOwn: this runs while the bundle
+            // loads, and older engines (Chromium < 93) lack Object.hasOwn.
+            highlightMode = Object.prototype.hasOwnProperty.call(MARKER_FILTERS, stored) ? stored : "all";
             return markersVisible;
           }
 
@@ -2678,7 +2680,7 @@
           restoreClaimCounts();
           highlightSelect?.addEventListener("change", function () {
             const show = this.value !== "none";
-            if (show) highlightMode = Object.hasOwn(MARKER_FILTERS, this.value) ? this.value : "all";
+            if (show) highlightMode = Object.prototype.hasOwnProperty.call(MARKER_FILTERS, this.value) ? this.value : "all";
             settings.set("consensus_highlights", show ? highlightMode : "none");
             applyConsensusMarkerVisibility(show, true);
           });

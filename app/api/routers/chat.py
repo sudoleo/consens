@@ -104,8 +104,7 @@ from app.services.usage_repository import (
     canonical_request_fingerprint,
 )
 from app.services.consensus_pipeline import analyze_provider_answers
-# The limits of a saved account system prompt are the limits of a run's.
-from app.services.user_settings import MAX_SYSTEM_PROMPT_BYTES, MAX_SYSTEM_PROMPT_CHARS
+from app.services import user_settings
 from app.services.llm.provider_runtime import analysis_budgeted
 
 router = APIRouter()
@@ -113,6 +112,10 @@ router = APIRouter()
 OWN_KEYS_LOGIN_REQUIRED = "Please log in to use your own API keys."
 MAX_QUESTION_CHARS = 8_000
 MAX_QUESTION_BYTES = 16_000
+# A run carries the account's saved system prompt behind the app's date line
+# (query-send.js), so every prompt the account can keep is one a run accepts.
+MAX_SYSTEM_PROMPT_CHARS = user_settings.MAX_SYSTEM_PROMPT_CHARS + user_settings.SYSTEM_PROMPT_DATE_LINE_RESERVE
+MAX_SYSTEM_PROMPT_BYTES = user_settings.MAX_SYSTEM_PROMPT_BYTES + user_settings.SYSTEM_PROMPT_DATE_LINE_RESERVE
 run_usage_repository = FirestoreUsageRepository(db_firestore)
 chat_store = ChatStore(db_firestore)
 answer_receipt_store = answer_receipts.ReceiptStore(db_firestore)

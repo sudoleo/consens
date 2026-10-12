@@ -24,6 +24,7 @@ function boot() {
     before(window) {
       window.document.body.classList.add("is-hero");
       window.localStorage.setItem("runMode", "consensus");
+      window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
       window.App = { modelPrefs: [],
         getModelOptionLabel: () => "", getSelectedModelCount: () => 0,
         initCustomModelPicker: vi.fn(), trackAppEvent: vi.fn(), composer: {expand: vi.fn()} };

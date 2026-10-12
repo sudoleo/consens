@@ -7,6 +7,10 @@ import os
 
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024
+# Routes whose largest valid body is small. A hostile body there could still
+# make validation expensive (one error per key), so it is refused early. The
+# settings PATCH is at most ~64 KB (a 32 KB system prompt, fully escaped).
+PATH_MAX_REQUEST_BODY_BYTES = {"/api/my/settings": 256 * 1024}
 
 
 def configured_max_request_body_bytes() -> int:
@@ -47,6 +51,8 @@ class RequestBodyLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
+        limit = min(self.max_body_bytes,
+                    PATH_MAX_REQUEST_BODY_BYTES.get(str(scope.get("path") or ""), self.max_body_bytes))
         headers = {
             key.lower(): value
             for key, value in scope.get("headers", [])
@@ -61,7 +67,7 @@ class RequestBodyLimitMiddleware:
             if declared < 0:
                 await self._reject(send, "Invalid Content-Length header.")
                 return
-            if declared > self.max_body_bytes:
+            if declared > limit:
                 await self._reject(send)
                 return
 
@@ -77,7 +83,7 @@ class RequestBodyLimitMiddleware:
             chunk = message.get("body", b"")
             if chunk:
                 buffered.extend(chunk)
-                if len(buffered) > self.max_body_bytes:
+                if len(buffered) > limit:
                     await self._reject(send)
                     return
             if not message.get("more_body", False):

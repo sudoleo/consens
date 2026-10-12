@@ -686,9 +686,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Persistenz als Kontoeinstellungen `compare_models`, `consensus_model` und
   `consensus_preset` über `App.userSettings` (lokale Kopie unter den bisherigen
   `pref_check_*`/`pref_select_*`/`pref_consensus_preset`-Schlüsseln;
-  `restoreModelSelections`, bei Werten vom Server/aus einem anderen Tab
-  `applyAccountModelPreferences`, das ungespeicherte Familien erst auf den
-  Seiten-Default setzt). Der Consensus-Picker hat seit 2026-07-18
+  `restoreModelSelections`, bei Werten vom Server, aus einem anderen Tab oder
+  nach dem Abmelden `applyAccountModelPreferences`, das ungespeicherte Familien
+  erst auf den Seiten-Default setzt). `markConsensusPresetCustom({family,
+  engine})`: wer ein Preset verlässt, behält die Aufstellung auf dem Schirm als
+  eigene Wahl; innerhalb von Custom wird nur das Geänderte gespeichert, dazu
+  Familien ohne gespeichertes Modell (eine gespeicherte Pro-Wahl, die vor dem
+  Laden der Stufe gesperrt erscheint, bleibt so erhalten). Der Consensus-Picker hat seit 2026-07-18
   eine Preset-Ebene (Daily/Balanced/High Quality + Custom): Presets kommen aus
   `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set genau
   sechs aus den Registry-Familien gewählte Antwortmodelle plus Consensus-Engine. High Quality (interne ID
@@ -1037,9 +1041,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   ausgeblendet, wenn sie weder Fakten noch ein sichtbares „Run again" trägt;
   mit `flex-grow` bzw. als leere Hülle hat sie die Aktionen sonst grundlos in
   den Umbruch gedrängt. Das Handy behält sein gestapeltes Raster.
-  Der Vorgängerschlüssel `consensio.showAgreementScore.v1` wird weiter gelesen
-  (`false` = `summary`) und mitgeschrieben, damit ein Rollback dieselbe Wahl
-  sieht.
+  Der Vorgängerschlüssel `consensio.showAgreementScore.v1` wird beim Lesen
+  einmal migriert (`false` = `summary`) und danach entfernt; er wird nicht mehr
+  mitgeschrieben.
   Die Usage-Gruppe zeigt zusätzlich das aktive Watch-Kontingent aus
   `/api/my/watches`. Gesperrte Features zeigen einen kurzen Hinweis ohne
   Unterbrechung; der Sidebar-Link „Early access“ (seit 2026-10-02 ein
@@ -5314,65 +5318,121 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
 Einstellungen, die einem Konto auf jedes Gerät folgen, liegen am Konto statt nur
 im Browser. **Server**: `app/services/user_settings.py` (Schema `UserSettings`,
 alle Felder optional = nur Gewähltes, `FirestoreUserSettingsRepository`) unter
-`users/{uid}/settings/app`; `GET /api/my/settings` → `{settings, revision}`
-(`revision` 0 = nie gespeichert), `PATCH /api/my/settings` mit
-`{settings: {name: wert | null}}` ändert nur die genannten Felder (`null` = zurück
-zum Default; `compare_models` wird als Ganzes ersetzt), 422 bei unbekannten
-Feldern/Werten, 403 während einer Kontolöschung. `users/{uid}` selbst bleibt für
-den Browser gesperrt (Tier/Rolle). Formregeln statt Katalogprüfung: ein Modell,
-das den Katalog verlässt, macht den Datensatz nicht unlesbar; gespeicherte
-Altwerte, die nicht mehr validieren, fallen einzeln weg.
+`users/{uid}/settings/app` mit `values`, `revision`, `field_revisions` (Revision
+der letzten Änderung je Einstellung) und `updated_at`.
+`GET /api/my/settings` → `{settings, revision, field_revisions}` (`revision` 0 =
+nie gespeichert; ein beschädigter Wert gilt als 1). `PATCH /api/my/settings` mit
+`{settings: {name: wert | null}}` (1 bis 11 Namen) ändert nur die genannten
+Einstellungen (`null` = zurück zum Default; `compare_models` ist eine Einheit und
+wird als Ganzes ersetzt) und prüft **Einstellung für Einstellung**
+(`validate_changes`): Unbekannte Namen und Werte außerhalb der Regeln kommen in
+`rejected` zurück, die übrigen werden trotzdem gespeichert (eine Version mehr
+oder weniger im Browser verliert so nicht die ganze Änderung). 422 nur für eine
+kaputte Anfrage (leeres/zu großes `settings`, weitere Felder), 403 während einer
+Kontolöschung, 429 über 60/min pro IP und pro Konto. Der Body ist auf 256 KB
+begrenzt (`PATH_MAX_REQUEST_BODY_BYTES`), Antworten unter `/api/my/` sind
+`private, no-store`. `users/{uid}` selbst bleibt für den Browser gesperrt
+(Tier/Rolle). Formregeln statt Katalogprüfung: ein Modell, das den Katalog
+verlässt, macht den Datensatz nicht unlesbar; gespeicherte Altwerte, die nicht
+mehr validieren, fallen je Einstellung weg.
 
 Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
 `agent_preferences` (`depth`/`quorum`/`autonomy`, nur gewählte),
 `check_sources`, `compare_models` (`{Familienlabel: {enabled, model}}`),
-`consensus_model`, `consensus_preset`, `system_prompt` (Grenzen = die eines
-Laufs, `chat.py` importiert sie), `agreement_display`, `consensus_highlights`,
-`claim_counts`. **Bewusst im Browser** bleiben Theme, Sidebar-Breite/-Zustand,
-`agentShellExpected` (vor dem ersten Paint nötig, gerätebezogen), der
-Fragen-Entwurf (würde bei jedem Tastendruck schreiben), der eigene
-OpenRouter-Key (fremdes Geheimnis), das Analytics-Opt-out, gesehene Hinweise
-und alles im sessionStorage.
+`consensus_model`, `consensus_preset`, `system_prompt` (höchstens 12.000 Zeichen
+/ 32.000 Bytes; ein Lauf akzeptiert 64 mehr für die Datumszeile, die
+`query-send.js` voranstellt, `chat.py`), `agreement_display`,
+`consensus_highlights`, `claim_counts`. **Bewusst im Browser** bleiben Theme,
+Sidebar-Breite/-Zustand, `agentShellExpected` (vor dem ersten Paint nötig,
+gerätebezogen), der Fragen-Entwurf (würde bei jedem Tastendruck schreiben), der
+eigene OpenRouter-Key (fremdes Geheimnis), das Analytics-Opt-out, gesehene
+Hinweise und alles im sessionStorage.
 
 **Browser**: `static/js/user-settings.js` (`App.userSettings`, Head-Bundle) ist
-der einzige Besitzer: `get(name)`, `set(name, wert | null)`,
-`onChange(names, handler)` über `consensio:settings-change` (`detail.source`:
-`local`, `server`, `tab`, `signout`; `previous`). Die lokale Kopie liegt unter
-den bisherigen localStorage-Schlüsseln (`runMode`, `pref_*`, `systemPrompt`,
+der einzige Besitzer: `get(name)`, `set(name, wert | null, {derived})`,
+`accepts(name, wert)`, `onChange(names, handler)` über
+`consensio:settings-change` (`detail.source`: `local`, `server`, `tab`,
+`signout`; `previous`; nach einer Rückkehr aus dem Back/Forward-Cache gleicht
+`pageshow` nach). Die lokale Kopie liegt unter den bisherigen
+localStorage-Schlüsseln (`runMode`, `checkSources`, `pref_*`, `systemPrompt`,
 `consensio.*`); `consensio.agentModel.v1` ersetzt das frühere
 `agent_settings_<uid>`. Alte Speicherformate werden beim Lesen migriert, nur
-hier. **Einmaliger Reset (2026-10-12):** Fehlt die Marke
-`consensio.settingsReset = "2026-10-12"`, entfernt `user-settings.js` beim
-Laden einmal Modus (`runMode` samt `runModeDefault`/`agentMode`/`autoConsensus`)
-und Modellwahl (`pref_check_*`, `pref_select_*`, `pref_consensus_preset`) und
-setzt die Marke: Jeder Browser startet so einmal mit Agent und dem App-Preset
-Daily, und alte Compare-Wahlen oder ausgemusterte Modell-IDs gelangen nie ins
-Konto. System-Prompt, Display, Agent-Einstellungen/-Modell und Check sources
-bleiben. Das App-Preset steht in `cfg.APP_DEFAULT_CONSENSUS_PRESET` (`fast` =
-Daily, an die Seite als `default_consensus_preset`); API und der Rückfall eines
-Agent-Vergleichs ohne Auswahl behalten `cfg.DEFAULT_CONSENSUS_PRESET` (Balanced). Abgleich: `firebase.js` ruft nach einer verifizierten Anmeldung
-`start({uid, getToken})` neben `/user_status` auf. Hat das Konto Einstellungen,
-gelten die des Servers; was diese Seite vor der Antwort änderte oder eine
-frühere Seite nicht zustellen konnte (`pending` in `consensio.settingsSync.v1`,
-an das Konto gebunden), wird stattdessen gesendet. Ein Konto ohne Einstellungen
-(`revision` 0) bekommt einmal die Werte dieses Browsers — außer sie gehören
-laut Sync-Datensatz einem anderen Konto (dann Defaults). Änderungen gehen
-gesammelt (400 ms) per PATCH; vorübergehende Fehler (401/408/429/5xx/Netz)
-werden mit Backoff wiederholt, eine Ablehnung (übrige 4xx) verwirft die Änderung
-mit Konsolenwarnung. `pagehide`/`visibilitychange` senden mit `keepalive`, der
-Logout wartet höchstens 3 s (`flush({timeoutMs})`), dann `stop()`: die Werte des
-Kontos verlassen den Browser, die eines Gasts (nie synchronisiert) bleiben.
-Module wenden Werte aus `server`/`tab`/`signout` selbst an (Modus, Modellwahl,
-Agent-Modell, Agent-Einstellungen, Check sources, Display, offener
-System-Prompt-Editor ohne eigenen Entwurf).
+hier. Das Modul wirft beim Laden nichts (jeder Lesefehler wird zu „nicht
+gesetzt“), denn alle späteren Module brauchen `App.userSettings`.
 
-Tests: `tests/test_user_settings.py` (Schema, Repository, Route, Kontolöschung,
-Gleichlauf der Regeln mit dem Browser), `tests/js/user-settings.test.mjs`
-(Speicher, Migrationen, Ereignisse, Abgleich), die Journey
+**Einmaliger Reset (2026-10-12):** Fehlt die Marke
+`consensio.settingsReset = "2026-10-12"`, entfernt `user-settings.js` beim Laden
+einmal Modus (`runMode`, `agentMode`, `autoConsensus`) und Modellwahl
+(`pref_check_*`, `pref_select_*`, `pref_consensus_preset`) sowie einen
+System-Prompt, den die App früher selbst als Standard schrieb oder der zu lang
+ist, und setzt die Marke. Die frühere Marke `runModeDefault` wird dabei auf
+`agent-2026-10-02` gesetzt, damit ein noch offener Tab der Vorversion eine neue
+Consensus-Wahl nicht auf Agent zurückdreht. Jeder Browser startet so einmal mit
+Agent und dem App-Preset Daily; Compare-Wahlen und Modell-IDs aus der Zeit davor
+werden nicht hochgeladen (ein noch offener Tab der Vorversion kann bis zum
+Neuladen Modellwahlen schreiben; alte IDs scheitern an den Options-Prüfungen und
+richten keinen Fehler an). System-Prompt, Display, Agent-Einstellungen/-Modell
+und Check sources bleiben. Das App-Preset steht in
+`cfg.APP_DEFAULT_CONSENSUS_PRESET` (`fast` = Daily, an die Seite als
+`default_consensus_preset`); API und der Rückfall eines Agent-Vergleichs ohne
+Auswahl behalten `cfg.DEFAULT_CONSENSUS_PRESET` (Balanced). Die Demo zeigt
+Balanced über `App.previewConsensusPreset` nur an (bis zum Neuladen oder zur
+nächsten eigenen Wahl), sie speichert es nicht.
+
+**Abgleich**: `firebase.js` ruft nach einer verifizierten Anmeldung
+`start({uid, getToken})` neben `/user_status` auf (erst nachdem
+`/confirm-registration` zurück ist und die Auth-Generation noch stimmt), `stop()`
+beim Abmelden, im Zweig für unbestätigte Adressen, beim Kontowechsel ohne
+Abmelden und nach einer Kontolöschung. Regeln beim Laden (`adopt`):
+- Was diese Seite vor der Antwort änderte (`touched`), gilt.
+- Eine Änderung aus einer früheren Seite (`pending` in
+  `consensio.settingsSync.v1` mit `owner` und `base` = neueste bekannte
+  Revision) gilt nur, wenn das Konto diese Einstellung seit `base` nicht
+  geändert hat (`field_revisions`) — sonst ist der Wert des Kontos neuer (auch
+  wenn die eigene, unbestätigte Anfrage schon angekommen war).
+- Ein Konto ohne Einstellungen (`revision` 0) bekommt die Werte dieses
+  Browsers — außer sie gehören laut Sync-Datensatz einem anderen Konto (dann
+  Defaults).
+- Der erste Abgleich eines Browsers überhaupt (Marke
+  `consensio.settingsSeeded` fehlt, kein eigener Sync-Datensatz) füllt
+  Einstellungen, die das Konto noch nicht hat, mit den Werten des Browsers;
+  danach gilt der Server ganz. Das alte `agent_settings_<uid>` wird übernommen,
+  wenn das Konto kein `agent_model` hat.
+- Sonst gilt der Wert des Kontos; fehlt er, der Default.
+- Eine Antwort, die älter ist als `base` (ein anderer Tab hat inzwischen
+  gespeichert), wird einmal neu angefragt; eine Antwort ohne gültige Form gilt
+  als Fehler.
+Änderungen gehen gesammelt (400 ms) per PATCH, eine Anfrage zur Zeit je Konto;
+nicht-`keepalive`-Anfragen brechen nach 15 s ab. `set(…, {derived: true})`
+(eine Korrektur der App, etwa ein Agent-Modell, das die Liste verlassen hat)
+bleibt vor der Antwort des Kontos lokal und kann dessen Wert nie überstimmen.
+Eine Änderung ohne Sitzung (offline, abgelaufenes Token) wird für den `owner`
+des Browsers vorgemerkt. Nach der Antwort (`settle`) verlässt ein gesendeter
+Wert die Liste; ein Wert, der sich während der Anfrage änderte, kommt (wieder)
+hinein, auch wenn ein anderer Tab ihn schon gesendet hatte und von dieser
+älteren Anfrage überholt wurde. Vorübergehende Fehler (401/408/429/5xx/Netz,
+Zeitüberschreitung) werden mit Backoff wiederholt; eine Ablehnung (übrige 4xx)
+verwirft die Änderung mit Konsolenwarnung. `pagehide`/`visibilitychange` senden
+mit `keepalive`; der Logout sendet parallel zum Session-Cleanup und wartet
+höchstens 3 s (`flush({timeoutMs})`), danach `stop()`: die Werte des Kontos
+verlassen den Browser (auch noch nicht zugestellte Änderungen), die eines Gasts
+(nie synchronisiert) bleiben.
+Module wenden Werte aus `server`/`tab`/`signout` selbst an (Modus, Modellwahl
+über `applyAccountModelPreferences` samt Überschriften und
+Anhang-Verträglichkeit, Agent-Modell — ein Tab, dessen Modellliste die Wahl
+nicht kennt, lädt die Liste vor jeder Korrektur neu —, Agent-Einstellungen,
+Check sources, Display, offener System-Prompt-Editor ohne eigenen Entwurf).
+
+Tests: `tests/test_user_settings.py` (Schema, Teil-Annahme, Repository,
+`field_revisions`, Route, Konto-Limit, Kontolöschung, Gleichlauf der Regeln mit
+dem Browser), `tests/js/user-settings.test.mjs` (Speicher, Reset, Ereignisse,
+alle Abgleichsregeln oben), `tests/js/model-preferences.test.mjs` (Demo-Vorschau,
+was eine Modelländerung speichert, Werte vom Konto), die Journey
 `test_settings_follow_the_account_to_another_device` (echter Server +
 Emulator). Die übrigen Browser-Tests stellen `/api/my/settings` pro Seite im
-Speicher bereit (`_route_account_settings` in `test_phase4_frontend.py`); der
-Firebase-Stub der Standard-Fixture startet keinen Abgleich.
+Speicher bereit, mit den Regeln der echten Route (`_route_account_settings` in
+`test_phase4_frontend.py`); der Firebase-Stub der Standard-Fixture startet
+keinen Abgleich.
 
 ### Nutzergebundene Consensus-API (v1)
 - Admins stellen über `POST /api/admin/api-keys` einen gescopten Schlüssel für eine
@@ -6399,7 +6459,11 @@ alte Gemini-ADC-JSON ist entfernt.
   Nicht-Produktionsserver die sonst nur in Produktion laufenden Scheduler,
   Cleanups und Startup-Backfills (§2 Lifespan); unter `MOCK_LLM=1` wirkungslos.
 - Request-Schutz: `MAX_REQUEST_BODY_BYTES` (Default 16 MiB, erlaubter Bereich
-  1 KiB bis 32 MiB) begrenzt den vollständigen HTTP-Body vor Framework-Parsing.
+  1 KiB bis 32 MiB) begrenzt den vollständigen HTTP-Body vor Framework-Parsing;
+  `PATH_MAX_REQUEST_BODY_BYTES` setzt für kleine JSON-Routen (heute
+  `/api/my/settings`, 256 KB) eine engere Grenze. Ein 422 nennt höchstens
+  `MAX_VALIDATION_DETAILS` (20) Probleme und zählt den Rest (`omitted`), damit
+  ein Body mit vielen Schlüsseln keine riesige Antwort erzeugt.
 - Firebase Web-Config: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,
   `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`,
   `FIREBASE_APP_ID` (ans Frontend durchgereicht via `/app`-Template).

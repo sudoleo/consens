@@ -151,22 +151,33 @@ def _route_account_settings(page, settings=None, revision=0):
     """/api/my/settings for one page, held in memory.
 
     The account starts without saved settings (revision 0) and keeps what the
-    page sends, like the real route; no test writes the shared emulator.
-    Returns the state for assertions.
+    page sends, checked by the real route's rules (user_settings); no test
+    writes the shared emulator. Returns the state for assertions; a value the
+    route would refuse is collected in ``rejected``.
     """
-    state = {"settings": dict(settings or {}), "revision": revision, "patches": []}
+    from app.services import user_settings as account_settings
+
+    state = {"settings": dict(settings or {}), "revision": revision, "field_revisions": {},
+             "patches": [], "rejected": []}
 
     def handle(route):
+        answer = {}
         if route.request.method == "PATCH":
-            changes = route.request.post_data_json["settings"]
-            state["patches"].append(changes)
+            sent = route.request.post_data_json["settings"]
+            state["patches"].append(sent)
+            changes, rejected = account_settings.validate_changes(sent)
+            state["rejected"].extend(rejected)
+            if changes:
+                state["revision"] += 1
             for name, value in changes.items():
                 if value is None:
                     state["settings"].pop(name, None)
                 else:
                     state["settings"][name] = value
-            state["revision"] += 1
-        _json(route, {"settings": state["settings"], "revision": state["revision"]})
+                state["field_revisions"][name] = state["revision"]
+            answer["rejected"] = rejected
+        _json(route, {"settings": state["settings"], "revision": state["revision"],
+                      "field_revisions": state["field_revisions"], **answer})
 
     page.route("**/api/my/settings", handle)
     return state

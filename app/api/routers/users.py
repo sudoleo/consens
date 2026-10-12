@@ -1,11 +1,11 @@
 import logging
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from firebase_admin import auth, firestore
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.rate_limit import limiter
+from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
 from app.core.observability import safe_exception
 import app.core.config as cfg
 from app.core.entitlements import entitlements_for
@@ -474,15 +474,32 @@ def undo_user_memory(request: Request, payload: UserMemoryUndoRequest):
 
 
 class UserSettingsPatchRequest(BaseModel):
-    """Only the named settings change; ``null`` resets one to the app default."""
+    """Only the named settings change; ``null`` resets one to the app default.
+
+    Values are checked setting by setting (user_settings.validate_changes):
+    one the server does not take is reported in ``rejected`` and the others
+    are still saved.
+    """
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    settings: user_settings.UserSettings
+    settings: dict[str, Any] = Field(min_length=1, max_length=user_settings.MAX_PATCH_FIELDS)
 
 
-def _settings_response(values: dict, revision: int) -> dict:
-    return {"settings": values, "revision": int(revision)}
+def _settings_response(state, rejected: Optional[list] = None) -> dict:
+    values, revision, field_revisions = state
+    response = {"settings": values, "revision": int(revision), "field_revisions": field_revisions}
+    if rejected is not None:
+        response["rejected"] = rejected
+    return response
+
+
+def _settings_unavailable(exc: Exception, action: str):
+    logging.error("user settings %s failed category=%s", action, safe_exception(exc))
+    raise HTTPException(
+        status_code=503,
+        detail="Settings are temporarily unavailable." if action == "read" else "Settings could not be saved.",
+    ) from None
 
 
 @router.get("/api/my/settings")
@@ -490,28 +507,29 @@ def _settings_response(values: dict, revision: int) -> dict:
 def get_user_settings(request: Request):
     uid = _account_uid(request)
     try:
-        values, revision = user_settings_repository.get(uid)
+        return _settings_response(user_settings_repository.get(uid))
     except Exception as exc:
-        logging.error("user settings read failed category=%s", safe_exception(exc))
-        raise HTTPException(status_code=503, detail="Settings are temporarily unavailable.") from None
-    return _settings_response(values, revision)
+        _settings_unavailable(exc, "read")
 
 
 @router.patch("/api/my/settings")
 @limiter.limit("60/minute")
 def patch_user_settings(request: Request, payload: UserSettingsPatchRequest):
     uid = _account_uid(request)
-    changes = user_settings.changes_from(payload.settings)
-    if not changes:
-        raise HTTPException(status_code=422, detail="Name at least one setting to change.")
     try:
-        values, revision = user_settings_repository.update(uid, changes)
+        # Per account, beside the per-address limit above.
+        api_uid_limiter.check(uid, "settings:write", 60)
+    except ApiUidRateLimitExceeded:
+        raise HTTPException(status_code=429, detail="Too many settings changes. Please wait.") from None
+    changes, rejected = user_settings.validate_changes(payload.settings)
+    try:
+        state = (user_settings_repository.update(uid, changes) if changes
+                 else user_settings_repository.get(uid))
     except persistence_guard.AccountDeletionInProgress:
         raise HTTPException(status_code=403, detail="This account is being deleted.") from None
     except Exception as exc:
-        logging.error("user settings write failed category=%s", safe_exception(exc))
-        raise HTTPException(status_code=503, detail="Settings could not be saved.") from None
-    return _settings_response(values, revision)
+        _settings_unavailable(exc, "write")
+    return _settings_response(state, rejected)
 
 
 @router.post("/delete_account")

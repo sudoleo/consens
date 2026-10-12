@@ -14,7 +14,7 @@ soup = BeautifulSoup((ROOT / 'templates/index.html').read_text(encoding='utf-8')
 modal = soup.select_one('#systemPromptModal')
 modal.select_one('#helpModal').decompose()
 markup = re.sub(r'{[%{].*?[%}]}', '', str(modal))
-html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="' + manifest['styles']['app'] + '"></head><body><button id="editSystemPromptBtn">Settings</button>' + markup + '<script src="/static/app-ui.js"></script></body></html>'
+html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="' + manifest['styles']['app'] + '"></head><body><button id="editSystemPromptBtn">Settings</button>' + markup + '<script src="/static/js/user-settings.js"></script><script src="/static/app-ui.js"></script></body></html>'
 html = html.replace('</body>', '<script src="/static/js/consensus-anchor.js"></script><script src="/static/js/consensus-insights.js"></script></body>')
 results = []
 with sync_playwright() as p:

@@ -141,3 +141,27 @@ def test_registered_http_exception_handler_preserves_headers():
     assert plain.status_code == 404
     assert plain.json() == {"error": "missing"}
     assert "retry-after" not in plain.headers
+
+
+def test_a_validation_error_names_only_a_few_problems():
+    """A hostile body with many keys yields one error per key; the answer
+    stays small instead of growing with the request."""
+    import main
+
+    client = TestClient(main.app)
+    body = {"settings": {"run_mode": "agent"}, **{f"extra{index}": 1 for index in range(500)}}
+    response = client.patch("/api/my/settings", json=body,
+                            headers={"Authorization": "Bearer not-a-real-token"})
+    assert response.status_code == 422
+    payload = response.json()
+    assert len(payload["details"]) == main.MAX_VALIDATION_DETAILS
+    assert payload["omitted"] == 500 - main.MAX_VALIDATION_DETAILS
+
+
+def test_the_accounts_own_data_is_never_cached():
+    import main
+
+    client = TestClient(main.app)
+    for path in ("/api/my/settings", "/api/my/memory"):
+        response = client.get(path)
+        assert "no-store" in response.headers.get("cache-control", ""), path

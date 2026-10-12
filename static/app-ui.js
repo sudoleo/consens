@@ -144,9 +144,10 @@ function saveSystemPrompt() {
   if (textarea) {
     const text = textarea.value.trim() || null;
     // The account does not keep a prompt over 32,000 bytes (the field caps the
-    // characters); the editor stays open with the text instead of dropping it.
+    // characters) or with a broken character; the editor stays open with the
+    // text instead of dropping it.
     if (!window.App.userSettings.accepts("system_prompt", text)) {
-      window.App.showPopup?.("This system prompt is too long to save. Please shorten it.");
+      window.App.showPopup?.("This system prompt can't be saved: it is too long or contains an invalid character.");
       return;
     }
     window.App.userSettings.set("system_prompt", text);

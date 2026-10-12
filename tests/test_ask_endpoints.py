@@ -295,7 +295,8 @@ def test_multibyte_question_and_system_prompt_obey_utf8_byte_caps():
             headers=AUTH_HEADER,
             json={
                 "question": "small",
-                "system_prompt": "🙂" * 8_001,
+                # One emoji (4 bytes) over the run's cap.
+                "system_prompt": "🙂" * (chat_router.MAX_SYSTEM_PROMPT_BYTES // 4 + 1),
                 "model": free_model("openai"),
                 "openrouter_key": "own-key",
             },

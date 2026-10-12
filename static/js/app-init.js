@@ -1025,8 +1025,9 @@
 
           if (select) {
             select.addEventListener("change", function () {
-              // Speichert die Auswahl aller Familien als eigene Wahl.
-              window.App.markConsensusPresetCustom();
+              // Speichert die Wahl dieser Familie (beim Verlassen eines
+              // Presets die ganze Aufstellung).
+              window.App.markConsensusPresetCustom({ family: pref });
               const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
               if (labelText) {
                 labelText.textContent = selectedLabel;
@@ -1054,7 +1055,7 @@
             // Eine explizite Modellwahl (change-Event) verlaesst die
             // Preset-Ebene und speichert die Engine als eigene Wahl;
             // Preset-Klicks feuern bewusst KEIN change (siehe model-picker.js).
-            window.App.markConsensusPresetCustom();
+            window.App.markConsensusPresetCustom({ engine: true });
             const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
             trackAppEvent("app_consensus_model_changed", { model: selectedLabel });
 

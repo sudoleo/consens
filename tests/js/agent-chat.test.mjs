@@ -1309,6 +1309,25 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("fetches the model list again before repairing a pick from a newer list", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const modelCalls = () => window.fetch.mock.calls.filter(([url]) => url === "/agent/models").length;
+    expect(modelCalls()).toBe(1);
+    // Another tab, opened after a deploy, picked a model this tab's list lacks.
+    const newer = { ...CATALOG, models: [...CATALOG.models,
+      { id: "gpt-6-astra", label: "GPT-6 Astra", reasoning_efforts: ["default"], reasoning_available: false }] };
+    window.fetch.mockImplementation(async url => ({ ok: true, json: async () => url.startsWith('/agent/') ? structuredClone(newer) : ({}) }));
+    const pick = JSON.stringify({ model_id: "gpt-6-astra", reasoning_effort: "default" });
+    window.localStorage.setItem("consensio.agentModel.v1", pick);
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "consensio.agentModel.v1", newValue: pick, storageArea: window.localStorage }));
+    await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").value).toBe("gpt-6-astra"));
+    expect(modelCalls()).toBe(2);
+    expect(window.localStorage.getItem("consensio.agentModel.v1")).toBe(pick);
+    expect(window.App.showPopup).not.toHaveBeenCalled();
+    dom.window.close();
+  });
+
   it("maps a migrated model ID to its successor instead of the default", async () => {
     const catalog = { ...CATALOG, aliases: { "grok-4.3-no-reasoning": "gpt-5.6-sol" } };
     const { window, document, dom } = boot({ catalog });

@@ -185,3 +185,30 @@ def test_replayed_body_does_not_synthesize_disconnect_for_delayed_stream():
         },
         {"type": "http.response.body", "body": b"", "more_body": False},
     ]
+
+
+def test_a_small_json_route_has_its_own_tighter_cap():
+    """The settings PATCH is at most ~64 KB; a larger body never reaches
+    validation, where it could cost one error per key."""
+    from app.core.request_limits import PATH_MAX_REQUEST_BODY_BYTES
+
+    limit = PATH_MAX_REQUEST_BODY_BYTES["/api/my/settings"]
+    sent = []
+    received_by_app = []
+
+    async def inner(scope, receive, send):
+        received_by_app.append(await receive())
+
+    async def receive():
+        return {"type": "http.request", "body": b"x" * (limit + 1), "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    for path, rejected in (("/api/my/settings", True), ("/api/my/memory", False)):
+        sent.clear()
+        received_by_app.clear()
+        scope = {"type": "http", "method": "PATCH", "path": path, "headers": []}
+        asyncio.run(RequestBodyLimitMiddleware(inner, 16 * 1024 * 1024)(scope, receive, send))
+        assert bool(sent and sent[0]["status"] == 413) == rejected
+        assert (received_by_app == []) == rejected

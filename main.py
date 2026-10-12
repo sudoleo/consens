@@ -315,6 +315,11 @@ async def handle_http_exception(request, exc: HTTPException):
         headers=dict(exc.headers) if exc.headers else None,
     )
 
+
+# A 422 names this many problems; the rest are only counted.
+MAX_VALIDATION_DETAILS = 20
+
+
 @app.exception_handler(RequestValidationError)
 async def handle_validation_exception(request, exc: RequestValidationError):
     """422 mit einer garantiert serialisierbaren Fehlerliste.
@@ -327,18 +332,20 @@ async def handle_validation_exception(request, exc: RequestValidationError):
     Token aus einem abgelehnten Feld. Deshalb werden nur Ort, Typ und Meldung
     uebernommen, jeweils als reiner String.
     """
+    errors = exc.errors()
     details = []
-    for error in exc.errors():
+    # A hostile body can carry one error per key; the answer names a few.
+    for error in errors[:MAX_VALIDATION_DETAILS]:
         location = error.get("loc") or ()
         details.append({
             "loc": [str(part) for part in location],
             "type": str(error.get("type") or ""),
             "msg": str(error.get("msg") or ""),
         })
-    return JSONResponse(
-        status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-        content={"error": "Validation failed", "details": details},
-    )
+    content = {"error": "Validation failed", "details": details}
+    if len(errors) > MAX_VALIDATION_DETAILS:
+        content["omitted"] = len(errors) - MAX_VALIDATION_DETAILS
+    return JSONResponse(status_code=HTTP_422_UNPROCESSABLE_CONTENT, content=content)
 
 @app.exception_handler(Exception)
 async def handle_unexpected_exception(request, exc: Exception):

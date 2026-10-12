@@ -968,7 +968,8 @@ async function runDemoFlow() {
   await whenAppReady();
   // The demonstration always uses the complete Balanced lineup, not the
   // intersection of its fixture authors with a previous Daily/Custom choice.
-  window.App.selectConsensusPreset?.('balanced');
+  // Shown only: it does not become the visitor's (or the account's) choice.
+  window.App.previewConsensusPreset?.('balanced');
   window.App.answerReader?.reset?.();
   const balanced = window.CONSENSUS_PRESETS?.find(preset => preset.id === 'balanced');
   activeDemoModels = (window.App.modelPrefs || []).filter(pref => balanced?.models?.[pref.provider]).map(pref => pref.key);

@@ -98,9 +98,11 @@
       || available?.find(item => item.id === catalog.default_model_id) || available?.[0];
     return model ? { model_id: model.id, reasoning_effort: effortFor(model, preferred.reasoning_effort) } : preferred;
   }
-  function rememberSelection(value) {
+  // options.derived: a repair the app makes itself, not a choice (see
+  // App.userSettings.set); it never wins over the account's own pick.
+  function rememberSelection(value, options) {
     selections.set(selectionKey(), value);
-    App.userSettings.set("agent_model", value);
+    App.userSettings.set("agent_model", value, options);
   }
   // The preferred model or level cannot run: selection() falls back for every
   // render and send. Only a lasting cause is written back: a migrated ID or a
@@ -120,7 +122,7 @@
       const offered = catalog.models.find(item => item.id === current.model_id)?.reasoning_efforts || ["default"];
       const repaired = { model_id: current.model_id,
         reasoning_effort: offered.includes(previous.reasoning_effort) ? previous.reasoning_effort : current.reasoning_effort };
-      if (source === "account") rememberSelection(repaired);
+      if (source === "account") rememberSelection(repaired, { derived: true });
       else if (source !== "run") selections.set(selectionKey(), repaired);
     }
     if (wanted === current.model_id || (listed && locked(listed))) return;
@@ -1521,8 +1523,18 @@
   // a no-op when nothing the shell shows has changed.
   window.addEventListener("consensio:run-registry-change", () => renderShell());
   window.addEventListener("consensio:run-mode-change", () => renderShell());
-  // The account's model pick arrived (server, another tab, sign-out).
-  App.userSettings.onChange("agent_model", detail => { if (detail.source !== "local") render(); });
+  // The account's model pick arrived (server, another tab, sign-out). A pick
+  // this tab's model list does not know comes from a newer list (a tab or
+  // device opened after a deploy): the list is fetched again before anything
+  // repairs the pick, so a stale tab never resets it for every device.
+  App.userSettings.onChange("agent_model", detail => {
+    if (detail.source === "local") return;
+    const pick = App.userSettings.get("agent_model");
+    if (pick && catalogStatus === "ready" && !catalog.models.some(item => item.id === canonicalId(pick.model_id))) {
+      catalogStatus = "idle";
+    }
+    render();
+  });
   // The placeholder has a length per width; a rotated phone gets the right one.
   for (const query of ['(max-width: 360px)', '(max-width: 640px)']) {
     window.matchMedia?.(query)?.addEventListener?.('change', () => syncComposer());

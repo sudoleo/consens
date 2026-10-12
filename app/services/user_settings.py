@@ -17,7 +17,7 @@ role live there (see docs/codebase-map.md, "Datenhaltung").
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from firebase_admin import firestore
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -31,10 +31,12 @@ SETTINGS_COLLECTION = "settings"
 SETTINGS_DOCUMENT_ID = "app"
 READ_TIMEOUT_SECONDS = 5.0
 
-# A system prompt the account can keep is one every run accepts
-# (chat.validate_client_system_prompt uses the same limits).
+# The longest system prompt an account keeps. A run sends it behind the date
+# line the app puts in front ("Today is Wednesday, 2026-10-12. ",
+# query-send.js), so a run accepts that much more (chat.py).
 MAX_SYSTEM_PROMPT_CHARS = 12_000
 MAX_SYSTEM_PROMPT_BYTES = 32_000
+SYSTEM_PROMPT_DATE_LINE_RESERVE = 64
 
 # Model IDs and family labels are checked by form, not against today's
 # catalog: a model that leaves the catalog must not make the whole settings
@@ -110,6 +112,8 @@ class UserSettings(_Strict):
 
 
 SETTING_NAMES = tuple(UserSettings.model_fields)
+# A PATCH names each setting at most once; more keys are not a settings change.
+MAX_PATCH_FIELDS = len(SETTING_NAMES)
 
 
 def _compact(name: str, value):
@@ -124,48 +128,93 @@ def _dump(settings: UserSettings, names) -> dict:
     return {name: _compact(name, dumped.get(name)) for name in names}
 
 
-def changes_from(settings: UserSettings) -> dict:
-    """The fields a PATCH named; ``None`` resets a setting to the default."""
-    return _dump(settings, [name for name in SETTING_NAMES if name in settings.model_fields_set])
+def _setting(name: str, value):
+    """One setting's stored form; ``None`` is the default. Raises ValidationError."""
+    if value is None:
+        return None
+    return _dump(UserSettings.model_validate({name: value}), [name])[name]
+
+
+def validate_changes(raw: dict) -> tuple[dict, list[str]]:
+    """The changes a PATCH asks for, setting by setting.
+
+    A setting the server does not take (an unknown name, a value outside its
+    rules, e.g. from a browser running an older or newer version) is
+    returned in ``rejected``; the others are still saved. ``None`` resets a
+    setting to the default.
+    """
+    changes, rejected = {}, []
+    for name, value in raw.items():
+        if name not in SETTING_NAMES:
+            rejected.append(name)
+            continue
+        try:
+            changes[name] = _setting(name, value)
+        except ValidationError:
+            rejected.append(name)
+    return changes, rejected
+
+
+def _revision(value) -> int:
+    """A stored revision; anything that is not a count is taken as 1 (the
+    document exists, so the account has settings)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 1
+
+
+def sanitize_field_revisions(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    return {name: value for name, value in raw.items()
+            if name in SETTING_NAMES and isinstance(value, int) and not isinstance(value, bool) and value > 0}
 
 
 def sanitize_settings(raw) -> dict:
-    """Stored values, field by field: one that no longer validates is dropped
-    alone (an older schema), never the whole record."""
+    """Stored values, setting by setting: one that no longer validates (an
+    older schema) is dropped alone, never the whole record. A setting is one
+    unit; ``compare_models`` is dropped as a whole."""
     if not isinstance(raw, dict):
         return {}
     clean = {}
     for name in SETTING_NAMES:
-        if raw.get(name) is None:
-            continue
         try:
-            settings = UserSettings.model_validate({name: raw[name]})
+            value = _setting(name, raw.get(name))
         except ValidationError:
             continue
-        value = _dump(settings, [name])[name]
         if value is not None:
             clean[name] = value
     return clean
 
 
+class AccountSettings(tuple):
+    """``(values, revision, field_revisions)`` of one account."""
+
+    __slots__ = ()
+
+    def __new__(cls, values: dict, revision: int, field_revisions: dict):
+        return super().__new__(cls, (values, revision, field_revisions))
+
+
 class FirestoreUserSettingsRepository:
-    """``users/{uid}/settings/app``: ``values``, ``revision``, ``updated_at``.
+    """``users/{uid}/settings/app``: ``values``, ``revision``,
+    ``field_revisions`` (the revision at which each setting last changed) and
+    ``updated_at``.
 
     ``revision`` 0 (no document) tells the browser that this account never
     saved settings; it then uploads what it chose before the sync existed.
+    ``field_revisions`` lets a browser tell whether a change it kept from an
+    earlier visit is older than the account's value.
     """
 
     def __init__(self, db):
         self.db = db
 
-    def get(self, uid: str) -> tuple[dict, int]:
+    def get(self, uid: str) -> AccountSettings:
         snapshot = self._ref(uid).get(timeout=READ_TIMEOUT_SECONDS, retry=None)
         if not snapshot.exists:
-            return {}, 0
-        raw = snapshot.to_dict() or {}
-        return sanitize_settings(raw.get("values")), max(0, int(raw.get("revision") or 0))
+            return AccountSettings({}, 0, {})
+        return self._state(snapshot.to_dict() or {})
 
-    def update(self, uid: str, changes: dict, *, now: datetime | None = None) -> tuple[dict, int]:
+    def update(self, uid: str, changes: dict, *, now: datetime | None = None) -> AccountSettings:
         """Apply named changes; every other setting keeps its stored value."""
         written = datetime.now(timezone.utc) if now is None else now
         ref = self._ref(uid)
@@ -175,8 +224,9 @@ class FirestoreUserSettingsRepository:
             # Settings must not reappear after an acknowledged account deletion.
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=transaction)
             snapshot = ref.get(transaction=transaction)
-            previous = (snapshot.to_dict() or {}) if snapshot.exists else {}
-            values = sanitize_settings(previous.get("values"))
+            previous = self._state(snapshot.to_dict() or {}) if snapshot.exists else AccountSettings({}, 0, {})
+            values, field_revisions = dict(previous[0]), dict(previous[2])
+            revision = previous[1] + 1
             for name, value in changes.items():
                 if name not in SETTING_NAMES:
                     raise ValueError(f"Unknown setting: {name}")
@@ -184,12 +234,18 @@ class FirestoreUserSettingsRepository:
                     values.pop(name, None)
                 else:
                     values[name] = value
-            revision = max(0, int(previous.get("revision") or 0)) + 1
-            transaction.set(ref, {"values": values, "revision": revision, "updated_at": written})
-            saved["values"], saved["revision"] = values, revision
+                field_revisions[name] = revision
+            transaction.set(ref, {"values": values, "revision": revision,
+                                  "field_revisions": field_revisions, "updated_at": written})
+            saved["state"] = AccountSettings(values, revision, field_revisions)
 
         _run_transaction(self.db, operation)
-        return saved["values"], saved["revision"]
+        return saved["state"]
+
+    @staticmethod
+    def _state(raw: dict) -> AccountSettings:
+        return AccountSettings(sanitize_settings(raw.get("values")), _revision(raw.get("revision")),
+                               sanitize_field_revisions(raw.get("field_revisions")))
 
     def _ref(self, uid: str):
         uid = str(uid or "").strip()

@@ -603,7 +603,8 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
         assert {r['provider']:r['model'] for r in result} == expected
         assert all(r['state'] == 'complete' and len(r['text']) > 100 for r in result)
         assert all('<span' not in r['text'] and '<div' not in r['text'] and 'thinking-wrap' not in r['text'] for r in result)
-        assert page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'balanced'
+        # The demo shows Balanced without making it the visitor's choice.
+        assert page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'fast'
         if agent_mode:
             expect(page.locator('#consensusOutput')).to_be_visible(timeout=30000)
             expect(page.locator('#differencesCards .diff-card')).to_have_count(3, timeout=60000)

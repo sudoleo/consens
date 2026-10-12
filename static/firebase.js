@@ -99,6 +99,10 @@ async function performLogout() {
   trackAppEvent("auth_logout_click");
   closeLogoutConfirm();
   try {
+    // Settings changed in the last moment still need the account's token;
+    // sent beside the session cleanup, waited for at most 3 s. What does not
+    // arrive is dropped with the account's values on sign-out.
+    const settingsSent = window.App.userSettings.flush({ timeoutMs: 3000 });
     // Clear the HttpOnly server session before dropping the Firebase identity.
     // If this request fails, keeping Firebase signed in avoids presenting a
     // false "logged out" state while the cookie could still authorize calls.
@@ -113,8 +117,7 @@ async function performLogout() {
     // then release prepared-but-unconsumed usage reservations with the run's
     // bound token; clearAll after signOut removes the remaining projections.
     window.App?.runRegistry?.cancelAll?.("logout");
-    // Settings changed in the last moment still need the account's token.
-    await window.App.userSettings.flush({ timeoutMs: 3000 });
+    await settingsSent;
     await signOut(auth);
     setActiveAuthIdentity(null);
     resetLoadedRunAfterLogout();
@@ -429,6 +432,9 @@ onIdTokenChanged(auth, async (user) => {
         // Offline oder gedrosselt: dann eben der Streifen.
       }
       if (becameVerified) return;
+      // reload() hat den Handler womoeglich schon neu ausgeloest (dann
+      // bestaetigt): der neuere Lauf gehoert der Seite, dieser raeumt nichts ab.
+      if (generation !== authState.generation) return;
 
       try { localStorage.removeItem("id_token"); } catch (_) {}
       resetLoadedRunAfterLogout();
@@ -486,6 +492,7 @@ onIdTokenChanged(auth, async (user) => {
       resetLoadedRunAfterLogout();
       clearAuthenticatedUiState();
       clearLocalProviderKeys();
+      window.App.userSettings.stop();
     }
 
     // ab hier nur noch verifizierte Nutzer
@@ -542,9 +549,11 @@ onIdTokenChanged(auth, async (user) => {
     } catch (err) {
       console.error("Error during confirm-registration:", err);
     }
+    // Signed out or switched while waiting: a newer run owns the page.
+    if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
     // Sent here to sign in by a private page (/app?next=/s/...): the session
     // cookie it needs is set now, so go back to it.
-    if (sessionCookieSet && SIGNED_IN_RETURN && isCurrentAuthenticatedUser(user.uid, generation)) {
+    if (sessionCookieSet && SIGNED_IN_RETURN) {
       window.location.replace(SIGNED_IN_RETURN);
       return;
     }
@@ -1662,12 +1671,14 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async () 
     if (res.status === 202 && data.cleanup_pending === true) {
       trackAppEvent("auth_account_deletion_result", { status: "cleanup_pending" });
       try { localStorage.removeItem("id_token"); } catch {}
+      window.App.userSettings.stop();
       alert(data.message || "Your account is blocked. Remaining data cleanup is queued and will be retried automatically.");
       await signOut(auth).catch(() => {});
       window.location.href = "/?landing=1";
     } else if (res.ok && data.status === "deleted" && data.cleanup_pending !== true) {
       trackAppEvent("auth_account_deletion_result", { status: "success" });
       try { localStorage.removeItem("id_token"); } catch {}
+      window.App.userSettings.stop();
       alert("Your account and data have been deleted.");
       // Der Auth-Account existiert nicht mehr; lokale Session beenden und zur Startseite
       signOut(auth).catch(() => {});
