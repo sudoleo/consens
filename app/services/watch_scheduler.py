@@ -18,7 +18,7 @@ from app.services import (
 )
 from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
-    query_consensus, query_differences, suggest_watch_goals,
+    pick_watch_visual, query_consensus, query_differences, suggest_watch_goals,
 )
 from app.services.llm.mock_llm import mock_llm_enabled
 
@@ -205,6 +205,16 @@ def suggest_goals(question: str, tier=TIER_FREE) -> list[str]:
         provider = cfg.get_consensus_model_config(engine).provider
         keys[PROVIDER_LABELS[provider]] = "mock"
     return suggest_watch_goals(question, keys, engine)
+
+
+def pick_visual(question: str, condition: str, domains) -> dict:
+    """Symbol und offizielle Seiten einer Watch (watch_images); ein Judge-Call
+    der günstigen Stufe, einmal pro Watch."""
+    from app.services import watch_symbols
+
+    keys = _developer_keys()
+    engine = _configured_consensus_engine(keys, TIER_FREE) or "OpenAI"
+    return pick_watch_visual(question, condition, domains, watch_symbols.SYMBOLS, keys, engine)
 
 
 def notification_kind(watch: dict, outcome: dict) -> str | None:

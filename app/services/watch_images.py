@@ -9,17 +9,23 @@ sucht dieses Modul unter den Quellen, auf die sich die Modelle gestützt haben:
 2. sonst das Thema: einen Artikel (schema.org Article/NewsArticle/BlogPosting,
    sonst ``og:type`` article), dessen Überschrift zur Frage passt, mit dem
    Vorschaubild, das der Verlag selbst fürs Teilen festlegt (``og:image``,
-   ``kind="article"``).
+   ``kind="article"``);
+3. sonst das Logo derer, um die es geht (seit 2026-10-12, damit man eine Watch
+   auf einen Blick wiedererkennt): eine Quelle, deren Domainname ein Name aus
+   der Frage ist ("Cursor oder Claude Code?" -> cursor.com, claude.com), mit
+   dem App-Icon, das die Seite selbst festlegt -- höchstens zwei nebeneinander
+   (``kind="logo"``).
 
 Das Bild wird einmal serverseitig geholt (SSRF-sicher über
 ``source_documents.pinned_target``), als kleines WebP neu kodiert und unter
 ``watch_images/{watch_id}`` gespeichert. Der Browser lädt es nur von
 consens.io; die Quelle sieht keine Besucher-IP.
 
-Bewusst nicht: KI-generierte Bilder, Stockfotos, Logos, Platzhalter,
-Seiten-Standardbilder. Passt nichts, gibt es kein Bild. Das Bild landet nie in
-der OG-Karte oder im JSON-LD der Watch-Seite -- es ist eine Vorschau, keine
-Werbung.
+Bewusst nicht: KI-generierte Bilder, Stockfotos, Platzhalter,
+Seiten-Standardbilder, Logos von Shops oder Verlagen. Passt nichts, gibt es
+kein Bild (das Dashboard zeigt dann ein Symbol, ``watch_symbols``). Das Bild
+landet nie in der OG-Karte oder im JSON-LD der Watch-Seite -- es ist eine
+Vorschau, keine Werbung.
 """
 
 from __future__ import annotations
@@ -40,10 +46,10 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
-from PIL import Image
+from PIL import Image, ImageDraw, ImageStat
 
 from app.core.observability import record_metric, safe_exception
-from app.services import persistence_guard
+from app.services import persistence_guard, watch_symbols
 from app.services.source_documents import pinned_target
 
 
@@ -51,6 +57,9 @@ WATCH_IMAGES_COLLECTION = "watch_images"
 STATUS_READY = "ready"
 STATUS_NONE = "none"
 STATUS_DISMISSED = "dismissed"
+# Stand der Suche. Erfolglose Versuche einer älteren Suche zählen nicht mehr,
+# sobald eine neue Stufe dazukommt (2 = Logos, 2026-10-12).
+SEARCH_VERSION = 2
 # Drei Prüfungen, in denen Seiten gelesen, aber kein passender Gegenstand
 # gefunden wurde: die Watch ist abstrakt. Versuche, in denen keine einzige
 # Seite lesbar war (Bot-Sperre, Zeitüberschreitung), zählen dort nicht, sind
@@ -71,13 +80,31 @@ THUMB_SIDE = 320
 STORED_MAX_BYTES = 120_000
 USER_AGENT = "Mozilla/5.0 (compatible; consens.io-preview/1.0; +https://consens.io)"
 
+# Logos: höchstens zwei App-Icons als abgerundete Kacheln nebeneinander
+# (2 x 144 + 16 = 304 px, also innerhalb von THUMB_SIDE). Kleiner als 64 px
+# ist ein Favicon, das in der Kachel nur verschwimmt.
+MAX_LOGOS = 2
+LOGO_SIDE = 144
+LOGO_GAP = 16
+LOGO_MIN_SIDE = 64
+LOGO_SECONDS = 15.0
+LOGO_MAX_BYTES = 1_000_000
+MAX_ICON_TRIES = 3
+MAX_SITES = 20
+
 TOKEN_RE = re.compile(r"^[0-9a-f]{20}$")
 WATCH_ID_RE = re.compile(r"^[A-Za-z0-9]{8,32}$")
 
 _PAGE_KINDS = frozenset({"text/html", "application/xhtml+xml"})
 _IMAGE_KINDS = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
 _IMAGE_FORMATS = ("JPEG", "PNG", "WEBP", "GIF")
+_ICON_KINDS = _IMAGE_KINDS | {"image/x-icon", "image/vnd.microsoft.icon", "image/ico"}
+_ICON_FORMATS = _IMAGE_FORMATS + ("ICO",)
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
+# Endungen, unter denen die eigentliche Domain eine Stufe tiefer liegt (bbc.co.uk).
+_SECOND_LEVEL = frozenset({"co", "com", "org", "net", "ac", "gov", "edu", "or", "ne"})
+# Weiterleitungen der Google-Suche sind kein Ort, an dem ein Thema zu Hause ist.
+_NOT_A_SITE = frozenset({"vertexaisearch.cloud.google.com"})
 
 # schema.org-Typen, deren Bild den Gegenstand selbst zeigt. Organisationen und
 # Webseiten fehlen absichtlich (Logos); Artikel sind die zweite Stufe
@@ -102,6 +129,8 @@ _ARTICLE_TYPES = frozenset({
 # Seiten, deren Vorschaubild nie das Thema zeigt (Plattform-Logos, Login-Wände,
 # Video-Thumbnails mit Gesichtern): ihr Abruf wäre verschwendet.
 _SKIP_HOSTS = (
+    # Die eigene Seite: ihr Vorschaubild ist unsere OG-Karte, kein Thema.
+    "consens.io",
     "reddit.com", "youtube.com", "youtu.be",
     "x.com", "twitter.com", "facebook.com", "instagram.com", "tiktok.com",
     "linkedin.com", "github.com", "medium.com", "quora.com",
@@ -539,8 +568,171 @@ def make_thumbnail(content: bytes):
 
 
 # ----------------------------------------------------------------------
+# Logos: das App-Icon einer Seite als Kachel
+# ----------------------------------------------------------------------
+
+def _icon_size(value) -> int:
+    sizes = re.findall(r"(\d+)\s*x\s*(\d+)", str(value or "").lower())
+    return max((min(int(width), int(height)) for width, height in sizes), default=0)
+
+
+def page_icons(html: str, base_url: str) -> list[str]:
+    """Icon-URLs, die die Seite selbst festlegt, beste zuerst.
+
+    Erst das App-Icon (apple-touch-icon, fluid-icon), dann große PNG-Icons,
+    dann /apple-touch-icon.png, zuletzt Icons ohne Größe und /favicon.ico (ein
+    .ico trägt manchmal 96 px). SVG und Masken-Icons fallen weg: SVG dekodieren
+    wir nicht, eine Maske ist einfarbig.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    ranked = []
+    for node in soup.find_all("link", href=True, limit=80):
+        rel = node.get("rel")
+        rel = " ".join(rel) if isinstance(rel, list) else str(rel or "")
+        rel = rel.lower()
+        href = str(node.get("href") or "").strip()
+        if not href or href.startswith("data:") or "mask-icon" in rel:
+            continue
+        if "svg" in str(node.get("type") or "").lower() or urlsplit(href).path.lower().endswith(".svg"):
+            continue
+        size = _icon_size(node.get("sizes"))
+        if size and size < LOGO_MIN_SIDE:
+            continue
+        if "apple-touch-icon" in rel or "fluid-icon" in rel:
+            rank, size = 0, size or 180
+        elif "icon" in rel.split():
+            rank = 1 if size else 3
+        else:
+            continue
+        url = urljoin(base_url, href)
+        if url.startswith(("https://", "http://")):
+            ranked.append((rank, -size, len(ranked), url[:2000]))
+    ranked.append((2, 0, len(ranked), urljoin(base_url, "/apple-touch-icon.png")))
+    ranked.append((4, 0, len(ranked), urljoin(base_url, "/favicon.ico")))
+    return list(dict.fromkeys(url for *_, url in sorted(ranked)))
+
+
+def make_logo(content: bytes):
+    """Quadratische Kachel (LOGO_SIDE, RGB) aus einem Icon oder None.
+
+    Ein Icon, das die Fläche füllt, füllt die Kachel. Ein Zeichen auf
+    Durchsicht steht verkleinert auf der Fläche, für die es gemacht ist:
+    helle Zeichen (für dunkle Tab-Leisten) auf Dunkel, sonst auf Weiß.
+    """
+    try:
+        with Image.open(io.BytesIO(content), formats=_ICON_FORMATS) as source:
+            width, height = source.size
+            if min(width, height) < LOGO_MIN_SIDE or width * height > MAX_PIXELS_DECODED:
+                return None
+            if not (1 / 2 <= width / height <= 2):
+                return None
+            image = source.convert("RGBA")
+        image.thumbnail((LOGO_SIDE, LOGO_SIDE), Image.Resampling.LANCZOS)
+        alpha = image.getchannel("A")
+        solid = alpha.point(lambda value: 255 if value > 128 else 0)
+        coverage = ImageStat.Stat(solid).mean[0] / 255
+        if coverage < 0.75:
+            light = ImageStat.Stat(image.convert("L"), mask=solid).mean[0] > 200
+            background = (32, 33, 36) if light else (255, 255, 255)
+            target = round(LOGO_SIDE * 0.72)
+        else:
+            corner = image.getpixel((0, 0))
+            background = corner[:3] if corner[3] > 250 else (255, 255, 255)
+            target = LOGO_SIDE
+        scale = target / max(image.size)
+        glyph = image.resize(
+            (max(1, round(image.width * scale)), max(1, round(image.height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+        tile = Image.new("RGB", (LOGO_SIDE, LOGO_SIDE), background)
+        tile.paste(glyph, ((LOGO_SIDE - glyph.width) // 2, (LOGO_SIDE - glyph.height) // 2), glyph)
+        if tile.getcolors(maxcolors=2) is not None:
+            return None  # eine leere Fläche ist kein Logo
+        return tile
+    except Exception:
+        return None
+
+
+def _rounded_mask(side: int):
+    big = Image.new("L", (side * 4, side * 4), 0)
+    ImageDraw.Draw(big).rounded_rectangle(
+        (0, 0, side * 4 - 1, side * 4 - 1), radius=round(side * 4 * 0.22), fill=255,
+    )
+    return big.resize((side, side), Image.Resampling.LANCZOS)
+
+
+def compose_logos(tiles) -> tuple[bytes, tuple[int, int]]:
+    """Kacheln mit abgerundeten Ecken nebeneinander, als ein WebP mit Durchsicht."""
+    tiles = list(tiles)[:MAX_LOGOS]
+    width = len(tiles) * LOGO_SIDE + (len(tiles) - 1) * LOGO_GAP
+    canvas = Image.new("RGBA", (width, LOGO_SIDE), (0, 0, 0, 0))
+    mask = _rounded_mask(LOGO_SIDE)
+    for index, tile in enumerate(tiles):
+        canvas.paste(tile, (index * (LOGO_SIDE + LOGO_GAP), 0), mask)
+    for options in ({"lossless": True, "method": 4}, {"quality": 85, "method": 4}):
+        buffer = io.BytesIO()
+        canvas.save(buffer, "WEBP", **options)
+        if buffer.tell() <= STORED_MAX_BYTES:
+            break
+    return buffer.getvalue(), canvas.size
+
+
+# ----------------------------------------------------------------------
 # Kandidaten und Abruf
 # ----------------------------------------------------------------------
+
+def site_domain(host) -> str:
+    """Die registrierbare Domain: docs.github.com -> github.com, www.bbc.co.uk -> bbc.co.uk."""
+    labels = [label for label in str(host or "").lower().strip(".").split(".") if label]
+    if len(labels) < 2:
+        return ""
+    keep = 3 if len(labels) >= 3 and labels[-2] in _SECOND_LEVEL and len(labels[-1]) == 2 else 2
+    return ".".join(labels[-keep:])
+
+
+def source_sites(sources, limit: int = MAX_SITES) -> list[tuple[str, list[str]]]:
+    """(Domain, Quell-URLs) je Domain der Quellen, häufiger zitierte zuerst."""
+    order, counts, urls = [], {}, {}
+    for item in sources or []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "").strip()
+        if not url.startswith(("https://", "http://")) or len(url) > 2000:
+            continue
+        host = (urlsplit(url).hostname or "").lower()
+        domain = site_domain(host)
+        if not domain or host in _NOT_A_SITE or domain == "consens.io":
+            continue
+        if domain not in counts:
+            order.append(domain)
+            urls[domain] = []
+        counts[domain] = counts.get(domain, 0) + 1
+        if url not in urls[domain]:
+            urls[domain].append(url)
+    ranked = sorted(order, key=lambda domain: (-counts[domain], order.index(domain)))
+    return [(domain, urls[domain][:3]) for domain in ranked[:limit]]
+
+
+def named_sites(sites, question: "Question") -> list[str]:
+    """Ohne Judge: Domains, deren Name ein Name aus der Frage ist.
+
+    "Cursor oder Claude Code?" -> cursor.com, claude.com; "Stelle an der
+    Hochschule Hannover" -> hs-hannover.de. Eine Seite, die nur berichtet
+    (heise.de), heißt nicht wie das Thema und fällt so von selbst weg.
+    Reihenfolge wie in der Frage.
+    """
+    names = {word for word in question.entities if len(word) >= 3 and not word.isdigit()}
+    names |= {word for word in question.tokens if len(word) >= 5 and not word.isdigit()}
+    positions: dict[str, int] = {}
+    for index, word in enumerate(question.sequences[0] + question.sequences[1]):
+        positions.setdefault(word, index)
+    ranked = []
+    for rank, (domain, _urls) in enumerate(sites):
+        label = domain.split(".")[0]
+        hits = [positions.get(part, 10_000) for part in {label, *label.split("-")} if part in names]
+        if hits:
+            ranked.append((min(hits), rank, domain))
+    return [domain for *_, domain in sorted(ranked)][:MAX_LOGOS]
 
 def _skip_host(host: str) -> bool:
     host = host.lower().strip(".")
@@ -627,12 +819,21 @@ async def _http_fetch(url: str, purpose: str):
         if purpose == "page":
             return await _fetch(client, url, _PAGE_KINDS, PAGE_MAX_BYTES,
                                 "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1")
+        if purpose == "icon":
+            return await _fetch(client, url, _ICON_KINDS, LOGO_MAX_BYTES,
+                                "image/png,image/webp,image/x-icon,image/*;q=0.8")
         return await _fetch(client, url, _IMAGE_KINDS, IMAGE_MAX_BYTES,
                             "image/webp,image/png,image/jpeg,image/gif;q=0.9")
 
 
-async def _find(urls, question: Question, fetch, progress: dict):
-    """Erst der Gegenstand auf irgendeiner Quelle, dann der beste Artikel."""
+async def _find(urls, question: Question, fetch, progress: dict, logos=None):
+    """Erst der Gegenstand auf irgendeiner Quelle, dann die Logos (``logos``,
+    eine Coroutine-Fabrik), zuletzt der beste Artikel.
+
+    Logos vor Artikeln: Ein Artikelbild wählt der Verlag, oft ist es eine
+    allgemeine Teilen-Grafik; das Logo dessen, um den es geht, erkennt man
+    sicherer wieder. Seiten werden dafür nur einmal gelesen.
+    """
     tried_images = set()
 
     async def first_photo(page_url, images, kind):
@@ -670,6 +871,10 @@ async def _find(urls, question: Question, fetch, progress: dict):
             final_url, content, _kind, _truncated = await asyncio.wait_for(
                 fetch(page_url, "page"), FETCH_SECONDS + 1,
             )
+            # Eine Weiterleitung (etwa die der Google-Suche) zählt als die
+            # Seite, auf der sie endet.
+            if _skip_host(urlsplit(final_url).hostname or ""):
+                continue
             items, article = _parse(content.decode("utf-8", errors="replace"), final_url)
         except Exception as exc:
             logging.info("Watch image page skipped category=%s", safe_exception(exc))
@@ -683,13 +888,17 @@ async def _find(urls, question: Question, fetch, progress: dict):
         for score, _index, images in scored[:2]:
             if score <= 0:
                 break
-            found = await first_photo(page_url, images, "item")
+            found = await first_photo(final_url, images, "item")
             if found:
                 return found
         if article is not None:
             score = article_score(article[0], question.tokens, question.entities)
             if score:
-                articles.append((score, rank, page_url, article[1]))
+                articles.append((score, rank, final_url, article[1]))
+    if logos is not None:
+        found = await logos()
+        if found:
+            return found
     for _score, _rank, page_url, images in sorted(articles, key=lambda row: (-row[0], row[1]))[:3]:
         found = await first_photo(page_url, images, "article")
         if found:
@@ -697,17 +906,94 @@ async def _find(urls, question: Question, fetch, progress: dict):
     return None
 
 
-def search(sources, question: str, condition: str = "", *, fetch=None) -> tuple[dict | None, bool]:
-    """(Bild oder None, ob mindestens eine Seite gelesen wurde). Blockiert (Thread)."""
+async def _site_logo(domain: str, urls, fetch, progress: dict):
+    """Kachel aus dem App-Icon der Startseite (sonst einer Quellseite) der Domain."""
+    icons = []
+    for page_url in [f"https://{domain}/", *list(urls or [])[:1]]:
+        try:
+            final_url, content, _kind, _truncated = await asyncio.wait_for(
+                fetch(page_url, "page"), FETCH_SECONDS + 1,
+            )
+            icons = page_icons(content.decode("utf-8", errors="replace"), final_url)
+        except Exception as exc:
+            logging.info("Watch logo page skipped category=%s", safe_exception(exc))
+            continue
+        progress["looked"] = True
+        break
+    for icon_url in icons[:MAX_ICON_TRIES]:
+        try:
+            _url, data, _kind, truncated = await asyncio.wait_for(
+                fetch(icon_url, "icon"), FETCH_SECONDS + 1,
+            )
+        except Exception as exc:
+            logging.info("Watch logo fetch skipped category=%s", safe_exception(exc))
+            continue
+        if truncated:
+            continue
+        tile = await asyncio.to_thread(make_logo, data)
+        if tile is not None:
+            return tile
+    return None
+
+
+async def _find_logos(sites, fetch, progress: dict):
+    tiles, domains = [], []
+    for domain, urls in list(sites)[:MAX_LOGOS]:
+        tile = await _site_logo(domain, urls, fetch, progress)
+        if tile is not None:
+            tiles.append(tile)
+            domains.append(domain)
+    if not tiles:
+        return None
+    content, (width, height) = await asyncio.to_thread(compose_logos, tiles)
+    return {
+        "content": content,
+        "content_type": "image/webp",
+        "kind": "logo",
+        "width": int(width),
+        "height": int(height),
+        "source_url": f"https://{domains[0]}/",
+        "source_host": ", ".join(domains),
+    }
+
+
+def logo_sites(sources, question: "Question", sites=None) -> list[tuple[str, list[str]]]:
+    """Die Domains, deren Logo infrage kommt, mit ihren Quell-URLs.
+
+    ``sites`` ist die Auswahl des Judges (auch aus einer früheren Prüfung,
+    deren Quellen heute fehlen dürfen); ohne sie gilt die Namensregel.
+    """
+    known = source_sites(sources)
+    urls = dict(known)
+    chosen = named_sites(known, question) if sites is None else list(sites)
+    return [(domain, urls.get(domain, [])) for domain in chosen[:MAX_LOGOS] if domain]
+
+
+def search(sources, question: str, condition: str = "", *, fetch=None,
+           sites=None) -> tuple[dict | None, bool]:
+    """(Bild oder None, ob mindestens eine Seite gelesen wurde). Blockiert (Thread).
+
+    Gegenstand, Logos, Artikel (``_find``); die Logos haben ein eigenes
+    Zeitbudget, damit langsame Quellen sie nicht verdrängen.
+    """
     asked = Question(question, condition)
     urls = candidate_urls(sources)
-    if not urls or not asked.tokens:
+    logos = logo_sites(sources, asked, sites)
+    if not (urls or logos) or not asked.tokens:
         return None, False
     progress = {"looked": False}
+    fetch = fetch or _http_fetch
+
+    async def logo_stage():
+        try:
+            return await asyncio.wait_for(_find_logos(logos, fetch, progress), LOGO_SECONDS)
+        except (asyncio.TimeoutError, TimeoutError):
+            return None
 
     async def run():
         return await asyncio.wait_for(
-            _find(urls, asked, fetch or _http_fetch, progress), ATTEMPT_SECONDS,
+            _find(urls, asked, fetch, progress, logos=logo_stage if logos else None),
+            ATTEMPT_SECONDS + LOGO_SECONDS,
         )
 
     try:
@@ -716,37 +1002,74 @@ def search(sources, question: str, condition: str = "", *, fetch=None) -> tuple[
         return None, progress["looked"]
 
 
-def find_image(sources, question: str, condition: str = "", *, fetch=None) -> dict | None:
+def find_image(sources, question: str, condition: str = "", *, fetch=None,
+               sites=None) -> dict | None:
     """Bild des Gegenstands, um den es geht, oder None. Blockiert (Thread)."""
-    return search(sources, question, condition, fetch=fetch)[0]
+    return search(sources, question, condition, fetch=fetch, sites=sites)[0]
 
 
 # ----------------------------------------------------------------------
 # Speichern, Ausliefern, Entfernen
 # ----------------------------------------------------------------------
 
-def needs_image(watch: dict) -> bool:
+_KINDS = ("item", "article", "logo")
+
+
+def _image_state(watch) -> dict:
     image = watch.get("image") if isinstance(watch, dict) else None
-    image = image if isinstance(image, dict) else {}
+    return image if isinstance(image, dict) else {}
+
+
+def _counts(image: dict) -> tuple[int, int]:
+    """(attempts, tries) der aktuellen Suche; die einer älteren zählen nicht."""
+    if image.get("version") != SEARCH_VERSION:
+        return 0, 0
+    attempts, tries = image.get("attempts"), image.get("tries")
+    return (attempts if isinstance(attempts, int) else 0, tries if isinstance(tries, int) else 0)
+
+
+def _stored_sites(image: dict):
+    """Die Auswahl des Judges aus einer früheren Prüfung, sonst None."""
+    sites = image.get("sites")
+    if not isinstance(sites, list):
+        return None
+    return [str(site) for site in sites if isinstance(site, str) and site][:MAX_LOGOS]
+
+
+def needs_image(watch: dict) -> bool:
+    image = _image_state(watch)
     if image.get("status") in (STATUS_READY, STATUS_DISMISSED):
         return False
-    attempts, tries = image.get("attempts"), image.get("tries")
-    return not (
-        (isinstance(attempts, int) and attempts >= MAX_ATTEMPTS)
-        or (isinstance(tries, int) and tries >= MAX_TRIES)
-    )
+    attempts, tries = _counts(image)
+    return attempts < MAX_ATTEMPTS and tries < MAX_TRIES
+
+
+def has_symbol(watch: dict) -> bool:
+    return isinstance(watch, dict) and watch.get("symbol") in watch_symbols.SYMBOLS
+
+
+def _has_candidates(watch: dict, sources) -> bool:
+    return bool(candidate_urls(sources) or source_sites(sources) or _stored_sites(_image_state(watch)))
+
+
+def wants_work(watch: dict, sources) -> bool:
+    """Fehlt der Watch ein Symbol oder (bei brauchbaren Quellen) ein Bild?"""
+    return not has_symbol(watch) or (needs_image(watch) and _has_candidates(watch, sources))
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def store_result(watch_id: str, found: dict | None, *, db, looked: bool = True) -> str:
+def store_result(watch_id: str, found: dict | None, *, db, looked: bool = True,
+                 symbol: str | None = None, sites=None, attempted: bool = True) -> str:
     """Ergebnis eines Versuchs festhalten, solange die Watch noch eins braucht.
 
     Bild und Watch-Feld entstehen in einer Transaktion, die die Watch liest:
     eine gelöschte Watch bekommt kein Bild-Dokument mehr, ein inzwischen
-    entferntes Bild kommt nicht zurück.
+    entferntes Bild kommt nicht zurück. Ein Symbol wird nur einmal gesetzt;
+    die Domain-Auswahl des Judges (``sites``) reist mit dem Bildstand, damit
+    spätere Versuche ihn nicht erneut fragen.
     """
     from app.services import watch_service
 
@@ -761,41 +1084,58 @@ def store_result(watch_id: str, found: dict | None, *, db, looked: bool = True) 
         persistence_guard.ensure_account_write_allowed(
             uid=current["owner_uid"], db=db, transaction=transaction,
         )
-        if not needs_image(current):
-            return "kept"
-        previous = current.get("image") if isinstance(current.get("image"), dict) else {}
-        attempts = previous.get("attempts") if isinstance(previous.get("attempts"), int) else 0
-        tries = previous.get("tries") if isinstance(previous.get("tries"), int) else 0
-        now = _now()
-        if not found:
-            transaction.update(watch_ref, {"image": {
-                "status": STATUS_NONE, "attempts": attempts + int(bool(looked)),
-                "tries": tries + 1, "last_attempt_at": now,
-            }})
-            return STATUS_NONE
-        token = hashlib.sha256(found["content"]).hexdigest()[:20]
-        transaction.set(image_ref, {
-            "owner_uid": current["owner_uid"],
-            "token": token,
-            "content": found["content"],
-            "content_type": found["content_type"],
-            "width": found["width"],
-            "height": found["height"],
-            "created_at": now,
-        })
-        transaction.update(watch_ref, {"image": {
-            "status": STATUS_READY,
-            "kind": "article" if found.get("kind") == "article" else "item",
-            "token": token,
-            "width": found["width"],
-            "height": found["height"],
-            "source_url": found["source_url"][:2000],
-            "source_host": found["source_host"][:120],
-            "attempts": attempts + 1,
-            "tries": tries + 1,
-            "picked_at": now,
-        }})
-        return STATUS_READY
+        updates = {}
+        if symbol in watch_symbols.SYMBOLS and not has_symbol(current):
+            updates["symbol"] = symbol
+        outcome = "kept"
+        if not attempted and sites is not None and needs_image(current):
+            # Der Judge hat gewählt, aber es gab nichts zu holen: die Wahl
+            # trotzdem merken, sonst fragt ihn jede Prüfung neu.
+            previous = _image_state(current)
+            if _stored_sites(previous) is None:
+                updates["image"] = {**previous, "sites": list(sites)[:MAX_LOGOS]}
+        if attempted and needs_image(current):
+            previous = _image_state(current)
+            attempts, tries = _counts(previous)
+            kept_sites = list(sites)[:MAX_LOGOS] if sites is not None else _stored_sites(previous)
+            now = _now()
+            if not found:
+                state = {
+                    "status": STATUS_NONE, "attempts": attempts + int(bool(looked)),
+                    "tries": tries + 1, "last_attempt_at": now, "version": SEARCH_VERSION,
+                }
+                outcome = STATUS_NONE
+            else:
+                token = hashlib.sha256(found["content"]).hexdigest()[:20]
+                transaction.set(image_ref, {
+                    "owner_uid": current["owner_uid"],
+                    "token": token,
+                    "content": found["content"],
+                    "content_type": found["content_type"],
+                    "width": found["width"],
+                    "height": found["height"],
+                    "created_at": now,
+                })
+                state = {
+                    "status": STATUS_READY,
+                    "kind": found.get("kind") if found.get("kind") in _KINDS else "item",
+                    "token": token,
+                    "width": found["width"],
+                    "height": found["height"],
+                    "source_url": found["source_url"][:2000],
+                    "source_host": found["source_host"][:120],
+                    "attempts": attempts + 1,
+                    "tries": tries + 1,
+                    "picked_at": now,
+                    "version": SEARCH_VERSION,
+                }
+                outcome = STATUS_READY
+            if kept_sites is not None:
+                state["sites"] = kept_sites
+            updates["image"] = state
+        if updates:
+            transaction.update(watch_ref, updates)
+        return outcome
 
     outcome = watch_service._run_transaction(db, write)
     if outcome == STATUS_READY:
@@ -803,22 +1143,74 @@ def store_result(watch_id: str, found: dict | None, *, db, looked: bool = True) 
     return outcome
 
 
+def _default_pick():
+    """Der Judge wählt Symbol und Seiten -- nie in Unit-/E2E-/Mock-Läufen."""
+    if not background_enabled():
+        return None
+    from app.services import watch_scheduler
+
+    return watch_scheduler.pick_visual
+
+
+def _pick_visual(pick, question: str, condition: str, sources) -> dict | None:
+    """{symbol, sites} vom Judge oder None; Seiten nur aus den Quell-Domains."""
+    if pick is None:
+        return None
+    domains = [domain for domain, _urls in source_sites(sources)]
+    try:
+        verdict = pick(question, condition, domains)
+    except Exception as exc:
+        logging.warning("Watch visual pick failed category=%s", safe_exception(exc))
+        return None
+    if not isinstance(verdict, dict) or verdict.get("symbol") not in watch_symbols.SYMBOLS:
+        return None
+    sites = verdict.get("sites") if isinstance(verdict.get("sites"), list) else []
+    return {
+        "symbol": verdict["symbol"],
+        "sites": [site for site in dict.fromkeys(sites) if site in domains][:MAX_LOGOS],
+    }
+
+
 def refresh_for_watch(watch_id: str, watch: dict, sources, question: str,
-                      condition: str = "", *, db=None, fetch=None) -> str:
-    """Ein Versuch für eine Watch; Quellen ohne Kandidaten zählen nicht."""
-    if not needs_image(watch) or not candidate_urls(sources):
+                      condition: str = "", *, db=None, fetch=None, pick=None) -> str:
+    """Ein Versuch für eine Watch: Symbol (einmal) und Bild.
+
+    Der Judge (``pick``) läuft, solange das Symbol oder seine Domain-Auswahl
+    fehlt -- in der Regel also genau einmal pro Watch. Fällt er aus, gilt für
+    Logos die Namensregel und das Dashboard zeigt das Standardsymbol.
+    Quellen ohne Kandidaten zählen nicht als Bildversuch.
+    """
+    wants_symbol = not has_symbol(watch)
+    wants_image = needs_image(watch) and _has_candidates(watch, sources)
+    if not (wants_symbol or wants_image):
         return "skipped"
     if db is None:
         from app.core.security import db_firestore as db
     started = time.monotonic()
-    try:
-        found, looked = search(sources, question, condition, fetch=fetch)
-    except Exception as exc:
-        # Ein unerwarteter Fehler soll nicht jede Prüfung wiederholen: er zählt
-        # als Versuch ohne gelesene Seite (MAX_TRIES deckelt das).
-        logging.warning("Watch image search failed category=%s", safe_exception(exc))
-        found, looked = None, False
-    outcome = store_result(watch_id, found, db=db, looked=looked)
+    sites = _stored_sites(_image_state(watch))
+    symbol, verdict = None, None
+    if wants_symbol or (wants_image and sites is None):
+        verdict = _pick_visual(pick if pick is not None else _default_pick(), question, condition, sources)
+        if verdict:
+            symbol, sites = verdict["symbol"], verdict["sites"]
+    if wants_image and not (
+        candidate_urls(sources) or logo_sites(sources, Question(question, condition), sites)
+    ):
+        wants_image = False
+    found, looked = None, False
+    if wants_image:
+        try:
+            found, looked = search(sources, question, condition, fetch=fetch, sites=sites)
+        except Exception as exc:
+            # Ein unerwarteter Fehler soll nicht jede Prüfung wiederholen: er
+            # zählt als Versuch ohne gelesene Seite (MAX_TRIES deckelt das).
+            logging.warning("Watch image search failed category=%s", safe_exception(exc))
+            found, looked = None, False
+    if not wants_image and not verdict:
+        return "skipped"
+    outcome = store_result(
+        watch_id, found, db=db, looked=looked, symbol=symbol, sites=sites, attempted=wants_image,
+    )
     record_metric(
         "watch_images", "pick",
         duration_ms=(time.monotonic() - started) * 1000,
@@ -865,7 +1257,7 @@ def _submit(watch_id: str, job) -> bool:
 def schedule_after_run(watch_id: str, watch: dict, sources, question: str,
                        condition: str = "") -> bool:
     """Nach einer Prüfung im Hintergrund versuchen; hält den Tick nie auf."""
-    if not background_enabled() or not needs_image(watch) or not candidate_urls(sources):
+    if not background_enabled() or not wants_work(watch, sources):
         return False
     sources = list(sources or [])
     return _submit(watch_id, lambda: refresh_for_watch(
@@ -913,8 +1305,9 @@ def image_view(watch_id: str, watch: dict) -> dict | None:
     return {
         "url": f"/api/watch/{watch_id}/image/{token}",
         # item: Produktfoto (meist weißer Grund, ganz zeigen); article: Foto
-        # eines Artikels (darf die Kachel füllen).
-        "kind": "article" if image.get("kind") == "article" else "item",
+        # eines Artikels (darf die Kachel füllen); logo: abgerundete
+        # App-Icon-Kacheln auf Durchsicht (ohne Rahmen zeigen).
+        "kind": image.get("kind") if image.get("kind") in _KINDS else "item",
         "width": side(image.get("width")),
         "height": side(image.get("height")),
         "source_url": source_url,

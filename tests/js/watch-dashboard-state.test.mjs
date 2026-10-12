@@ -162,8 +162,11 @@ describe("dashboard render", () => {
     await window.App.watchDashboard.render();
 
     const body = window.document.getElementById("watchDashBody");
-    const figures = body.querySelectorAll(".wd-image");
+    const figures = body.querySelectorAll(".wd-image:not(.is-symbol)");
     expect(figures.length).toBe(1);
+    // The foreign URL is never loaded; that card shows its symbol instead.
+    expect(body.querySelectorAll(".wd-image.is-symbol").length).toBe(1);
+    expect(body.querySelector('img[src^="https://tracker.test"]')).toBeNull();
     const figure = figures[0];
     const card = figure.closest(".wd-item");
     expect(card.classList.contains("has-image")).toBe(true);
@@ -181,9 +184,55 @@ describe("dashboard render", () => {
     expect(frame.getAttribute("aria-label")).toBe("Image from shop.test");
 
     figure.querySelector(".wd-image-remove").click();
-    await vi.waitFor(() => expect(body.querySelector(".wd-image")).toBeNull());
+    await vi.waitFor(() => expect(card.querySelector(".wd-image.is-item")).toBeNull());
     expect(calls).toContainEqual(["DELETE", "/api/watch/WatchImage0001/image"]);
-    expect(card.classList.contains("has-image")).toBe(false);
+    // The removed picture gives way to the watch's symbol.
+    expect(card.querySelector(".wd-image.is-symbol svg")).not.toBeNull();
+    expect(card.classList.contains("has-image")).toBe(true);
+  });
+
+  it("shows logos without a frame and otherwise the watch's symbol", async () => {
+    const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
+    const { window } = harness;
+    window.history.replaceState(null, "", "/app/watches");
+    window.auth.currentUser.getIdToken = async () => "token";
+    const watches = [
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "WatchLogo0003", question: "Is Cursor or Claude Code better value?", share_path: "/s/d",
+        symbol: "code",
+        image: { url: "/api/watch/WatchLogo0003/image/" + "d".repeat(20), kind: "logo",
+                 width: 304, height: 144, source_url: "https://cursor.com/", source_host: "cursor.com, claude.com" }
+      }),
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "w4", question: "Stelle an der Hochschule Hannover?", share_path: "/s/e", symbol: "briefcase"
+      }),
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "w5", question: "How to make money?", share_path: "/s/f", symbol: "<img src=x onerror=alert(1)>"
+      })
+    ];
+    window.fetch = vi.fn(async (path) => ({
+      ok: true,
+      json: async () => String(path).includes("/api/my/watches")
+        ? { watches: watches, limits: { plan: "free", active_count: 3, active_limit: 3 } }
+        : {}
+    }));
+
+    await window.App.watchDashboard.render();
+
+    const byQuestion = text => [...window.document.querySelectorAll(".wd-item")]
+      .find(card => card.querySelector(".wd-question a").textContent.startsWith(text));
+    const cards = [byQuestion("Is Cursor"), byQuestion("Stelle"), byQuestion("How to")];
+    const logo = cards[0].querySelector(".wd-image");
+    expect(logo.classList.contains("is-logo")).toBe(true);
+    expect(logo.querySelector(".wd-image-frame").title).toBe("Logo: cursor.com, claude.com");
+    expect(logo.querySelector(".wd-image-remove").title).toBe("Remove logo");
+    const job = cards[1].querySelector(".wd-image.is-symbol");
+    expect(job.getAttribute("aria-hidden")).toBe("true");
+    expect(job.querySelector("svg rect")).not.toBeNull();
+    // An unknown name falls back to the default drawing, never to markup.
+    const other = cards[2].querySelector(".wd-image.is-symbol");
+    expect(other.querySelector("img")).toBeNull();
+    expect(other.querySelector("svg circle")).not.toBeNull();
   });
 
   it("lets an article photo fill its tile and keeps a pending card's time in the footer only", async () => {

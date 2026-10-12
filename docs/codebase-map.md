@@ -1921,10 +1921,15 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   eine Textspalte über die ganze Breite: Status (bei „First check pending“ ohne
   Zeit, die steht im Fuß), Frage (3 Zeilen geklemmt), „Waiting for“ + Zielstatus,
   den Satz des Zustands, tragende Quellen und eine Check-Leiste (ein Strich je
-  Check, Form nach Signal). Hat die Watch ein Bild (`watch.image`), schwebt es
-  als 3:2-Kachel oben rechts (`.wd-image` float, `is-item` ganz auf Weiß,
-  `is-article` füllend; Karte `.has-image`), der Text fließt herum; mobil ist es
-  kleiner und die Frage darf neben dem Bild vier Zeilen haben. Nur Pfade
+  Check, Form nach Signal). Oben rechts schwebt immer etwas zum Wiedererkennen
+  (`.wd-image` float, Karte `.has-image`), der Text fließt herum; mobil ist es
+  kleiner und die Frage darf daneben vier Zeilen haben. Hat die Watch ein Bild
+  (`watch.image`), ist es eine 3:2-Kachel (`is-item` ganz auf Weiß, `is-article`
+  füllend) oder bei `is-logo` die abgerundeten App-Icon-Kacheln ohne Rahmen
+  (52 px hoch, Haarlinien-Schatten per `drop-shadow`). Sonst — und sobald ein
+  Bild entfernt wird oder nicht lädt — steht das Symbol der Watch
+  (`watch.symbol`, `.wd-image.is-symbol` > `.wd-symbol`, Strichzeichnung aus
+  `SYMBOL_ICONS`, unbekannte Namen → `eye`). Nur Pfade
   `/api/watch/{id}/image/{token}` werden gerendert, das × ruft
   `DELETE /api/watch/{id}/image`. Im Fuß stehen links „Open page“/„Settings“,
   rechts nächster Check + Zeitplan (Zeitzone nur, wenn sie nicht die eigene
@@ -5708,7 +5713,8 @@ app/services/
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Zielregeln, Lauf-Abschluss (Signal, geltende Antwort, Abschluss), Unsubscribe-Tokens
   evidence_change.py         Change-Judge mit Quellen + serverseitige Belegprüfung (Ursache, tragende Quellen), geteilt von Watch und Topic
   watch_probe.py             Täglicher Beleg-Scan zwischen zwei Checks: Claim, ein günstiger Such-Call, Vorziehen des vollen Checks
-  watch_images.py            Watch-Bild: Gegenstand (schema.org Product …) oder passenden Artikel (og:image) unter den Quellen finden, Bild SSRF-sicher holen, WebP-Vorschau speichern/ausliefern
+  watch_images.py            Watch-Bild: Gegenstand (schema.org Product …), sonst Logos der Seiten, um die es geht, sonst passenden Artikel (og:image) unter den Quellen finden, Bild SSRF-sicher holen, WebP-Vorschau speichern/ausliefern; Judge-Wahl von Symbol + Seiten einmal pro Watch
+  watch_symbols.py           Feste Symbolliste (Name -> Bedeutung) fürs Dashboard, wenn eine Watch kein Bild hat; Standardsymbol
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
   watch_scheduler.py         Owner-gebundener Global-Lease, Tagesbudget, Pipeline-Adapter, run_brief_tick + Outbox-Retry-Pass
@@ -6176,8 +6182,10 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 - `watch_images/{watch_id}` — die Vorschau einer Watch (seit 2026-10-11): `content`
   (WebP, Kante ≤ 320 px, ≤ 120 kB), `content_type`, `token` (sha256-Präfix des
   Inhalts), `width`/`height`, `owner_uid`, `created_at`. Am Watch-Dokument steht
-  dazu `image = {status: ready|none|dismissed, kind: item|article, token, width,
-  height, source_url, source_host, attempts, tries, picked_at}`. Gelöscht in derselben Transaktion wie die
+  dazu `image = {status: ready|none|dismissed, kind: item|article|logo, token, width,
+  height, source_url, source_host, attempts, tries, version, sites, picked_at}`
+  (`sites` = Domain-Wahl des Judges, auch `[]`) und seit 2026-10-12 `symbol`
+  (Name aus `watch_symbols.SYMBOLS`, einmal gesetzt). Gelöscht in derselben Transaktion wie die
   Watch (`_delete_watch_record`, damit auch Share-Hard-Delete und Kontolöschung)
   und beim Entfernen durch den Owner.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
@@ -6797,18 +6805,34 @@ löst eine Nachprüfung aus. Weiterbeobachten (`PATCH status=active`) verlangt e
 neues oder leeres Ziel (`goal_reached`, 409). `changes_only` meldet `moved` oder
 den Abschluss, `condition` nur den Abschluss, `every_run` jeden Check. Ein Ziel,
 das während des Laufs geändert wurde, wird weder bewertet noch gespeichert (R16).
-**Watch-Bild (`watch_images.py`, seit 2026-10-11):** ein echtes Bild aus den
-Quellen oder keins — kein KI-Bild, keine Stockfoto-Suche, kein Logo, kein
-Platzhalter. Nach jedem erfolgreichen Check (`watch_scheduler` nach
-`complete_watch_run`) und beim Anlegen aus einer fertigen Antwort (Router nach
-`create_watch`, nicht bei Query-first) startet im Hintergrund (höchstens 2
-Daemon-Thread zur Zeit, 8 offene Aufträge, aus in Unit-/E2E-/Mock-Modus) ein
-Versuch: bis zu 5 Quellen-URLs (mehrfach zitierte zuerst, ein Host pro Runde;
-Reddit/YouTube/X/Facebook/Instagram/TikTok/LinkedIn/Google/GitHub/Medium/Quora/
-Stack Overflow/HN und PDFs übersprungen) werden über
+**Watch-Bild (`watch_images.py`, seit 2026-10-11; Logos + Symbol seit
+2026-10-12):** ein echtes Bild aus den Quellen oder keins — kein KI-Bild, keine
+Stockfoto-Suche, kein Platzhalter, kein Logo eines Shops oder Verlags. Zweck
+ist das Wiedererkennen einer Watch auf einen Blick. Nach jedem erfolgreichen
+Check (`watch_scheduler` nach `complete_watch_run`) und beim Anlegen aus einer
+fertigen Antwort (Router nach `create_watch`, nicht bei Query-first) startet im
+Hintergrund (ein Daemon-Thread zur Zeit, 8 offene Aufträge, aus in
+Unit-/E2E-/Mock-Modus) ein Versuch (`refresh_for_watch`). Fehlt der Watch noch
+ein Symbol oder die Seitenwahl, fragt er zuerst **einmal pro Watch** den
+günstigen Judge (`watch_scheduler.pick_visual` →
+`consensus_engine.pick_watch_visual`, Free-Stufe, Structured Output, ohne
+Websuche): `symbol` aus der festen Liste `watch_symbols.SYMBOLS` (Enum) und
+`sites` = höchstens zwei der übergebenen Quell-Domains, die dem Gegenstand der
+Frage selbst gehören (nie eine Seite, die nur berichtet, vergleicht oder
+verkauft); was nicht in den Listen steht, fällt weg. Das Symbol steht danach
+fest (`watch.symbol`), die Seitenwahl reist als `image.sites` mit (auch `[]`),
+damit spätere Checks nicht erneut fragen. Fällt der Judge aus, gilt für Logos
+die Namensregel (`named_sites`: der Domainname, z. B. `hs-hannover` aus
+`karriere.hs-hannover.de`, ist ein Name aus Frage/Ziel) und das Dashboard zeigt
+das Standardsymbol. Dann werden bis zu 5 Quellen-URLs (mehrfach zitierte
+zuerst, ein Host pro Runde; consens.io selbst, Reddit/YouTube/X/Facebook/
+Instagram/TikTok/LinkedIn/Google/GitHub/Medium/Quora/Stack Overflow/HN und PDFs
+übersprungen, auch wenn eine Weiterleitung dort endet; eine Weiterleitung zählt
+als ihre Zielseite) über
 `source_documents.pinned_target` abgerufen (DNS-gepinnt, nur öffentliche IPs,
-Redirects je Hop neu geprüft, Seiten ≤ 2 MB, Bilder ≤ 5 MB, 6 s je Abruf, 25 s
-je Versuch). Zwei Stufen: (1) **Gegenstand** (`kind="item"`) — eine Seite, die
+Redirects je Hop neu geprüft, Seiten ≤ 2 MB, Bilder ≤ 5 MB, Icons ≤ 1 MB, 6 s je
+Abruf, 25 s + 15 s für Logos je Versuch). Drei Stufen, Seiten werden nur einmal
+gelesen: (1) **Gegenstand** (`kind="item"`) — eine Seite, die
 sich selbst als schema.org Product/Vehicle/Book/(echte) Event/Unterkunft
 ausweist (JSON-LD/Microdata, sonst `og:type` product/item) und deren Name zur
 Frage + Ziel passt (`Question`/`match_score`): kein Zubehör-/Merch-Wort, das die
@@ -6819,7 +6843,17 @@ enthält drei Wörter der Frage am Stück (trennt Schwestermodelle). Das
 Seitenbild (`og:image`) erbt nur ein eigenständiger Gegenstand (oberste Ebene,
 `@graph`, `mainEntity`, Microdata ohne äußeres itemscope) auf einer Seite, die
 kein Artikel ist — nie einer aus Rezension, Liste oder Video. Die erste Stufe
-gewinnt auf jeder Quelle. (2) **Thema**
+gewinnt auf jeder Quelle. (2) **Logo** (`kind="logo"`) — sonst das App-Icon
+der gewählten Seiten (Judge oder Namensregel): Startseite der Domain (sonst die
+zitierte Seite) lesen, `apple-touch-icon`/`fluid-icon` (größtes zuerst), große
+PNG-Icons, `/apple-touch-icon.png`, zuletzt `.ico` (`page_icons`; SVG und
+Masken nie, ≤ 3 Icon-Abrufe je Seite). Ein Icon braucht ≥ 64 px
+(`make_logo`): füllt es die Fläche, füllt es die 144-px-Kachel; ein Zeichen auf
+Durchsicht steht verkleinert auf Weiß bzw. — wenn es hell ist — auf Dunkel; eine
+leere Fläche ist kein Logo. Bis zu zwei Kacheln werden mit abgerundeten Ecken
+und Lücke zu einem WebP mit Durchsicht (`compose_logos`, ≤ 304 × 144 px).
+Logos stehen vor Artikeln, weil man das Logo dessen, um den es geht, sicherer
+wiedererkennt als die Teilen-Grafik eines Verlags. (3) **Thema**
 (`kind="article"`) — sonst ein Artikel (schema.org Article/NewsArticle/
 BlogPosting …, sonst `og:type` article), dessen Überschrift passt (≥ 3
 gemeinsame Wörter oder 2 bei kurzer Überschrift, und mindestens ein gemeinsames
@@ -6832,7 +6866,11 @@ WebP/GIF, JPEG per `draft()` gleich verkleinert dekodiert (6300² ≈ 4 MB statt
 ~475 MB), andere Formate nur bis 8 MP (≈ 32 MB), EXIF-Ausrichtung nur bei JPEG. Drei Versuche, in denen
 Seiten gelesen, aber nichts Passendes gefunden wurde (`attempts`), beenden die
 Suche; Versuche ohne eine einzige lesbare Seite (Bot-Sperre, Timeout) zählen
-nur in `tries` (Deckel 8). Ein gefundenes oder entferntes Bild bleibt. Die
+nur in `tries` (Deckel 8). Beide Zähler gelten nur für die aktuelle Suche
+(`image.version` = `SEARCH_VERSION`, 2 = Logos): kommt eine Stufe dazu, beginnt
+die Zählung neu. Bestehende, auch pausierte Watches rüstet
+`scripts/backfill_watch_visuals.py` nach (Trockenlauf ruft Judge und Seiten,
+schreibt nichts; `--apply` = Prod-Write). Ein gefundenes oder entferntes Bild bleibt. Die
 Speicher-Transaktion liest die Watch und den Konto-Tombstone, damit eine
 gelöschte Watch kein Bild zurückbekommt. Ausgeliefert wird nur von consens.io
 (`GET /api/watch/{id}/image/{token}`, Prozess-LRU mit Generationszähler gegen
@@ -6841,8 +6879,12 @@ kostet keinen Read, eine unbekannte Watch-ID genau einen), die Quelle sieht
 keine Besucher-IP. Die gecachte Watch-Seite blendet ein inzwischen entferntes
 Bild per `error`-Handler aus. Das Bild
 steht im Dashboard und im Kopf der Watch-Seite als 3:2-Kachel (Gegenstand ganz
-auf Weiß, Artikelfoto füllend), verlinkt auf seine Quelle, aber nie in
-OG-Karte, `og:image` oder JSON-LD.
+auf Weiß, Artikelfoto füllend) bzw. als rahmenlose Logo-Kacheln, verlinkt auf
+seine Quelle (bei Logos die erste Domain, Titel „Logo: a.com, b.com“), aber nie
+in OG-Karte, `og:image` oder JSON-LD. Ohne Bild zeigt nur das Dashboard das
+Symbol (`watch.symbol` in `_serialize`, `watch_symbols.clean_symbol`); die
+Zeichnungen liegen unter denselben Namen in `watch-dashboard.js`
+(`SYMBOL_ICONS`, ein Test hält beide Listen gleich).
 **Tages-Scan (`watch_probe.py`):** aktive Owner-Watches **mit Ziel** und Intervall weekly/
 monthly tragen `next_probe_at` (Watches ohne Ziel halten strikt ihren Wochentag;
 eine Zieländerung berechnet `next_probe_at` neu) (Index `status`+`next_probe_at`). Im Watch-Tick

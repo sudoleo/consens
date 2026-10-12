@@ -1617,7 +1617,8 @@ canvas {
 
 /* Das Bild des Gegenstands oder Themas (services/watch_images.py), rechts
    neben der Frage, als 3:2-Kachel wie im Dashboard: ein Produktfoto ganz auf
-   Weiß, ein Artikelfoto füllend. */
+   Weiß, ein Artikelfoto füllend, Logos als eigene abgerundete Kacheln ohne
+   Rahmen. */
 .wp-head.has-image { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: start; }
 .wp-head-text { min-width: 0; }
 .wp-image { width: 150px; margin: 4px 0 0; }
@@ -1634,6 +1635,17 @@ canvas {
   object-fit: contain;
 }
 .wp-image.is-article img { object-fit: cover; }
+.wp-image.is-logo { width: auto; }
+.wp-image.is-logo a,
+.wp-image.is-logo img { border-radius: 0; }
+.wp-image.is-logo img {
+  width: auto;
+  height: 60px;
+  aspect-ratio: auto;
+  background: none;
+  outline: 0;
+  filter: drop-shadow(0 0 .5px rgba(0, 0, 0, .35)) drop-shadow(0 1px 2px rgba(0, 0, 0, .08));
+}
 
 /* Der Stand: eine Zeile, die sagt, ob sich die Antwort bewegt hat. */
 .wp-state { margin: 22px 0 0; padding: 18px 20px; border-radius: var(--radius-lg); background: var(--raise); }
@@ -1766,6 +1778,8 @@ canvas {
   .wp-head.has-image .wp-head-text { display: contents; }
   .wp-head.has-image .wp-kicker { grid-column: 1; grid-row: 1; align-self: center; }
   .wp-head.has-image .wp-image { grid-column: 2; grid-row: 1; width: 84px; margin: 0; }
+  .wp-head.has-image .wp-image.is-logo { width: auto; }
+  .wp-image.is-logo img { height: 40px; }
   .wp-head.has-image .wp-question,
   .wp-head.has-image .share-question-more { grid-column: 1 / -1; justify-self: start; }
   .wp-chart { display: none; }

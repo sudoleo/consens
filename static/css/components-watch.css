@@ -550,8 +550,37 @@
 }
 .wd-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .wd-image.is-article img { object-fit: cover; }
+/* Logos arrive as rounded app-icon tiles on transparency: no frame, just a
+   hairline shadow that follows the tiles so a white icon still reads on the
+   light card. The symbol is the quiet stand-in when there is no picture. */
+.wd-image.is-logo,
+.wd-image.is-symbol { width: auto; }
+.wd-image.is-logo .wd-image-frame {
+  aspect-ratio: auto;
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+  outline: 0;
+}
+.wd-image.is-logo img {
+  width: auto;
+  height: 52px;
+  filter: drop-shadow(0 0 .5px rgba(0, 0, 0, .35)) drop-shadow(0 1px 2px rgba(0, 0, 0, .08));
+}
+.wd-symbol {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--well);
+  color: var(--ink-2);
+}
+.wd-symbol svg { width: 26px; height: 26px; }
 .is-paused .wd-image-frame,
-.is-error .wd-image-frame { opacity: .72; }
+.is-error .wd-image-frame,
+.is-paused .wd-symbol,
+.is-error .wd-symbol { opacity: .72; }
 .wd-image-remove {
   position: absolute;
   top: -7px;
@@ -862,6 +891,9 @@
     padding: 18px 16px 12px;
   }
   .wd-image { width: 72px; margin-left: 12px; }
+  .wd-image.is-logo img { height: 40px; }
+  .wd-symbol { width: 40px; height: 40px; border-radius: 10px; }
+  .wd-symbol svg { width: 22px; height: 22px; }
   /* Beside the picture the question is narrower; a fourth line keeps its end. */
   .wd-item.has-image .wd-question a { -webkit-line-clamp: 4; }
   .wd-item-side {

@@ -1,12 +1,16 @@
-"""Watch-Bilder: ein echtes Bild des Gegenstands aus den Quellen -- oder keins.
+"""Watch-Bilder: ein echtes Bild aus den Quellen -- oder keins.
 
-Produktentscheidung 2026-10-10: kein KI-Bild, kein Stockfoto, kein Artikel-
-Aufmacher, kein Logo. Abstrakte Watches bekommen gar kein Bild.
+Produktentscheidung 2026-10-10/11: kein KI-Bild, kein Stockfoto; der
+Gegenstand selbst, sonst das Vorschaubild eines passenden Artikels. Seit
+2026-10-12 sonst die Logos der Seiten, um die es geht (nie die einer Seite,
+die nur berichtet), und ohne Bild ein Symbol aus fester Liste.
 """
 
 import functools
 import io
+import json
 import random
+import re
 import threading
 import time
 import unittest
@@ -14,12 +18,13 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.api.routers import share as share_router
 from app.api.routers import watch as watch_router
 from app.core.rate_limit import limiter
-from app.services import persistence_guard, watch_images, watch_service
+from app.services import persistence_guard, watch_images, watch_service, watch_symbols
+from app.services.llm import consensus_engine
 from tests.test_watch_feature import FakeDb, share
 
 
@@ -621,6 +626,335 @@ class RouteTests(unittest.TestCase):
                 })
             self.assertEqual(response.status_code, 200)
             self.assertEqual(schedule.called, expected)
+
+
+def icon_bytes(size=180, fill=(0, 110, 80, 255), glyph=(255, 255, 255, 255), fmt="PNG"):
+    """An app icon: a filled square with a round mark; fill=None leaves only
+    the mark on transparency, like a favicon."""
+    image = Image.new("RGBA", (size, size), fill or (0, 0, 0, 0))
+    ImageDraw.Draw(image).ellipse((size * .3, size * .3, size * .7, size * .7), fill=glyph)
+    buffer = io.BytesIO()
+    image.save(buffer, fmt, **({"sizes": [(size, size)]} if fmt == "ICO" else {}))
+    return buffer.getvalue()
+
+
+def home_page(*links):
+    return ("<html><head><title>Home</title>" + "".join(links) + "</head><body></body></html>").encode()
+
+
+CURSOR_QUESTION = "Is Cursor or Claude Code better value for daily coding?"
+UNRELATED_ARTICLE = """<html><head><meta property="og:type" content="article">
+<meta property="og:title" content="The best laptops for students">
+<meta property="og:image" content="https://news.test/laptops.jpg"></head></html>""".encode()
+
+
+class SiteTests(unittest.TestCase):
+    def test_the_registrable_domain(self):
+        self.assertEqual(watch_images.site_domain("docs.github.com"), "github.com")
+        self.assertEqual(watch_images.site_domain("www.bbc.co.uk"), "bbc.co.uk")
+        self.assertEqual(watch_images.site_domain("gemini.google"), "gemini.google")
+        self.assertEqual(watch_images.site_domain("karriere.hs-hannover.de"), "hs-hannover.de")
+        self.assertEqual(watch_images.site_domain("localhost"), "")
+
+    def test_sites_by_citations_without_search_redirects(self):
+        sites = watch_images.source_sites([
+            {"url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc"},
+            {"url": "https://heise.de/a"},
+            {"url": "https://support.claude.com/x"},
+            {"url": "https://platform.claude.com/y"},
+            {"url": "ftp://files.test/z"},
+        ])
+        self.assertEqual(sites, [
+            ("claude.com", ["https://support.claude.com/x", "https://platform.claude.com/y"]),
+            ("heise.de", ["https://heise.de/a"]),
+        ])
+
+    def test_named_sites_follow_the_question_and_skip_reporters(self):
+        question = watch_images.Question("Is Kimchi Coding cheaper than Claude Code and Cursor for AI coding?")
+        sites = watch_images.source_sites([
+            {"url": "https://www.heise.de/news/kimchi"},
+            {"url": "https://cursor.com/pricing"},
+            {"url": "https://support.claude.com/x"},
+            {"url": "https://kimchi.dev/"},
+        ])
+        self.assertEqual(watch_images.named_sites(sites, question), ["kimchi.dev", "claude.com"])
+        job = watch_images.Question(
+            "Ausgeschriebene Stelle als Wis. Mitarbeiter an der Hochschule Hannover oder Leibniz Universität")
+        sites = watch_images.source_sites([
+            {"url": "https://www.uni-hannover.de/jobs/id/8689"},
+            {"url": "https://www.stellenwerk.de/hannover"},
+            {"url": "https://karriere.hs-hannover.de/portal"},
+        ])
+        self.assertEqual(watch_images.named_sites(sites, job), ["uni-hannover.de", "hs-hannover.de"])
+        self.assertEqual(watch_images.named_sites(sites, watch_images.Question("how to make money")), [])
+
+
+class LogoTests(unittest.TestCase):
+    def test_page_icons_prefer_the_largest_app_icon(self):
+        html = """<html><head>
+        <link rel="apple-touch-icon" sizes="57x57" href="/icons/apple-57.png">
+        <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-180.png">
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+        <link rel="mask-icon" href="/pinned.png">
+        <link rel="icon" sizes="32x32" href="/icons/32.png">
+        <link rel="icon" sizes="192x192" href="/icons/192.png">
+        <link rel="shortcut icon" href="/favicon.ico">
+        <link rel="stylesheet" href="/site.css"></head></html>"""
+        self.assertEqual(watch_images.page_icons(html, "https://site.test/home"), [
+            "https://site.test/icons/apple-180.png",
+            "https://site.test/icons/192.png",
+            "https://site.test/apple-touch-icon.png",
+            "https://site.test/favicon.ico",
+        ])
+
+    def test_an_app_icon_fills_its_tile_and_a_mark_sits_on_its_own_ground(self):
+        filled = watch_images.make_logo(icon_bytes())
+        self.assertEqual(filled.size, (watch_images.LOGO_SIDE, watch_images.LOGO_SIDE))
+        self.assertEqual(filled.getpixel((3, 70)), (0, 110, 80))
+        dark_mark = watch_images.make_logo(icon_bytes(fill=None, glyph=(30, 30, 30, 255)))
+        self.assertEqual(dark_mark.getpixel((3, 3)), (255, 255, 255))
+        light_mark = watch_images.make_logo(icon_bytes(fill=None, glyph=(250, 250, 250, 255)))
+        self.assertEqual(light_mark.getpixel((3, 3)), (32, 33, 36))
+        self.assertIsNotNone(watch_images.make_logo(icon_bytes(size=96, fmt="ICO")))
+
+    def test_tiny_blank_or_broken_icons_are_no_logo(self):
+        self.assertIsNone(watch_images.make_logo(icon_bytes(size=48)))
+        self.assertIsNone(watch_images.make_logo(icon_bytes(glyph=(0, 110, 80, 255))))
+        self.assertIsNone(watch_images.make_logo(icon_bytes(fill=None, glyph=(0, 0, 0, 0))))
+        self.assertIsNone(watch_images.make_logo(b"<svg></svg>"))
+        self.assertIsNone(watch_images.make_logo(b"\x00\x00\x01\x00garbage"))
+
+    def test_two_logos_become_one_image_with_rounded_tiles(self):
+        tile = watch_images.make_logo(icon_bytes())
+        data, size = watch_images.compose_logos([tile, tile, tile])
+        self.assertEqual(size, (304, 144))
+        self.assertLessEqual(size[0], watch_images.THUMB_SIDE)
+        with Image.open(io.BytesIO(data)) as image:
+            self.assertEqual(image.format, "WEBP")
+            image = image.convert("RGBA")
+            self.assertEqual(image.getpixel((0, 0))[3], 0)  # rounded corner
+            self.assertEqual(image.getpixel((150, 72))[3], 0)  # the gap
+            self.assertEqual(image.getpixel((72, 72))[3], 255)
+
+
+class LogoSearchTests(unittest.TestCase):
+    sources = [
+        {"url": "https://news.test/a"},
+        {"url": "https://cursor.com/pricing"},
+        {"url": "https://support.claude.com/x"},
+    ]
+
+    def fetch(self, **extra_pages):
+        pages = {
+            "https://news.test/a": UNRELATED_ARTICLE,
+            "https://cursor.com/": home_page('<link rel="apple-touch-icon" href="/apple-touch-icon-light.png">'),
+            "https://claude.com/": home_page('<link rel="icon" href="https://assets.test/32.png?w=32">'),
+        }
+        pages.update(extra_pages)
+        return FakeFetch(pages=pages, images={
+            "https://news.test/laptops.jpg": photo_bytes(seed=4),
+            "https://cursor.com/apple-touch-icon-light.png": icon_bytes(fill=(20, 20, 20, 255)),
+            "https://claude.com/apple-touch-icon.png": icon_bytes(fill=(217, 119, 87, 255)),
+        })
+
+    def test_without_product_or_article_the_named_sites_show_their_logos(self):
+        fetch = self.fetch()
+        found = watch_images.find_image(self.sources, CURSOR_QUESTION, fetch=fetch)
+        self.assertEqual(found["kind"], "logo")
+        self.assertEqual(found["source_host"], "cursor.com, claude.com")
+        self.assertEqual(found["source_url"], "https://cursor.com/")
+        self.assertEqual((found["width"], found["height"]), (304, 144))
+        # The news page's own picture or icon is never taken.
+        self.assertNotIn(("image", "https://news.test/laptops.jpg"), fetch.calls)
+        self.assertFalse([call for call in fetch.calls if "news.test" in call[1] and call[0] != "page"])
+
+    def test_the_judges_choice_replaces_the_name_rule(self):
+        fetch = self.fetch()
+        self.assertIsNone(watch_images.find_image(self.sources, CURSOR_QUESTION, fetch=fetch, sites=[]))
+        self.assertNotIn(("page", "https://cursor.com/"), fetch.calls)
+        found = watch_images.find_image(
+            self.sources, "Is GPT-6 Sol better value for coding?", fetch=self.fetch(), sites=["claude.com"],
+        )
+        self.assertEqual(found["source_host"], "claude.com")
+        self.assertEqual(found["width"], watch_images.LOGO_SIDE)
+
+    def test_the_logo_beats_a_publishers_article_picture(self):
+        article = """<html><head><meta property="og:type" content="article">
+        <meta property="og:title" content="Cursor changes its pricing for Pro users">
+        <meta property="og:image" content="https://news.test/cursor-pricing.jpg"></head></html>""".encode()
+        fetch = self.fetch(**{"https://news.test/cursor": article})
+        fetch.images["https://news.test/cursor-pricing.jpg"] = photo_bytes(seed=5)
+        found = watch_images.find_image(
+            [{"url": "https://news.test/cursor"}, {"url": "https://cursor.com/pricing"}],
+            "Has Cursor changed its pricing for Pro users?", fetch=fetch,
+        )
+        self.assertEqual((found["kind"], found["source_host"]), ("logo", "cursor.com"))
+        self.assertNotIn(("image", "https://news.test/cursor-pricing.jpg"), fetch.calls)
+        # Without a site of its own, the article picture still comes through.
+        found = watch_images.find_image(
+            [{"url": "https://news.test/cursor"}], "Has Cursor changed its pricing for Pro users?",
+            fetch=fetch, sites=[],
+        )
+        self.assertEqual((found["kind"], found["source_url"]), ("article", "https://news.test/cursor"))
+
+    def test_a_redirect_counts_as_the_page_it_ends_on(self):
+        redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc"
+        video = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/def"
+        product = product_page("adidas Adizero Adios Pro 4").encode()
+
+        async def fetch(url, purpose):
+            if url == redirect:
+                return "https://shop.test/p/1", product, "text/html", False
+            if url == video:
+                return "https://www.youtube.com/watch?v=1", product, "text/html", False
+            if url == "https://cdn.shop.test/p/adios-pro-4.jpg":
+                return url, photo_bytes(), "image/jpeg", False
+            raise ValueError("status_403")
+
+        found = watch_images.find_image([{"url": redirect}], QUESTION, GOAL, fetch=fetch)
+        self.assertEqual((found["source_url"], found["source_host"]), ("https://shop.test/p/1", "shop.test"))
+        self.assertIsNone(watch_images.find_image([{"url": video}], QUESTION, GOAL, fetch=fetch))
+
+    def test_our_own_pages_are_never_a_source(self):
+        own = [{"url": "https://www.consens.io/s/abc123"}, {"url": "https://consens.io/topics/x"}]
+        self.assertEqual(watch_images.candidate_urls(own), [])
+        self.assertEqual(watch_images.source_sites(own), [])
+
+    def test_a_blocked_home_page_falls_back_to_the_cited_page(self):
+        fetch = self.fetch(**{
+            "https://cursor.com/pricing": home_page('<link rel="apple-touch-icon" href="/apple-touch-icon-light.png">'),
+        })
+        del fetch.pages["https://cursor.com/"]
+        found = watch_images.find_image(self.sources[:2], "Is Cursor worth it?", fetch=fetch)
+        self.assertEqual(found["source_host"], "cursor.com")
+        self.assertIn(("page", "https://cursor.com/pricing"), fetch.calls)
+
+
+class VisualPickTests(unittest.TestCase):
+    sources = [{"url": "https://news.test/a"}, {"url": "https://cursor.com/pricing"}]
+
+    def setUp(self):
+        self.db = FakeDb()
+        self.db.stores["shares"]["S" * 16] = share()
+        self.db.stores[watch_service.WATCHES_COLLECTION][WATCH_ID] = {
+            "owner_uid": "u1", "share_id": "S" * 16, "status": "active", "visibility": "public",
+        }
+        watch_images.forget(WATCH_ID)
+        self.fetch = FakeFetch(
+            pages={
+                "https://news.test/a": UNRELATED_ARTICLE,
+                "https://cursor.com/": home_page('<link rel="apple-touch-icon" href="/touch.png">'),
+            },
+            images={"https://cursor.com/touch.png": icon_bytes()},
+        )
+
+    def watch(self):
+        return self.db.stores[watch_service.WATCHES_COLLECTION][WATCH_ID]
+
+    def refresh(self, pick, sources=None, question=CURSOR_QUESTION):
+        return watch_images.refresh_for_watch(
+            WATCH_ID, self.watch(), self.sources if sources is None else sources, question,
+            db=self.db, fetch=self.fetch, pick=pick,
+        )
+
+    def test_the_judge_picks_once_from_the_source_domains(self):
+        calls = []
+
+        def pick(question, condition, domains):
+            calls.append(domains)
+            return {"symbol": "code", "sites": ["cursor.com", "invented.example", "cursor.com"]}
+
+        self.assertEqual(self.refresh(pick), "ready")
+        self.assertEqual(calls, [["news.test", "cursor.com"]])
+        self.assertEqual(self.watch()["symbol"], "code")
+        self.assertEqual(self.watch()["image"]["sites"], ["cursor.com"])
+        self.assertEqual(self.watch()["image"]["kind"], "logo")
+        listed = watch_service.list_watches("u1", db=self.db)[0]
+        self.assertEqual(listed["symbol"], "code")
+        self.assertEqual(listed["image"]["kind"], "logo")
+        self.assertEqual(self.refresh(pick), "skipped")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_choice_with_nothing_to_fetch_is_remembered(self):
+        calls = []
+
+        def pick(question, condition, domains):
+            calls.append(domains)
+            return {"symbol": "film", "sites": []}
+
+        self.assertEqual(self.refresh(pick, sources=[{"url": "https://www.youtube.com/watch?v=1"}]), "kept")
+        self.assertEqual(self.watch()["symbol"], "film")
+        self.assertEqual(self.watch()["image"], {"sites": []})
+        self.assertEqual(self.refresh(pick, sources=[{"url": "https://www.youtube.com/watch?v=2"}]), "skipped")
+        self.assertEqual(self.refresh(pick), "none")  # an unrelated article, no logo chosen
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn(("page", "https://cursor.com/"), self.fetch.calls)
+
+    def test_a_failing_judge_leaves_the_default_symbol_and_the_name_rule(self):
+        def pick(question, condition, domains):
+            raise RuntimeError("judge down")
+
+        self.assertEqual(self.refresh(pick), "ready")
+        self.assertNotIn("symbol", self.watch())
+        self.assertNotIn("sites", self.watch()["image"])
+        self.assertEqual(watch_service.list_watches("u1", db=self.db)[0]["symbol"], watch_symbols.DEFAULT_SYMBOL)
+        for verdict in (None, {"symbol": "<svg>", "sites": []}, "code"):
+            self.assertIsNone(watch_images._pick_visual(lambda *_: verdict, CURSOR_QUESTION, "", self.sources))
+
+    def test_a_symbol_is_set_once(self):
+        watch_images.store_result(WATCH_ID, None, db=self.db, symbol="code", attempted=False)
+        watch_images.store_result(WATCH_ID, None, db=self.db, symbol="film", attempted=False)
+        watch_images.store_result(WATCH_ID, None, db=self.db, symbol="<b>", attempted=False)
+        self.assertEqual(self.watch()["symbol"], "code")
+        self.assertNotIn("image", self.watch())
+
+    def test_failures_of_an_older_search_do_not_count(self):
+        self.watch()["image"] = {"status": "none", "attempts": 3, "tries": 3}
+        self.assertTrue(watch_images.needs_image(self.watch()))
+        self.assertEqual(watch_images.store_result(WATCH_ID, None, db=self.db), "none")
+        image = self.watch()["image"]
+        self.assertEqual((image["attempts"], image["tries"], image["version"]),
+                         (1, 1, watch_images.SEARCH_VERSION))
+
+    def test_no_judge_in_tests(self):
+        self.assertIsNone(watch_images._default_pick())
+
+
+class JudgeTests(unittest.TestCase):
+    KEYS = {"OpenRouter": "dummy"}
+
+    def test_the_judge_only_picks_from_its_lists(self):
+        raw = json.dumps({"symbol": "briefcase", "sites": ["HS-Hannover.de", "evil.example", "uni-hannover.de",
+                                                           "hs-hannover.de", "stellenwerk.de"]})
+        with patch.object(consensus_engine, "_call_engine_text", return_value=raw) as call:
+            result = consensus_engine.pick_watch_visual(
+                "Stelle an der Hochschule Hannover?", "Eine Stelle wird ausgeschrieben",
+                ["hs-hannover.de", "uni-hannover.de", "stellenwerk.de"], watch_symbols.SYMBOLS,
+                self.KEYS, "OpenAI",
+            )
+        self.assertEqual(result, {"symbol": "briefcase", "sites": ["hs-hannover.de", "uni-hannover.de"]})
+        kwargs = call.call_args.kwargs
+        self.assertEqual(kwargs["json_schema"]["properties"]["symbol"]["enum"], list(watch_symbols.SYMBOLS))
+        self.assertIn('"stellenwerk.de"', kwargs["prompt"])
+        self.assertIn("untrusted data", kwargs["prompt"])
+
+    def test_an_unknown_symbol_is_a_failed_attempt(self):
+        with patch.object(consensus_engine, "_call_engine_text",
+                          return_value=json.dumps({"symbol": "unicorn", "sites": []})) as call:
+            with self.assertRaises(RuntimeError):
+                consensus_engine.pick_watch_visual("q", "", [], watch_symbols.SYMBOLS, self.KEYS, "OpenAI")
+        self.assertGreaterEqual(call.call_count, 2)
+
+
+class SymbolTests(unittest.TestCase):
+    def test_every_symbol_has_a_drawing_and_every_drawing_a_symbol(self):
+        source = open("static/js/watch-dashboard.js", encoding="utf-8").read()
+        block = source.split("const SYMBOL_ICONS = {", 1)[1].split("\n  };", 1)[0]
+        drawn = re.findall(r"^\s{4}(\w+): '", block, flags=re.MULTILINE)
+        self.assertEqual(drawn, list(watch_symbols.SYMBOLS))
+        self.assertIn(watch_symbols.DEFAULT_SYMBOL, watch_symbols.SYMBOLS)
+        self.assertEqual(watch_symbols.clean_symbol("nope"), watch_symbols.DEFAULT_SYMBOL)
+        self.assertEqual(watch_symbols.clean_symbol("trophy"), "trophy")
 
 
 class WatchPageTests(unittest.TestCase):

@@ -20,7 +20,7 @@ from app.core.entitlements import TIER_PRO
 from app.core.security import db_firestore
 from app.services import (
     drift_signal, notification_outbox, opinion_map, persistence_guard, share_snapshots,
-    watch_images,
+    watch_images, watch_symbols,
 )
 
 
@@ -297,6 +297,8 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "last_probe": _serialize_probe(data.get("last_probe")),
         "query_first": data.get("query_first") is True,
         "image": watch_images.image_view(watch_id, data),
+        # Woran man die Watch ohne Bild erkennt (nur Dashboard).
+        "symbol": watch_symbols.clean_symbol(data.get("symbol")),
         "awaiting_first_run": bool(
             share.get("awaiting_first_watch_run")
             and not data.get("last_successful_run_id")
