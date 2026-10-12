@@ -170,7 +170,10 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         if quiet == "none":
             assert page.evaluate("__agentMotion.every(m => m.options.duration <= 220)")
             if width == 320:
-                assert page.evaluate("__agentMotion.some(m => m.target.matches('.agent-progress') && m.frames.at(-1).opacity === 0 && m.frames.at(-1).height === '0px')")
+                # The lines gave way at once when the answer began, also while
+                # the check still ran: no second, animated collapse at the end
+                # (2026-10-12: they came back for the check and left again).
+                assert not page.evaluate("__agentMotion.some(m => m.target.matches('.agent-progress') && m.frames.at(-1).height === '0px')")
         else:
             assert page.evaluate("__agentMotion.length") == 0
         _snapshot(page, f"agent-progress-final-{snapshot_variant}")

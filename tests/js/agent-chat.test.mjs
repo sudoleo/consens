@@ -747,6 +747,32 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('keeps the progress lines gone while the app checks the written answer', () => {
+    // 2026-10-12: the lines left when the answer began, came back for
+    // "Checking the answer" and left again: two collapses instead of one.
+    const { window, document, dom } = boot();
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const events = [];
+    activity.receive(events, {version:1, id:'p1', kind:'progress', text:'Comparing the plans.'});
+    activity.receive(events, {version:1, id:'writing', kind:'status', status:'responding'});
+    activity.render(host, {events, running:true, answerText:'The answer begins'});
+    const preview = host.querySelector('.agent-progress');
+    expect(preview.hidden).toBe(true);
+    for (const name of ['judge_answer', 'check_contradictions']) {
+      activity.receive(events, {version:1, id:name, kind:'tool', name, status:'running'});
+      activity.render(host, {events, running:true, answerText:'The answer begins and ends.', review:{status:'running'}});
+      expect(preview.hidden).toBe(true);
+      expect(preview.childElementCount).toBe(0);
+      // The step stays named in the history (and the answer shows its check).
+      expect(host.querySelector('.agent-activity-run-details [role="status"]').textContent).toBe('Checking the answer…');
+      activity.receive(events, {version:1, id:name, kind:'tool', name, status:'succeeded'});
+    }
+    activity.render(host, {events, running:false, answerText:'The answer begins and ends.'});
+    expect(preview.hidden).toBe(true);
+    dom.window.close();
+  });
+
   it('reads a complete, checked answer as done even when the run failed afterwards', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');

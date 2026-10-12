@@ -32,6 +32,8 @@
   };
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
+  // Checks the app runs once the answer is written (DelegationLoop._finish_review).
+  const answerChecks = new Set(['judge_answer', 'check_contradictions']);
   const toolName = name => tools[name]?.[0] || 'Tool';
   // "Searched the web · 3 sources: skat.dk, virk.dk, borger.dk" says what the
   // answer now rests on; the bare verb said nothing a reader could check.
@@ -386,8 +388,11 @@
     // Like ChatGPT/Claude, the progress lines give way the moment the answer
     // starts: at that point nothing stands below them yet. Kept until the
     // run ended, their collapse pulled the finished answer up under the eye.
-    // A preamble before a running tool is not the answer yet.
-    const answering = running && !activeTool && Boolean(String(answerText || '').trim());
+    // A preamble before a running tool is not the answer yet; the app's own
+    // checks of the written answer are no such tool: the lines came back for
+    // "Checking the answer" and left again (2026-10-12), two collapses for one.
+    const answering = running && (!activeTool || answerChecks.has(activeTool.name))
+      && Boolean(String(answerText || '').trim());
     const showPreview = running && paragraphs.length && !answering;
     let previewChanged = false;
     if (showPreview) {

@@ -7490,7 +7490,9 @@ haben keinen horizontalen Innen-/Außenabstand mehr, der Überstand ist ein
 innere Seite weg), Filter/Ausblenden setzen auch `box-shadow: none`. Die
 Fortschrittszeilen über der Antwort (`.agent-progress`) verschwinden ohne
 Animation, sobald Antworttext steht und kein Tool läuft (eine Präambel vor einem
-laufenden Tool zählt nicht); eine vom Leser geöffnete Aktivitäts-Historie bleibt
+laufenden Tool zählt nicht); die App-Prüfungen der fertigen Antwort
+(`judge_answer`, `check_contradictions`, `answerChecks`) holen sie nicht zurück –
+bis 2026-10-12 klappten sie dafür ein zweites Mal auf und zu. Eine vom Leser geöffnete Aktivitäts-Historie bleibt
 am Laufende offen, solange sie im Bild ist (oberhalb des Viewports klappt sie mit
 `preserveAbove`-Korrektur zu). Der Antwortbeginn blendet nur ein
 (`reveal(body, {lift:false})`). Laden: `app-bootstrap.js` setzt per
