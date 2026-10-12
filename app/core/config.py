@@ -534,6 +534,11 @@ CONSENSUS_PRESET_MODELS = {
     for preset_id, models in _BASE_CONSENSUS_PRESET_MODELS.items()
 }
 DEFAULT_CONSENSUS_PRESET = "balanced"
+# The preset the app's model picker starts from. Daily since 2026-10-12, when
+# every browser was reset once to Agent + Daily (static/js/user-settings.js);
+# the API and the fallback lineup of an Agent comparison keep
+# DEFAULT_CONSENSUS_PRESET.
+APP_DEFAULT_CONSENSUS_PRESET = "fast"
 
 VALID_LEADERBOARD_MODELS = {
     label

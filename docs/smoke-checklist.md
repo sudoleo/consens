@@ -851,6 +851,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Tier-Defaults (Free vs. Pro) werden beim Tier-Wechsel angewandt; eine
       zuvor explizit im Picker gewählte Provider-Auswahl bleibt erhalten.
 - [ ] Modell-Auswahl bleibt nach Reload erhalten.
+- [ ] Erster Besuch nach dem Reset vom 2026-10-12 (oder `consensio.settingsReset` im localStorage löschen, neu laden): Modus Agent, Preset Daily; System-Prompt und Display-Optionen unverändert.
 
 ## Kontoeinstellungen
 - [ ] Angemeldet Modus, Modellauswahl, eine Display-Option und den System-Prompt

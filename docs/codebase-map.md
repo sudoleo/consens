@@ -2608,7 +2608,9 @@ Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
 abgelehnt. Der Browser validiert zwei bis sechs Vergleichsmodelle, sperrt Senden
 bei ungültiger Auswahl und erhält auch bei direkten Aufrufen den Entwurf vor
 Chat-Erstellung/Netzwerkzugriff. Er sendet nie `null` als Ersatz für eine leere
-Auswahl. API-Aufrufe ohne Auswahl behalten das zentrale Default-Preset. Der öffentliche
+Auswahl. API-Aufrufe ohne Auswahl behalten das zentrale Default-Preset
+(`cfg.DEFAULT_CONSENSUS_PRESET`, Balanced; die App startet seit 2026-10-12 mit
+`cfg.APP_DEFAULT_CONSENSUS_PRESET`, Daily). Der öffentliche
 Metering-Katalog ergänzt die gemeinsame Registry automatisch um aktuelle
 Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeeintrag.
 
@@ -4695,15 +4697,14 @@ Eine Wahl, ein Besitzer: `static/js/run-mode.js` (`App.runMode`) haelt die
 Kontoeinstellung `run_mode` ∈ {`compare`, `consensus`, `agent`} (lokal
 `localStorage.runMode`, siehe „Kontoeinstellungen“). `DEFAULT_MODE`
 steht dort als eine Konstante (seit 2026-10-02 `agent`); wer nie waehlte, hat
-keinen gespeicherten Wert. `user-settings.js` migriert beim Lesen die
-Altschluessel (`agentMode=false` → compare, sonst der Default) und loescht
-`agentMode` und `autoConsensus`; andere Tabs, der Server und das Abmelden
-melden Aenderungen ueber `consensio:settings-change`, das `run-mode.js` als
-`consensio:run-mode-change` weitergibt. Weil bis 2026-10-02 jeder Erstbesuch
-ungefragt `consensus` speicherte, gilt ein gespeichertes `consensus` ohne die
-Marke `localStorage.runModeDefault = "agent-2026-10-02"` als ungewaehlt (der
-Wert entfaellt, die Marke wird gesetzt; jedes Speichern setzt sie mit);
-`compare` bleibt. E2E-Tests, die `runMode` vorbelegen, setzen die Marke mit.
+keinen gespeicherten Wert. Andere Tabs, der Server und das Abmelden melden
+Aenderungen ueber `consensio:settings-change`, das `run-mode.js` als
+`consensio:run-mode-change` weitergibt. Der einmalige Reset vom 2026-10-12
+(„Kontoeinstellungen“) hat jeden Browser auf Agent gesetzt und dabei die
+Altschluessel `agentMode`, `autoConsensus` und die fruehere Marke
+`runModeDefault` entfernt. E2E-Tests, die `runMode` oder die Modellwahl vor dem
+Laden vorbelegen, setzen die Reset-Marke `consensio.settingsReset = "2026-10-12"`
+mit, sonst entfernt der Reset ihre Werte.
 - `preference()` ist die Wahl fuer neue Nachrichten, `effective()` das, was die
   naechste Nachricht tatsaechlich tut: ein offener Agent-Chat bleibt Agent, ein
   offener Consensus-Chat kann nur zwischen Compare und Consensus wechseln
@@ -5340,7 +5341,16 @@ der einzige Besitzer: `get(name)`, `set(name, wert | null)`,
 den bisherigen localStorage-Schlüsseln (`runMode`, `pref_*`, `systemPrompt`,
 `consensio.*`); `consensio.agentModel.v1` ersetzt das frühere
 `agent_settings_<uid>`. Alte Speicherformate werden beim Lesen migriert, nur
-hier. Abgleich: `firebase.js` ruft nach einer verifizierten Anmeldung
+hier. **Einmaliger Reset (2026-10-12):** Fehlt die Marke
+`consensio.settingsReset = "2026-10-12"`, entfernt `user-settings.js` beim
+Laden einmal Modus (`runMode` samt `runModeDefault`/`agentMode`/`autoConsensus`)
+und Modellwahl (`pref_check_*`, `pref_select_*`, `pref_consensus_preset`) und
+setzt die Marke: Jeder Browser startet so einmal mit Agent und dem App-Preset
+Daily, und alte Compare-Wahlen oder ausgemusterte Modell-IDs gelangen nie ins
+Konto. System-Prompt, Display, Agent-Einstellungen/-Modell und Check sources
+bleiben. Das App-Preset steht in `cfg.APP_DEFAULT_CONSENSUS_PRESET` (`fast` =
+Daily, an die Seite als `default_consensus_preset`); API und der Rückfall eines
+Agent-Vergleichs ohne Auswahl behalten `cfg.DEFAULT_CONSENSUS_PRESET` (Balanced). Abgleich: `firebase.js` ruft nach einer verifizierten Anmeldung
 `start({uid, getToken})` neben `/user_status` auf. Hat das Konto Einstellungen,
 gelten die des Servers; was diese Seite vor der Antwort änderte oder eine
 frühere Seite nicht zustellen konnte (`pending` in `consensio.settingsSync.v1`,

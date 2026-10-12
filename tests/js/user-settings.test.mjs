@@ -42,9 +42,14 @@ function fakeServer({ settings = {}, revision = 0 } = {}) {
   return server;
 }
 
-function boot({ storage = {}, server = null } = {}) {
+// A browser that already went through the one-time reset of 2026-10-12,
+// unless a test asks for one from before it.
+const RESET_KEY = "consensio.settingsReset";
+
+function boot({ storage = {}, server = null, beforeReset = false } = {}) {
   const { window, dom } = loadScripts(["static/js/user-settings.js"], {
     before(win) {
+      if (!beforeReset) win.localStorage.setItem(RESET_KEY, "2026-10-12");
       Object.entries(storage).forEach(([key, value]) => win.localStorage.setItem(key, value));
       if (server) win.fetch = server.fetch;
     },
@@ -92,8 +97,8 @@ describe("the local copy", () => {
     settings.set("consensus_highlights", "critical");
     settings.set("claim_counts", true);
     expect(Object.fromEntries(Object.keys(local).filter(key => key !== SYNC_KEY).map(key => [key, local.getItem(key)]))).toEqual({
+      [RESET_KEY]: "2026-10-12",
       runMode: "compare",
-      runModeDefault: "agent-2026-10-02",
       checkSources: "false",
       "consensio.agentPreferences.v2": JSON.stringify({ quorum: "fast" }),
       "consensio.agentModel.v1": JSON.stringify({ model_id: "openai/gpt-6-luna", reasoning_effort: "low" }),
@@ -167,21 +172,44 @@ describe("the local copy", () => {
   });
 });
 
-describe("migrations of older stored values", () => {
-  it.each([
-    [{ agentMode: "false", autoConsensus: "false" }, "compare"],
-    [{ agentMode: "true" }, undefined],
-    // Before 2026-10-02 every first visit stored "consensus" unasked.
-    [{ runMode: "consensus" }, undefined],
-    [{ runMode: "consensus", runModeDefault: "agent-2026-10-02" }, "consensus"],
-    [{ runMode: "compare" }, "compare"],
-    [{ runMode: "bogus" }, undefined],
-  ])("reads the run mode of %o as %s", (storage, expected) => {
-    const { settings, local } = open({ storage });
-    expect(settings.get("run_mode")).toBe(expected);
-    expect(local.getItem("runMode")).toBe(expected || null);
-    expect(local.getItem("agentMode")).toBeNull();
-    expect(local.getItem("autoConsensus")).toBeNull();
+describe("the one-time reset to Agent and the default preset", () => {
+  const BEFORE = {
+    runMode: "compare", runModeDefault: "agent-2026-10-02", agentMode: "false", autoConsensus: "false",
+    pref_check_Grok: "false", pref_select_OpenAI: "gpt-4o", pref_select_consensus: "OpenAI-Pro",
+    pref_consensus_preset: "custom",
+    // Not part of the reset: the user's own choices without model IDs.
+    systemPrompt: "Answer in German.", checkSources: "false", "consensio.showClaimCounts.v1": "true",
+    "consensio.agentPreferences.v2": JSON.stringify({ depth: "quick" }),
+    "consensio.agentModel.v1": JSON.stringify({ model_id: "gpt-6-luna", reasoning_effort: "low" }),
+    theme: "dark",
+  };
+
+  it("drops the mode and the model choice of an older version once", () => {
+    const { settings, local } = open({ storage: BEFORE, beforeReset: true });
+    for (const key of ["runMode", "runModeDefault", "agentMode", "autoConsensus", "pref_check_Grok",
+      "pref_select_OpenAI", "pref_select_consensus", "pref_consensus_preset"]) {
+      expect(local.getItem(key)).toBeNull();
+    }
+    expect(settings.get("run_mode")).toBeUndefined();
+    expect(settings.get("compare_models")).toBeUndefined();
+    expect(settings.get("system_prompt")).toBe("Answer in German.");
+    expect(settings.get("check_sources")).toBe(false);
+    expect(settings.get("claim_counts")).toBe(true);
+    expect(settings.get("agent_preferences")).toEqual({ depth: "quick" });
+    expect(settings.get("agent_model")).toEqual({ model_id: "gpt-6-luna", reasoning_effort: "low" });
+    expect(local.getItem("theme")).toBe("dark");
+    expect(local.getItem(RESET_KEY)).toBe("2026-10-12");
+  });
+
+  it("keeps what was chosen after the reset", () => {
+    const { settings } = open({ storage: { runMode: "compare", pref_check_Grok: "false" } });
+    expect(settings.get("run_mode")).toBe("compare");
+    expect(settings.get("compare_models")).toEqual({ Grok: { enabled: false } });
+  });
+
+  it("reads a stored mode it does not know as the default", () => {
+    const { settings } = open({ storage: { runMode: "bogus" } });
+    expect(settings.get("run_mode")).toBeUndefined();
   });
 
   it("keeps only the Agent choices v1 stored beyond its defaults", () => {
@@ -222,14 +250,14 @@ describe("change events", () => {
   });
 
   it("follow another tab, but not a write that changes no value", () => {
-    const { window, settings, events, local } = open({ storage: { runMode: "compare", runModeDefault: "agent-2026-10-02" } });
+    const { window, settings, events, local } = open({ storage: { runMode: "compare" } });
     const heard = vi.fn();
     settings.onChange("run_mode", heard);
     const tab = (key, value) => {
       local.setItem(key, value);
       window.dispatchEvent(new window.StorageEvent("storage", { key, newValue: value, storageArea: local }));
     };
-    tab("runModeDefault", "agent-2026-10-02");
+    tab("runMode", "compare");
     tab("pref_check_Gemini", "false");
     tab("runMode", "consensus");
     expect(events.map(event => [event.names, event.source])).toEqual([[["compare_models"], "tab"], [["run_mode"], "tab"]]);
@@ -242,7 +270,7 @@ describe("sync with the account", () => {
   it("gives an account without settings this browser's choices once", async () => {
     const server = fakeServer();
     const { settings, start, local } = open({ server, storage: {
-      runMode: "compare", runModeDefault: "agent-2026-10-02", pref_check_Grok: "false", systemPrompt: "Be brief.",
+      runMode: "compare", pref_check_Grok: "false", systemPrompt: "Be brief.",
     } });
     expect(await start()).toBe(true);
     await settings.flush();
@@ -263,7 +291,7 @@ describe("sync with the account", () => {
   it("applies the account's settings over this browser's and announces them", async () => {
     const server = fakeServer({ settings: { run_mode: "consensus", claim_counts: true }, revision: 3 });
     const { settings, start, events, local } = open({ server, storage: {
-      runMode: "compare", runModeDefault: "agent-2026-10-02", checkSources: "false",
+      runMode: "compare", checkSources: "false",
       [SYNC_KEY]: JSON.stringify({ owner: UID, pending: [] }),
     } });
     await start();
@@ -297,7 +325,7 @@ describe("sync with the account", () => {
   it("sends what an earlier page of this account could not deliver", async () => {
     const server = fakeServer({ settings: { run_mode: "agent" }, revision: 5 });
     const { settings, start } = open({ server, storage: {
-      runMode: "compare", runModeDefault: "agent-2026-10-02",
+      runMode: "compare",
       [SYNC_KEY]: JSON.stringify({ owner: UID, pending: ["run_mode", "unknown"] }),
     } });
     await start();
@@ -310,7 +338,7 @@ describe("sync with the account", () => {
   it("never gives one account another account's settings", async () => {
     const server = fakeServer();
     const { settings, start, local } = open({ server, storage: {
-      runMode: "compare", runModeDefault: "agent-2026-10-02", systemPrompt: "Private to B.",
+      runMode: "compare", systemPrompt: "Private to B.",
       [SYNC_KEY]: JSON.stringify({ owner: OTHER, pending: ["run_mode"] }),
       // This account's own Agent pick from before the sync existed.
       [`agent_settings_${UID}`]: JSON.stringify({ model_id: "anthropic/claude-sonnet-5.5", reasoning_effort: "medium" }),
@@ -406,7 +434,7 @@ describe("sync with the account", () => {
   });
 
   it("leaves a guest's own choices alone on sign-out", () => {
-    const { settings } = open({ storage: { runMode: "compare", runModeDefault: "agent-2026-10-02" } });
+    const { settings } = open({ storage: { runMode: "compare" } });
     settings.stop();
     expect(settings.get("run_mode")).toBe("compare");
   });

@@ -542,7 +542,7 @@ def read_root(request: Request):
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_models": consensus_models,
         "consensus_presets": cfg.get_consensus_presets(),
-        "default_consensus_preset": cfg.DEFAULT_CONSENSUS_PRESET,
+        "default_consensus_preset": cfg.APP_DEFAULT_CONSENSUS_PRESET,
         "model_labels": model_labels,
         "model_badges": model_badges,
         # Statt einer handgepflegten Versionsnummer steht in der Fusszeile

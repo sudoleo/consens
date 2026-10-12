@@ -15,34 +15,21 @@ function boot(storage = {}) {
 
 describe("run mode", () => {
   // An unchosen mode is not stored: a later change of the default reaches
-  // everyone who never chose. Older stored values migrate once.
+  // everyone who never chose. Every browser starts once from Agent (the reset
+  // of 2026-10-12 in user-settings.js); a choice after it stays.
+  const RESET = {"consensio.settingsReset": "2026-10-12"};
   it.each([
     [{}, "agent", null],
-    [{agentMode: "true", autoConsensus: "true"}, "agent", null],
-    [{agentMode: "false", autoConsensus: "false"}, "compare", "compare"],
-    [{runMode: "agent", agentMode: "false"}, "agent", "agent"],
-    [{runMode: "bogus"}, "agent", null],
+    [{agentMode: "false", autoConsensus: "false"}, "agent", null],
+    [{runMode: "compare"}, "agent", null],
+    [{runMode: "compare", ...RESET}, "compare", "compare"],
+    [{runMode: "bogus", ...RESET}, "agent", "bogus"],
   ])("reads %o as %s (stored: %s)", (storage, expected, stored) => {
     const {window, dom} = boot(storage);
     expect(window.App.runMode.preference()).toBe(expected);
     expect(window.localStorage.getItem("runMode")).toBe(stored);
-    if (!storage.runMode || storage.runMode === "bogus") {
-      expect(window.localStorage.getItem("agentMode")).toBeNull();
-      expect(window.localStorage.getItem("autoConsensus")).toBeNull();
-    }
-    dom.window.close();
-  });
-
-  // Before 2026-10-02 every first visit stored "consensus" unasked. It moves
-  // to the new default once; a later choice of Consensus is kept.
-  it.each([
-    [{runMode: "consensus"}, "agent"],
-    [{runMode: "compare"}, "compare"],
-    [{runMode: "consensus", runModeDefault: "agent-2026-10-02"}, "consensus"],
-  ])("moves an unchosen stored mode %o to the default once (%s)", (storage, expected) => {
-    const {window, dom} = boot(storage);
-    expect(window.App.runMode.preference()).toBe(expected);
-    expect(window.localStorage.getItem("runModeDefault")).toBe("agent-2026-10-02");
+    expect(window.localStorage.getItem("agentMode")).toBeNull();
+    expect(window.localStorage.getItem("consensio.settingsReset")).toBe("2026-10-12");
     window.App.runMode.set("consensus");
     expect(window.App.runMode.preference()).toBe("consensus");
     expect(window.localStorage.getItem("runMode")).toBe("consensus");
@@ -50,7 +37,7 @@ describe("run mode", () => {
   });
 
   it("changes only to known modes, announces changes once and tracks the source", () => {
-    const {window, dom} = boot({runMode: "consensus", runModeDefault: "agent-2026-10-02"});
+    const {window, dom} = boot({runMode: "consensus", "consensio.settingsReset": "2026-10-12"});
     const heard = vi.fn();
     window.addEventListener("consensio:run-mode-change", event => heard(event.detail));
     expect(window.App.runMode.set("nonsense")).toBe(false);
@@ -89,7 +76,7 @@ describe("run mode", () => {
   });
 
   it("follows a change made in another tab or arriving from the account", () => {
-    const {window, dom} = boot({runMode: "consensus", runModeDefault: "agent-2026-10-02"});
+    const {window, dom} = boot({runMode: "consensus", "consensio.settingsReset": "2026-10-12"});
     const heard = vi.fn();
     window.addEventListener("consensio:run-mode-change", event => heard(event.detail));
     const tab = (key, newValue) => {

@@ -134,37 +134,13 @@
   // run_mode ---------------------------------------------------------------
   const RUN_MODE_KEY = "runMode";
   const RUN_MODES = ["compare", "consensus", "agent"];
-  // Until 2026-10-02 every first visit stored "consensus" without anyone
-  // choosing it. A stored mode without this mark is from that time; its
-  // "consensus" is the default (Agent) now, "compare" was always chosen.
-  const RUN_MODE_MARK_KEY = "runModeDefault";
-  const RUN_MODE_MARK = "agent-2026-10-02";
-  // Before 2026-10 "agentMode" held the choice ("false" = Compare) and
-  // "autoConsensus" mirrored it.
-  const RUN_MODE_LEGACY_KEYS = ["agentMode", "autoConsensus"];
 
   const runMode = keyed([RUN_MODE_KEY], {
     read() {
       const stored = readKey(RUN_MODE_KEY);
-      if (RUN_MODES.includes(stored)) {
-        if (readKey(RUN_MODE_MARK_KEY) === RUN_MODE_MARK) return stored;
-        writeKey(RUN_MODE_MARK_KEY, RUN_MODE_MARK);
-        if (stored !== "consensus") return stored;
-        writeKey(RUN_MODE_KEY, null);
-        return undefined;
-      }
-      if (stored !== null) writeKey(RUN_MODE_KEY, null);
-      const legacy = readKey("agentMode");
-      RUN_MODE_LEGACY_KEYS.forEach(key => { if (readKey(key) !== null) writeKey(key, null); });
-      if (legacy !== "false") return undefined;
-      writeKey(RUN_MODE_KEY, "compare");
-      writeKey(RUN_MODE_MARK_KEY, RUN_MODE_MARK);
-      return "compare";
+      return RUN_MODES.includes(stored) ? stored : undefined;
     },
-    write(value) {
-      writeKey(RUN_MODE_KEY, value);
-      writeKey(RUN_MODE_MARK_KEY, RUN_MODE_MARK);
-    },
+    write(value) { writeKey(RUN_MODE_KEY, value); },
     normalize: value => (RUN_MODES.includes(value) ? value : undefined),
   });
 
@@ -236,6 +212,7 @@
   const FAMILY_CHECK_PREFIX = "pref_check_";
   const FAMILY_SELECT_PREFIX = "pref_select_";
   const CONSENSUS_MODEL_KEY = "pref_select_consensus";
+  const CONSENSUS_PRESET_KEY = "pref_consensus_preset";
 
   function familyKey(key) {
     if (key === CONSENSUS_MODEL_KEY) return null;
@@ -385,7 +362,7 @@
     check_sources: booleanSetting("checkSources"),
     compare_models: compareModels,
     consensus_model: patternSetting(CONSENSUS_MODEL_KEY, MODEL_ID),
-    consensus_preset: patternSetting("pref_consensus_preset", PRESET_ID),
+    consensus_preset: patternSetting(CONSENSUS_PRESET_KEY, PRESET_ID),
     system_prompt: systemPrompt,
     agreement_display: agreementDisplay,
     consensus_highlights: consensusHighlights,
@@ -406,6 +383,27 @@
   let retryTimer = null;
   let retryAttempt = 0;
   let inflight = null;
+
+  // ---- One-time reset (2026-10-12) ------------------------------------------
+  // With the move to account settings every browser starts once from the
+  // defaults for the mode (Agent) and the models (the app's default preset,
+  // Daily): stored Compare choices and lineups from earlier versions held
+  // retired model IDs and would otherwise be uploaded to the account. Choices
+  // made after the reset stay. The keys listed here are the run mode, its
+  // earlier forms and marks, and the Compare/Consensus model choice.
+  const RESET_KEY = "consensio.settingsReset";
+  const RESET_MARK = "2026-10-12";
+  const RESET_KEYS = [RUN_MODE_KEY, "runModeDefault", "agentMode", "autoConsensus",
+    CONSENSUS_MODEL_KEY, CONSENSUS_PRESET_KEY];
+
+  function resetOnce() {
+    if (readKey(RESET_KEY) === RESET_MARK) return;
+    storedKeys().forEach(key => {
+      if (RESET_KEYS.includes(key) || familyKey(key)) writeKey(key, null);
+    });
+    writeKey(RESET_KEY, RESET_MARK);
+  }
+  resetOnce();
 
   // ---- What this page last saw, and change events --------------------------
   // Reading every setting once here also runs the legacy migrations before

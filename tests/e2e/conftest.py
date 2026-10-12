@@ -146,7 +146,7 @@ def context(browser):
     ctx.add_init_script(
         "if (!sessionStorage.getItem('e2eRunModeSeeded')) {"
         " localStorage.setItem('runMode', 'consensus');"
-        " localStorage.setItem('runModeDefault', 'agent-2026-10-02');"
+        " localStorage.setItem('consensio.settingsReset', '2026-10-12');"
         " sessionStorage.setItem('e2eRunModeSeeded', '1'); }"
     )
     # Analytics im Test nicht laden (Netz-Rauschen + Konsolen-Warnungen).

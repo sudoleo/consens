@@ -80,7 +80,7 @@ class Journey:
         self.context.add_init_script(
             "if (!sessionStorage.getItem('journeyRunModeSeeded')) {"
             " localStorage.setItem('runMode', 'consensus');"
-            " localStorage.setItem('runModeDefault', 'agent-2026-10-02');"
+            " localStorage.setItem('consensio.settingsReset', '2026-10-12');"
             " sessionStorage.setItem('journeyRunModeSeeded', '1'); }")
         for name, source in [('app', FIREBASE_APP_STUB), ('auth', FIREBASE_AUTH_STUB)]:
             self.context.route(f'https://www.gstatic.com/firebasejs/9.22.0/firebase-{name}.js',
