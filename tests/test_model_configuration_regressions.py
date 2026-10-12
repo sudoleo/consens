@@ -571,10 +571,11 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_saved_preferences_are_not_overwritten_when_present(self):
         # applyTierDefaultModels lebt seit dem index.html-Refactor in
         # static/js/model-picker.js. Der Guard (gespeicherte Auswahl wird nicht
-        # von Tier-Defaults ueberschrieben) muss dort erhalten bleiben.
+        # von Tier-Defaults ueberschrieben) muss dort erhalten bleiben; die
+        # Auswahl ist seit 2026-10-12 die Kontoeinstellung compare_models.
         module = (ROOT / "static" / "js" / "model-picker.js").read_text(encoding="utf-8")
-        self.assertIn('localStorage.getItem("pref_select_" + pref.key) !== null', module)
-        self.assertIn("return;", module)
+        apply_defaults = module.split("function applyTierDefaultModels", 1)[1].split("\n  }\n", 1)[0]
+        self.assertIn("if (storedFamily(pref).model !== undefined) return;", apply_defaults)
 
     def test_watch_models_are_separate_for_free_and_pro(self):
         normalized = normalize_models_document({

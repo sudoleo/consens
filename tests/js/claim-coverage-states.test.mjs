@@ -24,7 +24,7 @@ function data(claims, differences = []) {
 
 function boot(storedCounts = null) {
   const { window, document } = loadScripts([
-    "static/js/consensus-anchor.js",
+    "static/js/user-settings.js", "static/js/consensus-anchor.js",
     "static/js/consensus-insights.js"
   ], {
     before(window) {

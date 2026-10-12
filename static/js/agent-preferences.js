@@ -1,34 +1,21 @@
 // Agent · Beta settings: how deep the comparison models answer, when the
-// answer starts (quorum) and how freely Agent picks its models (autonomy). Saved in this browser and sent with every Agent
-// message (agent_preferences); a running turn keeps the values it started with.
+// answer starts (quorum) and how freely Agent picks its models (autonomy). An
+// account setting ("agent_preferences", user-settings.js) sent with every
+// Agent message; a running turn keeps the values it started with.
 (function () {
   "use strict";
   const App = window.App = window.App || {};
-  // v2 stores only what the user chose, so a later change of a default
-  // reaches everyone who never touched that setting. v1 stored every field
-  // whenever one changed; its values equal to the old defaults are dropped.
-  const KEY = "consensio.agentPreferences.v2";
-  const LEGACY_KEY = "consensio.agentPreferences.v1";
-  const LEGACY_DEFAULTS = { depth: "auto", quorum: "balanced", autonomy: "guided" };
+  const settings = App.userSettings;
   // quorum "all" since 2026-10-07: a model that answers after the answer has
   // started no longer reaches its check.
   const DEFAULTS = Object.freeze({ depth: "auto", quorum: "all", autonomy: "guided" });
   const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"], autonomy: ["guided", "free"] };
   const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect", autonomy: "agentAutonomySelect" };
 
+  // Only what the user chose is stored, so a later change of a default
+  // reaches everyone who never touched that setting.
   function stored() {
-    try {
-      const current = localStorage.getItem(KEY);
-      if (current !== null) return JSON.parse(current) || {};
-      const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || "{}") || {};
-      const chosen = {};
-      for (const field of Object.keys(CHOICES)) {
-        if (CHOICES[field].includes(legacy[field]) && legacy[field] !== LEGACY_DEFAULTS[field]) chosen[field] = legacy[field];
-      }
-      localStorage.setItem(KEY, JSON.stringify(chosen));
-      localStorage.removeItem(LEGACY_KEY);
-      return chosen;
-    } catch (_) { return {}; }
+    return settings.get("agent_preferences") || {};
   }
 
   function get() {
@@ -42,8 +29,7 @@
 
   function set(field, choice) {
     if (!CHOICES[field]?.includes(choice)) return;
-    const value = { ...stored(), [field]: choice };
-    try { localStorage.setItem(KEY, JSON.stringify(value)); } catch (_) { /* Session keeps the control value. */ }
+    settings.set("agent_preferences", { ...stored(), [field]: choice });
   }
 
   // The tab only exists for accounts that can use Agent · Beta.
@@ -61,6 +47,8 @@
     for (const [field, id] of Object.entries(CONTROLS)) {
       document.getElementById(id)?.addEventListener("change", event => set(field, event.target.value));
     }
+    // The account's values arrived (server, another tab, sign-out).
+    settings.onChange("agent_preferences", detail => { if (detail.source !== "local") sync(); });
     sync();
   }
 

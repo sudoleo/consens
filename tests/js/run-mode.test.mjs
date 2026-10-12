@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // run-mode.js is the single source of truth for Compare / Consensus / Agent.
+// The value is the account setting "run_mode" (user-settings.js, whose own
+// tests cover storage, migration and sync).
 function boot(storage = {}) {
-  return loadScripts(["static/js/run-mode.js"], {
+  return loadScripts(["static/js/user-settings.js", "static/js/run-mode.js"], {
     before(window) {
       Object.entries(storage).forEach(([key, value]) => window.localStorage.setItem(key, value));
       window.App = { trackAppEvent: vi.fn() };
@@ -12,16 +14,18 @@ function boot(storage = {}) {
 }
 
 describe("run mode", () => {
+  // An unchosen mode is not stored: a later change of the default reaches
+  // everyone who never chose. Older stored values migrate once.
   it.each([
-    [{}, "agent"],
-    [{agentMode: "true", autoConsensus: "true"}, "agent"],
-    [{agentMode: "false", autoConsensus: "false"}, "compare"],
-    [{runMode: "agent", agentMode: "false"}, "agent"],
-    [{runMode: "bogus"}, "agent"],
-  ])("migrates %o once to %s and removes the legacy keys", (storage, expected) => {
+    [{}, "agent", null],
+    [{agentMode: "true", autoConsensus: "true"}, "agent", null],
+    [{agentMode: "false", autoConsensus: "false"}, "compare", "compare"],
+    [{runMode: "agent", agentMode: "false"}, "agent", "agent"],
+    [{runMode: "bogus"}, "agent", null],
+  ])("reads %o as %s (stored: %s)", (storage, expected, stored) => {
     const {window, dom} = boot(storage);
     expect(window.App.runMode.preference()).toBe(expected);
-    expect(window.localStorage.getItem("runMode")).toBe(expected);
+    expect(window.localStorage.getItem("runMode")).toBe(stored);
     if (!storage.runMode || storage.runMode === "bogus") {
       expect(window.localStorage.getItem("agentMode")).toBeNull();
       expect(window.localStorage.getItem("autoConsensus")).toBeNull();
@@ -41,6 +45,7 @@ describe("run mode", () => {
     expect(window.localStorage.getItem("runModeDefault")).toBe("agent-2026-10-02");
     window.App.runMode.set("consensus");
     expect(window.App.runMode.preference()).toBe("consensus");
+    expect(window.localStorage.getItem("runMode")).toBe("consensus");
     dom.window.close();
   });
 
@@ -83,15 +88,23 @@ describe("run mode", () => {
     dom.window.close();
   });
 
-  it("follows a change made in another tab", () => {
+  it("follows a change made in another tab or arriving from the account", () => {
     const {window, dom} = boot({runMode: "consensus", runModeDefault: "agent-2026-10-02"});
     const heard = vi.fn();
     window.addEventListener("consensio:run-mode-change", event => heard(event.detail));
-    window.dispatchEvent(new window.StorageEvent("storage", {key: "runMode", oldValue: "consensus", newValue: "compare"}));
-    window.dispatchEvent(new window.StorageEvent("storage", {key: "runMode", newValue: "bogus"}));
-    window.dispatchEvent(new window.StorageEvent("storage", {key: "theme", newValue: "dark"}));
+    const tab = (key, newValue) => {
+      if (newValue === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, newValue);
+      window.dispatchEvent(new window.StorageEvent("storage", {key, newValue, storageArea: window.localStorage}));
+    };
+    tab("runMode", "compare");
+    tab("theme", "dark");
     expect(heard).toHaveBeenCalledOnce();
-    expect(heard).toHaveBeenCalledWith({mode: "compare", previous: "consensus"});
+    expect(heard).toHaveBeenLastCalledWith({mode: "compare", previous: "consensus"});
+    // Signing out drops the account's choice: back to the default.
+    tab("runMode", null);
+    expect(heard).toHaveBeenLastCalledWith({mode: "agent", previous: "compare"});
+    expect(heard).toHaveBeenCalledTimes(2);
     dom.window.close();
   });
 });

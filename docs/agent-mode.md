@@ -129,10 +129,11 @@ Vergleichsgrundlage eingeholt.
 
 ### Tiefe, Parallelität und Quorum
 
-Einstellungen → **Agent · Beta** (nur für Konten mit Agent-Zugang, gespeichert im
-Browser unter `consensio.agentPreferences.v2`, nur ausdrücklich gewählte Werte;
-v1 speicherte bei jeder Änderung alle Felder, beim Umzug fallen deren alte
-Standardwerte weg) legt drei Werte fest, die jede
+Einstellungen → **Agent · Beta** (nur für Konten mit Agent-Zugang, gespeichert
+seit 2026-10-12 als Kontoeinstellung `agent_preferences` am Konto, lokale Kopie
+unter `consensio.agentPreferences.v2`, nur ausdrücklich gewählte Werte; v1
+speicherte bei jeder Änderung alle Felder, beim Umzug fallen deren alte
+Standardwerte weg; siehe codebase-map §4 „Kontoeinstellungen“) legt drei Werte fest, die jede
 Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
 einfriert (Teil der Request-Identität bei Recovery): **Answer depth**
 (`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der

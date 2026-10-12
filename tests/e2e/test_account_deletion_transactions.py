@@ -18,7 +18,7 @@ def seed(db, uid):
     user = db.collection("users").document(uid)
     user.set({"email": uid + "@example.invalid"})
     refs = [user]
-    for collection in ("bookmarks", "counters", "memory", "usage_days", "usage_runs", "llm_calls", "google_connections",
+    for collection in ("bookmarks", "counters", "memory", "settings", "usage_days", "usage_runs", "llm_calls", "google_connections",
                        "google_oauth_states", "google_write_intents", "watch_state", "watch_uniques", "api_consensus_idempotency"):
         ref = user.collection(collection).document(uuid.uuid4().hex)
         ref.set({"fixture": uid})

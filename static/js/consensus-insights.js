@@ -108,8 +108,9 @@
 
           // Display filters never change the analysis or saved answer data.
           // Settings control both sentence highlights and source-reference verdicts.
-          const MARKER_VISIBILITY_STORAGE_KEY = "consensio.showConsensusMarkers.v1";
-          const MARKER_FILTER_KEY = "consensio.consensusHighlightMode.v1";
+          // Both choices are account settings (user-settings.js):
+          // "consensus_highlights" (none or a filter below) and "claim_counts".
+          const settings = window.App.userSettings;
           const MARKER_FILTERS = {
             all: "Highlight all model and source checks. Agreement is not proof of correctness.",
             contradictions: "Highlight model contradictions, including minor details, and sources that contradict a claim.",
@@ -124,30 +125,26 @@
           let highlightMode = "all";
           let markersVisible = true;
           const MARKERS_HIDDEN_CLASS = "consensus-markers-hidden";
-          const CLAIM_COUNTS_KEY = "consensio.showClaimCounts.v1";
           const claimCountsToggle = $("claimCountsSwitch");
 
           function restoreClaimCounts() {
-            let show = false;
-            try { show = localStorage.getItem(CLAIM_COUNTS_KEY) === "true"; } catch (_) {}
+            const show = settings.get("claim_counts") === true;
             document.body.classList.toggle("claim-counts-visible", show);
             if (claimCountsToggle) claimCountsToggle.checked = show;
             applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
           }
 
           claimCountsToggle?.addEventListener("change", function () {
-            try { localStorage.setItem(CLAIM_COUNTS_KEY, String(this.checked)); } catch (_) {}
+            settings.set("claim_counts", this.checked);
             document.body.classList.toggle("claim-counts-visible", this.checked);
             applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
           });
           window.addEventListener("pageshow", restoreClaimCounts);
 
           function readMarkerPreferences() {
-            try {
-              markersVisible = window.localStorage.getItem(MARKER_VISIBILITY_STORAGE_KEY) !== "false";
-              const stored = window.localStorage.getItem(MARKER_FILTER_KEY);
-              highlightMode = Object.hasOwn(MARKER_FILTERS, stored) ? stored : "all";
-            } catch (_) { /* Keep the working session preference if storage is unavailable. */ }
+            const stored = settings.get("consensus_highlights");
+            markersVisible = stored !== "none";
+            highlightMode = Object.hasOwn(MARKER_FILTERS, stored) ? stored : "all";
             return markersVisible;
           }
 
@@ -2682,13 +2679,17 @@
           highlightSelect?.addEventListener("change", function () {
             const show = this.value !== "none";
             if (show) highlightMode = Object.hasOwn(MARKER_FILTERS, this.value) ? this.value : "all";
-            try {
-              localStorage.setItem(MARKER_FILTER_KEY, highlightMode);
-              localStorage.setItem(MARKER_VISIBILITY_STORAGE_KEY, String(show));
-            } catch (_) { /* The selection still applies during this session. */ }
+            settings.set("consensus_highlights", show ? highlightMode : "none");
             applyConsensusMarkerVisibility(show, true);
           });
           window.addEventListener("pageshow", restoreConsensusMarkerVisibility);
+          // The account's choice arrived (server, another tab, sign-out).
+          settings.onChange("consensus_highlights", function (detail) {
+            if (detail.source !== "local") restoreConsensusMarkerVisibility();
+          });
+          settings.onChange("claim_counts", function (detail) {
+            if (detail.source !== "local") restoreClaimCounts();
+          });
 
           window.renderConsensusInsights = renderConsensusInsights;
           window.renderStoredConsensusClaims = renderStoredConsensusClaims;

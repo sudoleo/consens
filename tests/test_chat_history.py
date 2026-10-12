@@ -56,7 +56,8 @@ class FakeDocumentRef:
     def collection(self, name):
         return FakeCollectionRef(self.database, (*self.path, name))
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **_options):
+        # ``timeout``/``retry`` as the real client takes them; no effect here.
         if transaction is not None:
             return transaction.get(self)
         self.database.read_log.append(self.path)

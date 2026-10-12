@@ -33,7 +33,7 @@ describe("interactive demo claim coverage", () => {
   it("marks every checkable consensus passage with the current coverage contract", () => {
     const data = readDemoData();
     const { window, document } = loadScripts([
-      "static/js/consensus-anchor.js",
+      "static/js/user-settings.js", "static/js/consensus-anchor.js",
       "static/js/consensus-insights.js"
     ], {
       body: `

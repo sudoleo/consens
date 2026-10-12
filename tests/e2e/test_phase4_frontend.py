@@ -147,6 +147,31 @@ def test_phase4_server_reuses_its_child_and_rejects_an_unowned_listener(phase4_s
         next(foreign_fixture)
 
 
+def _route_account_settings(page, settings=None, revision=0):
+    """/api/my/settings for one page, held in memory.
+
+    The account starts without saved settings (revision 0) and keeps what the
+    page sends, like the real route; no test writes the shared emulator.
+    Returns the state for assertions.
+    """
+    state = {"settings": dict(settings or {}), "revision": revision, "patches": []}
+
+    def handle(route):
+        if route.request.method == "PATCH":
+            changes = route.request.post_data_json["settings"]
+            state["patches"].append(changes)
+            for name, value in changes.items():
+                if value is None:
+                    state["settings"].pop(name, None)
+                else:
+                    state["settings"][name] = value
+            state["revision"] += 1
+        _json(route, {"settings": state["settings"], "revision": state["revision"]})
+
+    page.route("**/api/my/settings", handle)
+    return state
+
+
 def _real_firebase_page(
     browser, app_server, initial_uid="account-a", path="/app", init_script=None, *, has_touch=False
 ):
@@ -189,6 +214,7 @@ def _real_firebase_page(
         lambda route: _json(route, {"bookmarks": [], "next_cursor": None}),
     )
     page.route("**/auth/session", lambda route: _json(route, {"status": "ok"}))
+    _route_account_settings(page)
     page.goto(app_server + path, wait_until="domcontentloaded")
     page.wait_for_function(
         "() => window.__consensioAuthState?.known === true"

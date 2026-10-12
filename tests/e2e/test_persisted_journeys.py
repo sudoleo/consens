@@ -67,9 +67,11 @@ def journey_server():
 
 
 class Journey:
-    def __init__(self, browser, server):
+    # uid: a second device of an existing journey account (close it with
+    # context.close(); the account's own journey cleans up).
+    def __init__(self, browser, server, uid=None):
         self.base, self.secret = server
-        self.uid = 'journey-' + uuid.uuid4().hex
+        self.uid = uid or 'journey-' + uuid.uuid4().hex
         self.context = browser.new_context(viewport={'width': 1440, 'height': 950})
         self.context.add_init_script('window.__E2E_INITIAL_UID = sessionStorage.getItem("journey_uid") || ' + json.dumps(self.uid))
         # Agent is the default since 2026-10-02; these journeys start from a
@@ -390,6 +392,34 @@ def test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch(journe
         assert other.request('POST', '/usage', {'id_token': 'token-' + other.uid}).json()['token_budget']['used'] == control_budget
     finally:
         other.close()
+
+
+def test_settings_follow_the_account_to_another_device(journey, browser, journey_server):
+    j = journey
+    settings = lambda: j.control('state')['collections']['settings']['app']['data']['values']
+    j.open()
+    # A new account receives this browser's choices once (journeys start in Consensus).
+    j.page.wait_for_function('() => App.userSettings.status().loaded && !App.userSettings.status().pending.length')
+    assert settings()['run_mode'] == 'consensus'
+    # A change on this device reaches the account.
+    j.page.locator('#attachTrigger').click()
+    j.page.locator('#runModeControl [data-value="compare"]').click()
+    j.page.evaluate('() => App.userSettings.flush()')
+    assert settings()['run_mode'] == 'compare'
+    # Another device of the same account starts from it, over its own stored mode.
+    device = Journey(browser, journey_server, uid=j.uid)
+    try:
+        device.open()
+        assert device.page.evaluate("localStorage.getItem('runMode')") in ('consensus', 'compare')
+        device.page.wait_for_function('() => App.runMode.preference() === "compare"')
+        expect(device.page.locator('#runModeSelect')).to_have_value('compare')
+        # Signing out takes the account's settings out of this browser.
+        device.page.evaluate('() => window.__switchE2EUser(null)')
+        device.page.wait_for_function("() => localStorage.getItem('runMode') === null")
+        assert device.page.evaluate('() => App.runMode.preference()') == 'agent'
+        assert settings()['run_mode'] == 'compare'
+    finally:
+        device.context.close()
 
 
 def test_persistence_quota_failure_keeps_answer_visible_and_never_claims_saved(journey):

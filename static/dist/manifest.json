@@ -1,5 +1,5 @@
 {
-  "sources": "f1a690cd0657",
+  "sources": "e6207a6dc694",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -110,6 +110,7 @@
     "static/js/token-budget.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
+    "static/js/user-settings.js",
     "static/js/user-tier.js",
     "static/js/watch-dashboard.js",
     "static/js/watch-state.js",
@@ -187,7 +188,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.10871dfaa201.js",
+      "src": "/static/dist/head.f8af611deec6.js",
       "module": false,
       "defer": false
     },
@@ -199,7 +200,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.f24515cefcec.js",
+      "src": "/static/dist/firebase.8da30fa910bf.js",
       "module": true,
       "defer": false
     },
@@ -211,7 +212,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.243f3d2427ce.js",
+      "src": "/static/dist/app.68f41dd69619.js",
       "module": false,
       "defer": true
     }
@@ -222,14 +223,14 @@
   "previous_assets": [
     "app.70ec3c910f04.css",
     "app.b93e6689267a.css",
-    "app.6317aac41c0d.js",
-    "app.9709cf0dcc77.js",
+    "app.43b487b67ab9.js",
+    "app.243f3d2427ce.js",
     "auth.5e487d1e2570.js",
     "demo.3165094e7e81.js",
     "demo.0ae29ba9ea95.js",
+    "firebase.f24515cefcec.js",
     "firebase.29dc3af5a11f.js",
-    "firebase.cbd71aeef6bd.js",
-    "head.c63fe502be8f.js",
-    "head.e04aa138352e.js"
+    "head.f6b06d5e9a59.js",
+    "head.b140635d22f8.js"
   ]
 }

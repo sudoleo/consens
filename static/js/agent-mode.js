@@ -17,22 +17,18 @@
 // =====================================================================
 
 (function () {
-  let checkSources = true;
-  try { checkSources = localStorage.getItem("checkSources") !== "false"; } catch (_) {}
-  // Preserve the preference, but direct comparisons have no judges.
+  const settings = window.App.userSettings;
+  // "Check sources" is an account setting, on unless switched off. Preserve
+  // the preference, but direct comparisons have no judges.
+  const checkSources = () => settings.get("check_sources") !== false;
   const isBeta = () => window.App.agentChat?.isSelected?.() === true;
   const runMode = () => window.App.runMode.effective();
   // The consensus pipeline runs unless the next message is a Compare.
   const pipelineEnabled = () => window.App.runMode.pipeline();
-  window.App.isSourceCheckEnabled = () => pipelineEnabled() && checkSources;
+  window.App.isSourceCheckEnabled = () => pipelineEnabled() && checkSources();
 
   function setSourceCheckEnabled(enabled) {
-    if (!pipelineEnabled()) {
-      renderComposerMode();
-      return;
-    }
-    checkSources = !!enabled;
-    try { localStorage.setItem("checkSources", String(checkSources)); } catch (_) {}
+    if (pipelineEnabled()) settings.set("check_sources", !!enabled);
     renderComposerMode();
   }
 
@@ -621,6 +617,8 @@
   document.getElementById("sourceCheckSwitch")?.addEventListener("change", function () {
     setSourceCheckEnabled(this.checked);
   });
+  // The account's value arrived (server, another tab, sign-out).
+  settings.onChange("check_sources", detail => { if (detail.source !== "local") renderComposerMode(); });
   // Reuse the original controls, including their plan checks and file picker.
   document.getElementById("composerReasoningToggle")?.addEventListener("click", function (event) {
     if (isBeta()) {

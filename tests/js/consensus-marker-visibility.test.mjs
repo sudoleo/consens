@@ -7,7 +7,7 @@ const CLAIM = "The launch date is September 3.";
 
 function boot(stored = null, mode = null, denyStorage = false) {
   return loadScripts([
-    "static/js/consensus-anchor.js",
+    "static/js/user-settings.js", "static/js/consensus-anchor.js",
     "static/js/consensus-insights.js"
   ], {
     body: `

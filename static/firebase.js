@@ -113,6 +113,8 @@ async function performLogout() {
     // then release prepared-but-unconsumed usage reservations with the run's
     // bound token; clearAll after signOut removes the remaining projections.
     window.App?.runRegistry?.cancelAll?.("logout");
+    // Settings changed in the last moment still need the account's token.
+    await window.App.userSettings.flush({ timeoutMs: 3000 });
     await signOut(auth);
     setActiveAuthIdentity(null);
     resetLoadedRunAfterLogout();
@@ -432,6 +434,7 @@ onIdTokenChanged(auth, async (user) => {
       resetLoadedRunAfterLogout();
       clearAuthenticatedUiState();
       if (previousAuthUid) clearLocalProviderKeys();
+      window.App.userSettings.stop();
       fetch("/auth/session", {
         method: "DELETE",
         credentials: "same-origin",
@@ -554,6 +557,9 @@ onIdTokenChanged(auth, async (user) => {
     const sessionKey = { user, key: `${user.uid}:${generation}` };
     if (initializedAuthSession?.user === user && initializedAuthSession.key === sessionKey.key) return;
 
+    // The account's settings (run mode, models, display): loaded beside the
+    // status check, applied by the modules as they arrive.
+    window.App.userSettings.start({ uid: user.uid, getToken: () => user.getIdToken() });
     const statusLoaded = await checkUserStatusOnLoad(user, token, generation);
     if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
@@ -748,6 +754,7 @@ onIdTokenChanged(auth, async (user) => {
         resetLoadedRunAfterLogout();
         clearAuthenticatedUiState();
         if (previousAuthUid) clearLocalProviderKeys();
+        window.App.userSettings.stop();
         fetch("/auth/session", {
           method: "DELETE",
           credentials: "same-origin",

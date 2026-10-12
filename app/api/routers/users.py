@@ -26,7 +26,7 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.account_deletion import FirestoreAccountDeletion
-from app.services import agent_memory, memory_edit, persistence_guard, user_memory
+from app.services import agent_memory, memory_edit, persistence_guard, user_memory, user_settings
 from app.services.user_memory import FirestoreUserMemoryRepository
 
 router = APIRouter()
@@ -36,6 +36,7 @@ user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
 memory_edit_repository = memory_edit.FirestoreMemoryEditRepository(db_firestore)
 memory_edit_service = memory_edit.MemoryEditService(memory_edit_repository)
 agent_memory_repository = agent_memory.FirestoreAgentMemoryRepository(db_firestore)
+user_settings_repository = user_settings.FirestoreUserSettingsRepository(db_firestore)
 
 
 class UsageRequest(BaseModel):
@@ -233,7 +234,7 @@ class UserMemoryUndoRequest(BaseModel):
     revision_id: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
-def _memory_uid(request: Request) -> str:
+def _account_uid(request: Request) -> str:
     token = extract_id_token(request, {})
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -280,7 +281,7 @@ def _memory_response(profile: dict, *, tier, revision: int, items: Optional[dict
 @router.get("/api/my/memory")
 @limiter.limit("30/minute")
 def get_user_memory(request: Request):
-    uid = _memory_uid(request)
+    uid = _account_uid(request)
     tier = _memory_tier(uid)
     try:
         profile, revision = user_memory_repository.get_with_revision(
@@ -296,7 +297,7 @@ def get_user_memory(request: Request):
 @router.put("/api/my/memory")
 @limiter.limit("20/minute")
 def put_user_memory(request: Request, payload: UserMemoryRequest):
-    uid = _memory_uid(request)
+    uid = _account_uid(request)
     if payload.expected_revision is None:
         # Transition rule for a tab still running an older app version: it
         # cannot prove which Memory it edited, so it must reload first. A plain
@@ -393,7 +394,7 @@ def _items_write(uid: str, operation):
 @limiter.limit("30/minute")
 def change_memory_items(request: Request, payload: MemoryItemsRequest):
     """Add, edit or delete saved memories by hand. Same rules as Agent, minus evidence."""
-    uid = _memory_uid(request)
+    uid = _account_uid(request)
 
     def operation():
         changes = [agent_memory.normalize_change(change.model_dump(), origin="user") for change in payload.changes]
@@ -408,7 +409,7 @@ def change_memory_items(request: Request, payload: MemoryItemsRequest):
 @limiter.limit("10/minute")
 def clear_memory_items(request: Request):
     """Delete every saved memory and its Undo history."""
-    uid = _memory_uid(request)
+    uid = _account_uid(request)
     return _items_write(uid, lambda: {"result": "cleared", "cleared_revision": agent_memory_repository.clear(uid)})
 
 
@@ -416,7 +417,7 @@ def clear_memory_items(request: Request):
 @limiter.limit("20/minute")
 def undo_memory_change(request: Request, change_id: str):
     """Undo one change Agent (or the user) made, if nothing changed it since."""
-    uid = _memory_uid(request)
+    uid = _account_uid(request)
     if not agent_memory.CHANGE_ID_RE.fullmatch(change_id):
         raise HTTPException(status_code=404, detail={"error_code": "not_found",
                                                      "message": "This memory change is no longer available."})
@@ -433,7 +434,7 @@ def _raise_memory_edit_error(exc: memory_edit.MemoryEditError):
 @router.post("/api/my/memory/edit")
 @limiter.limit("10/minute")
 def edit_user_memory(request: Request, payload: UserMemoryEditRequest):
-    uid = _memory_uid(request)
+    uid = _account_uid(request)
     tier = _memory_tier(uid)
     try:
         result = memory_edit_service.edit(
@@ -458,7 +459,7 @@ def edit_user_memory(request: Request, payload: UserMemoryEditRequest):
 @router.post("/api/my/memory/undo")
 @limiter.limit("10/minute")
 def undo_user_memory(request: Request, payload: UserMemoryUndoRequest):
-    uid = _memory_uid(request)
+    uid = _account_uid(request)
     tier = _memory_tier(uid)
     try:
         return memory_edit_repository.undo(
@@ -470,6 +471,47 @@ def undo_user_memory(request: Request, payload: UserMemoryUndoRequest):
         raise HTTPException(status_code=403, detail="This account is being deleted.") from None
     except memory_edit.MemoryEditError as exc:
         _raise_memory_edit_error(exc)
+
+
+class UserSettingsPatchRequest(BaseModel):
+    """Only the named settings change; ``null`` resets one to the app default."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    settings: user_settings.UserSettings
+
+
+def _settings_response(values: dict, revision: int) -> dict:
+    return {"settings": values, "revision": int(revision)}
+
+
+@router.get("/api/my/settings")
+@limiter.limit("30/minute")
+def get_user_settings(request: Request):
+    uid = _account_uid(request)
+    try:
+        values, revision = user_settings_repository.get(uid)
+    except Exception as exc:
+        logging.error("user settings read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Settings are temporarily unavailable.") from None
+    return _settings_response(values, revision)
+
+
+@router.patch("/api/my/settings")
+@limiter.limit("60/minute")
+def patch_user_settings(request: Request, payload: UserSettingsPatchRequest):
+    uid = _account_uid(request)
+    changes = user_settings.changes_from(payload.settings)
+    if not changes:
+        raise HTTPException(status_code=422, detail="Name at least one setting to change.")
+    try:
+        values, revision = user_settings_repository.update(uid, changes)
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=403, detail="This account is being deleted.") from None
+    except Exception as exc:
+        logging.error("user settings write failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Settings could not be saved.") from None
+    return _settings_response(values, revision)
 
 
 @router.post("/delete_account")

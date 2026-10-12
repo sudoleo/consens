@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 function render(agreement) {
-  const app = loadScripts(["static/js/consensus-anchor.js", "static/js/consensus-insights.js"], {
+  const app = loadScripts(["static/js/user-settings.js", "static/js/consensus-anchor.js", "static/js/consensus-insights.js"], {
     body: '<div id="consensusAnswerBody"><p>A concrete statement with evidence.</p></div><div id="consensusVerdict"></div><div id="differencesCards"></div>',
     before(window) {
       window.App = { consensusBodyEl: () => window.document.getElementById("consensusAnswerBody") };

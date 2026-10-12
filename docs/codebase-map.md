@@ -298,7 +298,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Mailbox-Setup-Pfad: Der Admin-SDK-Reset-Link (`continueUrl = {PUBLIC_SITE_URL}/app?setup=1`, damit Firebases „Passwort gespeichert“-Seite zurück in den vorausgefüllten Login führt) geht in einer EIGENEN SMTP-Mail raus (`registration.send_own_setup_email` → `mailer.build_account_setup_message` „Finish setting up …“ bzw. für Konten mit mindestens einem Login `build_existing_account_message` „You already have an account“ mit Login-Knopf + optionalem Reset; „Send the link again“ vor dem ersten Login bekommt wieder die Setup-Mail, `needs_password_setup`). Grund: Firebases Vorlage sagt „Reset your password“ und ist in diesem Projekt gesperrt. Ohne SMTP oder bei Fehlern geht wie früher Firebases `PASSWORD_RESET`-Mail raus (lehnt Firebase die Continue-URL mit 400 ab, ohne sie). Die HTTP-Antwort bleibt in allen Fällen identisch. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `firebase_auth_proxy.py` | Same-Origin-Proxy für Firebases Sign-in-Helfer: `GET/HEAD/POST /__/auth/*` und `GET /__/firebase/init.json` werden transparent an `https://<FIREBASE_PROJECT_ID>.firebaseapp.com` (überschreibbar per `FIREBASE_AUTH_PROXY_UPSTREAM`) weitergereicht (Firebase „redirect best practices“, Proxy-Option). Weitergereicht werden nur Request-Zeile, Content-Negotiation-Header und der Handler-Body, nie Cookies/Authorization; zurück nur Inhalts-/Cache-Header, kein `Set-Cookie`. `CustomSecurityMiddleware` lässt auf diesen Pfaden die App-CSP weg und setzt `X-Frame-Options: SAMEORIGIN` (das `/__/auth/iframe` rahmt die App selbst). Wirksam erst, wenn `FIREBASE_AUTH_DOMAIN` den App-Host nennt (siehe §7). Ohne Projekt-ID 404, Upstream-Fehler neutral 502. |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `POST`/`DELETE /api/my/memory/items` und `POST /api/my/memory/changes/{change_id}/undo` (gespeicherte Einzel-Erinnerungen, siehe §3 „Agent-Memory“), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `POST`/`DELETE /api/my/memory/items` und `POST /api/my/memory/changes/{change_id}/undo` (gespeicherte Einzel-Erinnerungen, siehe §3 „Agent-Memory“), `GET`/`PATCH /api/my/settings` (Kontoeinstellungen, siehe §4 „Kontoeinstellungen“), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call, 6/min; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel), `/api/watch/{id}/image/{token}` (GET ohne Login, 60/min: die gespeicherte Watch-Vorschau aus `watch_images`, nur mit passendem Inhalts-Token, `Cache-Control: private` 30 Tage; siehe §4 „Watch-Bild“), `/api/watch/{id}/image` (DELETE, Owner: Bild entfernen, danach wird nie wieder eins gesucht), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
@@ -682,17 +682,22 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `setAppTitle` setzt den Standardtitel oder
   einen gekürzten, fragebezogenen Browser-Tab-Titel; `exitHeroMode` schaltet
   Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
-- **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
-  Persistenz (`restoreModelSelections`). Der Consensus-Picker hat seit 2026-07-18
+- **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle,
+  Persistenz als Kontoeinstellungen `compare_models`, `consensus_model` und
+  `consensus_preset` über `App.userSettings` (lokale Kopie unter den bisherigen
+  `pref_check_*`/`pref_select_*`/`pref_consensus_preset`-Schlüsseln;
+  `restoreModelSelections`, bei Werten vom Server/aus einem anderen Tab
+  `applyAccountModelPreferences`, das ungespeicherte Familien erst auf den
+  Seiten-Default setzt). Der Consensus-Picker hat seit 2026-07-18
   eine Preset-Ebene (Daily/Balanced/High Quality + Custom): Presets kommen aus
   `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set genau
   sechs aus den Registry-Familien gewählte Antwortmodelle plus Consensus-Engine. High Quality (interne ID
   `thorough`) ist Pro-only und zeigt
   ein Pro-Badge; eine manuelle Antwort- oder Consensus-Modellwahl wechselt zu
   Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt. Die High-Quality-Basis nutzt OpenAI GPT-5.6 Sol; gespeicherte
-  Legacy-Werte mit GPT-5.5 werden bei der Normalisierung migriert. Zustand in localStorage
-  `pref_consensus_preset` ("custom" = explizite Modellwahl, ausgeloest durch
-  jedes change-Event am Dropdown); `pref_select_consensus` bleibt die
+  Legacy-Werte mit GPT-5.5 werden bei der Normalisierung migriert. Zustand in
+  `consensus_preset` ("custom" = explizite Modellwahl, ausgeloest durch
+  jedes change-Event am Dropdown); `consensus_model` bleibt die
   Custom-Wahl. Bestandsnutzer mit gespeicherter Modellwahl migrieren zu
   "custom"; die volle Modell-Liste bleibt bewusst ohne Beschreibungen.
   **Seit 2026-07-27 ist „Custom" die ganze Aufstellung eines Laufs**, nicht
@@ -700,8 +705,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   (Uebersicht: alle Registry-Familien mit Ein-/Ausschluss-Toggle + aktuellem
   Modell, darunter die Consensus-Engine) → `provider:<key>` bzw. `engine`
   (die jeweilige Modell-Liste, mit Rueckweg). Die Auswahl feuert `change` auf
-  dem ZIEL-Select, damit `app-init.js` wie bisher `pref_select_*` speichert
-  und auf „custom" umschaltet; nur Provider-Zeilen kehren danach in die
+  dem ZIEL-Select, damit `app-init.js` über `markConsensusPresetCustom()` die
+  Wahl aller Familien speichert und auf „custom" umschaltet; nur Provider-Zeilen kehren danach in die
   Uebersicht zurueck statt das Menue zu schliessen. Vorher waren die sechs
   Antwortmodelle vom Composer aus gar nicht erreichbar (im Agent Mode sind
   die Antwortboxen verborgen).
@@ -985,7 +990,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Der Controller synchronisiert `aria-orientation` mit dem 700-px-Breakpoint
   und hält aktivierte Reiter im sichtbaren Navigationsausschnitt.
   Display → `#consensusHighlightsSelect` steuert Antwort- und Quellenmarkierungen
-  browserlokal über `consensio.consensusHighlightMode.v1`: `all`,
+  über die Kontoeinstellung `consensus_highlights` (`none` oder ein Filter;
+  lokal `consensio.showConsensusMarkers.v1` + `consensio.consensusHighlightMode.v1`): `all`,
   `contradictions` (inklusive grauer Detailwidersprüche), `concerns`
   (alle Widersprüche inklusive leichter, Split-Claims und auffällige/unklare
   Quellen — passt damit zur Zahl „Contradictions N“ im Antwort-Fuß)
@@ -1012,7 +1018,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   von Emphasis/Thin. Es gibt keine separate Legende oder Hide/Show-Aktion
   unter der Antwort mehr; die Einstellung liegt ausschließlich unter Display.
   Die Display-Einstellung `#agreementDisplaySelect` speichert ihre
-  browserlokale Wahl unter `consensio.agreementDisplay.v1` und kennt drei
+  Wahl als Kontoeinstellung `agreement_display` (lokal
+  `consensio.agreementDisplay.v1`; der Vorgänger-Schalter
+  `consensio.showAgreementScore.v1` wird beim Lesen migriert) und kennt drei
   Stufen: `full` (Standard), `summary` — die Body-Klasse
   `.agreement-score-hidden` nimmt nur die Zahl samt Messbalken, qualitative
   Einordnung und Widerspruchshinweise bleiben sichtbar — und `off`, wo
@@ -1467,9 +1475,15 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   stattfindet, gibt Text UND Anhänge unveraendert zurueck. Solange sie schwebt,
   blendet `body.thread-message-pending` den Composer-`#attachmentBar` aus,
   damit dieselben Chips nicht zweimal dastehen.
-- **`run-mode.js`** (Head-Bundle, vor `app-bootstrap.js`) — **einzige Quelle**
-  der Moduswahl Compare / Consensus / Agent; siehe „Modus: Compare, Consensus,
-  Agent". Kein DOM; `agent-mode.js` rendert den Wähler.
+- **`user-settings.js`** (Head-Bundle, erste Datei) — `App.userSettings`:
+  **einziger Besitzer der Kontoeinstellungen** (Modus, Agent-Modell und
+  -Einstellungen, Check sources, Modellauswahl, System-Prompt, drei
+  Display-Optionen): lokale Kopie, Migration alter Speicherformate und Abgleich
+  mit `/api/my/settings`; siehe §4 „Kontoeinstellungen“. Kein DOM.
+- **`run-mode.js`** (Head-Bundle, nach `user-settings.js`, vor `app-bootstrap.js`) —
+  **einzige Quelle** der Moduswahl Compare / Consensus / Agent (Kontoeinstellung
+  `run_mode`); siehe „Modus: Compare, Consensus, Agent". Kein DOM;
+  `agent-mode.js` rendert den Wähler.
 - **`agent-mode.js`** — gruppiertes Lauf-Panel (Status-Hub, Timer; die Namen
   „agent-mode" sind historisch und meinen den Consensus-Lauf, nicht Agent Beta),
   der Moduswähler `#runModeSelect` samt Settings-Spiegel `#runModeSetting` und
@@ -2021,8 +2035,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `MARK_LEVELS` (unanimous < minor < split < major) auf die stärkere Stufe an,
   statt die zuerst gesetzte Klasse zu behalten.
   Die Inline-Quote ist standardmäßig ausgeblendet. Settings → Display →
-  `#claimCountsSwitch` aktiviert sie browserlokal über
-  `consensio.showClaimCounts.v1` / die Body-Klasse `claim-counts-visible`.
+  `#claimCountsSwitch` aktiviert sie über die Kontoeinstellung `claim_counts`
+  (lokal `consensio.showClaimCounts.v1`) / die Body-Klasse `claim-counts-visible`.
   Ohne Badge übernimmt die Passage den Tastaturzugang; Hover und Klick bleiben
   für Live- und gespeicherte Antworten verfügbar. Hover und Detaildialog betonen
   die Quote fett und beziehen den Nenner ausdrücklich auf Modelle, die den Claim
@@ -2410,10 +2424,13 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen, und
   beendet beim Start denselben Hero-Leerzustand wie eine echte Anfrage.
 - **`static/app-ui.js`** — alleiniger Binder für System-Prompt-/Help-Modal
-  (keine zweite Bindung mehr in `app-init.js`) + App-Width-Resizer.
-  `window.App.getCustomSystemPrompt()` liefert nur persönliche Anweisungen;
-  bekannte historische App-Defaults werden aus `localStorage.systemPrompt`
-  entfernt, damit die zentrale Admin-Konfiguration greifen kann.
+  (keine zweite Bindung mehr in `app-init.js`) + App-Width-Resizer. Der eigene
+  System-Prompt ist die Kontoeinstellung `system_prompt` (`query-send.js` liest
+  sie für jeden Lauf; leer = zentrale Admin-Konfiguration). Bekannte historische
+  App-Defaults, die ältere Versionen selbst unter `localStorage.systemPrompt`
+  ablegten, verwirft `user-settings.js` beim Lesen; `app-init.js` schreibt seit
+  2026-10-12 keinen Default mehr (er machte den Standardtext zur „eigenen“
+  Anweisung).
 
 **Abhängigkeitsrichtung**: Bootstrap-/State-Owner + `run-registry.js` →
 `app-core.js` → Feature-Module/`run-view.js` →
@@ -2533,8 +2550,9 @@ ihren gelisteten Nachfolger ab, wie `resolve_agent_model` es serverseitig tut.
 `agent-chat.js` wählt damit für eine gespeicherte Alt-ID (z. B.
 `grok-4.3-no-reasoning`) den Nachfolger statt des Defaults. Die Auswahl für die
 nächste Nachricht wird nur bei dauerhafter Ursache zurückgeschrieben (migrierte
-ID, Modell nicht mehr gelistet), und in `agent_settings_<uid>` nur, wenn sie von
-dort kam: Ein alter Chat mit totem Modell ändert die Wahl für neue Chats nicht,
+ID, Modell nicht mehr gelistet), und in die Kontoeinstellung `agent_model` nur,
+wenn sie von dort kam (bis 2026-10-12 `agent_settings_<uid>`; ein Konto ohne
+gespeicherte Einstellungen übernimmt den Wert beim ersten Abgleich): Ein alter Chat mit totem Modell ändert die Wahl für neue Chats nicht,
 ein gelistetes, gerade nicht verfügbares (`available: false`) oder noch als Pro
 gesperrtes Modell fällt nur pro Nachricht zurück (Hinweis einmal je Chat).
 
@@ -3282,8 +3300,8 @@ Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
 `agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum und
-Agent freedom (`autonomy`: `guided`/`free`, Details in `docs/agent-mode.md`) der
-Einstellungen im Browser, gibt den Reiter `agentSettingsSection` über
+Agent freedom (`autonomy`: `guided`/`free`, Details in `docs/agent-mode.md`) als
+Kontoeinstellung `agent_preferences` (nur gewählte Felder), gibt den Reiter `agentSettingsSection` über
 `App.settingsTabs.setTabAvailable` nur bei `agentChat.canUse()` frei (Aufruf aus
 `agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld
 `agent_preferences` von POST `/agent` (`AgentPreferences` in `agent_comparison.py`,
@@ -4673,16 +4691,19 @@ sichtbarer Run-ID und schreibt eine optionale Bookmark-Aktualisierung explizit
 an dessen Bookmark statt an die inzwischen geöffnete Ansicht.
 
 ### Modus: Compare, Consensus, Agent (seit 2026-09-30)
-Eine Wahl, ein Besitzer: `static/js/run-mode.js` (`App.runMode`) haelt
-`localStorage.runMode` ∈ {`compare`, `consensus`, `agent`}. `DEFAULT_MODE`
-steht dort als eine Konstante (seit 2026-10-02 `agent`). Beim ersten Laden
-migriert das Modul die Altschluessel (`agentMode=false` → compare, sonst der
-Default) und loescht `agentMode` und `autoConsensus`; andere Tabs folgen ueber
-das `storage`-Event. Weil bis dahin jeder Erstbesuch ungefragt `consensus`
-speicherte, zieht `migrateDefault()` einen gespeicherten `consensus`-Wert genau
-einmal auf den Default (Marke `localStorage.runModeDefault =
-"agent-2026-10-02"`, auch von `set()` gesetzt); `compare` bleibt. E2E-Tests,
-die `runMode` vorbelegen, setzen die Marke mit.
+Eine Wahl, ein Besitzer: `static/js/run-mode.js` (`App.runMode`) haelt die
+Kontoeinstellung `run_mode` ∈ {`compare`, `consensus`, `agent`} (lokal
+`localStorage.runMode`, siehe „Kontoeinstellungen“). `DEFAULT_MODE`
+steht dort als eine Konstante (seit 2026-10-02 `agent`); wer nie waehlte, hat
+keinen gespeicherten Wert. `user-settings.js` migriert beim Lesen die
+Altschluessel (`agentMode=false` → compare, sonst der Default) und loescht
+`agentMode` und `autoConsensus`; andere Tabs, der Server und das Abmelden
+melden Aenderungen ueber `consensio:settings-change`, das `run-mode.js` als
+`consensio:run-mode-change` weitergibt. Weil bis 2026-10-02 jeder Erstbesuch
+ungefragt `consensus` speicherte, gilt ein gespeichertes `consensus` ohne die
+Marke `localStorage.runModeDefault = "agent-2026-10-02"` als ungewaehlt (der
+Wert entfaellt, die Marke wird gesetzt; jedes Speichern setzt sie mit);
+`compare` bleibt. E2E-Tests, die `runMode` vorbelegen, setzen die Marke mit.
 - `preference()` ist die Wahl fuer neue Nachrichten, `effective()` das, was die
   naechste Nachricht tatsaechlich tut: ein offener Agent-Chat bleibt Agent, ein
   offener Consensus-Chat kann nur zwischen Compare und Consensus wechseln
@@ -4909,8 +4930,9 @@ Die bisherigen Schubladen sind nur der Fallback ohne geladenes Reader-Modul.
 Die Moduswahl steht im Abschnitt „Modus: Compare, Consensus, Agent". Compare und
 Consensus sind fuer alle Stufen frei; Agent erscheint nur mit Agent-Zugang.
 
-**Default fuer neue Nutzer**: `run-mode.js` setzt `DEFAULT_MODE` (consensus),
-solange der Key fehlt. Der
+**Default fuer neue Nutzer**: `run-mode.js` nimmt `DEFAULT_MODE` (seit
+2026-10-02 `agent`, ohne Agent-Zugang laeuft es als Consensus), solange keine
+Wahl gespeichert ist. Der
 Einstieg zeigt in Consensus den zentrierten Composer. In Compare
 zeigt `answerReader.syncPreview(enabled, models)` sofort das echte
 Direktvergleichsraster mit den aktuell ausgewaehlten Modellnamen und statischen
@@ -5270,7 +5292,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   lebt getrennt in `app_config/agent_budget`.
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
-  explizite Auswahl (`pref_select_*`) gespeichert hat. Explizite Picker-Werte
+  explizite Auswahl (`compare_models[<Familie>].model`, lokal `pref_select_*`) gespeichert hat. Explizite Picker-Werte
   haben Vorrang. Normale Watch-Runs lesen die aktuelle Stufe des Owners
   bei jedem Lauf neu und wählen danach `WATCH_MODELS_BY_TIER` (ein Upgrade wirkt
   deshalb auch auf bereits bestehende Watches nach Ablauf des Tier-Cache).
@@ -5286,6 +5308,61 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Admin-UID; das globale tägliche Watch-Run-Budget gilt weiter. Einen eigenen
   Publisher-Kapazitätszähler gibt es nicht mehr, und ihr Zeitplan ist wie bei
   jeder Watch über `update_watch` änderbar.
+
+### Kontoeinstellungen (seit 2026-10-12)
+Einstellungen, die einem Konto auf jedes Gerät folgen, liegen am Konto statt nur
+im Browser. **Server**: `app/services/user_settings.py` (Schema `UserSettings`,
+alle Felder optional = nur Gewähltes, `FirestoreUserSettingsRepository`) unter
+`users/{uid}/settings/app`; `GET /api/my/settings` → `{settings, revision}`
+(`revision` 0 = nie gespeichert), `PATCH /api/my/settings` mit
+`{settings: {name: wert | null}}` ändert nur die genannten Felder (`null` = zurück
+zum Default; `compare_models` wird als Ganzes ersetzt), 422 bei unbekannten
+Feldern/Werten, 403 während einer Kontolöschung. `users/{uid}` selbst bleibt für
+den Browser gesperrt (Tier/Rolle). Formregeln statt Katalogprüfung: ein Modell,
+das den Katalog verlässt, macht den Datensatz nicht unlesbar; gespeicherte
+Altwerte, die nicht mehr validieren, fallen einzeln weg.
+
+Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
+`agent_preferences` (`depth`/`quorum`/`autonomy`, nur gewählte),
+`check_sources`, `compare_models` (`{Familienlabel: {enabled, model}}`),
+`consensus_model`, `consensus_preset`, `system_prompt` (Grenzen = die eines
+Laufs, `chat.py` importiert sie), `agreement_display`, `consensus_highlights`,
+`claim_counts`. **Bewusst im Browser** bleiben Theme, Sidebar-Breite/-Zustand,
+`agentShellExpected` (vor dem ersten Paint nötig, gerätebezogen), der
+Fragen-Entwurf (würde bei jedem Tastendruck schreiben), der eigene
+OpenRouter-Key (fremdes Geheimnis), das Analytics-Opt-out, gesehene Hinweise
+und alles im sessionStorage.
+
+**Browser**: `static/js/user-settings.js` (`App.userSettings`, Head-Bundle) ist
+der einzige Besitzer: `get(name)`, `set(name, wert | null)`,
+`onChange(names, handler)` über `consensio:settings-change` (`detail.source`:
+`local`, `server`, `tab`, `signout`; `previous`). Die lokale Kopie liegt unter
+den bisherigen localStorage-Schlüsseln (`runMode`, `pref_*`, `systemPrompt`,
+`consensio.*`); `consensio.agentModel.v1` ersetzt das frühere
+`agent_settings_<uid>`. Alte Speicherformate werden beim Lesen migriert, nur
+hier. Abgleich: `firebase.js` ruft nach einer verifizierten Anmeldung
+`start({uid, getToken})` neben `/user_status` auf. Hat das Konto Einstellungen,
+gelten die des Servers; was diese Seite vor der Antwort änderte oder eine
+frühere Seite nicht zustellen konnte (`pending` in `consensio.settingsSync.v1`,
+an das Konto gebunden), wird stattdessen gesendet. Ein Konto ohne Einstellungen
+(`revision` 0) bekommt einmal die Werte dieses Browsers — außer sie gehören
+laut Sync-Datensatz einem anderen Konto (dann Defaults). Änderungen gehen
+gesammelt (400 ms) per PATCH; vorübergehende Fehler (401/408/429/5xx/Netz)
+werden mit Backoff wiederholt, eine Ablehnung (übrige 4xx) verwirft die Änderung
+mit Konsolenwarnung. `pagehide`/`visibilitychange` senden mit `keepalive`, der
+Logout wartet höchstens 3 s (`flush({timeoutMs})`), dann `stop()`: die Werte des
+Kontos verlassen den Browser, die eines Gasts (nie synchronisiert) bleiben.
+Module wenden Werte aus `server`/`tab`/`signout` selbst an (Modus, Modellwahl,
+Agent-Modell, Agent-Einstellungen, Check sources, Display, offener
+System-Prompt-Editor ohne eigenen Entwurf).
+
+Tests: `tests/test_user_settings.py` (Schema, Repository, Route, Kontolöschung,
+Gleichlauf der Regeln mit dem Browser), `tests/js/user-settings.test.mjs`
+(Speicher, Migrationen, Ereignisse, Abgleich), die Journey
+`test_settings_follow_the_account_to_another_device` (echter Server +
+Emulator). Die übrigen Browser-Tests stellen `/api/my/settings` pro Seite im
+Speicher bereit (`_route_account_settings` in `test_phase4_frontend.py`); der
+Firebase-Stub der Standard-Fixture startet keinen Abgleich.
 
 ### Nutzergebundene Consensus-API (v1)
 - Admins stellen über `POST /api/admin/api-keys` einen gescopten Schlüssel für eine
@@ -6157,6 +6234,11 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   gelöscht; der Undo-Vorzustand darin verfällt nach 30 Tagen. Single-Field-
   Collection-Group-Indizes auf `memory.undo_expires_at` und `memory.lease_until`
   (`firestore.indexes.json`) tragen die Retention-Queries.
+- `users/{uid}/settings/app` — Kontoeinstellungen (seit 2026-10-12): `values`
+  (nur gewählte Einstellungen, Schema `UserSettings` in
+  `app/services/user_settings.py`), `revision`, `updated_at`. Geschrieben nur
+  über `PATCH /api/my/settings` mit dem Tombstone-Zaun; gelöscht mit dem Konto
+  (Subcollection `settings`). Siehe §4 „Kontoeinstellungen“.
 - `users/{uid}/memory/entries` — gespeicherte Einzel-Erinnerungen (`items`,
   `revision`, Undo-Log `changes`, `changes_purge_at`, siehe §3 „Agent-Memory“);
   `users/{uid}/memory/profile` trägt zusätzlich `auto_memory`. `items` und
@@ -7428,7 +7510,8 @@ Check contradictions ist seit der Todo-Runde 3 (2026-10-02) eine stehende
 Einstellung statt eines Werkzeugs im Composer: `#composerSourcesToggle` (Leiste)
 und `#sourceCheckMenuSwitch` ((+)-Menü) sind entfernt, es bleibt nur
 `#sourceCheckSwitch` unter Settings → Runs („Check contradictions against
-sources“), gespeichert unter `localStorage.checkSources` (Default On). Grund:
+sources“), gespeichert als Kontoeinstellung `check_sources` (lokal
+`localStorage.checkSources`, Default On). Grund:
 Der Schalter stand prominent, steuerte aber nur den späteren Quellenabgleich,
 dessen Ergebnis hinter Klicks lag. Das Ergebnis rückt dafür an die Antwort:
 `App.sourceVerification.brief(snapshot)` liefert eine kurze Phrase („1 settled

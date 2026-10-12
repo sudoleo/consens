@@ -27,7 +27,7 @@ const BODY = `
 `;
 
 function boot({ mode = "consensus", checkSources = true } = {}) {
-  return loadScripts(["static/js/run-mode.js", "static/js/agent-mode.js"], {
+  return loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
       window.App = {

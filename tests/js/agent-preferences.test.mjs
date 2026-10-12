@@ -5,7 +5,7 @@ const contexts = [];
 afterEach(() => contexts.splice(0).forEach(ctx => ctx.window.close()));
 
 function boot(allowed) {
-  const ctx = loadScripts(["static/js/agent-preferences.js"], {
+  const ctx = loadScripts(["static/js/user-settings.js", "static/js/agent-preferences.js"], {
     body: `<select id="agentDepthSelect"><option value="auto">A</option><option value="quick">Q</option><option value="full">F</option></select>
       <select id="agentQuorumSelect"><option value="balanced">B</option><option value="fast">F</option><option value="all">A</option></select>
       <select id="agentAutonomySelect"><option value="guided">G</option><option value="free">F</option></select>`,

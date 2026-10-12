@@ -16,6 +16,10 @@
       "note": "Render-blocking on purpose: seeds state (run mode, theme, auth) before the first paint.",
       "files": [
         {
+          "file": "static/js/user-settings.js",
+          "note": "Account settings (local copy + sync with /api/my/settings). First: run-mode.js and every settings module read through it."
+        },
+        {
           "file": "static/js/run-mode.js",
           "note": "Single source of truth for Compare / Consensus / Agent. Must precede app-bootstrap.js, which paints the stored mode."
         },

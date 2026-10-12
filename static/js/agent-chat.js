@@ -43,7 +43,8 @@
   }
   // Where the next message's settings come from: the running turn, this
   // session's pick for the chat, the settings an opened chat was saved with,
-  // the account's own pick (localStorage) or the catalog default.
+  // the account's own pick (account setting "agent_model") or the catalog
+  // default.
   function preferredSource() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
@@ -52,8 +53,7 @@
     const session = selections.get(selectionKey());
     if (session) return { value: session, source: "session" };
     if (saved) return { value: saved, source: "chat" };
-    let preferred;
-    try { preferred = JSON.parse(localStorage.getItem(`agent_settings_${catalogOwner}`) || "null"); } catch (_) {}
+    const preferred = App.userSettings.get("agent_model");
     if (preferred) return { value: preferred, source: "account" };
     return { value: { model_id: catalog?.default_model_id, reasoning_effort: "default" }, source: "default" };
   }
@@ -100,7 +100,7 @@
   }
   function rememberSelection(value) {
     selections.set(selectionKey(), value);
-    try { localStorage.setItem(`agent_settings_${catalogOwner}`, JSON.stringify(value)); } catch (_) {}
+    App.userSettings.set("agent_model", value);
   }
   // The preferred model or level cannot run: selection() falls back for every
   // render and send. Only a lasting cause is written back: a migrated ID or a
@@ -1521,6 +1521,8 @@
   // a no-op when nothing the shell shows has changed.
   window.addEventListener("consensio:run-registry-change", () => renderShell());
   window.addEventListener("consensio:run-mode-change", () => renderShell());
+  // The account's model pick arrived (server, another tab, sign-out).
+  App.userSettings.onChange("agent_model", detail => { if (detail.source !== "local") render(); });
   // The placeholder has a length per width; a rotated phone gets the right one.
   for (const query of ['(max-width: 360px)', '(max-width: 640px)']) {
     window.matchMedia?.(query)?.addEventListener?.('change', () => syncComposer());

@@ -30,8 +30,9 @@ from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
 from app.services.agent_background import AgentRunDuplicate, AgentRunStopped, AgentShuttingDown, agent_background
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
-from app.services.llm.agent_client import (PRO_REASONING_EFFORTS, AgentCompletion, agent_model, agent_model_options,
-                                           default_agent_model_id, free_default_effort, resolve_agent_model)
+from app.services.llm.agent_client import (PRO_REASONING_EFFORTS, REASONING_EFFORT_PATTERN, AgentCompletion, agent_model,
+                                           agent_model_options, default_agent_model_id, free_default_effort,
+                                           resolve_agent_model)
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
 from app.services.llm.streaming import SSE_HEADERS, SSE_PADDING
@@ -112,7 +113,7 @@ class AgentRequest(BaseModel):
     stream: Literal[True] = True
     recover_only: bool = False
     model_id: str | None = Field(default=None, min_length=1, max_length=160)
-    reasoning_effort: str = Field(default="default", pattern=r"^(default|none|minimal|low|medium|high|xhigh|max)$")
+    reasoning_effort: str = Field(default="default", pattern=REASONING_EFFORT_PATTERN)
     comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
     check_sources: bool = False
     file_ids: list[str] = Field(default_factory=list, max_length=5)

@@ -248,7 +248,7 @@ Wiederaufnahme übernimmt diesen Grund nur für dasselbe Paket in das Ergebnis.
 gespeicherte Fehlerphase. Die UI zeigt die jeweilige Phase direkt am Widerspruch.
 
 Neue `check_sources: false` Runs speichern `status: disabled` ohne Fetch/Judge
-oder `sources.*`-Events. Der Schalter und `localStorage.checkSources` bleiben
+oder `sources.*`-Events. Der Schalter und die Kontoeinstellung `check_sources` bleiben
 erhalten; seine eingefrorene Einstellung gilt nur für den jeweiligen neuen Run.
 Alte null-Snapshots und alte v1/v2/v3-Texte/Befunde bleiben unverändert lesbar.
 Ein Legacy-v3-Plan läuft weiter mit seiner damaligen Satz-/Quellen-Semantik.

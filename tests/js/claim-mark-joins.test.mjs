@@ -9,7 +9,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 const SENTENCE = "Hoch: Jahresabschluss (Årsrapport) nach dem Gesetz, das gilt.";
 
 it("keeps inner joins of a split sentence flush and pads only its outer ends", () => {
-  const { window, document } = loadScripts(["static/js/consensus-anchor.js", "static/js/consensus-insights.js"], {
+  const { window, document } = loadScripts(["static/js/user-settings.js", "static/js/consensus-anchor.js", "static/js/consensus-insights.js"], {
     body: `<article class="thread-history-turn"><div class="consensus-answer-body thread-history-answer-body">
       <p><strong>Hoch:</strong> Jahresabschluss (<em>Årsrapport</em>) nach dem <em>Gesetz</em>, das gilt.</p></div>
       <div class="consensus-claims-fallback" hidden></div></article>`

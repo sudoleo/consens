@@ -30,7 +30,9 @@ def test_settings_offer_three_agreement_display_levels_persistently():
     assert 'id="agreementDisplaySelect"' in template
     for value in ("full", "summary", "off"):
         assert f'<option value="{value}">' in template
-    assert "consensio.agreementDisplay.v1" in init
+    # The choice is the account setting agreement_display (user-settings.js).
+    assert 'window.App.userSettings.get("agreement_display") || "full"' in init
+    assert 'window.App.userSettings.set("agreement_display", mode)' in init
     assert 'classList.toggle("agreement-score-hidden", mode === "summary")' in init
     assert 'classList.toggle("agreement-verdict-hidden", mode === "off")' in init
     # Nur die Zahl weg: die Worte des Urteils bleiben.
@@ -51,10 +53,14 @@ def test_footer_status_is_separate_from_navigation_and_tools_follow_it():
 
 
 def test_the_old_agreement_score_switch_choice_still_applies():
+    # Migrated where every setting is read (user-settings.js); its behaviour is
+    # tested in tests/js/user-settings.test.mjs ("reads the old agreement switch").
     init = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
+    settings = (ROOT / "static" / "js" / "user-settings.js").read_text(encoding="utf-8")
 
-    assert "consensio.showAgreementScore.v1" in init
-    assert 'localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) === "false"' in init
+    assert 'const AGREEMENT_SCORE_LEGACY_KEY = "consensio.showAgreementScore.v1";' in settings
+    assert 'legacy === "false"' in settings
+    assert "consensio.showAgreementScore.v1" not in init
 
 
 def test_sentence_checks_have_a_discreet_persistent_visibility_control():
@@ -70,7 +76,8 @@ def test_sentence_checks_have_a_discreet_persistent_visibility_control():
     assert 'id="consensusMarkerToggle"' not in template
     assert 'id="consensusHighlightsSelect"' in template
     assert "button:not(" not in inputs
-    assert "consensio.showConsensusMarkers.v1" in insights
+    # Persistent as the account setting consensus_highlights (user-settings.js).
+    assert 'settings.set("consensus_highlights", show ? highlightMode : "none")' in insights
     assert 'classList.toggle(MARKERS_HIDDEN_CLASS, !show)' in insights
     assert "body.consensus-markers-hidden .consensus-answer-body .claim-badge" in shell
 

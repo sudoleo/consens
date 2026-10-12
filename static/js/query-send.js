@@ -78,8 +78,9 @@
   }
 
   function currentSystemPrompt() {
-    const base = window.App.getCustomSystemPrompt?.() ?? localStorage.getItem("systemPrompt") ?? "";
-    // Empty means the live app default supplied by /prepare (also by /ask on fallback).
+    // The account setting. Empty means the live app default supplied by
+    // /prepare (also by /ask on fallback).
+    const base = window.App.userSettings.get("system_prompt") || "";
     if (!base.trim()) return "";
     const now = new Date();
     const weekday = now.toLocaleDateString("en-US", { weekday: "long" });

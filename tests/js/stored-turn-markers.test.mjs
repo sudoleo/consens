@@ -43,7 +43,7 @@ const DIFFERENCES_DATA = {
 
 function boot() {
   const { window, document } = loadScripts([
-    "static/js/consensus-anchor.js",
+    "static/js/user-settings.js", "static/js/consensus-anchor.js",
     "static/js/consensus-insights.js"
   ], {
     body: `
@@ -119,7 +119,7 @@ describe("renderStoredConsensusClaims", () => {
 
 describe('real archived drawer row', () => {
   it('keeps all drawers in one row, toggles only its own panel and allocates unique IDs', () => {
-    const { window, document } = loadScripts(['static/js/consensus-anchor.js', 'static/js/consensus-insights.js', 'static/js/consensus-run.js'], {
+    const { window, document } = loadScripts(['static/js/user-settings.js', 'static/js/consensus-anchor.js', 'static/js/consensus-insights.js', 'static/js/consensus-run.js'], {
       body: '<div id="threadHistory" hidden></div><div id="differencesCards"></div>',
       before(window) { window.App = {}; window.Element.prototype.scrollIntoView = () => {}; },
     });

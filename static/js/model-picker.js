@@ -20,8 +20,10 @@
 //   window.App.{applyTierDefaultModels, setModelSelectionState,
 //   openModelPicker, collapseExpandedModelPicker, initCustomModelPicker,
 //   linkModelPicker}.
+// Gespeichert wird die Wahl als Kontoeinstellung (compare_models,
+// consensus_model, consensus_preset) ueber window.App.userSettings.
 // Abhaengigkeiten: window.App.{modelPrefs, getModelOptionLabel,
-//   getSelectedModelCount, trackAppEvent}, window.updateAgentModeUI,
+//   getSelectedModelCount, trackAppEvent, userSettings}, window.updateAgentModeUI,
 //   window.updateConsensusButtonAvailability,
 //   window.PRO_DEFAULT_MODELS, window.FREE_DEFAULT_MODELS.
 // Das Wiring (Event-Listener, Init-Aufrufe) lebt weiterhin in initApp und
@@ -29,6 +31,27 @@
 // =====================================================================
 
 (function () {
+  const settings = window.App.userSettings;
+
+  // --- GESPEICHERTE MODELLWAHL (Kontoeinstellung) ---
+  // Pro Familie (Label wie "OpenAI"): enabled (ein-/ausgeschlossen) und
+  // model. Ohne Eintrag gilt der Seiten- bzw. Stufen-Default.
+  function storedFamilies() {
+    return settings.get("compare_models") || {};
+  }
+
+  function storedFamily(pref) {
+    return storedFamilies()[pref.key] || {};
+  }
+
+  function saveFamilies(changes) {
+    const families = storedFamilies();
+    Object.entries(changes).forEach(([label, change]) => {
+      families[label] = Object.assign({}, families[label], change);
+    });
+    settings.set("compare_models", families);
+  }
+
   // --- MODEL PREFERENCES WIEDERHERSTELLUNG ---
 
   function setPickerToValue(select, labelText, value) {
@@ -49,7 +72,7 @@
       ? (window.PRO_DEFAULT_MODELS || {})
       : (window.FREE_DEFAULT_MODELS || {});
     window.App.modelPrefs.forEach(pref => {
-      if (localStorage.getItem("pref_select_" + pref.key) !== null) return;
+      if (storedFamily(pref).model !== undefined) return;
       const select = document.getElementById(pref.selectId);
       const labelText = document.getElementById(pref.textId);
       setPickerToValue(select, labelText, defaults[pref.provider]);
@@ -108,9 +131,9 @@
     // Der Block faellt: die gespeicherte Nutzerwahl gilt wieder. Ohne Eintrag
     // bleibt die aktuelle Auswahl stehen (der Composer stellt seinen gemerkten
     // Wert selbst wieder her, wenn die Dateien entfernt werden).
-    const saved = localStorage.getItem("pref_check_" + pref.key);
-    if (saved === null) return;
-    setModelSelectionState(pref, saved === "true", {
+    const saved = storedFamily(pref).enabled;
+    if (saved === undefined) return;
+    setModelSelectionState(pref, saved, {
       persist: false,
       syncCheckbox: true,
       animate: false
@@ -182,7 +205,7 @@
 
     // Die siebte Familie wird abgelehnt statt eine andere still abzuwaehlen.
     // Gilt auch fuer die Wiederherstellung gespeicherter Auswahlen, damit ein
-    // alter localStorage-Stand das Limit nicht umgeht.
+    // alter gespeicherter Stand das Limit nicht umgeht.
     if (checked && capBlocksInclusion(pref)) {
       checked = false;
       if (persist) {
@@ -224,7 +247,7 @@
     }
 
     if (persist) {
-      localStorage.setItem("pref_check_" + pref.key, String(checked));
+      saveFamilies({ [pref.key]: { enabled: checked } });
       window.App.trackAppEvent("app_model_selection_changed", {
         provider: pref.key,
         enabled: checked,
@@ -249,22 +272,22 @@
 
   window.restoreModelSelections = function () {
     // 1. Bestehende Logik für die Chat-Boxen (OpenAI, Mistral etc.)
+    const families = storedFamilies();
     window.App.modelPrefs.forEach(pref => {
       const checkbox = document.getElementById(pref.checkId);
       const select = document.getElementById(pref.selectId);
       const labelText = document.getElementById(pref.textId);
+      const saved = families[pref.key] || {};
 
       // Checkboxen wiederherstellen
-      const savedCheck = localStorage.getItem("pref_check_" + pref.key);
       if (checkbox) {
-        const isChecked = savedCheck === null ? checkbox.checked : savedCheck === "true";
+        const isChecked = saved.enabled === undefined ? checkbox.checked : saved.enabled;
         setModelSelectionState(pref, isChecked, { persist: false, syncCheckbox: true });
       }
 
       // Dropdowns wiederherstellen
-      const savedSelect = localStorage.getItem("pref_select_" + pref.key);
-      if (savedSelect !== null && select) {
-        setPickerToValue(select, labelText, savedSelect);
+      if (saved.model !== undefined && select) {
+        setPickerToValue(select, labelText, saved.model);
       }
     });
 
@@ -273,7 +296,7 @@
     if (consensusSelect) {
       const presetId = getActiveConsensusPresetId();
       if (presetId === "custom") {
-        const savedConsensus = localStorage.getItem("pref_select_consensus"); // Eigener Key
+        const savedConsensus = settings.get("consensus_model");
         if (savedConsensus) {
           // Prüfen, ob die Option existiert und für den User freigeschaltet ist
           const option = consensusSelect.querySelector(`option[value="${savedConsensus}"]`);
@@ -289,8 +312,6 @@
   };
 
   // --- CONSENSUS-PRESETS (Daily/Balanced/High Quality + Custom) ---
-
-  const CONSENSUS_PRESET_STORAGE_KEY = "pref_consensus_preset";
 
   // Zuletzt angezeigtes Preset-/Modell-Label OHNE die Modellanzahl davor.
   // Der gefuehrte Lauf nennt es rechts im Kopf ("Daily · 6 models"); die Zahl
@@ -311,7 +332,7 @@
   function getActiveConsensusPresetId() {
     const presets = getConsensusPresets();
     if (!presets.length) return "custom";
-    const stored = localStorage.getItem(CONSENSUS_PRESET_STORAGE_KEY);
+    const stored = settings.get("consensus_preset");
     if (stored === "custom") return "custom";
     if (stored && presets.some(preset => preset.id === stored)) {
       const preset = presets.find(entry => entry.id === stored);
@@ -320,7 +341,7 @@
     }
     // Migration: eine bereits gespeicherte explizite Modellwahl (Bestand vor
     // den Presets) bleibt als Custom-Auswahl erhalten.
-    if (localStorage.getItem("pref_select_consensus") !== null) return "custom";
+    if (settings.get("consensus_model") !== undefined) return "custom";
     return getDefaultConsensusPresetId();
   }
 
@@ -390,23 +411,49 @@
       window.App.showProFeatureModal?.(`${preset.label || "High Quality"} mode`);
       return;
     }
-    localStorage.setItem(CONSENSUS_PRESET_STORAGE_KEY, presetId);
+    settings.set("consensus_preset", presetId);
     applyConsensusPreset(select, presetId);
     window.App.trackAppEvent("app_consensus_preset_changed", { preset: presetId });
     collapseExpandedModelPicker(select);
     syncCustomModelPicker(select);
   }
 
+  // Eine ausdrueckliche Modellwahl verlaesst die Preset-Ebene: die aktuelle
+  // Auswahl aller Familien und der Consensus-Engine wird zur eigenen Wahl.
   function markConsensusPresetCustom() {
-    localStorage.setItem(CONSENSUS_PRESET_STORAGE_KEY, "custom");
+    settings.set("consensus_preset", "custom");
+    const models = {};
     window.App.modelPrefs.forEach(pref => {
       const select = document.getElementById(pref.selectId);
-      if (select?.value) localStorage.setItem("pref_select_" + pref.key, select.value);
+      if (select?.value) models[pref.key] = { model: select.value };
     });
+    saveFamilies(models);
     const consensus = document.getElementById("consensusModelDropdown");
-    if (consensus?.value) localStorage.setItem("pref_select_consensus", consensus.value);
+    if (consensus?.value) settings.set("consensus_model", consensus.value);
     window.syncCustomModelPickers?.();
   }
+
+  // Die Wahl des Kontos kam an (Server, anderer Tab, Abmelden). Familien ohne
+  // gespeicherten Wert fallen erst auf den Seiten-Default zurueck, sonst
+  // bliebe die Wahl eines anderen Kontos oder Geraets stehen.
+  function applyAccountModelPreferences() {
+    const families = storedFamilies();
+    const quiet = { persist: false, syncCheckbox: true, animate: false };
+    // Erst alle aus, dann ein: so blockiert der Familien-Cap keine Umstellung.
+    window.App.modelPrefs.forEach(pref => setModelSelectionState(pref, false, quiet));
+    window.App.modelPrefs.forEach(pref => {
+      const enabled = families[pref.key]?.enabled;
+      const fallback = document.getElementById(pref.checkId)?.defaultChecked === true;
+      setModelSelectionState(pref, enabled === undefined ? fallback : enabled, quiet);
+    });
+    applyTierDefaultModels(window.isUserPro === true);
+    window.restoreModelSelections();
+    window.syncCustomModelPickers?.();
+  }
+
+  settings.onChange(["compare_models", "consensus_model", "consensus_preset"], detail => {
+    if (detail.source !== "local" && window.App.modelPrefs) applyAccountModelPreferences();
+  });
 
   // --- CUSTOM MODEL PICKER (eigene Listbox ueber den nativen <select>) ---
 

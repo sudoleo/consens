@@ -6,13 +6,15 @@
 //   agent     · Agent (Beta): works in steps with research, files and tools
 //
 // This module only owns the preference. It is the single source of truth
-// for the composer selector, the settings panel and every run. Whether a
+// for the composer selector, the settings panel and every run; the value is
+// the account setting "run_mode" (user-settings.js stores and syncs it,
+// including the migration of older stored values). Whether a
 // mode can be used right now (plan, sign-in, the family of an open chat)
 // is decided where that knowledge lives (agent-chat.js); the composer asks
 // App.runMode.effective() for the combined answer.
 //
-// Loaded in the render-blocking head bundle so the first paint already
-// matches the stored mode. No DOM access here.
+// Loaded in the render-blocking head bundle, after user-settings.js, so the
+// first paint already matches the stored mode. No DOM access here.
 // Exports: window.App.runMode
 // Event:   "consensio:run-mode-change" on window, detail {mode, previous}
 // =====================================================================
@@ -20,21 +22,12 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "runMode";
+  const settings = window.App.userSettings;
   const MODES = Object.freeze(["compare", "consensus", "agent"]);
   // For people who never chose. Agent is the default since 2026-10-02;
   // accounts without Agent access (guests, a failed status check) still fall
   // back to consensus in effective().
   const DEFAULT_MODE = "agent";
-  // Until 2026-10-02 every first visit stored "consensus" without anyone
-  // choosing it, so a stored "consensus" cannot be told apart from a choice.
-  // It moves to the new default once; "compare" was always chosen and stays.
-  const DEFAULT_MIGRATION_KEY = "runModeDefault";
-  const DEFAULT_MIGRATION = "agent-2026-10-02";
-  // Before 2026-10 two switches decided this: "agentMode" (consensus on/off)
-  // and an in-memory Agent Beta choice. "autoConsensus" only mirrored the
-  // first. Migrated once and removed, so nothing can read a stale copy.
-  const LEGACY_KEYS = ["agentMode", "autoConsensus"];
 
   const COPY = Object.freeze({
     compare: Object.freeze({ label: "Compare", description: "Answers side by side, no consensus." }),
@@ -42,33 +35,12 @@
     agent: Object.freeze({ label: "Agent", badge: "Beta", description: "Works in steps with research, files and tools." }),
   });
 
-  let memory = null; // used only when storage is unavailable
-
   function valid(mode) {
     return MODES.includes(mode);
   }
 
-  function migrateDefault(stored) {
-    if (localStorage.getItem(DEFAULT_MIGRATION_KEY) === DEFAULT_MIGRATION) return stored;
-    localStorage.setItem(DEFAULT_MIGRATION_KEY, DEFAULT_MIGRATION);
-    if (stored !== "consensus") return stored;
-    localStorage.setItem(STORAGE_KEY, DEFAULT_MODE);
-    return DEFAULT_MODE;
-  }
-
   function read() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (valid(stored)) return migrateDefault(stored);
-      const legacy = localStorage.getItem("agentMode");
-      const migrated = legacy === "false" ? "compare" : DEFAULT_MODE;
-      localStorage.setItem(STORAGE_KEY, migrated);
-      localStorage.setItem(DEFAULT_MIGRATION_KEY, DEFAULT_MIGRATION);
-      LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
-      return migrated;
-    } catch (_) {
-      return memory || DEFAULT_MODE;
-    }
+    return settings.get("run_mode") || DEFAULT_MODE;
   }
 
   function preference() {
@@ -79,10 +51,7 @@
     if (!valid(mode)) return false;
     const previous = read();
     if (previous === mode) return false;
-    try {
-      localStorage.setItem(STORAGE_KEY, mode);
-      localStorage.setItem(DEFAULT_MIGRATION_KEY, DEFAULT_MIGRATION);
-    } catch (_) { memory = mode; }
+    settings.set("run_mode", mode);
     if (options.source) {
       window.App?.trackAppEvent?.("app_run_mode_changed", { mode, previous, source: options.source });
     }
@@ -121,11 +90,14 @@
     };
   }
 
-  // Another tab changed the mode: storage is shared, the event is not.
-  window.addEventListener("storage", event => {
-    if (event.key !== STORAGE_KEY || !valid(event.newValue)) return;
-    window.dispatchEvent(new CustomEvent("consensio:run-mode-change",
-      { detail: { mode: event.newValue, previous: valid(event.oldValue) ? event.oldValue : null } }));
+  // The account's value arrived from the server, another tab or a sign-out.
+  // A change on this page went through set() and has announced itself.
+  settings.onChange("run_mode", detail => {
+    if (detail.source === "local") return;
+    const mode = read();
+    const previous = detail.previous.run_mode || DEFAULT_MODE;
+    if (mode === previous) return;
+    window.dispatchEvent(new CustomEvent("consensio:run-mode-change", { detail: { mode, previous } }));
   });
 
   window.App = window.App || {};

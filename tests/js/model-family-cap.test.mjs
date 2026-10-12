@@ -20,7 +20,7 @@ const BODY = FAMILIES.map(family => `
 
 function boot({ cap = 3, checked = [] } = {}) {
   const popups = [];
-  const harness = loadScripts(["static/js/model-picker.js"], {
+  const harness = loadScripts(["static/js/user-settings.js", "static/js/model-picker.js"], {
     body: BODY,
     before(window) {
       window.App = {

@@ -60,14 +60,20 @@ FAST_GRACE = 1.1
 FAST_MIN_GRACE_SECONDS = 1.0
 
 
+# The choices of each Agent setting; user_settings.py stores the same ones.
+AgentDepth = Literal["auto", "quick", "full"]
+AgentQuorum = Literal["balanced", "fast", "all"]
+AgentAutonomy = Literal["guided", "free"]
+
+
 class AgentPreferences(BaseModel):
     """Per-user Agent Beta settings, frozen with the turn."""
     model_config = ConfigDict(extra="forbid", strict=True)
-    depth: Literal["auto", "quick", "full"] = "auto"
-    quorum: Literal["balanced", "fast", "all"] = "all"
+    depth: AgentDepth = "auto"
+    quorum: AgentQuorum = "all"
     # guided: every comparison asks all selected models. free: the orchestrator
     # picks the models of each comparison, at least two families (server rule).
-    autonomy: Literal["guided", "free"] = "guided"
+    autonomy: AgentAutonomy = "guided"
 
 
 def stored_preferences(value):

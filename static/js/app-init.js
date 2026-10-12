@@ -130,9 +130,8 @@
         //   summary — nur die Worte, keine Zahl (die alte Aus-Stellung)
         //   off     — gar kein Urteilsbereich, unter der Antwort bleiben nur
         //             die Schubladen (Differences / Answers / Sources)
-        const AGREEMENT_DISPLAY_STORAGE_KEY = "consensio.agreementDisplay.v1";
-        // Vorgaenger-Schalter: sein "false" ist genau die Stufe "summary".
-        const AGREEMENT_SCORE_STORAGE_KEY = "consensio.showAgreementScore.v1";
+        // Kontoeinstellung "agreement_display" (user-settings.js, dort auch
+        // die Migration des Vorgaenger-Schalters).
         const AGREEMENT_DISPLAY_MODES = ["full", "summary", "off"];
         const agreementDisplaySelect = document.getElementById("agreementDisplaySelect");
 
@@ -142,25 +141,17 @@
           if (agreementDisplaySelect) agreementDisplaySelect.value = mode;
         }
 
-        function storedAgreementDisplayMode() {
-          const stored = localStorage.getItem(AGREEMENT_DISPLAY_STORAGE_KEY);
-          if (AGREEMENT_DISPLAY_MODES.includes(stored)) return stored;
-          return localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) === "false"
-            ? "summary"
-            : "full";
-        }
-
         function restoreAgreementDisplayPreference() {
-          applyAgreementDisplayPreference(storedAgreementDisplayMode());
+          applyAgreementDisplayPreference(window.App.userSettings.get("agreement_display") || "full");
         }
 
         restoreAgreementDisplayPreference();
+        window.App.userSettings.onChange("agreement_display", detail => {
+          if (detail.source !== "local") restoreAgreementDisplayPreference();
+        });
         agreementDisplaySelect?.addEventListener("change", function () {
           const mode = AGREEMENT_DISPLAY_MODES.includes(this.value) ? this.value : "full";
-          localStorage.setItem(AGREEMENT_DISPLAY_STORAGE_KEY, mode);
-          // Den alten Schluessel mitschreiben, damit ein Rollback auf die
-          // Vorgaengerversion nicht ploetzlich wieder Zahlen zeigt.
-          localStorage.setItem(AGREEMENT_SCORE_STORAGE_KEY, String(mode === "full"));
+          window.App.userSettings.set("agreement_display", mode);
           applyAgreementDisplayPreference(mode);
           trackAppEvent("app_agreement_score_visibility_changed", {
             mode: mode,
@@ -505,12 +496,6 @@
           const pref = (window.App.modelPrefs || [])
             .find(item => item.responseId === responseId);
           return pref ? document.getElementById(pref.checkId) : null;
-        }
-
-        // Beispiel für das Setzen des systemPrompt-Wertes, falls noch nicht gesetzt:
-        const defaultPrompt = "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly with the information available.";
-        if (!localStorage.getItem("systemPrompt")) {
-          localStorage.setItem("systemPrompt", defaultPrompt);
         }
 
         // Settings- und Help-Controls werden ausschliesslich von app-ui.js
@@ -1040,8 +1025,8 @@
 
           if (select) {
             select.addEventListener("change", function () {
-              localStorage.setItem("pref_select_" + pref.key, this.value);
-              window.App.markConsensusPresetCustom?.();
+              // Speichert die Auswahl aller Familien als eigene Wahl.
+              window.App.markConsensusPresetCustom();
               const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
               if (labelText) {
                 labelText.textContent = selectedLabel;
@@ -1066,12 +1051,10 @@
         const consensusSelect = document.getElementById("consensusModelDropdown");
         if (consensusSelect) {
           consensusSelect.addEventListener("change", function () {
-            // Speichere die Auswahl im LocalStorage, sobald der User sie ändert
-            localStorage.setItem("pref_select_consensus", this.value);
             // Eine explizite Modellwahl (change-Event) verlaesst die
-            // Preset-Ebene; Preset-Klicks feuern bewusst KEIN change
-            // (siehe model-picker.js).
-            window.App.markConsensusPresetCustom?.();
+            // Preset-Ebene und speichert die Engine als eigene Wahl;
+            // Preset-Klicks feuern bewusst KEIN change (siehe model-picker.js).
+            window.App.markConsensusPresetCustom();
             const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
             trackAppEvent("app_consensus_model_changed", { model: selectedLabel });
 

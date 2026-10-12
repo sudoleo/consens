@@ -221,6 +221,9 @@ def lighter_reasoning(model):
         return None
     return _resolve_effort(model, metadata, effort)
 _EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+# What a request or a saved account setting may name: "default" (the model's
+# own) or one of the levels above.
+REASONING_EFFORT_PATTERN = rf"^(default|{'|'.join(_EFFORTS)})$"
 
 
 def _choices(model, metadata):

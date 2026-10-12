@@ -141,9 +141,9 @@ describe('Admin prompt configuration', () => {
 });
 
 describe('Central default and personal Consensus instructions', () => {
-    const appUi = readFileSync(path.join(ROOT, 'static/app-ui.js'), 'utf8');
+    // The own prompt is the account setting system_prompt (user-settings.js).
+    const preferences = readFileSync(path.join(ROOT, 'static/js/user-settings.js'), 'utf8');
     const query = readFileSync(path.join(ROOT, 'static/js/query-send.js'), 'utf8');
-    const preferences = appUi.slice(0, appUi.indexOf('/**'));
     const choose = query.slice(query.indexOf('  function currentSystemPrompt()'), query.indexOf('  function createUsage('));
 
     it.each([null, '', 'Please respond briefly and precisely, focusing only on the essentials.',

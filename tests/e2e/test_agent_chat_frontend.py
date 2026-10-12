@@ -886,7 +886,7 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
     stale = json.dumps({"model_id": "removed-model", "reasoning_effort": "ultra"})
     context, page = _real_firebase_page(
         browser, phase4_server,
-        init_script=f"localStorage.setItem('agent_settings_account-a', {json.dumps(stale)});")
+        init_script=f"localStorage.setItem('consensio.agentModel.v1', {json.dumps(stale)});")
     try:
         page.set_viewport_size({"width": width, "height": 900})
         page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
@@ -908,7 +908,7 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         _choose_mode(page, "agent")
         expect(page.locator("#agentModelDropdown")).to_have_value(CATALOG["default_model_id"])
         page.evaluate("() => { App.agentChat.render(); App.agentChat.render(); }")
-        assert page.evaluate("() => JSON.parse(localStorage.getItem(`agent_settings_${auth.currentUser.uid}`)).model_id") == CATALOG["default_model_id"]
+        assert page.evaluate("() => App.userSettings.get('agent_model').model_id") == CATALOG["default_model_id"]
         expect(page.locator(".explanation-popup")).to_have_count(1)
         expect(page.locator("#agentModelNotice")).to_have_count(0)
         label = page.locator(".agent-model-picker .model-picker-display-text")

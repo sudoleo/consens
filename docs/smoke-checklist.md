@@ -850,7 +850,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Custom Model Picker öffnet/wählt, sichtbarer Name aktualisiert.
 - [ ] Tier-Defaults (Free vs. Pro) werden beim Tier-Wechsel angewandt; eine
       zuvor explizit im Picker gewählte Provider-Auswahl bleibt erhalten.
-- [ ] Modell-Auswahl bleibt nach Reload erhalten (localStorage).
+- [ ] Modell-Auswahl bleibt nach Reload erhalten.
+
+## Kontoeinstellungen
+- [ ] Angemeldet Modus, Modellauswahl, eine Display-Option und den System-Prompt
+      ändern; in einem zweiten Browser (oder privaten Fenster) mit demselben
+      Konto anmelden → dieselben Einstellungen sind da.
+- [ ] Abmelden → Modus und Modellauswahl stehen wieder auf den Defaults; erneut
+      anmelden → die Einstellungen des Kontos kehren zurück.
+- [ ] Netz kurz trennen (DevTools Offline), eine Einstellung ändern, Netz wieder
+      an → die Änderung erreicht das Konto (zweiter Browser zeigt sie nach Reload).
 
 ## Attachments (Pro)
 - [ ] Datei anhängen → Chip erscheint, Vorschau öffnet, Entfernen funktioniert.

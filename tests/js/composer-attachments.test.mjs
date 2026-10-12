@@ -19,7 +19,7 @@ const BODY = `<div class="input-section">
     <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button></div>`;
 
 function boot() {
-  const ctx = loadScripts(["static/js/run-mode.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
+  const ctx = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
       window.document.body.classList.add("is-hero");

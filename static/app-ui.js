@@ -1,33 +1,8 @@
-const DEFAULT_SYSTEM_PROMPT = "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly with the information available.";
-
-// Alte eingebaute Defaults geben die zentrale Konfiguration frei. Nur exakte
-// bekannte Default-Texte werden entfernt; individuelle Prompts bleiben erhalten.
-(function migrateLegacySystemPrompt() {
-  const LEGACY_DEFAULTS = [
-    DEFAULT_SYSTEM_PROMPT,
-    "Please respond briefly and precisely, focusing only on the essentials.",
-    "Please respond briefly and precisely, focusing only on the essentials. No follow-up questions.",
-    "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify.",
-  ];
-  try {
-    const stored = localStorage.getItem("systemPrompt");
-    if (stored !== null && LEGACY_DEFAULTS.includes(stored.trim())) {
-      localStorage.removeItem("systemPrompt");
-    }
-  } catch (e) {
-    // localStorage nicht verfügbar (z. B. Private Mode) — kein Abbruch nötig.
-  }
-})();
-
+// The own system prompt is an account setting (user-settings.js, which also
+// drops the built-in defaults older versions stored). Empty: the app default.
 function getStoredSystemPrompt() {
-  const stored = localStorage.getItem("systemPrompt");
-  if (stored !== null) {
-    return stored;
-  }
-  return "";
+  return window.App.userSettings.get("system_prompt") || "";
 }
-window.App = window.App || {};
-window.App.getCustomSystemPrompt = getStoredSystemPrompt;
 
 /**
  * Die Einstellungen als Reiter statt als eine lange Bahn.
@@ -167,7 +142,14 @@ function closeSettingsModal() {
 function saveSystemPrompt() {
   const textarea = document.getElementById("systemPromptInput");
   if (textarea) {
-    localStorage.setItem("systemPrompt", textarea.value.trim());
+    const text = textarea.value.trim() || null;
+    // The account does not keep a prompt over 32,000 bytes (the field caps the
+    // characters); the editor stays open with the text instead of dropping it.
+    if (!window.App.userSettings.accepts("system_prompt", text)) {
+      window.App.showPopup?.("This system prompt is too long to save. Please shorten it.");
+      return;
+    }
+    window.App.userSettings.set("system_prompt", text);
   }
   closeSettingsModal();
   window.App?.trackAppEvent?.("app_settings_saved");
@@ -199,6 +181,13 @@ function bindSettingsModalControls() {
   document.getElementById("saveSystemPromptBtn")?.addEventListener("click", saveSystemPrompt);
   document.getElementById("helpButton")?.addEventListener("click", openHelpModal);
   document.getElementById("closeHelpModal")?.addEventListener("click", closeHelpModal);
+  // The account's prompt arrived (server, another tab, sign-out): an open
+  // editor follows unless it holds an edit of its own.
+  window.App.userSettings.onChange("system_prompt", detail => {
+    const textarea = document.getElementById("systemPromptInput");
+    if (detail.source === "local" || !textarea) return;
+    if (textarea.value.trim() === (detail.previous.system_prompt || "")) textarea.value = getStoredSystemPrompt();
+  });
 
   window.addEventListener("click", (event) => {
     if (event.target === document.getElementById("systemPromptModal")) {

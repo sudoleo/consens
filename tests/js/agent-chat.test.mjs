@@ -16,7 +16,7 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
 ] };
 
 function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, live = false } = {}) {
-  const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js",
+  const setup = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js",
     ...(live ? ["static/js/agent-live.js"] : []), "static/js/agent-chat.js"], {
     body,
     before(window) {
@@ -143,7 +143,7 @@ describe("single-model agent chat", () => {
         unavailable_reason:'Model information unavailable', reasoning_efforts:['default']}]
       .map(model => ({...model, provider:'openai', provider_label:'OpenAI'}))};
     const {window:w, document:d, dom} = boot({catalog});
-    w.localStorage.setItem('agent_settings_owner', JSON.stringify({model_id:'future-missing', reasoning_effort:'high'}));
+    w.localStorage.setItem('consensio.agentModel.v1', JSON.stringify({model_id:'future-missing', reasoning_effort:'high'}));
     await selectAgent(w);
     const select = d.querySelector('#agentModelDropdown');
     expect(select.value).toBe(CATALOG.default_model_id);
@@ -185,7 +185,7 @@ describe("single-model agent chat", () => {
     expect(select.value).toBe('gpt-5.6-sol');
     expect(menu.classList.contains('is-open')).toBe(false);
     expect(d.activeElement).toBe(trigger);
-    expect(JSON.parse(w.localStorage.getItem('agent_settings_owner')).model_id).toBe('gpt-5.6-sol');
+    expect(JSON.parse(w.localStorage.getItem('consensio.agentModel.v1')).model_id).toBe('gpt-5.6-sol');
     w.App.openModelPicker(select, {secondary:true});
     expect(menu.querySelector('[data-setting-value="medium"]')).not.toBeNull();
     menu.querySelector('.model-picker-back-option').click();
@@ -633,12 +633,12 @@ describe("single-model agent chat", () => {
 
   it("reconciles a removed saved model with the displayed choice before sending", async () => {
     const { window, document, dom } = boot();
-    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "removed-model", reasoning_effort: "ultra" }));
+    window.localStorage.setItem("consensio.agentModel.v1", JSON.stringify({ model_id: "removed-model", reasoning_effort: "ultra" }));
     await selectAgent(window);
     expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
     expect(document.getElementById("agentModelNotice")).toBe(null);
     expect(document.querySelector(".agent-model-picker .model-picker-display").textContent).toContain("DeepSeek V4.1 Flash");
-    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({
+    expect(JSON.parse(window.localStorage.getItem("consensio.agentModel.v1"))).toEqual({
       model_id: CATALOG.default_model_id, reasoning_effort: "default",
     });
     expect(window.App.showPopup).toHaveBeenCalledTimes(1);
@@ -1294,14 +1294,14 @@ describe("single-model agent chat", () => {
 
   it("opening an old chat with a removed model leaves the account's own pick alone", async () => {
     const { window, document, dom } = boot();
-    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" }));
+    window.localStorage.setItem("consensio.agentModel.v1", JSON.stringify({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" }));
     await selectAgent(window);
     expect(document.getElementById("agentModelDropdown").value).toBe("gpt-5.6-sol");
     const settings = { model_id: "removed-model", label: "Historical model", reasoning_effort: "default" };
     window.App.runRegistry.showSavedView({ type: "bookmark" }, { chatId: "c".repeat(32), bookmarkId: "old", question: "Old",
       consensus: "Old answer", executionMode: "agent", currentTurn: { id: "old-turn", question: "Old", consensus: "Old answer", agent_settings: settings } });
     expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
-    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
+    expect(JSON.parse(window.localStorage.getItem("consensio.agentModel.v1"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
     // A new chat starts from the account's pick again.
     window.App.runRegistry.clearVisible();
     window.App.agentChat.render();
@@ -1312,10 +1312,10 @@ describe("single-model agent chat", () => {
   it("maps a migrated model ID to its successor instead of the default", async () => {
     const catalog = { ...CATALOG, aliases: { "grok-4.3-no-reasoning": "gpt-5.6-sol" } };
     const { window, document, dom } = boot({ catalog });
-    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "grok-4.3-no-reasoning", reasoning_effort: "medium" }));
+    window.localStorage.setItem("consensio.agentModel.v1", JSON.stringify({ model_id: "grok-4.3-no-reasoning", reasoning_effort: "medium" }));
     await selectAgent(window);
     expect(document.getElementById("agentModelDropdown").value).toBe("gpt-5.6-sol");
-    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
+    expect(JSON.parse(window.localStorage.getItem("consensio.agentModel.v1"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
     expect(window.App.showPopup).not.toHaveBeenCalled();
     dom.window.close();
   });
@@ -1323,14 +1323,14 @@ describe("single-model agent chat", () => {
   it("falls back for a briefly unavailable model without saving over the pick", async () => {
     const catalog = { ...CATALOG, models: CATALOG.models.map(model => model.id === "gpt-5.6-sol" ? { ...model, available: false } : model) };
     const { window, document, dom } = boot({ catalog });
-    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" }));
+    window.localStorage.setItem("consensio.agentModel.v1", JSON.stringify({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" }));
     await selectAgent(window);
     expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
     window.App.agentChat.render();
     window.App.agentChat.render();
     expect(window.App.showPopup).toHaveBeenCalledTimes(1);
     expect(window.App.showPopup.mock.calls[0][0]).toContain("GPT-5.6 Sol is unavailable right now");
-    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
+    expect(JSON.parse(window.localStorage.getItem("consensio.agentModel.v1"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
     document.getElementById("questionInput").value = "Question";
     await window.App.agentChat.send();
     expect(window.streamSSERequest.mock.calls[0][1]).toMatchObject({ model_id: CATALOG.default_model_id });
