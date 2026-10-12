@@ -695,6 +695,15 @@ class ShareFlowTests(unittest.TestCase):
         self.assertEqual(saved['references'], job['references'] + ['shares/' + result['share_id']])
         self.assertGreater(saved['cleanup_at'], datetime.now(timezone.utc) + timedelta(days=29))
 
+    def test_a_new_share_gets_its_redirects_resolved_in_the_background(self):
+        result_id = self._store_pending()
+        with patch.object(snapshots, "schedule_share_cleanup") as schedule:
+            created = snapshots.create_share_from_pending(self.uid, result_id, db=self.db, consume_quota=lambda: True)
+            again = snapshots.create_share_from_pending(self.uid, result_id, db=self.db, consume_quota=lambda: True)
+        # Once, for the share actually created; sharing again returns the same page.
+        schedule.assert_called_once_with(created["share_id"])
+        self.assertFalse(again["created"])
+
     def test_publication_rejects_missing_foreign_or_deleting_source_check_before_quota(self):
         for job in (None, {'uid': 'stranger', 'status': 'complete'}, {'uid': self.uid, 'status': 'deleting'}):
             with self.subTest(job=job):

@@ -7,6 +7,7 @@ S-Verweise (docs/source-verification.md).
 
 import re
 import unittest
+from unittest.mock import patch
 
 from app.services import source_links
 from app.services.public_markdown import render_public_markdown
@@ -231,6 +232,65 @@ class ExpiredTests(unittest.TestCase):
     def test_a_redirect_is_never_a_direct_link_even_when_named(self):
         named = [source(REDIRECT + "1", "Adidas product page title", "adidas.com", "adidas", direct=False)]
         self.assertEqual(source_links.key_links(named, "Bei Adidas schauen."), [])
+
+
+class ShareCleanupTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_watch_feature import FakeDb
+
+        self.db = FakeDb()
+        self.db.stores["shares"]["S" * 16] = {
+            "status": "active",
+            "consensus_md": "Siehe [S1] und [S2].",
+            "sources": [
+                {"id": "S1", "url": REDIRECT + "live", "title": "idealo.de"},
+                {"id": "S2", "url": REDIRECT + "dead", "title": "billiger.de"},
+                {"id": "S3", "url": "https://geizhals.de/p", "title": "Geizhals"},
+            ],
+            "source_verification": {"documents": [{"source_id": "D1", "url": REDIRECT + "live",
+                                                   "source_url": REDIRECT + "live"}]},
+        }
+
+    def clean(self, **kwargs):
+        from app.services import share_snapshots, source_redirects
+
+        target = "https://www.idealo.de/preisvergleich/OffersOfProduct/1"
+        with patch.object(source_redirects, "_enabled", return_value=True), \
+                patch("app.services.agent_read_source.resolve_redirect",
+                      side_effect=lambda url: target if url.endswith("live") else ""), \
+                patch.object(source_redirects, "_status", side_effect=lambda url: 404 if url.endswith("dead") else 200), \
+                patch.object(share_snapshots, "invalidate_share_cache") as invalidate:
+            stats = share_snapshots.clean_share_sources("S" * 16, db=self.db, **kwargs)
+        return stats, invalidate, target
+
+    def test_resolves_sources_and_the_source_check_alike(self):
+        stats, invalidate, target = self.clean()
+        share = self.db.stores["shares"]["S" * 16]
+        self.assertEqual(stats, {"redirects": 2, "resolved": 1, "expired": 0, "changed": True})
+        self.assertEqual(share["sources"][0]["url"], target)
+        self.assertEqual(share["sources"][1]["url"], REDIRECT + "dead")  # no expiry check at share time
+        self.assertEqual(share["source_verification"]["documents"][0]["url"], target)
+        self.assertEqual(share["source_verification"]["documents"][0]["source_url"], target)
+        invalidate.assert_called_once_with("S" * 16)
+
+    def test_the_backfill_drops_dead_links_and_keeps_their_numbers(self):
+        stats, _invalidate, _target = self.clean(check_expired=True)
+        share = self.db.stores["shares"]["S" * 16]
+        self.assertEqual(stats["expired"], 1)
+        self.assertEqual([source["id"] for source in share["sources"]], ["S1", "S3"])
+        self.assertEqual(share["expired_source_ids"], ["S2"])
+
+    def test_a_dry_run_writes_nothing(self):
+        before = dict(self.db.stores["shares"]["S" * 16])
+        stats, invalidate, _target = self.clean(check_expired=True, apply=False)
+        self.assertTrue(stats["changed"])
+        self.assertEqual(self.db.stores["shares"]["S" * 16], before)
+        invalidate.assert_not_called()
+
+    def test_sharing_starts_the_cleanup_but_never_in_tests(self):
+        from app.services import share_snapshots
+
+        self.assertFalse(share_snapshots.schedule_share_cleanup("S" * 16))
 
 
 class CardLinkTests(unittest.TestCase):

@@ -31,6 +31,9 @@ from urllib.parse import urlsplit
 from app.core.observability import safe_exception
 
 REDIRECT_HOSTS = frozenset({"vertexaisearch.cloud.google.com"})
+# Felder, in denen eine Quelle ihre Adresse trägt (Quellen, Belege, Dokumente
+# der Quellenprüfung).
+URL_KEYS = frozenset({"url", "source_url"})
 MAX_URLS = 40
 MAX_WORKERS = 6
 BUDGET_SECONDS = 10.0
@@ -89,7 +92,8 @@ def replace_urls(value, mapping: dict[str, str]):
     """(Kopie mit ersetzten ``url``-Feldern, ob sich etwas geändert hat).
 
     Läuft durch Listen und Dicts -- Quellen, Belege einer Änderung, Belege
-    des Ziels, History-Punkte --; nur Felder namens ``url`` werden ersetzt.
+    des Ziels, History-Punkte, Dokumente der Quellenprüfung --; nur die
+    Adressfelder (``URL_KEYS``) werden ersetzt.
     """
     if not mapping:
         return value, False
@@ -105,7 +109,7 @@ def replace_urls(value, mapping: dict[str, str]):
         changed = False
         out = {}
         for key, item in value.items():
-            if key == "url" and isinstance(item, str) and item in mapping:
+            if key in URL_KEYS and isinstance(item, str) and item in mapping:
                 out[key] = mapping[item]
                 changed = True
                 continue
@@ -117,14 +121,14 @@ def replace_urls(value, mapping: dict[str, str]):
 
 
 def collect_redirects(value) -> list[str]:
-    """Alle Weiterleitungen in ``url``-Feldern einer verschachtelten Struktur."""
+    """Alle Weiterleitungen in Adressfeldern (``URL_KEYS``) einer verschachtelten Struktur."""
     found = []
     if isinstance(value, list):
         for item in value:
             found += collect_redirects(item)
     elif isinstance(value, dict):
         for key, item in value.items():
-            if key == "url" and is_redirect(item):
+            if key in URL_KEYS and is_redirect(item):
                 found.append(item)
             else:
                 found += collect_redirects(item)

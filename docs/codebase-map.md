@@ -7023,6 +7023,14 @@ entfernter Quellen stehen als `expired_source_ids` am Check bzw. Share,
 `expired_sources` an `render_public_markdown(excluded_sources=…)`, damit alte
 `[S3]`-Verweise wegfallen statt als nackter Text zu stehen. Direktlinks nehmen
 nie eine Weiterleitung auf (sie verrät ihr Ziel nicht und verfällt).
+Geteilte Antworten ohne Watch: `create_share_from_pending` startet nach dem
+Anlegen `share_snapshots.schedule_share_cleanup` (Daemon-Thread, aus in
+Unit-/E2E-/Mock-Modus), das `clean_share_sources` ausführt — aufgelöste
+Adressen ersetzen Quellen **und** die Dokumente der Quellenprüfung
+(`URL_KEYS` = `url`/`source_url`), damit beide zusammenpassen; danach wird der
+Share-Cache invalidiert. Der Teilen-Klick wartet nie auf Google.
+`scripts/backfill_share_links.py` bereinigt bestehende Shares mit
+`check_expired=True` (Trockenlauf ohne Writes, `--apply` = Prod-Write).
 Die normale Watch-URL rendert serverseitig die **geltende** Vollversion
 (`accepted_run_id`, sonst die neueste) über dem unveränderten
 Share-Baseline-Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber

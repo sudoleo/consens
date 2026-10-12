@@ -1143,7 +1143,80 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
             "visibility": visibility,
         }
 
-    return _run_transaction(db, publish)
+    result = _run_transaction(db, publish)
+    if result.get("created"):
+        # Google-Weiterleitungen verfallen; die Share bekommt im Hintergrund
+        # die Adressen, auf die sie zeigen (source_redirects.py).
+        schedule_share_cleanup(result["share_id"])
+    return result
+
+
+def clean_share_sources(share_id, *, db=None, check_expired=False, apply=True):
+    """Google-Weiterleitungen einer Share durch ihr Ziel ersetzen (seit 2026-10-12).
+
+    Aufgelöste Adressen ersetzen Quellen und die Dokumente der
+    Quellenprüfung gleichermaßen, damit beide zusammenpassen. Mit
+    ``check_expired`` fallen eindeutig abgelaufene Weiterleitungen (404/410)
+    aus der Quellenliste; ihre Nummern landen in ``expired_source_ids``,
+    damit alte ``[S3]``-Verweise beim Rendern wegfallen. Gibt
+    ``{"redirects", "resolved", "expired", "changed"}`` zurück.
+    """
+    from app.services import source_redirects
+
+    db = db if db is not None else db_firestore
+    ref = db.collection(SHARES_COLLECTION).document(str(share_id))
+    snap = ref.get()
+    data = snap.to_dict() if snap.exists else None
+    stats = {"redirects": 0, "resolved": 0, "expired": 0, "changed": False}
+    if not data:
+        return stats
+    fields = ("sources", "source_verification")
+    redirects = set(source_redirects.collect_redirects([data.get(field) for field in fields]))
+    stats["redirects"] = len(redirects)
+    if not redirects:
+        return stats
+    mapping = source_redirects.resolve_urls(redirects)
+    expired = source_redirects.expired_urls(redirects - set(mapping)) if check_expired else set()
+    stats.update(resolved=len(mapping), expired=len(expired))
+    updates = {}
+    sources, changed = source_redirects.replace_urls(data.get("sources") or [], mapping)
+    sources, dropped, removed = source_redirects.drop_urls(sources, expired)
+    if changed or dropped:
+        updates["sources"] = sources
+    if removed:
+        updates["expired_source_ids"] = list(dict.fromkeys([*_expired_ids(data), *removed]))
+    verification, moved = source_redirects.replace_urls(data.get("source_verification"), mapping)
+    if moved:
+        updates["source_verification"] = verification
+    stats["changed"] = bool(updates)
+    if updates and apply:
+        ref.update(updates)
+        invalidate_share_cache(str(share_id))
+    return stats
+
+
+def schedule_share_cleanup(share_id) -> bool:
+    """Nach dem Teilen im Hintergrund auflösen: der Klick wartet nie auf Google."""
+    import os
+    import threading
+
+    from app.services.llm.mock_llm import mock_llm_enabled
+
+    if mock_llm_enabled() or any(os.getenv(key) == "1" for key in ("UNIT_TEST_MODE", "E2E_TEST_MODE")):
+        return False
+
+    def run():
+        try:
+            clean_share_sources(share_id)
+        except Exception as exc:
+            logging.warning("share source cleanup failed category=%s", safe_exception(exc))
+
+    try:
+        threading.Thread(target=run, name="share-source-cleanup", daemon=True).start()
+    except Exception as exc:
+        logging.warning("share source cleanup start failed category=%s", safe_exception(exc))
+        return False
+    return True
 
 
 def build_share_for_watch_query(uid, question, *, visibility="private"):
