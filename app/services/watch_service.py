@@ -246,6 +246,33 @@ def _serialize_probe(value) -> dict | None:
     }
 
 
+def goal_state(data: dict) -> str:
+    """Wie es um das Ziel steht: reached | confirming | not_met | unclear | pending.
+
+    ``last_condition_status`` hält nur ein klares met/not_met. Hat ein Check
+    das aktuelle Ziel bewertet, aber keine Antwort gefunden (``unknown``),
+    ist es "unclear" -- nicht "pending", denn geprüft wurde es. Leer ohne Ziel.
+    """
+    goal = str(data.get("condition") or "")
+    if not goal:
+        return ""
+    if data.get("status") == WATCH_STATUS_RESOLVED:
+        return "reached"
+    status = data.get("last_condition_status")
+    if status == "met":
+        return "confirming"
+    if status == "not_met":
+        return "not_met"
+    goal_hash = condition_hash(goal)
+    points = data.get("history_points")
+    for point in reversed(points if isinstance(points, list) else []):
+        if isinstance(point, dict) and point.get("condition_hash") == goal_hash:
+            # Ein met/not_met hier, aber leerer Status: das Ziel wurde seitdem
+            # neu gesetzt (gleicher Text) und noch nicht wieder geprüft.
+            return "unclear" if point.get("condition_status") == "unknown" else "pending"
+    return "pending"
+
+
 def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> dict:
     def iso(value):
         return value.isoformat() if isinstance(value, datetime) else ""
@@ -277,6 +304,7 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "telegram_muted_until": iso(data.get("telegram_muted_until")),
         "condition": str(data.get("condition") or ""),
         "last_condition_status": data.get("last_condition_status"),
+        "goal_state": goal_state(data),
         "visibility": visibility,
         "status": data.get("status") or "paused",
         "next_run_at": iso(data.get("next_run_at")),

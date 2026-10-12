@@ -1918,23 +1918,36 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   *Watching* (Moved → Re-checking → Held → Watching → Pending, dann nach nächstem
   Check) / *Resolved* / *Paused*, am Ende *Delivery* (Telegram-Verbindung und
   Morning Brief im `.switch`/`.slider`-Stil des Input-Felds). Jede Karte zeigt
-  eine Textspalte über die ganze Breite: Status (bei „First check pending“ ohne
-  Zeit, die steht im Fuß), Frage (3 Zeilen geklemmt), „Waiting for“ + Zielstatus,
-  den Satz des Zustands, tragende Quellen und eine Check-Leiste (ein Strich je
-  Check, Form nach Signal). Oben rechts schwebt immer etwas zum Wiedererkennen
-  (`.wd-image` float, Karte `.has-image`), der Text fließt herum; mobil ist es
-  kleiner und die Frage darf daneben vier Zeilen haben. Hat die Watch ein Bild
-  (`watch.image`), ist es eine 3:2-Kachel (`is-item` ganz auf Weiß, `is-article`
-  füllend) oder bei `is-logo` die abgerundeten App-Icon-Kacheln ohne Rahmen
-  (52 px hoch, Haarlinien-Schatten per `drop-shadow`). Sonst — und sobald ein
+  eine Textspalte über die ganze Breite: Status (Zeit als „checked 3 h ago“ bzw.
+  „last check …“; bei „First check pending“ ohne Zeit, die steht im Fuß), Frage
+  (3 Zeilen geklemmt), „Waiting for“ + Ziel + Zielstand, den Satz des Zustands
+  („The answer has held through N checks.“), tragende Quellen und ab drei
+  Checks eine Check-Leiste (ein Strich je Check, Form nach Signal; ein, zwei
+  Striche sahen wie ein Darstellungsfehler aus). Den Zielstand liefert der
+  Server (`watch_service.goal_state`: reached | confirming | not_met | unclear |
+  pending) — ein Check, der das aktuelle Ziel bewertet, aber keine Antwort
+  gefunden hat (`unknown`), heißt „No clear answer yet“, nie „Not checked yet“;
+  er ist Text hinter einem Punkt, gefärbt nur bei Reached (`--agree`) und
+  Reported (`--partial`). Pro Karte gibt es keine Versalien-Etiketten; Ziel- und
+  Fußzeile laufen als Fließtext mit echten Trennpunkten (`.wd-sep`, per
+  geschütztem Leerzeichen an den Teil davor gebunden, damit kein Umbruch eine
+  Zeile mit „·“ beginnt). Eine Haarlinie (`--line-soft`) trennt Inhalt
+  (`.wd-item-main`, `display: flow-root` hält das Bild darüber) und Fuß. Oben
+  rechts schwebt immer etwas zum Wiedererkennen (`.wd-image` float, Karte
+  `.has-image`), alle Arten auf derselben Höhe `--wd-anchor` (60 px, mobil
+  44 px), der Text fließt herum; mobil darf die Frage daneben vier Zeilen haben.
+  Hat die Watch ein Bild (`watch.image`), ist es eine 3:2-Kachel (`is-item` ganz
+  auf Weiß, `is-article` füllend) oder bei `is-logo` die abgerundeten
+  App-Icon-Kacheln ohne Rahmen (Haarlinien-Schatten per `drop-shadow`). Sonst — und sobald ein
   Bild entfernt wird oder nicht lädt — steht das Symbol der Watch
   (`watch.symbol`, `.wd-image.is-symbol` > `.wd-symbol`, Strichzeichnung aus
   `SYMBOL_ICONS`, unbekannte Namen → `eye`). Nur Pfade
   `/api/watch/{id}/image/{token}` werden gerendert, das × ruft
   `DELETE /api/watch/{id}/image`. Im Fuß stehen links „Open page“/„Settings“,
-  rechts nächster Check + Zeitplan (Zeitzone nur, wenn sie nicht die eigene
-  ist), Tages-Scan (`last_probe`) und „Public page · Telegram“ (mobil darüber,
-  eigene Zeilen); eine eigene rechte Spalte gibt es nicht mehr. „Settings“
+  rechts eine leise Zeile „Next check in 21 h · Zeitplan (Zeitzone nur, wenn sie
+  nicht die eigene ist) · Tages-Scan (`last_probe`) · Public page · Telegram“,
+  nur die Zeit in `--ink` (mobil darüber, linksbündig); eine eigene rechte
+  Spalte gibt es nicht mehr. „Settings“
   klappt in der Karte Ziel-Editor, Intervall/Tag/Uhrzeit, Alerts, Kanäle,
   Google-Listing, Pause/Delete auf; eine abgeschlossene Watch bietet „Watch for
   something new“ (PATCH `status=active` + neues oder leeres Ziel). Kein

@@ -3034,3 +3034,28 @@ class FollowRouteTests(unittest.TestCase):
         with patch.object(watch_router.watch_followers, "confirm_follow", side_effect=WatchError("invalid_token", "This link is invalid.")):
             response = self.client.get("/watch/follow/confirm?token=x")
         self.assertEqual(response.status_code, 400)
+
+
+class GoalStateTests(unittest.TestCase):
+    """The dashboard's goal line reads goal_state; "unknown" is no "not checked"."""
+
+    GOAL = "Eine Promotionsstelle wird ausgeschrieben"
+
+    def point(self, status, goal=None):
+        return {"condition_hash": watch_service.condition_hash(goal or self.GOAL), "condition_status": status}
+
+    def test_each_standing_of_the_goal(self):
+        state = watch_service.goal_state
+        base = {"status": "active", "condition": self.GOAL}
+        self.assertEqual(state({"status": "active"}), "")
+        self.assertEqual(state({**base, "status": "resolved"}), "reached")
+        self.assertEqual(state({**base, "last_condition_status": "met"}), "confirming")
+        self.assertEqual(state({**base, "last_condition_status": "not_met"}), "not_met")
+        self.assertEqual(state(base), "pending")
+        # Checked, but the evidence did not settle it.
+        self.assertEqual(state({**base, "history_points": [self.point("unknown")]}), "unclear")
+        # Only checks of the current goal count.
+        self.assertEqual(state({**base, "history_points": [self.point("unknown", goal="Old goal")]}), "pending")
+        # Same goal set again after a definite answer: not checked since.
+        self.assertEqual(state({**base, "history_points": [self.point("unknown"), self.point("met")]}), "pending")
+        self.assertEqual(state({**base, "history_points": "broken"}), "pending")

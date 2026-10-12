@@ -168,19 +168,31 @@
       when: point.ts,
       headline: move
         ? `Last moved ${formatDay(move.ts)}: ${move.change_summary || "the answer changed on evidence."}`
-        : (steady > 1 ? `No change on evidence in ${steady} checks.` : "No change on evidence since the baseline."),
+        : (steady > 1 ? `The answer has held through ${steady} checks.` : "The answer has held since the first check."),
       sources: []
     };
   }
 
+  // The server says where the goal stands (watch_service.goal_state): a check
+  // that looked but found no answer is "unclear", not "not checked".
+  const GOAL_STATES = {
+    reached: { status: "Reached", tone: "reached" },
+    confirming: { status: "Reported, confirming", tone: "reported" },
+    not_met: { status: "Not yet", tone: "open" },
+    unclear: { status: "No clear answer yet", tone: "open" },
+    pending: { status: "Not checked yet", tone: "open" }
+  };
+
   function goalLine(watch) {
     const goal = String(watch.condition || "").trim();
     if (!goal) return null;
-    let status = "Not yet";
-    if (watch.status === "resolved") status = "Reached";
-    else if (watch.last_condition_status === "met") status = "Reported, confirming";
-    else if (!watch.last_condition_status) status = "Not checked yet";
-    return { goal: goal, status: status };
+    let state = GOAL_STATES[watch.goal_state];
+    if (!state) {
+      state = watch.status === "resolved" ? GOAL_STATES.reached
+        : watch.last_condition_status === "met" ? GOAL_STATES.confirming
+          : watch.last_condition_status ? GOAL_STATES.not_met : GOAL_STATES.pending;
+    }
+    return { goal: goal, status: state.status, tone: state.tone };
   }
 
   const SIGNAL_LABELS = {
@@ -193,9 +205,14 @@
     stable: "No change"
   };
 
+  // From three checks on the strip has a shape worth reading; one or two
+  // lone ticks only looked like a rendering glitch, and the sentence above
+  // already says how many checks held.
+  const RECORD_MIN_CHECKS = 3;
+
   function buildRecord(watch) {
     const history = (Array.isArray(watch.history) ? watch.history : []).slice(-16);
-    if (!history.length) return null;
+    if (history.length < RECORD_MIN_CHECKS) return null;
     const strip = el("div", "wd-record");
     const moved = history.filter(point => point.signal === "moved").length;
     const held = history.filter(point => point.signal === "held").length;
@@ -325,42 +342,52 @@
     return figure;
   }
 
+  function separator() {
+    const dot = el("span", "wd-sep", "·");
+    dot.setAttribute("aria-hidden", "true");
+    return dot;
+  }
+
+  // One quiet line of parts ("Next check in 21 h · Weekly on … · Public
+  // page"), joined by real separators so a wrap breaks after a dot.
   function scheduleBlock(watch) {
     const side = el("div", "wd-item-side");
+    const parts = [];
+    const part = (...nodes) => {
+      const wrap = el("span", "wd-side-part");
+      wrap.append(...nodes);
+      parts.push(wrap);
+      return wrap;
+    };
     if (watch.status === "active" && watch.next_run_at) {
-      side.appendChild(el("span", "wd-side-label", "Next check"));
       const strong = el("strong", "wd-side-value", relativeTime(watch.next_run_at));
       strong.title = formatDateTime(watch.next_run_at);
-      side.appendChild(strong);
-      const note = el("span", "wd-side-note", shortSchedule(watch));
-      note.title = schedule(watch);
-      side.appendChild(note);
+      part(el("span", "wd-side-label", "Next check"), " ", strong);
+      part(el("span", "wd-side-note", shortSchedule(watch))).title = schedule(watch);
     } else if (watch.status === "resolved") {
-      side.appendChild(el("span", "wd-side-label", "Closed"));
-      side.appendChild(el("strong", "wd-side-value", formatDay(watch.resolution?.at) || "Done"));
-      side.appendChild(el("span", "wd-side-note", "Slot freed"));
+      part(el("span", "wd-side-label", "Closed"), " ",
+        el("strong", "wd-side-value", formatDay(watch.resolution?.at) || "Done"));
+      part(el("span", "wd-side-note", "slot freed"));
     } else {
-      side.appendChild(el("span", "wd-side-label", "Schedule"));
-      side.appendChild(el("strong", "wd-side-value", "Paused"));
-      const note = el("span", "wd-side-note", shortSchedule(watch));
-      note.title = schedule(watch);
-      side.appendChild(note);
+      part(el("strong", "wd-side-value", "Paused"));
+      part(el("span", "wd-side-note", shortSchedule(watch))).title = schedule(watch);
     }
     const probe = watch.last_probe;
     if (watch.status === "active" && probe && probe.at) {
-      const note = el("span", "wd-side-probe");
-      note.textContent = probe.outcome === "new_evidence"
+      part(el("span", "wd-side-probe", probe.outcome === "new_evidence"
         ? `Daily scan found news ${relativeTime(probe.at)}`
         : probe.outcome === "failed"
           ? "Daily scan unavailable"
-          : `Daily scan: nothing new (${relativeTime(probe.at)})`;
-      side.appendChild(note);
+          : `Daily scan: nothing new (${relativeTime(probe.at)})`));
     }
     // How the watch is set up belongs with its schedule, not in the status line.
-    const meta = [];
-    if (watch.visibility === "public") meta.push("Public page");
-    if (watch.telegram_enabled) meta.push("Telegram");
-    if (meta.length) side.appendChild(el("span", "wd-side-meta", meta.join(" · ")));
+    if (watch.visibility === "public") part(el("span", "wd-side-meta", "Public page"));
+    if (watch.telegram_enabled) part(el("span", "wd-side-meta", "Telegram"));
+    // A no-break space ties each dot to the part before it.
+    parts.forEach((node, index) => {
+      if (index) side.append(" ", separator(), " ");
+      side.appendChild(node);
+    });
     return side;
   }
 
@@ -384,7 +411,11 @@
     // A pending first check's time is the next check, which the side column
     // already shows; saying it twice only crowds the line.
     if (state.when && state.key !== "waiting") {
-      const time = el("time", "wd-status-time", relativeTime(state.when));
+      // Say what the time is: the last check, unless the label already is
+      // the event ("Moved", "Resolved").
+      const prefix = state.key === "watching" || state.key === "held" ? "checked "
+        : state.key === "paused" ? "last check " : "";
+      const time = el("time", "wd-status-time", prefix + relativeTime(state.when));
       time.dateTime = state.when;
       time.title = formatDateTime(state.when);
       status.appendChild(time);
@@ -403,9 +434,13 @@
     const goal = goalLine(watch);
     if (goal) {
       const line = el("p", "wd-goal");
-      line.appendChild(el("span", "wd-goal-label", "Waiting for"));
-      line.appendChild(el("span", "wd-goal-text", goal.goal));
-      line.appendChild(el("span", "wd-goal-status is-" + goal.status.split(" ")[0].toLowerCase().replace(",", ""), goal.status));
+      // Spaces between the parts let the line break like a sentence; a
+      // no-break space keeps the dot at the end of a line, never opening one.
+      line.append(
+        el("span", "wd-goal-label", "Waiting for"), " ",
+        el("span", "wd-goal-text", goal.goal), " ", separator(), " ",
+        el("span", "wd-goal-status is-" + goal.tone, goal.status)
+      );
       main.appendChild(line);
     }
 

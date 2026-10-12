@@ -191,6 +191,53 @@ describe("dashboard render", () => {
     expect(card.classList.contains("has-image")).toBe(true);
   });
 
+  it("says where the goal stands, keeps one label voice and shows the record from three checks", async () => {
+    const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
+    const { window } = harness;
+    window.history.replaceState(null, "", "/app/watches");
+    window.auth.currentUser.getIdToken = async () => "token";
+    const two = [
+      { ts: "2026-10-10T07:00:00+00:00", signal: "stable", trigger: "stable" },
+      { ts: "2026-10-11T07:00:00+00:00", signal: "stable", trigger: "stable" }
+    ];
+    const watches = [
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "w1", question: "Promotionsstelle an der Hochschule Hannover?", share_path: "/s/a",
+        condition: "Eine Stelle wird ausgeschrieben", goal_state: "unclear", history: two,
+        visibility: "public", telegram_enabled: true
+      }),
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "w2", question: "Cursor or Claude Code?", share_path: "/s/b",
+        condition: "Cursor drops its price", goal_state: "pending",
+        history: [...two, { ts: "2026-10-12T07:00:00+00:00", signal: "stable", trigger: "stable" }]
+      })
+    ];
+    window.fetch = vi.fn(async (path) => ({
+      ok: true,
+      json: async () => String(path).includes("/api/my/watches")
+        ? { watches: watches, limits: { plan: "free", active_count: 2, active_limit: 3 } }
+        : {}
+    }));
+
+    await window.App.watchDashboard.render();
+
+    const card = text => [...window.document.querySelectorAll(".wd-item")]
+      .find(node => node.querySelector(".wd-question a").textContent.startsWith(text));
+    const job = card("Promotionsstelle");
+    // Checked, but no answer: never "Not checked yet".
+    expect(job.querySelector(".wd-goal-status").textContent).toBe("No clear answer yet");
+    expect(card("Cursor").querySelector(".wd-goal-status").textContent).toBe("Not checked yet");
+    expect(job.querySelector(".wd-status-time").textContent).toMatch(/^checked /);
+    expect(job.querySelector(".wd-headline").textContent).toBe("The answer has held through 2 checks.");
+    // Two checks are no shape yet; three are.
+    expect(job.querySelector(".wd-record")).toBeNull();
+    expect(card("Cursor").querySelectorAll(".wd-record .wd-tick").length).toBe(3);
+    // The footer is one line of parts; each dot is tied to the part before it.
+    const side = job.querySelector(".wd-item-side");
+    expect(side.textContent.replace(/ /g, " ")).toMatch(/^Next check \S.* · Weekly · Public page · Telegram$/);
+    expect([...side.querySelectorAll(".wd-sep")].every(dot => dot.previousSibling.textContent === " ")).toBe(true);
+  });
+
   it("shows logos without a frame and otherwise the watch's symbol", async () => {
     const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
     const { window } = harness;

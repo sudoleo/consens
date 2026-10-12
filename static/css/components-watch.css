@@ -500,7 +500,15 @@
 .wd-item.is-resolved { --wd-tone: var(--agree); }
 .wd-item.is-error { --wd-tone: var(--dispute); }
 .wd-item.is-rechecking { --wd-tone: var(--ink-2); }
-.wd-item-main { grid-area: main; min-width: 0; }
+/* A hairline parts what the watch says from how it runs (actions, schedule);
+   flow-root keeps the floated picture inside, above the line. */
+.wd-item-main {
+  grid-area: main;
+  display: flow-root;
+  min-width: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
 
 .wd-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: var(--font-size-xs); }
 .wd-dot {
@@ -536,14 +544,17 @@
 
 /* The picture of the thing or the topic (services/watch_images.py) floats top
    right; status, question and goal flow around it, so the card grows no
-   taller. A product shot is shown whole on white, an article photo fills the
-   tile. The × shows on hover/focus, always on touch. */
-.wd-image { position: relative; float: right; width: 132px; margin: 2px 0 10px 22px; }
+   taller. Every kind stands at the same height (--wd-anchor), so the cards
+   line up: a product shot whole on white, an article photo filling its 3:2
+   tile, logos and the symbol as square tiles. The × shows on hover/focus,
+   always on touch. */
+.wd-item { --wd-anchor: 60px; }
+.wd-image { position: relative; float: right; width: calc(var(--wd-anchor) * 1.5); margin: 2px 0 10px 22px; }
 .wd-image-frame {
   display: block;
   overflow: hidden;
   aspect-ratio: 3 / 2;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: #fff;
   outline: 1px solid var(--line-soft);
   outline-offset: -1px;
@@ -564,19 +575,19 @@
 }
 .wd-image.is-logo img {
   width: auto;
-  height: 52px;
+  height: var(--wd-anchor);
   filter: drop-shadow(0 0 .5px rgba(0, 0, 0, .35)) drop-shadow(0 1px 2px rgba(0, 0, 0, .08));
 }
 .wd-symbol {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
+  width: var(--wd-anchor);
+  height: var(--wd-anchor);
+  border-radius: calc(var(--wd-anchor) * .22);
   background: var(--well);
   color: var(--ink-2);
 }
-.wd-symbol svg { width: 26px; height: 26px; }
+.wd-symbol svg { width: calc(var(--wd-anchor) * .46); height: calc(var(--wd-anchor) * .46); }
 .is-paused .wd-image-frame,
 .is-error .wd-image-frame,
 .is-paused .wd-symbol,
@@ -607,34 +618,20 @@
   .wd-image-remove { opacity: 1; }
 }
 
+/* Running text, not flex: label, goal and standing wrap like a sentence, so
+   a narrow card never leaves "· Not yet" alone on a line. */
 .wd-goal {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
   margin: 10px 0 0;
   font-size: var(--font-size-sm);
-  line-height: 1.45;
+  line-height: 1.5;
 }
-.wd-goal-label {
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
+/* One label voice per card: sentence case, small, muted -- no caps. The goal's
+   standing is a word after a dot, coloured only when it means something. */
+.wd-goal-label { color: var(--ink-3); font-size: var(--font-size-xs); }
 .wd-goal-text { min-width: 0; color: var(--ink); font-weight: var(--font-weight-medium); }
-.wd-goal-status {
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  color: var(--ink-2);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-}
-.wd-goal-status.is-reached { background: var(--agree-bg); box-shadow: none; color: var(--agree); }
-.wd-goal-status.is-reported { background: var(--partial-bg); box-shadow: none; color: var(--partial); }
+.wd-goal-status { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); white-space: nowrap; }
+.wd-goal-status.is-reached { color: var(--agree); }
+.wd-goal-status.is-reported { color: var(--partial); }
 
 .wd-headline { margin: 10px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.55; }
 .is-moved .wd-headline,
@@ -671,31 +668,21 @@
 .wd-tick.is-reverted { background: color-mix(in srgb, var(--ink-3) 35%, transparent); height: 8px; }
 .wd-tick.is-resolved { background: var(--agree); }
 
+/* The footer reads as one quiet line: "Next check in 21 h · Weekly on … ·
+   Public page". Only the time itself is in ink. */
 .wd-item-side {
   grid-area: side;
-  display: flex;
-  flex-wrap: wrap;
   align-self: center;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 2px 8px;
   min-width: 0;
-  margin-top: 12px;
+  margin-top: 10px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
   text-align: right;
 }
-.wd-side-label {
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-.wd-side-value { color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
-.wd-side-note { color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.45; }
-.wd-side-probe,
-.wd-side-meta { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.45; }
-.wd-side-probe::before,
-.wd-side-meta::before { content: "·"; margin-right: 8px; }
+.wd-side-part { white-space: nowrap; }
+.wd-side-value { color: var(--ink); font-weight: var(--font-weight-medium); }
+.wd-sep { margin: 0 2px; color: var(--ink-3); }
 
 .wd-actions {
   grid-area: actions;
@@ -703,7 +690,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  margin: 12px -8px 0;
+  margin: 10px -8px 0;
 }
 .wd-action {
   display: inline-flex;
@@ -890,23 +877,11 @@
     grid-template-areas: "main" "side" "actions" "settings";
     padding: 18px 16px 12px;
   }
-  .wd-image { width: 72px; margin-left: 12px; }
-  .wd-image.is-logo img { height: 40px; }
-  .wd-symbol { width: 40px; height: 40px; border-radius: 10px; }
-  .wd-symbol svg { width: 22px; height: 22px; }
+  .wd-item { --wd-anchor: 44px; }
+  .wd-image { margin-left: 12px; }
   /* Beside the picture the question is narrower; a fourth line keeps its end. */
   .wd-item.has-image .wd-question a { -webkit-line-clamp: 4; }
-  .wd-item-side {
-    justify-content: flex-start;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line-soft);
-    text-align: left;
-  }
-  .wd-side-probe,
-  .wd-side-meta { width: 100%; }
-  .wd-side-probe::before,
-  .wd-side-meta::before { content: none; }
+  .wd-item-side { text-align: left; }
   .wd-explainer-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .wd-example-list { grid-template-columns: minmax(0, 1fr); }
   .wd-summary { gap: 8px 22px; }
