@@ -613,7 +613,9 @@ def share_page(request: Request, slug_id: str):
             return _unavailable_response(
                 request, 403, "Private watch page",
                 "This page is private. Sign in with the account that created it to view it.",
-                sign_in_href="/app?next=" + quote(request.url.path, safe="/"),
+                # The canonical path, not the requested one: it always
+                # matches what the app accepts as a return target.
+                sign_in_href="/app?next=" + quote(snapshots.share_path("", share_id), safe="/"),
             )
         if viewer_uid != data.get("owner_uid"):
             return _unavailable_response(

@@ -584,3 +584,23 @@ def test_outbox_retry_scan_survives_a_missing_composite_index():
             return Query()
 
     assert outbox.list_due_ids(now=now, db=Db()) == ["early", "late"]
+
+
+def test_owner_mails_for_private_watches_go_through_the_app_sign_in():
+    # A private page needs the owner's session cookie, which the mail app
+    # lacks: every owner mail links via /app?next=, a public page directly.
+    share_id = "A" * 16
+    for kind, alert in ((outbox.KIND_WATCH_ALERT, "change"), (outbox.KIND_WATCH_ALERT, "every_run"),
+                        (outbox.KIND_WATCH_ALERT, "condition"), (outbox.KIND_WATCH_PAUSED, None)):
+        for visibility, expected in (("private", f"/app?next=/s/{share_id}"), ("public", f"/s/slug-{share_id}")):
+            payload = {"share_id": share_id, "share_slug": "slug", "visibility": visibility,
+                       "question": "Private question?", "alert": alert,
+                       "delta": {"summary": "Something moved."}}
+            item = {"kind": kind, "resource_id": "watch-1"}
+            message = notification_delivery._owner_message(item, payload, "owner@example.test", "Answer.")
+            plain = message.get_body(preferencelist=("plain",)).get_content()
+            html_part = message.get_body(preferencelist=("html",)).get_content()
+            assert notification_delivery.SITE_URL + expected in plain, (kind, alert, visibility)
+            assert expected in html_part, (kind, alert, visibility)
+            if visibility == "private":
+                assert f"{notification_delivery.SITE_URL}/s/{share_id}\n" not in plain

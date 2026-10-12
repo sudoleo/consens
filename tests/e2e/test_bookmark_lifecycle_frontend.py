@@ -27,9 +27,11 @@ def test_delete_disappears_before_server_reply_and_restores_on_failure(browser, 
         row.hover()
         control = row.locator('.delete-bookmark')
         # The first click only arms the control; nothing is deleted yet.
-        control.click()
+        # A double-click arms only: its second click never confirms.
+        control.dblclick()
         expect(control).to_have_text('Delete')
         expect(row).to_have_count(1)
+        page.wait_for_timeout(450)
         assert not requests
         control.click()
         expect(row).to_have_count(0)
@@ -48,6 +50,7 @@ def test_delete_disappears_before_server_reply_and_restores_on_failure(browser, 
             # The restored item can retry, including an ambiguous server failure.
             row.hover()
             row.locator('.delete-bookmark').click()
+            page.wait_for_timeout(450)
             row.locator('.delete-bookmark').click()
             expect(row).to_have_count(0)
             assert len(requests) == 2
@@ -68,7 +71,7 @@ def test_armed_delete_cancels_without_deleting(browser, phase4_server, width, ca
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
         page.set_viewport_size({'width': width, 'height': 800})
-        bookmarks = [{'id': 'first', 'title': 'Keep me', 'query': 'Question', 'mode': 'Agent'},
+        bookmarks = [{'id': 'first', 'title': 'Keep me even with a long title that runs to the edge', 'query': 'Question', 'mode': 'Agent'},
                      {'id': 'second', 'title': 'Other chat', 'query': 'Another question', 'mode': 'Agent'}]
         page.route('**/bookmarks?*', lambda r: _json(r, {'bookmarks': bookmarks, 'next_cursor': None}))
         page.route('**/bookmark', lambda r: requests.append(r))
@@ -83,6 +86,9 @@ def test_armed_delete_cancels_without_deleting(browser, phase4_server, width, ca
         expect(control).to_have_text('Delete')
         # The second step reads as destructive, also with a touch-stuck :hover.
         expect(control).to_have_css('color', 'rgb(177, 79, 91)')
+        # The title ends before "Delete" instead of running under it.
+        title = row.locator('p')
+        assert title.bounding_box()['x'] + title.bounding_box()['width'] <= control.bounding_box()['x'] + 1
         reader_screenshot(page, f'bookmark-delete-armed-{width}')
         if cancel == 'escape':
             page.keyboard.press('Escape')

@@ -1283,13 +1283,14 @@ body:has(.sidebar.active) .brand-float {
 .delete-bookmark.is-armed:hover,
 .delete-bookmark.is-armed:focus-visible {
   padding: 0 9px;
-  background: color-mix(in srgb, var(--dispute) 12%, transparent);
+  /* Opaque: a long title must not show through "Delete". */
+  background: color-mix(in srgb, var(--dispute) 12%, var(--raise));
   color: var(--dispute);
 }
 .delete-bookmark.is-armed:focus-visible { outline: var(--focus-ring); }
-/* The armed row keeps its tint so the question stays readable next to the
-   wider "Delete" control. */
-.sidebar .bookmark.is-confirming-delete { background: var(--raise); }
+/* The armed row keeps its tint, and its title ends before the wider
+   "Delete" control instead of running under it. */
+.sidebar .bookmark.is-confirming-delete { background: var(--raise); padding-right: 68px; }
 
 /* Touch-Geraete haben kein Hover: das X bleibt sichtbar, aber als ruhiges
    Symbol in Volltonfarbe statt halbtransparent, mit Zeilenhoehe als Tippziel. */

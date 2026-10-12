@@ -1529,7 +1529,8 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 403)
         self.assertNotIn("Photosynthese wandelt", denied.text)
         # The owner from a mail link signs in and comes straight back.
-        self.assertIn('href="/app?next=%s"' % path, denied.text)
+        # Always the canonical path, whatever slug the link carried.
+        self.assertIn('href="/app?next=/s/%s"' % self.share_id, denied.text)
         self.assertIn("Sign in to view", denied.text)
 
         with patch.object(share_router.snapshots, "get_share", return_value=doc), \

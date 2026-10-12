@@ -3281,8 +3281,10 @@ function updateBookmarkDOM(bookmark) {
 // Deleting a chat cannot be undone, so the first activation only arms the
 // control: it turns into "Delete" and only a second activation deletes. It
 // disarms by itself, on Escape and on a click anywhere else (a tap on the row
-// still opens the chat).
+// still opens the chat). The second click of a double-click, or any
+// activation right after arming, never counts as that confirmation.
 const BOOKMARK_DELETE_ARM_MS = 5000;
+const BOOKMARK_DELETE_CONFIRM_DELAY_MS = 400;
 const BOOKMARK_DELETE_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
 let armedBookmarkDelete = null;
 
@@ -3310,7 +3312,8 @@ function armBookmarkDelete(control, row) {
   control.textContent = "Delete";
   control.setAttribute("aria-label", `Confirm: delete chat ${row.querySelector("p")?.textContent || ""}`.trim());
   control.title = "Click again to delete this chat";
-  armedBookmarkDelete = { control, row, timer: setTimeout(disarmBookmarkDelete, BOOKMARK_DELETE_ARM_MS) };
+  armedBookmarkDelete = { control, row, at: performance.now(),
+    timer: setTimeout(disarmBookmarkDelete, BOOKMARK_DELETE_ARM_MS) };
 }
 
 document.addEventListener("click", event => {
@@ -3342,6 +3345,7 @@ function createReadyBookmarkRow(bookmark, runId = null) {
       armBookmarkDelete(deleteControl, div);
       return;
     }
+    if (e.detail > 1 || performance.now() - (armedBookmarkDelete?.at || 0) < BOOKMARK_DELETE_CONFIRM_DELAY_MS) return;
     disarmBookmarkDelete();
     deleteBookmark(bookmark.id);
   });
