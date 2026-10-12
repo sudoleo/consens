@@ -1224,6 +1224,11 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   danach mit kurzem Klartext. Sonst fährt die Pflichtentscheidung `memory` auf
   `answer` mit (seit 2026-10-11, vorher auf `compare_models`): jede beantwortete
   Nachricht endet mit `answer`, also bleibt es eine Entscheidung pro Nachricht.
+  Seit 2026-10-12 nimmt das Feld jede Form an (`_memory_changes`: `null` oder
+  unlesbarer Text = keine Änderung, ein Objekt = eine Änderung, ein Eintrag ohne
+  Objekt = eine Änderung, die `apply` sichtbar ablehnt); vorher scheiterte das
+  ganze `answer`. Angewandt wird es erst, wenn `answer` angenommen ist: ein
+  abgelehntes `answer` kommt mit seiner Entscheidung wieder (vorher doppelt gespeichert).
   Serverseitige Verträge: (1) jede Agent-Änderung trägt `evidence`, ein
   wörtliches Zitat, das in einer **Nutzer**-Nachricht des Chats vorkommen muss
   (`evidence_matches`, normalisiert nur Groß-/Kleinschreibung, Leerraum,
@@ -1234,7 +1239,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   anhängt (gemeinsamer Vertrag `tests/fixtures/composer_quote_format.json`,
   in Python und vitest geprüft; eine reine „Please comment on this
   passage…“-Nachricht fällt ganz weg; die Modelle sehen die Frage
-  unverändert). Die Garantie ist genau: der Server belegt, dass der Nutzer die
+  unverändert). Seit 2026-10-12 entfernt `MemoryTools._user_messages` auch Links
+  (`_LINK`): eine gelesene Seite kennt ihre eigene URL und hätte sie als
+  „Zitat“ des Nutzers angeben können. Die Garantie ist genau: der Server belegt, dass der Nutzer die
   zitierten Worte geschrieben hat, nicht, dass der Memory-Text dasselbe sagt
   (Wortüberlappung würde sprachübergreifende Saves fälschlich ablehnen).
   Text aus Webseiten, Dateien, Mails oder Tool-Ergebnissen kommt also nicht
@@ -2599,8 +2606,11 @@ begrenzen weiche Schutzgrenzen pro Turn (`AgentPolicy.turn_*`, gesetzt nur in
 (der fünfte ist ein Tool-Fehler), 24 Orchestrierungsschritte, 15 min bis zum
 Wrap-up plus 5 min (`TURN_WRAP_UP_SECONDS`) bis zum harten Stopp in `_check`, und
 höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; `wait_agents`
-ausgenommen). Wrap-up = Synthese + Judges aus einem Vergleich mit ≥2 Antworten,
-sonst `AnalysisBudgetExceeded` mit gespeicherten Teilergebnissen. Details und
+ausgenommen; bei `answer` gehört seit 2026-10-12 der Turn-Stand – Vergleiche,
+gelesene Seiten, `compare_failed` – zum Schlüssel). Wrap-up = Synthese + Judges
+aus einem Vergleich mit ≥2 Antworten, sonst `AnalysisBudgetExceeded` mit
+gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
+Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Details und
 Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt).
 Worker-Delegation bleibt separat durch delegation_config.enabled und die
 geprüfte Modell-/Reasoning-Kombination freigegeben. policy.delegation aktiviert
@@ -2713,10 +2723,14 @@ sieht der Orchestrator die Antworten und entscheidet (`CompareArgs` ignoriert
 `reason`/`next_step` versteckt). `answer` ohne Vergleich setzt zusätzlich
 `ComparisonTools.direct`: Schreibschritt mit `AGENT_DIRECT_ANSWER_PROMPT`, ohne
 Judges; `capture()` fixiert den Text ohne Version, eine Review (`snapshot`-Status
-`direct`, Standard ohne Vergleiche) entsteht nur mit gelesenen Seiten. `answer`
+`direct`, Standard ohne Vergleiche) entsteht nur mit gelesenen Seiten. Seit
+2026-10-12 führt `run` `answer` nach allen anderen Aufrufen seines Schritts aus
+(Ergebnisse in Modellreihenfolge), und `answer` lehnt auch mit früheren
+Vergleichen ab, wenn der Vergleich desselben Batches weniger als zwei Antworten
+bekam (`compare_failed == "few_answers"`). `answer`
 ohne Vergleich lehnt als Ergebnis ab, wenn im selben Batch ein `compare_models`/
-`check_text` scheiterte oder abgelehnt wurde (`DelegationLoop.compare_failed`:
-sonst ginge die Antwort still ungeprüft raus) oder wenn der Orchestrator selbst
+`check_text` scheiterte oder abgelehnt wurde (`DelegationLoop.compare_failed`
+`"not_run"`: sonst ginge die Antwort still ungeprüft raus) oder wenn der Orchestrator selbst
 gesucht und keine Seite gelesen hat (nach einem Read ist kein Vergleich mehr
 möglich, die gelesene Seite trägt die Antwort). Der Schreibschritt nutzt
 `answer_output_limit` (Completion-Grenze des Chatmodells; denkende Modelle
@@ -2801,10 +2815,12 @@ negativ, und `/health/metrics` zählt `search_overrun:<modell>` (agent-mode.md,
 „Websuche“).
 Das Orchestrator-Tool `read_source` (seit 2026-10-11 standardmäßig an,
 `AGENT_READ_SOURCES=0` schaltet ab; `agent_read_source.SourceReader`, nur
-Kontomodus, nicht bei Google-Daten) öffnet nach einem Vergleich eine von einer
+Kontomodus, nicht bei Google-Daten) öffnet vor der Antwort, seit 2026-10-11 auch ohne Vergleich, eine von einer
 Vergleichsantwort zitierte URL, eine gespeicherte Quelle früherer Nachrichten
 (`AgentRunStore.messages(sources=…)` → `DelegationLoop.chat_sources`) oder eine
-URL aus den Nachrichten des Nutzers (`user_urls`; nie Links nur aus Antworttext),
+URL aus den Nachrichten des Nutzers (`user_urls` über `agent_memory.user_words`; nie
+Links nur aus Antworttext, seit 2026-10-12 auch nicht aus einem per „Ask about
+this“ zitierten Antwortabsatz),
 über einen abgerechneten Helferschritt (`DelegationLoop._step(...,
 server_tools=[engines.web_fetch_tool(...)], completion=PageFetch())`, Responses
 API, Text aus dem Output-Item `openrouter:web_fetch`; über Chat Completions

@@ -107,8 +107,13 @@ def url_key(value):
 # * URLs the user wrote (user_urls). Links in earlier answer TEXT are not: the
 #   answer step writes from untrusted evidence, and an injected page could
 #   make it write a URL carrying chat content for a later, click-free fetch.
-# One character class, no nested quantifier: linear on any text.
-_CHAT_URL = re.compile(r"https?://[^\s<>\"'`\[\]{}|\\^]+")
+#   The same holds for an answer passage the user quotes with "Ask about
+#   this": it is cut off like for memory evidence (user_words, review
+#   2026-10-12).
+# One character class, no nested quantifier: linear on any text. Typographic
+# quotes end a URL like straight ones ("„https://…“" kept the closing quote).
+_CHAT_URL = re.compile("https?://[^\\s<>\"'`\\[\\]{}|\\\\^\u201c\u201d\u201e\u00ab\u00bb\u2018\u2019\u2039\u203a]+",
+                       re.IGNORECASE)
 _URL_TRAILING = ".,;:!?*"
 CHAT_URLS_MAX = 60
 LABEL_USER = "your message"
@@ -116,16 +121,18 @@ LABEL_EARLIER = "an earlier message's sources"
 
 
 def user_urls(conversation):
-    """URLs in the user's messages, latest message first.
+    """URLs the user wrote, latest message first.
 
     Markdown links and bare URLs alike; trailing punctuation and an
-    unbalanced closing parenthesis (the end of "[text](url)") are cut."""
+    unbalanced closing parenthesis (the end of "[text](url)") are cut. A
+    quoted answer passage is not the user's text (user_words)."""
+    from app.services.agent_memory import user_words
     found, seen = [], set()
     for message in reversed(conversation or []):
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str) or message.get("role") != "user":
             continue
-        for match in _CHAT_URL.finditer(content):
+        for match in _CHAT_URL.finditer(user_words(content)):
             url = match.group(0)
             if len(url) > 2100:  # _safe_url refuses over 2048
                 continue

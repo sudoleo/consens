@@ -81,6 +81,8 @@ TURN_STEP_LIMIT = ("This response reached its step limit without finishing. "
                    "The available results have been saved; send a follow-up message to continue.")
 TURN_REPEAT_LIMIT = ("The model repeated the same tool request without progress. "
                      "The available results have been saved; send a follow-up message to continue.")
+TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress. "
+                      "The available results have been saved.")
 
 
 def smaller_search(searches):
@@ -204,8 +206,9 @@ class DelegationLoop(AgentLoop):
         self.search_handoff = False
         # One reminder per turn for a long plain-text reply (_direct_reply_reminder).
         self.reply_reminded = False
-        # A compare_models/check_text call of the current batch did not run:
-        # answer in the same batch must not become an unchecked direct answer.
+        # A compare_models/check_text call of the current batch did not run
+        # ("not_run") or got fewer than two answers ("few_answers"): answer in
+        # the same batch is refused until the orchestrator has seen why.
         self.compare_failed = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
@@ -407,6 +410,15 @@ class DelegationLoop(AgentLoop):
             return None  # Invalid JSON is the invalid-tool guard's case.
         if isinstance(args, dict):
             args = {key: value for key, value in args.items() if key != "status_update"}
+        if name == "answer" and self.comparison is not None:
+            # Whether answer is accepted depends on the turn, not on its few
+            # arguments: after a new comparison, a read page or a failed
+            # comparison in its own step it is progress, not a repeat
+            # (review 2026-10-12: the third, legitimate answer was refused).
+            reads = self.comparison.reader.reads if self.comparison.reader is not None else []
+            args = {"arguments": args, "turn": [len(self.comparison.comparisons),
+                                                sum(r.get("status") == "completed" for r in reads),
+                                                self.compare_failed]}
         key = f"{name}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
         seen = self.identical_calls[key] = self.identical_calls.get(key, 0) + 1
         if seen <= limit:
@@ -636,12 +648,16 @@ class DelegationLoop(AgentLoop):
                     self.outgoing.put_nowait(self.activity({"step_id": value.step_id,
                         "id": f"{call['id']}/progress", "kind": "progress", "text": update}))
             publish("running")
-            # Memory changes riding along on answer: no extra model step. A
-            # refused change never stops the answer; the model reads why. A
-            # text checked this turn is no evidence of the user's own words
-            # (MemoryTools._user_messages leaves the declared passage out).
+            result = tool.execute(args, cancellation=cancellation)
+            # Memory changes riding along on answer: no extra model step,
+            # applied once the answer is accepted (a refused answer comes
+            # again with its decision; applied before, it saved twice). A
+            # refused change never stops the answer. A text checked this turn
+            # is no evidence of the user's own words (MemoryTools._user_messages
+            # leaves the declared passage out).
             memory_result = None
-            if registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory":
+            if (registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory"
+                    and not (isinstance(result, dict) and result.get("status") == "refused")):
                 memory_step = f"{value.step_id}:{call['id']}:memory"
                 try:
                     memory_result = self.memory.apply(args.memory)
@@ -657,7 +673,6 @@ class DelegationLoop(AgentLoop):
                     self.outgoing.put_nowait(self.tool_event(memory_step, "update_memory", "blocked",
                                                              text=memory_result["error"],
                                                              reason=getattr(exc, "code", None) or "refused"))
-            result = tool.execute(args, cancellation=cancellation)
             if memory_result is not None and isinstance(result, dict):
                 result = {**result, "memory": memory_result}
             status = "succeeded"
@@ -1411,33 +1426,57 @@ class DelegationLoop(AgentLoop):
                     if value.tool_calls:
                         accepted_tool = last_accepted = False
                         limit = None
+                        # Why a compare_models/check_text of this step left no
+                        # usable comparison: "not_run" (refused or invalid) or
+                        # "few_answers" (fewer than two answers). answer in the
+                        # same step is then refused: the orchestrator decides
+                        # again once it has seen that result.
                         self.compare_failed = False
-                        for call in value.tool_calls:
+                        results = {}
+                        answered = False
+                        # answer ends the steering, so it runs after every other
+                        # call of its step, whatever order the model sent: else
+                        # [answer, compare_models] wrote an unchecked answer and
+                        # [answer, read_source] paid for a read nobody routed on
+                        # (review 2026-10-12). Results keep the model's order.
+                        for call in sorted(value.tool_calls, key=lambda c: (c.get("function") or {}).get("name") == "answer"):
+                            name = (call.get("function") or {}).get("name")
+                            if name == "answer" and answered:
+                                # A second answer of the same step: its memory
+                                # decision would only save the first one again.
+                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(
+                                    {"status": "accepted", "note": "answer was already accepted in this step."})}
+                                continue
                             repeat = self._identical_call(call)
                             if repeat == "stop":
                                 limit = TURN_REPEAT_LIMIT
                                 break
                             if repeat == "refuse":
-                                name = call["function"]["name"]
-                                self.compare_failed |= name in {"compare_models", "check_text"}
-                                self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
+                                if name in {"compare_models", "check_text"}:
+                                    self.compare_failed = self.compare_failed or "not_run"
+                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
                                     "error": f"This identical {name} call already ran {self.policy.turn_identical_calls} "
                                              "times in this message and is not run again. Its results are above: use them "
-                                             "and continue with a different step. Repeating it ends the response."})})
+                                             "and continue with a different step. Repeating it ends the response."})}
                                 last_accepted = False
                                 continue
                             result = yield from self._execute_stream(value, call)
-                            self.messages.append(result)
+                            results[call["id"]] = result
                             content = json.loads(result["content"])
                             last_accepted = "error" not in content
-                            if call.get("function", {}).get("name") in {"compare_models", "check_text"} and (
-                                    not last_accepted or (isinstance(content, dict) and content.get("status") == "refused")):
-                                self.compare_failed = True
+                            if name in {"compare_models", "check_text"}:
+                                if not last_accepted or (isinstance(content, dict) and content.get("status") == "refused"):
+                                    self.compare_failed = self.compare_failed or "not_run"
+                                elif isinstance(content, dict) and len(content.get("answers") or []) < 2:
+                                    self.compare_failed = self.compare_failed or "few_answers"
+                            answered = answered or (name == "answer" and isinstance(content, dict)
+                                                    and content.get("status") == "accepted")
                             accepted_tool |= last_accepted
                             if self.comparison and self.comparison.finalized:
                                 # Ignore speculative extra calls in the same batch
                                 # once all required checks have reached an end state.
                                 break
+                        self.messages.extend(results[call["id"]] for call in value.tool_calls if call["id"] in results)
                         yield from self._events()
                         if limit:
                             yield from self._wrap_up(limit, steps, value)
@@ -1445,7 +1484,12 @@ class DelegationLoop(AgentLoop):
                             break
                         self.invalid_tool_rounds = 0 if accepted_tool else self.invalid_tool_rounds + 1
                         if self.invalid_tool_rounds >= 3:
-                            raise AnalysisBudgetExceeded("The model repeated invalid tool requests without progress. The available results have been saved.")
+                            # Paid comparisons still reach their checked answer
+                            # (_wrap_up), e.g. after three answer calls with a
+                            # malformed field; without one the turn stops.
+                            yield from self._wrap_up(TURN_INVALID_LIMIT, steps, value)
+                            status = "succeeded"
+                            break
                         # Once the answer is fixed only its checks remain, and the
                         # app runs them itself (_finish_review): no further
                         # steering step just to call check_contradictions.

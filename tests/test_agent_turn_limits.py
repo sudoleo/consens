@@ -187,6 +187,63 @@ def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
     assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 4 + (0 if fail_model else 1)
 
 
+def planned(script, plan):
+    """Routing step n sends the tool calls plan[n] (the last entry repeats)."""
+    base = type(script.factory())
+
+    class Planned(base):
+        def stream(self, *, model, messages, **kwargs):
+            if not self.step_id.startswith("completion:") or not kwargs["tools"]:
+                yield from super().stream(model=model, messages=messages, **kwargs)
+                return
+            index = int(self.step_id.split(":")[-1])
+            script.calls.append((self.step_id, model.model))
+            self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
+            self.tool_calls = [{"id": f"s{index}_{n}", "type": "function",
+                                "function": {"name": name, "arguments": json.dumps(args)}}
+                               for n, (name, args) in enumerate(plan[min(index, len(plan) - 1)])]
+            self.finish_reason = "tool_calls"
+            yield from ()
+    return Planned
+
+
+def test_a_legitimate_answer_after_refused_ones_is_no_repeat(store):
+    """Review 2026-10-12: answer has (almost) no arguments, so the guard took
+    the third answer for a loop although the turn had moved on, and the turn
+    ended without an answer."""
+    invalid = ("compare_models", {"question": "Who won?", "depth": "deep"})
+    script = Script()
+    loop = chat_loop(store, script)
+    loop.factory = planned(script, [[invalid, ("answer", {})], [invalid, ("answer", {})], [("answer", {})]])
+    list(loop.run())
+    assert tool_result(loop, "s0_1")["status"] == tool_result(loop, "s1_1")["status"] == "refused"
+    assert tool_result(loop, "s2_0")["status"] == "accepted"
+    assert saved_turn(store, loop)["status"] == "completed" and loop.comparison.direct
+    # Without any progress, refused answers still end the turn.
+    fresh = chat_loop(store, Script())
+    answer = {"id": "a", "type": "function", "function": {"name": "answer", "arguments": '{"status_update": "x"}'}}
+    assert [fresh._identical_call(answer) for _ in range(4)] == [None, None, "refuse", "stop"]
+
+
+@pytest.mark.parametrize("fail_model", [False, True])
+def test_three_invalid_rounds_answer_from_a_usable_comparison(store, fail_model):
+    """Review 2026-10-12: three rejected answer calls (a malformed field)
+    ended a turn whose comparisons were paid, without an answer."""
+    script = Script(fail_model=fail_model)
+    loop = chat_loop(store, script)
+    compare = ("compare_models", {"question": "Evaluate option 1", "context": "Budget is 100."})
+    loop.factory = planned(script, [[compare], *([("answer", {"bogus": n})] for n in range(1, 4))])
+    if fail_model:
+        with pytest.raises(AnalysisBudgetExceeded, match="invalid tool requests"):
+            list(loop.run())
+        assert saved_turn(store, loop)["status"] == "failed"
+        return
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert all("error" in tool_result(loop, f"s{n}_0") for n in (1, 2, 3))
+    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+
+
 def test_repeated_polling_is_not_counted_as_identical_calls(store):
     loop = chat_loop(store, Script())
     call = {"id": "w", "type": "function", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}

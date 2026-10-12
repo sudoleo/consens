@@ -338,6 +338,21 @@ def test_user_urls_are_the_links_the_user_wrote():
     assert user_urls([{"role": "user", "content": "https://example.org/" + ")" * 2000}]) == ["https://example.org/"]
 
 
+def test_links_in_a_quoted_answer_passage_are_not_the_users():
+    """Review 2026-10-12: "Ask about this" puts answer text into the user's
+    message. A link there is answer text, which stays unreadable (an injected
+    page could have it carry chat content)."""
+    from app.services.agent_memory import QUOTE_ONLY_PREFIX, QUOTE_TYPED_MARKER
+    typed = f"Was steht da? https://example.org/mine{QUOTE_TYPED_MARKER}Siehe https://evil.example/?leak=abc”"
+    only = f"{QUOTE_ONLY_PREFIX}https://evil.example/q”"
+    assert user_urls([{"role": "user", "content": typed}, {"role": "user", "content": only}]) == [
+        "https://example.org/mine"]
+    # Typographic quotes end a link like straight ones; an upper-case scheme is one.
+    german = "Lies „https://example.org/a?b=1“ und «https://example.org/c» und HTTPS://Example.org/x."
+    assert user_urls([{"role": "user", "content": german}]) == [
+        "https://example.org/a?b=1", "https://example.org/c", "HTTPS://Example.org/x"]
+
+
 def test_reads_a_source_of_an_earlier_message_but_never_a_link_only_in_answer_text(store, monkeypatch, enabled):
     """2026-10-11: "kannst du eine Quelle direkt nachlesen?" after an answer
     citing tri247.com could open nothing; only this message's answers counted.
@@ -456,6 +471,35 @@ def test_reads_a_page_the_user_points_to_and_answers_without_a_comparison(store,
     assert not any(step[0] in {"comparison", "coverage", "differences"} for step in plan.steps)
     system, evidence = plan.answer_messages[0]["content"], plan.answer_messages[-1]["content"]
     assert "No model comparison ran" in system and PAGE in evidence
+
+
+def test_a_read_sent_after_answer_in_one_step_runs_first(store, monkeypatch, enabled):
+    """Review 2026-10-12: [answer, read_source] decided the answer before the
+    read (after a search: refused it) and still paid for the read. answer
+    runs last, so the page it asked for already carries it."""
+    calls = fake_fetch(monkeypatch)
+    linked = "https://example.org/linked"
+
+    class Searched(Plan):
+        def factory(self):
+            base = type(super().factory())
+
+            class Completion(base):
+                def stream(self, *, model, messages, **kwargs):
+                    if self.step_id == "completion:0" and kwargs.get("tools"):
+                        self.sources = [{"url": "https://example.org/found", "title": "Found"}]
+                    yield from super().stream(model=model, messages=messages, **kwargs)
+            return Completion()
+
+    plan = Searched(steps=[[("answer", {}), read_call(linked)]])
+    loop, _, saved = run(store, plan, conversation=[{"role": "user", "content": f"Was steht auf {linked}?"}])
+    answer = next(json.loads(m["content"]) for m in loop.messages
+                  if m.get("role") == "tool" and m["tool_call_id"] == "call_0_0")
+    assert answer["status"] == "accepted" and loop.comparison.direct and not loop.comparison.comparisons
+    assert len(calls) == 1 and [r["status"] for r in results(loop)] == ["completed"]
+    assert [kind for kind, _ in plan.steps] == ["routing", "answer"]
+    assert saved["status"] == "completed" and saved["agent_review"]["read_sources"][0]["url"] == linked
+    assert PAGE in plan.answer_messages[-1]["content"]
 
 
 def test_no_read_hint_when_no_answer_cited_a_source(store, monkeypatch, enabled):

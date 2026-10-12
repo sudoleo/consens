@@ -486,9 +486,17 @@ def test_a_container_argument_sent_as_json_text_is_decoded():
     assert registry.validate(call("[]"))[1].memory == []
     change = '[{"op": "add", "text": "Lives in Berlin.", "evidence": "I live in Berlin"}]'
     assert registry.validate(call(change))[1].memory[0].text == "Lives in Berlin."
+    # Text of another shape is left for validation to reject. (memory itself
+    # takes any shape since 2026-10-12, test_agent_memory: a strict list here.)
+    strict = create_model("ListCompareArgs", __base__=CompareArgs, items=(list[int], ...))
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", strict, lambda a, **kw: {})], argument_limit=24_000)
+    def listed(items):
+        return {"function": {"name": "compare_models", "arguments": json.dumps({"question": "Q", "items": items})}}
+    assert registry.validate(listed("[1, 2]"))[1].items == [1, 2]
     for bad in ("nothing", '{"op": "add"}', "[1, 2"):
         with pytest.raises(ValueError):
-            registry.validate(call(bad))
+            registry.validate(listed(bad))
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", args, lambda a, **kw: {})], argument_limit=24_000)
     # A text field keeps text that happens to look like JSON.
     plain = {"function": {"name": "compare_models", "arguments": json.dumps(
         {"question": "[]", "context": "", "reason": "R", "next_step": "answer", "memory": []})}}

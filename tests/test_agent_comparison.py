@@ -1217,29 +1217,67 @@ def test_answer_without_a_comparison_streams_an_unchecked_answer(store):
     assert [step for step, _ in script.calls] == ["completion:0", "completion:1"]
 
 
-def test_a_comparison_after_answer_is_refused_and_nothing_is_paid(store):
-    script_calls = [("answer", {}), ("compare_models", {"question": "Q?"})]
+class OneStep(DirectAnswer):
+    """The first routing step sends exactly `calls`; later steps answer."""
 
-    class Both(DirectAnswer):
-        def factory(self):
-            base = type(super().factory())
-            class Completion(base):
-                def stream(self, *, model, messages, **kwargs):
-                    if self.step_id == "completion:0" and kwargs["tools"]:
-                        self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
-                        self.tool_calls = [{"id": f"c{n}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
-                                           for n, (name, args) in enumerate(script_calls)]
-                        self.finish_reason = "tool_calls"
-                        return
-                    yield from super().stream(model=model, messages=messages, **kwargs)
-            return Completion()
+    def __init__(self, calls, **kwargs):
+        super().__init__(**kwargs)
+        self.step_calls = calls
 
-    both = Both()
-    loop = make_loop(store, both)
+    def factory(self):
+        base = type(super().factory())
+        script = self
+        class Completion(base):
+            def stream(self, *, model, messages, **kwargs):
+                if self.step_id == "completion:0" and kwargs["tools"]:
+                    script.calls.append((self.step_id, model.model))
+                    self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                    self.tool_calls = [{"id": f"c{n}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+                                       for n, (name, args) in enumerate(script.step_calls)]
+                    self.finish_reason = "tool_calls"
+                    return
+                yield from super().stream(model=model, messages=messages, **kwargs)
+        return Completion()
+
+
+def test_answer_runs_after_the_other_calls_of_its_step(store):
+    """Review 2026-10-12: [answer, compare_models] wrote an unchecked direct
+    answer. answer ends the steering, so it runs last; the results keep the
+    model's order."""
+    script = OneStep([("answer", {}), ("compare_models", {"question": "Q?"})])
+    loop = make_loop(store, script)
     list(loop.run())
-    refused = next(json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool" and m["tool_call_id"] == "c1")
-    assert "already being written" in refused["error"]
-    assert not loop.comparison.comparisons and not both.prompts
+    tools = [m for m in loop.messages if m.get("role") == "tool"]
+    assert [m["tool_call_id"] for m in tools] == ["c0", "c1"]
+    assert json.loads(tools[0]["content"])["status"] == "accepted"
+    assert len(loop.comparison.comparisons) == 1 and not loop.comparison.direct
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
+    # Comparison, answer: no further routing round.
+    assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0", "completion:1"]
+
+
+def test_a_comparison_after_the_answer_is_written_is_refused(store):
+    script = OneStep([("compare_models", {"question": "Q?"})])
+    loop = make_loop(store, script)
+    loop.comparison.text = "Written."
+    with pytest.raises(ValueError, match="already being written"):
+        loop.comparison.compare(loop.comparison.tools[0].arguments.model_validate({"question": "Q?"}),
+                                cancellation=loop.cancellation)
+    assert not loop.comparison.comparisons and not script.prompts
+
+
+def test_a_comparison_with_one_answer_and_answer_in_one_step_decides_again(store):
+    """Review 2026-10-12: one model failed, and the answer in the same step
+    rested on the single other answer, unchecked ("insufficient_answers")."""
+    script = OneStep([("compare_models", {"question": "Q?"}), ("answer", {})], fail_model=True)
+    loop = make_loop(store, script)
+    list(loop.run())
+    results = {m["tool_call_id"]: json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"}
+    assert len(results["c0"]["answers"]) == 1
+    assert results["c1"]["status"] == "refused" and "fewer than two answers" in results["c1"]["reason"]
+    # The orchestrator saw the failure; its answer alone in the next step is its decision.
+    assert loop.comparison.answer_requested and len(loop.comparison.comparisons) == 1
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
 
 

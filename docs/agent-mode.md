@@ -191,7 +191,7 @@ still verkleinert. Im freien Modus wählt das Chatmodell sie pro Vergleich (`mod
 Die Zeile unter „Comparison n“ ist das `status_update` des Aufrufs. Die Felder
 `reason` und `next_step` (bis 2026-10-11) nimmt das Schema noch versteckt an und
 ignoriert sie, damit ein Modell, das sie aus Gewohnheit schickt, keinen Toolfehler
-bekommt. Kommen `compare_models` und `answer` im selben Schritt, schreibt der
+bekommt. Kommen `compare_models` (mit mindestens zwei Antworten) und `answer` im selben Schritt, schreibt der
 Server die Antwort direkt nach dem Vergleich (wie früher `next_step="answer"`).
 
 Alle Vergleichsmodelle laufen gleichzeitig (eigener Semaphore je Vergleich,
@@ -312,8 +312,13 @@ Bei eingeschaltetem „Check contradictions“ folgt `check_contradictions`; der
 Server ruft es nach der Antwortprüfung selbst auf (`_finish_review`).
 
 **Ablauf von `answer`.** `answer` beendet nur die Steuerung
-(`ComparisonTools.answer_requested`); weitere Werkzeuge lehnt die App danach ab.
-Nach dem Batch schreibt `DelegationLoop.run` die Antwort ohne weitere
+(`ComparisonTools.answer_requested`). Seit 2026-10-12 führt `DelegationLoop.run`
+es nach allen anderen Aufrufen seines Schritts aus, egal in welcher Reihenfolge
+das Modell sie schickt (die Ergebnisse behalten seine Reihenfolge): vorher
+schrieb `[answer, compare_models]` eine ungeprüfte Direktantwort, und
+`[answer, read_source]` bezahlte eine Seite nach der Entscheidung. Ein zweites
+`answer` im selben Schritt läuft nicht mehr. Vergleiche nach dem Schreiben lehnt
+die App ab. Nach dem Batch schreibt `DelegationLoop.run` die Antwort ohne weitere
 Steuerrunde (`_answer_ready`). Nach Vergleichen prüft `_finish_review` sie danach
 mit `judge_answer` (und gegebenenfalls `check_contradictions`) über
 `app_registry`; die Prüfung bleibt eine eigene sichtbare Zeile („Checked the
@@ -332,9 +337,14 @@ und keine Seite gelesen, lehnt `answer` als Ergebnis ab: Der Antwortschritt
 bekäme nur die URLs, nicht die Funde; Recherche ist Sache eines Vergleichs. Nach
 einem Read ist kein Vergleich mehr möglich, also trägt die gelesene Seite die
 Antwort. Ebenso lehnt `answer` ab, wenn ein `compare_models`/`check_text` im
-selben Batch scheiterte oder abgelehnt wurde (`DelegationLoop.compare_failed`):
-Der Orchestrator hat die Absage noch nicht gesehen, und die Antwort ginge still
-ungeprüft raus. Er entscheidet dann neu. Der Antwortschritt darf wie nach
+selben Batch scheiterte oder abgelehnt wurde (`DelegationLoop.compare_failed`
+`"not_run"`): Der Orchestrator hat die Absage noch nicht gesehen, und die Antwort
+ginge still ungeprüft raus. Seit 2026-10-12 gilt das auch mit früheren
+Vergleichen, wenn der Vergleich desselben Batches weniger als zwei Antworten
+bekam (`"few_answers"`, etwa ein Modell im Cooldown): sonst schrieb die App die
+Antwort aus einem einzigen Modell, und die Prüfung meldete nur
+`insufficient_answers` (bis 2026-10-11 verlangte `next_step="answer"` dafür zwei
+Antworten). Er entscheidet dann neu: erneut vergleichen oder `answer` allein. Der Antwortschritt darf wie nach
 Vergleichen überziehen (`_admit_chat_step`). Bricht er ab, bleibt der gestreamte
 Teiltext als Antwort (`finish_run` nutzt `completion.text`, solange die Review
 keine Vergleiche hat).
@@ -749,7 +759,7 @@ sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
 | Vergleiche (`turn_comparisons`) | 4 | Der fünfte `compare_models` liefert einen Tool-Fehler („call answer now“), nichts Bezahltes startet; der vierte meldet „last comparison allowed“. |
 | Orchestrierungsschritte (`turn_steps`) | 24 | Vor dem 25. Routing-Schritt: Wrap-up (siehe unten). |
 | Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. Seit 2026-10-08 kommt der Wrap-up früher, wenn bis zum harten Stopp weniger als `ANSWER_RESERVE_SECONDS` der Denkstufe bleibt (max 10 min, high 6 min, low 2,5 min); ebenso endet dann das Warten auf Nachzügler. |
-| Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (ohne `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
+| Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (ohne `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. Bei `answer` gehört seit 2026-10-12 der Stand des Turns zum Schlüssel (Zahl der Vergleiche, gelesene Seiten, `compare_failed`): seine Annahme hängt davon ab, nicht von seinen (kaum vorhandenen) Argumenten; vorher sperrte die Grenze das dritte, berechtigte `answer` nach zwei Absagen. |
 
 Wrap-up: Gibt es einen Vergleich mit mindestens zwei Antworten (oder schon eine
 Synthese) und sind alle Worker geprüft, schreibt der Server die Synthese und
@@ -779,8 +789,11 @@ Provider-Rechnung. Meldet der Provider höheren Verbrauch, wird er vollständig
 verbucht und weiterer Verbrauch blockiert. Unbekannte Nutzung ist kein Nullwert.
 Drei aufeinanderfolgende Tool-Batches ohne gültig ausgeführten Aufruf stoppen
 als Protokollstillstand, statt das Tageskontingent mit derselben ungültigen
-Anfrage aufzubrauchen. Gültige Arbeit begrenzen nur die Schutzgrenzen pro
-Nachricht oben.
+Anfrage aufzubrauchen. Seit 2026-10-12 auch hier per Wrap-up
+(`TURN_INVALID_LIMIT`): bezahlte Vergleiche mit zwei Antworten führen trotzdem
+zur geprüften Antwort, etwa wenn das Modell `answer` dreimal ohne Pflichtfeld
+`memory` schickt; ohne solchen Vergleich endet der Turn wie bisher. Gültige
+Arbeit begrenzen nur die Schutzgrenzen pro Nachricht oben.
 
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
@@ -1098,6 +1111,11 @@ nichts, was es öffnen durfte. **Nicht** lesbar sind Links, die nur im Text eine
 früheren Antwort stehen: Der Antwortschritt schreibt aus nicht vertrauenswürdiger
 Evidenz, eine präparierte Seite könnte ihn eine URL mit Chat-Inhalt schreiben
 lassen, die ein späterer Turn ohne Klick abrufen würde (Review 2026-10-11).
+Dasselbe gilt seit 2026-10-12 für eine Antwortpassage, die der Nutzer per „Ask
+about this“ zitiert: `user_urls` liest nur `agent_memory.user_words`, also ohne
+das Zitat (vorher kamen Links aus Antworttext so doch durch). Typografische
+Anführungszeichen („…“, «…», ‚…‘) beenden einen Link wie gerade, und ein
+großgeschriebenes `HTTPS://` zählt mit.
 Gespeicherte Quellen sind Provider-Zitate oder bereits gelesene Seiten. Schalter:
 `AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
 Code: `agent_read_source.py`.
@@ -1119,10 +1137,13 @@ leichtesten Denkstufe) und nimmt den Text aus dem Output-Item; die eigene
 Antwort des Helfers („OK“) wird verworfen.
 
 **Grenzen.**
-- Nur nach einem Vergleich und vor der Antwort. Das Tool steht während des
-  ganzen Turns in der Registry (eine zwischen Schritten wechselnde Toolliste
-  würde den Prompt-Cache neu schreiben) und lehnt davor bzw. danach ab.
-- Nur URLs, die eine Vergleichsantwort dieser Nachricht als Quelle führt
+- Vor der Antwort, seit 2026-10-11 auch ohne Vergleich (eine Seite, auf die der
+  Nutzer zeigt; danach ist kein Vergleich mehr möglich). Das Tool steht während
+  des ganzen Turns in der Registry (eine zwischen Schritten wechselnde Toolliste
+  würde den Prompt-Cache neu schreiben) und lehnt nach der Antwort ab; ein
+  `read_source` im selben Schritt wie `answer` läuft vor ihm.
+- Nur URLs, die eine Vergleichsantwort dieser Nachricht als Quelle führt, dazu
+  die Quellen früherer Nachrichten und Links des Nutzers (siehe oben)
   (`answers[].sources`, kanonisch verglichen wie `url_key`: Schema, Host-
   Schreibweise und Schrägstrich am Ende egal, nur http(s)). Strenger als eine
   Domainliste: kein anderer Artikel derselben Seite, keine URL aus der eigenen

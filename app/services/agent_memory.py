@@ -16,7 +16,8 @@ Contracts that are design, not convenience:
    ``evidence``, a verbatim quote (at least ``MIN_EVIDENCE_CHARS`` characters
    or one whole message) that must occur in one of the user's own messages of
    this chat. A passage the user quoted from an earlier answer is not their
-   words and is cut off before the check (``user_words``). The check proves
+   words and is cut off before the check (``user_words``), and links are
+   removed: a page knows its own URL. The check proves
    that the user said the quoted words; it does not prove that the memory text
    says the same thing (word overlap would wrongly refuse a German quote for an
    English memory). So text from web pages, files, emails or tool results
@@ -36,6 +37,7 @@ Contracts that are design, not convenience:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
@@ -43,9 +45,9 @@ import threading
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.core.observability import safe_exception
 from app.services import persistence_guard, user_memory
@@ -175,6 +177,12 @@ def evidence_matches(evidence: str, user_messages) -> bool:
 # browser: tests/fixtures/composer_quote_format.json.
 QUOTE_TYPED_MARKER = "\n\nQuoted from the previous answer:\n\u201c"
 QUOTE_ONLY_PREFIX = "Please comment on this passage from the previous answer:\n\u201c"
+
+
+# A link in the user's message is no evidence of what they said: a page the
+# Agent read knows its own URL and could cite it as the user's "quote"
+# (review 2026-10-12). MemoryTools._user_messages removes them.
+_LINK = re.compile(r"(?:https?://|www\.)[^\s<>\"'`]+", re.IGNORECASE)
 
 
 def user_words(message: object) -> str:
@@ -810,6 +818,25 @@ def synthesis_prompt(snapshot: MemorySnapshot) -> str:
 
 # --- Agent tools ------------------------------------------------------------
 
+def _memory_changes(value):
+    """The ``memory`` field as a list of changes, whatever shape a model sent.
+
+    A schema error here rejects the whole answer, and three rejected rounds
+    ended a turn whose comparisons were paid (review 2026-10-12): ``null`` or
+    unreadable text is no change, one object is one change, and an item that
+    is no object stays a change that ``apply`` refuses visibly."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return []
+    if isinstance(value, dict):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [item if isinstance(item, dict) else {} for item in value]
+
+
 def memory_field():
     """The ``memory`` field that rides along on answer.
 
@@ -820,7 +847,7 @@ def memory_field():
     """
     # No max_length: more than MAX_CHANGES_PER_CALL changes are refused in
     # MemoryTools.apply, as a memory refusal instead of a rejected comparison.
-    return (list[MemoryChange], Field(description=
+    return (Annotated[list[MemoryChange], BeforeValidator(_memory_changes)], Field(description=
         "Required memory decision for the user's latest message. [] when it reveals nothing new and "
         "lasting about the user, which is the usual case. Otherwise the add, update or delete changes "
         f"(as with update_memory, at most {MAX_CHANGES_PER_CALL}), for example a stated diet, home town, job, "
@@ -858,7 +885,8 @@ class MemoryTools:
 
     def _user_messages(self) -> list[str]:
         """The user's own words only: a quoted answer passage is cut off
-        (``user_words``) and a passage pasted for checking is removed."""
+        (``user_words``), a passage pasted for checking and every link are
+        removed (_LINK)."""
         declared = getattr(getattr(self.loop, "comparison", None), "passage", None) or {}
         # Text the user pasted to have checked (check_text): another AI's
         # answer or an article, never the user's own words.
@@ -870,7 +898,7 @@ class MemoryTools:
             text = user_words(message["content"])
             for passage in foreign:
                 text = text.replace(passage, "\n")
-            words.append(text)
+            words.append(_LINK.sub(" ", text))
         return [text for text in words if text.strip()]
 
     def update_memory(self, args, *, cancellation=None):

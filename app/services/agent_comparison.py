@@ -1352,11 +1352,19 @@ class ComparisonTools:
         _finish_review: the check stays a visible step of its own). Without a
         comparison the answer is direct and nothing is checked."""
         self.loop._check(cancellation)
+        failed = getattr(self.loop, "compare_failed", False)
+        if failed == "few_answers":
+            # [compare_models, answer] in one step, and the comparison got
+            # fewer than two answers: the answer would rest on one model and
+            # its check could not run (review 2026-10-12).
+            return {"status": "refused", "reason": "Your comparison in this step got fewer than two answers, so no "
+                    "answer could be checked against it; its result says why. Decide again: compare again (other "
+                    "families where you choose them), or call answer alone to answer from what you have."}
         if self.comparisons:
             self.answer_requested = True
             return {"status": "accepted",
                     "instruction": "The app now writes the answer and checks it. Do not call further tools."}
-        if getattr(self.loop, "compare_failed", False):
+        if failed:
             # [compare_models (refused or invalid), answer] in one step: the
             # orchestrator never saw the refusal, and the answer would go out
             # unchecked (review 2026-10-11, the live Ironman question).

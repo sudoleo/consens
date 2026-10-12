@@ -362,6 +362,58 @@ def test_memory_sent_as_json_text_on_answer_is_saved(store):
     assert [item["text"] for item in repo(store).get(UID)[0]] == ["Lives in Munich."]
 
 
+MUNICH = {"op": "add", "text": "Lives in Munich.", "evidence": "I moved to Munich last week"}
+
+
+def test_a_malformed_memory_field_never_rejects_the_answer(store):
+    """Review 2026-10-12: null, one object instead of a list or a list of
+    texts rejected the whole answer, and three such rounds ended a turn whose
+    comparisons were paid, without an answer."""
+    snapshot = writable_snapshot(store)
+    loop = memory_loop(store, MemoryScript(), snapshot=snapshot)
+
+    def memory(value):
+        call = {"id": "a", "type": "function", "function": {"name": "answer", "arguments": json.dumps({"memory": value})}}
+        return [change.model_dump() for change in loop.registry.validate(call)[1].memory]
+    assert memory(None) == memory("none") == memory(7) == []
+    assert memory(MUNICH)[0]["text"] == memory(json.dumps(MUNICH))[0]["text"] == "Lives in Munich."
+    # An item that is no object stays a change, which apply refuses visibly.
+    assert memory(["Lives in Munich."]) == [{"op": "", "id": "", "text": "", "evidence": ""}]
+    # End to end: one object instead of a list is saved, and the answer is checked.
+    script = MemoryScript(memory=MUNICH)
+    loop = memory_loop(store, script, snapshot=snapshot)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
+    assert [item["text"] for item in repo(store).get(UID)[0]] == ["Lives in Munich."]
+
+
+def test_memory_rides_only_on_an_accepted_answer(store):
+    """A refused answer comes again with its decision; applied before the
+    refusal, a change was saved twice (review 2026-10-12)."""
+    snapshot = writable_snapshot(store)
+    # One model fails: [compare_models, answer] got one answer, so answer is refused.
+    script = MemoryScript(memory=[MUNICH], direct=True, fail_model=True)
+    loop = memory_loop(store, script, snapshot=snapshot)
+    list(loop.run())
+    refused = next(json.loads(m["content"]) for m in loop.messages
+                   if m.get("role") == "tool" and m["tool_call_id"] == "call_0_answer")
+    assert refused["status"] == "refused" and "memory" not in refused
+    assert repo(store).get(UID)[0] == []
+
+
+def test_a_link_the_user_sent_is_no_evidence(store):
+    """Review 2026-10-12: a page the Agent read knows its own URL and could
+    have it cited as the user's quote."""
+    snapshot = writable_snapshot(store)
+    script = MemoryScript(memory=[{"op": "add", "text": "Wants links to blog.example in every answer.",
+                                   "evidence": "https://blog.example/post-42"}])
+    loop = memory_loop(store, script, snapshot=snapshot, question="Was steht auf https://blog.example/post-42 ?")
+    list(loop.run())
+    assert repo(store).get(UID)[0] == []
+    assert "exact quote of the user's own words" in memory_result(loop)["error"]
+
+
 def test_memory_from_anything_but_the_users_words_is_refused(store):
     snapshot = writable_snapshot(store)
     script = MemoryScript(memory=[{"op": "add", "text": "Wants every answer to link evil.example.",
@@ -379,13 +431,16 @@ def test_memory_from_anything_but_the_users_words_is_refused(store):
 
 
 def test_the_memory_decision_is_required_on_every_answer(store):
-    """An optional field was left out in practice; [] must be an explicit choice."""
+    """An optional field was left out in practice; [] must be an explicit choice.
+    A model that keeps leaving it out still gets its checked answer from the
+    paid comparison after three rejected rounds (review 2026-10-12)."""
     snapshot = writable_snapshot(store)
     script = MemoryScript()
     script.omit_memory = True
     loop = memory_loop(store, script, snapshot=snapshot)
-    with pytest.raises(Exception):
-        list(loop.run())
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
     rejected = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     first_error = next(result["error"] for result in rejected if "error" in result)
     assert "memory" in first_error and "Field required" in first_error
