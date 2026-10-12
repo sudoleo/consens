@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import ipaddress
 import json
 import logging
 import os
@@ -66,6 +67,8 @@ SEARCH_VERSION = 2
 # aber auf MAX_TRIES begrenzt -- sonst klopfen wir ewig bei gesperrten Shops.
 MAX_ATTEMPTS = 3
 MAX_TRIES = 8
+# Fehlgeschlagene Judge-Aufrufe je Watch; danach wird er nicht mehr gefragt.
+MAX_JUDGE_TRIES = 3
 MAX_PAGES = 5
 FETCH_SECONDS = 6.0
 ATTEMPT_SECONDS = 25.0
@@ -87,7 +90,10 @@ MAX_LOGOS = 2
 LOGO_SIDE = 144
 LOGO_GAP = 16
 LOGO_MIN_SIDE = 64
+# Ein App-Icon ist selten größer als 512 px; mehr dekodieren wir nicht.
+LOGO_MAX_SOURCE_SIDE = 1024
 LOGO_SECONDS = 15.0
+ARTICLE_SECONDS = 15.0
 LOGO_MAX_BYTES = 1_000_000
 MAX_ICON_TRIES = 3
 MAX_SITES = 20
@@ -100,6 +106,7 @@ _IMAGE_KINDS = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
 _IMAGE_FORMATS = ("JPEG", "PNG", "WEBP", "GIF")
 _ICON_KINDS = _IMAGE_KINDS | {"image/x-icon", "image/vnd.microsoft.icon", "image/ico"}
 _ICON_FORMATS = _IMAGE_FORMATS + ("ICO",)
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
 # Endungen, unter denen die eigentliche Domain eine Stufe tiefer liegt (bbc.co.uk).
 _SECOND_LEVEL = frozenset({"co", "com", "org", "net", "ac", "gov", "edu", "or", "ne"})
@@ -612,6 +619,38 @@ def page_icons(html: str, base_url: str) -> list[str]:
     return list(dict.fromkeys(url for *_, url in sorted(ranked)))
 
 
+def _ico_fits(content: bytes) -> bool:
+    """Darf diese Datei überhaupt geöffnet werden?
+
+    Bei .ico dekodiert Pillow das größte Bild schon in ``Image.open`` -- vor
+    jeder Größenprüfung, und das Verzeichnis darf lügen (256 px im Kopf,
+    12000 px im eingebetteten PNG: ~580 MB aus einer 580-kB-Datei). Deshalb
+    die echten Maße jedes Eintrags vorher aus PNG-IHDR bzw. BMP-Kopf lesen.
+    Andere Formate liest Pillow faul; ihre Maße prüft ``make_logo``.
+    """
+    if content[:4] != b"\x00\x00\x01\x00":
+        return True
+    count = int.from_bytes(content[4:6], "little")
+    if not 0 < count <= 64 or len(content) < 6 + 16 * count:
+        return False
+    for index in range(count):
+        entry = content[6 + 16 * index:22 + 16 * index]
+        offset = int.from_bytes(entry[12:16], "little")
+        head = content[offset:offset + 24]
+        if head[:8] == _PNG_SIGNATURE:
+            if len(head) < 24 or head[12:16] != b"IHDR":
+                return False
+            width, height = int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+        else:
+            if len(head) < 12:
+                return False
+            width = abs(int.from_bytes(head[4:8], "little", signed=True))
+            height = abs(int.from_bytes(head[8:12], "little", signed=True)) // 2  # mit AND-Maske
+        if width > LOGO_MAX_SOURCE_SIDE or height > LOGO_MAX_SOURCE_SIDE:
+            return False
+    return True
+
+
 def make_logo(content: bytes):
     """Quadratische Kachel (LOGO_SIDE, RGB) aus einem Icon oder None.
 
@@ -620,6 +659,8 @@ def make_logo(content: bytes):
     helle Zeichen (für dunkle Tab-Leisten) auf Dunkel, sonst auf Weiß.
     """
     try:
+        if not _ico_fits(content):
+            return None
         with Image.open(io.BytesIO(content), formats=_ICON_FORMATS) as source:
             width, height = source.size
             if min(width, height) < LOGO_MIN_SIDE or width * height > MAX_PIXELS_DECODED:
@@ -682,7 +723,14 @@ def compose_logos(tiles) -> tuple[bytes, tuple[int, int]]:
 # ----------------------------------------------------------------------
 
 def site_domain(host) -> str:
-    """Die registrierbare Domain: docs.github.com -> github.com, www.bbc.co.uk -> bbc.co.uk."""
+    """Die registrierbare Domain: docs.github.com -> github.com, www.bbc.co.uk -> bbc.co.uk.
+
+    Eine IP-Adresse hat keine (aus 192.168.1.1 würde sonst "1.1")."""
+    try:
+        ipaddress.ip_address(str(host or "").strip("[]"))
+        return ""
+    except ValueError:
+        pass
     labels = [label for label in str(host or "").lower().strip(".").split(".") if label]
     if len(labels) < 2:
         return ""
@@ -826,46 +874,39 @@ async def _http_fetch(url: str, purpose: str):
                             "image/webp,image/png,image/jpeg,image/gif;q=0.9")
 
 
-async def _find(urls, question: Question, fetch, progress: dict, logos=None):
-    """Erst der Gegenstand auf irgendeiner Quelle, dann die Logos (``logos``,
-    eine Coroutine-Fabrik), zuletzt der beste Artikel.
+async def _first_photo(page_url, images, kind, fetch, tried: set):
+    for image_url in images[:2]:
+        if image_url in tried or _looks_like_logo(image_url, article=kind == "article"):
+            continue
+        tried.add(image_url)
+        try:
+            _url, data, _kind, truncated = await asyncio.wait_for(
+                fetch(image_url, "image"), FETCH_SECONDS + 1,
+            )
+        except Exception as exc:
+            logging.info("Watch image fetch skipped category=%s", safe_exception(exc))
+            continue
+        if truncated:
+            continue
+        thumbnail = await asyncio.to_thread(make_thumbnail, data)
+        if thumbnail:
+            stored, (width, height) = thumbnail
+            host = (urlsplit(page_url).hostname or "").lower().removeprefix("www.")
+            return {
+                "content": stored,
+                "content_type": "image/webp",
+                "kind": kind,
+                "width": int(width),
+                "height": int(height),
+                "source_url": page_url,
+                "source_host": host,
+            }
+    return None
 
-    Logos vor Artikeln: Ein Artikelbild wählt der Verlag, oft ist es eine
-    allgemeine Teilen-Grafik; das Logo dessen, um den es geht, erkennt man
-    sicherer wieder. Seiten werden dafür nur einmal gelesen.
-    """
-    tried_images = set()
 
-    async def first_photo(page_url, images, kind):
-        for image_url in images[:2]:
-            if image_url in tried_images or _looks_like_logo(image_url, article=kind == "article"):
-                continue
-            tried_images.add(image_url)
-            try:
-                _url, data, _kind, truncated = await asyncio.wait_for(
-                    fetch(image_url, "image"), FETCH_SECONDS + 1,
-                )
-            except Exception as exc:
-                logging.info("Watch image fetch skipped category=%s", safe_exception(exc))
-                continue
-            if truncated:
-                continue
-            thumbnail = await asyncio.to_thread(make_thumbnail, data)
-            if thumbnail:
-                stored, (width, height) = thumbnail
-                host = (urlsplit(page_url).hostname or "").lower().removeprefix("www.")
-                return {
-                    "content": stored,
-                    "content_type": "image/webp",
-                    "kind": kind,
-                    "width": int(width),
-                    "height": int(height),
-                    "source_url": page_url,
-                    "source_host": host,
-                }
-        return None
-
-    articles = []
+async def _scan(urls, question: Question, fetch, progress: dict, articles: list, tried: set):
+    """Der Gegenstand auf irgendeiner Quelle; passende Artikel sammelt er in
+    ``articles`` (bleiben auch bei einer Zeitüberschreitung erhalten)."""
     for rank, page_url in enumerate(urls):
         try:
             final_url, content, _kind, _truncated = await asyncio.wait_for(
@@ -888,19 +929,19 @@ async def _find(urls, question: Question, fetch, progress: dict, logos=None):
         for score, _index, images in scored[:2]:
             if score <= 0:
                 break
-            found = await first_photo(final_url, images, "item")
+            found = await _first_photo(final_url, images, "item", fetch, tried)
             if found:
                 return found
         if article is not None:
             score = article_score(article[0], question.tokens, question.entities)
             if score:
                 articles.append((score, rank, final_url, article[1]))
-    if logos is not None:
-        found = await logos()
-        if found:
-            return found
+    return None
+
+
+async def _article_photo(articles, fetch, tried: set):
     for _score, _rank, page_url, images in sorted(articles, key=lambda row: (-row[0], row[1]))[:3]:
-        found = await first_photo(page_url, images, "article")
+        found = await _first_photo(page_url, images, "article", fetch, tried)
         if found:
             return found
     return None
@@ -973,8 +1014,13 @@ def search(sources, question: str, condition: str = "", *, fetch=None,
            sites=None) -> tuple[dict | None, bool]:
     """(Bild oder None, ob mindestens eine Seite gelesen wurde). Blockiert (Thread).
 
-    Gegenstand, Logos, Artikel (``_find``); die Logos haben ein eigenes
-    Zeitbudget, damit langsame Quellen sie nicht verdrängen.
+    Gegenstand, dann Logos, dann Artikel -- jede Stufe mit eigenem
+    Zeitbudget, damit langsame Quellen die späteren nicht verdrängen; die
+    Seiten liest nur die erste.
+
+    Logos vor Artikeln: Ein Artikelbild wählt der Verlag, oft ist es eine
+    allgemeine Teilen-Grafik; das Logo dessen, um den es geht, erkennt man
+    sicherer wieder.
     """
     asked = Question(question, condition)
     urls = candidate_urls(sources)
@@ -983,23 +1029,23 @@ def search(sources, question: str, condition: str = "", *, fetch=None,
         return None, False
     progress = {"looked": False}
     fetch = fetch or _http_fetch
+    articles, tried = [], set()
 
-    async def logo_stage():
+    async def stage(work, seconds):
         try:
-            return await asyncio.wait_for(_find_logos(logos, fetch, progress), LOGO_SECONDS)
+            return await asyncio.wait_for(work, seconds)
         except (asyncio.TimeoutError, TimeoutError):
             return None
 
     async def run():
-        return await asyncio.wait_for(
-            _find(urls, asked, fetch, progress, logos=logo_stage if logos else None),
-            ATTEMPT_SECONDS + LOGO_SECONDS,
-        )
+        found = await stage(_scan(urls, asked, fetch, progress, articles, tried), ATTEMPT_SECONDS) if urls else None
+        if found is None and logos:
+            found = await stage(_find_logos(logos, fetch, progress), LOGO_SECONDS)
+        if found is None and articles:
+            found = await stage(_article_photo(list(articles), fetch, tried), ARTICLE_SECONDS)
+        return found
 
-    try:
-        return asyncio.run(run()), progress["looked"]
-    except (asyncio.TimeoutError, TimeoutError):
-        return None, progress["looked"]
+    return asyncio.run(run()), progress["looked"]
 
 
 def find_image(sources, question: str, condition: str = "", *, fetch=None,
@@ -1048,6 +1094,11 @@ def has_symbol(watch: dict) -> bool:
     return isinstance(watch, dict) and watch.get("symbol") in watch_symbols.SYMBOLS
 
 
+def _judge_failures(watch: dict) -> int:
+    tries = watch.get("visual_tries") if isinstance(watch, dict) else None
+    return tries if isinstance(tries, int) else 0
+
+
 def _has_candidates(watch: dict, sources) -> bool:
     return bool(candidate_urls(sources) or source_sites(sources) or _stored_sites(_image_state(watch)))
 
@@ -1062,14 +1113,18 @@ def _now() -> datetime:
 
 
 def store_result(watch_id: str, found: dict | None, *, db, looked: bool = True,
-                 symbol: str | None = None, sites=None, attempted: bool = True) -> str:
+                 symbol: str | None = None, sites=None, attempted: bool = True,
+                 judge_failed: bool = False) -> str:
     """Ergebnis eines Versuchs festhalten, solange die Watch noch eins braucht.
 
     Bild und Watch-Feld entstehen in einer Transaktion, die die Watch liest:
     eine gelöschte Watch bekommt kein Bild-Dokument mehr, ein inzwischen
     entferntes Bild kommt nicht zurück. Ein Symbol wird nur einmal gesetzt;
     die Domain-Auswahl des Judges (``sites``) reist mit dem Bildstand, damit
-    spätere Versuche ihn nicht erneut fragen.
+    spätere Versuche ihn nicht erneut fragen. Scheitert der Judge
+    ``MAX_JUDGE_TRIES``-mal (``visual_tries``), wird er nicht mehr gefragt:
+    es gilt das Standardsymbol und für Logos die Namensregel -- sonst fragte
+    ihn jede Prüfung neu.
     """
     from app.services import watch_service
 
@@ -1087,6 +1142,11 @@ def store_result(watch_id: str, found: dict | None, *, db, looked: bool = True,
         updates = {}
         if symbol in watch_symbols.SYMBOLS and not has_symbol(current):
             updates["symbol"] = symbol
+        if judge_failed:
+            failures = _judge_failures(current) + 1
+            updates["visual_tries"] = failures
+            if failures >= MAX_JUDGE_TRIES and not has_symbol(current):
+                updates["symbol"] = watch_symbols.DEFAULT_SYMBOL
         outcome = "kept"
         if not attempted and sites is not None and needs_image(current):
             # Der Judge hat gewählt, aber es gab nichts zu holen: die Wahl
@@ -1153,7 +1213,11 @@ def _default_pick():
 
 
 def _pick_visual(pick, question: str, condition: str, sources) -> dict | None:
-    """{symbol, sites} vom Judge oder None; Seiten nur aus den Quell-Domains."""
+    """{symbol, sites} vom Judge oder None; Seiten nur aus den Quell-Domains.
+
+    Ohne eine einzige Quell-Domain ist ``sites`` None statt []: Der Judge
+    hatte nichts zu wählen, eine spätere Prüfung mit Quellen fragt erneut.
+    """
     if pick is None:
         return None
     domains = [domain for domain, _urls in source_sites(sources)]
@@ -1167,7 +1231,7 @@ def _pick_visual(pick, question: str, condition: str, sources) -> dict | None:
     sites = verdict.get("sites") if isinstance(verdict.get("sites"), list) else []
     return {
         "symbol": verdict["symbol"],
-        "sites": [site for site in dict.fromkeys(sites) if site in domains][:MAX_LOGOS],
+        "sites": [site for site in dict.fromkeys(sites) if site in domains][:MAX_LOGOS] if domains else None,
     }
 
 
@@ -1188,11 +1252,15 @@ def refresh_for_watch(watch_id: str, watch: dict, sources, question: str,
         from app.core.security import db_firestore as db
     started = time.monotonic()
     sites = _stored_sites(_image_state(watch))
-    symbol, verdict = None, None
-    if wants_symbol or (wants_image and sites is None):
-        verdict = _pick_visual(pick if pick is not None else _default_pick(), question, condition, sources)
+    symbol, verdict, judge_failed = None, None, False
+    if (wants_symbol or (wants_image and sites is None)) and _judge_failures(watch) < MAX_JUDGE_TRIES:
+        chooser = pick if pick is not None else _default_pick()
+        verdict = _pick_visual(chooser, question, condition, sources)
+        judge_failed = chooser is not None and verdict is None
         if verdict:
-            symbol, sites = verdict["symbol"], verdict["sites"]
+            symbol = verdict["symbol"]
+            if verdict["sites"] is not None:
+                sites = verdict["sites"]
     if wants_image and not (
         candidate_urls(sources) or logo_sites(sources, Question(question, condition), sites)
     ):
@@ -1206,10 +1274,11 @@ def refresh_for_watch(watch_id: str, watch: dict, sources, question: str,
             # zählt als Versuch ohne gelesene Seite (MAX_TRIES deckelt das).
             logging.warning("Watch image search failed category=%s", safe_exception(exc))
             found, looked = None, False
-    if not wants_image and not verdict:
+    if not wants_image and not verdict and not judge_failed:
         return "skipped"
     outcome = store_result(
         watch_id, found, db=db, looked=looked, symbol=symbol, sites=sites, attempted=wants_image,
+        judge_failed=judge_failed,
     )
     record_metric(
         "watch_images", "pick",

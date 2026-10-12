@@ -3144,7 +3144,9 @@ def pick_watch_visual(question: str, condition: str, domains, symbols: dict,
         try:
             raw = _call_engine_text(
                 provider, api_model, model_ref, api_keys,
-                system="Return valid JSON only.", prompt=prompt, max_tokens=200,
+                # Die Antwort ist kurz, aber das Denken des Judges zählt mit;
+                # Spielraum, damit es die Antwort nie verdrängt.
+                system="Return valid JSON only.", prompt=prompt, max_tokens=800,
                 temperature=0.0, json_mode=True,
                 effort=_judge_effort(provider, api_model, judge_tier),
                 json_schema=schema,

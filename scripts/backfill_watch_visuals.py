@@ -50,33 +50,41 @@ def main(argv=None) -> int:
     if pick is None:
         print("Judge unavailable (test or mock mode); nothing to do.")
         return 1
-    for snapshot in db.collection(watch_service.WATCHES_COLLECTION).stream():
+    # Erst die Liste, dann die langsame Arbeit: ein offener Stream liefe ab.
+    snapshots = list(db.collection(watch_service.WATCHES_COLLECTION).stream())
+    failed = 0
+    for snapshot in snapshots:
         watch = snapshot.to_dict() or {}
         if watch.get("status") not in STATUSES:
             continue
-        share = share_snapshots.get_share(str(watch.get("share_id") or "")) or {}
-        question = str(share.get("question") or "")
-        condition = str(watch.get("condition") or "")
-        sources = _sources(db, watch, share)
-        if not question or not watch_images.wants_work(watch, sources):
-            continue
-        if args.apply:
-            outcome = watch_images.refresh_for_watch(
-                snapshot.id, watch, sources, question, condition, db=db, pick=pick,
-            )
-            print(f"{snapshot.id}: {outcome}")
-            continue
-        verdict = watch_images._pick_visual(pick, question, condition, sources)
-        sites = verdict["sites"] if verdict else None
-        found = None
-        if watch_images.needs_image(watch):
-            found, _looked = watch_images.search(sources, question, condition, sites=sites)
-        print(f"{snapshot.id}: {question[:70]!r}\n"
-              f"    symbol={verdict and verdict['symbol']} sites={sites}"
-              f" -> {found and (found['kind'], found['source_host'])}")
+        try:
+            share = share_snapshots.get_share(str(watch.get("share_id") or "")) or {}
+            question = str(share.get("question") or "")
+            condition = str(watch.get("condition") or "")
+            sources = _sources(db, watch, share)
+            if not question or not watch_images.wants_work(watch, sources):
+                continue
+            if args.apply:
+                outcome = watch_images.refresh_for_watch(
+                    snapshot.id, watch, sources, question, condition, db=db, pick=pick,
+                )
+                print(f"{snapshot.id}: {outcome}")
+                continue
+            # Der Trockenlauf ruft den Judge wirklich (Kosten wie --apply).
+            verdict = watch_images._pick_visual(pick, question, condition, sources)
+            sites = verdict["sites"] if verdict else None
+            found = None
+            if watch_images.needs_image(watch):
+                found, _looked = watch_images.search(sources, question, condition, sites=sites)
+            print(f"{snapshot.id}: {question[:70]!r}\n"
+                  f"    symbol={verdict and verdict['symbol']} sites={sites}"
+                  f" -> {found and (found['kind'], found['source_host'])}")
+        except Exception as exc:  # eine kaputte Watch hält die übrigen nicht auf
+            failed += 1
+            print(f"{snapshot.id}: failed {type(exc).__name__}")
     if not args.apply:
         print("\nDry run. Re-run with --apply to write.")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

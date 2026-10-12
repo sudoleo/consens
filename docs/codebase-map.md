@@ -6185,7 +6185,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   dazu `image = {status: ready|none|dismissed, kind: item|article|logo, token, width,
   height, source_url, source_host, attempts, tries, version, sites, picked_at}`
   (`sites` = Domain-Wahl des Judges, auch `[]`) und seit 2026-10-12 `symbol`
-  (Name aus `watch_symbols.SYMBOLS`, einmal gesetzt). Gelöscht in derselben Transaktion wie die
+  (Name aus `watch_symbols.SYMBOLS`, einmal gesetzt) sowie `visual_tries`
+  (Fehlschläge des Judges, Deckel 3). Gelöscht in derselben Transaktion wie die
   Watch (`_delete_watch_record`, damit auch Share-Hard-Delete und Kontolöschung)
   und beim Entfernen durch den Owner.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
@@ -6821,18 +6822,23 @@ Websuche): `symbol` aus der festen Liste `watch_symbols.SYMBOLS` (Enum) und
 Frage selbst gehören (nie eine Seite, die nur berichtet, vergleicht oder
 verkauft); was nicht in den Listen steht, fällt weg. Das Symbol steht danach
 fest (`watch.symbol`), die Seitenwahl reist als `image.sites` mit (auch `[]`),
-damit spätere Checks nicht erneut fragen. Fällt der Judge aus, gilt für Logos
-die Namensregel (`named_sites`: der Domainname, z. B. `hs-hannover` aus
-`karriere.hs-hannover.de`, ist ein Name aus Frage/Ziel) und das Dashboard zeigt
-das Standardsymbol. Dann werden bis zu 5 Quellen-URLs (mehrfach zitierte
+damit spätere Checks nicht erneut fragen — außer der Judge sah gar keine
+Domain (Watch ohne Quellen): dann gilt nur das Symbol und ein späterer Check
+mit Quellen fragt erneut. Fällt der Judge aus, gilt für Logos die Namensregel
+(`named_sites`: der Domainname, z. B. `hs-hannover` aus
+`karriere.hs-hannover.de`, ist ein Name aus Frage/Ziel; IP-Adressen haben
+keinen) und das Dashboard zeigt das Standardsymbol; nach drei Fehlschlägen
+(`visual_tries`) wird er für diese Watch nicht mehr gefragt und `symbol` =
+Standardsymbol. Dann werden bis zu 5 Quellen-URLs (mehrfach zitierte
 zuerst, ein Host pro Runde; consens.io selbst, Reddit/YouTube/X/Facebook/
 Instagram/TikTok/LinkedIn/Google/GitHub/Medium/Quora/Stack Overflow/HN und PDFs
 übersprungen, auch wenn eine Weiterleitung dort endet; eine Weiterleitung zählt
 als ihre Zielseite) über
 `source_documents.pinned_target` abgerufen (DNS-gepinnt, nur öffentliche IPs,
 Redirects je Hop neu geprüft, Seiten ≤ 2 MB, Bilder ≤ 5 MB, Icons ≤ 1 MB, 6 s je
-Abruf, 25 s + 15 s für Logos je Versuch). Drei Stufen, Seiten werden nur einmal
-gelesen: (1) **Gegenstand** (`kind="item"`) — eine Seite, die
+Abruf). Drei Stufen mit je eigenem Zeitbudget (Seiten + Gegenstand 25 s, Logos
+15 s, Artikelbilder 15 s; bis zum Abbruch gesammelte Artikel bleiben), Seiten
+werden nur einmal gelesen: (1) **Gegenstand** (`kind="item"`) — eine Seite, die
 sich selbst als schema.org Product/Vehicle/Book/(echte) Event/Unterkunft
 ausweist (JSON-LD/Microdata, sonst `og:type` product/item) und deren Name zur
 Frage + Ziel passt (`Question`/`match_score`): kein Zubehör-/Merch-Wort, das die
@@ -6848,7 +6854,10 @@ der gewählten Seiten (Judge oder Namensregel): Startseite der Domain (sonst die
 zitierte Seite) lesen, `apple-touch-icon`/`fluid-icon` (größtes zuerst), große
 PNG-Icons, `/apple-touch-icon.png`, zuletzt `.ico` (`page_icons`; SVG und
 Masken nie, ≤ 3 Icon-Abrufe je Seite). Ein Icon braucht ≥ 64 px
-(`make_logo`): füllt es die Fläche, füllt es die 144-px-Kachel; ein Zeichen auf
+(`make_logo`); ein `.ico` wird nur geöffnet, wenn die echten Maße jedes
+Eintrags (PNG-IHDR bzw. BMP-Kopf, `_ico_fits`) ≤ 1024 px sind — Pillow
+dekodiert `.ico` schon in `Image.open`, und das Verzeichnis darf lügen. Füllt
+das Icon die Fläche, füllt es die 144-px-Kachel; ein Zeichen auf
 Durchsicht steht verkleinert auf Weiß bzw. — wenn es hell ist — auf Dunkel; eine
 leere Fläche ist kein Logo. Bis zu zwei Kacheln werden mit abgerundeten Ecken
 und Lücke zu einem WebP mit Durchsicht (`compose_logos`, ≤ 304 × 144 px).

@@ -6,6 +6,7 @@ Gegenstand selbst, sonst das Vorschaubild eines passenden Artikels. Seit
 die nur berichtet), und ohne Bild ein Symbol aus fester Liste.
 """
 
+import asyncio
 import functools
 import io
 import json
@@ -655,6 +656,10 @@ class SiteTests(unittest.TestCase):
         self.assertEqual(watch_images.site_domain("gemini.google"), "gemini.google")
         self.assertEqual(watch_images.site_domain("karriere.hs-hannover.de"), "hs-hannover.de")
         self.assertEqual(watch_images.site_domain("localhost"), "")
+        # An address is no domain ("192.168.1.1" would become "1.1").
+        self.assertEqual(watch_images.site_domain("192.168.1.1"), "")
+        self.assertEqual(watch_images.site_domain("::1"), "")
+        self.assertEqual(watch_images.source_sites([{"url": "http://8.8.8.8/x"}]), [])
 
     def test_sites_by_citations_without_search_redirects(self):
         sites = watch_images.source_sites([
@@ -716,6 +721,24 @@ class LogoTests(unittest.TestCase):
         light_mark = watch_images.make_logo(icon_bytes(fill=None, glyph=(250, 250, 250, 255)))
         self.assertEqual(light_mark.getpixel((3, 3)), (32, 33, 36))
         self.assertIsNotNone(watch_images.make_logo(icon_bytes(size=96, fmt="ICO")))
+
+    def test_an_ico_that_lies_about_its_size_is_never_decoded(self):
+        # The directory says 32 px, the embedded PNG says 12000 px: Pillow
+        # would decode it inside Image.open, before any size check.
+        def ico(payload):
+            entry = bytes([32, 32, 0, 0]) + (1).to_bytes(2, "little") + (32).to_bytes(2, "little") \
+                + len(payload).to_bytes(4, "little") + (22).to_bytes(4, "little")
+            return b"\x00\x00\x01\x00" + (1).to_bytes(2, "little") + entry + payload
+
+        png_bomb = b"\x89PNG\r\n\x1a\n" + (13).to_bytes(4, "big") + b"IHDR" \
+            + (12000).to_bytes(4, "big") + (12000).to_bytes(4, "big") + b"\x08\x06\x00\x00\x00"
+        bmp_bomb = (40).to_bytes(4, "little") + (9000).to_bytes(4, "little") + (18000).to_bytes(4, "little")
+        with patch.object(watch_images.Image, "open") as opened:
+            self.assertIsNone(watch_images.make_logo(ico(png_bomb)))
+            self.assertIsNone(watch_images.make_logo(ico(bmp_bomb)))
+            self.assertIsNone(watch_images.make_logo(b"\x00\x00\x01\x00\x00\x00"))
+        opened.assert_not_called()
+        self.assertTrue(watch_images._ico_fits(icon_bytes(size=96, fmt="ICO")))
 
     def test_tiny_blank_or_broken_icons_are_no_logo(self):
         self.assertIsNone(watch_images.make_logo(icon_bytes(size=48)))
@@ -900,6 +923,57 @@ class VisualPickTests(unittest.TestCase):
         self.assertEqual(watch_service.list_watches("u1", db=self.db)[0]["symbol"], watch_symbols.DEFAULT_SYMBOL)
         for verdict in (None, {"symbol": "<svg>", "sites": []}, "code"):
             self.assertIsNone(watch_images._pick_visual(lambda *_: verdict, CURSOR_QUESTION, "", self.sources))
+
+    def test_a_judge_without_domains_only_sets_the_symbol(self):
+        calls = []
+
+        def pick(question, condition, domains):
+            calls.append(domains)
+            return {"symbol": "code", "sites": [domain for domain in domains if domain == "cursor.com"]}
+
+        # Created from an answer without sources: the judge saw no domain.
+        self.assertEqual(self.refresh(pick, sources=[]), "kept")
+        self.assertEqual(self.watch()["symbol"], "code")
+        self.assertNotIn("image", self.watch())
+        # So a later check with sources asks again and finds the logo.
+        self.assertEqual(self.refresh(pick), "ready")
+        self.assertEqual(calls, [[], ["news.test", "cursor.com"]])
+        self.assertEqual(self.watch()["image"]["kind"], "logo")
+
+    def test_a_judge_that_keeps_failing_is_asked_three_times(self):
+        calls = []
+
+        def pick(question, condition, domains):
+            calls.append(domains)
+            raise RuntimeError("judge down")
+
+        sources = [{"url": "https://www.youtube.com/watch?v=1"}]
+        for expected in (1, 2):
+            self.assertEqual(self.refresh(pick, sources=sources), "kept")
+            self.assertEqual(self.watch()["visual_tries"], expected)
+            self.assertNotIn("symbol", self.watch())
+        self.refresh(pick, sources=sources)
+        self.assertEqual(self.watch()["symbol"], watch_symbols.DEFAULT_SYMBOL)
+        # Neither the symbol nor the site choice asks again; logos fall back
+        # to the name rule.
+        self.assertEqual(self.refresh(pick, sources=sources), "skipped")
+        self.assertEqual(self.refresh(pick), "ready")
+        self.assertEqual(len(calls), 3)
+
+    def test_slow_pages_do_not_crowd_out_the_logos(self):
+        async def fetch(url, purpose):
+            if url == "https://slow.test/a":
+                await asyncio.sleep(5)
+            return await self.fetch(url, purpose)
+
+        with patch.object(watch_images, "ATTEMPT_SECONDS", 0.2):
+            started = time.monotonic()
+            found = watch_images.find_image(
+                [{"url": "https://slow.test/a"}, {"url": "https://cursor.com/pricing"}],
+                CURSOR_QUESTION, fetch=fetch,
+            )
+        self.assertEqual(found["kind"], "logo")
+        self.assertLess(time.monotonic() - started, 3)
 
     def test_a_symbol_is_set_once(self):
         watch_images.store_result(WATCH_ID, None, db=self.db, symbol="code", attempted=False)
