@@ -521,6 +521,7 @@ onIdTokenChanged(auth, async (user) => {
       window.updateQuestionInputAccess();
     }
 
+    let sessionCookieSet = false;
     try {
       // Dieser Call übernimmt nun die Arbeit für ALLE Login-Arten (Google, Email, Reload)
       const res = await fetch("/confirm-registration", {
@@ -528,6 +529,7 @@ onIdTokenChanged(auth, async (user) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_token: token })
       });
+      sessionCookieSet = res.ok;
       
       if (!res.ok) {
         // Hilft dir beim Debuggen: Was genau sagt das Backend?
@@ -536,6 +538,12 @@ onIdTokenChanged(auth, async (user) => {
       }
     } catch (err) {
       console.error("Error during confirm-registration:", err);
+    }
+    // Sent here to sign in by a private page (/app?next=/s/...): the session
+    // cookie it needs is set now, so go back to it.
+    if (sessionCookieSet && SIGNED_IN_RETURN && isCurrentAuthenticatedUser(user.uid, generation)) {
+      window.location.replace(SIGNED_IN_RETURN);
+      return;
     }
 
     // Firebase refreshes the ID token hourly and fires this handler again
@@ -1580,6 +1588,27 @@ setMode("login");
       googleErr.textContent = mapGoogleSignInError(error);
       trackAppEvent("auth_google_login_result", { status: "error", flow: "redirect", code: error?.code || "unknown" });
     });
+})();
+
+// A private Watch page opens only with its owner's session cookie, which a
+// mail app or another browser lacks. Its links and its "Sign in to view"
+// button come here as /app?next=/s/...; once signed in (or at once, when this
+// browser is signed in already) the auth handler above goes back. Only
+// same-origin page paths are accepted, never a full URL or "//host".
+const SIGNED_IN_RETURN = (() => {
+  const next = new URL(window.location.href).searchParams.get("next") || "";
+  return /^\/s\/[A-Za-z0-9_-]{1,240}$/.test(next) ? next : "";
+})();
+(function askToSignInForPrivatePage() {
+  if (!SIGNED_IN_RETURN) return;
+  let handled = false;
+  onAuthStateChanged(auth, user => {
+    if (handled) return;
+    handled = true;
+    if (user) return;
+    showAuthModal("login");
+    loginNoticeEl.textContent = "Log in to open your private watch page.";
+  });
 })();
 
 // Back from the password-setup e-mail (continueUrl /app?setup=1, see
@@ -3245,7 +3274,51 @@ function updateBookmarkDOM(bookmark) {
   const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmark.id}"]`);
   const label = row?.querySelector("p");
   if (label) label.textContent = bookmarkLabelText(bookmarkDisplayTitle(bookmark));
+  const control = row?.querySelector(".delete-bookmark");
+  if (control && !control.classList.contains("is-armed")) labelDeleteControl(control, label?.textContent);
 }
+
+// Deleting a chat cannot be undone, so the first activation only arms the
+// control: it turns into "Delete" and only a second activation deletes. It
+// disarms by itself, on Escape and on a click anywhere else (a tap on the row
+// still opens the chat).
+const BOOKMARK_DELETE_ARM_MS = 5000;
+const BOOKMARK_DELETE_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+let armedBookmarkDelete = null;
+
+function labelDeleteControl(control, title) {
+  const label = title ? `Delete chat: ${title}` : "Delete chat";
+  control.setAttribute("aria-label", label);
+  control.title = "Delete chat";
+}
+
+function disarmBookmarkDelete() {
+  if (!armedBookmarkDelete) return;
+  const { control, row, timer } = armedBookmarkDelete;
+  armedBookmarkDelete = null;
+  clearTimeout(timer);
+  row.classList.remove("is-confirming-delete");
+  control.classList.remove("is-armed");
+  control.innerHTML = BOOKMARK_DELETE_ICON;
+  labelDeleteControl(control, row.querySelector("p")?.textContent);
+}
+
+function armBookmarkDelete(control, row) {
+  disarmBookmarkDelete();
+  row.classList.add("is-confirming-delete");
+  control.classList.add("is-armed");
+  control.textContent = "Delete";
+  control.setAttribute("aria-label", `Confirm: delete chat ${row.querySelector("p")?.textContent || ""}`.trim());
+  control.title = "Click again to delete this chat";
+  armedBookmarkDelete = { control, row, timer: setTimeout(disarmBookmarkDelete, BOOKMARK_DELETE_ARM_MS) };
+}
+
+document.addEventListener("click", event => {
+  if (armedBookmarkDelete && !armedBookmarkDelete.control.contains(event.target)) disarmBookmarkDelete();
+}, true);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") disarmBookmarkDelete();
+});
 
 function createReadyBookmarkRow(bookmark, runId = null) {
   const div = document.createElement("div");
@@ -3256,27 +3329,21 @@ function createReadyBookmarkRow(bookmark, runId = null) {
   // werden - deshalb textContent statt Template-Interpolation in innerHTML.
   const label = document.createElement("p");
   label.textContent = bookmarkLabelText(bookmarkDisplayTitle(bookmark));
-  const deleteSpan = document.createElement("span");
-  deleteSpan.className = "delete-bookmark";
-  deleteSpan.setAttribute("role", "button");
-  deleteSpan.setAttribute("tabindex", "0");
-  deleteSpan.setAttribute("aria-label", "Delete bookmark");
-  deleteSpan.setAttribute("title", "Delete bookmark");
-  deleteSpan.textContent = "x";
-  div.append(label, deleteSpan);
+  const deleteControl = document.createElement("button");
+  deleteControl.type = "button";
+  deleteControl.className = "delete-bookmark";
+  deleteControl.innerHTML = BOOKMARK_DELETE_ICON;
+  labelDeleteControl(deleteControl, label.textContent);
+  div.append(label, deleteControl);
 
-  // Delete-Event
-  const deleteControl = div.querySelector(".delete-bookmark");
-  deleteControl.addEventListener("click", e => { 
-       e.stopPropagation(); 
-       deleteBookmark(bookmark.id); 
-  });
-  deleteControl.addEventListener("keydown", e => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      e.stopPropagation();
-      deleteBookmark(bookmark.id);
+  deleteControl.addEventListener("click", e => {
+    e.stopPropagation();
+    if (!deleteControl.classList.contains("is-armed")) {
+      armBookmarkDelete(deleteControl, div);
+      return;
     }
+    disarmBookmarkDelete();
+    deleteBookmark(bookmark.id);
   });
 
   // Click-Event -> Ruft jetzt die ausgelagerte Funktion auf

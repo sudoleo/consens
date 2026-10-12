@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Request, Body, HTTPException
@@ -407,11 +408,11 @@ def report_share(request: Request, share_id: str, data: dict = Body(default={}))
     return {"status": "success", "message": "Thanks, this page has been reported for review."}
 
 
-def _unavailable_response(request, status_code, heading, message):
+def _unavailable_response(request, status_code, heading, message, *, sign_in_href=""):
     response = templates.TemplateResponse(
         request=request,
         name="share_unavailable.html",
-        context={"heading": heading, "message": message},
+        context={"heading": heading, "message": message, "sign_in_href": sign_in_href},
         status_code=status_code,
     )
     response.headers["X-Robots-Tag"] = "noindex, noarchive"
@@ -605,10 +606,19 @@ def share_page(request: Request, slug_id: str):
             viewer_uid = verify_user_token(token) if token else ""
         except Exception:
             viewer_uid = ""
-        if not viewer_uid or viewer_uid != data.get("owner_uid"):
+        if not viewer_uid:
+            # Usually the owner from a mail link, in a browser without the
+            # session cookie: the app signs in (or finds the session it
+            # already has) and comes straight back (static/firebase.js).
             return _unavailable_response(
                 request, 403, "Private watch page",
-                "This page is private. Sign in with its owner account to view it.",
+                "This page is private. Sign in with the account that created it to view it.",
+                sign_in_href="/app?next=" + quote(request.url.path, safe="/"),
+            )
+        if viewer_uid != data.get("owner_uid"):
+            return _unavailable_response(
+                request, 403, "Private watch page",
+                "This page is private and belongs to another account. Sign in with the account that created it to view it.",
             )
 
     canonical_slug = data.get("slug") or ""

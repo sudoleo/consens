@@ -1528,6 +1528,17 @@ class SharePageRouteTests(unittest.TestCase):
             denied = self.client.get(path)
         self.assertEqual(denied.status_code, 403)
         self.assertNotIn("Photosynthese wandelt", denied.text)
+        # The owner from a mail link signs in and comes straight back.
+        self.assertIn('href="/app?next=%s"' % path, denied.text)
+        self.assertIn("Sign in to view", denied.text)
+
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router, "extract_id_token", return_value="token"), \
+                patch.object(share_router, "verify_user_token", return_value="someone-else"):
+            other = self.client.get(path)
+        self.assertEqual(other.status_code, 403)
+        self.assertIn("belongs to another account", other.text)
+        self.assertNotIn("/app?next=", other.text)
 
         with patch.object(share_router.snapshots, "get_share", return_value=doc), \
                 patch.object(share_router, "extract_id_token", return_value="token"), \

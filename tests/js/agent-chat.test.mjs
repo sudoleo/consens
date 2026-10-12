@@ -1292,6 +1292,51 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("opening an old chat with a removed model leaves the account's own pick alone", async () => {
+    const { window, document, dom } = boot();
+    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" }));
+    await selectAgent(window);
+    expect(document.getElementById("agentModelDropdown").value).toBe("gpt-5.6-sol");
+    const settings = { model_id: "removed-model", label: "Historical model", reasoning_effort: "default" };
+    window.App.runRegistry.showSavedView({ type: "bookmark" }, { chatId: "c".repeat(32), bookmarkId: "old", question: "Old",
+      consensus: "Old answer", executionMode: "agent", currentTurn: { id: "old-turn", question: "Old", consensus: "Old answer", agent_settings: settings } });
+    expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
+    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
+    // A new chat starts from the account's pick again.
+    window.App.runRegistry.clearVisible();
+    window.App.agentChat.render();
+    expect(document.getElementById("agentModelDropdown").value).toBe("gpt-5.6-sol");
+    dom.window.close();
+  });
+
+  it("maps a migrated model ID to its successor instead of the default", async () => {
+    const catalog = { ...CATALOG, aliases: { "grok-4.3-no-reasoning": "gpt-5.6-sol" } };
+    const { window, document, dom } = boot({ catalog });
+    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "grok-4.3-no-reasoning", reasoning_effort: "medium" }));
+    await selectAgent(window);
+    expect(document.getElementById("agentModelDropdown").value).toBe("gpt-5.6-sol");
+    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
+    expect(window.App.showPopup).not.toHaveBeenCalled();
+    dom.window.close();
+  });
+
+  it("falls back for a briefly unavailable model without saving over the pick", async () => {
+    const catalog = { ...CATALOG, models: CATALOG.models.map(model => model.id === "gpt-5.6-sol" ? { ...model, available: false } : model) };
+    const { window, document, dom } = boot({ catalog });
+    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" }));
+    await selectAgent(window);
+    expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
+    window.App.agentChat.render();
+    window.App.agentChat.render();
+    expect(window.App.showPopup).toHaveBeenCalledTimes(1);
+    expect(window.App.showPopup.mock.calls[0][0]).toContain("GPT-5.6 Sol is unavailable right now");
+    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({ model_id: "gpt-5.6-sol", reasoning_effort: "medium" });
+    document.getElementById("questionInput").value = "Question";
+    await window.App.agentChat.send();
+    expect(window.streamSSERequest.mock.calls[0][1]).toMatchObject({ model_id: CATALOG.default_model_id });
+    dom.window.close();
+  });
+
   it("keeps the actual failure reason visible when reopening an incomplete answer", async () => {
     const { window, document, dom } = boot();
     const failure = "The model provider stopped responding. Your available answer has been saved.";

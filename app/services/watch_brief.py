@@ -281,6 +281,7 @@ def collect_brief_items(uid: str, *, since: datetime, db=None) -> tuple[list[dic
         items.append({
             "question": watch.get("question") or "",
             "share_path": watch.get("share_path") or "",
+            "visibility": watch.get("visibility") or "public",
             "status": watch.get("status") or "paused",
             "interval": watch.get("interval") or "weekly",
             "run_weekday": watch.get("run_weekday") or "",

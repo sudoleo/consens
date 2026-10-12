@@ -33,6 +33,16 @@
     </header>
     <div class="page-content">
       <section class="legal-panel">
+        {% if sign_in_href %}
+        <p>
+          Private watch pages open only for the account that created them.
+          After signing in you come straight back to this page.
+        </p>
+        <div class="links">
+          <a href="{{ sign_in_href }}" class="button-primary">Sign in to view</a>
+          <a href="/app/watches" class="button-secondary">Your watches</a>
+        </div>
+        {% else %}
         <p>
           consens.io compares answers from multiple AI models and turns them into a structured consensus.
           You can ask your own question for free.
@@ -41,6 +51,7 @@
           <a href="/app" class="button-primary">Ask your own question</a>
           <a href="/about" class="button-secondary">About consens.io</a>
         </div>
+        {% endif %}
       </section>
     </div>
   </main>

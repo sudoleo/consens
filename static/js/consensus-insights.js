@@ -113,12 +113,15 @@
           const MARKER_FILTERS = {
             all: "Highlight all model and source checks. Agreement is not proof of correctness.",
             contradictions: "Highlight model contradictions, including minor details, and sources that contradict a claim.",
-            concerns: "Highlight critical contradictions and split model views, plus contradicting, problematic or unclear sources (red and amber).",
+            concerns: "Highlight model contradictions, including minor details, and split model views, plus contradicting, problematic or unclear sources.",
             critical: "Highlight critical model contradictions and sources that contradict a claim (red).",
           };
           const highlightSelect = $("consensusHighlightsSelect");
           const highlightHelp = $("consensusHighlightsHelp");
-          let highlightMode = "concerns";
+          // "All checks" by default (2026-10-12): the quiet green on agreed
+          // sentences shows that the answer was compared at all; red and amber
+          // stay louder by design (components-consensus-visuals.css).
+          let highlightMode = "all";
           let markersVisible = true;
           const MARKERS_HIDDEN_CLASS = "consensus-markers-hidden";
           const CLAIM_COUNTS_KEY = "consensio.showClaimCounts.v1";
@@ -143,7 +146,7 @@
             try {
               markersVisible = window.localStorage.getItem(MARKER_VISIBILITY_STORAGE_KEY) !== "false";
               const stored = window.localStorage.getItem(MARKER_FILTER_KEY);
-              highlightMode = Object.hasOwn(MARKER_FILTERS, stored) ? stored : "concerns";
+              highlightMode = Object.hasOwn(MARKER_FILTERS, stored) ? stored : "all";
             } catch (_) { /* Keep the working session preference if storage is unavailable. */ }
             return markersVisible;
           }
@@ -155,6 +158,8 @@
           function matchesHighlightFilter(mark) {
             if (highlightMode === "all") return true;
             if (highlightMode === "contradictions") return !!mark.cxGroup?.hasContradiction;
+            // Every contradiction the footer counts, minor ones included.
+            if (highlightMode === "concerns" && mark.cxGroup?.hasContradiction) return true;
             return mark.classList.contains("is-major")
               || (highlightMode === "concerns" && mark.classList.contains("is-split"));
           }
@@ -2676,7 +2681,7 @@
           restoreClaimCounts();
           highlightSelect?.addEventListener("change", function () {
             const show = this.value !== "none";
-            if (show) highlightMode = Object.hasOwn(MARKER_FILTERS, this.value) ? this.value : "concerns";
+            if (show) highlightMode = Object.hasOwn(MARKER_FILTERS, this.value) ? this.value : "all";
             try {
               localStorage.setItem(MARKER_FILTER_KEY, highlightMode);
               localStorage.setItem(MARKER_VISIBILITY_STORAGE_KEY, String(show));

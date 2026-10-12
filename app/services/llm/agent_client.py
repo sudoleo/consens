@@ -307,7 +307,13 @@ def agent_model_options():
             'available': False, 'premium': entry.internal_id in cfg.PREMIUM_MODELS, 'unavailable_reason': 'Model information unavailable · check the model ID or retry later',
             'reasoning_efforts': ['default'], 'reasoning_available': False,
         })
-    return {'default_model_id': default['id'], 'models': models}
+    # Saved selections may carry a migrated ID (grok-4.3-no-reasoning). The
+    # browser maps them like resolve_agent_model does instead of treating the
+    # user's choice as gone and resetting it to the default.
+    ids = {model['id'] for model in models}
+    aliases = {legacy: target for migrations in cfg.PROVIDER_MODEL_MIGRATIONS.values()
+               for legacy, target in migrations.items() if target in ids and legacy not in ids}
+    return {'default_model_id': default['id'], 'models': models, 'aliases': aliases}
 
 
 def metered_model(model_id, *, max_tokens=2048):

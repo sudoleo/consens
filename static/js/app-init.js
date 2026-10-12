@@ -677,13 +677,21 @@
           trackAppEvent("app_new_comparison");
         });
 
-        // Fenstergröße prüfen – wenn <1024px, Sidebar einklappen
+        // Fenstergröße prüfen – im Overlay-Modus (<=1099px) Sidebar einklappen.
+        // Nur ein Wechsel zwischen Overlay und Push setzt die Sidebar zurück:
+        // Resizes innerhalb eines Modus (Handy-Tastatur mit
+        // interactive-widget=resizes-content, einklappende Browserleiste)
+        // schlossen sonst die offene Sidebar, während man in ihrer Suche tippt.
+        let sidebarOverlayMode = null;
         function checkWindowSize() {
           const sidebar = document.querySelector(".sidebar");
           syncThreadComposerReserve();
           if (!sidebar) return;
+          const overlay = usesOverlaySidebar();
+          if (overlay === sidebarOverlayMode) return;
+          sidebarOverlayMode = overlay;
 
-          if (usesOverlaySidebar()) {
+          if (overlay) {
             sidebar.classList.add("collapsed");
             sidebar.classList.remove("active");
           } else {

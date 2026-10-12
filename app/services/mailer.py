@@ -10,7 +10,7 @@ import re
 import smtplib
 import ssl
 from email.message import EmailMessage
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from datetime import datetime, timezone
 
 from app.core.observability import safe_exception
@@ -236,6 +236,19 @@ _CAUSE_SENTENCES = {
         "reading before this message was sent."
     ),
 }
+
+
+def owner_page_path(path: str, *, private: bool) -> str:
+    """The link a page's owner gets by mail. A private page opens only with
+    the owner's session cookie, which a mail app or another browser lacks
+    (the link ended on "This page is private"). Private links therefore go
+    through the app's sign-in, which returns to the page once the cookie is
+    set (static/firebase.js, ?next=); a browser that is signed in already
+    passes straight through."""
+    path = str(path or "")
+    if not private or not path.startswith("/s/"):
+        return path
+    return "/app?next=" + quote(path, safe="/")
 
 
 def _host(url: str) -> str:
@@ -665,7 +678,7 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
         plain_question = _ascii(question)
         status_label = _brief_status_label(str(item.get("status") or ""))
         goal_line = _brief_goal_line(item)
-        url = site_url + str(item.get("share_path") or "")
+        url = site_url + owner_page_path(item.get("share_path"), private=item.get("visibility") == "private")
         schedule = str(item.get("interval") or "").capitalize()
         if item.get("interval") == "weekly" and item.get("run_weekday"):
             schedule += f" on {str(item['run_weekday']).capitalize()}"

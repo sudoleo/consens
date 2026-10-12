@@ -589,8 +589,12 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   background: transparent;
   box-shadow: none;
   color: var(--ink);
-  /* Right side stays free for the 22px delete X (layout.css). */
+  /* Right side stays free for the delete X (layout.css); on touch it is
+     always shown with a row-high tap target. */
   padding: 6px 34px 6px 8px;
+}
+@media (hover: none) {
+  .sidebar .bookmark { padding-right: 44px; }
 }
 
 .sidebar .bookmark:hover,

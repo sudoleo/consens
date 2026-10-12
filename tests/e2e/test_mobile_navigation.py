@@ -169,6 +169,49 @@ def test_watch_navigation_uses_the_same_mobile_surface(browser, phase4_server, n
         context.close()
 
 
+def test_open_mobile_sidebar_survives_the_keyboard_resize(browser, phase4_server):
+    # Chrome on Android resizes the layout viewport when the keyboard opens
+    # (interactive-widget=resizes-content); typing in the chat search must not
+    # snap the sidebar shut. Only crossing the overlay/push breakpoint resets it.
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width': 390, 'height': 820})
+        sidebar = page.locator('#appSidebar')
+        page.locator('#toggleSidebarButton').click()
+        expect(sidebar).to_have_class(re.compile(r'\bactive\b'))
+        page.set_viewport_size({'width': 390, 'height': 420})
+        page.wait_for_timeout(100)
+        expect(sidebar).to_have_class(re.compile(r'\bactive\b'))
+        page.set_viewport_size({'width': 844, 'height': 390})
+        page.wait_for_timeout(100)
+        expect(sidebar).to_have_class(re.compile(r'\bactive\b'))
+        page.set_viewport_size({'width': 1440, 'height': 900})
+        expect(sidebar).not_to_have_class(re.compile(r'\bactive\b'))
+    finally:
+        context.close()
+
+
+def test_touch_fields_are_large_enough_that_ios_does_not_zoom(browser, phase4_server):
+    # iOS Safari zooms into any focused field below 16px and stays zoomed.
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True)
+    try:
+        page.set_viewport_size({'width': 390, 'height': 820})
+        assert page.evaluate("matchMedia('(hover: none) and (pointer: coarse)').matches")
+        sizes = page.evaluate("""() => ['#chatSearch', '#questionInput', '#feedbackForm textarea', '#feedbackForm input[type=email]']
+          .map(selector => document.querySelector(selector)).filter(Boolean)
+          .map(el => parseFloat(getComputedStyle(el).fontSize))""")
+        assert len(sizes) >= 2 and min(sizes) >= 16, sizes
+    finally:
+        context.close()
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width': 1280, 'height': 820})
+        # A mouse keeps the compact sidebar search.
+        assert page.evaluate("parseFloat(getComputedStyle(document.getElementById('chatSearch')).fontSize)") < 16
+    finally:
+        context.close()
+
+
 def test_desktop_sidebar_controls_keep_their_original_layout(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:

@@ -88,3 +88,15 @@ select,
 summary {
   font: inherit;
 }
+
+/* iOS Safari zooms into any focused field set below 16px and stays zoomed
+   (chat search, Watch dialog, follow e-mail, feedback). On touch screens
+   every text field therefore gets at least 16px; larger fields keep their
+   size. !important because component rules with IDs would otherwise win. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="file"], [type="color"], [type="image"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}

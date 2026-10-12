@@ -62,3 +62,19 @@ def test_free_accounts_may_chat_with_the_default_but_not_compare_against_it(monk
         assert exc.status_code == 403
     else:
         raise AssertionError("Sonnet as a comparison model must stay Pro")
+
+
+def test_catalog_maps_migrated_ids_to_listed_successors(monkeypatch):
+    # The browser maps a saved, migrated chat model (grok-4.3-no-reasoning)
+    # like resolve_agent_model instead of resetting it to the default.
+    monkeypatch.delenv("AGENT_MODEL", raising=False)
+    monkeypatch.setattr(metadata, "snapshot", baseline)
+    import app.core.config as cfg
+    options = agent_model_options()
+    ids = {item["id"] for item in options["models"]}
+    target = options["models"][0]["id"]
+    monkeypatch.setitem(cfg.PROVIDER_MODEL_MIGRATIONS, "test-family", {"legacy-id": target, "gone-id": "not-listed"})
+    aliases = agent_model_options()["aliases"]
+    assert aliases["legacy-id"] == target
+    assert "gone-id" not in aliases
+    assert all(value in ids and key not in ids for key, value in aliases.items())

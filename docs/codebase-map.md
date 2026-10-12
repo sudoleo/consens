@@ -987,10 +987,14 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Display → `#consensusHighlightsSelect` steuert Antwort- und Quellenmarkierungen
   browserlokal über `consensio.consensusHighlightMode.v1`: `all`,
   `contradictions` (inklusive grauer Detailwidersprüche), `concerns`
-  (Default: kritische Widersprüche, Split-Claims und auffällige/unklare Quellen)
-  oder `critical` (kritische Widersprüche). Fachliche Optionsnamen und ein
+  (alle Widersprüche inklusive leichter, Split-Claims und auffällige/unklare
+  Quellen — passt damit zur Zahl „Contradictions N“ im Antwort-Fuß)
+  oder `critical` (kritische Widersprüche). Default ist seit 2026-10-12 `all`:
+  das leise Grün auf übereinstimmenden Sätzen zeigt überhaupt erst, dass
+  verglichen wurde; Rot/Bernstein bleiben durch die Staffelung lauter
+  (`components-consensus-visuals.css`). Fachliche Optionsnamen und ein
   umbrechender Hilfetext erklären die Farben. Bestehende explizite Auswahlen
-  bleiben erhalten; fehlende/ungültige Werte fallen auf `concerns` zurück.
+  bleiben erhalten; fehlende/ungültige Werte fallen auf `all` zurück.
   „No highlights“ verwendet weiterhin `consensio.showConsensusMarkers.v1`.
   `consensus-insights.js` setzt `body[data-consensus-highlight-mode]`; CSS
   filtert damit auch später eintreffende `data-source-check`-Markierungen auf
@@ -2523,7 +2527,16 @@ GET/POST: ein Firestore-Read pro Request und ein ungeschütztes Leeren/Neubefül
 der globalen Maps, während andere Requests sie lasen). Neue Revisionen kommen
 über den Admin-Save im eigenen Prozess und den 60-s-Task `model-configuration-sync`.
 Premium-Zuordnung und Presets sind keine zweite Allowlist. `provider` und
-`provider_label` ordnen jedes Modell seiner Registry-Familie zu.
+`provider_label` ordnen jedes Modell seiner Registry-Familie zu. `aliases`
+(seit 2026-10-12) bildet migrierte IDs aus `cfg.PROVIDER_MODEL_MIGRATIONS` auf
+ihren gelisteten Nachfolger ab, wie `resolve_agent_model` es serverseitig tut.
+`agent-chat.js` wählt damit für eine gespeicherte Alt-ID (z. B.
+`grok-4.3-no-reasoning`) den Nachfolger statt des Defaults. Die Auswahl für die
+nächste Nachricht wird nur bei dauerhafter Ursache zurückgeschrieben (migrierte
+ID, Modell nicht mehr gelistet), und in `agent_settings_<uid>` nur, wenn sie von
+dort kam: Ein alter Chat mit totem Modell ändert die Wahl für neue Chats nicht,
+ein gelistetes, gerade nicht verfügbares (`available: false`) oder noch als Pro
+gesperrtes Modell fällt nur pro Nachricht zurück (Hinweis einmal je Chat).
 
 `llm/agent_model_metadata.py` lädt Preise, Kontextgrenzen und erlaubte Denkstufen
 vom festen öffentlichen OpenRouter-Endpunkt `/api/v1/models` ohne Authentifizierung
@@ -3530,8 +3543,9 @@ seit 2026-10-01 gemeinsam mit Compare/Consensus/Reasoning-Läufen (§4 „Ein To
 für alle Modi"). Das Limit kommt aus der Kontostufe
 (`app_config/agent_budget.tier_limits[free|plus|pro|admin]`, `account_tier`:
 Admin-Rolle vor gespeicherter Stufe); das frühere globale
-`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Agent bleibt
-Pro/Admin (`require_agent_access`), das Konto selbst ist für jede Stufe da.
+`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Agent ist
+seit 2026-10-02 für jedes angemeldete Konto offen (`require_agent_access`);
+Pro bleiben Premium-Modelle und hohe Denkstufen.
 agent_budget_config.py liest die Einstellung mit 30 Sekunden Cache je Prozess/DB.
 Admin → Limits verwendet
 GET/PUT /api/admin/agent-budget und POST /api/admin/agent-budget/reset mit
@@ -3787,7 +3801,8 @@ Antwort-Prompt).
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
   als Fürstimmen), gemalt nach der Highlights-Einstellung
-  (`body[data-consensus-highlight-mode]`, Standard „concerns"); der Rest ist
+  (`body[data-consensus-highlight-mode]`, Standard „all" — die Karte öffnet dann
+  auf dem ganzen Text); der Rest ist
   `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
   Urteilsfarbe. Zitierte Sätze sind immer gemalt. Klick/Enter auf einen Satz
   öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
@@ -4300,7 +4315,7 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   Zugriff ausschließlich über **`window.App.consensusBodyEl(scope?)`**
   (das alte `.consensus-main p` gibt es nicht mehr). Darunter liegt der
   kompakte Antwort-Footer; Markierungsfilter werden ausschließlich über
-  Settings → Display gesteuert (Default: Disagreements & issues, siehe oben).
+  Settings → Display gesteuert (Default: All checks, siehe oben).
   Der zugeklappte
   `<details id="consensusDifferencesPanel" class="consensus-differences
   consensus-differences-panel">`; `#differencesCards` und das Karten-Rendering
@@ -5408,7 +5423,14 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   „verwandte Fragen"; **Indexierung (`index, follow`) nur wenn der Admin `indexed`
   setzt** — nie automatisch; sonst `noindex`. Private Watch-Snapshots werden am
   Endpoint serverseitig auf die Eigentümer-Session geprüft und nie indexiert,
-  gecacht, reportet oder als Related/Sitemap-Ziel ausgegeben. Public-Caching via
+  gecacht, reportet oder als Related/Sitemap-Ziel ausgegeben. Ohne Session
+  antwortet die Seite mit 403 und „Sign in to view“ → `/app?next=/s/…`:
+  `firebase.js` öffnet ohne Login den Login-Dialog und springt nach
+  `/confirm-registration`, das das `session`-Cookie setzt, auf die Seite zurück;
+  ein schon angemeldeter Browser läuft direkt durch. Nur `/s/<pfad>` gilt als
+  Ziel. Mails an den Eigentümer verlinken private Seiten gleich so
+  (`mailer.owner_page_path`, Watch-Mails und Morning Brief); mit fremder Session
+  gibt es keinen Sign-in-Knopf. Public-Caching via
   `SHARE_CACHE_CONTROL` + In-Process-Cache (`get_share_cached` /
   `invalidate_share_cache`). Seit Review R18 gibt es eine feste obere Grenze für
   die Widerrufsverzögerung (`PUBLIC_REVOCATION_MAX_DELAY_SECONDS`, 5 Minuten):

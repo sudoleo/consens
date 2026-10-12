@@ -106,7 +106,10 @@ def _delta(payload: dict) -> dict:
 
 
 def _owner_message(item: dict, payload: dict, recipient: str, consensus: str):
-    share_url = SITE_URL + _share_path(payload, private_aware=True)
+    share_url = SITE_URL + mailer.owner_page_path(
+        _share_path(payload, private_aware=True),
+        private=payload.get("visibility") == "private",
+    )
     unsubscribe_url = (
         SITE_URL + "/watch/unsubscribe?token="
         + watch_service.make_unsubscribe_token(item["resource_id"])

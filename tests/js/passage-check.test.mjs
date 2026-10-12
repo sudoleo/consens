@@ -44,7 +44,10 @@ function reordered(value) {
   return Object.fromEntries(Object.keys(value).sort().reverse().map(key => [key, reordered(value[key])]));
 }
 
-function boot({ mode } = {}) {
+// The app always sets the Highlights mode (consensus-insights.js, default
+// "all"); these cases run the folded "Disagreements & issues" card unless
+// they name another mode.
+function boot({ mode = "concerns" } = {}) {
   const popover = vi.fn();
   const openContext = vi.fn();
   const env = loadScripts(["static/js/passage-check.js"], {
@@ -159,7 +162,7 @@ describe("result card of a checked pasted text", () => {
     const marks = [...text.querySelectorAll(".pc-claim")];
     expect(marks.map(mark => mark.dataset.verdict)).toEqual(["holds", "disputed", "unconfirmed"]);
     expect(text.textContent).toContain("• You always need underfloor heating");
-    // Default ("concerns"): only red and amber; the rest stays a working sentence.
+    // "Disagreements & issues": only red and amber; the rest stays a working sentence.
     expect(marks.map(mark => mark.classList.contains("is-quiet"))).toEqual([true, false, true]);
     expect(marks[0].getAttribute("role")).toBe("button");
     const toggle = card().querySelector(".passage-check-toggle");

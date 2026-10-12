@@ -1,8 +1,11 @@
 """Bookmark interaction against built assets and isolated, delayed HTTP fixtures."""
+import re
+
 import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 from test_agent_chat_frontend import CATALOG
+from test_model_answer_reader import reader_screenshot
 
 
 @pytest.mark.parametrize('width,status,reduced', [(1280, 200, False), (390, 403, False), (390, 500, True)])
@@ -22,7 +25,13 @@ def test_delete_disappears_before_server_reply_and_restores_on_failure(browser, 
             page.locator('#toggleSidebarButton').click()
         row = page.locator('.bookmark[data-id="first"]')
         row.hover()
-        row.locator('.delete-bookmark').click()
+        control = row.locator('.delete-bookmark')
+        # The first click only arms the control; nothing is deleted yet.
+        control.click()
+        expect(control).to_have_text('Delete')
+        expect(row).to_have_count(1)
+        assert not requests
+        control.click()
         expect(row).to_have_count(0)
         assert len(requests) == 1
         # A stale metadata refresh cannot resurrect the optimistically hidden row.
@@ -39,9 +48,61 @@ def test_delete_disappears_before_server_reply_and_restores_on_failure(browser, 
             # The restored item can retry, including an ambiguous server failure.
             row.hover()
             row.locator('.delete-bookmark').click()
+            row.locator('.delete-bookmark').click()
             expect(row).to_have_count(0)
             assert len(requests) == 2
             _json(requests[1], {'status': 'success'})
+        assert not errors
+    finally:
+        context.close()
+
+
+ARMED = re.compile(r'(^|\s)is-armed(\s|$)')
+
+
+@pytest.mark.parametrize('width,cancel', [(1280, 'escape'), (390, 'elsewhere')])
+def test_armed_delete_cancels_without_deleting(browser, phase4_server, width, cancel):
+    # The phone case runs with touch: the X is always shown there.
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
+    requests, errors = [], []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({'width': width, 'height': 800})
+        bookmarks = [{'id': 'first', 'title': 'Keep me', 'query': 'Question', 'mode': 'Agent'},
+                     {'id': 'second', 'title': 'Other chat', 'query': 'Another question', 'mode': 'Agent'}]
+        page.route('**/bookmarks?*', lambda r: _json(r, {'bookmarks': bookmarks, 'next_cursor': None}))
+        page.route('**/bookmark', lambda r: requests.append(r))
+        page.evaluate('() => window.loadBookmarks()')
+        if width < 1100:
+            page.locator('#toggleSidebarButton').click()
+        row = page.locator('.bookmark[data-id="first"]')
+        row.hover()
+        control = row.locator('.delete-bookmark')
+        reader_screenshot(page, f'bookmark-delete-idle-{width}')
+        control.click()
+        expect(control).to_have_text('Delete')
+        # The second step reads as destructive, also with a touch-stuck :hover.
+        expect(control).to_have_css('color', 'rgb(177, 79, 91)')
+        reader_screenshot(page, f'bookmark-delete-armed-{width}')
+        if cancel == 'escape':
+            page.keyboard.press('Escape')
+        else:
+            # Any click outside the armed control disarms it (inside the
+            # sidebar here: a click beside it closes the phone overlay).
+            page.evaluate("() => document.getElementById('bookmarksContainer').click()")
+        expect(control).not_to_have_class(ARMED)
+        expect(control).to_have_text('')
+        # Arming another row disarms the first; its click arms, never deletes.
+        row.hover()
+        control.click()
+        other = page.locator('.bookmark[data-id="second"] .delete-bookmark')
+        page.locator('.bookmark[data-id="second"]').hover()
+        other.click()
+        expect(control).not_to_have_class(ARMED)
+        expect(other).to_have_text('Delete')
+        page.wait_for_timeout(100)
+        assert not requests
+        expect(page.locator('.bookmark')).to_have_count(2)
         assert not errors
     finally:
         context.close()

@@ -41,14 +41,28 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     return `${catalogOwner}:${context?.metadata.chatId || context?.basis?.chatId || basis?.chatId || (context ? `run:${context.runId}` : "draft")}`;
   }
-  function preferredSelection() {
+  // Where the next message's settings come from: the running turn, this
+  // session's pick for the chat, the settings an opened chat was saved with,
+  // the account's own pick (localStorage) or the catalog default.
+  function preferredSource() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const saved = context?.consensus.completedTurn?.agent_settings || context?.metadata.agentSettings || basis?.currentTurn?.agent_settings;
-    if (context && registry.isExecuting(context.runId)) return context.config.agentSettings || saved;
+    if (context && registry.isExecuting(context.runId)) return { value: context.config.agentSettings || saved, source: "run" };
+    const session = selections.get(selectionKey());
+    if (session) return { value: session, source: "session" };
+    if (saved) return { value: saved, source: "chat" };
     let preferred;
     try { preferred = JSON.parse(localStorage.getItem(`agent_settings_${catalogOwner}`) || "null"); } catch (_) {}
-    return selections.get(selectionKey()) || saved || preferred || { model_id: catalog?.default_model_id, reasoning_effort: "default" };
+    if (preferred) return { value: preferred, source: "account" };
+    return { value: { model_id: catalog?.default_model_id, reasoning_effort: "default" }, source: "default" };
+  }
+  function preferredSelection() {
+    return preferredSource().value;
+  }
+  // A migrated ID (grok-4.3-no-reasoning) names its successor, as on the server.
+  function canonicalId(id) {
+    return (id && catalog?.aliases?.[id]) || id;
   }
   // Premium models stay Pro in Agent as in every other mode. They stay in the
   // list with their badge; the server refuses them for other tiers as well.
@@ -79,13 +93,44 @@
   function selection() {
     const preferred = preferredSelection() || {};
     const available = catalog?.models.filter(selectable);
-    const model = available?.find(item => item.id === preferred.model_id)
+    const wanted = canonicalId(preferred.model_id);
+    const model = available?.find(item => item.id === wanted)
       || available?.find(item => item.id === catalog.default_model_id) || available?.[0];
     return model ? { model_id: model.id, reasoning_effort: effortFor(model, preferred.reasoning_effort) } : preferred;
   }
   function rememberSelection(value) {
     selections.set(selectionKey(), value);
     try { localStorage.setItem(`agent_settings_${catalogOwner}`, JSON.stringify(value)); } catch (_) {}
+  }
+  // The preferred model or level cannot run: selection() falls back for every
+  // render and send. Only a lasting cause is written back: a migrated ID or a
+  // model that left the list, and to the account's pick only when it came
+  // from there. A model that is listed but unavailable for now, Pro models or
+  // levels while the tier is still loading are never saved over, so the
+  // user's own pick returns by itself. Opening an old chat never changes the
+  // pick for new chats.
+  const repairNotices = new Set();
+  function repairSelection(previous, source, current) {
+    if (!previous.model_id) return;
+    const wanted = canonicalId(previous.model_id);
+    const listed = catalog.models.find(item => item.id === wanted);
+    if ((wanted !== previous.model_id && wanted === current.model_id) || !listed) {
+      // A level the new model offers stays, even one the tier may not have
+      // confirmed yet; selection() still applies the tier per message.
+      const offered = catalog.models.find(item => item.id === current.model_id)?.reasoning_efforts || ["default"];
+      const repaired = { model_id: current.model_id,
+        reasoning_effort: offered.includes(previous.reasoning_effort) ? previous.reasoning_effort : current.reasoning_effort };
+      if (source === "account") rememberSelection(repaired);
+      else if (source !== "run") selections.set(selectionKey(), repaired);
+    }
+    if (wanted === current.model_id || (listed && locked(listed))) return;
+    const notice = `${selectionKey()}:${previous.model_id}`;
+    if (repairNotices.has(notice)) return;
+    repairNotices.add(notice);
+    const label = catalog.models.find(item => item.id === current.model_id)?.label;
+    App.showPopup?.(listed
+      ? `${listed.label} is unavailable right now. Using ${label} for your next message.`
+      : `Previous model unavailable. Selected ${label} for your next message.`);
   }
   async function loadModels() {
     if (!canUse() || catalogStatus !== "idle") return;
@@ -152,6 +197,7 @@
       catalogStatus = "idle";
       loadGeneration++;
       selections.clear();
+      repairNotices.clear();
     }
     const host = document.getElementById("agentModelControls");
     const select = document.getElementById("agentModelDropdown");
@@ -169,14 +215,10 @@
     const ready = catalogStatus === "ready" && canUse();
     const running = registry.isExecuting(registry.visible()?.runId);
     const current = selection();
-    const previous = preferredSelection() || {};
-    if (ready && !running && (previous.model_id !== current.model_id || previous.reasoning_effort !== current.reasoning_effort)) {
-      // Repair the next-message preference once; historical settings stay frozen.
-      rememberSelection(current);
-      if (previous.model_id && previous.model_id !== current.model_id) {
-        const label = catalog.models.find(item => item.id === current.model_id)?.label;
-        App.showPopup?.(`Previous model unavailable. Selected ${label} for your next message.`);
-      }
+    const { value: previous = {}, source } = preferredSource();
+    if (ready && !running && previous && (previous.model_id !== current.model_id || previous.reasoning_effort !== current.reasoning_effort)) {
+      // Historical settings stay frozen; only the next message changes.
+      repairSelection(previous, source, current);
     }
     const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : "Loading models…" }];
     const signature = JSON.stringify([options, options.map(locked)]);

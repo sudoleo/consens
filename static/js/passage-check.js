@@ -189,7 +189,7 @@
   }
 
   function highlightMode() {
-    return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "concerns";
+    return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "all";
   }
 
   // "All checks" promises every verdict highlighted, so the card opens on the

@@ -88,7 +88,10 @@ GREY = r"""el => { const value = getComputedStyle(el).backgroundColor;
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
 def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, width, dark):
-    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
+    # The folded card is the "Disagreements & issues" view; "All checks", the
+    # default since 2026-10-12, opens it on the full text.
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700,
+        init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','concerns')")
     requests, errors = [], []
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:

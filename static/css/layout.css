@@ -1242,39 +1242,35 @@ body:has(.sidebar.active) .brand-float {
 .sidebar .bookmark:hover {
   background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
 }
-/* Loeschen-X erst beim Hovern des Bookmarks einblenden */
+/* Loeschen-X erst beim Hovern des Bookmarks einblenden. Der erste Klick
+   macht daraus "Delete", erst der zweite loescht (firebase.js). */
 .delete-bookmark {
   position: absolute !important;
-  right: 8px !important;
+  right: 6px !important;
   top: 50% !important;
-  width: 22px;
-  height: 22px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 0;
   border-radius: 999px;
+  background: transparent;
   color: var(--sidebar-text-muted);
   cursor: pointer;
-  font-size: 0;
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-solid);
+  white-space: nowrap;
   opacity: 0;
   transform: translateY(-50%) !important;
   transition: opacity var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
-
-/* Touch-Geraete haben kein Hover: X dezent sichtbar lassen */
-@media (hover: none) {
-  .delete-bookmark {
-    opacity: 0.5;
-  }
-}
-.delete-bookmark::before {
-  content: "\00d7";
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-solid);
-}
+.delete-bookmark svg { display: block; }
 .bookmark:hover .delete-bookmark,
-.delete-bookmark:focus-visible {
+.delete-bookmark:focus-visible,
+.delete-bookmark.is-armed {
   opacity: 1;
 }
 .delete-bookmark:hover,
@@ -1282,6 +1278,33 @@ body:has(.sidebar.active) .brand-float {
   background: color-mix(in srgb, var(--clear-button-bg) 74%, transparent);
   color: var(--clear-button-text);
   outline: none;
+}
+.delete-bookmark.is-armed,
+.delete-bookmark.is-armed:hover,
+.delete-bookmark.is-armed:focus-visible {
+  padding: 0 9px;
+  background: color-mix(in srgb, var(--dispute) 12%, transparent);
+  color: var(--dispute);
+}
+.delete-bookmark.is-armed:focus-visible { outline: var(--focus-ring); }
+/* The armed row keeps its tint so the question stays readable next to the
+   wider "Delete" control. */
+.sidebar .bookmark.is-confirming-delete { background: var(--raise); }
+
+/* Touch-Geraete haben kein Hover: das X bleibt sichtbar, aber als ruhiges
+   Symbol in Volltonfarbe statt halbtransparent, mit Zeilenhoehe als Tippziel. */
+@media (hover: none) {
+  .delete-bookmark {
+    right: 2px !important;
+    min-width: 40px;
+    height: 100%;
+    max-height: 36px;
+    opacity: 1;
+    color: color-mix(in srgb, var(--sidebar-text-muted) 72%, var(--ground, transparent));
+  }
+  /* A tap leaves :hover stuck on touch; only the idle X ignores it. */
+  .delete-bookmark:not(.is-armed):hover { background: transparent; color: color-mix(in srgb, var(--sidebar-text-muted) 72%, var(--ground, transparent)); }
+  .delete-bookmark.is-armed { right: 4px !important; min-width: 0; height: 26px; }
 }
 
 @media (max-width: 1099px) {

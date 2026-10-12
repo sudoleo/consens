@@ -1465,6 +1465,22 @@ class MailerTests(unittest.TestCase):
         # Die URLs muessen im Text-Teil klickbar bleiben: keine Base64-Wand.
         self.assertIn("https://consens.io/s/b", plain)
 
+    def test_private_watch_links_go_through_the_app_sign_in(self):
+        # A private page needs the owner's session cookie, which the mail app
+        # lacks; the app signs in and returns (static/firebase.js, ?next=).
+        self.assertEqual(mailer.owner_page_path("/s/abc", private=True), "/app?next=/s/abc")
+        self.assertEqual(mailer.owner_page_path("/s/slug-abc", private=False), "/s/slug-abc")
+        self.assertEqual(mailer.owner_page_path("", private=True), "")
+        private = {"question": "Private watch", "share_path": "/s/p", "visibility": "private",
+                   "status": "active", "goal": "", "interval": "weekly", "new_points": []}
+        message = mailer.build_brief_message(
+            recipient="owner@example.test", date_label="Monday, 13 July 2026",
+            items=[private], changes_count=0, site_url="https://consens.io",
+            unsubscribe_url="https://consens.io/watch/brief/unsubscribe?token=x",
+        )
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        self.assertIn("https://consens.io/app?next=/s/p", plain)
+
     def test_admin_test_mail_is_multipart_and_does_not_claim_a_watch(self):
         message = mailer.build_test_message(recipient="admin@example.test")
         self.assertTrue(message.is_multipart())
