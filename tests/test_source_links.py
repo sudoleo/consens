@@ -183,6 +183,56 @@ class RedirectTests(unittest.TestCase):
         self.assertEqual(source_redirects.replace_urls(value, {}), (value, False))
 
 
+class ExpiredTests(unittest.TestCase):
+    def test_only_a_definite_404_counts_as_expired(self):
+        from app.services import source_redirects
+
+        codes = {REDIRECT + "dead": 404, REDIRECT + "gone": 410, REDIRECT + "busy": 429, REDIRECT + "down": 503}
+
+        def status(url):
+            if url == REDIRECT + "timeout":
+                raise TimeoutError("slow")
+            return codes[url]
+
+        expired = source_redirects.expired_urls([*codes, REDIRECT + "timeout", "https://x.de/404"], status=status)
+        self.assertEqual(expired, {REDIRECT + "dead", REDIRECT + "gone"})
+        self.assertEqual(source_redirects.expired_urls([REDIRECT + "dead"]), set())  # no network in tests
+
+    def test_dead_links_are_dropped_with_their_numbers(self):
+        from app.services import source_redirects
+
+        value = {
+            "sources": [{"id": "S1", "url": REDIRECT + "dead"}, {"id": "S2", "url": "https://x.de/a"}],
+            "history_points": [{"evidence_sources": [{"url": REDIRECT + "dead", "title": "t"}]}],
+        }
+        new, changed, removed = source_redirects.drop_urls(value, {REDIRECT + "dead"})
+        self.assertTrue(changed)
+        self.assertEqual(new["sources"], [{"id": "S2", "url": "https://x.de/a"}])
+        self.assertEqual(new["history_points"][0]["evidence_sources"], [])
+        self.assertEqual(removed, ["S1"])
+        self.assertEqual(source_redirects.drop_urls(value, set()), (value, False, []))
+
+    def test_references_to_removed_sources_disappear_from_the_text(self):
+        from app.services import share_snapshots
+
+        payload = share_snapshots.public_share_payload({
+            "consensus_md": "Der Preis fiel. [S1] Weiter bei [S2].",
+            "sources": [{"id": "S2", "url": "https://x.de/a", "title": "x"}],
+            "expired_source_ids": ["S1", "junk", "S1"],
+        })
+        self.assertEqual(payload["expired_sources"], [{"id": "S1"}])
+        html = render_public_markdown(payload["consensus_md"], payload["sources"],
+                                      excluded_sources=payload["expired_sources"])
+        self.assertNotIn("[S1]", html)
+        self.assertIn('href="#src-2"', html)
+        version = share_snapshots._watch_version_payload("run1", {"consensus_md": "x", "expired_source_ids": ["S4"]})
+        self.assertEqual(version["expired_source_ids"], ["S4"])
+
+    def test_a_redirect_is_never_a_direct_link_even_when_named(self):
+        named = [source(REDIRECT + "1", "Adidas product page title", "adidas.com", "adidas", direct=False)]
+        self.assertEqual(source_links.key_links(named, "Bei Adidas schauen."), [])
+
+
 class CardLinkTests(unittest.TestCase):
     def test_compact_links_for_the_dashboard(self):
         stored = [

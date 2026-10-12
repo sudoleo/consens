@@ -731,7 +731,9 @@ def share_page(request: Request, slug_id: str):
         watch_key_links = source_links.key_links(sources_view, payload["consensus_md"])
         site_links = source_links.site_mentions(sources_view, payload["consensus_md"])
     consensus_html = render_public_markdown(
-        payload["consensus_md"], payload["sources"], site_links=site_links,
+        payload["consensus_md"], payload["sources"],
+        # Abgelaufene Weiterleitungen sind entfernt; ihre [S3]-Verweise fallen weg.
+        excluded_sources=payload["expired_sources"], site_links=site_links,
     )
 
     # Differences: strukturierte Karten, sonst Freitext-Fallback (markdown-

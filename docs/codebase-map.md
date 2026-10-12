@@ -7015,6 +7015,14 @@ gesehen“; aufgelöste Adressen wiederholen sich und machen `seen_before` im
 Change-Judge erst verlässlich. `scripts/backfill_watch_links.py` löst in allen
 Checks, im Ausgangs-Share und am Watch-Dokument auf, was noch auflösbar ist, und
 setzt die Dashboard-Links (Trockenlauf ohne Writes, `--apply` = Prod-Write).
+Was Google eindeutig nicht mehr kennt (404/410 — Zeitüberschreitung, 429, 5xx
+zählen nicht, `source_redirects.expired_urls`), ist ein toter Link und wird
+dort entfernt (`drop_urls`, auch aus Belegen und History-Punkten); die Nummern
+entfernter Quellen stehen als `expired_source_ids` am Check bzw. Share,
+`public_share_payload`/`_watch_version_payload` reichen sie als
+`expired_sources` an `render_public_markdown(excluded_sources=…)`, damit alte
+`[S3]`-Verweise wegfallen statt als nackter Text zu stehen. Direktlinks nehmen
+nie eine Weiterleitung auf (sie verrät ihr Ziel nicht und verfällt).
 Die normale Watch-URL rendert serverseitig die **geltende** Vollversion
 (`accepted_run_id`, sonst die neueste) über dem unveränderten
 Share-Baseline-Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber

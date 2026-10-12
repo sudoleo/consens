@@ -225,13 +225,16 @@ def key_links(sources, text: str, limit: int = MAX_KEY_LINKS) -> list[dict]:
 
     Eine Quelle je Domain. Vorn, was die Antwort beim Namen nennt, dann tiefe
     direkte Seiten mit sprechendem Titel (die Stellenanzeige, die
-    Produktseite); eine Startseite oder Weiterleitung kommt nur, wenn die
-    Antwort sie nennt. Bei Gleichstand gilt die Reihenfolge der Quellen.
+    Produktseite); eine Startseite kommt nur, wenn die Antwort sie nennt, eine
+    Google-Weiterleitung nie (sie verrät ihr Ziel nicht und verfällt). Bei
+    Gleichstand gilt die Reihenfolge der Quellen.
     """
     text = str(text or "")
     order = {id(entry): index for index, entry in enumerate(sources or [])}
     ranked = []
     for domain, entry in best_by_domain(sources).items():
+        if not entry.get("is_direct"):
+            continue
         mentioned = _mention(entry, text) is not None
         quality = _quality(entry)
         if not mentioned and quality < 4:

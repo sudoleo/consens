@@ -13,6 +13,11 @@ nur der ``Location``-Header (dem Ziel wird nicht gefolgt, es wird nichts davon
 geladen), das Ziel muss eine sichere öffentliche URL sein. Hier kommt nur das
 parallele Abarbeiten mit festem Gesamtbudget dazu. Scheitert eine Auflösung,
 bleibt die Weiterleitung stehen -- nichts geht verloren.
+
+Was Google eindeutig nicht mehr kennt (404/410, ``expired_urls``), ist ein
+toter Link: das Nachrüst-Skript entfernt solche Quellen und merkt sich ihre
+Nummern als ``expired_source_ids``, damit alte ``[S3]``-Verweise im Text
+wegfallen statt als nackter Text stehen zu bleiben.
 """
 
 from __future__ import annotations
@@ -124,6 +129,74 @@ def collect_redirects(value) -> list[str]:
             else:
                 found += collect_redirects(item)
     return found
+
+
+EXPIRED_CODES = frozenset({404, 410})
+
+
+def _status(url: str):
+    import httpx
+
+    with httpx.Client(timeout=5.0, follow_redirects=False, trust_env=False) as client:
+        return client.get(url, headers={"User-Agent": "consens.io source reader/1"}).status_code
+
+
+def expired_urls(urls, *, status=None) -> set[str]:
+    """Die Weiterleitungen, die Google eindeutig nicht mehr kennt (404/410).
+
+    Nur der feste Google-Host wird gefragt. Zeitüberschreitung, 429 oder 5xx
+    heißen "weiß nicht" -- solche Links bleiben stehen.
+    """
+    pending = list(dict.fromkeys(str(url) for url in urls or [] if is_redirect(url)))
+    if not pending or (status is None and not _enabled()):
+        return set()
+    status = status or _status
+    expired = set()
+
+    def run(url):
+        try:
+            if status(url) in EXPIRED_CODES:
+                expired.add(url)
+        except Exception as exc:
+            logging.info("Source redirect check skipped category=%s", safe_exception(exc))
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="source-expiry") as pool:
+        list(pool.map(run, pending))
+    return expired
+
+
+def drop_urls(value, urls):
+    """(Kopie ohne Einträge mit diesen ``url``s, ob sich etwas geändert hat,
+    die ``id``s der entfernten Einträge).
+
+    Wie ``replace_urls``: läuft durch Listen und Dicts; entfernt werden
+    Listeneinträge (Quellen, Belege), deren ``url`` abgelaufen ist.
+    """
+    urls = set(urls or ())
+    if not urls:
+        return value, False, []
+    if isinstance(value, list):
+        items, changed, removed = [], False, []
+        for item in value:
+            if isinstance(item, dict) and item.get("url") in urls:
+                changed = True
+                if item.get("id"):
+                    removed.append(str(item["id"]))
+                continue
+            new, moved, gone = drop_urls(item, urls)
+            items.append(new)
+            changed = changed or moved
+            removed += gone
+        return (items, True, removed) if changed else (value, False, [])
+    if isinstance(value, dict):
+        out, changed, removed = {}, False, []
+        for key, item in value.items():
+            new, moved, gone = drop_urls(item, urls)
+            out[key] = new
+            changed = changed or moved
+            removed += gone
+        return (out, True, removed) if changed else (value, False, [])
+    return value, False, []
 
 
 def resolve_sources(sources, *, fetch=None) -> list:

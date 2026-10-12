@@ -1969,6 +1969,18 @@ def list_watch_history(share_id, db=None, max_items=100):
     return points
 
 
+def _expired_ids(data) -> list[str]:
+    """IDs entfernter, abgelaufener Quellen (``source_redirects``): ihre
+    ``[S3]``-Verweise fallen beim Rendern weg statt als Text stehen zu bleiben."""
+    values = data.get("expired_source_ids") if isinstance(data, dict) else None
+    ids = []
+    for value in values if isinstance(values, list) else []:
+        match = _SOURCE_ID_RE.match(_clip(value, 10))
+        if match and "S%d" % int(match.group(1)) not in ids:
+            ids.append("S%d" % int(match.group(1)))
+    return ids[:200]
+
+
 def _watch_version_payload(run_id, data):
     """Whitelist one immutable Watch version for server-side page rendering."""
     if not isinstance(data, dict) or not data.get("consensus_md"):
@@ -1983,6 +1995,7 @@ def _watch_version_payload(run_id, data):
         "differences_data": sanitize_differences_data(data.get("differences_data")),
         "differences_text": _clip(data.get("differences_text"), MAX_DIFFERENCES_TEXT_CHARS),
         "sources": sanitize_sources(data.get("sources")),
+        "expired_source_ids": _expired_ids(data),
         "included_models": _sanitize_str_list(data.get("included_models"), 160, 6),
         "consensus_model": _clip(data.get("consensus_model"), 80),
         "answered_at": ts.isoformat() if isinstance(ts, datetime) else "",
@@ -2042,6 +2055,8 @@ def public_share_payload(data):
         "differences_data": data.get("differences_data"),
         "differences_text": data.get("differences_text") or "",
         "sources": data.get("sources") or [],
+        # Abgelaufene, entfernte Quellen: nur ihre IDs, damit Verweise wegfallen.
+        "expired_sources": [{"id": source_id} for source_id in _expired_ids(data)],
         "included_models": data.get("included_models") or [],
         "consensus_model": data.get("consensus_model") or "",
         "answered_at": data.get("answered_at") or "",

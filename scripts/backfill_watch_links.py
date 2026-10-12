@@ -12,7 +12,10 @@ both for existing watches:
   ``last_probe`` and ``key_links`` (from the answer the watch page shows).
 
 One request per redirect to Google's fixed host reads where it points; the
-target page itself is never fetched. No model calls.
+target page itself is never fetched. No model calls. A redirect Google no
+longer knows (404/410) is a dead link: it is removed from these lists, and a
+check's or share's ``expired_source_ids`` keeps its number so old ``[S3]``
+references in the answer are dropped instead of left as bare text.
 
 Default is a dry run that resolves and reports but writes nothing.
 ``--apply`` writes only the fields that change.
@@ -45,13 +48,22 @@ def _resolve(urls) -> dict[str, str]:
     return mapping
 
 
-def _changes(data: dict, fields, mapping) -> dict:
-    changes = {}
+def _changes(data: dict, fields, mapping, expired=frozenset()) -> dict:
+    """Geänderte Felder: Weiterleitungen aufgelöst, abgelaufene entfernt; die
+    Nummern entfernter Quellen (nur aus ``sources``) als ``expired_source_ids``."""
+    changes, removed_ids = {}, []
     for field in fields:
-        if field in data:
-            value, changed = source_redirects.replace_urls(data[field], mapping)
-            if changed:
-                changes[field] = value
+        if field not in data:
+            continue
+        value, changed = source_redirects.replace_urls(data[field], mapping)
+        value, dropped, gone = source_redirects.drop_urls(value, expired)
+        if changed or dropped:
+            changes[field] = value
+        if field == "sources":
+            removed_ids += gone
+    if removed_ids:
+        known = data.get("expired_source_ids") if isinstance(data.get("expired_source_ids"), list) else []
+        changes["expired_source_ids"] = list(dict.fromkeys([*known, *removed_ids]))
     return changes
 
 
@@ -62,7 +74,7 @@ def main(argv=None) -> int:
 
     from app.core.security import db_firestore as db
 
-    totals = {"redirects": 0, "resolved": 0, "docs": 0, "key_links": 0}
+    totals = {"redirects": 0, "resolved": 0, "expired": 0, "docs": 0, "key_links": 0}
     snapshots = list(db.collection(watch_service.WATCHES_COLLECTION).stream())
     failed = 0
     for snapshot in snapshots:
@@ -80,20 +92,23 @@ def main(argv=None) -> int:
             for _ref, run in runs:
                 redirects += source_redirects.collect_redirects([run.get(field) for field in RUN_FIELDS])
             mapping = _resolve(redirects)
+            expired = source_redirects.expired_urls(set(redirects) - set(mapping))
             totals["redirects"] += len(set(redirects))
             totals["resolved"] += len(mapping)
+            totals["expired"] += len(expired)
 
             writes = []
             for ref, run in runs:
-                changes = _changes(run, RUN_FIELDS, mapping)
+                changes = _changes(run, RUN_FIELDS, mapping, expired)
                 if changes:
                     writes.append((ref, changes))
                     run.update(changes)
-            share_changes = _changes(share, SHARE_FIELDS, mapping)
+            share_changes = _changes(share, SHARE_FIELDS, mapping, expired)
             if share_changes:
                 writes.append((share_ref, share_changes))
                 share.update(share_changes)
-            watch_changes = _changes(watch, WATCH_FIELDS, mapping)
+            watch_changes = _changes(watch, WATCH_FIELDS, mapping, expired)
+            watch_changes.pop("expired_source_ids", None)  # only checks and shares carry them
 
             shown_id = str(watch.get("accepted_run_id") or watch.get("last_successful_run_id") or "")
             shown = next((run for ref, run in runs if ref.id == shown_id), None) or share
@@ -106,7 +121,7 @@ def main(argv=None) -> int:
             totals["docs"] += len(writes)
 
             print(f"{snapshot.id}: {len(set(redirects))} redirects, {len(mapping)} resolved, "
-                  f"{len(writes)} docs; links: {[link['domain'] for link in links]}")
+                  f"{len(expired)} expired, {len(writes)} docs; links: {[link['domain'] for link in links]}")
             if args.apply:
                 for ref, changes in writes:
                     ref.update(changes)
