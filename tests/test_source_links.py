@@ -197,6 +197,15 @@ class CardLinkTests(unittest.TestCase):
         self.assertEqual([link["domain"] for link in links], ["idealo.de", "billiger.de"])
         self.assertEqual(source_links.card_links(None, None), [])
 
+    def test_a_real_title_beats_one_read_from_the_path(self):
+        stored = [
+            {"url": "https://geizhals.de/adidas-adizero-adios-pro-4-herren-v189512.html", "title": "geizhals.de"},
+            {"url": "https://geizhals.de/adidas-adizero-adios-pro-4-herren-v189512.html?x=1",
+             "title": "adidas Adizero Adios Pro 4 (Herren) ab € 124,95"},
+        ]
+        self.assertEqual(source_links.card_links(stored, "Bei Geizhals schauen.")[0]["title"],
+                         "adidas Adizero Adios Pro 4 (Herren) ab € 124,95")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,26 +71,25 @@ def _path_depth(url: str) -> int:
     return len([part for part in path.split("/") if part])
 
 
-def _descriptive(entry: dict) -> bool:
-    """Ein Titel, der mehr sagt als die Domain -- oder, wo der Titel bloß die
-    Domain ist, ein sprechender Pfad."""
+def _descriptive(entry: dict) -> int:
+    """2 für einen Titel, der mehr sagt als die Domain; 1, wo der Titel bloß
+    die Domain ist, aber der Pfad spricht; sonst 0."""
     title = str(entry.get("title") or "").strip().lower()
     domain = str(entry.get("domain") or "").lower()
     if title in {domain, "www." + domain}:
-        return bool(entry.get("is_direct")) and bool(_slug_title(str(entry.get("url") or "")))
-    return len(title) >= 12
+        return int(bool(entry.get("is_direct")) and bool(_slug_title(str(entry.get("url") or ""))))
+    return 2 if len(title) >= 12 else 0
 
 
 def _quality(entry: dict) -> int:
-    """Wie gut eine Quelle als Ziel taugt: tiefe direkte Seite mit Titel > Startseite > Weiterleitung."""
+    """Wie gut eine Quelle als Ziel taugt: tiefe direkte Seite mit echtem
+    Titel > mit sprechendem Pfad > Startseite > Weiterleitung."""
     score = 0
     if entry.get("is_direct"):
         score += 1
         if _path_depth(str(entry.get("url") or "")) > 0:
             score += 2
-    if _descriptive(entry):
-        score += 1
-    return score
+    return score + _descriptive(entry)
 
 
 def _usable(entry: dict) -> bool:

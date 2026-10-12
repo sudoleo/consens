@@ -6983,7 +6983,8 @@ beobachtet, will selbst nachsehen. Zwischen Zustand und Antwort stehen deshalb
 bis zu vier **Direktlinks** (`watch_key_links`, `.wp-links`: Kacheln mit
 Favicon, Seitentitel ohne angehängten Seitennamen, Domain, ↗; zwei Spalten,
 mobil eine): je Domain die Quelle, die als Ziel am meisten taugt (tiefe direkte
-Seite mit sprechendem Titel > Startseite > Grounding-Weiterleitung), vorn die
+Seite mit echtem Titel > mit Titel aus dem Pfad > Startseite >
+Grounding-Weiterleitung), vorn die
 Seiten, die die Antwort beim Namen nennt, sonst nur tiefe direkte Seiten mit
 Titel (die Stellenanzeige, die Produktseite). Im Antworttext wird die erste
 Nennung je Quelle zum Link (`site_mentions` → `render_public_markdown(…,
