@@ -127,6 +127,29 @@
       {% if watch_state.facts %}<p class="wp-facts">{{ watch_state.facts | join(" · ") }}</p>{% endif %}
     </section>
 
+    {# Direkt zu den Seiten, um die es geht (source_links.key_links): wer ein
+       Thema beobachtet, will selbst nachsehen, nicht erst die Quellenliste
+       am Ende suchen. Navigation, kein Beleg einzelner Sätze. #}
+    {% if watch_key_links and not watch_awaiting_first_run %}
+    <section class="wp-links" aria-labelledby="wpLinksHeading">
+      <h2 id="wpLinksHeading" class="wp-label">Direct links</h2>
+      <ul class="wp-links-list">
+        {% for link in watch_key_links %}
+        <li>
+          <a class="wp-link" href="{{ link.url }}" target="_blank" rel="nofollow noopener noreferrer">
+            <img class="wp-link-icon" src="/api/topics/favicon?d={{ link.domain | urlencode }}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">
+            <span class="wp-link-body">
+              <span class="wp-link-title">{{ link.title }}</span>
+              {% if link.domain != link.title %}<span class="wp-link-domain">{{ link.domain }}</span>{% endif %}
+            </span>
+            <svg class="wp-link-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 10.5l5-5M6.5 5.5h4v4"/></svg>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
     {% if not watch_awaiting_first_run %}
     <section class="wp-answer" aria-labelledby="wpAnswerHeading">
       <h2 id="wpAnswerHeading" class="wp-label">{% if watch_state.back %}The answer then{% elif watch_state.tone == "past" %}First answer{% else %}Current answer{% endif %}</h2>

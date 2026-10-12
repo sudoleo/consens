@@ -1689,6 +1689,73 @@ canvas {
   white-space: nowrap;
 }
 
+/* Direktlinks (source_links.key_links): die Seiten, um die es geht, vor der
+   Antwort. Kacheln wie echte Objekte -- man klickt sie --, im Ton des
+   Zustandsblocks, zwei nebeneinander, auf dem Handy untereinander. */
+.wp-links { margin-top: 32px; }
+.wp-links-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wp-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--heading);
+  text-decoration: none;
+  transition: background-color .15s ease;
+}
+.wp-link:hover,
+.wp-link:focus-visible { background: var(--well); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.wp-link-icon { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px; }
+.wp-link-body { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
+.wp-link-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.wp-link-domain { overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+.wp-link-arrow { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted); transition: transform .15s ease, color .15s ease; }
+.wp-link:hover .wp-link-arrow,
+.wp-link:focus-visible .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
+
+/* Namen der Quellen im Text (source_links.site_mentions): das Wort bleibt,
+   davor das Favicon, darunter eine leise Linie -- sichtbar als Weg zur
+   Seite, ohne den Lesefluss zu brechen. */
+.share-md a.wp-ref {
+  color: inherit;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.share-md a.wp-ref:hover,
+.share-md a.wp-ref:focus-visible { text-decoration-color: currentColor; }
+.share-md .wp-ref-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin: 0 4px 0 1px;
+  border-radius: 3px;
+  vertical-align: -2px;
+}
+
 .wp-label {
   margin: 0 0 12px;
   color: var(--muted);
@@ -1779,6 +1846,7 @@ canvas {
   .wp-head.has-image .wp-kicker { grid-column: 1; grid-row: 1; align-self: center; }
   .wp-head.has-image .wp-image { grid-column: 2; grid-row: 1; width: 84px; margin: 0; }
   .wp-head.has-image .wp-image.is-logo { width: auto; }
+  .wp-links-list { grid-template-columns: minmax(0, 1fr); }
   .wp-image.is-logo img { height: 40px; }
   .wp-head.has-image .wp-question,
   .wp-head.has-image .share-question-more { grid-column: 1 / -1; justify-self: start; }

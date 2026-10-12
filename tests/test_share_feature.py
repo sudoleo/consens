@@ -1690,6 +1690,35 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("next check Jul 19", body)
         self.assertIn("Current answer", body)
 
+    def test_watch_page_leads_straight_to_the_pages_it_names(self):
+        """Watchers want to look for themselves: the pages the answer names sit
+        above it as direct links, and the names in the text lead to them."""
+        sources = [
+            {"id": "S1", "url": "https://www.idealo.de/preisvergleich/OffersOfProduct/1",
+             "title": "Adios Pro 4 ab 149,95 € - idealo"},
+            {"id": "S2", "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/x",
+             "title": "billiger.de"},
+        ]
+        doc = self._share_doc(consensus_md="Setze einen Preisalarm bei Idealo.", sources=sources)
+        meta = {"status": "active", "interval": "daily",
+                "next_run_at": datetime(2026, 10, 13, 7, tzinfo=timezone.utc)}
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta):
+            body = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id)).text
+        self.assertIn("Direct links", body)
+        links = body.split('class="wp-links"')[1].split("</section>")[0]
+        self.assertIn('href="https://www.idealo.de/preisvergleich/OffersOfProduct/1"', links)
+        self.assertIn("Adios Pro 4 ab 149,95 €", links)
+        self.assertNotIn("billiger.de", links)
+        self.assertLess(body.index('class="wp-links"'), body.index('class="wp-answer"'))
+        self.assertIn('class="wp-ref"', body)
+        # A plain share page (no watch) keeps its answer as it was.
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=None):
+            plain = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id)).text
+        self.assertNotIn("wp-ref", plain)
+        self.assertNotIn("Direct links", plain)
+
     def test_a_rephrased_check_reads_as_stable_on_the_watch_page(self):
         """Every completed check used to raise the change badge, because the
         Judge flags a rewritten qualification as `changed` too. The badge now

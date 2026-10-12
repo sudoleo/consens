@@ -14,7 +14,7 @@ from app.core.observability import safe_exception
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.core import seo_entity
 from app.core.site import SITE_URL
-from app.services import claim_ledger, drift_signal, og_image
+from app.services import claim_ledger, drift_signal, og_image, source_links
 from app.services import share_snapshots as snapshots
 from app.services.history_view import build_history_view, day_label
 from app.services import watch_service
@@ -674,7 +674,6 @@ def share_page(request: Request, slug_id: str):
     selected_version = display_version["snapshot"]
     display_data = display_version["data"]
     payload = snapshots.public_share_payload(display_data)
-    consensus_html = render_public_markdown(payload["consensus_md"], payload["sources"])
     watch_awaiting_first_run = bool(
         watch_page and data.get("awaiting_first_watch_run") and not selected_version
     )
@@ -723,6 +722,17 @@ def share_page(request: Request, slug_id: str):
             # False = die URL ist ein Redirect, die Domain kam aus dem Titel.
             "is_direct": bool(domain) and domain == source_host(url),
         })
+
+    # Watch-Seiten führen direkt zu den Quellen: Direktlinks über der Antwort
+    # und die Namen der Quellen im Text als Links (source_links.py).
+    watch_key_links = []
+    site_links = None
+    if watch_page:
+        watch_key_links = source_links.key_links(sources_view, payload["consensus_md"])
+        site_links = source_links.site_mentions(sources_view, payload["consensus_md"])
+    consensus_html = render_public_markdown(
+        payload["consensus_md"], payload["sources"], site_links=site_links,
+    )
 
     # Differences: strukturierte Karten, sonst Freitext-Fallback (markdown-
     # gerendert). Beides read-only aus dem Snapshot – keine LLM-Calls.
@@ -916,6 +926,7 @@ def share_page(request: Request, slug_id: str):
             and not watch_awaiting_first_run
         ),
         "sources": sources_view,
+        "watch_key_links": watch_key_links,
         "related_shares": related_shares,
         "watch_history": watch_history,
         "watch_page": watch_page,

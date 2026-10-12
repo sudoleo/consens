@@ -16,10 +16,11 @@ Gespeicherte Antworten und Quellenziele werden dabei nicht verändert.
 """
 
 import re
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import nh3
 from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 _MD = (
     MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False})
@@ -174,11 +175,14 @@ def _preserve_math_delimiters(md_text):
     )
 
 
-def render_public_markdown(md_text, sources=None, excluded_sources=None):
+def render_public_markdown(md_text, sources=None, excluded_sources=None, site_links=None):
     """Markdown → sanitisiertes HTML (sicher für `| safe` im Template).
 
     ``excluded_sources`` are sources removed by source rules: citations to
-    them are dropped instead of showing as raw ``[S3]`` text.
+    them are dropped instead of showing as raw ``[S3]`` text. ``site_links``
+    (``source_links.site_mentions``, Watch-Seiten) turns the first mention of a
+    source's name into a link to it -- navigation, not a citation -- and gives
+    every outbound link in the answer the same look: favicon, new tab.
     """
     text = str(md_text or "")
     labels = _source_labels(sources)
@@ -188,8 +192,89 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None):
     text = _preserve_math_delimiters(text)
     tokens = _MD.parse(text)
     _normalize_citation_links(tokens, sources)
+    if site_links is not None:
+        _link_site_mentions(tokens, site_links)
     html = _MD.renderer.render(tokens, _MD.options, {})
-    return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL)
+    return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL, attributes=_ALLOWED_ATTRIBUTES)
+
+
+# Die Site-Links tragen Klasse, Favicon und öffnen in neuem Tab. Modell-
+# Markdown kann keine Attribute setzen (html=False), Klassen kommen nur von hier.
+_ALLOWED_ATTRIBUTES = {
+    **nh3.ALLOWED_ATTRIBUTES,
+    "a": set(nh3.ALLOWED_ATTRIBUTES.get("a", set())) | {"class", "target"},
+    "img": set(nh3.ALLOWED_ATTRIBUTES.get("img", set())) | {"class", "loading"},
+}
+
+
+def _favicon_token(domain):
+    icon = Token("html_inline", "", 0)
+    icon.content = (
+        f'<img class="wp-ref-icon" src="/api/topics/favicon?d={quote(str(domain), safe=".-")}" '
+        'alt="" width="14" height="14" loading="lazy">'
+    )
+    return icon
+
+
+def _site_link_tokens(link):
+    opening = Token("link_open", "a", 1)
+    opening.attrs = {"href": link["url"], "class": "wp-ref", "target": "_blank"}
+    label = Token("text", "", 0)
+    label.content = link["name"]
+    return [opening, _favicon_token(link["domain"]), label, Token("link_close", "a", -1)]
+
+
+def _link_site_mentions(tokens, site_links):
+    """Wege zu den Quellen im Fließtext.
+
+    Ausgehende Links der Antwort bekommen Favicon, Stil und neuen Tab; die
+    erste Nennung je Quelle (``site_links``) wird zum Link auf sie -- nur in
+    Textknoten außerhalb von Links und Code. Der Wortlaut bleibt unverändert.
+    """
+    pending = [link for link in site_links if link.get("name") and link.get("url")]
+    for token in tokens:
+        if token.type != "inline" or not token.children:
+            continue
+        children, depth = [], 0
+        for child in token.children:
+            if child.type == "link_open":
+                depth += 1
+                href = str(child.attrGet("href") or "")
+                domain = source_host(href)
+                if href.startswith(("https://", "http://")) and domain and domain not in _INDIRECT_SOURCE_HOSTS:
+                    child.attrSet("class", "wp-ref")
+                    child.attrSet("target", "_blank")
+                    children.extend((child, _favicon_token(domain)))
+                    continue
+            elif child.type == "link_close":
+                depth = max(0, depth - 1)
+            if child.type != "text" or depth or not pending:
+                children.append(child)
+                continue
+            content = child.content
+            while pending:
+                hits = []
+                for link in pending:
+                    match = re.search(
+                        r"(?<![\w.-])" + re.escape(link["name"]) + r"(?![\w-])", content,
+                    )
+                    if match:
+                        hits.append((match.start(), match.end(), link))
+                if not hits:
+                    break
+                start, end, link = min(hits, key=lambda hit: hit[0])
+                if start:
+                    before = Token("text", "", 0)
+                    before.content = content[:start]
+                    children.append(before)
+                children.extend(_site_link_tokens(link))
+                pending.remove(link)
+                content = content[end:]
+            if content:
+                rest = Token("text", "", 0)
+                rest.content = content
+                children.append(rest)
+        token.children = children
 
 
 def _normalize_citation_links(tokens, sources, *, strip=False):

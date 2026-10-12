@@ -5732,7 +5732,8 @@ app/services/
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
   watch_scheduler.py         Owner-gebundener Global-Lease, Tagesbudget, Pipeline-Adapter, run_brief_tick + Outbox-Retry-Pass
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
-  public_markdown.py         Server-Markdown-Rendering für Share-Seiten
+  public_markdown.py         Server-Markdown-Rendering für Share-Seiten; auf Watch-Seiten Namen der Quellen als Links + ausgehende Links mit Favicon (`site_links`)
+  source_links.py            Watch-Seiten: Direktlinks über der Antwort (`key_links`) und Nennungen der Quellen im Text (`site_mentions`); Navigation, kein Beleg
   topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
   topic_runner.py            Leased Topic-Research/Consensus-Runs, automatische Evidence/Meinungsänderungen + Intervall-Scheduler
   topic_pipeline.py          Topic-spezifische Projektion auf die neutrale Consensus-Pipeline
@@ -6972,6 +6973,27 @@ Fragen klappen auf drei Zeilen ein (`#shareQuestion` + `#shareQuestionMore`).
 Hat die Watch ein Bild (`watch_page.image`), steht es rechts neben der Frage
 (`.wp-head.has-image`); unter 700 px rückt es neben die Kicker-Zeile, damit die
 Frage die volle Breite behält.
+**Wege zu den Quellen (seit 2026-10-12, `source_links.py`):** Wer ein Thema
+beobachtet, will selbst nachsehen. Zwischen Zustand und Antwort stehen deshalb
+bis zu vier **Direktlinks** (`watch_key_links`, `.wp-links`: Kacheln mit
+Favicon, Seitentitel ohne angehängten Seitennamen, Domain, ↗; zwei Spalten,
+mobil eine): je Domain die Quelle, die als Ziel am meisten taugt (tiefe direkte
+Seite mit sprechendem Titel > Startseite > Grounding-Weiterleitung), vorn die
+Seiten, die die Antwort beim Namen nennt, sonst nur tiefe direkte Seiten mit
+Titel (die Stellenanzeige, die Produktseite). Im Antworttext wird die erste
+Nennung je Quelle zum Link (`site_mentions` → `render_public_markdown(…,
+site_links=…)`, `.wp-ref`: Favicon über `/api/topics/favicon`, kräftig, leise
+unterstrichen, neuer Tab): ausgeschriebene Domain immer, Site-Name nur wie ein
+Name (groß, mit Ziffer oder Binnenmajuskel, nicht in einer Wortkette wie
+„Adidas-Größe“, nicht wenn er ein gewöhnliches Wort ist wie „billiger“,
+„Zeit“), nur in Textknoten außerhalb von Links/Code und nur auf Seiten mit
+echter Adresse (keine Weiterleitung). Ausgehende Links, die die Antwort selbst
+setzt, bekommen denselben Stil. Das ist Navigation, kein Satz-für-Satz-Beleg:
+die Synthese schreibt bewusst keine S-Verweise (Quellenprüfung v4), ein Name,
+der zu genau dieser Seite führt, kann nicht falsch zitieren. Die vollständige
+Quellenliste bleibt am Ende; normale Share-Seiten bleiben unverändert. `nh3`
+erlaubt dafür `class`/`target` an `a` und `class`/`loading` an `img` — Modell-
+Markdown kann keine Attribute setzen (`html=False`).
 Die normale Watch-URL rendert serverseitig die **geltende** Vollversion
 (`accepted_run_id`, sonst die neueste) über dem unveränderten
 Share-Baseline-Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber
