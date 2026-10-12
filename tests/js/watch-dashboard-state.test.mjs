@@ -238,6 +238,49 @@ describe("dashboard render", () => {
     expect([...side.querySelectorAll(".wd-sep")].every(dot => dot.previousSibling.textContent === " ")).toBe(true);
   });
 
+  it("leads straight to the pages: direct links, or the evidence of a move", async () => {
+    const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
+    const { window } = harness;
+    window.history.replaceState(null, "", "/app/watches");
+    window.auth.currentUser.getIdToken = async () => "token";
+    const watches = [
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "w1", question: "Adios Pro 4 unter 140 €?", share_path: "/s/a",
+        key_links: [
+          { url: "https://www.idealo.de/preisvergleich/OffersOfProduct/1", title: "Adios Pro 4", domain: "idealo.de" },
+          { url: "javascript:alert(1)", title: "bad", domain: "x.de" }
+        ]
+      }),
+      active({
+        signal: "moved", trigger: "changed", change_summary: "Price dropped.",
+        evidence_sources: [{ title: "Price history", url: "https://geizhals.de/p" }]
+      }, {
+        id: "w2", question: "GPU prices?", share_path: "/s/b",
+        key_links: [{ url: "https://www.idealo.de/x", title: "Other", domain: "idealo.de" }]
+      })
+    ];
+    window.fetch = vi.fn(async (path) => ({
+      ok: true,
+      json: async () => String(path).includes("/api/my/watches")
+        ? { watches: watches, limits: { plan: "free", active_count: 2, active_limit: 3 } }
+        : {}
+    }));
+
+    await window.App.watchDashboard.render();
+
+    const card = text => [...window.document.querySelectorAll(".wd-item")]
+      .find(node => node.querySelector(".wd-question a").textContent.startsWith(text));
+    const links = card("Adios").querySelectorAll(".wd-sources a");
+    expect(links.length).toBe(1);
+    expect(links[0].href).toBe("https://www.idealo.de/preisvergleich/OffersOfProduct/1");
+    expect(links[0].rel).toContain("noreferrer");
+    expect(links[0].querySelector(".wd-source-icon").getAttribute("src")).toBe("/api/topics/favicon?d=idealo.de");
+    expect(links[0].querySelector(".wd-source-title").textContent).toBe("Adios Pro 4");
+    // A move shows what moved it, not the standing direct links.
+    const moved = card("GPU").querySelectorAll(".wd-sources a");
+    expect([...moved].map(link => link.href)).toEqual(["https://geizhals.de/p"]);
+  });
+
   it("shows logos without a frame and otherwise the watch's symbol", async () => {
     const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
     const { window } = harness;

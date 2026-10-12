@@ -20,7 +20,7 @@ from app.core.entitlements import TIER_PRO
 from app.core.security import db_firestore
 from app.services import (
     drift_signal, notification_outbox, opinion_map, persistence_guard, share_snapshots,
-    watch_images, watch_symbols,
+    source_links, watch_images, watch_symbols,
 )
 
 
@@ -246,6 +246,23 @@ def _serialize_probe(value) -> dict | None:
     }
 
 
+def _serialize_key_links(value) -> list[dict]:
+    """Direktlinks fürs Dashboard: nur http(s), höchstens drei."""
+    links = []
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "")
+        if not url.startswith(("https://", "http://")):
+            continue
+        links.append({
+            "url": url[:2000],
+            "title": str(item.get("title") or "")[:200],
+            "domain": str(item.get("domain") or "")[:120],
+        })
+    return links[:source_links.MAX_CARD_LINKS]
+
+
 def goal_state(data: dict) -> str:
     """Wie es um das Ziel steht: reached | confirming | not_met | unclear | pending.
 
@@ -327,6 +344,7 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "image": watch_images.image_view(watch_id, data),
         # Woran man die Watch ohne Bild erkennt (nur Dashboard).
         "symbol": watch_symbols.clean_symbol(data.get("symbol")),
+        "key_links": _serialize_key_links(data.get("key_links")),
         "awaiting_first_run": bool(
             share.get("awaiting_first_watch_run")
             and not data.get("last_successful_run_id")
@@ -513,6 +531,8 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
         "last_drift_score": None,
         "last_event_type": "",
         "query_first": created_query_share,
+        # Direktlinks fürs Dashboard aus der Antwort, aus der die Watch entsteht.
+        "key_links": source_links.card_links(share.get("sources"), share.get("consensus_md")),
     }
     from app.services import watch_probe
 
@@ -1713,6 +1733,9 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         }
         if outcome["accepted"]:
             updates["accepted_run_id"] = run_id
+        if outcome["accepted"] or not current.get("accepted_run_id"):
+            # Die Direktlinks folgen der Antwort, die die Watch-Seite zeigt.
+            updates["key_links"] = source_links.card_links(history["sources"], history["consensus_md"])
         from app.services import watch_probe
 
         updates["next_probe_at"] = watch_probe.next_probe_after(effective, now)

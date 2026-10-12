@@ -954,6 +954,40 @@ class SchedulerSafetyTests(unittest.TestCase):
             "run12345678",
         )
 
+    def test_the_shown_answer_gives_the_dashboard_its_direct_links(self):
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = {
+            **share(), "consensus_md": "Preisalarm bei Idealo setzen.",
+            "sources": [{"id": "S1", "url": "https://www.idealo.de/preisvergleich/OffersOfProduct/1",
+                         "title": "Adios Pro 4 - idealo"}],
+        }
+        created = watch_service.create_watch("u1", share_id="A" * 16, interval="weekly", tier="free", db=db)
+        self.assertEqual(created["key_links"], [{
+            "url": "https://www.idealo.de/preisvergleich/OffersOfProduct/1",
+            "title": "Adios Pro 4", "domain": "idealo.de",
+        }])
+        watch_id = created["id"]
+        db.stores["watches"][watch_id]["current_run_id"] = "run12345678"
+        claimed = {**db.stores["watches"][watch_id], "share_id": "A" * 16, "current_run_id": "run12345678"}
+        result = {
+            "consensus": "Bei Geizhals ist er am günstigsten.", "agreement_score": 68,
+            "differences_data": {"agreement": {"score": 68}}, "included_models": ["OpenAI"],
+            "consensus_model": "OpenAI",
+            "sources": [{"id": "S1", "url": "https://geizhals.de/adidas-adizero-adios-pro-4-herren-v189512.html",
+                         "title": "adidas Adizero Adios Pro 4 (Herren) ab € 124,95"}],
+        }
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            watch_service.complete_watch_run(watch_id, claimed, result,
+                                             now=datetime(2026, 10, 12, tzinfo=timezone.utc), db=db)
+        listed = watch_service.list_watches("u1", db=db)[0]
+        self.assertEqual([link["domain"] for link in listed["key_links"]], ["geizhals.de"])
+        # Only http(s) links with known fields reach the dashboard.
+        db.stores["watches"][watch_id]["key_links"] = [
+            {"url": "javascript:alert(1)", "title": "x"}, "junk", {"url": "https://a.de/1", "extra": 1},
+        ]
+        self.assertEqual(watch_service.list_watches("u1", db=db)[0]["key_links"],
+                         [{"url": "https://a.de/1", "title": "", "domain": ""}])
+
     def test_a_restated_answer_is_recorded_as_a_check_not_as_a_change(self):
         """The Judge sets `changed` for a rewritten qualification too. Marking
         that as movement made every tracked page claim it had changed."""

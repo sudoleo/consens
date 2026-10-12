@@ -1921,7 +1921,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   eine Textspalte über die ganze Breite: Status (Zeit als „checked 3 h ago“ bzw.
   „last check …“; bei „First check pending“ ohne Zeit, die steht im Fuß), Frage
   (3 Zeilen geklemmt), „Waiting for“ + Ziel + Zielstand, den Satz des Zustands
-  („The answer has held through N checks.“), tragende Quellen und ab drei
+  („The answer has held through N checks.“), bis zu drei Link-Chips (Favicon,
+  Site, Titel; bei einer Bewegung ihre Belege, sonst `watch.key_links`) und ab drei
   Checks eine Check-Leiste (ein Strich je Check, Form nach Signal; ein, zwei
   Striche sahen wie ein Darstellungsfehler aus). Den Zielstand liefert der
   Server (`watch_service.goal_state`: reached | confirming | not_met | unclear |
@@ -5733,7 +5734,8 @@ app/services/
   watch_scheduler.py         Owner-gebundener Global-Lease, Tagesbudget, Pipeline-Adapter, run_brief_tick + Outbox-Retry-Pass
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten; auf Watch-Seiten Namen der Quellen als Links + ausgehende Links mit Favicon (`site_links`)
-  source_links.py            Watch-Seiten: Direktlinks über der Antwort (`key_links`) und Nennungen der Quellen im Text (`site_mentions`); Navigation, kein Beleg
+  source_links.py            Watch-Seiten: Direktlinks über der Antwort (`key_links`) und Nennungen der Quellen im Text (`site_mentions`); kompakt fürs Dashboard (`card_links`); Navigation, kein Beleg
+  source_redirects.py        Google-Grounding-Weiterleitungen beim Speichern einer Watch-Prüfung durch ihr Ziel ersetzen (paralleles `agent_read_source.resolve_redirect`, 10-s-Budget)
   topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
   topic_runner.py            Leased Topic-Research/Consensus-Runs, automatische Evidence/Meinungsänderungen + Intervall-Scheduler
   topic_pipeline.py          Topic-spezifische Projektion auf die neutrale Consensus-Pipeline
@@ -6200,7 +6202,10 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   height, source_url, source_host, attempts, tries, version, sites, picked_at}`
   (`sites` = Domain-Wahl des Judges, auch `[]`) und seit 2026-10-12 `symbol`
   (Name aus `watch_symbols.SYMBOLS`, einmal gesetzt) sowie `visual_tries`
-  (Fehlschläge des Judges, Deckel 3). Gelöscht in derselben Transaktion wie die
+  (Fehlschläge des Judges, Deckel 3) und `key_links` (bis zu drei
+  `{url, title, domain}` fürs Dashboard aus der Antwort, die die Watch-Seite
+  zeigt: beim Anlegen aus dem Share, dann mit jedem angenommenen Check —
+  `source_links.card_links`, damit die Liste keine Checks nachliest). Gelöscht in derselben Transaktion wie die
   Watch (`_delete_watch_record`, damit auch Share-Hard-Delete und Kontolöschung)
   und beim Entfernen durch den Owner.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
@@ -6993,7 +6998,22 @@ die Synthese schreibt bewusst keine S-Verweise (Quellenprüfung v4), ein Name,
 der zu genau dieser Seite führt, kann nicht falsch zitieren. Die vollständige
 Quellenliste bleibt am Ende; normale Share-Seiten bleiben unverändert. `nh3`
 erlaubt dafür `class`/`target` an `a` und `class`/`loading` an `img` — Modell-
-Markdown kann keine Attribute setzen (`html=False`).
+Markdown kann keine Attribute setzen (`html=False`). Ist ein Titel bloß die
+Domain (aufgelöste Weiterleitung), zeigt die Kachel einen Titel aus dem
+sprechenden Pfad („Adidas adizero adios pro 4“; lange IDs/Hashes fallen weg).
+**Echte Adressen (`source_redirects.py`):** Geminis Grounding-Quellen sind
+signierte Weiterleitungen über `vertexaisearch.cloud.google.com`, meist nur mit
+der Domain als Titel, und sie verfallen (Stichprobe 2026-10-12: Juli → 404,
+Oktober → 302). `watch_scheduler.execute_watch` ersetzt sie deshalb direkt nach
+dem Sammeln der Quellen, vor Judge und Ziel-Bewertung, durch ihr Ziel: je
+Weiterleitung eine Anfrage an den festen Google-Host, nur der
+`Location`-Header (dem Ziel wird nicht gefolgt), parallel mit 10 s
+Gesamtbudget; Unauflösbares bleibt stehen. Weil die Weiterleitungen pro Lauf
+neu signiert sind, galten Gemini-Quellen bisher bei jedem Check als „neu
+gesehen“; aufgelöste Adressen wiederholen sich und machen `seen_before` im
+Change-Judge erst verlässlich. `scripts/backfill_watch_links.py` löst in allen
+Checks, im Ausgangs-Share und am Watch-Dokument auf, was noch auflösbar ist, und
+setzt die Dashboard-Links (Trockenlauf ohne Writes, `--apply` = Prod-Write).
 Die normale Watch-URL rendert serverseitig die **geltende** Vollversion
 (`accepted_run_id`, sonst die neueste) über dem unveränderten
 Share-Baseline-Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber

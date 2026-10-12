@@ -19,11 +19,37 @@ falsch zitieren. Keine Modell-Calls, keine Netzabrufe.
 from __future__ import annotations
 
 import re
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
+
+from app.services.public_markdown import source_host, source_site_name
 
 MAX_KEY_LINKS = 4
+MAX_CARD_LINKS = 3
 MAX_INLINE_LINKS = 8
 MIN_NAME_LENGTH = 4
+
+
+def source_entries(sources) -> list[dict]:
+    """Gespeicherte Quellen als Einträge mit Domain, Site-Name und ob die URL
+    direkt ist (keine Grounding-Weiterleitung). Gleiche Felder wie die
+    Quellenliste der Watch-Seite."""
+    entries = []
+    for source in sources or []:
+        if not isinstance(source, dict):
+            continue
+        url = str(source.get("url") or "")
+        domain = source_host(url, source.get("title"))
+        title = str(source.get("title") or "").strip()
+        if not title or title == url or re.fullmatch(r"\d+", title):
+            title = domain or url
+        entries.append({
+            "title": title,
+            "url": url,
+            "domain": domain,
+            "site": source_site_name(url, source.get("title")),
+            "is_direct": bool(domain) and domain == source_host(url),
+        })
+    return entries
 
 # Site-Namen, die zugleich gewöhnliche Wörter sind ("billiger kaufen", "die
 # Zeit", "ein Test"): als Wort im Text sind sie meist keine Nennung der Seite.
@@ -46,10 +72,13 @@ def _path_depth(url: str) -> int:
 
 
 def _descriptive(entry: dict) -> bool:
-    """Ein Titel, der mehr sagt als die Domain."""
+    """Ein Titel, der mehr sagt als die Domain -- oder, wo der Titel bloß die
+    Domain ist, ein sprechender Pfad."""
     title = str(entry.get("title") or "").strip().lower()
     domain = str(entry.get("domain") or "").lower()
-    return len(title) >= 12 and title not in {domain, "www." + domain}
+    if title in {domain, "www." + domain}:
+        return bool(entry.get("is_direct")) and bool(_slug_title(str(entry.get("url") or "")))
+    return len(title) >= 12
 
 
 def _quality(entry: dict) -> int:
@@ -139,13 +168,44 @@ def site_mentions(sources, text: str, limit: int = MAX_INLINE_LINKS) -> list[dic
 _TITLE_SEPARATORS = re.compile(r"\s+(?:[-|–—·:]|::)\s+")
 
 
+def _slug_title(url: str) -> str:
+    """Lesbarer Titel aus dem letzten sprechenden Pfadteil, sonst leer.
+
+    "/baseproducts/119030-adidas-adizero-adios-pro-4" -> "Adidas adizero
+    adios pro 4". Nur für Quellen, deren Titel bloß die Domain ist.
+    """
+    try:
+        parts = [unquote(part) for part in urlsplit(url).path.split("/") if part]
+    except ValueError:
+        return ""
+    for part in reversed(parts):
+        part = re.sub(r"\.(html?|php|aspx?)$", "", part, flags=re.IGNORECASE)
+        words = [word for word in re.split(r"[-_+\s]+", part) if word]
+        # Lange IDs, Hashes und Artikelnummern ("119030", "kj6244") raus;
+        # kurze Zahlen gehören zum Namen ("Pro 4", "2026").
+        words = [
+            word for word in words
+            if not re.fullmatch(r"\d{5,}|(?=[0-9a-f]*\d)[0-9a-f]{8,}|[a-z]{1,2}\d{3,}\w*", word, re.IGNORECASE)
+        ]
+        letters = [word for word in words if re.search(r"[^\W\d_]{2,}", word)]
+        if len(letters) >= 2:
+            text = " ".join(words)
+            return (text[:1].upper() + text[1:])[:120]
+    return ""
+
+
 def display_title(entry: dict) -> str:
     """Seitentitel ohne angehängten Seitennamen und lose Anführungszeichen.
 
     "Laufschuhe adidas Adizero Adios Pro 4 - Top4Running.de" -> "Laufschuhe
-    adidas Adizero Adios Pro 4"; die Domain steht ohnehin darunter.
+    adidas Adizero Adios Pro 4"; die Domain steht ohnehin darunter. Ist der
+    Titel bloß die Domain (aufgelöste Grounding-Weiterleitung), sagt der
+    Pfad mehr.
     """
     title = str(entry.get("title") or "").strip().strip("\"'“”„« »")
+    domain = str(entry.get("domain") or "").lower()
+    if title.lower().removeprefix("www.") == domain and entry.get("is_direct"):
+        return _slug_title(str(entry.get("url") or "")) or title
     names = {str(entry.get("site") or "").lower(), str(entry.get("domain") or "").lower()} - {""}
     parts = _TITLE_SEPARATORS.split(title)
     while len(parts) > 1:
@@ -182,4 +242,13 @@ def key_links(sources, text: str, limit: int = MAX_KEY_LINKS) -> list[dict]:
     return [
         {**entry, "title": display_title(entry)}
         for *_rank, entry in ranked[:limit]
+    ]
+
+
+def card_links(sources, text: str, limit: int = MAX_CARD_LINKS) -> list[dict]:
+    """Die Direktlinks fürs Dashboard, kompakt zum Speichern am Watch-Dokument
+    (``{url, title, domain}``): so liest die Liste keine weiteren Dokumente."""
+    return [
+        {"url": link["url"][:2000], "title": link["title"][:200], "domain": link["domain"][:120]}
+        for link in key_links(source_entries(sources), text, limit=limit)
     ]

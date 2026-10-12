@@ -137,5 +137,66 @@ class RenderTests(unittest.TestCase):
         self.assertIn("&lt;img src=x onerror", html)
 
 
+class RedirectTests(unittest.TestCase):
+    def test_redirects_become_the_pages_they_point_to(self):
+        from app.services import source_redirects
+
+        sources = [
+            {"id": "S1", "url": REDIRECT + "1", "title": "billiger.de"},
+            {"id": "S2", "url": REDIRECT + "2", "title": "adidas.com"},
+            {"id": "S3", "url": "https://geizhals.de/p", "title": "Geizhals"},
+        ]
+        targets = {REDIRECT + "1": "https://www.billiger.de/baseproducts/119030-adidas-adizero-adios-pro-4",
+                   REDIRECT + "2": ""}  # expired: Google answers 404
+        resolved = source_redirects.resolve_sources(sources, fetch=lambda url: targets.get(url, ""))
+        self.assertEqual(resolved[0]["url"], targets[REDIRECT + "1"])
+        self.assertEqual(resolved[1]["url"], REDIRECT + "2")  # kept, nothing lost
+        self.assertIs(resolved[2], sources[2])
+        self.assertEqual(sources[0]["url"], REDIRECT + "1")  # the input is not changed
+
+    def test_only_googles_host_and_never_another_redirect(self):
+        from app.services import source_redirects
+
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            return REDIRECT + "loop"
+
+        self.assertEqual(source_redirects.resolve_urls(
+            ["https://evil.example/r", "http://vertexaisearch.cloud.google.com/x", REDIRECT + "a"], fetch=fetch,
+        ), {})
+        self.assertEqual(asked, [REDIRECT + "a"])
+        # Without a test fetch nothing goes out in unit tests.
+        self.assertEqual(source_redirects.resolve_urls([REDIRECT + "b"]), {})
+
+    def test_nested_evidence_is_rewritten_too(self):
+        from app.services import source_redirects
+
+        value = {"history_points": [{"evidence_sources": [{"url": REDIRECT + "1", "title": "x"}]}],
+                 "note": REDIRECT + "1"}
+        self.assertEqual(source_redirects.collect_redirects(value), [REDIRECT + "1"])
+        new, changed = source_redirects.replace_urls(value, {REDIRECT + "1": "https://x.de/a"})
+        self.assertTrue(changed)
+        self.assertEqual(new["history_points"][0]["evidence_sources"][0]["url"], "https://x.de/a")
+        self.assertEqual(new["note"], REDIRECT + "1")  # only url fields
+        self.assertEqual(source_redirects.replace_urls(value, {}), (value, False))
+
+
+class CardLinkTests(unittest.TestCase):
+    def test_compact_links_for_the_dashboard(self):
+        stored = [
+            {"url": "https://www.idealo.de/preisvergleich/OffersOfProduct/1", "title": "Adios Pro 4 - idealo"},
+            {"url": "https://www.billiger.de/baseproducts/119030-adidas-adizero-adios-pro-4", "title": "billiger.de"},
+            {"url": REDIRECT + "x", "title": "adidas.com"},
+        ]
+        links = source_links.card_links(stored, "Preisalarm bei Idealo setzen.")
+        self.assertEqual(links[0], {"url": stored[0]["url"], "title": "Adios Pro 4", "domain": "idealo.de"})
+        # A resolved redirect titled only by its domain speaks through its path.
+        self.assertEqual(links[1]["title"], "Adidas adizero adios pro 4")
+        self.assertEqual([link["domain"] for link in links], ["idealo.de", "billiger.de"])
+        self.assertEqual(source_links.card_links(None, None), [])
+
+
 if __name__ == "__main__":
     unittest.main()

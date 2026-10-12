@@ -228,6 +228,9 @@
     return strip;
   }
 
+  // Up to three links straight to the pages: the evidence of a move, else
+  // the watch's direct links (services/source_links.py: the pages its answer
+  // names, deep pages with a real title). Favicons come through our own proxy.
   function buildSources(sources) {
     const items = (sources || []).filter(item => item && /^https?:\/\//.test(item.url || "")).slice(0, 3);
     if (!items.length) return null;
@@ -237,9 +240,22 @@
       const link = el("a");
       link.href = item.url;
       link.target = "_blank";
-      link.rel = "noopener";
-      link.appendChild(el("span", "wd-source-host", hostOf(item.url)));
-      link.appendChild(el("span", "wd-source-title", item.title || item.url));
+      link.rel = "noopener noreferrer";
+      const host = item.domain || hostOf(item.url);
+      if (host) {
+        const icon = el("img", "wd-source-icon");
+        icon.src = "/api/topics/favicon?d=" + encodeURIComponent(host);
+        icon.alt = "";
+        icon.width = 14;
+        icon.height = 14;
+        icon.loading = "lazy";
+        icon.addEventListener("error", () => icon.remove());
+        link.appendChild(icon);
+      }
+      link.appendChild(el("span", "wd-source-host", host));
+      const title = item.title && item.title !== host ? item.title : "";
+      if (title) link.appendChild(el("span", "wd-source-title", title));
+      link.title = (title ? title + " · " : "") + host;
       li.appendChild(link);
       list.appendChild(li);
     });
@@ -446,7 +462,7 @@
 
     main.appendChild(el("p", "wd-headline", state.headline));
     if (state.held) main.appendChild(el("p", "wd-held", "Held: " + state.held));
-    const sources = buildSources(state.sources);
+    const sources = buildSources(state.sources && state.sources.length ? state.sources : watch.key_links);
     if (sources) main.appendChild(sources);
     const record = buildRecord(watch);
     if (record) main.appendChild(record);

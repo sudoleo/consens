@@ -14,7 +14,8 @@ from app.core.observability import correlation_scope, record_metric, safe_except
 from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
     drift_signal, evidence_change, mailer, notification_delivery, notification_outbox, opinion_map,
-    share_snapshots, watch_brief, watch_followers, watch_images, watch_probe, watch_service,
+    share_snapshots, source_redirects, watch_brief, watch_followers, watch_images, watch_probe,
+    watch_service,
 )
 from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
@@ -144,6 +145,9 @@ def execute_watch(question: str, standing=None, condition: str = "",
         item["provider"]: item.get("sources") or []
         for item in model_answers if item.get("sources")
     })
+    # Google-Weiterleitungen werden zur Seite, auf die sie zeigen -- bevor
+    # Judge und Ziel-Bewertung sie als Belege zitieren (source_redirects.py).
+    sources = source_redirects.resolve_sources(sources)
     included_models = share_snapshots.build_included_models(
         [item["provider"] for item in model_answers],
         {item["provider"]: item["model"] for item in model_answers},
