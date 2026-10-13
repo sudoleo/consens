@@ -136,6 +136,9 @@ def test_guest_navigation_fits_and_auth_dialogs_open(browser, phase4_server, wid
         seed_insights(page)
         expect(header.locator('#consensusShareButton')).to_be_hidden()
         expect(header.locator('.consensus-actions-toggle')).to_be_visible()
+        # The collapsed composer keeps a long guest hint on its one line.
+        page.wait_for_function("() => document.body.classList.contains('composer-collapsed')")
+        assert page.evaluate("getComputedStyle(document.getElementById('questionInput'), '::placeholder').whiteSpace") == 'nowrap'
         expect(auth).to_be_visible()
         bounds=[button.bounding_box() for button in header.locator('button:visible').all()]
         assert all(a['x']+a['width']<=b['x']+.5 for a,b in zip(bounds,bounds[1:]))
@@ -252,6 +255,13 @@ def test_menu_island_carries_the_watches_hint_until_watches_opens(browser, phase
         page.locator('#toggleSidebarButton').click()
         expect(page.locator('#mobileSidebarViews #viewSwitchWatches')).to_be_visible()
         assert page.evaluate("getComputedStyle(document.getElementById('viewSwitchWatches'), '::after').content") != 'none'
+        # Popovers of the islands sit above the fade but never above the
+        # open sidebar that covers the islands.
+        page.evaluate("""() => { const probe = document.createElement('span');
+          probe.className = 'watch-feature-nudge'; probe.id = 'nudgeProbe'; probe.textContent = 'Keep this answer current';
+          document.body.append(probe); }""")
+        expect(page.locator('#nudgeProbe')).to_be_hidden()
+        page.evaluate("document.getElementById('nudgeProbe').remove()")
         reader_screenshot(page, 'mobile-sidebar-watches-hint')
         page.locator('#viewSwitchWatches').click()
         expect(page.locator('#watchDashboard')).to_be_visible()

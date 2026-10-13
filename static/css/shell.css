@@ -4586,9 +4586,12 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
 
   .consensus-actions-menu .consensus-copy-icon-btn.consensus-menu-share { display: flex; }
 
-  /* Popovers anchored to the islands open over the fade beneath them. */
+  /* Popovers anchored to the islands open over the fade beneath them. An
+     open sidebar covers the islands, so their popovers leave with them
+     (the sidebar shares the header's layer and must not end up beneath). */
   .consensus-actions-menu,
   .watch-feature-nudge { z-index: calc(var(--z-header) + 1); }
+  body:has(.sidebar.active) :is(.consensus-actions-menu, .watch-feature-nudge) { visibility: hidden; }
 
   .sidebar-pinned { margin-top: 0; }
   .mobile-sidebar-views { display: block; margin-bottom: 8px; }

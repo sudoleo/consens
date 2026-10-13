@@ -261,6 +261,14 @@
     padding-top: 6px;
     padding-bottom: 6px;
   }
+  /* One line means one line for the hint too: a long one ("Sign in to start
+     asking questions for free" at 320px) wrapped and showed half of its
+     second line under the first. */
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-field::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-actions-container { order: 3; margin-left: 0; }
 }
 
