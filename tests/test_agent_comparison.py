@@ -1213,8 +1213,63 @@ def test_answer_without_a_comparison_streams_an_unchecked_answer(store):
     assert "No model comparison ran" in script.answer_messages[0]["content"]
     evidence = script.answer_messages[-1]["content"]
     assert '"comparisons"' not in evidence and '"research_sources"' not in evidence
+    # Nothing to show: no empty, unexplained fields (2026-10-12).
+    assert json.loads(evidence.split("\n", 1)[1]) == {}
+    # The answer step knows what its own earlier step decided.
+    assert "In this message it ran no comparison and its own web search contributed no source." in (
+        script.answer_messages[0]["content"])
     # Routing step, answer step: no further round.
     assert [step for step, _ in script.calls] == ["completion:0", "completion:1"]
+
+
+class Searched(Script):
+    """The first routing step's own web search finds a page; records the answer step."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.answer_messages = None
+
+    def factory(self):
+        base = type(super().factory())
+        script = self
+        class Completion(base):
+            def stream(self, *, model, messages, **kwargs):
+                if self.step_id == "completion:0":
+                    self.sources = [{"url": "https://example.org/found", "title": "Found"}]
+                if self.step_id.startswith("completion:") and not kwargs["tools"]:
+                    script.answer_messages = messages
+                yield from super().stream(model=model, messages=messages, **kwargs)
+        return Completion()
+
+
+def test_the_answer_step_learns_what_the_agent_did_and_gets_only_explained_fields(store):
+    from app.services.prompt_defaults import AGENT_ANSWER_EVIDENCE_FIELDS, AGENT_ANSWER_TURN_PROMPT
+    script = Searched()
+    loop = make_loop(store, script)
+    list(loop.run())
+    system = script.answer_messages[0]["content"]
+    evidence = json.loads(script.answer_messages[-1]["content"].split("\n", 1)[1])
+    assert [s["url"] for s in evidence["research_sources"]] == ["https://example.org/found"]
+    assert not {"supporting_results", "saved_documents", "google_results"} & set(evidence)
+    assert AGENT_ANSWER_TURN_PROMPT.split("{summary}")[0] in system
+    assert ("In this message it ran 1 comparison (2 model answers) and its own web search contributed "
+            "1 source (research_sources).") in system
+    assert AGENT_ANSWER_EVIDENCE_FIELDS["research_sources"] in system
+    assert not any(AGENT_ANSWER_EVIDENCE_FIELDS[key] in system
+                   for key in ("supporting_results", "saved_documents", "google_results"))
+
+
+def test_turn_summary_counts_answers_missing_models_and_pages():
+    from app.services.agent_comparison import turn_summary
+    comparisons = [{"answers": [{}] * 5, "failed_models": [{}], "pending_models": []}, {"answers": [{}]}]
+    reads = [{"url": "https://a.example/1", "text": "page"}, {"url": "https://a.example/2", "status": "not read"}]
+    assert turn_summary(comparisons, [], reads, can_read=True) == (
+        "In this message it ran 2 comparisons (6 model answers, 1 missing), its own web search contributed no "
+        "source and it opened 1 page (read_sources); 1 page could not be opened.")
+    # A field the evidence leaves out is not named.
+    assert turn_summary([], [{"url": "https://a.example"}], [], can_read=False) == (
+        "In this message it ran no comparison and its own web search contributed 1 source.")
+    assert turn_summary([], [], [], can_read=True).endswith("and it opened no page.")
 
 
 class OneStep(DirectAnswer):

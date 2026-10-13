@@ -266,6 +266,9 @@ def test_offers_comparison_documents_and_gmail_draft_through_real_agent_loop(gma
         if file['mime']=='application/pdf': assert '100 EUR' in PdfReader(io.BytesIO(raw)).pages[0].extract_text()
     synthesis=next(call for call in recorded if not call['tools'] and any('google_results' in str(m) for m in call['messages']))
     assert document['document_id'] in str(synthesis['messages']) and proposal['id'] in str(synthesis['messages'])
+    from app.services.prompt_defaults import AGENT_ANSWER_EVIDENCE_FIELDS
+    assert AGENT_ANSWER_EVIDENCE_FIELDS['google_results'] in synthesis['messages'][0]['content']
+    assert '"google_results"' in str(synthesis['messages'][1:])
     assert any(e.get('type')=='resources' for e in events)
     assert all(call['model'].request_config['provider']['only']==['reviewed-host'] for call in recorded)
 

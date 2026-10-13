@@ -52,15 +52,17 @@ _ENTRIES = (
     ("agent_answer", "Agent: answer step",
      "System prompt of the step that writes the answer the user reads (same model, no tools, fresh context). "
      "At runtime the app facts (AGENT_ANSWER_APP_FACTS, with the read and Watch sentences where the turn "
-     "can do that), the date context, selected model, memory block (if enabled) and, after a prepared Watch, "
+     "can do that), what the agent did in this message (AGENT_ANSWER_TURN_PROMPT: comparisons, own web "
+     "search, pages opened) with one sentence per further evidence field sent (AGENT_ANSWER_EVIDENCE_FIELDS), "
+     "the date context, selected model, memory block (if enabled) and, after a prepared Watch, "
      "the Watch card note are appended; the "
      "conversation and the evidence message (comparison answers with sources) follow.",
      "prompt_defaults.py:AGENT_ANSWER_PROMPT", _agent_answer),
     ("agent_direct_answer", "Agent: answer step without comparison",
      "Replaces the answer-step prompt when the Agent answered without a comparison (tool answer, no model "
      "answers, no check), e.g. for questions about the chat, rewrites or a page the user asked to read. The "
-     "same app facts, date, model, memory and Watch additions follow; the evidence holds only pages read "
-     "and a prepared Watch.",
+     "same app facts, message summary, date, model, memory and Watch additions follow; the evidence holds "
+     "only pages read, a prepared Watch and, where present, documents, Google items or helper results.",
      "prompt_defaults.py:AGENT_DIRECT_ANSWER_PROMPT", _agent_direct_answer),
     ("comparison", "Agent: comparison models",
      "System prompt of each independent comparison model, shown for depth \"full\" (3 search rounds). "

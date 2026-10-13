@@ -30,11 +30,15 @@ OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
 
 
-def agent_sources(completion, review=None):
-    """Keep provider/search citations on the canonical turn, across all steps."""
+def agent_sources(completion, review=None, *, skip_tools=()):
+    """Keep provider/search citations on the canonical turn, across all steps.
+
+    ``skip_tools`` leaves out the sources of these tools' events (the answer
+    step's research_sources: a page read_source opened is no search result)."""
     sources = list(getattr(completion, "sources", []) or [])
     for event in completion.activity:
-        sources.extend(event.get("sources") or [])
+        if event.get("name") not in skip_tools:
+            sources.extend(event.get("sources") or [])
     for comparison in (review or {}).get("comparisons", []):
         for answer in comparison.get("answers", []):
             sources.extend(answer.get("sources") or [])

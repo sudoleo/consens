@@ -13,18 +13,21 @@ soon as an answer arrives) and gives the answer step one deduplicated source
 list with relevant original excerpts under a fixed character budget.
 
 No model call, no search, nothing persisted or streamed. See
-docs/agent-mode.md, "Quellenauszüge für die Antwort".
+docs/agent-mode.md, "Quellenauszüge für die Antwort". Google's grounding
+redirects are replaced by their pages when an answer arrives
+(resolve_redirects), before anything else sees its sources.
 """
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
+import logging
 import re
 import threading
 import time
 from urllib.parse import urlsplit
 
-from app.core.observability import record_metric
+from app.core.observability import record_metric, safe_exception
 from app.services.llm.citations import citation_end
 from app.services.source_catalog import canonical_source_url
 from app.services.source_documents import fetch_document, select_passages
@@ -68,6 +71,12 @@ _LEADING_MARKER = re.compile(r"^(?:#{1,6}\s+|[-*+]\s+|\d{1,3}[.)]\s+|>\s*)+")
 # Google grounding counts offsets in UTF-8 bytes (2026-10-10); its sources
 # are redirect URLs on this host.
 _BYTE_OFFSET_HOSTS = {"vertexaisearch.cloud.google.com"}
+# Marks a citation whose offsets were already converted to characters
+# (_positions): its URL may no longer show where it came from.
+_CHARACTER_OFFSETS = "characters"
+# Resolving an answer's grounding redirects (one Location header each, in
+# parallel) delays that answer by at most this long.
+REDIRECT_BUDGET_SECONDS = 3.0
 # Lone surrogates (a page's "&#55357;", text cut inside an emoji) cannot be
 # encoded as UTF-8: the answer step's request would fail with them.
 _SURROGATES = re.compile(r"[\ud800-\udfff]")
@@ -192,15 +201,54 @@ def _positions(text, citations):
     """One answer's citations with offsets in characters.
 
     Google grounding counts UTF-8 bytes, known by its redirect host: its
-    offsets are converted. Other providers count characters."""
+    offsets are converted, once (a converted citation is marked). Other
+    providers count characters."""
     items = [citation for citation in citations or [] if isinstance(citation, dict)]
     encoded = text.encode("utf-8", "surrogatepass")
-    if len(encoded) > len(text) and any(_host(c.get("url")) in _BYTE_OFFSET_HOSTS for c in items):
+    if len(encoded) > len(text) and any(c.get("offsets") != _CHARACTER_OFFSETS
+                                        and _host(c.get("url")) in _BYTE_OFFSET_HOSTS for c in items):
         def char(offset):
             return (len(encoded[:offset].decode("utf-8", "ignore")) if type(offset) is int and offset >= 0
                     else offset)
-        items = [{**c, "start_index": char(c.get("start_index")), "end_index": char(c.get("end_index"))} for c in items]
+        items = [c if c.get("offsets") == _CHARACTER_OFFSETS else
+                 {**c, "start_index": char(c.get("start_index")), "end_index": char(c.get("end_index")),
+                  "offsets": _CHARACTER_OFFSETS} for c in items]
     return items
+
+
+def resolve_redirects(text, citations, sources):
+    """(citations, sources) of one answer with Google's grounding redirects
+    replaced by the pages they point to.
+
+    Gemini cites signed redirects titled with a bare domain ("europa.eu",
+    2026-10-12) that expire after a while: the answer step could not tell
+    which page stood behind them, and saved chats kept links that stop
+    working. Offsets are converted to characters first, because _positions
+    knows Google's byte offsets only by the redirect host. A redirect that
+    does not resolve in time stays as it was; without any, both come back
+    unchanged."""
+    from app.services import source_redirects
+    sources = list(sources or [])
+    urls = [c.get("url") for c in citations or [] if isinstance(c, dict)]
+    urls += source_redirects.collect_redirects(sources)
+    try:
+        mapping = source_redirects.resolve_urls(urls, budget_seconds=REDIRECT_BUDGET_SECONDS)
+    except Exception as exc:
+        logging.warning("Agent comparison kept grounding redirects category=%s", safe_exception(exc))
+        mapping = {}
+    if not mapping:
+        return citations, sources
+    resolved = [{**c, "url": mapping.get(c.get("url"), c.get("url"))} for c in _positions(text or "", citations)]
+    unique, seen = [], set()
+    for source in source_redirects.replace_urls(sources, mapping)[0]:
+        # Two redirects to one page, or to a page the answer also cites
+        # directly: one source.
+        key = canonical_source_url(source.get("url")) if isinstance(source, dict) else None
+        if key and key in seen:
+            continue
+        seen.add(key)
+        unique.append(source)
+    return resolved, unique
 
 
 def answer_citations(text, citations):

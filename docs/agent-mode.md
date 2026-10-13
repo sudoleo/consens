@@ -122,7 +122,11 @@ Das Modell kann eine ganze Frage oder mehrere begründete Teilfragen
 vergleichen. Jede Vergleichsgruppe erhält denselben neutralen Auftrag samt
 notwendigem Kontext. Die Vergleichsmodelle kennen den Chatverlauf nicht. Das
 Chatmodell muss deshalb bei Bedarf Bezüge konkretisieren und relevante frühere
-Anforderungen mitgeben. Keine Vergleichsantwort beeinflusst die andere. Das
+Anforderungen mitgeben. Wünsche zu Länge und Form der Antwort (kompakt,
+Tabelle, Stichpunkte) gibt es seit 2026-10-13 nicht mehr weiter; die setzt der
+Antwortschritt um. Vorher reichte der Steuer-Schritt eine gemerkte Vorliebe für
+kurze Antworten als „kompakt“ an die Vergleichsmodelle weiter, und deren
+Antworten wurden dadurch dünner. Keine Vergleichsantwort beeinflusst die andere. Das
 Chatmodell erhält Antworten, Quellen, Status und Modellmetadaten und schreibt
 die Synthese selbst. Auch bei einem Prüfwunsch wird zuerst eine unabhängige
 Vergleichsgrundlage eingeholt.
@@ -265,6 +269,29 @@ zitierter Quellen kommen unter `sources`), dazu nur, was der Turn wirklich kann:
 `AGENT_ANSWER_READ_FACT` mit `read_source`, `AGENT_ANSWER_WATCH_FACT` mit dem
 Watch-Tool (`agent_comparison.synthesis_messages`). Das sind Fakten, keine
 Stilvorgaben.
+
+**Was der Antwortschritt über seine eigene Nachricht weiß (seit 2026-10-13).**
+Opus 5.5 beschrieb auf Max' Frage nach seiner Arbeit in consens.io den
+Steuer-Schritt als fremde Instanz: „Ob eine Seite geöffnet wird, entscheidet
+die App, nicht ich“. Dabei hatte dasselbe Modell einen Schritt vorher selbst
+entschieden, nicht nachzulesen. Hinter den App-Fakten steht deshalb
+`AGENT_ANSWER_TURN_PROMPT` („THIS MESSAGE“): Die Antwort ist der letzte Schritt
+desselben Agenten mit demselben Modell, die früheren Schritte entschieden über
+Rückfrage, Vergleich, Websuche und Nachlesen, und `turn_summary` zählt, was
+davon in dieser Nachricht geschah (Vergleiche mit Antworten und fehlenden
+Modellen, Treffer der eigenen Websuche, gelesene und nicht lesbare Seiten).
+Gezählt wird nur, was die App selbst weiß, nie Text eines Modells oder einer
+Seite. `AGENT_ANSWER_READ_FACT` spricht vom Agenten statt von „der App“. Felder
+ohne Inhalt (`research_sources`, `supporting_results`, `saved_documents`,
+`google_results`) fehlen in der Evidenz; jedes gesendete Feld, das die
+Antwort-Prompts nicht selbst erklären, bekommt seinen Satz aus
+`AGENT_ANSWER_EVIDENCE_FIELDS`. Vorher bestand die Evidenz einer direkten
+Antwort nur aus drei leeren, unerklärten Feldern, über deren Bedeutung das
+Modell rätselte. Ohne Vergleich ist die Evidenz jetzt `{}`. `research_sources`
+enthält nur noch Treffer der eigenen Websuche (`agent_sources(...,
+skip_tools={"read_source"})`). Eine mit `read_source` geöffnete Seite stand dort
+vorher zusätzlich, als hätte die Suche sie gefunden; sie steht weiter mit Text
+unter `read_sources` und in den gespeicherten Quellen des Turns.
 
 Seit 2026-10-07
 zeigt der Schreibschritt während des Denkens kurze Auszüge aus dem Provider-
@@ -1003,7 +1030,22 @@ Pakets mit der Annotation, für `shift_citation`). Live gemessen (2026-10-10, EZ
 
 `_positions` rechnet deshalb die Offsets von Google Grounding (erkannt am
 Redirect-Host, nicht an einem Überlauf: OpenAI zählt Zeichen, auch hinter
-Emojis) von Bytes in Zeichen um. Eine Zitation ohne Spanne (0/0) markiert die
+Emojis) von Bytes in Zeichen um.
+
+**Echte Adressen statt Google-Weiterleitungen (seit 2026-10-13).** Geminis
+Quellen kamen als `vertexaisearch…`-Weiterleitung mit der Domain als Titel
+(„europa.eu“) an: Der Antwortschritt sah nicht, welche Seite dahinter steht,
+gespeicherte Chats behielten Links, die nach einiger Zeit verfallen, und
+dieselbe EZB-Seite stand unter mehreren Adressen. `resolve_redirects` ersetzt
+sie, sobald eine Vergleichsantwort eintrifft, und zwar vor Auszügen,
+Antwortschritt, Judges und Speichern. Dafür fragt es je Weiterleitung den
+`Location`-Header bei Google ab (`source_redirects.resolve_urls`, parallel,
+höchstens `REDIRECT_BUDGET_SECONDS` = 3 s je Antwort). Die Offsets werden
+vorher in Zeichen umgerechnet und als umgerechnet markiert (`offsets`), weil
+`_positions` die Bytes sonst nur am Redirect-Host erkennt. Eine Weiterleitung,
+die nicht rechtzeitig auflöst, bleibt stehen und wird nicht doppelt
+umgerechnet. Zeigen zwei Quellen danach auf dieselbe Seite, bleibt die erste.
+In Unit-, E2E- und Mock-Läufen geht keine Anfrage hinaus. Eine Zitation ohne Spanne (0/0) markiert die
 Ankunft der Suchergebnisse, nicht die gestützte Aussage, und bindet keine; ihr
 Text bleibt Auszug. Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
 Server deshalb die Seite selbst, mit demselben begrenzten, gecachten Abruf wie

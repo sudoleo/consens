@@ -19,7 +19,7 @@ from pydantic.json_schema import SkipJsonSchema
 from app.core import config as cfg
 from app.core.observability import safe_exception
 from app.services.agent_source_evidence import (EXCERPT_BUDGET_CHARS, MIN_EXCERPT_CHARS, PAGE_WAIT_SECONDS,
-                                                SourceEvidence, source_entries)
+                                                SourceEvidence, resolve_redirects, source_entries)
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_provider_limits import ModelOutputLimit
 from app.services.llm.agent_client import metered_model, with_reasoning_summary
@@ -536,6 +536,34 @@ def comparison_selection(value=None):
             for key, value in chosen.items()}
 
 
+def _count(number, noun):
+    return f"{number} {noun}" + ("" if number == 1 else "s")
+
+
+def turn_summary(comparisons, research, reads, *, can_read, listed=()):
+    """What the agent did in its earlier steps of this message, for the
+    answer step (AGENT_ANSWER_TURN_PROMPT): facts the app counted, no text a
+    model or a page wrote. ``listed`` names the evidence fields sent."""
+    if comparisons:
+        answers = sum(len(c.get("answers") or []) for c in comparisons)
+        missing = sum(len(c.get("failed_models") or []) + len(c.get("pending_models") or []) for c in comparisons)
+        parts = [f"ran {_count(len(comparisons), 'comparison')} ({_count(answers, 'model answer')}"
+                 + (f", {missing} missing" if missing else "") + ")"]
+    else:
+        parts = ["ran no comparison"]
+    if research:
+        parts.append(f"its own web search contributed {_count(len(research), 'source')}"
+                     + (" (research_sources)" if "research_sources" in listed else ""))
+    else:
+        parts.append("its own web search contributed no source")
+    if can_read:
+        failed = sum(1 for read in reads if read.get("status") == "not read")
+        opened = len(reads) - failed
+        part = f"it opened {_count(opened, 'page')} (read_sources)" if opened else "it opened no page"
+        parts.append(part + (f"; {_count(failed, 'page')} could not be opened" if failed else ""))
+    return "In this message it " + ", ".join(parts[:-1]) + " and " + parts[-1] + "."
+
+
 class ComparisonTools:
     def __init__(self, loop, models, *, check_sources=False, source_limits=None, preferences=None,
                  memory_changes=False, read_sources=False):
@@ -653,27 +681,13 @@ class ComparisonTools:
         from app.services import prompt_config
         from app.services.agent_runs import agent_sources
         from app.services.llm.base import get_date_context
-        from app.services.prompt_defaults import (AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_PROMPT, AGENT_ANSWER_READ_FACT,
+        from app.services.prompt_defaults import (AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_EVIDENCE_FIELDS,
+                                                  AGENT_ANSWER_PROMPT, AGENT_ANSWER_READ_FACT, AGENT_ANSWER_TURN_PROMPT,
                                                   AGENT_ANSWER_WATCH_FACT, AGENT_DIRECT_ANSWER_PROMPT)
         config = prompt_config.get_config()
         self.freeze_for_synthesis()
         direct = self.direct and not self.comparisons
-        # What the answer may say about the app: only what this turn can do.
-        facts = [AGENT_ANSWER_APP_FACTS, *([AGENT_ANSWER_READ_FACT] if self.reader is not None else []),
-                 *([AGENT_ANSWER_WATCH_FACT] if getattr(self.loop, "watch_tools", None) is not None else [])]
-        system = ((AGENT_DIRECT_ANSWER_PROMPT if direct else AGENT_ANSWER_PROMPT) + "\n\n" + " ".join(facts) + "\n\n"
-                  + get_date_context(config["reference_timezone"])
-                  + f"\nSelected model: {self.loop.model.label} ({self.loop.model.model}).")
-        memory = getattr(self.loop, "memory", None)
-        if memory is not None:
-            from app.services.agent_memory import synthesis_prompt
-            block = synthesis_prompt(memory.snapshot)
-            if block:
-                system += "\n\n" + block
         watch = getattr(self.loop, "watch_proposal", None)
-        if watch:
-            from app.services.agent_watch import SYNTHESIS_PROMPT
-            system += "\n\n" + SYNTHESIS_PROMPT
         # Answers name their sources by URL; what a source says stands once in
         # "sources", pooled across answers and comparisons.
         evidence = {"comparisons": [{
@@ -681,10 +695,18 @@ class ComparisonTools:
             "unavailable_answers": len(comparison["failed_models"]) + len(comparison.get("pending_models", [])),
             "answers": [{"text": answer["text"], "sources": [s["url"] for s in answer["sources"] if s.get("url")]}
                         for answer in comparison["answers"]],
-        } for comparison in self.comparisons], "sources": [], "research_sources": agent_sources(self.loop.completion),
-            "supporting_results": self.loop.worker_evidence(),
-            "saved_documents": self.loop.documents.results if getattr(self.loop, "documents", None) else []}
-        evidence["google_results"] = getattr(self.loop, "google_evidence", [])
+        } for comparison in self.comparisons], "sources": []}
+        # The agent's own search only: pages it opened are read_sources, with
+        # their text, and were listed here before as if found by search.
+        research = agent_sources(self.loop.completion, skip_tools={"read_source"})
+        # Only fields with content, each explained (AGENT_ANSWER_EVIDENCE_FIELDS):
+        # empty, unexplained fields left the answer step guessing what they
+        # were (2026-10-12).
+        evidence.update({key: value for key, value in (
+            ("research_sources", research),
+            ("supporting_results", self.loop.worker_evidence()),
+            ("saved_documents", self.loop.documents.results if getattr(self.loop, "documents", None) else []),
+            ("google_results", getattr(self.loop, "google_evidence", []))) if value})
         if watch:
             evidence["prepared_watch"] = watch
         checked = self.checked_text_evidence()
@@ -699,6 +721,25 @@ class ComparisonTools:
             # No model answers to weigh: only what this message really has.
             for key in ("comparisons", "sources", "research_sources"):
                 evidence.pop(key, None)
+        # What the answer may say about the app: only what this turn can do.
+        facts = [AGENT_ANSWER_APP_FACTS, *([AGENT_ANSWER_READ_FACT] if self.reader is not None else []),
+                 *([AGENT_ANSWER_WATCH_FACT] if getattr(self.loop, "watch_tools", None) is not None else [])]
+        turn = AGENT_ANSWER_TURN_PROMPT.format(summary=turn_summary(
+            self.comparisons, research, read, can_read=self.reader is not None, listed=evidence))
+        fields = [sentence for key, sentence in AGENT_ANSWER_EVIDENCE_FIELDS.items() if key in evidence]
+        system = ((AGENT_DIRECT_ANSWER_PROMPT if direct else AGENT_ANSWER_PROMPT) + "\n\n" + " ".join(facts) + "\n\n"
+                  + " ".join([turn, *fields]) + "\n\n"
+                  + get_date_context(config["reference_timezone"])
+                  + f"\nSelected model: {self.loop.model.label} ({self.loop.model.model}).")
+        memory = getattr(self.loop, "memory", None)
+        if memory is not None:
+            from app.services.agent_memory import synthesis_prompt
+            block = synthesis_prompt(memory.snapshot)
+            if block:
+                system += "\n\n" + block
+        if watch:
+            from app.services.agent_watch import SYNTHESIS_PROMPT
+            system += "\n\n" + SYNTHESIS_PROMPT
 
         def messages():
             return [{"role": "system", "content": system}, *conversation,
@@ -1065,12 +1106,19 @@ class ComparisonTools:
                                   comparison_id=cid, file_ids=file_ids, cancellation=child, slots=slots, partial=partial,
                                   search_rounds=rounds)
                 text = value.text.strip()
+                citations, sources = value.citations, transport.to_plain(value.sources or [])
+                # Grounding redirects become their pages before anything sees
+                # them: excerpts, answer step, judges, saved sources.
+                try:
+                    citations, sources = resolve_redirects(value.text, citations, sources)
+                except Exception as exc:
+                    logging.warning("Agent comparison kept grounding redirects category=%s", safe_exception(exc))
                 # Citation offsets index the unstripped text. Recorded before
                 # the answer joins the comparison: the answer step never sees
                 # an answer without its sources' text. Excerpts only enrich a
                 # paid answer; they never cost it.
                 try:
-                    self.source_evidence.record(cid, provider, value.text, value.citations)
+                    self.source_evidence.record(cid, provider, value.text, citations)
                 except Exception as exc:
                     logging.warning("Agent comparison kept an answer without its source excerpts category=%s",
                                     safe_exception(exc))
@@ -1079,7 +1127,7 @@ class ComparisonTools:
                 # Checkpoint each answer while slower peers are still running:
                 # a process loss must not erase already paid evidence.
                 with self.lock:
-                    self._raw[cid][provider] = {"text": text, "sources": transport.to_plain(value.sources or []),
+                    self._raw[cid][provider] = {"text": text, "sources": sources,
                                                 **({"truncated": True} if getattr(value, "truncated", False) else {})}
                     self._rebuild(comparison)
                     self.checkpoint()

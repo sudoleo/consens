@@ -9,6 +9,7 @@ from app.services import agent_source_evidence as evidence
 from app.services.agent_source_evidence import (
     EXCERPT_BUDGET_CHARS, LEAD_EXCERPT_CHARS, MIN_SEARCH_TEXT_CHARS, PooledSource, SourceEvidence,
     answer_citations, cited_claim, source_entries)
+from test_agent_runs import store  # noqa: F401  (fixture)
 
 
 ANSWER = "Prices rose sharply. The tariff is 4.5% since [March 2026](https://example.org/a). It ends in May."
@@ -276,6 +277,88 @@ def test_close_stops_fetches_that_have_not_started():
     settle(sources)
     assert "https://example.org/after" not in pages.calls
     assert len(pages.calls) <= 3  # only the pool's running fetches
+
+
+# Google grounding redirects become their pages when an answer arrives.
+
+GOOGLE = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/"
+RATES = "https://www.ecb.europa.eu/stats/key_ecb_interest_rates/html/index.de.html"
+
+
+@pytest.fixture
+def google_redirects(monkeypatch):
+    """Resolution as in production, against a fixed table instead of Google."""
+    from app.services import agent_read_source, source_redirects
+    targets, asked = {}, []
+    monkeypatch.setattr(source_redirects, "_enabled", lambda: True)
+    monkeypatch.setattr(agent_read_source, "resolve_redirect", lambda url: asked.append(url) or targets.get(url, ""))
+    return targets, asked
+
+
+def test_grounding_redirects_become_their_pages_and_keep_their_claims(google_redirects):
+    targets, _ = google_redirects
+    targets[GOOGLE + "rates"] = RATES  # GOOGLE + "gone" does not resolve
+    # Enough multibyte characters that offsets read as bytes once too often
+    # land in the sentence before.
+    text = ("Der Einlagesatz für Banken: 2,50 %. Ökonomen äußern sich über Größe, Maß und Übergänge – überwiegend "
+            "zufrieden, Bürger süß, Käufer froh. Fazit: stabil.")
+    first, size = len("Der Einlagesatz für Banken: 2,50 %.".encode()), len(text.encode())
+    last = size - len("Fazit: stabil.")
+    citations = [citation(GOOGLE + "rates", start=0, end=first), citation(GOOGLE + "gone", start=last, end=size),
+                 citation(GOOGLE + "rates", start=0, end=first)]
+    sources = [{"url": GOOGLE + "rates", "title": "europa.eu"}, {"url": GOOGLE + "gone", "title": "econmesh.com"},
+               {"url": RATES, "title": "Key ECB interest rates"}]
+    resolved, kept = evidence.resolve_redirects(text, citations, sources)
+    cited = answer_citations(text, resolved)
+    # Google counts bytes: converted before the URL hides where it came from...
+    assert cited[RATES]["claims"] == ["Der Einlagesatz für Banken: 2,50 %."]
+    # ...and only once, also for a redirect that stays.
+    assert cited[GOOGLE + "gone"]["claims"] == ["Fazit: stabil."]
+    # One source per page; a redirect that did not resolve stays, nothing is lost.
+    assert kept == [{"url": RATES, "title": "europa.eu"}, {"url": GOOGLE + "gone", "title": "econmesh.com"}]
+    assert citations[0]["url"] == GOOGLE + "rates" and sources[0]["url"] == GOOGLE + "rates"  # inputs unchanged
+    # All resolved: no redirect host is left to recognise the bytes by.
+    targets[GOOGLE + "gone"] = "https://econmesh.com/zinsen"
+    cited = answer_citations(text, evidence.resolve_redirects(text, citations, sources)[0])
+    assert cited[RATES]["claims"] == ["Der Einlagesatz für Banken: 2,50 %."]
+    assert cited["https://econmesh.com/zinsen"]["claims"] == ["Fazit: stabil."]
+
+
+def test_answers_without_a_resolved_redirect_stay_exactly_as_they_were(google_redirects, monkeypatch):
+    from app.services import source_redirects
+    _, asked = google_redirects
+    citations = [citation("https://example.org/a", end=5), citation(GOOGLE + "gone", end=5)]
+    sources = [{"url": "https://example.org/a", "title": "A"}, {"url": GOOGLE + "gone", "title": "x.org"}]
+    assert evidence.resolve_redirects(ANSWER, citations, sources) == (citations, sources)
+    assert asked == [GOOGLE + "gone"]  # only Google's host is asked, each redirect once
+    assert evidence.resolve_redirects(ANSWER, [], []) == ([], [])
+    calls = []
+    monkeypatch.setattr(source_redirects, "resolve_urls", lambda urls, **kw: calls.append(kw) or {})
+    evidence.resolve_redirects(ANSWER, citations, sources)
+    assert calls == [{"budget_seconds": evidence.REDIRECT_BUDGET_SECONDS}]
+
+    def broken(urls, **kw):
+        raise RuntimeError("resolver down")
+    monkeypatch.setattr(source_redirects, "resolve_urls", broken)
+    assert evidence.resolve_redirects(ANSWER, citations, sources) == (citations, sources)
+
+
+def test_a_comparison_answer_cites_the_page_behind_a_grounding_redirect(store, monkeypatch, google_redirects):
+    from test_agent_web_fetch import Plan, compare, run
+    targets, _ = google_redirects
+    targets[GOOGLE + "rates"] = RATES
+    fetched = []
+    monkeypatch.setattr(evidence, "fetch_document",
+                        lambda url, limits: fetched.append(url) or {"text": long_text("the deposit facility rate")})
+    plan = Plan(steps=[[compare()]], cited=(GOOGLE + "rates", RATES, "https://example.net/other"))
+    _, _, saved = run(store, plan)
+    answers = saved["agent_review"]["comparisons"][0]["answers"]
+    assert answers and all([s["url"] for s in a["sources"]] == [RATES, "https://example.net/other"] for a in answers)
+    assert GOOGLE not in json.dumps(saved["sources"]) and RATES in json.dumps(saved["sources"])
+    # The answer step sees the page, and its text was fetched from the page itself.
+    evidence_message = plan.answer_messages[-1]["content"]
+    assert GOOGLE not in evidence_message and RATES in evidence_message and "deposit facility rate" in evidence_message
+    assert GOOGLE + "rates" not in fetched and RATES in fetched
 
 
 # The real client: citations keep text and position, sources stay small.

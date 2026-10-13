@@ -110,6 +110,8 @@ def test_synthesis_keeps_actual_document_results(setup):
     loop.documents = SimpleNamespace(results=[{"title": "Decision", "files": [{"id": "a" * 32}]}])
     messages = loop.comparison.synthesis_messages(loop.answer_conversation)
     assert '"saved_documents"' in messages[-1]["content"] and '"Decision"' in messages[-1]["content"]
+    from app.services.prompt_defaults import AGENT_ANSWER_EVIDENCE_FIELDS
+    assert AGENT_ANSWER_EVIDENCE_FIELDS["saved_documents"] in messages[0]["content"]
 
 
 def test_chat_deletion_removes_document_versions_and_manifest(setup):

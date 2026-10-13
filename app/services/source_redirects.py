@@ -55,11 +55,12 @@ def _enabled() -> bool:
     return not any(os.getenv(key) == "1" for key in ("UNIT_TEST_MODE", "E2E_TEST_MODE"))
 
 
-def resolve_urls(urls, *, fetch=None) -> dict[str, str]:
+def resolve_urls(urls, *, fetch=None, budget_seconds=BUDGET_SECONDS) -> dict[str, str]:
     """{Weiterleitung: Ziel} für die auflösbaren Weiterleitungen in ``urls``.
 
     ``fetch(url) -> Ziel oder ""`` ersetzt den Netzabruf in Tests; ohne ihn
-    passiert in Unit-/E2E-/Mock-Läufen nichts.
+    passiert in Unit-/E2E-/Mock-Läufen nichts. ``budget_seconds`` begrenzt
+    die Wartezeit insgesamt (Agent-Vergleich: kürzer als die Watch-Prüfung).
     """
     pending = list(dict.fromkeys(str(url) for url in urls or [] if is_redirect(url)))[:MAX_URLS]
     if not pending or (fetch is None and not _enabled()):
@@ -81,7 +82,7 @@ def resolve_urls(urls, *, fetch=None) -> dict[str, str]:
     pool = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="source-redirect")
     try:
         futures = [pool.submit(run, url) for url in pending]
-        wait(futures, timeout=max(0.0, BUDGET_SECONDS - (time.monotonic() - started)))
+        wait(futures, timeout=max(0.0, budget_seconds - (time.monotonic() - started)))
     finally:
         # Nicht auf Nachzügler warten: das Budget gilt für die Prüfung.
         pool.shutdown(wait=False, cancel_futures=True)

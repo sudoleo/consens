@@ -2875,6 +2875,14 @@ Seit 2026-10-11 folgt dem Antwort-Prompt `AGENT_ANSWER_APP_FACTS` plus, nur wenn
 der Turn es kann, `AGENT_ANSWER_READ_FACT` (`read_source`) und
 `AGENT_ANSWER_WATCH_FACT` (Watch-Tool): Fakten über die App, damit die Antwort
 nicht behauptet, consens.io könne weder Quellen lesen noch erinnern.
+Seit 2026-10-13 folgt `AGENT_ANSWER_TURN_PROMPT` mit `turn_summary`: Die
+Antwort ist der letzte Schritt desselben Agenten. Gezählt wird, was er in
+dieser Nachricht tat (Vergleiche/Antworten/fehlende Modelle, Treffer der
+eigenen Websuche, gelesene Seiten). Dazu kommt je gesendetem Zusatzfeld ein
+Satz aus `AGENT_ANSWER_EVIDENCE_FIELDS`. `research_sources`,
+`supporting_results`, `saved_documents` und `google_results` stehen nur mit
+Inhalt in der Evidenz (agent-mode.md, „Was der Antwortschritt über seine eigene
+Nachricht weiß“).
 Seit 2026-10-10 nennen die Antworten im Evidenzblock ihre Quellen nur per URL;
 `sources` führt jede zitierte Quelle einmal mit `cited_by`, `supports`
 (gestützte Antwortsätze) und `excerpt` (Originalauszug), gebaut von
@@ -5900,7 +5908,7 @@ app/services/
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompts für Orchestrator/Antwortschritt; startet nie eine Watch
-  agent_source_evidence.py   Quellenauszüge für den Agent-Antwortschritt: Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
+  agent_source_evidence.py   Quellenauszüge für den Agent-Antwortschritt: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Evidenz read_sources für Antwortschritt, Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
@@ -5938,7 +5946,7 @@ app/services/
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten; auf Watch-Seiten Namen der Quellen als Links + ausgehende Links mit Favicon (`site_links`)
   source_links.py            Watch-Seiten: Direktlinks über der Antwort (`key_links`) und Nennungen der Quellen im Text (`site_mentions`); kompakt fürs Dashboard (`card_links`); Navigation, kein Beleg
-  source_redirects.py        Google-Grounding-Weiterleitungen beim Speichern einer Watch-Prüfung durch ihr Ziel ersetzen (paralleles `agent_read_source.resolve_redirect`, 10-s-Budget)
+  source_redirects.py        Google-Grounding-Weiterleitungen durch ihr Ziel ersetzen: beim Speichern einer Watch-Prüfung (10-s-Budget) und für jede Agent-Vergleichsantwort (agent_source_evidence.resolve_redirects, 3 s); paralleles `agent_read_source.resolve_redirect`
   topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
   topic_runner.py            Leased Topic-Research/Consensus-Runs, automatische Evidence/Meinungsänderungen + Intervall-Scheduler
   topic_pipeline.py          Topic-spezifische Projektion auf die neutrale Consensus-Pipeline

@@ -174,6 +174,12 @@ def test_reads_a_cited_page_after_the_comparison_and_keeps_it_as_evidence(store,
     assert evidence["read_sources"] == [{"url": CITED, "title": "Report", "read_for": "The monthly price of option one",
                                          "text": PAGE, "text_cut": False, "retrieved_at": read["retrieved_at"],
                                          "cited_by": [c["label"] for c in read["cited_by"]]}]
+    # A page it opened is no result of its own web search (listed there until 2026-10-13).
+    assert "research_sources" not in evidence
+    assert ("its own web search contributed no source and it opened 1 page (read_sources)."
+            in plan.answer_messages[0]["content"])
+    # The turn's saved sources keep the page.
+    assert CITED in json.dumps(saved["sources"])
     [result] = results(loop)
     assert result["status"] == "completed" and result["untrusted_page_text"] == PAGE
     # The warning comes before the page text, not after 24,000 characters of it.
@@ -269,6 +275,8 @@ def test_prompt_explains_reading_only_when_on(store, enabled):
     assert "an earlier message of this chat (the links in earlier answers), or a page the user linked" in content
     for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
         assert AGENT_SYSTEM_PROMPT.count(old) == 1 and old not in content and new in content
+    # Length and form are the answer step's business, never the comparison models'.
+    assert "Leave out how long or in what form the reply should be" in content
     # The answer step may quote what was read, and must not claim a failed read.
     assert "read_sources" in AGENT_ANSWER_PROMPT and '"not read"' in AGENT_ANSWER_PROMPT
 
@@ -376,6 +384,8 @@ def test_reads_a_source_of_an_earlier_message_but_never_a_link_only_in_answer_te
     # The answer step knows that the app reads pages (it denied it before).
     system = plan.answer_messages[0]["content"]
     assert AGENT_ANSWER_APP_FACTS in system and AGENT_ANSWER_READ_FACT in system
+    # ...and that its own earlier step opened one and was refused another.
+    assert "and it opened 1 page (read_sources)." in system
 
 
 def test_reads_a_page_the_user_linked(store, monkeypatch, enabled):

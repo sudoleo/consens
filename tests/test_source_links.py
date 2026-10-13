@@ -171,6 +171,20 @@ class RedirectTests(unittest.TestCase):
         # Without a test fetch nothing goes out in unit tests.
         self.assertEqual(source_redirects.resolve_urls([REDIRECT + "b"]), {})
 
+    def test_the_budget_bounds_the_wait_for_slow_redirects(self):
+        import threading
+        import time
+        from app.services import source_redirects
+
+        gate = threading.Event()
+        started = time.monotonic()
+        try:
+            self.assertEqual(source_redirects.resolve_urls(
+                [REDIRECT + "slow"], fetch=lambda url: gate.wait(5) and "https://x.de/a", budget_seconds=0.2), {})
+            self.assertLess(time.monotonic() - started, 2)
+        finally:
+            gate.set()
+
     def test_nested_evidence_is_rewritten_too(self):
         from app.services import source_redirects
 
