@@ -184,7 +184,8 @@ body.is-hero .consensus-section { display: none; }
   padding-bottom: 50px;
   position: relative;
   box-shadow: var(--card-shadow);
-  transition: border-color var(--dur-layer), box-shadow var(--dur-layer), background-color var(--dur-layer);
+  transition: border-color var(--dur-layer), box-shadow var(--dur-layer), background-color var(--dur-layer),
+    border-radius var(--dur-state) var(--ease-out);
   backdrop-filter: blur(calc(var(--glass-blur) * 0.74)) saturate(1.2);
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.74)) saturate(1.2);
   overflow: hidden;

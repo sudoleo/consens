@@ -845,6 +845,9 @@ body.direct-comparison-active:not(:has(#watchDashboard:not([hidden]))) .view-swi
    The composer shares the app surface hue with its own translucent finish.
    -------------------------------------------------------------------------- */
 :root {
+  /* A one-line composer is a pill: 1px edge + 6px padding + half of the
+     36px round controls, so its ends are concentric with (+) and Send. */
+  --composer-pill-radius: 25px;
   --composer-surface: rgba(245, 245, 245, 0.96);
   --composer-edge: rgba(34, 36, 40, 0.09);
   --composer-shadow: 0 2px 6px rgba(28, 30, 33, 0.04), 0 8px 28px rgba(28, 30, 33, 0.08);
@@ -2748,6 +2751,7 @@ body:not(.is-hero) .input-section {
     transition:
       margin var(--dur-state) var(--ease-out),
       padding var(--dur-state) var(--ease-out),
+      border-radius var(--dur-state) var(--ease-out),
       box-shadow var(--dur-layer),
       background-color var(--dur-layer);
   }
@@ -4385,7 +4389,12 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
   text-decoration: none;
 }
 
-/* Mobile navigation has its own opaque surface above the reading area.
+/* Mobile navigation: no bar, two islands. The menu is a round button on the
+   left, the thread's actions a pill on the right; both wear the composer's
+   material (surface, 1px edge, shadow), so top and bottom read as one
+   system. Between them the thread stays visible. Once something scrolls
+   beneath, the ground dissolves it over the top of the screen, the same way
+   the composer's halo does at the bottom: tone, no blur.
    The existing scroll controller hides/reveals the entire header together. */
 @media (max-width: 1099px) {
   body:has(.app-mobile-header) { --app-mobile-header-height: calc(56px + env(safe-area-inset-top, 0px)); }
@@ -4400,16 +4409,34 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
     box-sizing: border-box;
     height: var(--app-mobile-header-height);
     padding: calc(5px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 6px max(12px, env(safe-area-inset-left, 0px));
-    background: var(--ground);
-    /* The edge only appears once something scrolls beneath it
-       (mobile-header.js sets .is-scrolled); on an empty start screen a
-       line would divide nothing from nothing. */
+    background: transparent;
     border-bottom: 1px solid transparent;
-    transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s linear 0s,
-      border-bottom-color var(--dur-state) var(--ease-standard);
+    /* The strip between the islands belongs to the thread: a tap there
+       reaches the text beneath, only the islands take it. */
+    pointer-events: none;
+    transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s linear 0s;
   }
 
-  .app-mobile-header.is-scrolled { border-bottom-color: var(--line-soft); }
+  .app-mobile-header > * { pointer-events: auto; }
+
+  /* The fade appears only once something scrolls beneath it
+     (mobile-header.js sets .is-scrolled); on an empty start screen it would
+     dissolve nothing into nothing. Solid under the status bar, then gone
+     28px below the islands. */
+  .app-mobile-header::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 -28px;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--ground);
+    -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(env(safe-area-inset-top, 0px) + 24px), transparent 100%);
+    mask-image: linear-gradient(180deg, #000 0, #000 calc(env(safe-area-inset-top, 0px) + 24px), transparent 100%);
+    opacity: 0;
+    transition: opacity var(--dur-state) var(--ease-standard);
+  }
+
+  .app-mobile-header.is-scrolled::before { opacity: 1; }
 
   .app-mobile-header .app-nav-float,
   body:has(.sidebar.collapsed) .app-mobile-header .app-nav-float {
@@ -4419,13 +4446,18 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
     transition: none;
   }
 
+  /* The edge is a ring, not a border, so the touch target stays 44px. */
   .app-mobile-header .sidebar-toggle {
+    position: relative;
     width: 44px;
     height: 44px;
     flex: 0 0 44px;
     padding: 0;
     color: var(--ink);
-    border-radius: var(--radius-xs);
+    border: 0;
+    border-radius: 50%;
+    background: var(--composer-surface);
+    box-shadow: 0 0 0 1px var(--composer-edge), var(--composer-shadow);
   }
 
   .app-mobile-header .sidebar-toggle:focus-visible {
@@ -4433,12 +4465,27 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
     outline-offset: -3px;
   }
 
-  /* Every icon in the bar is one kind of control: the same ink, the same
-     22px glyph, the same flat fill on hover. The desktop float's glassy lift
-     would stick to a tapped button on a touch screen. */
+  /* Every icon on the islands is one kind of control: the same ink, the same
+     22px glyph, the same tone on hover. */
   .app-mobile-header .sidebar-toggle:hover {
-    background: var(--raise);
-    box-shadow: none;
+    background: var(--app-surface-hover);
+    box-shadow: 0 0 0 1px var(--composer-edge), var(--composer-shadow);
+  }
+
+  /* Watches lives in the menu on a phone. Until it has been opened once, the
+     discovery hint that marks it on desktop marks the menu instead: a still
+     green point, the Watches colour, where the way to it starts. */
+  body:has(#viewSwitchWatches.has-watch-pulse) .app-mobile-header .sidebar-toggle::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--agree);
+    box-shadow: 0 0 0 2px var(--composer-surface);
+    pointer-events: none;
   }
 
   .app-mobile-header .view-switch {
@@ -4498,7 +4545,13 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
 
   body:has(.watch-page:not([hidden])) .app-mobile-header .app-nav-float { display: flex; }
 
-  .mobile-conversation-actions { display: flex; align-items: center; gap: 0; order: 4; margin-inline-start: auto; }
+  /* The right island: New chat, then the answer's actions, in one pill. With
+     only New chat in it (start screen) it is as round as the menu. */
+  .mobile-conversation-actions {
+    display: flex; align-items: center; gap: 0; order: 4; margin-inline-start: auto;
+    border-radius: var(--radius-pill); background: var(--composer-surface);
+    box-shadow: 0 0 0 1px var(--composer-edge), var(--composer-shadow);
+  }
   .app-mobile-header .auth-top-actions { margin-inline-start: auto; }
   .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions { margin-inline-start: 0; }
   .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions .mobile-new-run,
@@ -4506,21 +4559,36 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
   .app-mobile-header .consensus-footer-actions { display: inline-flex; margin: 0; }
   .app-mobile-header .consensus-footer-actions[hidden] { display: none; }
   .app-mobile-header .consensus-copy-inline { gap: 0; flex-wrap: nowrap; }
+  /* Share is in the ... menu here (consensus-actions.js adds the row); the
+     island keeps New chat, Watch and the menu. */
+  .app-mobile-header #consensusShareButton { display: none; }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) {
     display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px;
     width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0;
-    border-radius: var(--radius-xs); background: transparent; color: var(--ink); cursor: pointer;
+    border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer;
   }
-  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--raise); }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--app-surface-hover); }
+  .app-mobile-header .consensus-actions-wrapper.open .consensus-actions-toggle { background: var(--app-surface-hover); }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 22px; height: 22px; flex: 0 0 22px; }
   .app-mobile-header :is(.consensus-share-pill, .consensus-actions-toggle) > span { display: none; }
-  /* A tap leaves :hover behind on touch screens; no fill may stick to it. */
+  /* In the island the toggle opens more than citations: three dots. */
+  .app-mobile-header .consensus-actions-toggle .quote-toggle-icon { display: none; }
+  .app-mobile-header .consensus-actions-toggle .more-toggle-icon { display: block; }
+  /* A tap leaves :hover behind on touch screens; no fill may stick to it.
+     The menu island keeps its own surface. */
   @media (hover: none) {
-    .app-mobile-header :is(.sidebar-toggle, .mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover {
+    .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover {
       background: transparent;
     }
+    .app-mobile-header .sidebar-toggle:hover { background: var(--composer-surface); }
   }
+
+  .consensus-actions-menu .consensus-copy-icon-btn.consensus-menu-share { display: flex; }
+
+  /* Popovers anchored to the islands open over the fade beneath them. */
+  .consensus-actions-menu,
+  .watch-feature-nudge { z-index: calc(var(--z-header) + 1); }
 
   .sidebar-pinned { margin-top: 0; }
   .mobile-sidebar-views { display: block; margin-bottom: 8px; }
@@ -4551,7 +4619,9 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
   #mobileSidebarViews .view-switch-btn:focus-visible {
     outline: var(--focus-ring); outline-offset: -3px;
   }
-  #mobileSidebarViews .view-switch-btn.has-watch-pulse::after { display: none; }
+  /* The discovery hint stays still here: it is the end of the way the dot
+     on the menu island points to, and it leaves once Watches is opened. */
+  #mobileSidebarViews .view-switch-btn.has-watch-pulse::after { animation: none; }
 
   body:has(.app-mobile-header) .container {
     padding-top: calc(var(--app-mobile-header-height) + 12px);

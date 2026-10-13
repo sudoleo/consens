@@ -8,13 +8,13 @@
      (hero, or the Compare       [ (+) ]                      [ models ] [ Demo Send ]
      start with its empty cards)
 
-     desktop thread, one line    [ (+) ][ field ............. ][ models ] [ Demo Send ]
+     desktop thread, one line    ( (+) ][ field ............. ][ models ] [ Demo Send )  a pill
      (field grows to two rows)   → same as the start screen
 
      phones, expanded            [ field ........................ ]
                                  [ (+) ][ models ]     [ Demo Send ]
 
-     phones, collapsed           [ (+) ][ field ........ ][ Send ]
+     phones, collapsed           ( (+) ][ field ........ ][ Send )  a pill
 
    (+) is always the first control on the left, Send always last on the
    right; nothing changes sides between states or modes. The mode is the
@@ -187,8 +187,14 @@
   body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) .composer-models { margin-left: 0; }
   body:not(.is-hero, .direct-comparison-preview) .chat-input-container {
     align-items: center;
-    padding: 6px 8px;
+    padding: 6px;
     margin: 0;
+  }
+  /* One line is a pill, as on a phone: its ends run concentric with (+) and
+     Send (1px edge + 6px + 18px = 25px). A second line returns the 20px box
+     the start screen has. A docked bar under the box needs its corners. */
+  body:not(.is-hero, .direct-comparison-preview) .input-section:not(:has(> .composer-mode-bar:not([hidden]))) > .chat-input-container:not(.is-multiline) {
+    border-radius: var(--composer-pill-radius);
   }
   /* In a chat the Agent picker yields width to the question. */
   body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
@@ -232,8 +238,14 @@
 @media (max-width: 1099px) {
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container {
     align-items: center;
-    padding: 6px 8px;
+    padding: 6px;
     margin: 0;
+  }
+  /* Collapsed it is a pill, the same material as the islands at the top.
+     Files or a quote above the row keep the same ends: the radius is that
+     of the row, so a taller box stays a rounded box, not a stadium. */
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .input-section:not(:has(> .composer-mode-bar:not([hidden]))) > .chat-input-container {
+    border-radius: var(--composer-pill-radius);
   }
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > :is(.composer-run-notice, .agent-google-chips),
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .composer-models,

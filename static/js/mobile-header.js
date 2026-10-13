@@ -38,6 +38,14 @@
       || output.classList.contains('is-hidden') || (watch && !watch.hidden)
       || !document.getElementById('consensusAnswerBody')?.textContent.trim());
     const movedActions = place(actions, mobile ? header : homes.get(actions).parentElement);
+    // In the island the toggle draws three dots and its menu also shares;
+    // in the footer it is the "Cite" button beside its own Share.
+    const toggle = actions.querySelector('.consensus-actions-toggle');
+    if (toggle) {
+      const label = mobile ? 'Share, copy and cite' : 'Citation and copy options';
+      toggle.setAttribute('aria-label', label);
+      toggle.title = label;
+    }
     const movedViews = place(views, mobile ? sidebarViews : homes.get(views).parentElement);
     if (movedViews && focusedView && mobile) document.getElementById('toggleSidebarButton')?.focus({preventScroll:true});
     else if ((movedActions && focusedAction && !actions.hidden) || (movedViews && focusedView)) focused.focus({preventScroll:true});

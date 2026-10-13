@@ -241,6 +241,31 @@
       copyText(citation, "Citation copied to clipboard.", "citation");
     });
 
+    // On a phone the share button has no room in the header island; the
+    // menu lists it first (shown by CSS there only) and hands the click to
+    // the real button, so login checks and the dialog stay in one place.
+    // Focus goes to the toggle first: the dialog returns it there on close.
+    const shareItemBtn = document.createElement("button");
+    shareItemBtn.type = "button";
+    shareItemBtn.className = "consensus-copy-icon-btn consensus-menu-share";
+    shareItemBtn.setAttribute("role", "menuitem");
+    shareItemBtn.innerHTML = `
+      <svg class="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 15V4"></path>
+        <path d="M8.5 7.5 12 4l3.5 3.5"></path>
+        <path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"></path>
+      </svg>
+      <span class="copy-label">Share publicly</span>
+    `;
+    shareItemBtn.title = "Share this consensus as a public page";
+    shareItemBtn.addEventListener("click", () => {
+      const toggle = document.querySelector(".consensus-actions-toggle[aria-expanded='true']");
+      closeConsensusActionsMenu();
+      toggle?.focus({ preventScroll: true });
+      document.getElementById("consensusShareButton")?.click();
+    });
+
+    menu.appendChild(shareItemBtn);
     menu.appendChild(copyAnswerBtn);
     menu.appendChild(copyCitationBtn);
     document.body.appendChild(menu);
@@ -302,6 +327,11 @@
     toggleBtn.innerHTML = `
       <svg class="quote-toggle-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"></path>
+      </svg>
+      <svg class="more-toggle-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <circle cx="5.5" cy="12" r="1.6"></circle>
+        <circle cx="12" cy="12" r="1.6"></circle>
+        <circle cx="18.5" cy="12" r="1.6"></circle>
       </svg>
       <span>Cite</span>
     `;

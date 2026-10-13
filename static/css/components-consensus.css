@@ -1027,6 +1027,18 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   flex: 0 0 auto;
 }
 
+/* The mobile island shows three dots instead (shell.css); the footer keeps
+   the quote mark beside "Cite". */
+.consensus-actions-toggle .more-toggle-icon {
+  display: none;
+}
+
+/* Share has its own button in the footer; only the mobile island, which
+   has no room for it, lists it in the menu (shell.css shows the row). */
+.consensus-actions-menu .consensus-copy-icon-btn.consensus-menu-share {
+  display: none;
+}
+
 .consensus-actions-menu {
   position: fixed;
   top: 0;

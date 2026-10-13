@@ -855,15 +855,29 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Aufwärtsscrollen, Seitenanfang und Tastatur-Navigation blenden sie wieder ein.
   Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
   verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
-- **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px links
-  das Menü und rechts angemeldet New chat sowie Share/Watch/Cite für die fertige Antwort.
+- **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px seit
+  2026-10-13 keine Leiste mehr, sondern zwei schwebende Inseln im Material des
+  Composers (`--composer-surface`, 1-px-Ring `--composer-edge`,
+  `--composer-shadow`): links das Menü als runder 44-px-Knopf, rechts eine Pille
+  mit New chat und, für die fertige Antwort, Watch und „…“. Share steht mobil
+  nicht als Icon in der Pille, sondern als erste Zeile „Share publicly“ im
+  „…“-Menü (`.consensus-menu-share` aus `consensus-actions.js`, nur ≤1099 px
+  sichtbar; sie fokussiert den Toggle und klickt den echten `#consensusShareButton`,
+  damit der Dialog den Fokus dorthin zurückgibt). Der Toggle zeigt in der Insel
+  drei Punkte statt des Zitatzeichens und heißt dort „Share, copy and cite“
+  (`mobile-header.js`), im Desktop-Footer weiter „Citation and copy options“.
   Auf dem Startbildschirm (`body.is-hero`) steht neben dem Menü die Marke
   (`.brand-float`, Logo + „consens.io“, 44 px Touchfläche; ≤359 px neben
   Log in/Sign up nur das Logo), im Thread gehört der Platz den Aktionen; ein
-  mittlerer Titel entfällt. Die deckende Fläche ist 56 px hoch mit
-  Safe-Area-Zuschlag; ihre feine Unterkante erscheint erst, wenn darunter
-  gescrollt ist (`.is-scrolled` aus `mobile-header.js`, Window- oder
-  Watch-Scroll). Alle Icons teilen Tinte (`--ink`), 22-px-Glyphen und
+  mittlerer Titel entfällt. Der Kopf ist 56 px hoch mit Safe-Area-Zuschlag,
+  selbst transparent und `pointer-events: none` (nur die Inseln nehmen Taps);
+  sobald darunter gescrollt ist (`.is-scrolled` aus `mobile-header.js`, Window-
+  oder Watch-Scroll), löst ein `--ground`-Verlauf (`::before`, 28 px unter die
+  Inseln) den Text auf, ohne Blur. Popover an den Inseln (`.consensus-actions-menu`,
+  `.watch-feature-nudge`) liegen darüber. Der einmalige Watches-Hinweis
+  (`#viewSwitchWatches.has-watch-pulse`) erscheint mobil als ruhiger grüner Punkt
+  am Menü-Knopf und am Watches-Reiter der Sidebar, bis Watches geöffnet wurde.
+  Alle Icons teilen Tinte (`--ink`), 22-px-Glyphen und
   44 × 44 px Touchflächen; auf Touch-Geräten bleibt keine Hover-Fläche stehen.
   `mobile-header.js` lädt nach `consensus-actions.js` und `watch.js` und verschiebt
   dieselben `#consensusFooterActions`-DOM-Knoten nach `#mobileConversationActions`,
@@ -950,7 +964,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   und den Startseiten-View-Switch im verbleibenden Bereich rechts der Navigation;
   eingeklappt und im mobilen Overlay-Modus gilt die Viewport-Mitte. Der mobile
   fixierte Composer verwendet dieselbe Breite wie der Spalteninhalt; mobil
-  stehen Menü und im Gespräch die Wortmarke in der deckenden Kopfleiste. Gast-Login/-Sign-up
+  stehen Menü und auf dem Startbildschirm die Wortmarke als schwebende Inseln oben. Gast-Login/-Sign-up
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind seit
   2026-08-17 **Reiter statt einer langen Bahn**: `.settings-layout` trägt links
@@ -4761,7 +4775,12 @@ Chat = eine Zeile [(+)][Feld][Modelle][Senden], ab der zweiten Textzeile
 unter dem Feld EINE Zeile [(+)][Modelle … ][Senden], der Chip nimmt den
 freien Platz und kürzt einen langen Modellnamen per Ellipse; Handy
 eingeklappt = [(+)][Feld][Senden], Anhänge
-und Zitat bleiben darüber sichtbar. (+) steht nie woanders, Senden
+und Zitat bleiben darüber sichtbar. Einzeilig ist der Thread-Composer seit
+2026-10-13 eine Pille (`--composer-pill-radius: 25px` = Rand + 6 px Padding +
+halber 36-px-Knopf, also konzentrisch zu (+) und Senden): Handy eingeklappt
+und Desktop ohne `.is-multiline`; aufgeklappt, mehrzeilig, auf dem
+Startbildschirm und mit sichtbarer Modusleiste bleibt die 20-px-Box. Der
+Radius wechselt mit der Auf-/Zuklapp-Bewegung. (+) steht nie woanders, Senden
 immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
 Chevron). Das (+)-Menü `#attachMenu` hat seit
 2026-10-02 eine Zeilenanatomie (`composer.css`, „The (+) menu“): 16-px-Icon ·

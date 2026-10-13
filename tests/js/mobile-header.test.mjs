@@ -12,7 +12,7 @@ function boot(mobile = true) {
       <div id="mobileConversationActions"><button id="mobileNewRunButton"></button></div></header>
       <aside class="sidebar"><button id="newRunButton"></button><button id="sidebarToggleInner"></button><div id="mobileSidebarViews"></div></aside>
       <section id="consensusOutput"><div id="consensusAnswerBody">A completed answer.</div>
-        <footer id="runProvenance"><span id="before"></span><span id="consensusFooterActions"><button id="action">Share</button></span><span id="after"></span></footer></section>
+        <footer id="runProvenance"><span id="before"></span><span id="consensusFooterActions"><button id="action">Share</button><button class="consensus-actions-toggle" aria-label="Citation and copy options"></button></span><span id="after"></span></footer></section>
       <div id="watchDashboard" hidden></div>`,
     before(window) { window.matchMedia = () => media; }
   });
@@ -53,6 +53,16 @@ describe('mobile action placement', () => {
     expect(actions.hidden).toBe(true);
     document.getElementById('watchDashboard').hidden=true;await Promise.resolve();
     expect(actions.hidden).toBe(false);
+  });
+  it('names the menu toggle for what it opens in the island and in the footer', () => {
+    const {document, resize}=boot(false);
+    const toggle=document.querySelector('.consensus-actions-toggle');
+    expect(toggle.getAttribute('aria-label')).toBe('Citation and copy options');
+    resize(true);
+    expect(toggle.getAttribute('aria-label')).toBe('Share, copy and cite');
+    expect(toggle.title).toBe('Share, copy and cite');
+    resize(false);
+    expect(toggle.getAttribute('aria-label')).toBe('Citation and copy options');
   });
   it('uses the existing new-comparison action and closes the sidebar after switching views', () => {
     const {document}=boot();

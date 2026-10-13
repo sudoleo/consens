@@ -22,8 +22,11 @@ def seed_long_answer(page):
     }""")
 
 
+COMPOSER_SURFACE = {'light': 'rgba(245, 245, 245, 0.96)', 'dark': 'rgba(48, 51, 56, 0.96)'}
+
+
 @pytest.mark.parametrize('width,theme', [(320, 'light'), (390, 'dark'), (768, 'light'), (1099, 'dark')])
-def test_mobile_menu_has_opaque_header_and_yields_while_reading(browser, phase4_server, width, theme):
+def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, phase4_server, width, theme):
     context, page = _real_firebase_page(browser, phase4_server,
         init_script=f"localStorage.setItem('theme','{theme}')")
     try:
@@ -36,28 +39,50 @@ def test_mobile_menu_has_opaque_header_and_yields_while_reading(browser, phase4_
         assert menu.bounding_box()['width'] >= 44
         assert menu.bounding_box()['height'] >= 44
         assert header.bounding_box()['height'] == 56
-        expect(header).to_have_css('background-color', 'rgb(25, 26, 28)' if theme == 'dark' else 'rgb(250, 250, 250)')
+        # No bar: the menu and the actions are islands in the composer's
+        # material, the strip between them belongs to the thread.
+        expect(header).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
+        islands = page.locator('#toggleSidebarButton, #mobileConversationActions')
+        for island in islands.all():
+            expect(island).to_have_css('background-color', COMPOSER_SURFACE[theme])
+        expect(menu).to_have_css('border-top-left-radius', '50%')
+        expect(page.locator('#mobileConversationActions')).to_have_css('border-top-left-radius', '999px')
         expect(header.locator('.brand-float')).to_be_hidden()
         expect(header.locator('#mobileNewRunButton')).to_be_visible()
         expect(header.locator('#mobileNewRunButton')).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         assert header.locator('#mobileNewRunButton svg').bounding_box()['width']>=20
-        expect(header.locator('#consensusShareButton')).to_be_visible()
+        # Share moved into the ... menu; New chat, Watch and the menu stay.
+        expect(header.locator('#consensusShareButton')).to_be_hidden()
         expect(header.locator('#consensusWatchButton')).to_be_visible()
-        expect(header.locator('.consensus-actions-toggle')).to_be_visible()
+        toggle = header.locator('.consensus-actions-toggle')
+        expect(toggle).to_be_visible()
+        expect(toggle).to_have_attribute('aria-label', 'Share, copy and cite')
+        expect(toggle.locator('.more-toggle-icon')).to_be_visible()
+        expect(toggle.locator('.quote-toggle-icon')).to_be_hidden()
         expect(page.locator('#runProvenance .consensus-footer-actions')).to_have_count(0)
+        assert page.evaluate('() => !document.querySelector(".app-mobile-header").contains(document.elementFromPoint(innerWidth / 2 - 30, 28))')
         buttons=header.locator('button:visible').all()
         bounds=[button.bounding_box() for button in buttons]
-        assert len(bounds)==5
+        assert len(bounds)==4
         assert all(box['width']>=44 and box['height']>=44 for box in bounds)
         assert all(a['x']+a['width']<=b['x']+.5 for a,b in zip(bounds,bounds[1:]))
         assert bounds[-1]['x']+bounds[-1]['width']<=width
         assert page.locator('.thread-history-turn').first.bounding_box()['y'] >= header.bounding_box()['height']
+        # The collapsed composer is a pill of the same material.
+        page.wait_for_function("() => document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
+        composer = page.locator('.chat-input-container')
+        expect(composer).to_have_css('border-top-left-radius', '25px')
+        expect(composer).to_have_css('background-color', COMPOSER_SURFACE[theme])
+        assert composer.bounding_box()['height'] <= 52
 
+        fade = "() => getComputedStyle(document.querySelector('.app-mobile-header'), '::before').opacity"
+        assert page.evaluate(fade) == '0'
         page.evaluate('window.scrollTo(0, 900)')
         expect(header).to_be_hidden()
         page.evaluate('window.scrollBy(0, -100)')
         expect(menu).to_be_visible()
         page.wait_for_function('() => Math.abs(document.querySelector(".app-mobile-header").getBoundingClientRect().top) < 1')
+        page.wait_for_function(f"() => ({fade})() === '1'")
         assert menu.evaluate('el => {const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         reader_screenshot(page, f'mobile-header-reading-{width}-{theme}')
@@ -109,7 +134,8 @@ def test_guest_navigation_fits_and_auth_dialogs_open(browser, phase4_server, wid
         assert all(item['height'] >= 44 and item['width'] >= 44 for item in bounds)
         reader_screenshot(page, f'mobile-header-guest-{width}')
         seed_insights(page)
-        expect(header.locator('#consensusShareButton')).to_be_visible()
+        expect(header.locator('#consensusShareButton')).to_be_hidden()
+        expect(header.locator('.consensus-actions-toggle')).to_be_visible()
         expect(auth).to_be_visible()
         bounds=[button.bounding_box() for button in header.locator('button:visible').all()]
         assert all(a['x']+a['width']<=b['x']+.5 for a,b in zip(bounds,bounds[1:]))
@@ -212,6 +238,59 @@ def test_touch_fields_are_large_enough_that_ios_does_not_zoom(browser, phase4_se
         context.close()
 
 
+def test_menu_island_carries_the_watches_hint_until_watches_opens(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server,
+        init_script="localStorage.setItem('theme','light');localStorage.setItem('consensio.watchViewSwitchHint.seen.v1','true')")
+    try:
+        page.set_viewport_size({'width': 390, 'height': 820})
+        dot = "() => getComputedStyle(document.getElementById('toggleSidebarButton'), '::after').content"
+        assert page.evaluate(dot) == 'none'
+        page.evaluate("document.getElementById('viewSwitchWatches').classList.add('has-watch-pulse')")
+        assert page.evaluate(dot) != 'none'
+        assert page.evaluate("getComputedStyle(document.getElementById('toggleSidebarButton'), '::after').backgroundColor") \
+            == 'rgb(40, 125, 104)'
+        page.locator('#toggleSidebarButton').click()
+        expect(page.locator('#mobileSidebarViews #viewSwitchWatches')).to_be_visible()
+        assert page.evaluate("getComputedStyle(document.getElementById('viewSwitchWatches'), '::after').content") != 'none'
+        reader_screenshot(page, 'mobile-sidebar-watches-hint')
+        page.locator('#viewSwitchWatches').click()
+        expect(page.locator('#watchDashboard')).to_be_visible()
+        assert page.evaluate(dot) == 'none'
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_one_line_thread_composer_is_a_pill(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width': width, 'height': 820})
+        composer = page.locator('.chat-input-container')
+        # The start screen keeps its box.
+        expect(composer).to_have_css('border-top-left-radius', '20px')
+        seed_long_answer(page)
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        expect(composer).to_have_css('border-top-left-radius', '25px')
+        page.wait_for_function("() => !document.getAnimations().some(animation => animation.playState === 'running')")
+        box = composer.bounding_box()
+        attach = page.locator('#attachTrigger').bounding_box()
+        # Its ends are concentric with (+): the same 7px all round.
+        assert abs((attach['x'] - box['x']) - (attach['y'] - box['y'])) <= 1
+        assert box['height'] <= 52
+        reader_screenshot(page, f'thread-composer-pill-{width}')
+        if width >= 1100:
+            page.locator('#questionInput').fill('first line\nsecond line\nthird line')
+            expect(composer).to_have_class(re.compile(r'\bis-multiline\b'))
+            expect(composer).to_have_css('border-top-left-radius', '20px')
+        else:
+            page.locator('#questionInput').click()
+            expect(page.locator('body')).not_to_have_class(re.compile(r'\bcomposer-collapsed\b'))
+            page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+            expect(composer).to_have_css('border-top-left-radius', '20px')
+    finally:
+        context.close()
+
+
 def test_desktop_sidebar_controls_keep_their_original_layout(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:
@@ -235,33 +314,50 @@ def test_mobile_actions_keep_dialogs_focus_and_new_chat_behavior(browser, phase4
         page.set_viewport_size({'width':390,'height':820})
         seed_insights(page)
         header=page.locator('.app-mobile-header')
-        share=header.locator('#consensusShareButton')
-        share.click()
+        cite=header.locator('.consensus-actions-toggle')
+        menu=page.locator('#consensusActionsMenuGlobal')
+        expect(header.locator('#consensusShareButton')).to_be_hidden()
+        # Share lives in the ... menu and opens the same dialog; focus comes
+        # back to the toggle the way it went.
+        cite.click()
+        share_item=menu.get_by_role('menuitem', name='Share publicly')
+        expect(share_item).to_be_visible()
+        assert menu.get_by_role('menuitem').all()[0].text_content().strip() == 'Share publicly'
+        share_item.click()
+        expect(menu).to_be_hidden()
         expect(page.locator('#shareModal')).to_be_visible()
         expect(page.locator('#shareModal')).to_have_class(re.compile('is-share-dialog'))
         page.keyboard.press('Escape')
-        expect(share).to_be_focused()
+        expect(cite).to_be_focused()
         watch=header.locator('#consensusWatchButton')
         watch.click()
         expect(page.locator('#shareModal')).to_be_visible()
         expect(page.locator('#shareModal')).to_have_class(re.compile('is-watch-dialog'))
         page.keyboard.press('Escape')
         expect(watch).to_be_focused()
-        cite=header.locator('.consensus-actions-toggle')
         cite.click()
-        menu=page.locator('#consensusActionsMenuGlobal')
         expect(menu).to_be_visible()
         assert menu.bounding_box()['y']>=cite.bounding_box()['y']+cite.bounding_box()['height']
         assert menu.bounding_box()['x']+menu.bounding_box()['width']<=390
+        # The menu opens over the fade beneath the islands, not under it.
+        assert share_item.evaluate('el => {const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}')
         reader_screenshot(page,'mobile-topbar-cite')
         page.keyboard.press('Escape')
         expect(menu).to_be_hidden()
         expect(cite).to_be_focused()
         page.evaluate('window.__mobileActions=document.getElementById("consensusFooterActions")')
         page.set_viewport_size({'width':1440,'height':900})
-        expect(page.locator('#runProvenance #consensusShareButton')).to_be_visible()
+        footer_share=page.locator('#runProvenance #consensusShareButton')
+        expect(footer_share).to_be_visible()
+        # The footer keeps its own Share and "Cite"; the menu does not repeat it.
+        desktop_cite=page.locator('#runProvenance .consensus-actions-toggle')
+        expect(desktop_cite).to_have_attribute('aria-label', 'Citation and copy options')
+        desktop_cite.click()
+        expect(menu).to_be_visible()
+        expect(share_item).to_be_hidden()
+        page.keyboard.press('Escape')
         page.set_viewport_size({'width':390,'height':820})
-        expect(share).to_be_visible()
+        expect(cite).to_be_visible()
         assert page.evaluate('__mobileActions===document.getElementById("consensusFooterActions")')
         page.evaluate('window.__previousMobileRun=App.runRegistry.visible()')
         header.locator('#mobileNewRunButton').click()
@@ -344,8 +440,8 @@ def test_mobile_header_names_the_product_on_the_start_screen(browser, phase4_ser
         expect(page.locator('body')).to_have_class(re.compile(r'\bis-hero\b'))
         expect(brand).to_be_visible()
         expect(brand.locator('.brand-float-title')).to_be_visible()
-        # Nothing scrolls beneath the bar on an empty start screen, so it
-        # draws no edge; one icon ink for menu and new chat.
+        # Nothing scrolls beneath the islands on an empty start screen, so
+        # there is no fade; one icon ink for menu and new chat.
         expect(header).not_to_have_class(re.compile(r'\bis-scrolled\b'))
         expect(header).to_have_css('border-bottom-color', 'rgba(0, 0, 0, 0)')
         assert header.locator('#mobileNewRunButton').evaluate('el => getComputedStyle(el).color') == \
