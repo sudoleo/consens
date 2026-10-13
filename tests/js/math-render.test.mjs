@@ -156,6 +156,23 @@ describe("ConsensusMath.prepareMarkdown", () => {
     expect(math.prepareMarkdown(source)).toBe(source);
   });
 
+  it("verlangt Formelinhalt direkt vor dem schliessenden $", () => {
+    // Vor dem Schluss-$ steht weder Leerraum noch ein Backslash: weder der
+    // TeX-Zeilenumbruch "\\" noch ein escaptes Leerzeichen beendet eine Formel.
+    for (const source of [
+      String.raw`Wert $x^2 $ hier`,
+      "Wert $x^2\t$ hier",
+      String.raw`Zeile $a_1 \\$ weiter`,
+      String.raw`Zeile $a_1\ $ weiter`,
+    ]) {
+      expect(math.prepareMarkdown(source)).toBe(source);
+    }
+    // Ein escaptes Zeichen darf die Formel beenden, "\\" mittendrin auch.
+    expect(math.stripMath(String.raw`Rate $17{,}5\%$ und $a \\ b^2$ hier`))
+      .toBe("Rate   und   hier");
+    expect(math.stripMath(String.raw`Kurs $x^2\$$ hier`)).toBe("Kurs   hier");
+  });
+
   it("haelt einen Preisvergleich fuer Text, keine Formel", () => {
     const source = "Der Preis fiel von $100 auf $80.";
     expect(math.prepareMarkdown(source)).toBe(source);

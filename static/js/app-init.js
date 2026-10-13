@@ -17,6 +17,29 @@
 // =====================================================================
 
       (function () {
+        // localStorage wirft bei gesperrtem Speicher (blockierte Cookies,
+        // manche privaten Modi) schon beim Zugriff. Ein Wurf in initApp braeche
+        // den Start ab und liesse die App halb verdrahtet stehen. Deshalb geht
+        // jeder Zugriff hier ueber diese Helfer - wie in user-settings.js mit
+        // einer Seiten-Ablage fuer verweigerte Werte: die Wahl gilt dann
+        // wenigstens bis zum naechsten Laden.
+        const storageOverlay = new Map();
+
+        function readStored(key) {
+          if (storageOverlay.has(key)) return storageOverlay.get(key);
+          try { return window.localStorage.getItem(key); } catch (_) { return null; }
+        }
+
+        function writeStored(key, value) {
+          try {
+            if (value === null) window.localStorage.removeItem(key);
+            else window.localStorage.setItem(key, value);
+            storageOverlay.delete(key);
+          } catch (_) {
+            storageOverlay.set(key, value);
+          }
+        }
+
         function initApp() {
         // --------------------------
         // Dark/Light Mode Initialisierung
@@ -107,10 +130,10 @@
         // daher keine lokalen Aliase noetig.
 
         // Lese gespeicherten Wert aus; wenn keiner vorhanden, verwende die Systempräferenz:
-        let storedTheme = localStorage.getItem("theme");
+        let storedTheme = readStored("theme");
         if (!storedTheme) {
           storedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-          localStorage.setItem("theme", storedTheme);
+          writeStored("theme", storedTheme);
         }
         applyTheme(storedTheme);
 
@@ -118,7 +141,7 @@
         modeToggles.forEach(toggle => {
           toggle.addEventListener("click", function () {
             const newTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
-            localStorage.setItem("theme", newTheme);
+            writeStored("theme", newTheme);
             applyTheme(newTheme);
           });
         });
@@ -285,12 +308,8 @@
         const QUESTION_DRAFT_KEY = "consensio.questionDraft.v1";
 
         function storeQuestionDraft(value) {
-          try {
-            if (value) localStorage.setItem(QUESTION_DRAFT_KEY, value);
-            else localStorage.removeItem(QUESTION_DRAFT_KEY);
-          } catch (_) {
-            // Private/gehaertete Browser: dann eben ohne Rettungsnetz.
-          }
+          // Private/gehaertete Browser: dann haelt nur die Seiten-Ablage.
+          writeStored(QUESTION_DRAFT_KEY, value || null);
         }
 
         window.App.clearQuestionDraft = function () {
@@ -313,10 +332,7 @@
         // zurueckkommt.
         window.App.restoreQuestionDraft = function () {
           if (!questionInput || questionInput.value.trim()) return;
-          let draft = "";
-          try {
-            draft = localStorage.getItem(QUESTION_DRAFT_KEY) || "";
-          } catch (_) {}
+          const draft = readStored(QUESTION_DRAFT_KEY) || "";
           if (!draft) return;
           questionInput.value = draft;
           requestAnimationFrame(resizeQuestionInput);
@@ -622,7 +638,7 @@
           } else {
             sidebar.classList.toggle("collapsed");
             sidebar.classList.remove("active");
-            localStorage.setItem(
+            writeStored(
               SIDEBAR_COLLAPSED_STORAGE_KEY,
               String(sidebar.classList.contains("collapsed"))
             );
@@ -680,7 +696,7 @@
             sidebar.classList.add("collapsed");
             sidebar.classList.remove("active");
           } else {
-            const prefersCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
+            const prefersCollapsed = readStored(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
             sidebar.classList.toggle("collapsed", prefersCollapsed);
             sidebar.classList.remove("active");
           }
@@ -1125,7 +1141,7 @@
           container.classList.toggle("hidden", isCollapsed);
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
           if (isCollapsed) setBookmarkSearchOpen(false, { clear: true });
-          localStorage.setItem("bookmarks_collapsed", String(isCollapsed));
+          writeStored("bookmarks_collapsed", String(isCollapsed));
         };
 
         function restoreBookmarksState() {
@@ -1134,7 +1150,7 @@
           const toggle = document.getElementById("bookmarksToggle");
           if (!section || !container || !toggle) return;
 
-          const isCollapsed = localStorage.getItem("bookmarks_collapsed") === "true";
+          const isCollapsed = readStored("bookmarks_collapsed") === "true";
           section.classList.toggle("is-collapsed", isCollapsed);
           container.classList.toggle("hidden", isCollapsed);
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
@@ -1236,7 +1252,7 @@
 
         // Erneut API Keys in Felder schreiben (falls benötigt)
         ["openrouterKey"].forEach(function (key) {
-          const stored = localStorage.getItem(key);
+          const stored = readStored(key);
           if (stored) {
             document.getElementById(key).value = stored;
           }
@@ -1297,7 +1313,7 @@
             return;
           }
 
-          localStorage.setItem("openrouterKey", openrouterKey);
+          writeStored("openrouterKey", openrouterKey);
           if (typeof window.updateQuestionInputAccess === "function") {
             window.updateQuestionInputAccess();
           }
@@ -1520,12 +1536,12 @@
         document.getElementById("logoLink").addEventListener("click", () => {
           trackAppEvent("app_logo_home_click");
           // wenn ich wirklich zurück will, entferne den visitedLanding-Flag
-          localStorage.removeItem("visitedLanding");
+          writeStored("visitedLanding", null);
           // und damit gilt beim nächsten Laden der Landing-Seite wieder first-view
         });
 
         // Demo-Chip automatisch beim ersten echten Besuch (wenn noch nie benutzt)
-        if (!localStorage.getItem("marketingPopupShown") || !localStorage.getItem("demoChipDismissed")) {
+        if (!readStored("marketingPopupShown") || !readStored("demoChipDismissed")) {
           createStartDemoChip();
         }
 

@@ -37,8 +37,12 @@
   // Erkannt wird deshalb nur ein Paar, das eindeutig Formel ist: der Inhalt
   // liegt ohne Leerzeichen an beiden Dollarzeichen an, bleibt in einer Zeile,
   // ist kurz und enthaelt mindestens ein LaTeX-Signal (\befehl, ^, _, {}).
+  // Das letzte Zeichen vor dem schliessenden "$" ist weder Leerraum noch
+  // Backslash: dafuer steht ein eigenes Schlusselement, kein Lookbehind -
+  // Safari/iOS unter 16.4 kann Lookbehind nicht parsen und verwirft dann das
+  // ganze App-Bundle (tests/js/frontend-syntax.test.mjs haelt das fest).
   const DOLLAR_INLINE_RE =
-    /(^|[^\\$\w])\$(?!\s)((?:[^$\n\\]|\\[^\n])+?)(?<![\s\\])\$(?![\w$])/g;
+    /(^|[^\\$\w])\$(?!\s)((?:[^$\n\\]|\\[^\n])*?(?:[^$\s\\]|\\[^\s\\]))\$(?![\w$])/g;
   const LATEX_SIGNAL_RE = /\\[A-Za-z]|[\^_{}]/;
   const MAX_INLINE_MATH_CHARS = 200;
 

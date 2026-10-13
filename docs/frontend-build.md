@@ -160,6 +160,21 @@ Textdatei dient als CRLF-Gegenkontrolle; globale Git-Einstellungen bleiben unber
 Alternative, falls das Diff-Rauschen stört: `static/dist/` ignorieren und im
 Render-Build-Command `npm ci && npm run build` ergänzen.
 
+## Browser-Untergrenze
+
+esbuild übersetzt Syntax auf `es2020`, aber weder Regex-Features noch
+Laufzeit-APIs. Weil `/app` seine Klassik-Skripte zu **einem** Bundle verkettet,
+reicht ein einziger Parse-Fehler, und die App startet gar nicht:
+
+- **Kein Regex-Lookbehind** (`(?<=`, `(?<!`): Safari/iOS kann ihn erst ab 16.4
+  parsen. `tests/js/frontend-syntax.test.mjs` durchsucht `static/`, die
+  Templates und die aktuellen Bundles laut Manifest. Benannte Gruppen
+  (`(?<name>`) sind erlaubt.
+- Laufzeit-APIs werden nicht polyfillt. Der Agent-Pfad nutzt u. a.
+  `Array.prototype.findLast`/`.at()` und `crypto.randomUUID()` (Safari/iOS ab
+  15.4) — das ist die bewusste Untergrenze; Geräte, die bei iOS 15 stehen
+  bleiben, haben 15.8.
+
 ## JS-Tests
 
 `tests/js/*.test.mjs`, Vitest + jsdom. Die Module sind keine ES-Module und
@@ -173,6 +188,11 @@ window.App.quote.set("…");
 
 Jeder Aufruf bekommt ein eigenes Fenster, damit ein Modul, das Listener bindet
 oder Globals einfriert, nicht ins nächste Testfile leckt.
+
+Für den ganzen Start von `/app` lädt `tests/js/app-init-storage.test.mjs` die
+Gruppen `head` + `app` direkt aus `bundles.json` (nur das Markup, das
+`initApp()` ohne `?.` anfasst, dazu Attrappen für `matchMedia`, `fetch` und das
+Demo-Modul); fertig ist der Start, wenn `.global-tooltip` existiert.
 
 Abgedeckt: `app-state.js` (Owner-Enforcement), `composer-quote.js`,
 `consensus-anchor.js`. Der erste Lauf hat direkt einen echten Mangel gefunden —

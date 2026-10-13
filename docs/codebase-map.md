@@ -1371,6 +1371,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   TeX-Kommentar das Ergebnis. `$...$` wird nur dann als Formel gelesen, wenn
   der Inhalt ohne Leerzeichen an beiden Dollarzeichen liegt, in einer Zeile
   bleibt und ein LaTeX-Signal trägt — „6,7 Mrd. $ in Q1“ bleibt Betrag.
+  Die Regex dafür kommt ohne Lookbehind aus: Safari/iOS unter 16.4 kann ihn
+  nicht parsen und verwarf damit das ganze verkettete App-Bundle
+  (`tests/js/frontend-syntax.test.mjs` verbietet `(?<=`/`(?<!` im Frontend).
   `stripMath()` liefert die formelfreie Fassung eines Satzes; die Ankersuche
   braucht sie, weil eine gerenderte Formel im DOM ein übersprungener
   `.katex`-Block ist, der Anker aber den LaTeX-Quelltext trägt.
@@ -2312,7 +2315,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   lokal zu früh zu laufen oder die Seite neu zu laden. Der neue UTC-Tag wird
   erst nach einem bestätigten Refresh markiert; Fehler werden begrenzt erneut
   versucht, damit ein veraltetes `0 / Limit` den neuen Tag nicht blockiert. Läuft als letztes
-  Script, ruft `initApp()` direkt auf.
+  Script, ruft `initApp()` direkt auf. `localStorage` nur über
+  `readStored`/`writeStored` (try/catch plus Seiten-Ablage wie in
+  `user-settings.js`): bei gesperrtem Speicher wirft schon der Zugriff, und ein
+  Wurf in `initApp()` ließ die App halb verdrahtet stehen.
+  `tests/js/app-init-storage.test.mjs` bootet dafür die echten Gruppen `head` +
+  `app` aus `bundles.json` in jsdom.
 
 Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` enthält
 die vormals template-lokalen Styles, `static/js/admin.js` Auth, Rendering und
