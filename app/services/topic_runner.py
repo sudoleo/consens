@@ -7,6 +7,7 @@ import logging
 import time
 from urllib.parse import urlsplit
 
+import app.core.config as cfg
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.services import (
@@ -191,12 +192,17 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
     recent = topics.list_runs(claimed["id"], db=db, max_items=KNOWN_CLAIM_RUNS)
     latest = recent[-1] if recent else standing
     run_config = claimed.get("run_config") or {}
+    # The stored plan names models as they were when the Topic was saved. A
+    # rerun runs them as they are today: migrated IDs in their current form,
+    # a removed model replaced by its family's default. The Topic document
+    # and its earlier runs keep what they stored.
+    provider_models = cfg.runnable_provider_models(run_config.get("provider_models"))
     try:
         result = executor(
             _research_question(claimed),
             str(standing.get("consensus_md") or ""),
             previous_opinion_map=latest.get("opinion_map"),
-            model_overrides=run_config.get("provider_models"),
+            model_overrides=provider_models,
             known_claims=known_claims_from_runs(recent),
             claim_key_prefix=str(claimed.get("current_run_id") or ""),
             previous_sources=(
@@ -237,7 +243,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                 "evidence": evidence,
                 "excluded_evidence": excluded_evidence,
                 "models": result.get("included_models") or topics.topic_model_labels(
-                    run_config.get("provider_models") or {}
+                    provider_models
                 ),
                 "differences_data": result.get("differences_data") or {},
                 "opinion_map": result.get("opinion_map") or {},

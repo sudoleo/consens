@@ -5639,7 +5639,14 @@ keinen Abgleich.
   Modell-IDs stehen ausschließlich in `run_config`.
 - `topic_runner.py` hängt über den eigenen Adapter `topic_pipeline.py` direkt an
   der neutralen Provider-/Consensus-/Differences-Pipeline und importiert keine
-  Watch-Services. Die pro Topic gespeicherte Modellauswahl bleibt maßgeblich. Jeder Lauf
+  Watch-Services. Die pro Topic gespeicherte Modellauswahl bleibt maßgeblich,
+  läuft aber so, wie sie heute laufen kann: `cfg.runnable_provider_models`
+  (`runnable_model_id` je Familie) hebt eine migrierte ID auf ihre aktuelle Form
+  und ersetzt ein inzwischen entferntes Modell durch das Standardmodell seiner
+  Familie (Watch-Modell der Stufe → Free-Default → Basis-Modell, Free nie
+  Premium). `run_config`, `models` und frühere Runs bleiben unverändert; nur der
+  neue Run trägt die tatsächlich gelaufenen Modelle. Watches speichern keinen
+  Modellplan, sie lesen bei jedem Lauf `WATCH_MODELS_BY_TIER`. Jeder Lauf
   recherchiert aktuelle Webquellen neu, dedupliziert sie zu Evidence, vergleicht
   Consensus (über `evidence_change.assess`, mit Quellen) mit dem **geltenden**
   Run (`accepted_run_id`, Altbestand `latest_run_id`) und die Opinion Map mit dem

@@ -1583,6 +1583,45 @@ def get_watch_models(tier) -> dict[str, str]:
     return dict(WATCH_MODELS_BY_TIER[key])
 
 
+def runnable_model_id(model_id: str | None, provider: str, tier=TIER_FREE) -> str:
+    """Eine gespeicherte Modell-ID so, wie sie heute laufen kann.
+
+    Migrierte IDs bekommen ihre aktuelle Form. Ein inzwischen entferntes
+    Modell vertritt das heutige Standardmodell der Familie fuer die Stufe:
+    zuerst das Watch-Modell der Stufe, dann der Free-Default, dann das
+    Basis-Modell; Free nie mit einem Premium-Ersatz. "" heisst: die Familie
+    bietet kein Modell mehr an. Gespeicherte Daten bleiben unangetastet.
+    """
+    allowed = _provider_allowed_sets().get(provider, set())
+    model = canonical_model_id(model_id, provider)
+    if model in allowed:
+        return model
+    pro = normalize_tier(tier) == TIER_PRO
+    family = PROVIDERS.get(provider)
+    candidates = (
+        get_watch_models(tier).get(provider),
+        FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
+        family.base_model if family else "",
+    )
+    return next(
+        (
+            candidate for candidate in candidates
+            if candidate in allowed and (pro or candidate not in PREMIUM_MODELS)
+        ),
+        "",
+    )
+
+
+def runnable_provider_models(models, tier=TIER_FREE) -> dict[str, str]:
+    """``runnable_model_id`` fuer eine gespeicherte Familie->Modell-Zuordnung."""
+    runnable = {}
+    for provider, model in (models if isinstance(models, dict) else {}).items():
+        if provider in PROVIDERS and model:
+            if chosen := runnable_model_id(model, provider, tier):
+                runnable[provider] = chosen
+    return runnable
+
+
 def apply_watch_consensus_models(config: dict | None) -> None:
     """Apply one valid Consensus engine per Watch tier with safe fallbacks."""
     incoming = config if isinstance(config, dict) else {}
