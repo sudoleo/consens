@@ -3487,12 +3487,18 @@ gespeicherte Scrollpositionen pro Turn beziehen sich auf diese Liste.
 Aufgeklappte Details haben bewusst keinen eigenen Scrollbereich mehr (zwei
 Scrollbalken nebeneinander): sie fließen in der Liste, der Kopf einer offenen
 Zeile klebt (`position: sticky`) oben, und ein vom Nutzer geöffneter Eintrag
-(Fokus auf dem `summary`, also Klick, Taste oder Modell-Icon) wird per
+(Fokus auf dem `summary`, also Klick oder Taste) wird per
 `reveal()` in Sicht gescrollt — höher als die Liste: Anfang oben.
-Seit 2026-10-09 öffnet ein Klick auf eine Vergleichsmodell-Zeile stattdessen
-den Answer-Reader auf genau dieser Antwort, „Answer check“ dort die
+Ein Modell-Icon über der Antwort (`show()`) öffnet seit 2026-10-14 nur die
+Leiste auf der Zeile dieses Modells: geschlossen, per `reveal()` in Sicht, mit
+kurzem Ton (`summary.is-pointed`); vorher klappte es Reasoning und Antwort
+gleich mit auf.
+Seit 2026-10-09 öffnet ein Klick auf eine geschlossene Vergleichsmodell-Zeile
+stattdessen den Answer-Reader auf genau dieser Antwort, „Answer check“ dort die
 Differences (`openInReader` in `agent-delegation.js`; Kontext über
-`comparison_id` der Sitzung und `App.agentReview.contextFor`). Die Agent-Leiste
+`comparison_id` der Sitzung und `App.agentReview.contextFor`). Eine offene
+Zeile klappt dagegen wie jede andere zu (vor 2026-10-14 öffnete auch ihr
+Faltzeichen den Reader, sie ließ sich nicht mehr schließen). Die Agent-Leiste
 schließt dabei wie bei jedem Reader-Öffnen. Gibt es noch keinen Reader-Kontext
 (Lauf läuft, Worker-Zeile), klappt die Zeile wie bisher auf. `agent-review.js`
 behält dafür die Kontexte der letzten 64 Vergleiche (`contextsByKey`) statt nur
@@ -7883,11 +7889,19 @@ bis 2026-10-12 klappten sie dafür ein zweites Mal auf und zu. Eine vom Leser ge
 am Laufende offen, solange sie im Bild ist (oberhalb des Viewports klappt sie mit
 `preserveAbove`-Korrektur zu). Der Antwortbeginn blendet nur ein
 (`reveal(body, {lift:false})`). Laden: `app-bootstrap.js` setzt per
-MutationObserver vor dem ersten Paint `agent-mode-enabled`, den gespeicherten
+MutationObserver vor dem ersten Paint `agent-mode-enabled`, das gespeicherte
+Theme (`body.dark-mode` nach `localStorage.theme`, sonst Systemvorgabe — vorher
+erst in `app-init.js`, jeder dunkle Reload malte zuerst hell, und iPhone-Safari
+behielt das Weiß hinter der Statusleiste), den gespeicherten
 Sidebar-Zustand (`sidebar_collapsed`, Overlay < 1100 px), `#authTopActions`
 nur für Gäste ohne `id_token` und bei `html.agent-shell-expected` die
-Agent-Texte (Begrüßung, „New chat“), die `renderShellNow` bis zur bekannten
-Berechtigung hält; `#composerModeBar` ist im Template sichtbar (Startbildschirm).
+Agent-Texte (Begrüßung, „New chat“, Composer-Platzhalter), die `renderShellNow`
+bzw. `syncComposer` bis zur bekannten Berechtigung hält; Gäste ohne `id_token`
+bekommen sofort den Sign-in-Platzhalter. Solange eine gespeicherte Sitzung
+noch wiederhergestellt wird (Auth unbekannt, `id_token` vorhanden), lässt
+`updateQuestionInputAccess` den Platzhalter stehen — vorher wechselte er beim
+Reload Vorlage → „Sign in…“ → „Enter your question“ → Agent-Text.
+`#composerModeBar` ist im Template sichtbar (Startbildschirm).
 Inter wird in `index.html` vorgeladen, bis dahin setzt „Inter Fallback“ (Arial
 mit Inter-Metriken, `typography.css`) den Text ohne Umbruchänderung;
 `.sidebar-content` reserviert eine dünne Scrollbar-Rinne.

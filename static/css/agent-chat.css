@@ -73,6 +73,9 @@
   transition: background-color var(--dur-press) var(--ease-standard);
 }
 .agent-session > summary:hover { background-color: var(--raise); }
+/* A model icon names its row with a short tone that fades (agent-delegation.js point). */
+.agent-session > summary.is-pointed { animation: agent-session-point 1.4s var(--ease-standard) both; }
+@keyframes agent-session-point { 0%, 40% { background-color: var(--raise); } }
 /* An open row keeps its heading in view while its answer scrolls past, so
    the reader knows whose answer it is and can fold it from anywhere. */
 .agent-session[open] > summary {

@@ -252,13 +252,20 @@
           const sendButton = document.getElementById("sendButton");
           const postDemoLoginPrompt = document.getElementById("postDemoLoginPrompt");
 
+          // A stored session still being restored keeps the words the field
+          // was painted with (app-bootstrap.js); "Sign in" in between only
+          // flickered past before the account arrived.
+          const restoring = !canType && !window.__consensioAuthState?.known
+            && document.documentElement.dataset.authUnavailable !== "true" && Boolean(readStored("id_token"));
           if (questionInput) {
             questionInput.disabled = !canType;
-            questionInput.placeholder = canAsk
-              ? defaultQuestionPlaceholder
-              : canType
-                ? unverifiedQuestionPlaceholder
-                : lockedQuestionPlaceholder;
+            if (!restoring) {
+              questionInput.placeholder = canAsk
+                ? defaultQuestionPlaceholder
+                : canType
+                  ? unverifiedQuestionPlaceholder
+                  : lockedQuestionPlaceholder;
+            }
             questionInput.setAttribute("aria-disabled", String(!canType));
             if (pendingComposerFocus && canType) {
               pendingComposerFocus = false;
@@ -298,6 +305,9 @@
         };
 
         window.updateQuestionInputAccess();
+        // Login unreachable (auth-bootstrap.js): no session is coming, so the
+        // field stops waiting for one and says why it is locked.
+        window.addEventListener("consensio:auth-unavailable", () => window.updateQuestionInputAccess());
 
         // --- Frage-Entwurf ueber den Bestaetigungs-Umweg retten ------------
         // Wer auf den Link im Postfach klickt, verlaesst diese Seite. Kaeme er

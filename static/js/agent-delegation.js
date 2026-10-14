@@ -364,15 +364,25 @@
       trigger?.focus({ preventScroll: true });
     }
   }
+  // A model icon opens the panel on that model's row, closed: its reasoning
+  // and answer open only when the reader asks for them on the row itself.
   function show(agentId, trigger) {
     if (!current) return;
     App.answerReader?.close({ focus: false });
     returnFocus = trigger;
     current.closed = false;
     current.manual = true;
-    if (agentId) current.expanded.add(agentId);
     prefs(current); render();
-    (sidebar._rows.get(agentId)?.summary || sidebar.querySelector(".agent-sidebar-close")).focus({ preventScroll: true });
+    const row = sidebar._rows.get(agentId);
+    (row?.summary || sidebar.querySelector(".agent-sidebar-close")).focus({ preventScroll: true });
+    if (row) { reveal(row.root); point(row.summary); }
+  }
+  // A short glow names the row the icon stands for among the others.
+  function point(summary) {
+    summary.classList.remove("is-pointed");
+    void summary.offsetWidth;
+    summary.classList.add("is-pointed");
+    summary.addEventListener("animationend", () => summary.classList.remove("is-pointed"), { once: true });
   }
   // A comparison model's answer is read where answers are read: in the
   // reader, on that model; the answer check opens its differences there.
@@ -504,7 +514,7 @@
     // Before layout settles the detail may still be a skeleton; the frame
     // after it has its first height.
     (window.requestAnimationFrame || setTimeout)(() => {
-      if (!root.isConnected || !root.open || !list.scrollBy) return;
+      if (!root.isConnected || !list.scrollBy) return;
       const top = root.getBoundingClientRect().top - list.getBoundingClientRect().top;
       const bottom = top + root.offsetHeight;
       const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -618,8 +628,10 @@
         const body = node("div", "agent-session-detail");
         info.append(heading, meta); summary.append(mark(agent), info); root.append(summary, body);
         summary.setAttribute('aria-describedby', state.id);
+        // An open row folds away like any other (its chevron says so); only
+        // a closed one opens the answer reader.
         summary.addEventListener("click", event => {
-          if (current === view && openInReader(view, findRow(view, agent.id))) event.preventDefault();
+          if (current === view && !root.open && openInReader(view, findRow(view, agent.id))) event.preventDefault();
         });
         root.addEventListener("toggle", () => {
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;

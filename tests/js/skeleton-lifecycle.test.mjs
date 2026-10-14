@@ -17,6 +17,43 @@ function boot(state) {
 }
 afterEach(() => contexts.splice(0).forEach(ctx => ctx.window.close()));
 
+// The first paint already has what the app settles on: no light flash on a
+// dark reload, no composer wording swapped in front of the reader.
+function paint({ storage = {}, systemDark = false } = {}) {
+  const ctx = loadScripts(["static/js/app-bootstrap.js"], {
+    body: '<h1 class="hero-greeting">Compare</h1><textarea id="questionInput" placeholder="Enter your question"></textarea>',
+    before(window) {
+      Object.entries(storage).forEach(([key, value]) => window.localStorage.setItem(key, value));
+      window.matchMedia = query => ({ matches: systemDark && query.includes("dark") });
+    },
+  });
+  contexts.push(ctx);
+  return ctx;
+}
+
+describe("first paint", () => {
+  it.each([
+    [{ theme: "dark" }, false, true],
+    [{ theme: "light" }, true, false],
+    [{}, true, true],
+    [{}, false, false],
+  ])("paints the stored theme, else the system's: %o system dark %s", (storage, systemDark, dark) => {
+    const { document } = paint({ storage, systemDark });
+    expect(document.body.classList.contains("dark-mode")).toBe(dark);
+  });
+
+  it("starts a reload that ended in Agent with Agent's composer words", () => {
+    const { document } = paint({ storage: { id_token: "cached-token", agentShellExpected: "1" } });
+    expect(document.getElementById("questionInput").placeholder).toBe("Ask anything, or paste an AI answer to check it");
+  });
+
+  it("starts a guest with the sign-in words and a restoring Consensus session with the template's", () => {
+    expect(paint().document.getElementById("questionInput").placeholder).toBe("Sign in to start asking questions for free.");
+    expect(paint({ storage: { id_token: "cached-token" } }).document.getElementById("questionInput").placeholder)
+      .toBe("Enter your question");
+  });
+});
+
 describe("loading lifecycle", () => {
   it.each([{ known: true, uid: "user" }, { known: true, uid: null }])(
     "does not overwrite an already resolved session with cached-token placeholders: %o", state => {

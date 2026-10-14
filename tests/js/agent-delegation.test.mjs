@@ -21,6 +21,9 @@ function bootNarrow(fetcher) {
     w.fetch = vi.fn(fetcher || (async () => ({ ok: true, json: async () => ({ agents: [agent()], status: "running" }) })));
   } });
 }
+// Lets the projection's first load land: its render would otherwise shut a
+// row that a click opened before the toggle event arrived.
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 function receive(w, data) {
   w.App.agentDelegation.receive({ metadata: { chatId }, auth: { uid: "owner" } }, { version: 1, chat_id: chatId, turn_id: turnId, agent: data });
 }
@@ -94,7 +97,12 @@ describe("Agent sidebar", () => {
     d.querySelector('.agent-sidebar-close').click();
     expect(d.querySelector('.agent-inline-model')).toBe(icon);
     icon.click();
-    expect(d.querySelectorAll('.agent-session')[1].open).toBe(true);
+    // The icon brings its row into view and names it; the detail stays shut.
+    const row = d.querySelectorAll('.agent-session')[1];
+    expect(d.getElementById('agentSidebar').hidden).toBe(false);
+    expect(row.open).toBe(false);
+    expect(d.activeElement).toBe(row.querySelector('summary'));
+    expect(row.querySelector('summary').classList.contains('is-pointed')).toBe(true);
     dom.window.close();
   });
   it('uses elapsed server durations with a monotonic clock and freezes terminal or recovered sessions', async () => {
@@ -260,7 +268,10 @@ describe("Agent sidebar", () => {
       ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true,json:async () => ({agents:[],status:'succeeded'})}));
     receive(w, agent()); w.App.agentDelegation.project({chatId, turnId});
     d.querySelector('.agent-inline-model').click();
-    expect(d.querySelector('.agent-detail-skeleton')).not.toBe(null);
+    expect(d.querySelector('.agent-session').open).toBe(false);
+    await settle();
+    d.querySelector('.agent-session summary').click();
+    await vi.waitFor(() => expect(d.querySelector('.agent-detail-skeleton')).not.toBe(null));
     expect(d.querySelector('.agent-session-detail').getAttribute('aria-busy')).toBe('true');
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
     finish({ok:true, json:async () => ({agent:{assignment:{goal:'Check the premise'}},messages:[{id:'m',seq:1,text:'Verified result',kind:'result'}],has_more:false})});
@@ -286,7 +297,8 @@ describe("Agent sidebar", () => {
     receive(w, agent()); w.App.agentDelegation.project({ chatId, turnId, running: true });
     expect(d.getElementById("agentSidebar").hidden).toBe(false);
     expect(d.querySelectorAll(".agent-session")).toHaveLength(1);
-    d.querySelector(".agent-inline-model").click();
+    await settle();
+    d.querySelector(".agent-session summary").click();
     await vi.waitFor(() => expect(d.querySelector(".agent-session-detail").textContent).toContain("Check the premise for Germany."));
     expect(d.querySelector(".agent-session-detail").textContent).toContain("Orchestrator → Check Germany");
     const focused = d.querySelector(".agent-inline-model"); focused.focus();
@@ -455,7 +467,8 @@ describe("Agent sidebar", () => {
       : { agents: [failed], status: "succeeded" } }));
     receive(w, failed);
     w.App.agentDelegation.project({ chatId, turnId });
-    d.querySelector(".agent-inline-model").click();
+    await settle();
+    d.querySelector(".agent-session summary").click();
     await vi.waitFor(() => expect(d.querySelector(".agent-session-detail .agent-judge-note")?.textContent).toBe(note));
     const detail = d.querySelector(".agent-session-detail").textContent;
     expect(detail).not.toMatch(/→|Orchestrator|Goal|Trying again/);
@@ -474,7 +487,8 @@ describe("Agent sidebar", () => {
     receive(w, stopped);
     w.App.agentDelegation.project({ chatId, turnId });
     expect(d.querySelector(".agent-session-state").textContent).toMatch(/^Incomplete · /);
-    d.querySelector(".agent-inline-model").click();
+    await settle();
+    d.querySelector(".agent-session summary").click();
     await vi.waitFor(() => expect(d.querySelector(".agent-session-detail").textContent).toContain("First half of an answer"));
     expect(d.querySelector(".agent-session-detail h3").textContent).toBe("Incomplete answer · not used");
     expect(d.querySelector(".agent-session-detail .agent-judge-note").textContent).toBe(note);
@@ -485,7 +499,8 @@ describe("Agent sidebar", () => {
     const { window: w, document: d, dom } = boot(async url => ({ ok: !url.includes(agentId), json: async () => ({ agents: [], status: "succeeded" }) }));
     receive(w, { ...agent(), title: '<img src=x onerror="alert(1)">' });
     w.App.agentDelegation.project({ chatId, turnId });
-    d.querySelector(".agent-inline-model").click();
+    await settle();
+    d.querySelector(".agent-session summary").click();
     await vi.waitFor(() => expect(d.querySelector(".agent-load-more")?.textContent).toBe("Retry"));
     const calls = w.fetch.mock.calls.length;
     receive(w, agent(3));
@@ -493,6 +508,26 @@ describe("Agent sidebar", () => {
     expect(w.fetch.mock.calls.length).toBe(calls);
     expect(d.querySelector("img[onerror]")).toBeNull();
     expect(w.App.agentDelegation.tokens(null)).toBe("Tokens unavailable");
+    dom.window.close();
+  });
+  it("opens a closed answer row in the reader and folds an open one on its chevron", async () => {
+    const answer = { ...agent(1, "completed"), kind: "comparison", comparison_id: "cmp", title: "Independent answer" };
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer], status: "succeeded" }) }));
+    w.App.agentReview = { contextFor: () => ({ answers: [{ model: "anthropic/claude-haiku-4.5", provider: "claude" }] }) };
+    w.App.answerReader = { openContext: vi.fn(), close: vi.fn() };
+    receive(w, answer); w.App.agentDelegation.project({ chatId, turnId });
+    d.querySelector(".agent-inline-model").click();
+    const row = d.querySelector(".agent-session");
+    expect(row.open).toBe(false);
+    expect(w.App.answerReader.openContext).not.toHaveBeenCalled();
+    row.querySelector("summary").click();
+    expect(w.App.answerReader.openContext).toHaveBeenCalledTimes(1);
+    expect(row.open).toBe(false);
+    // A row opened earlier (a saved state, or before its answer was readable).
+    row.open = true; row.dispatchEvent(new w.Event("toggle"));
+    row.querySelector("summary").click();
+    expect(row.open).toBe(false);
+    expect(w.App.answerReader.openContext).toHaveBeenCalledTimes(1);
     dom.window.close();
   });
   it("sums the run up in one overview and keeps opened details in the single scrolling list", async () => {

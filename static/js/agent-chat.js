@@ -920,7 +920,10 @@
     if (blocker) descriptions.add('agentComposerMessage');
     if (descriptions.size) input.setAttribute('aria-describedby', [...descriptions].join(' '));
     else input.removeAttribute('aria-describedby');
-    if (!agent || window.userCanAskQuestions?.() === false) return;
+    // Until access is known, a reload that ended in Agent keeps Agent's words
+    // (seeded before the first paint in app-bootstrap.js), as the greeting does.
+    const wording = agent || document.documentElement.classList.contains('agent-shell-expected');
+    if (!wording || window.userCanAskQuestions?.() === false) return;
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     // A new chat names the one thing nobody would guess: a pasted AI answer
     // gets checked (the Agent decides; there is no extra mode or button).

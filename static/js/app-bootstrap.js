@@ -58,10 +58,20 @@
   // it exists. CSP forbids an inline script in the body for the same job.
   let token = null;
   try { token = localStorage.getItem("id_token"); } catch (_) { /* storage unavailable */ }
+  // Same rule as app-init.js (applyTheme), which keeps it later: the stored
+  // theme, else the system's. Set only there, every dark reload painted a
+  // light page first, and iPhone Safari kept that light colour in the strip
+  // behind the status bar.
+  let theme = null;
+  try { theme = localStorage.getItem("theme"); } catch (_) { /* storage unavailable */ }
+  if (theme !== "dark" && theme !== "light") {
+    theme = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+  }
   const seeded = new Set();
   function seed() {
     if (!seeded.has("body") && document.body) {
       seeded.add("body");
+      if (theme === "dark") document.body.classList.add("dark-mode");
       // The consensus view is painted before auth resolves; run-mode.js
       // (earlier in this bundle) owns the stored choice.
       if (window.App?.runMode?.preference() !== "compare") {
@@ -108,7 +118,23 @@
       seeded.add("greeting");
       seeded.add("newChat");
     }
-    return seeded.size === 5;
+    // The composer starts with the words it will keep: Agent's new-chat line
+    // (same words as agent-chat.js syncComposer), or the sign-in line for a
+    // guest (app-init.js). A restored session showed the template's, then
+    // "Sign in", then Consensus's, then Agent's.
+    const input = !seeded.has("input") && document.getElementById("questionInput");
+    if (input) {
+      seeded.add("input");
+      const authState = window.__consensioAuthState;
+      if (document.documentElement.classList.contains("agent-shell-expected")) {
+        const width = window.innerWidth || 1024;
+        input.placeholder = width <= 360 ? "Ask or check an AI answer"
+          : width <= 640 ? "Ask, or paste an AI answer to check" : "Ask anything, or paste an AI answer to check it";
+      } else if (authState?.known ? !authState.uid : !token) {
+        input.placeholder = "Sign in to start asking questions for free.";
+      }
+    }
+    return seeded.size === 6;
   }
   if (!seed() && typeof MutationObserver === "function") {
     const observer = new MutationObserver(() => { if (seed()) observer.disconnect(); });
