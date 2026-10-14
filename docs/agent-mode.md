@@ -536,7 +536,13 @@ bis zu drei).
   die 8.000-Zeichen-Fassung), fehlende Modelle, die Quellenliste mit Auszügen und
   nach `check_text` die Satzurteile (`checked_text`). Die Antworten dieses
   Vergleichs sind damit fixiert; spätere Nachzügler sind `late`, wie beim
-  Antwortschritt.
+  Antwortschritt. Die gewählte Tiefe steht nicht darin: Sie steuert nur die
+  Vergleichsmodelle, und der Antwortschritt sah sie nie.
+- Hat ein Vergleich Antworten geliefert, hängt die App direkt dahinter eine eigene
+  Nachricht an (`AGENT_MERGED_WRITE_NOTE`, wie die eingeschobenen Hinweise von
+  Claude Code): Sobald die Antworten reichen, ist die nächste Nachricht die
+  Antwort für den Nutzer, vollständig und aus allen Antworten. So steht der
+  Auftrag dort, wo geschrieben wird, und nicht nur im langen Steuer-Prompt.
 - Anders als nach `read_source` bleiben weitere Vergleiche erlaubt, obwohl jetzt
   Seitentext (Auszüge) im Kontext steht; sonst gäbe es im zusammengelegten Weg
   praktisch nie einen zweiten Vergleich. Die Anweisung im Ergebnis verlangt dafür
@@ -636,10 +642,19 @@ blinder Richter; Testmaterial nur im Scratchpad):
 - Kosten: gleich (Luna-Schritte kosten 0,1–0,7 Cent, den Rest tragen Vergleich
   und Judges). Die Ersparnis zählt erst bei teuren Chatmodellen.
 
-Damit bleibt der Schalter aus. Offen: warum die Antworten kürzer werden
-(Evidenz als Toolergebnis-JSON statt Belegnachricht des Antwortschritts?),
-die 300-s-Pausen nach dem Vergleich (Befund unten: Wartezeit beim Provider) und ein
-Lauf mit einem Claude-Modell.
+Damit bleibt der Schalter aus. Diagnose der Kürze (Code und diese Testdaten, kein
+neuer Lauf): Die Schreibregeln sind fast wortgleich, Denkstufe und Limits gleich.
+Der zusammengelegte Schritt schreibt aber als Abschluss seiner Werkzeug-Schleife
+(zwei Drittel des Prompts Steuerung, zuletzt ein Toolergebnis mit „write the
+answer now“) und dachte bei den drei Fragen mit der größten Lücke nur ein Drittel
+so lange nach (geschätzt 520–805 statt 1.460–2.225 Denk-Tokens). Dazu sah er die
+selbst gewählte Tiefe „quick“; der Antwortschritt nie. Antwort darauf: die
+Schreibnotiz nach dem Vergleich und keine Tiefe im Ergebnis (siehe Ablauf),
+Vorbild Claude Code, das ebenfalls ohne eigenen Schreibschritt arbeitet. Reicht
+das bei OpenAI-Modellen nicht, bleibt als Rückfall ein Schreibaufruf ohne
+Werkzeuge im selben, gecachten Kontext. Offen außerdem: die 300-s-Pausen nach
+dem Vergleich (Befund unten: Wartezeit beim Provider) und ein Lauf mit einem
+Claude-Modell.
 
 **Wohin die Zeit geht (seit 2026-10-14).** Jede Zeile hat zusätzlich `phases`
 (Start und Ende des Vergleichs, erster Antworttext, Start und Ende der Judges,

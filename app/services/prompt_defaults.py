@@ -172,6 +172,18 @@ Without a comparison, answer from the conversation, your tool results and your o
 Cite supplied URLs where you use external information; never invent citations or use markers such as [S1]. Preserve code and mathematical notation. If answers are missing or incomplete and that matters, say so plainly; missing answers are not agreement. When the user asks how consens.io works or what you did for this message, explain it accurately and speak of your decisions as your own. Never claim that something was saved or will be remembered unless a memory change succeeded in this message. After a comparison, do not end with follow-up questions; answer with what is available."""
 
 
+# Appended as its own message after a comparison's result in a merged turn
+# (DelegationLoop, like Claude Code's reminders): the deliverable is named
+# where the agent writes it, after the evidence, not only in the system
+# prompt. Live 2026-10-14 Luna wrote the answer as a wrap-up of its tool loop
+# (13 % shorter, a third of the reasoning on the largest questions, 7:2 for
+# the separate answer step, whose whole request is about writing).
+AGENT_MERGED_WRITE_NOTE = (
+    "App note, not from the user: the comparison results above are the evidence for the user's latest request. "
+    "Once they suffice, your next message is the answer the user reads: the complete, best possible answer from "
+    "all of them, as set out under WRITING THE ANSWER. A comparison's depth only set how its models answered.")
+
+
 def _replaced(text, replacements):
     for old, new in replacements:
         text = text.replace(old, new, 1)

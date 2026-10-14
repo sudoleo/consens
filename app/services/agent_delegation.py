@@ -1727,6 +1727,9 @@ class DelegationLoop(AgentLoop):
                         self.compare_failed = False
                         results = {}
                         answered = False
+                        # A comparison of this step returned answers to write
+                        # from (merged: AGENT_MERGED_WRITE_NOTE follows them).
+                        compared = False
                         # answer ends the steering, so it runs after every other
                         # call of its step, whatever order the model sent: else
                         # [answer, compare_models] wrote an unchecked answer and
@@ -1762,6 +1765,8 @@ class DelegationLoop(AgentLoop):
                                     self.compare_failed = self.compare_failed or "not_run"
                                 elif isinstance(content, dict) and len(content.get("answers") or []) < 2:
                                     self.compare_failed = self.compare_failed or "few_answers"
+                                else:
+                                    compared = True
                             answered = answered or (name == "answer" and isinstance(content, dict)
                                                     and content.get("status") == "accepted")
                             accepted_tool |= last_accepted
@@ -1783,6 +1788,11 @@ class DelegationLoop(AgentLoop):
                             yield from self._wrap_up(TURN_INVALID_LIMIT, steps, value)
                             status = "succeeded"
                             break
+                        if self.merged and compared and not answered_with_tools:
+                            # The next step writes from these answers: name the
+                            # deliverable there, as Claude Code's reminders do.
+                            from app.services.prompt_defaults import AGENT_MERGED_WRITE_NOTE
+                            self.messages.append({"role": "user", "content": AGENT_MERGED_WRITE_NOTE})
                         # Once the answer is fixed only its checks remain, and the
                         # app runs them itself (_finish_review): no further
                         # steering step just to call check_contradictions.

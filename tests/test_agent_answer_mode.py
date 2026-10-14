@@ -209,8 +209,14 @@ def test_the_step_that_reads_the_answers_writes_the_checked_answer(store):
     # Full answers and the source list are in the tool result the agent reads.
     result = tool_result(loop, "call_0_0")
     assert [a["text"] for a in result["answers"]] == [MODEL_ANSWER.strip()] * 2
-    assert "sources" in result and "write the answer now" in result["instruction"]
+    assert "sources" in result and "write the answer;" in result["instruction"]
     assert not any("text_shortened_for_routing" in a for a in result["answers"])
+    # The deliverable is named right after the evidence, like Claude Code's
+    # reminders; the depth that steered the comparison models is not shown.
+    assert "depth" not in result
+    request = script.requests[1]
+    assert request[-1] == {"role": "user", "content": prompt_defaults.AGENT_MERGED_WRITE_NOTE}
+    assert request[-2]["role"] == "tool" and request[-2]["tool_call_id"] == "call_0_0"
     # The answer streamed and was complete before the check started.
     assert deltas(events) == ANSWER
     first_judge = next(i for i, e in enumerate(events) if e.get("kind") == "tool" and e.get("name") == "judge_answer")
@@ -218,6 +224,19 @@ def test_the_step_that_reads_the_answers_writes_the_checked_answer(store):
     assert not retractions(events)
     assert all(c.get("synthesis_providers") == ["anthropic", "openai"] for c in review["comparisons"])
     assert loop.completion.text == ANSWER
+
+
+def test_the_write_note_follows_only_usable_comparisons_of_merged_turns(store):
+    note = prompt_defaults.AGENT_MERGED_WRITE_NOTE
+    # A refused comparison (invalid task) gives nothing to write from.
+    refused = ("compare_models", {"question": "", "status_update": "Comparing."})
+    script = Merged([{"tools": [refused]}, {"text": "Hello! How can I help?"}])
+    list(merged_loop(store, script).run())
+    assert note not in json.dumps(script.requests[1])
+    # The separate path keeps its steering messages as before.
+    loop = merged_loop(store, Script(), merged=False)
+    list(loop.run())
+    assert loop.comparison.comparisons and note not in json.dumps(loop.messages)
 
 
 def test_a_direct_answer_is_one_call_and_unchecked(store):

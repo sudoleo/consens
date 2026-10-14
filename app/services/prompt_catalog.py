@@ -74,7 +74,9 @@ _ENTRIES = (
      "Agent writes the answer itself as its last step, with no separate answer step. It is the steering prompt "
      "with the sentences of AGENT_MERGED_REPLACEMENTS changed, followed by the writing rules "
      "(AGENT_MERGED_ANSWER_SECTION). The same runtime additions follow, source reading and Watch in their "
-     "merged wording and the memory decision on compare_models and check_text.",
+     "merged wording and the memory decision on compare_models and check_text. After each comparison that "
+     "returned answers, the app adds AGENT_MERGED_WRITE_NOTE as its own message (the answer is the next "
+     "message: complete, from all answers; depth only steered the comparison models).",
      "prompt_defaults.py:AGENT_MERGED_SYSTEM_PROMPT", _agent_merged),
     ("comparison", "Agent: comparison models",
      "System prompt of each independent comparison model, shown for depth \"full\" (3 search rounds). "
