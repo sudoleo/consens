@@ -210,10 +210,19 @@ def main():
     parser.add_argument("--check-sources", action="store_true", help="Also run the source check of contradictions")
     parser.add_argument("--pairwise", help="Model id of a blind judge that picks the better answer per question")
     parser.add_argument("--out", help="Write every line to this JSON lines file as well")
+    parser.add_argument("--tier", default="pro", choices=("free", "plus", "pro"),
+                        help="Token allowance of the test account (default pro)")
     args = parser.parse_args()
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
     os.chdir(ROOT)
+    from app.services import agent_quota
+    # The test account exists only in memory; looked up in Firestore it is
+    # Free, and the Free allowance queues the parallel comparison answers and
+    # judges behind each other and shrinks searches (2026-10-14: 518 s for a
+    # turn that takes 1-2 min on a Pro account).
+    agent_quota._stored_tier = lambda uid: args.tier
+    agent_quota._admin_role = lambda uid: False
     from app.core import config as cfg
     cfg.load_models_from_db(persist_backfill=False)
     from app.services import prompt_config

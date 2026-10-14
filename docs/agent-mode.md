@@ -589,7 +589,11 @@ zum ersten Antworttext und ab dem letzten Vergleich, Kosten und Tokens der
 Chatmodell-Schritte, Rücknahmen, verdächtige Wörter (`leaks`) und das Urteil der
 Judges. `--pairwise <modell>` lässt zusätzlich einen blinden Richter die bessere
 Antwort wählen, `--only` beschränkt auf einzelne Fragen. Weil jeder Lauf eigene
-Vergleichsantworten bekommt, sind die Qualitätszahlen ein Trend.
+Vergleichsantworten bekommt, sind die Qualitätszahlen ein Trend. Das Testkonto
+rechnet als Pro (`--tier`, Standard `pro`): In Firestore nachgeschlagen wäre es
+Free, und das Free-Kontingent ließ am 2026-10-14 Vergleichsantworten und Judges
+nacheinander statt parallel laufen und kürzte die Suche (EZB-Frage 434–518 s
+statt 214 s, davon 330 s statt 27 s nach dem Vergleich).
 
 **Offen vor dem Einschalten** (Gegenprüfung 2026-10-14, bewusst nicht behoben):
 
