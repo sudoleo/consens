@@ -27,8 +27,20 @@ Measured per turn:
 - steps: chat model steps; retractions: text taken back from view
 - leaks: tool or protocol words in the answer
 - agreement / major_contradictions: the judges' verdict per comparison
+
+Where the time goes (seconds since the turn started, see Timing):
+- phases: comparison start/end, first answer text, judges start/end
+- timeline: one entry per provider call, chat steps (completion:N) and
+  workers (comparison answers, judges, page reads): start, claimed, request,
+  first_progress, first_text, end, settled, wait (admission), ttft,
+  max_silence (longest stretch without a token, the 180 s stall watchdog's
+  measure), tokens, error (HTTP status or exception class) and stalled
+- after_comparison: seconds_after_comparison split into chat steps, page
+  reads and the rest (app work, retry pauses)
+- rate_limits, stalls, retries, allowance_refusals, longest_silence
 """
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -36,6 +48,7 @@ import random
 import re
 import statistics
 import sys
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +93,235 @@ def usd(nanos):
     return round((nanos or 0) / 1e9, 5)
 
 
+# The provider call a stream is opening on this thread, for the stall
+# watchdog it creates (Timing.installed).
+_ACTIVE = threading.local()
+
+
+class Timing:
+    """Where a turn's time goes, read from what the run does anyway.
+
+    One record per provider call: chat-model steps (completion:N) and
+    workers (agent:<id>:N: comparison answers, judges, page reads). Times are
+    seconds since the turn started: ``start`` (the step began, before its
+    admission), ``claimed`` (admitted, receipt written), ``request`` (sent),
+    ``first_progress`` (first token, reasoning or tool call: what the stall
+    watchdog counts as progress), ``first_text``, ``end`` (stream closed) and
+    ``settled`` (receipt settled). ``max_silence`` is the longest stretch
+    without progress, the wait for the first token included; the watchdog
+    ends a call at AGENT_PROVIDER_STALL_SECONDS (180 s). ``error`` is the HTTP
+    status or the exception class of a failed call, never a provider body;
+    ``stalled`` marks a call the watchdog ended. Prompts and answers are not
+    recorded."""
+
+    def __init__(self):
+        # perf_counter: Windows' monotonic clock ticks in 15.6 ms steps.
+        self.started = time.perf_counter()
+        self.lock = threading.Lock()
+        self.calls = {}
+        # Worker kind and title by agent id, from the session events.
+        self.agents = {}
+        # Claims the daily allowance refused: the step waited for other calls
+        # to settle, or tried again with less search or output.
+        self.refused_claims = 0
+
+    def clock(self):
+        return time.perf_counter() - self.started
+
+    def call(self, step):
+        with self.lock:
+            return self.calls.setdefault(step, {})
+
+    def first(self, record, key, at=None):
+        if record.get(key) is None:
+            record[key] = self.clock() if at is None else at
+
+    def progress(self, record):
+        at = self.clock()
+        last = record.get("_last", record.get("request"))
+        if last is not None:
+            record["max_silence"] = max(record.get("max_silence", 0), at - last)
+        record["_last"] = at
+        self.first(record, "first_progress", at)
+
+    def end(self, record):
+        record["end"] = at = self.clock()
+        last = record.get("_last", record.get("request"))
+        if last is not None:
+            record["max_silence"] = max(record.get("max_silence", 0), at - last)
+
+    @staticmethod
+    def error(record, error):
+        status = getattr(error, "status_code", None)
+        record["error"] = str(status) if status else type(error).__name__
+        if isinstance(error, TimeoutError) and "no progress" in str(error):
+            record["stalled"] = True
+
+    def watch_store(self, store):
+        """Claims, settlements and worker sessions of this turn's store."""
+        from app.services.agent_quota import AgentTokenBudgetExceeded
+        claim, settle, publish = store.claim, store.settle, store.publish_agent
+
+        def timed_claim(*args, **kwargs):
+            try:
+                claimed = claim(*args, **kwargs)
+            except AgentTokenBudgetExceeded:
+                record = self.call(kwargs.get("step", "completion:0"))
+                with self.lock:
+                    self.refused_claims += 1
+                    record["refused"] = record.get("refused", 0) + 1
+                raise
+            if claimed:
+                record = self.call(kwargs.get("step", "completion:0"))
+                self.first(record, "claimed")
+                model = kwargs.get("model", args[3] if len(args) > 3 else None)
+                record["model"] = getattr(model, "model", None)
+            return claimed
+
+        def timed_settle(*args, **kwargs):
+            settled = settle(*args, **kwargs)
+            record = self.call(kwargs.get("step", "completion:0"))
+            self.first(record, "settled")
+            completion = kwargs.get("completion")
+            usage = getattr(completion, "usage", None) or {}
+            record.update(status=kwargs.get("status"), finish_reason=getattr(completion, "finish_reason", None) or None,
+                          input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
+                          reasoning_tokens=usage.get("reasoning_tokens"))
+            return settled
+
+        def timed_publish(*args, agent_id=None, patch=None, **kwargs):
+            if patch:
+                with self.lock:
+                    known = self.agents.setdefault(agent_id, {"created": self.clock()})
+                    for key in ("kind", "title"):
+                        if patch.get(key):
+                            known.setdefault(key, patch[key])
+            return publish(*args, agent_id=agent_id, patch=patch, **kwargs)
+
+        store.claim, store.settle, store.publish_agent = timed_claim, timed_settle, timed_publish
+
+    def completion(self, base):
+        """``base`` with its stream timed (first progress, first text, end)
+        and its failures recorded."""
+        timing = self
+
+        class Timed(base):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._timing_start = timing.clock()
+
+            def stream(self, *args, **kwargs):
+                record = self._timing = timing.call(self.step_id)
+                timing.first(record, "start", self._timing_start)
+                record["request"] = timing.clock()
+                # The watchdog is created on the first next(), on this thread.
+                _ACTIVE.record = record
+                source = super().stream(*args, **kwargs)
+                try:
+                    for event in source:
+                        _ACTIVE.record = None
+                        if event.get("type") == "delta":
+                            timing.first(record, "first_text")
+                            timing.progress(record)
+                        elif event.get("kind") == "reasoning":
+                            timing.progress(record)
+                        yield event
+                finally:
+                    _ACTIVE.record = None
+                    source.close()
+                    timing.end(record)
+
+            def _tool_delta(self, raw):
+                if getattr(self, "_timing", None) is not None:
+                    timing.progress(self._timing)
+                return super()._tool_delta(raw)
+
+            def record_rejection(self, error, model):
+                timing.error(timing.call(self.step_id), error)
+                return super().record_rejection(error, model)
+
+        Timed.__name__ = base.__name__
+        return Timed
+
+    @contextmanager
+    def installed(self):
+        """Time the progress of real provider streams: the stall watchdog
+        sees every token, reasoning delta and tool-call fragment."""
+        from app.services.llm import provider_runtime
+        base = provider_runtime.ProviderProgressWatchdog
+        timing = self
+
+        class TimedWatchdog(base):
+            def __init__(self, seconds):
+                self.record = None
+                super().__init__(seconds)
+                self.record = getattr(_ACTIVE, "record", None)
+
+            def touch(self):
+                super().touch()
+                if self.record is not None:
+                    timing.progress(self.record)
+
+            def check(self):
+                try:
+                    super().check()
+                except TimeoutError:
+                    if self.record is not None:
+                        self.record["stalled"] = True
+                    raise
+
+        provider_runtime.ProviderProgressWatchdog = TimedWatchdog
+        try:
+            yield self
+        finally:
+            provider_runtime.ProviderProgressWatchdog = base
+
+    def timeline(self, digits=1):
+        """The calls in order of their start, internal fields dropped, times
+        rounded to ``digits`` (None: exact, for comparing them)."""
+        rows = []
+        with self.lock:
+            calls, agents = dict(self.calls), dict(self.agents)
+        for step, record in calls.items():
+            agent = agents.get(step.split(":")[1], {}) if step.startswith("agent:") else {}
+            kind = "chat" if step.startswith("completion:") else agent.get("kind", "worker")
+            # A worker starts when it is created: waiting for a judge slot
+            # or for admission is part of its time.
+            start = record.get("start") if kind == "chat" else agent.get("created", record.get("start"))
+            start = record.get("claimed") if start is None else start
+            row = {"call": step if kind == "chat" else f"{kind}:{step.split(':')[1][:8]}", "kind": kind,
+                   "title": agent.get("title"), "model": record.get("model"), "start": start,
+                   **{key: record.get(key) for key in ("claimed", "request", "first_progress", "first_text", "end",
+                                                       "settled", "max_silence")}}
+            if start is not None and row["claimed"] is not None:
+                row["wait"] = row["claimed"] - start
+            if row["request"] is not None and row["first_progress"] is not None:
+                row["ttft"] = row["first_progress"] - row["request"]
+            done = row["settled"] if row["settled"] is not None else row["end"]
+            if start is not None and done is not None:
+                row["seconds"] = done - start
+            row.update({key: record.get(key) for key in ("refused", "status", "finish_reason", "error", "stalled",
+                                                         "input_tokens", "output_tokens", "reasoning_tokens")})
+            rows.append({key: round(value, digits) if isinstance(value, float) and digits is not None else value
+                         for key, value in row.items() if value is not None})
+        return sorted(rows, key=lambda row: (row.get("start", float("inf")), row["call"]))
+
+
+def after_comparison(timeline, begin, end):
+    """seconds_after_comparison split: chat steps, page reads and the rest
+    (app work between them, the page-excerpt wait, retry pauses). Both run on
+    the loop's thread one after another, so their spans add up."""
+    if begin is None or end is None:
+        return None
+    inside = [row for row in timeline if row["kind"] in {"chat", "source"} and row.get("start") is not None
+              and begin <= row["start"] <= end]
+    chat = sum(row.get("seconds", 0) for row in inside if row["kind"] == "chat")
+    reads = sum(row.get("seconds", 0) for row in inside if row["kind"] == "source")
+    return {"chat_seconds": round(chat, 1), "read_seconds": round(reads, 1),
+            "other_seconds": round(max(0.0, end - begin - chat - reads), 1),
+            "calls": [row["call"] for row in inside]}
+
+
 def receipts(store, uid, chat_id, turn_id):
     """Usage of the chat model's own steps (completion:N), in order."""
     steps, index = [], 0
@@ -106,40 +348,52 @@ def run_turn(case, question, *, merged, model, families, config, key, check_sour
 
     store = AgentRunStore(Database())
     chat, turn = pending(store, question=question)
+    timing = Timing()
+    timing.watch_store(store)
     delegation_config = {**config["delegation"], "enabled": False}
     messages = [{"role": "system", "content": config["prompts"]["agent"]},
                 {"role": "user", "content": with_app_context(question, get_agent_turn_context(model, config))}]
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"], model=model, messages=messages,
                           api_key=key, cancellation=ProviderCancellation(),
                           policy=AgentPolicy.for_chat(delegation_config), delegation_config=delegation_config,
-                          completion_factory=AgentCompletion, comparison_models=comparison_selection(families),
+                          completion_factory=timing.completion(AgentCompletion),
+                          comparison_models=comparison_selection(families),
                           check_sources=check_sources, merged_answer=merged)
-    started = time.monotonic()
+    timing.started = time.perf_counter()
     events, error = [], None
     try:
-        for event in loop.run():
-            events.append((time.monotonic() - started, event))
+        with timing.installed():
+            for event in loop.run():
+                events.append((timing.clock(), event))
     except Exception as exc:  # A failed turn is a result; provider bodies are never printed.
         error = f"{type(exc).__name__}: {str(exc)[:160]}"
-    total = time.monotonic() - started
+    total = timing.clock()
     saved = store.get_turn(UID, chat, turn["id"]) or {}
     text = saved.get("assistant_response") or saved.get("consensus") or ""
 
     first_delta = next((t for t, e in events if e.get("type") == "delta"), None)
-    judge = next((t for t, e in events if e.get("kind") == "tool" and e.get("name") == "judge_answer"), None)
+    judges = [(t, e) for t, e in events if e.get("kind") == "tool" and e.get("name") == "judge_answer"]
+    judge = judges[0][0] if judges else None
+    judge_done = next((t for t, e in reversed(judges) if e.get("status") in {"succeeded", "failed"}), None)
     compares = [(t, e) for t, e in events if e.get("kind") == "tool" and e.get("name") in {"compare_models", "check_text"}
                 and e.get("status") == "succeeded"]
     answer_done = judge if judge is not None else (total if text else None)
     last_compare = compares[-1][0] if compares else None
-    compare_step = None
+    compare_step = compare_started = None
     if compares:
         match = TOOL_STEP.match(str(compares[-1][1].get("id") or ""))
         compare_step = int(match.group(1)) if match else None
+        compare_started = next(t for t, e in events if e.get("id") == compares[-1][1].get("id"))
     steps = receipts(store, UID, chat, turn["id"])
     after = [s for s in steps if compare_step is not None and s["step"] > compare_step]
     review = saved.get("agent_review") or {}
     checks = [((c.get("differences_data") or {}).get("agreement") or {}) for c in review.get("checks") or []]
     usage = loop.completion.usage or {}
+    timeline = timing.timeline()
+    silent = max(timeline, key=lambda row: row.get("max_silence", 0), default=None)
+
+    def at(value):
+        return None if value is None else round(value, 1)
     return {
         "case": case, "mode": "merged" if merged else "separate", "model": model.selection_id,
         "question": question[:120], "status": saved.get("status"), "error": error,
@@ -160,6 +414,19 @@ def run_turn(case, question, *, merged, model, families, config, key, check_sour
         "review": review.get("status"),
         "agreement": [c.get("score") for c in checks],
         "major_contradictions": sum(c.get("major_contradictions") or 0 for c in checks),
+        "phases": {"comparison_started": at(compare_started), "comparison_done": at(last_compare),
+                   "answer_text": at(first_delta), "judges_started": at(judge), "judges_done": at(judge_done),
+                   "end": at(total)},
+        "after_comparison": after_comparison(timing.timeline(digits=None), last_compare, answer_done),
+        "rate_limits": sum(row.get("error") == "429" for row in timeline),
+        "stalls": sum(bool(row.get("stalled")) for row in timeline),
+        # Thought-only steps written again lighter, 429 or cooldown waits.
+        "retries": sum(1 for _, e in events if e.get("kind") == "progress"
+                       and str(e.get("id", "")).endswith(("/retry", "/rate_limit"))),
+        "allowance_refusals": timing.refused_claims,
+        "longest_silence": ({"call": silent["call"], "seconds": silent["max_silence"]}
+                            if silent and "max_silence" in silent else None),
+        "timeline": timeline,
         "answer": text,
     }
 
@@ -199,7 +466,11 @@ def summary(rows, mode):
             "chat_input_tokens": mean("chat_input_tokens"), "total_cost_usd": mean("total_cost_usd"),
             "retractions": sum(r["retractions"] for r in mine), "turns_with_leaks": sum(bool(r["leaks"]) for r in mine),
             "agreement": round(statistics.mean(scores), 1) if scores else None,
-            "major_contradictions": sum(r["major_contradictions"] for r in mine)}
+            "major_contradictions": sum(r["major_contradictions"] for r in mine),
+            "rate_limits": sum(r["rate_limits"] for r in mine), "stalls": sum(r["stalls"] for r in mine),
+            "retries": sum(r["retries"] for r in mine),
+            "longest_silence": max((r["longest_silence"]["seconds"] for r in mine if r["longest_silence"]),
+                                   default=None)}
 
 
 def main():

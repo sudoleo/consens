@@ -635,7 +635,44 @@ blinder Richter; Testmaterial nur im Scratchpad):
 
 Damit bleibt der Schalter aus. Offen: warum die Antworten kürzer werden
 (Evidenz als Toolergebnis-JSON statt Belegnachricht des Antwortschritts?),
-die 300-s-Pausen nach dem Vergleich und ein Lauf mit einem Claude-Modell.
+die 300-s-Pausen nach dem Vergleich (Befund unten: Wartezeit beim Provider) und ein
+Lauf mit einem Claude-Modell.
+
+**Wohin die Zeit geht (seit 2026-10-14).** Jede Zeile hat zusätzlich `phases`
+(Start und Ende des Vergleichs, erster Antworttext, Start und Ende der Judges,
+Sekunden ab Turnbeginn), `timeline` mit einem Eintrag je Provider-Aufruf
+(Chat-Schritte `completion:N`, Vergleichsantworten, Judges, Seitenabrufe:
+`start`, `claimed`, `request`, `first_progress`, `first_text`, `end`, `settled`,
+daraus `wait` für die Zulassung, `ttft` und `seconds`; dazu `max_silence`,
+Tokens, `refused` für abgelehnte Zulassungen, `error` als HTTP-Status oder
+Ausnahmeklasse und `stalled`) und `after_comparison`, das
+`seconds_after_comparison` in Chat-Schritte, Seitenabrufe und den Rest teilt
+(App-Arbeit, Warten auf Seitenauszüge, Wiederholungspausen). `rate_limits`,
+`stalls`, `retries`, `allowance_refusals` und `longest_silence` zählen je Turn,
+die Zusammenfassung summiert sie. Fortschritt heißt dasselbe wie für den
+Stall-Watchdog (`AGENT_PROVIDER_STALL_SECONDS`, 180 s): Text, Reasoning,
+Toolcall-Teile oder steigende Usage, nicht OpenRouters Keepalive-Kommentare;
+`max_silence` schließt das Warten auf den ersten Token ein. Das Skript hängt
+sich nur von außen ein (Store-Aufrufe, Unterklasse der Completion, Watchdog
+während des Laufs) und speichert weder Prompts noch Antworten der Modelle.
+
+**Befund 2026-10-14: 290–330 s nach dem Vergleich.** Zwischen Vergleichsende und
+Judge-Start kann nur Folgendes minutenlang dauern: der Provider-Aufruf des
+Chatmodells selbst (bis 180 s ohne Fortschritt, danach bricht der Watchdog ab und
+der Turn scheitert), eine Wiederholung nach einem ausgedachten Schritt (ein
+weiterer Schritt, Warnung im Log) und `read_source` (bis 60 s je Abruf,
+nacheinander, höchstens fünf). 429 kostet höchstens 10 s, sonst scheitert der
+Schritt; zugelassen wird nach einem Vergleich immer (Überziehen erlaubt).
+Quorum-Nachfrist und Nachzügler liegen vor dem Vergleichsende, Judge-Plätze und
+Judge-Ausfälle danach. Die zusammengelegten Ausreißer (Wärmepumpe 299 s,
+Eiffelturm 290 s) hatten genau zwei Chat-Schritte, keine Warnung und für beide
+zusammen nur 1.337 bzw. 795 Ausgabetokens samt Reasoning: Die Minuten vergingen
+wartend beim Provider von GPT-6 Luna (OpenRouter, unter ZDR Azure), nicht in der
+App. Im selben Lauf hingen Luna-Judges zweimal 180 s bis zum Watchdog, ein
+Coverage-Judge endete mit Timeout, ein Aufruf mit 504, und ein Turn scheiterte an
+„Provider stream made no progress“. Offen ist der Free-Fall EZB getrennt (330 s,
+fünf Chat-Schritte statt drei, ohne Log); die Zeitachse zeigt beim nächsten Lauf,
+ob es Wartezeit beim Provider, eine Wiederholung oder ein Abruf war.
 
 **Offen vor dem Einschalten** (Gegenprüfung 2026-10-14, bewusst nicht behoben):
 

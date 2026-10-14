@@ -572,3 +572,120 @@ def test_the_live_comparison_script_measures_both_modes(store, monkeypatch):
     assert one["review"] == "succeeded" and one["seconds_after_comparison"] is not None
     summary = module.summary([separate, one], "merged")
     assert summary["turns"] == summary["completed"] == 1 and summary["steps"] == 2
+
+    # Where the time goes: every provider call with claim, request, first
+    # token and settlement; the time after the comparison split by step.
+    for row, chat in ((separate, ["completion:0", "completion:1", "completion:2"]), (one, ["completion:0", "completion:1"])):
+        calls = row["timeline"]
+        assert [c["call"] for c in calls if c["kind"] == "chat"] == chat
+        assert sum(c["kind"] == "comparison" for c in calls) == 2 and any(c["kind"] == "judge" for c in calls)
+        for c in calls:
+            assert c["status"] == "succeeded" and "error" not in c
+            assert c["start"] <= c["claimed"] <= c["request"] <= c["end"] <= c["settled"]
+            assert c["request"] <= c.get("first_progress", c["request"]) <= c["end"]
+            assert c["seconds"] >= 0 and c["max_silence"] >= 0 and c["output_tokens"] == 20
+        # The step that writes the answer streams text.
+        assert "first_text" in next(c for c in calls if c["call"] == chat[-1])
+        assert all(c["title"].startswith("Comparison 1") for c in calls if c["kind"] == "comparison")
+        phases = row["phases"]
+        assert (phases["comparison_started"] <= phases["comparison_done"] <= phases["judges_started"]
+                <= phases["judges_done"] <= phases["end"])
+        assert row["rate_limits"] == row["stalls"] == row["retries"] == 0
+        # The test account's allowance does not hold the first step's three
+        # search rounds: one refused claim, then it searches less.
+        assert row["allowance_refusals"] == 1 and next(c for c in calls if c["call"] == "completion:0")["refused"] == 1
+    assert separate["after_comparison"]["calls"] == ["completion:1", "completion:2"]
+    assert one["after_comparison"]["calls"] == ["completion:1"]
+    split = one["after_comparison"]
+    assert split["read_seconds"] == 0 and split["chat_seconds"] + split["other_seconds"] >= 0
+    assert one["phases"]["answer_text"] is not None and one["longest_silence"]["seconds"] >= 0
+
+
+def test_the_live_comparison_script_shows_429s_and_stalls(store, monkeypatch):
+    """A free 429 of the answer step and a comparison answer the stall
+    watchdog ended show up in the script's timeline and counters."""
+    import importlib.util
+    from pathlib import Path
+    from app.services import prompt_config
+    from app.services.llm import agent_client
+    path = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_agent_answer_mode.py"
+    spec = importlib.util.spec_from_file_location("evaluate_agent_answer_mode", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(agent_delegation.DelegationLoop, "_pause", lambda self, seconds: iter(()))
+    monkeypatch.setattr(agent_delegation, "provider_cooldowns", ProviderCooldowns())
+    base = type(Merged([{"tools": [COMPARE]}, {"rate_limited": True}, {"text": ANSWER}]).factory())
+
+    class Stalling(base):
+        def stream(self, *, model, messages, **kwargs):
+            schema = (model.request_config.get("response_format") or {}).get("json_schema")
+            if not self.step_id.startswith("completion:") and not schema and model.model.startswith("google/"):
+                raise TimeoutError("Provider stream made no progress")
+            yield from super().stream(model=model, messages=messages, **kwargs)
+
+    monkeypatch.setattr(agent_client, "AgentCompletion", Stalling)
+    row = module.run_turn(0, "Which option is cheaper?", merged=True, model=resolve_agent_model("claude-haiku-4-5"),
+                          families={"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini",
+                                    "gemini": "gemini-3.5-flash-lite"},
+                          config=prompt_config.get_config(), key="test", check_sources=False)
+    assert row["status"] == "completed" and row["answer"] == ANSWER
+    assert (row["rate_limits"], row["stalls"], row["retries"]) == (1, 1, 1)
+    calls = {c["call"]: c for c in row["timeline"]}
+    assert calls["completion:1"]["error"] == "429" and "first_progress" not in calls["completion:1"]
+    assert "error" not in calls["completion:2"] and calls["completion:2"]["first_text"] >= calls["completion:2"]["request"]
+    stalled = [c for c in row["timeline"] if c.get("stalled")]
+    assert [(c["kind"], c["error"], c["status"]) for c in stalled] == [("comparison", "TimeoutError", "failed")]
+    assert row["after_comparison"]["calls"] == ["completion:1", "completion:2"]
+    summary = module.summary([row], "merged")
+    assert (summary["rate_limits"], summary["stalls"], summary["retries"]) == (1, 1, 1)
+
+
+def test_the_live_comparison_script_times_real_provider_streams(monkeypatch):
+    """The real stream path: the stall watchdog's progress gives the first
+    token and the longest silence (keepalive comments are none), and a
+    stream the watchdog ends is marked stalled."""
+    import importlib.util
+    from pathlib import Path
+    import time
+    from app.services.llm import agent_client, provider_runtime
+    path = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_agent_answer_mode.py"
+    spec = importlib.util.spec_from_file_location("evaluate_agent_answer_mode", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def packet(delta, finish=None):
+        return "data: " + json.dumps({"id": "gen", "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]})
+
+    def answering(url, **kwargs):
+        yield ": OPENROUTER PROCESSING"
+        time.sleep(.15)
+        yield packet({"content": "Hello"})
+        yield ""
+        yield packet({"content": " world"}, "stop")
+        yield ""
+        yield "data: [DONE]"
+        yield ""
+
+    def stalling(url, *, progress, **kwargs):
+        yield ": OPENROUTER PROCESSING"
+        progress.deadline = 0  # 180 s without a token, as the socket guard sees it
+        progress.check()
+
+    timing = module.Timing()
+    timed = timing.completion(agent_client.AgentCompletion)
+    model = resolve_agent_model("claude-haiku-4-5")
+    original = provider_runtime.ProviderProgressWatchdog
+    with timing.installed():
+        for step, lines in (("completion:0", answering), ("completion:1", stalling)):
+            monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
+            value = timed()
+            value.step_id = step
+            try:
+                list(value.stream(model=model, messages=[{"role": "user", "content": "Hi"}], api_key="test"))
+            except TimeoutError:
+                assert step == "completion:1"
+    assert provider_runtime.ProviderProgressWatchdog is original
+    answered, stalled = timing.timeline()
+    assert answered["call"] == "completion:0" and answered["ttft"] >= .1 and answered["max_silence"] >= .1
+    assert answered["first_text"] == answered["first_progress"] and "stalled" not in answered
+    assert stalled["call"] == "completion:1" and stalled["stalled"] and "first_progress" not in stalled

@@ -2998,7 +2998,8 @@ schreibt die Antwort in einem letzten Schritt mit gelisteten, nicht aufrufbaren
 Tools (`allow_tools=False` → `tool_choice: none`), offene Toolcalls bekommen
 vorher ein Ergebnis (`_close_open_calls`). Details und Messung:
 [agent-mode.md](agent-mode.md), „Antwort im selben Aufruf“;
-`scripts/evaluate_agent_answer_mode.py` vergleicht beide Wege live.
+`scripts/evaluate_agent_answer_mode.py` vergleicht beide Wege live und zeigt je
+Provider-Aufruf, wohin die Zeit geht (Zulassung, erster Token, Stille, Settlement).
 Der Toolcall prüft diesen exakten Text, keinen vom Modell frei behaupteten
 Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,
 Zitatprüfung und begrenzten Repairs. `chat_mode=true` hält beide Judges auf den
