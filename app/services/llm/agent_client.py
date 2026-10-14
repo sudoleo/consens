@@ -151,6 +151,15 @@ ANSWER_SOURCES_MAX = 10
 CITATION_CONTENT_CHARS = 4000
 # Citation records per call; providers repeat cumulative annotation snapshots.
 CITATIONS_MAX = 40
+# OpenAI's own citation marks, private-use characters in the text:
+# "citeturn2search0", "citehttps://…" or URLs
+# only, sometimes without the closing mark (it then ends at the next
+# whitespace). GPT-6 Luna wrote them into 5 of 13 merged Agent answers on
+# 2026-10-14, where they showed as "citeturn2search0". Never text: removed
+# while streaming (AgentCompletion._visible), and a stray mark character too.
+CITE_MARK = re.compile(r"[^\s]*?|[-]")
+# A mark split across chunks waits this long for its end; longer is no mark.
+CITE_HOLD_CHARS = 8192
 
 
 def _metadata(model):
@@ -531,6 +540,11 @@ class AgentCompletion:
         self._citation_keys = set()
         # Text length when the first search results arrived (see _drop_presearch_text).
         self._results_at = None
+        # Citation marks (CITE_MARK): an unfinished one held back, the
+        # provider's text length so far and what was removed where in it.
+        self._mark = ""
+        self._raw_chars = 0
+        self._removed = []
         self._tool_parts = {}
         self._raw_usage = {}
         self._final_usage_fields = set()
@@ -711,15 +725,45 @@ class AgentCompletion:
             if known:
                 self._citation(url, value)
 
+    def _visible(self, chunk, *, final=False):
+        """``chunk`` of the provider's text without citation marks (CITE_MARK).
+
+        A mark still open at its end (no closing mark, no whitespace yet)
+        waits for the next chunk; ``final`` releases what is held. Removed
+        spans are kept in provider positions for the citation offsets."""
+        text = self._mark + chunk
+        start = self._raw_chars - len(self._mark)
+        self._raw_chars += len(chunk)
+        self._mark = ""
+        if text.isascii():
+            return text
+        opened = text.rfind("")
+        if not final and opened >= 0:
+            tail = text[opened:]
+            if "" not in tail and not any(c.isspace() for c in tail) and len(tail) < CITE_HOLD_CHARS:
+                self._mark, text = tail, text[:opened]
+        parts, last = [], 0
+        for match in CITE_MARK.finditer(text):
+            parts.append(text[last:match.start()])
+            self._removed.append((start + match.start(), match.end() - match.start()))
+            last = match.end()
+        parts.append(text[last:])
+        return "".join(parts)
+
+    def _shown_index(self, index):
+        """A provider text position, moved past the removed citation marks."""
+        return index - sum(min(length, max(0, index - at)) for at, length in self._removed)
+
     def _citation(self, url, value):
         """Keep where the answer cites ``url`` and the source text sent with it.
 
         Offsets index the final answer text; some native-search adapters send
         0/0. The text length seen so far is the fallback anchor, as in the
-        Consensus stream (streaming._stream_openrouter_chat_completion)."""
+        Consensus stream (streaming._stream_openrouter_chat_completion).
+        Provider offsets count removed citation marks (_visible): moved."""
         def offset(name):
             number = value.get(name)
-            return number if type(number) is int and number >= 0 else None
+            return self._shown_index(number) if type(number) is int and number >= 0 else None
         key = (url, offset("start_index"), offset("end_index"))
         if key in self._citation_keys or len(self.citations) >= CITATIONS_MAX:
             # Repeated cumulative snapshots: the first is closest to its claim.
@@ -870,6 +914,8 @@ class AgentCompletion:
                             self._tool_delta(delta["tool_calls"])
                         yield from self.reasoning_events(delta)
                         chunk = delta.get("content")
+                        if isinstance(chunk, str) and chunk:
+                            chunk = self._visible(chunk)
                         if isinstance(chunk, str) and chunk and len(self.text) >= TEXT_STORAGE_CHARS:
                             # Beyond the storage limit: keep reading so usage and
                             # cost still arrive, but end the answer as truncated.
@@ -887,6 +933,8 @@ class AgentCompletion:
                         self._annotations((choice.get("message") or {}).get("annotations"), before)
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
+                # A mark still held at the end is a mark cut off: never text.
+                self._visible("", final=True)
                 self._drop_presearch_text(model)
                 if text_capped and self.finish_reason == "stop":
                     self.finish_reason = "length"

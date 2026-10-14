@@ -437,6 +437,47 @@ def test_client_drops_what_the_model_wrote_before_its_search_results(monkeypatch
     assert all(entry["claims"] == [] and entry["content"] for entry in cited.values())
 
 
+# OpenAI's own citation marks (private-use characters), recorded in merged
+# Agent answers of GPT-6 Luna on 2026-10-14; shown as "citeturn2search0".
+MARKED = ("Breite ETFs streuen das Risiko. citehttps://www.finra.org/investors/x\n\n"
+          "Einzelaktien bündeln es. citeturn2search0turn2search1\n- Fazit. "
+          "https://a.example/1https://b.example/2\n\nEnde.")
+UNMARKED = "Breite ETFs streuen das Risiko. \n\nEinzelaktien bündeln es. \n- Fazit. \n\nEnde."
+
+
+@pytest.mark.parametrize("size", [1, 7, 50, len(MARKED)])
+def test_client_removes_openai_citation_marks_while_streaming(monkeypatch, size):
+    from test_agent_loop import packet, usage
+    chunks = [MARKED[i:i + size] for i in range(0, len(MARKED), size)]
+    completion, events = stream_answer(monkeypatch, [*(packet({"content": c}) for c in chunks),
+                                                     packet(finish="stop", usage=usage())])
+    assert completion.text == UNMARKED
+    # Live text never shows a mark, also when one is split across chunks.
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == UNMARKED
+
+
+def test_client_drops_a_citation_mark_cut_off_at_the_end(monkeypatch):
+    from test_agent_loop import packet, usage
+    completion, events = stream_answer(monkeypatch, [packet({"content": "Antwort. citetu"}),
+                                                     packet({"content": "rn0search"}),
+                                                     packet(finish="stop", usage=usage())])
+    assert completion.text == "Antwort. "
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == "Antwort. "
+
+
+def test_citation_offsets_move_past_removed_marks(monkeypatch):
+    from test_agent_loop import packet, usage
+    mark = "citeturn0search0"
+    raw = "Erster Satz. " + mark + " Zweiter Satz."
+    start = raw.index("Zweiter")
+    completion, _ = stream_answer(monkeypatch, [
+        packet({"content": raw, "annotations": [search_result("https://example.org/a", start, len(raw))]}),
+        packet(finish="stop", usage=usage(1))])
+    assert completion.text == "Erster Satz.  Zweiter Satz."
+    citation = completion.citations[0]
+    assert completion.text[citation["start_index"]:citation["end_index"]] == "Zweiter Satz."
+
+
 def test_client_keeps_text_when_no_results_preceded_it(monkeypatch):
     from test_agent_loop import packet, usage
     # OpenAI cites spans while it writes, Gemini after the answer: no arrival.
