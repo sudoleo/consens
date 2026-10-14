@@ -151,15 +151,38 @@ ANSWER_SOURCES_MAX = 10
 CITATION_CONTENT_CHARS = 4000
 # Citation records per call; providers repeat cumulative annotation snapshots.
 CITATIONS_MAX = 40
-# OpenAI's own citation marks, private-use characters in the text:
-# "citeturn2search0", "citehttps://…" or URLs
-# only, sometimes without the closing mark (it then ends at the next
-# whitespace). GPT-6 Luna wrote them into 5 of 13 merged Agent answers on
-# 2026-10-14, where they showed as "citeturn2search0". Never text: removed
-# while streaming (AgentCompletion._visible), and a stray mark character too.
-CITE_MARK = re.compile(r"[^\s]*?|[-]")
+# OpenAI's own citation marks, private-use characters in the text: U+E200
+# opens, U+E202 separates, U+E201 closes, as in [E200]cite[E202]turn2search0
+# [E201] or [E200]cite[E202]https://...[E201]; sometimes URLs only and without
+# the closing mark (it then ends at the next whitespace). GPT-6 Luna wrote them
+# into 5 of 13 merged Agent answers on 2026-10-14 (shown as "citeturn2search0")
+# instead of links, and dropping them dropped the answer's sources. While
+# streaming (AgentCompletion._visible) a mark's URLs become markdown links,
+# like the links the answer step writes; other references and stray mark
+# characters go.
+CITE_OPEN, CITE_CLOSE, CITE_SEP = chr(0xE200), chr(0xE201), chr(0xE202)
+CITE_MARK = re.compile(CITE_OPEN + r"[^\s" + CITE_CLOSE + "]*" + CITE_CLOSE + "?|[" + CITE_CLOSE + "-" + chr(0xE2FF) + "]")
 # A mark split across chunks waits this long for its end; longer is no mark.
 CITE_HOLD_CHARS = 8192
+
+
+def _cite_links(mark):
+    """Markdown links for the URLs of one citation mark (CITE_MARK), joined
+    like the answer step's links; nothing for references without a URL."""
+    links = []
+    for ref in mark.strip(CITE_OPEN + CITE_CLOSE).split(CITE_SEP):
+        try:
+            parsed = urlsplit(ref)
+            valid = (len(ref) <= 2048 and parsed.scheme in {"https", "http"} and parsed.hostname
+                     and not parsed.username and not parsed.password)
+        except ValueError:
+            valid = False
+        if valid:
+            host = parsed.hostname[4:] if parsed.hostname.startswith("www.") else parsed.hostname
+            link = f"[{host}]({ref.replace('(', '%28').replace(')', '%29')})"
+            if link not in links:
+                links.append(link)
+    return " · ".join(links)
 
 
 def _metadata(model):
@@ -726,10 +749,11 @@ class AgentCompletion:
                 self._citation(url, value)
 
     def _visible(self, chunk, *, final=False):
-        """``chunk`` of the provider's text without citation marks (CITE_MARK).
+        """``chunk`` of the provider's text with citation marks (CITE_MARK)
+        turned into links of their URLs (_cite_links).
 
         A mark still open at its end (no closing mark, no whitespace yet)
-        waits for the next chunk; ``final`` releases what is held. Removed
+        waits for the next chunk; ``final`` releases what is held. Replaced
         spans are kept in provider positions for the citation offsets."""
         text = self._mark + chunk
         start = self._raw_chars - len(self._mark)
@@ -737,22 +761,30 @@ class AgentCompletion:
         self._mark = ""
         if text.isascii():
             return text
-        opened = text.rfind("")
+        opened = text.rfind(CITE_OPEN)
         if not final and opened >= 0:
             tail = text[opened:]
-            if "" not in tail and not any(c.isspace() for c in tail) and len(tail) < CITE_HOLD_CHARS:
+            if CITE_CLOSE not in tail and not any(c.isspace() for c in tail) and len(tail) < CITE_HOLD_CHARS:
                 self._mark, text = tail, text[:opened]
         parts, last = [], 0
         for match in CITE_MARK.finditer(text):
-            parts.append(text[last:match.start()])
-            self._removed.append((start + match.start(), match.end() - match.start()))
+            links = _cite_links(match.group(0))
+            parts += [text[last:match.start()], links]
+            self._removed.append((start + match.start(), match.end() - match.start(), len(links)))
             last = match.end()
         parts.append(text[last:])
         return "".join(parts)
 
     def _shown_index(self, index):
-        """A provider text position, moved past the removed citation marks."""
-        return index - sum(min(length, max(0, index - at)) for at, length in self._removed)
+        """A provider text position in the shown text: replaced citation
+        marks no longer count, the links that replaced them do."""
+        shown = index
+        for at, length, added in self._removed:
+            if index >= at + length:
+                shown += added - length
+            elif index > at:
+                shown += min(added, index - at) - (index - at)
+        return shown
 
     def _citation(self, url, value):
         """Keep where the answer cites ``url`` and the source text sent with it.

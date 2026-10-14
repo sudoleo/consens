@@ -78,7 +78,7 @@ CASES = [
 # Also OpenAI's citation marks (agent_client.CITE_MARK), should one get past.
 LEAKS = re.compile(r"\b(compare_models|check_text|read_source|prepare_watch|update_memory|status_update|"
                    r"judge_answer|tool calls?|tool results?|comparison results?|untrusted|Model [A-F]|"
-                   r"cite\W?turn\d+\w*|turn\d+search\d+)\b|[-]", re.I)
+                   r"cite\W?turn\d+\w*|turn\d+search\d+)\b|[\ue200-\ue2ff]", re.I)
 STEP = re.compile(r"^completion:(\d+)/started$")
 TOOL_STEP = re.compile(r"^completion:(\d+):")
 

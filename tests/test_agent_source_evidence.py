@@ -6,6 +6,7 @@ import threading
 import pytest
 
 from app.services import agent_source_evidence as evidence
+from app.services.llm.agent_client import CITE_CLOSE, CITE_OPEN, CITE_SEP
 from app.services.agent_source_evidence import (
     EXCERPT_BUDGET_CHARS, LEAD_EXCERPT_CHARS, MIN_SEARCH_TEXT_CHARS, PooledSource, SourceEvidence,
     answer_citations, cited_claim, source_entries)
@@ -439,43 +440,49 @@ def test_client_drops_what_the_model_wrote_before_its_search_results(monkeypatch
 
 # OpenAI's own citation marks (private-use characters), recorded in merged
 # Agent answers of GPT-6 Luna on 2026-10-14; shown as "citeturn2search0".
-MARKED = ("Breite ETFs streuen das Risiko. citehttps://www.finra.org/investors/x\n\n"
-          "Einzelaktien bündeln es. citeturn2search0turn2search1\n- Fazit. "
-          "https://a.example/1https://b.example/2\n\nEnde.")
-UNMARKED = "Breite ETFs streuen das Risiko. \n\nEinzelaktien bündeln es. \n- Fazit. \n\nEnde."
+O, C, S = CITE_OPEN, CITE_CLOSE, CITE_SEP
+MARKED = (f"Breite ETFs streuen das Risiko. {O}cite{S}https://www.finra.org/investors/x{C}\n\n"
+          f"Einzelaktien bündeln es. {O}cite{S}turn2search0{S}turn2search1{C}\n- Fazit. "
+          f"{O}https://a.example/1{S}https://b.example/2\n\nEnde.{S}")
+# The URLs become links like the answer step writes them; other references go.
+LINKED = ("Breite ETFs streuen das Risiko. [finra.org](https://www.finra.org/investors/x)\n\n"
+          "Einzelaktien bündeln es. \n- Fazit. [a.example](https://a.example/1) · [b.example](https://b.example/2)"
+          "\n\nEnde.")
 
 
 @pytest.mark.parametrize("size", [1, 7, 50, len(MARKED)])
-def test_client_removes_openai_citation_marks_while_streaming(monkeypatch, size):
+def test_client_turns_openai_citation_marks_into_links_while_streaming(monkeypatch, size):
     from test_agent_loop import packet, usage
     chunks = [MARKED[i:i + size] for i in range(0, len(MARKED), size)]
     completion, events = stream_answer(monkeypatch, [*(packet({"content": c}) for c in chunks),
                                                      packet(finish="stop", usage=usage())])
-    assert completion.text == UNMARKED
+    assert completion.text == LINKED
     # Live text never shows a mark, also when one is split across chunks.
-    assert "".join(e["text"] for e in events if e["type"] == "delta") == UNMARKED
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == LINKED
 
 
-def test_client_drops_a_citation_mark_cut_off_at_the_end(monkeypatch):
+def test_a_citation_mark_without_a_web_url_leaves_nothing(monkeypatch):
     from test_agent_loop import packet, usage
-    completion, events = stream_answer(monkeypatch, [packet({"content": "Antwort. citetu"}),
-                                                     packet({"content": "rn0search"}),
-                                                     packet(finish="stop", usage=usage())])
-    assert completion.text == "Antwort. "
-    assert "".join(e["text"] for e in events if e["type"] == "delta") == "Antwort. "
+    completion, events = stream_answer(monkeypatch, [
+        packet({"content": f"Antwort. {O}cite{S}javascript:alert(1){S}https://user:pw@example.org/{C} Ende. "}),
+        packet({"content": f"{O}cite{S}tu"}), packet({"content": "rn0search"}),
+        packet(finish="stop", usage=usage())])
+    # A mark cut off at the end of the stream is no text either.
+    assert completion.text == "Antwort.  Ende. "
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == completion.text
 
 
-def test_citation_offsets_move_past_removed_marks(monkeypatch):
+def test_citation_offsets_move_with_replaced_marks(monkeypatch):
     from test_agent_loop import packet, usage
-    mark = "citeturn0search0"
-    raw = "Erster Satz. " + mark + " Zweiter Satz."
-    start = raw.index("Zweiter")
+    raw = (f"Erster Satz. {O}cite{S}https://example.org/q{C} Zweiter Satz. {O}cite{S}turn0search0{C}"
+           " Dritter Satz.")
+    start = raw.index("Dritter")
     completion, _ = stream_answer(monkeypatch, [
         packet({"content": raw, "annotations": [search_result("https://example.org/a", start, len(raw))]}),
         packet(finish="stop", usage=usage(1))])
-    assert completion.text == "Erster Satz.  Zweiter Satz."
+    assert completion.text == "Erster Satz. [example.org](https://example.org/q) Zweiter Satz.  Dritter Satz."
     citation = completion.citations[0]
-    assert completion.text[citation["start_index"]:citation["end_index"]] == "Zweiter Satz."
+    assert completion.text[citation["start_index"]:citation["end_index"]] == "Dritter Satz."
 
 
 def test_client_keeps_text_when_no_results_preceded_it(monkeypatch):

@@ -577,12 +577,15 @@ nimmt die App gestreamten Text vor der leichteren Wiederholung zurück.
 Zitiermarken in 5 von 13 Antworten (Live-Vergleich 2026-10-14), sichtbar als
 „citeturn2search0“; im getrennten Antwortschritt nie, weil dort keine Such- und
 Toolergebnisse im selben Aufruf liegen. Die Marken bestehen aus Private-Use-Zeichen
-(`citeturn2search0`, auch mit URLs oder ohne Schlusszeichen).
-`AgentCompletion._visible` entfernt sie beim Streamen für jeden Agent-Aufruf; eine
-über Chunks geteilte Marke wartet bis zu ihrem Ende, Zitat-Offsets werden
-mitverschoben. Die URLs darin werden bewusst nicht zu Links oder Quellen: Eine
-präparierte Seite könnte sonst eine Adresse mit Chatinhalt in die Quellenliste
-bringen, die `read_source` später öffnen dürfte.
+(`\ue200cite\ue202turn2search0\ue201`, auch mit URLs oder ohne Schlusszeichen).
+Luna setzte sie statt Links: In 3 von 8 zusammengelegten Antworten war dort kein
+einziger Quellenlink. `AgentCompletion._visible` macht beim Streamen für jeden
+Agent-Aufruf aus den URLs einer Marke Markdown-Links (`[host](url)`, mehrere mit
+„ · “, wie der Antwortschritt verlinkt); andere Verweise (`turn2search0`) und
+Adressen außer http(s) ohne Zugangsdaten fallen weg. Eine über Chunks geteilte
+Marke wartet bis zu ihrem Ende, Zitat-Offsets werden mitverschoben. Die Links
+stehen nur im Text und werden keine Quellen: Links aus dem Antworttext öffnet
+`read_source` nie, eine präparierte Seite kann so nichts abrufen lassen.
 
 **Eigene Recherche.** Vor dem ersten Vergleich wird Text nach eigenen
 Suchtreffern nicht gezeigt. Antwortet der Agent aus seiner Recherche, greift wie
