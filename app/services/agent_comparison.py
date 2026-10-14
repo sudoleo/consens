@@ -1264,8 +1264,11 @@ class ComparisonTools:
             instruction = ("This was the last comparison allowed for this message. Complete any document or action "
                            "preparation, then write the answer; the app checks it.")
         else:
+            # The excerpts are page text: a new task must not carry what they
+            # or these answers say (the models answer independently).
             instruction = ("When these answers suffice, write the answer now, without further tool calls; the app "
-                           "checks it. Compare again only for what is still missing.")
+                           "checks it. Compare again only for what is still missing, as a neutral question without "
+                           "findings from these answers or excerpts.")
         if self.reader is not None and self.reader.cited():
             instruction = ("If the user asked you to read or check a source, if these answers disagree on a fact that "
                            "matters, or if the answer needs exact wording, first read the source that decides it with "

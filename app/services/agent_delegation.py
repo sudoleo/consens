@@ -1413,11 +1413,17 @@ class DelegationLoop(AgentLoop):
         Nothing once a tool call has started (the text is a preamble) or, in
         a step before any comparison, once its own search found results (that
         text is research the app does not send: _consensus_search_handoff).
-        Nothing below ANSWER_HOLD_CHARS: a short preamble never flashes up."""
+        Nothing below ANSWER_HOLD_CHARS: a short preamble never flashes up.
+        ``value.short_reply``: such a short text was held only for its length
+        and would show if the step ended here (_answered_with_tools)."""
         from app.services.agent_answer_mode import ANSWER_HOLD_CHARS
-        if value._tool_parts or (research and (getattr(value, "_results_at", None) is not None or value.sources)):
+        if value._tool_parts:
+            return None
+        if research and (getattr(value, "_results_at", None) is not None or value.sources):
+            value.short_reply = False
             return None
         if not value.published and len(value.text) < ANSWER_HOLD_CHARS:
+            value.short_reply = True
             return None
         if not value.text.startswith(value.published):
             return None
@@ -1456,13 +1462,16 @@ class DelegationLoop(AgentLoop):
             yield self.activity({"step_id": value.step_id, "id": "note", "kind": "progress", "text": text})
 
     def _answered_with_tools(self, value):
-        """A merged step that shows its answer and calls only tools that
-        change nothing it rests on (agent_answer_mode.SIDE_TOOLS): the text
-        is the answer. Claude may write the answer and then save a memory;
-        retracting it would leave only "Saved." for the next step."""
+        """A merged step that shows its answer (or a short one that was held
+        only for its length) and calls only tools that change nothing it
+        rests on (agent_answer_mode.SIDE_TOOLS): the text is the answer.
+        Claude may write the answer and then save a memory; retracting it
+        would leave only "Saved." for the next step, and "Got it, I'll keep
+        that in mind." with update_memory is the whole reply."""
         from app.services.agent_answer_mode import SIDE_TOOLS
         names = {(call.get("function") or {}).get("name") for call in value.tool_calls}
-        return bool(getattr(value, "published", "") and value.text.strip() and names <= SIDE_TOOLS
+        shown = getattr(value, "published", "") or getattr(value, "short_reply", False)
+        return bool(shown and value.text.strip() and names <= SIDE_TOOLS
                     and value.finish_reason not in {"length", "max_tokens"})
 
     def _research_unchecked(self):
@@ -1649,6 +1658,10 @@ class DelegationLoop(AgentLoop):
                         index = next(steps, None) if lighter else None
                         if index is None:
                             raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
+                        if self.merged:
+                            # Text it streamed before a tool call cut in half
+                            # does not stay under the retry's text.
+                            yield from self._retract(value)
                         logging.warning("Agent routing step reasoned through its allowance model=%s effort=%s retry_effort=%s",
                                         routing.model, routing.reasoning_effort, lighter.reasoning_effort)
                         yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",

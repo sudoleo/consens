@@ -537,6 +537,13 @@ bis zu drei).
   nach `check_text` die Satzurteile (`checked_text`). Die Antworten dieses
   Vergleichs sind damit fixiert; spätere Nachzügler sind `late`, wie beim
   Antwortschritt.
+- Anders als nach `read_source` bleiben weitere Vergleiche erlaubt, obwohl jetzt
+  Seitentext (Auszüge) im Kontext steht; sonst gäbe es im zusammengelegten Weg
+  praktisch nie einen zweiten Vergleich. Die Anweisung im Ergebnis verlangt dafür
+  eine neutrale Frage ohne Befunde aus Antworten oder Auszügen. Bewusst weich:
+  `update_memory` braucht ein wörtliches Nutzerzitat, `prepare_watch` den Start
+  durch den Nutzer und `read_source` zitierte Adressen; der verbleibende Weg wäre
+  eine präparierte Seite, die den zweiten Vergleichsauftrag färbt.
 - Jeder Schritt hat das Antwortbudget samt Denk-Reserve, zeigt Denk-Auszüge und
   läuft mit Prompt-Cache. Nach bezahlten Vergleichen wird ein kostenloser 429
   einmal wiederholt, ein ausgedachter Schritt einmal leichter.
@@ -549,7 +556,12 @@ ein Toolcall, stoppt das Streaming. Wurde schon Text gezeigt, nimmt die App ihn
 zurück (Status `retract` mit `clear_response`) und zeigt ihn als eine
 Fortschrittszeile (`note`, höchstens 400 Zeichen). Folgen nur `update_memory`
 oder `prepare_watch`, bleibt der Text die Antwort: Claude schreibt manchmal erst
-die Antwort und speichert dann eine Erinnerung.
+die Antwort und speichert dann eine Erinnerung. Das gilt auch für kurzen Text,
+der nur wegen der 300 Zeichen zurückgehalten wurde (`short_reply`, z. B. „Alles
+klar, merke ich mir.“ bei einer Merk-Bitte); bis zur Gegenprüfung vom 2026-10-14
+verschwand er, und der nächste Schritt schrieb nur noch „Saved.“. Text nach
+eigenen Suchtreffern zählt nie als gezeigt. Reißt ein Toolcall am Ausgabelimit ab,
+nimmt die App gestreamten Text vor der leichteren Wiederholung zurück.
 
 **Eigene Recherche.** Vor dem ersten Vergleich wird Text nach eigenen
 Suchtreffern nicht gezeigt. Antwortet der Agent aus seiner Recherche, greift wie
@@ -578,6 +590,21 @@ Chatmodell-Schritte, Rücknahmen, verdächtige Wörter (`leaks`) und das Urteil 
 Judges. `--pairwise <modell>` lässt zusätzlich einen blinden Richter die bessere
 Antwort wählen, `--only` beschränkt auf einzelne Fragen. Weil jeder Lauf eigene
 Vergleichsantworten bekommt, sind die Qualitätszahlen ein Trend.
+
+**Offen vor dem Einschalten** (Gegenprüfung 2026-10-14, bewusst nicht behoben):
+
+- Denk-Auszüge erscheinen in jedem Schritt, auch in Steuer-Schritten, die
+  Systemprompt und Toolergebnisse sehen; Toolnamen oder Prompt-Regeln können so
+  als Fortschrittszeile auftauchen (gespeichert in `agent_activity`).
+- Jeder Schritt reserviert das Antwortbudget, und eine Direktantwort darf nicht
+  überziehen (`direct` steht erst nach dem Schritt): Kurz vor dem Tageslimit fällt
+  zuerst die Suche weg oder der Turn wird abgelehnt, wo der Antwortschritt im
+  getrennten Weg überzogen hätte.
+- An der Turn-Grenze nicht live geprüft: Liefert ein Anbieter trotz
+  `tool_choice: none` einen Toolcall, scheitert der Turn („Unexpected tool call“).
+- Stoppt der Wiederholungs- oder Ungültig-Schutz im selben Schritt wie eine
+  gezeigte Antwort mit `update_memory`, scheitert ein Turn ohne Vergleich, obwohl
+  die Antwort sichtbar war (selten).
 
 ### Eingefügten Text prüfen (seit 2026-10-09)
 

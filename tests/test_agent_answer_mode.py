@@ -15,7 +15,7 @@ from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
-from app.services.agent_provider_limits import ProviderCooldowns
+from app.services.agent_provider_limits import ModelOutputLimit, ProviderCooldowns
 from app.services.llm.engines import _ProviderHTTPStatusError
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation
 from test_agent_comparison import Script
@@ -84,6 +84,11 @@ class Merged(Script):
                     chunk = text[start:start + 50]
                     self.text += chunk
                     yield {"type": "delta", "text": chunk}
+                if step.get("cut"):
+                    # A tool call cut in half at the output limit: the client
+                    # marks it and raises (AgentCompletion._output_limited).
+                    self.finish_reason, self.output_limited = "length", True
+                    raise ModelOutputLimit()
                 calls = []
                 for n, (name, args) in enumerate(step.get("tools", ())):
                     if script.memory is not None and name in {"compare_models", "check_text"} and "memory" not in args:
@@ -362,6 +367,49 @@ def test_an_answer_followed_only_by_a_memory_save_stands(store):
     assert orchestrator_steps(script) == ["completion:0"]
     assert loop.completion.text == ANSWER and deltas(events) == ANSWER and not retractions(events)
     assert [item["text"] for item in repo(store).get(UID)[0]] == ["Leads a team of ten."]
+
+
+def test_a_short_reply_with_a_memory_save_is_the_whole_answer(store):
+    """The usual memory request: a short confirmation, held only for its
+    length, plus update_memory. Not a preamble: no second step writes "Saved."
+    (review 2026-10-14)."""
+    set_profile(store.db, auto_memory=True)
+    save = ("update_memory", {"changes": [{"op": "add", "text": "Leads a team of ten.",
+                                           "evidence": "Which option is cheaper?"}]})
+    short = "Got it, I will keep in mind that you lead a team of ten."
+    script = Merged([{"text": short, "tools": [save]}, {"text": "Saved."}])
+    loop = merged_loop(store, script, memory=repo(store).snapshot(UID))
+    events = list(loop.run())
+    assert orchestrator_steps(script) == ["completion:0"]
+    assert loop.completion.text == short and deltas(events) == short and not retractions(events)
+    assert [item["text"] for item in repo(store).get(UID)[0]] == ["Leads a team of ten."]
+
+
+def test_a_short_text_held_during_research_is_no_answer_with_a_memory_save(store):
+    """Text after the step's own search results never counted as shown: a
+    memory save next to it does not turn research into the answer."""
+    set_profile(store.db, auto_memory=True)
+    save = ("update_memory", {"changes": [{"op": "add", "text": "Leads a team of ten.",
+                                           "evidence": "Which option is cheaper?"}]})
+    script = Merged([{"sources": [{"url": "https://example.com/a", "title": "A"}], "text": "Found prices.",
+                      "tools": [save]}, {"tools": [COMPARE]}, {"text": ANSWER}])
+    loop = merged_loop(store, script, memory=repo(store).snapshot(UID))
+    events = list(loop.run())
+    assert orchestrator_steps(script)[:2] == ["completion:0", "completion:1"]
+    assert "Found prices." not in deltas(events) and loop.completion.text != "Found prices."
+
+
+def test_text_before_a_cut_tool_call_is_taken_back_before_the_retry(store, monkeypatch):
+    monkeypatch.setattr(agent_delegation, "lighter_reasoning",
+                        lambda model: replace(model, reasoning_effort="low"))
+    preamble = "Let me first think about what matters here. " * 12
+    script = Merged([{"text": preamble, "cut": True}, {"text": ANSWER}])
+    loop = merged_loop(store, script)
+    events = list(loop.run())
+    assert len(retractions(events)) == 1
+    clear = events.index(retractions(events)[0])
+    assert deltas(events[:clear]) == preamble and deltas(events[clear:]) == ANSWER
+    assert loop.completion.text == ANSWER
 
 
 def test_a_page_read_after_the_comparison_is_in_context_and_checked(store, monkeypatch):
