@@ -618,6 +618,25 @@ Verdacht, das Free-Kontingent habe die EZB-Frage verlangsamt (434–518 s statt
 214 s), bestätigte sich nicht: Jeder Turn bekommt ein frisches Konto, und dort
 wartet auch Free nicht (siehe „Tageskontingent“, Stufe und Parallelität).
 
+**Ergebnis Luna, 2026-10-14** (Pro-Konto, 9 vollständige Paare, Sonnet 5.5 als
+blinder Richter; Testmaterial nur im Scratchpad):
+
+- Qualität: 7:2 für den getrennten Weg. Die zusammengelegten Antworten waren im
+  Median 13 % kürzer, bei drei Fragen 30–52 %; der Richter begründete fast immer
+  mit fehlenden Konkreta (Rechenbeispiel, Modelle, Förderbeträge), zweimal mit
+  Zitiermarken (seitdem entfernt, siehe oben).
+- Rücknahmen 0, Werkzeugwörter 0 in beiden Wegen.
+- Zeit: Direktantwort 2 s statt 28 s. Mit Vergleich gleich (Median 231 s gegen
+  239 s gesamt, erster Antworttext 193 s gegen 183 s); nach dem Vergleich im
+  Median schneller (45 s gegen 74 s), aber mit Ausreißern um 300 s und einem
+  Lauf ins 20-Minuten-Limit.
+- Kosten: gleich (Luna-Schritte kosten 0,1–0,7 Cent, den Rest tragen Vergleich
+  und Judges). Die Ersparnis zählt erst bei teuren Chatmodellen.
+
+Damit bleibt der Schalter aus. Offen: warum die Antworten kürzer werden
+(Evidenz als Toolergebnis-JSON statt Belegnachricht des Antwortschritts?),
+die 300-s-Pausen nach dem Vergleich und ein Lauf mit einem Claude-Modell.
+
 **Offen vor dem Einschalten** (Gegenprüfung 2026-10-14, bewusst nicht behoben):
 
 - Denk-Auszüge erscheinen in jedem Schritt, auch in Steuer-Schritten, die
