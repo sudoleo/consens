@@ -21,6 +21,9 @@ den Sources-Knopf. Die Werkzeuge des Orchestrators: `compare_models` (Frage,
 Kontext, Tiefe; im freien Modus die Familien), `check_text` (eingefügten fremden
 Text prüfen), `read_source`, `prepare_watch`, Memory und `answer` (beendet die
 Steuerung; die App schreibt die Antwort und prüft sie, wenn verglichen wurde).
+Mit `AGENT_MERGED_ANSWER=1` schreibt der Agent die Antwort selbst als letzten
+Schritt, ohne `answer` und ohne eigenen Antwortschritt (siehe „Antwort im selben
+Aufruf“).
 `judge_answer` und `check_contradictions` führt die App selbst aus
 (`ComparisonTools.app_tools`, `DelegationLoop.app_registry`); das Modell sieht sie
 nicht. Nach einem Vergleich bekommt der Orchestrator immer die Antworten zu sehen
@@ -500,6 +503,81 @@ Alte, ausführliche
 Aktivitäten werden beim Anzeigen ebenfalls gekürzt; bestehende Daten werden
 nicht migriert. Private Provider-Fortsetzungsdaten bleiben ausschließlich im
 laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
+
+### Antwort im selben Aufruf (AGENT_MERGED_ANSWER, seit 2026-10-14)
+
+Mit `AGENT_MERGED_ANSWER=1` schreibt der Agent die Antwort selbst, als letzten
+Schritt seiner Nachricht. Der getrennte Antwortschritt oben bleibt der Standard,
+bis der Live-Vergleich beider Wege (`scripts/evaluate_agent_answer_mode.py`)
+Qualität, Zeit und Kosten bestätigt hat. Jeder Turn liest den Schalter einmal und
+speichert ihn als `agent_settings.answer_mode` (`separate` oder `merged`).
+
+**Warum.** Im EZB-Lauf mit Opus (136 s) las Opus die sechs Antworten, entschied
+„reicht“ (13 s) und gab mit `answer` ab; danach las ein neuer Aufruf desselben
+Modells Verlauf und Antworten noch einmal von vorn, ohne Prompt-Cache, und
+schrieb (57 s). Das zweite Lesen kostete rund 20.000 Tokens. Der neue Aufruf
+kannte nur, was die App ihm in die Evidenz legte, daher das Flickwerk aus
+App-Fakten, Nachrichtenzusammenfassung und Feldsätzen (2026-10-11 bis 10-13).
+Zusammengelegt schreibt der Aufruf, der die Antworten liest, direkt weiter: kein
+zweites Lesen, Cache für den ganzen Turn, und der Agent kennt seine eigenen
+Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei (lange bisher
+bis zu drei).
+
+**Ablauf.**
+
+- Der Steuer-Prompt ist `AGENT_MERGED_SYSTEM_PROMPT`: `AGENT_SYSTEM_PROMPT` mit
+  geänderten Sätzen (`AGENT_MERGED_REPLACEMENTS`) und den Schreibregeln des
+  Antwort-Prompts (`AGENT_MERGED_ANSWER_SECTION`: Journalist, Treue zur Substanz,
+  Auszüge, `checked_text`, Direktantworten, Format, keine Werkzeug- oder
+  Ablaufsprache). Lesen, Watch und Memory stehen in eigener Fassung dahinter.
+- `answer` gibt es nicht. Text in einem Schritt ohne Toolcalls ist die Antwort;
+  jede Nachricht ist entweder Toolcalls oder die Antwort.
+- Nach jedem Vergleich enthält das Toolergebnis die vollen Antworten (nicht mehr
+  die 8.000-Zeichen-Fassung), fehlende Modelle, die Quellenliste mit Auszügen und
+  nach `check_text` die Satzurteile (`checked_text`). Die Antworten dieses
+  Vergleichs sind damit fixiert; spätere Nachzügler sind `late`, wie beim
+  Antwortschritt.
+- Jeder Schritt hat das Antwortbudget samt Denk-Reserve, zeigt Denk-Auszüge und
+  läuft mit Prompt-Cache. Nach bezahlten Vergleichen wird ein kostenloser 429
+  einmal wiederholt, ein ausgedachter Schritt einmal leichter.
+- Danach prüfen die Judges genau den sichtbaren Text, wie bisher.
+
+**Was der Nutzer sieht.** Text erscheint erst ab 300 Zeichen
+(`ANSWER_HOLD_CHARS`), damit eine kurze Einleitung vor einem Toolcall nie
+aufblitzt; kurze Antworten wie Grüße kommen am Schrittende auf einmal. Beginnt
+ein Toolcall, stoppt das Streaming. Wurde schon Text gezeigt, nimmt die App ihn
+zurück (Status `retract` mit `clear_response`) und zeigt ihn als eine
+Fortschrittszeile (`note`, höchstens 400 Zeichen). Folgen nur `update_memory`
+oder `prepare_watch`, bleibt der Text die Antwort: Claude schreibt manchmal erst
+die Antwort und speichert dann eine Erinnerung.
+
+**Eigene Recherche.** Vor dem ersten Vergleich wird Text nach eigenen
+Suchtreffern nicht gezeigt. Antwortet der Agent aus seiner Recherche, greift wie
+bisher `_consensus_search_handoff`. Schreibt er danach erneut eine lange Antwort
+ohne Vergleich, hält die App sie einmal zurück (`TOOL_REMINDERS`); beim nächsten
+Mal steht sie, statt den Turn scheitern zu lassen. Kurze Rückfragen stehen sofort,
+wie Klartext im getrennten Weg.
+
+**Memory.** Das Pflichtfeld `memory` sitzt an `compare_models` und `check_text`
+(weitere Vergleiche derselben Nachricht: `[]`). Ohne Vergleich nutzt der Agent
+`update_memory` vor der Antwort; dort ist die Entscheidung wieder freiwillig. Das
+betrifft vor allem Grüße, Umformulieren und ausdrückliche Merk-Bitten, für die der
+Prompt `update_memory` ohnehin verlangt.
+
+**Turn-Grenzen.** Erreicht ein Turn sein Zeit- oder Schrittlimit, schreibt der
+Agent die Antwort in einem letzten Schritt: dieselben Tools stehen im Request
+(Prompt-Cache), sind aber nicht aufrufbar (`tool_choice: none`), dazu eine
+App-Notiz. Toolcalls ohne Ergebnis (ein vom Wiederholungsschutz gestoppter Batch)
+bekommen vorher eines.
+
+**Messen.** `scripts/evaluate_agent_answer_mode.py --live --model <id>` stellt
+zehn Fragen je einmal getrennt und zusammengelegt (gleiche sechs
+Vergleichsfamilien, echte Judges, In-Memory-Store) und misst Zeit gesamt, bis
+zum ersten Antworttext und ab dem letzten Vergleich, Kosten und Tokens der
+Chatmodell-Schritte, Rücknahmen, verdächtige Wörter (`leaks`) und das Urteil der
+Judges. `--pairwise <modell>` lässt zusätzlich einen blinden Richter die bessere
+Antwort wählen, `--only` beschränkt auf einzelne Fragen. Weil jeder Lauf eigene
+Vergleichsantworten bekommt, sind die Qualitätszahlen ein Trend.
 
 ### Eingefügten Text prüfen (seit 2026-10-09)
 

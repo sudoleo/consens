@@ -29,6 +29,11 @@ def _agent_direct_answer():
     return AGENT_DIRECT_ANSWER_PROMPT
 
 
+def _agent_merged():
+    from app.services.prompt_defaults import AGENT_MERGED_SYSTEM_PROMPT
+    return AGENT_MERGED_SYSTEM_PROMPT
+
+
 def _comparison():
     from app.services.agent_comparison import SEARCH_ROUNDS, comparison_system_prompt
     return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, comparison_system_prompt("full", SEARCH_ROUNDS["full"]), count=1)
@@ -64,6 +69,13 @@ _ENTRIES = (
      "same app facts, message summary, date, model, memory and Watch additions follow; the evidence holds "
      "only pages read, a prepared Watch and, where present, documents, Google items or helper results.",
      "prompt_defaults.py:AGENT_DIRECT_ANSWER_PROMPT", _agent_direct_answer),
+    ("agent_merged", "Agent: steering and answer in one step",
+     "Replaces the steering instructions when AGENT_MERGED_ANSWER=1 (agent_answer_mode, off by default): the "
+     "Agent writes the answer itself as its last step, with no separate answer step. It is the steering prompt "
+     "with the sentences of AGENT_MERGED_REPLACEMENTS changed, followed by the writing rules "
+     "(AGENT_MERGED_ANSWER_SECTION). The same runtime additions follow, source reading and Watch in their "
+     "merged wording and the memory decision on compare_models and check_text.",
+     "prompt_defaults.py:AGENT_MERGED_SYSTEM_PROMPT", _agent_merged),
     ("comparison", "Agent: comparison models",
      "System prompt of each independent comparison model, shown for depth \"full\" (3 search rounds). "
      "Quick depth allows one search round and adds brief-answer guidance instead. The date line is "

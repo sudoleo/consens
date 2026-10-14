@@ -290,7 +290,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. `compare_models.memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. `compare_models.memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` hält fest, ob der Turn die Antwort im eigenen Schritt (`separate`) oder als letzten Agent-Schritt (`merged`, `AGENT_MERGED_ANSWER=1`) schreibt. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -2958,6 +2958,42 @@ anzeigen (nie in `AgentCompletion.activity`). In Antwort und Kontext gelangt es 
 ohne Tool-Aufrufe sammelt der Schritt keine Fortsetzungsdaten
 (`_preserve_reasoning`). Die eigentliche
 Synthese wird für Folgeschritte nach den Tool-Ergebnissen in den Kontext aufgenommen.
+
+**Antwort im selben Aufruf (`AGENT_MERGED_ANSWER=1`, seit 2026-10-14, Default aus).**
+`agent_answer_mode.enabled()` liest den Schalter; der Router speichert die Wahl als
+`agent_settings.answer_mode` (`separate`/`merged`) und übergibt sie als
+`DelegationLoop(merged_answer=…)`, nur Chat-Turns (`account_budget_only`) mit
+Vergleichs-Tools nutzen sie. Dann schreibt der Agent die Antwort selbst: Text in
+einem Schritt ohne Toolcalls ist die Antwort, `answer`, `_write_synthesis` und
+`synthesis_messages` entfallen. Steuer-Prompt `AGENT_MERGED_SYSTEM_PROMPT` =
+`AGENT_SYSTEM_PROMPT` mit `AGENT_MERGED_REPLACEMENTS` plus
+`AGENT_MERGED_ANSWER_SECTION` (Schreibregeln des Antwort-Prompts); Lesen
+(`AGENT_MERGED_READ_SOURCE_*`), Watch (`agent_watch.MERGED_ORCHESTRATOR_PROMPT`
+samt Kartenhinweis) und Memory (`MERGED_MEMORY_DECISION`) in eigener Fassung. Das
+Pflichtfeld `memory` sitzt an `compare_models`/`check_text`; Direktantworten nutzen
+`update_memory`. `ComparisonTools._merged_result` gibt nach jedem Vergleich die
+vollen Antworten, `missing_answers`, die Quellenliste mit Auszügen
+(`source_entries`) und nach `check_text` `checked_text` ins Toolergebnis und
+fixiert die Antworten dieses Vergleichs (`_freeze`, Nachzügler sind `late`). Jeder
+Schritt bekommt das Antwortbudget (`_routing_model`), zeigt Denk-Auszüge und läuft
+mit Prompt-Cache; nach bezahlten Vergleichen wiederholt `_answer_attempt` einen
+kostenlosen 429 einmal. Streaming (`_step(answer_candidate=True)`,
+`_candidate_delta`): Text erscheint ab `ANSWER_HOLD_CHARS` (300) Zeichen, nie
+nach Beginn eines Toolcalls und vor dem ersten Vergleich nie nach eigenen
+Suchtreffern; `hold` (`_hold_answer`) blendet ihn ganz aus. Folgt doch ein Toolcall,
+nimmt `_retract` den Text per Status `retract` mit `clear_response` zurück und
+zeigt ihn als Fortschrittszeile `note`; folgen nur `SIDE_TOOLS` (`update_memory`,
+`prepare_watch`), bleibt der Text die Antwort (`_answered_with_tools`).
+`_show_answer` gleicht den sichtbaren Text vor den Judges an (auch nach
+`_drop_presearch_text`), `_finish_merged` fixiert und prüft wie nach dem
+Antwortschritt. Eigene Recherche ohne Vergleich: `_consensus_search_handoff` wie
+bisher, danach hält `_tool_reminder` eine lange Antwort einmal zurück
+(`TOOL_REMINDERS`), kurze Rückfragen stehen. Turn-Grenzen: `_merged_wrap_up`
+schreibt die Antwort in einem letzten Schritt mit gelisteten, nicht aufrufbaren
+Tools (`allow_tools=False` → `tool_choice: none`), offene Toolcalls bekommen
+vorher ein Ergebnis (`_close_open_calls`). Details und Messung:
+[agent-mode.md](agent-mode.md), „Antwort im selben Aufruf“;
+`scripts/evaluate_agent_answer_mode.py` vergleicht beide Wege live.
 Der Toolcall prüft diesen exakten Text, keinen vom Modell frei behaupteten
 Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,
 Zitatprüfung und begrenzten Repairs. `chat_mode=true` hält beide Judges auf den
@@ -5908,6 +5944,7 @@ app/services/
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompts für Orchestrator/Antwortschritt; startet nie eine Watch
+  agent_answer_mode.py       Schalter AGENT_MERGED_ANSWER (Default aus): Agent schreibt die Antwort selbst als letzten Schritt statt im Antwortschritt; Konstanten für Streaming, Notiz, Erinnerung und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für den Agent-Antwortschritt: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Evidenz read_sources für Antwortschritt, Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
@@ -6214,7 +6251,7 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   bleiben als Obergrenze der Code-Prompts (Test), damit der Datumsblock beim
   `/prepare`→`/ask_*`-Roundtrip mit dessen 12.000-Zeichen-/32.000-Byte-Limit passt.
   `prompt_catalog.py` listet die angezeigten Prompts als eine Liste
-  `{key, label, used_for, source, text}` (Agent-Steuerung, Agent-Antwortschritt, Vergleichsmodelle mit Datums-Platzhalter für Tiefe „full“,
+  `{key, label, used_for, source, text}` (Agent-Steuerung, Agent-Antwortschritt, Agent-Steuerung mit eigener Antwort bei `AGENT_MERGED_ANSWER=1`, Vergleichsmodelle mit Datums-Platzhalter für Tiefe „full“,
   Consensus-Einzelantworten/-Endantwort, Delegation Orchestrator/Worker); neue
   Prompts = ein Eintrag in `_ENTRIES`. Datum, Modellidentität, Verlauf,
   Quellen-/Antwort-Scaffolding und Tooldefinitionen werden im Code zusammengesetzt.
@@ -6534,6 +6571,10 @@ alte Gemini-ADC-JSON ist entfernt.
   `FIRESTORE_EMULATOR_HOST` sowie die in `app/core/e2e_profile.py` fest
   allowgelisteten Demo-Projekt-ID. Das Profil ist in Produktion verboten und
   in der normalen `.env` deaktiviert.
+- Agent-Antwort: `AGENT_MERGED_ANSWER=1` lässt den Agenten die Antwort selbst als
+  letzten Schritt schreiben, ohne getrennten Antwortschritt (`agent_answer_mode.py`,
+  §4 „Antwort im selben Aufruf“). Default aus; pro Turn als
+  `agent_settings.answer_mode` gespeichert.
 - Der serverseitige LLM-Key ist ausschließlich `OPENROUTER_API_KEY`.
   App-Consensus, Consensus-API und Benchmark lösen ihn über
   `llm.credentials.resolve_developer_api_keys` mit identischer

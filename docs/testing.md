@@ -189,6 +189,15 @@ Toolcall, Protokollstillstand und gepufferte Direktantworten. Weitere Regression
 decken fehlgeschlagene Turns im Folgekontext, gültige lange/mit „Error“ beginnende
 Vergleichstexte sowie tatsächliche Worker-Abläufe mit Annahme, Überarbeitung und
 geprüftem Ersatztext im Synthesekontext ab.
+`tests/test_agent_answer_mode.py` prüft den Schalter `AGENT_MERGED_ANSWER`
+(Antwort als letzter Agent-Schritt): Prompt-Ersetzungen, Werkzeugsatz ohne
+`answer`, Memory-Pflichtfeld an `compare_models`, volle Antworten und Quellen im
+Toolergebnis, Streaming ab 300 Zeichen, Rücknahme einer Einleitung vor einem
+Toolcall, Recherche ohne Vergleich, 429-Wiederholung, Turn-Grenze mit
+`tool_choice: none`, Lesen, Watch, den HTTP-Weg und das Vergleichsskript offline.
+Den Live-Vergleich beider Wege startet
+`.\venv\Scripts\python.exe scripts/evaluate_agent_answer_mode.py --live --model <id>`
+(bezahlt; `--only`, `--pairwise`, `--out`, siehe agent-mode.md).
 `tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsmeldungen aus validierten Toolargumenten, Reihenfolge vor Toolstart,
 Persistenz, unveränderte Übernahme mehrsprachiger Texte und Aufruf-/Tokenabrechnung. Provider-
