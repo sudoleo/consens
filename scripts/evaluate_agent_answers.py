@@ -369,7 +369,10 @@ def run_turn(case, question, *, model, families, config, key, check_sources):
     saved = store.get_turn(UID, chat, turn["id"]) or {}
     text = saved.get("assistant_response") or saved.get("consensus") or ""
 
-    first_delta = next((t for t, e in events if e.get("type") == "delta"), None)
+    # The first text that stayed: a delta after the last retraction.
+    cleared = max((i for i, (_, e) in enumerate(events) if e.get("kind") == "status" and e.get("clear_response")),
+                  default=-1)
+    first_delta = next((t for t, e in events[cleared + 1:] if e.get("type") == "delta"), None)
     judges = [(t, e) for t, e in events if e.get("kind") == "tool" and e.get("name") == "judge_answer"]
     judge = judges[0][0] if judges else None
     judge_done = next((t for t, e in reversed(judges) if e.get("status") in {"succeeded", "failed"}), None)

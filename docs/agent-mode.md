@@ -502,11 +502,15 @@ seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
   ist die Antwort; jede Nachricht des Agenten ist entweder Toolcalls oder die
   Antwort.
 - Nach jedem Vergleich enthält das Toolergebnis (`ComparisonTools._merged_result`)
-  die vollen Antworten, fehlende Modelle (`missing_answers`), die Quellenliste mit
+  die vollen Antworten (anonym und gemischt, ohne Familie oder Modellnamen, wie
+  früher der Antwortschritt und die Consensus-Synthese), fehlende Modelle
+  (`missing_answers`, mit Familie), die Quellenliste mit
   Auszügen (`sources`) und nach `check_text` die Satzurteile (`passage_check`,
   `checked_text`). Die Antworten dieses Vergleichs sind damit fixiert; spätere
   Nachzügler sind `late`. Die gewählte Tiefe steht nicht darin: Sie steuert nur
-  die Vergleichsmodelle.
+  die Vergleichsmodelle. Mit weniger als zwei Antworten sagt die Anweisung, dass
+  nichts geprüft werden kann (nochmal vergleichen oder sagen, dass die Antwort auf
+  einem Modell beruht), und keine Schreibnotiz folgt.
 - Hat ein Vergleich (`compare_models` oder `check_text`) mindestens zwei Antworten
   geliefert, hängt die App direkt dahinter eine eigene Nachricht an
   (`AGENT_WRITE_NOTE`, wie die eingeschobenen Hinweise von Claude Code): Sobald
@@ -527,8 +531,8 @@ seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
   Such-Segment, `_routing_model`). Das Antwortbudget darüber (`_answer_output`)
   reserviert er einmal, nicht pro Suchrunde, und dieser Teil darf das
   Tageslimit überziehen, auch ohne Vergleich
-  (`agent_quota.reserve(..., overdraft=<Tokens>)`); nach dem Start eines
-  Vergleichs darf es der ganze Schritt. Vor dem Fix vom 2026-10-14 (noch hinter
+  (`agent_quota.reserve(..., overdraft=<Tokens>)`); sobald ein Vergleich bezahlte
+  Antworten hat, darf es der ganze Schritt. Vor dem Fix vom 2026-10-14 (noch hinter
   dem Schalter) reservierte der erste Schritt mit drei Recherche-Runden rund 470k
   Tokens statt 270k wie im getrennten Weg: Ein Free-Konto (660k) bekam schon ab
   ≈ 190k Tagesverbrauch nur noch eine statt drei Recherche-Runden, und kurz vor
@@ -542,8 +546,15 @@ aufblitzt; kurze Antworten wie Grüße kommen am Schrittende auf einmal. Beginnt
 ein Toolcall, stoppt das Streaming. Wurde schon Text gezeigt, nimmt die App ihn
 zurück (Status `retract` mit `clear_response`) und zeigt ihn als eine
 Fortschrittszeile (`note`, höchstens 400 Zeichen). Folgen nur `update_memory`
-oder `prepare_watch`, bleibt der Text die Antwort: Claude schreibt manchmal erst
-die Antwort und speichert dann eine Erinnerung. Das gilt auch für kurzen Text,
+oder `prepare_watch`, bleibt der Text die Antwort, wenn diese Werkzeuge geklappt
+haben (`_side_results_accepted`: kein Fehler, Watch-Status `prepared`): Claude
+schreibt manchmal erst die Antwort und speichert dann eine Erinnerung. Hat eines
+nicht geklappt, nimmt die App den Text zurück, und der nächste Schritt schreibt mit
+dem Ergebnis im Blick (bis zur Gegenprüfung vom 2026-10-14 behauptete die Antwort
+sonst ein Speichern oder eine Watch-Karte, die es nicht gab, und an einer
+Turn-Grenze schrieb der Abschluss eine zweite Antwort unter die erste). Nach einem
+Vergleich ist `update_memory` gesperrt (Memory-Sperre unten): Antwort plus
+`update_memory` wird dort also immer zurückgenommen und neu geschrieben. Das gilt auch für kurzen Text,
 der nur wegen der 300 Zeichen zurückgehalten wurde (`short_reply`, z. B. „Alles
 klar, merke ich mir.“ bei einer Merk-Bitte); bis zur Gegenprüfung vom 2026-10-14
 verschwand er, und der nächste Schritt schrieb nur noch „Saved.“. Text nach
@@ -564,7 +575,7 @@ einziger Quellenlink. `AgentCompletion._visible` macht beim Streamen für jeden
 Agent-Aufruf aus den URLs einer Marke Markdown-Links (`[host](url)`, mehrere mit
 „ · “); andere Verweise (`turn2search0`) und
 Adressen außer http(s) ohne Zugangsdaten fallen weg. Eine über Chunks geteilte
-Marke wartet bis zu ihrem Ende, Zitat-Offsets werden mitverschoben. Die Links
+Marke wartet bis zu ihrem Ende, Zitat-Offsets werden mitverschoben; endet der Stream mit einer offenen Marke, werden ihre URLs dort noch zu Links. Die Links
 stehen nur im Text und werden keine Quellen: Links aus dem Antworttext öffnet
 `read_source` nie, eine präparierte Seite kann so nichts abrufen lassen.
 
@@ -584,6 +595,19 @@ Prompt `update_memory` ohnehin verlangt (`agent_memory.MEMORY_WRITE_PROMPT`,
 `memory_field`). Bis 2026-10-14 saß das Pflichtfeld an `answer`, und der
 Antwortschritt bekam die Erinnerungen als eigenen Block ohne IDs
 (`synthesis_prompt`); heute stehen sie nur im Systemprompt des Agenten.
+
+**Memory-Sperre (seit 2026-10-14).** Sobald in einer Nachricht ein Werkzeug
+fremden Inhalt in den Kontext gebracht hat (`MEMORY_LOCKING_TOOLS`: Vergleich,
+Textprüfung, gelesene Seite, Kalender, Gmail, Dateien), kann das Memory in dieser
+Nachricht nicht mehr geändert werden (`DelegationLoop.memory_locked`):
+`update_memory` antwortet mit `MEMORY_LOCKED`, ein `memory`-Feld an einem
+späteren Vergleich wird nicht angewandt (Aktivität „blocked“,
+`untrusted_context`). Grund: Die Prüfung, dass die Evidenz ein wörtliches
+Nutzerzitat ist, bindet den Text der Erinnerung nicht an das Zitat; seit volle
+Antworten und Seitenauszüge im Kontext eines Schritts mit Werkzeugen stehen,
+hätte eine präparierte Seite so eine Erinnerung setzen können. Das Feld am
+ersten Vergleich wird vor dessen Ergebnissen entschieden und gilt weiter; ein
+abgelehnter Vergleich sperrt nicht.
 
 **Turn-Grenzen.** Erreicht ein Turn sein Zeit- oder Schrittlimit, schreibt der
 Agent die Antwort in einem letzten Schritt: dieselben Tools stehen im Request
@@ -1122,8 +1146,8 @@ Kontextfenster passen, die Abrechnung bucht den gemessenen Verbrauch. Die
 Worst-Case-Schranke für drei Runden und sechs parallele Antworten (≈ 1,5 M
 Tokens) läge sonst über einem ganzen Free-Tag, und die Zulassung hätte die
 zuletzt gestarteten Modelle abgestuft. Damit ein Vergleich, der das Tageslimit
-dabei überzieht, nicht bezahlte Antworten verwirft, dürfen nach dem Start
-eines Vergleichs Orchestrator (also auch der Schritt, der die Antwort schreibt)
+dabei überzieht, nicht bezahlte Antworten verwirft, dürfen, sobald ein Vergleich
+bezahlte Antworten hat, Orchestrator (also auch der Schritt, der die Antwort schreibt)
 und Judges das Limit überziehen
 (`agent_quota.reserve(..., overdraft=True)`, nur im Kontomodus); die nächste
 Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Ein

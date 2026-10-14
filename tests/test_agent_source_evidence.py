@@ -478,6 +478,18 @@ def test_a_citation_mark_without_a_web_url_leaves_nothing(monkeypatch):
     assert "".join(e["text"] for e in events if e["type"] == "delta") == completion.text
 
 
+def test_a_url_mark_still_open_when_the_stream_ends_becomes_a_link(monkeypatch):
+    """Luna ends an answer with a URL-only mark and no closing mark: held for
+    its end, it went with the stream and the answer lost its source
+    (review 2026-10-14)."""
+    from test_agent_loop import packet, usage
+    completion, events = stream_answer(monkeypatch, [
+        packet({"content": "Der Einlagesatz bleibt bei 2,00 %. "}),
+        packet({"content": f"{O}https://www.ecb.europa.eu/press/pr"}), packet(finish="stop", usage=usage())])
+    assert completion.text == "Der Einlagesatz bleibt bei 2,00 %. [ecb.europa.eu](https://www.ecb.europa.eu/press/pr)"
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == completion.text
+
+
 def test_citation_offsets_move_with_replaced_marks(monkeypatch):
     from test_agent_loop import packet, usage
     raw = (f"Erster Satz. {O}cite{S}https://example.org/q{C} Zweiter Satz. {O}cite{S}turn0search0{C}"

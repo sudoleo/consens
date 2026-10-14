@@ -135,6 +135,13 @@ def retractions(events):
     return [event for event in events if event.get("kind") == "status" and event.get("clear_response")]
 
 
+def shown(events):
+    """What the browser shows at the end (agent-chat.js): a delta appends, a
+    retraction clears."""
+    clears = [i for i, event in enumerate(events) if event.get("kind") == "status" and event.get("clear_response")]
+    return deltas(events[clears[-1] + 1:] if clears else events)
+
+
 def orchestrator_steps(script):
     return [step for step, _ in script.calls if step.startswith("completion:")]
 
@@ -469,6 +476,61 @@ def test_a_short_text_held_during_research_is_no_answer_with_a_memory_save(store
     assert "Found prices." not in deltas(events) and loop.completion.text != "Found prices."
 
 
+# Evidence paraphrased, not the user's words: update_memory refuses the change.
+REFUSED_SAVE = ("update_memory", {"changes": [{"op": "add", "text": "Leads a team of ten.",
+                                               "evidence": "I lead a team of ten people at work"}]})
+
+
+@pytest.mark.parametrize("reply", ["Got it, I will keep in mind that you lead a team of ten.", ANSWER],
+                         ids=["held", "shown"])
+def test_a_reply_next_to_a_refused_memory_save_is_written_again(store, reply):
+    """The reply may confirm a change that was refused: it goes back (a shown
+    one stays as a note) and the next step writes the answer with the
+    refusal in view (_side_results_accepted, review 2026-10-14)."""
+    set_profile(store.db, auto_memory=True)
+    retry = "I could not save that: a memory needs your own words."
+    script = Merged([{"text": reply, "tools": [REFUSED_SAVE]}, {"text": retry}])
+    loop = merged_loop(store, script, memory=repo(store).snapshot(UID))
+    events = list(loop.run())
+    assert "error" in tool_result(loop, "call_0_0") and repo(store).get(UID)[0] == []
+    assert orchestrator_steps(script) == ["completion:0", "completion:1"]
+    assert any(m.get("role") == "tool" and "error" in m["content"] for m in script.requests[1])
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["assistant_response"] == retry
+    assert shown(events) == retry
+    # Only a reply that was on screen leaves a note.
+    notes = [e for e in events if e.get("kind") == "progress" and e.get("id", "").endswith("/note")]
+    assert len(notes) == (reply == ANSWER)
+
+
+@pytest.mark.parametrize("accepted", [False, True], ids=["refused", "accepted"])
+def test_a_reply_with_a_side_tool_at_the_invalid_round_limit_leaves_one_answer_on_screen(store, monkeypatch,
+                                                                                         accepted):
+    """A comparison, two invalid rounds, then the answer with a side tool.
+    Refused (a memory save), the wrap-up wrote a second answer under the
+    first, which stayed on screen (review 2026-10-14); accepted (a prepared
+    Watch), the answer stands without another step. Either way the browser
+    shows exactly the saved answer."""
+    from app.services import watch_service
+    from test_agent_watch import WATCH, outlook
+    monkeypatch.setattr(watch_service, "create_watch", lambda *args, **kwargs: pytest.fail("Watch created"))
+    set_profile(store.db, auto_memory=True)
+    invalid = ("compare_models", {"question": "", "context": "", "status_update": "Comparing."})
+    side = ("prepare_watch", WATCH) if accepted else REFUSED_SAVE
+    wrap_up = "From the comparisons: the first option is cheaper over two years for a team of ten. " * 4
+    script = Merged([{"tools": [COMPARE]}, {"tools": [invalid]}, {"tools": [invalid]},
+                     {"text": ANSWER, "tools": [side]}, {"text": wrap_up}], memory=[])
+    loop = merged_loop(store, script, memory=repo(store).snapshot(UID))
+    loop.watch_tools.outlook = outlook()
+    events = list(loop.run())
+    answer = ANSWER if accepted else wrap_up
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["consensus"] == answer
+    assert review_is_bound(saved["agent_review"], answer)
+    assert shown(events) == answer
+    assert len(orchestrator_steps(script)) == (4 if accepted else 5)
+
+
 def test_text_before_a_cut_tool_call_is_taken_back_before_the_retry(store, monkeypatch):
     monkeypatch.setattr(agent_delegation, "lighter_reasoning",
                         lambda model: replace(model, reasoning_effort="low"))
@@ -480,6 +542,77 @@ def test_text_before_a_cut_tool_call_is_taken_back_before_the_retry(store, monke
     clear = events.index(retractions(events)[0])
     assert deltas(events[:clear]) == preamble and deltas(events[clear:]) == ANSWER
     assert loop.completion.text == ANSWER
+
+
+class RealStep(Merged):
+    """Merged, but step completion:``real`` streams through the real client
+    (AgentCompletion.stream over test_agent_loop.transport)."""
+
+    def __init__(self, plan, *, real, **kwargs):
+        super().__init__(plan, **kwargs)
+        self.real = real
+
+    def factory(self):
+        from test_agent_loop import REAL_STREAM
+        base = type(super().factory())
+        script = self
+
+        class Completion(base):
+            def stream(self, **kwargs):
+                if self.step_id != f"completion:{script.real}":
+                    yield from super().stream(**kwargs)
+                    return
+                script.calls.append((self.step_id, kwargs["model"].model))
+                yield from REAL_STREAM(self, **kwargs)
+        return Completion()
+
+
+def searched_midway(before, after, end):
+    """Provider packets: ``before``, the step's own search results (0/0
+    offsets, as Anthropic's search sends them), ``after``, then ``end``."""
+    from test_agent_loop import packet
+    from test_agent_source_evidence import search_result
+    text = lambda value: [packet({"content": value[i:i + 50]}) for i in range(0, len(value), 50)]
+    return [*text(before), packet({"content": "", "annotations": [search_result("https://example.org/fees")]}),
+            *text(after), end]
+
+
+def test_an_answer_that_searches_midway_keeps_its_shown_opening(store, monkeypatch):
+    """After a comparison the agent writes, settles a point with its own
+    search and writes on. The client's pre-search cut took the opening the
+    user had seen off the screen and out of the saved answer
+    (AgentCompletion._drop_presearch_text, review 2026-10-14)."""
+    from test_agent_loop import packet, transport, usage
+    opening = "Summary: the first option is cheaper over two years for a team of ten. " * 6
+    rest = "After checking the fee table: the second option adds 20 euros per seat. " * 10
+    transport(monkeypatch, [searched_midway(opening, rest, packet(finish="stop", usage=usage(1)))])
+    script = RealStep([{"tools": [COMPARE]}, {}], real=1)
+    loop = merged_loop(store, script)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["consensus"] == opening + rest
+    assert review_is_bound(saved["agent_review"], opening + rest)
+    assert deltas(events) == opening + rest and not retractions(events)
+
+
+def test_a_research_step_that_breaks_off_saves_only_what_was_shown(store, monkeypatch):
+    """A first step shows its opening, gets its own search results, writes on
+    unseen (research the app does not send) and its stream breaks: the
+    partial answer saved is what the user saw (DelegationLoop._step,
+    review 2026-10-14)."""
+    from test_agent_loop import transport
+    opening = "Let me look into the current prices of both options carefully. " * 6
+    research = "From the results: the first option costs 100 and the second 80 a month. " * 12
+    transport(monkeypatch, [searched_midway(opening, research, RuntimeError("connection reset"))])
+    loop = merged_loop(store, RealStep([{}], real=0))
+    loop.cooldowns = ProviderCooldowns()  # never the process-wide gate in tests
+    events = []
+    with pytest.raises(RuntimeError, match="connection reset"):
+        for event in loop.run():
+            events.append(event)
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert deltas(events) == opening
+    assert saved["status"] == "failed" and saved["assistant_response"] == opening
 
 
 def test_a_page_read_after_the_comparison_is_in_context_and_checked(store, monkeypatch):

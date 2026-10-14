@@ -72,6 +72,13 @@ RATE_LIMIT_RETRY_MIN_TURN_SECONDS = 60
 THINKING_UPDATE_SECONDS = 3
 # Polling has no arguments that change; repeating it is waiting, not looping.
 REPEATABLE_TOOLS = frozenset({"wait_agents"})
+# Tools that bring outside content into the agent's context: model answers
+# and their source excerpts, pages, emails, calendars, files. Once one of them
+# returned in a message, its memory can no longer change (memory_locked): a
+# page could otherwise steer update_memory, whose evidence check only proves
+# that some words of the user are quoted (review 2026-10-14).
+MEMORY_LOCKING_TOOLS = frozenset({"compare_models", "check_text", "read_source", "calendar_read",
+                                  "gmail_read", "import_gmail_attachment", "read_file", "read_document"})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800
@@ -210,6 +217,8 @@ class DelegationLoop(AgentLoop):
         self.closed = threading.Event()
         self.watch_error = None
         self.search_handoff = False
+        # Set after a batch in which a MEMORY_LOCKING_TOOLS call returned.
+        self.memory_locked = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
         # Per-turn guards of account mode (see TURN_WRAP_UP_SECONDS); the
@@ -649,6 +658,13 @@ class DelegationLoop(AgentLoop):
             # leaves the declared passage out).
             memory_result = None
             if (registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory"
+                    and self.memory_locked):
+                # Decided with outside content in view: never applied.
+                from app.services.agent_memory import MEMORY_LOCKED
+                memory_result = {"error": MEMORY_LOCKED}
+                self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}:memory", "update_memory",
+                                                         "blocked", text=MEMORY_LOCKED, reason="untrusted_context"))
+            elif (registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory"
                     and not (isinstance(result, dict) and result.get("status") == "refused")):
                 memory_step = f"{value.step_id}:{call['id']}:memory"
                 try:
@@ -696,8 +712,8 @@ class DelegationLoop(AgentLoop):
         answer of a comparison keeps its full rounds, whatever order the
         siblings are admitted in; settlement books the measured search tokens.
         Only a context window too small for the search shrinks it.
-        Once a comparison of this message has started, the orchestrator and
-        the judges may overdraw the daily allowance: paid
+        Once a comparison of this message holds paid answers, the orchestrator
+        and the judges may overdraw the daily allowance: paid
         comparisons always reach an answer and its check, and the next message
         is refused instead (see agent_quota.reserve).
         A step that may write the answer (``answer_output``) is admitted like
@@ -708,7 +724,11 @@ class DelegationLoop(AgentLoop):
         """
         from app.services.agent_tokens import input_estimate, minimum_output
         soft = bool(worker and getattr(worker, "kind", None) == "comparison")
-        overdraft = bool(self.comparison and self.comparison.comparisons
+        # Only once a comparison of this message holds paid answers: a started
+        # comparison whose answers found no allowance has nothing to finish
+        # (review 2026-10-14: near the daily limit a long first step left the
+        # comparison without answers, and the overdraft then paid an unchecked turn).
+        overdraft = bool(self.comparison and any(c.get("answers") for c in self.comparison.comparisons)
                          and (worker is None or getattr(worker, "kind", None) == "judge"))
         search_limited, waiting = False, False
         delay, recovered_at = .1, time.monotonic()
@@ -1013,8 +1033,9 @@ class DelegationLoop(AgentLoop):
                 # candidates are checkpointed separately, with their exact hash.
                 self.completion.text = value.text
             elif stream_answer and value.published and not value._tool_parts:
-                # The same for a merged step that was streaming its answer.
-                self.completion.text = value.text
+                # The same for a step that was streaming its answer: what the
+                # user saw, not text held back after its own search results.
+                self.completion.text = value.published
             if claimed:
                 if not provider_attempted and self.mock_answer is None:
                     value.record_unstarted(model)
@@ -1042,8 +1063,9 @@ class DelegationLoop(AgentLoop):
             if (stream_answer and value.published and value.text and self.comparison
                     and self.comparison.comparisons and not value.tool_calls and not value._tool_parts
                     and (status != "succeeded" or value.finish_reason in {"length", "max_tokens"})):
-                # Persist partial synthesis only after the mandatory settlement.
-                self.comparison.capture(value.text)
+                # Persist the partial answer the user saw, only after the
+                # mandatory settlement.
+                self.comparison.capture(value.published)
         self.costs.check()
         if not worker:
             yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.costs.total()})
@@ -1401,6 +1423,35 @@ class DelegationLoop(AgentLoop):
         return bool(shown and value.text.strip() and names <= SIDE_TOOLS
                     and value.finish_reason not in {"length", "max_tokens"})
 
+    def _side_results_accepted(self, value, results):
+        """Whether every side tool of a step that wrote its answer did what
+        the answer may say: the memory change accepted, the Watch prepared."""
+        for call in value.tool_calls:
+            result = results.get(call["id"])
+            try:
+                content = json.loads(result["content"]) if result else None
+            except (TypeError, ValueError):
+                content = None
+            if not isinstance(content, dict) or "error" in content or content.get("status") == "refused":
+                return False
+            if (call.get("function") or {}).get("name") == "prepare_watch" and content.get("status") != "prepared":
+                return False
+        return True
+
+    def _brought_outside_content(self, value, results):
+        """Whether a call of this batch returned outside content
+        (MEMORY_LOCKING_TOOLS) into the agent's context."""
+        for call in value.tool_calls:
+            if (call.get("function") or {}).get("name") not in MEMORY_LOCKING_TOOLS or call["id"] not in results:
+                continue
+            try:
+                content = json.loads(results[call["id"]]["content"])
+            except (TypeError, ValueError):
+                return True
+            if not (isinstance(content, dict) and ("error" in content or content.get("status") == "refused")):
+                return True
+        return False
+
     def _research_unchecked(self):
         """The agent searched the web for this message and has neither
         compared nor read a page. Such a question goes through a comparison."""
@@ -1649,6 +1700,16 @@ class DelegationLoop(AgentLoop):
                                 break
                         self.messages.extend(results[call["id"]] for call in value.tool_calls if call["id"] in results)
                         yield from self._events()
+                        if self._brought_outside_content(value, results):
+                            self.memory_locked = True
+                        if answered_with_tools and not self._side_results_accepted(value, results):
+                            # The text may say what a refused tool did not do (a
+                            # memory not saved, no Watch card): the next step
+                            # writes the answer with the result in view. A kept
+                            # answer had only accepted calls, so no turn limit
+                            # below can write a second one under it.
+                            yield from self._retract(value, note=True)
+                            answered_with_tools = False
                         if limit:
                             yield from self._wrap_up(limit, steps, value)
                             status = "succeeded"

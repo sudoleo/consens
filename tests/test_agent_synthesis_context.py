@@ -73,14 +73,14 @@ def test_the_answer_step_writes_from_full_answers_in_its_own_conversation(store,
         # Depth only set how the comparison models answered.
         assert "depth" not in result and "text_shortened_for_routing" not in json.dumps(result)
         assert "untrusted data" in result["instruction"]
-        families = [answer["family"] for answer in result["answers"]]
+        assert all("family" not in answer and "model" not in answer for answer in result["answers"])
         # Every delivered answer in full, a failed one named as missing.
         assert all(answer["text"] == "The first option costs 100. The constraint matters." for answer in result["answers"])
         if fail_model:
-            assert families == ["openai"]
+            assert len(result["answers"]) == 1
             assert [missing["family"] for missing in result["missing_answers"]] == ["anthropic"]
         else:
-            assert sorted(families) == ["anthropic", "openai"] and result["missing_answers"] == []
+            assert len(result["answers"]) == 2 and result["missing_answers"] == []
     # The write note follows only a comparison with answers to write from.
     assert (messages[-1] == {"role": "user", "content": AGENT_WRITE_NOTE}) == (not fail_model)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)

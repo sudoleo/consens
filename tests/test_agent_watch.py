@@ -222,6 +222,31 @@ def test_starting_an_earlier_watch_prepares_it_again_and_answers_without_a_compa
     assert "to start or set up a Watch prepared earlier, call prepare_watch" in script.system
 
 
+def watch_outage(uid, question):
+    raise RuntimeError("firestore down")
+
+
+@pytest.mark.usefixtures("no_watch_writes")
+@pytest.mark.parametrize("watch_outlook,reply", [
+    (outlook(already_watched=True), "You already watch this question."),
+    (watch_outage, "Watches cannot be prepared right now, sorry."),
+], ids=["already_watched", "outage"])
+def test_a_reply_next_to_a_watch_that_was_not_prepared_is_written_again(store, watch_outlook, reply):
+    """The reply pointed to a card that offers no new Watch: it goes back and
+    the next step writes the answer with the result in view
+    (DelegationLoop._side_results_accepted, review 2026-10-14)."""
+    script = WatchWithReply(direct_reply=reply)
+    loop = watch_loop(store, script, question="Kannst du den Watch bitte für mich starten?",
+                      watch_outlook=watch_outlook)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0", "completion:1"]
+    assert saved["status"] == "completed" and saved["consensus"] == reply
+    assert "".join(e["text"] for e in events if e.get("type") == "delta") == reply
+    assert seen_watch(script.writer()) == tool_results(loop)[0]
+    assert tool_results(loop)[0].get("status") != "prepared"
+
+
 def test_a_reminder_request_counts_and_the_answer_never_denies_reminders():
     """2026-10-11: GPT-6 Luna read "kannst du mich erinnern, wann der Sieger
     feststeht?" after a search as a question about the date, prepared nothing,

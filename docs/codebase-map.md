@@ -2789,8 +2789,9 @@ erhalten keine Delegations-/Vergleichstools, aber Websuche
 `SEARCH_ROUNDS`: `quick` eine Runde, `full` bis zu drei, für alle Konten gleich;
 ihre Suche wird gebucht, nicht reserviert, `soft_search`) und mit
 `comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
-Orchestrator sucht vor dem ersten Vergleich nur für sich selbst. Nach dem Start eines Vergleichs
-dürfen die Schritte des Agenten und die Judges das Tageslimit überziehen
+Orchestrator sucht vor dem ersten Vergleich nur für sich selbst. Sobald ein Vergleich
+bezahlte Antworten hat (bis 2026-10-14: schon ab seinem Start), dürfen die Schritte
+des Agenten und die Judges das Tageslimit überziehen
 (`_admit_chat_step` → `claim(overdraft=True)`). Jeder Schritt des Agenten im
 Kontomodus kann die Antwort schreiben und wird mit dem Steuer-Budget zugelassen
 (`_routing_model`); sein Antwortbudget darüber (`_answer_output`) reserviert er
@@ -2839,7 +2840,10 @@ Recherche ohne Vergleich) blendet ihn ganz aus. Folgt doch ein Toolcall, nimmt
 `_retract` den Text per Status `retract` mit `clear_response` zurück und zeigt
 ihn als Fortschrittszeile `note` (höchstens `NOTE_CHARS` = 400 Zeichen); folgen
 nur `SIDE_TOOLS` (`update_memory`, `prepare_watch`), bleibt der Text die Antwort
-(`_answered_with_tools`). Eigene Recherche ohne Vergleich:
+(`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
+(`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach einem Batch mit
+fremdem Inhalt (`MEMORY_LOCKING_TOOLS`) sperrt `memory_locked` jede weitere
+Memory-Änderung der Nachricht (`agent_memory.MEMORY_LOCKED`). Eigene Recherche ohne Vergleich:
 `_consensus_search_handoff` (oben), danach hält `_tool_reminder` eine Antwort
 über `DIRECT_REPLY_CHARS` (800) Zeichen einmal zurück (`TOOL_REMINDERS`);
 kürzere Rückfragen stehen sofort, nach der Erinnerung steht auch eine lange
@@ -2855,9 +2859,12 @@ Vergleiche) entsteht nur mit gelesenen Seiten. Festgeschrieben und geprüft wird
 nur ein vollständiger, nicht leerer Schritt ohne Toolcalls. Endet er am
 Tokenlimit (`length`) oder bricht ab, bleibt schon sichtbarer Text nach
 Vergleichen als ungeprüfte Teilantwort (`capture` nach dem Settlement, keine
-Judges) und ohne Vergleich als Text des fehlgeschlagenen Turns erhalten; nie
+Judges) und ohne Vergleich als Text des fehlgeschlagenen Turns erhalten,
+gespeichert wird genau der gesehene Text (`value.published`); nie
 sichtbarer Text (kurz, zurückgehalten oder zurückgenommen) wird nicht
-gespeichert. Turn-Grenzen: `_merged_wrap_up` (oben) schreibt die Antwort in
+gespeichert, außer eine kurze Antwort am Ausgabelimit (`_keep_cut_answer`
+zeigt und speichert sie). Schon gezeigter Antworttext bleibt auch, wenn der
+Schritt danach sucht (`_drop_presearch_text` schneidet nur Ungezeigtes). Turn-Grenzen: `_merged_wrap_up` (oben) schreibt die Antwort in
 einem letzten Schritt mit gelisteten, nicht aufrufbaren Tools
 (`allow_tools=False` → `tool_choice: none`, der Prompt-Cache bleibt), mit der
 gewählten Denkstufe und dem Antwortbudget; offene Toolcalls bekommen vorher ein

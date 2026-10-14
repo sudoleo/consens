@@ -858,7 +858,8 @@ def test_answer_starts_at_quorum_and_a_late_answer_stays_out_of_the_check(store,
     assert sorted(comparison["synthesis_providers"]) == ["anthropic", "openai"]
     # The agent was told which answer it writes without.
     result = json.loads(next(m["content"] for m in loop.messages if m["role"] == "tool"))
-    assert sorted(a["family"] for a in result["answers"]) == ["anthropic", "openai"]
+    # Anonymous: the agent weighs the answers, not the models' names.
+    assert len(result["answers"]) == 2 and all("family" not in a and "model" not in a for a in result["answers"])
     assert [m["family"] for m in result["missing_answers"]] == ["gemini"]
     late = [a["provider"] for a in comparison["answers"] if a.get("late")]
     assert late == ["gemini"] and len(comparison["answers"]) == 3
@@ -1259,7 +1260,7 @@ def test_a_comparison_with_one_answer_names_the_missing_one_and_is_never_certifi
     loop = make_loop(store, script)
     list(loop.run())
     result = tool_results(loop)["call_0_0"]
-    assert [a["family"] for a in result["answers"]] == ["openai"]
+    assert len(result["answers"]) == 1 and "cannot be checked" in result["instruction"]
     [missing] = result["missing_answers"]
     assert missing["family"] == "anthropic" and missing["reason"]
     assert AGENT_WRITE_NOTE not in [m["content"] for m in loop.messages if m["role"] == "user"]

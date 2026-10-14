@@ -812,7 +812,13 @@ class AgentCompletion:
         2026-10-10) and OpenRouter joins that text to the answer, where it
         opened the comparison answer, its card and the evidence of synthesis
         and judges. Live deltas already showed it; text and citation offsets
-        are moved together (see citations.presearch_end)."""
+        are moved together (see citations.presearch_end). Text the user
+        already saw as the agent's answer stays (``published``, set by
+        DelegationLoop._candidate_delta): cutting it lost the opening of an
+        answer that searched midway (review 2026-10-14)."""
+        if getattr(self, "published", ""):
+            self._results_at = None
+            return
         cut = presearch_end(self.text, self._results_at)
         self._results_at = None
         if cut:
@@ -965,8 +971,13 @@ class AgentCompletion:
                         self._annotations((choice.get("message") or {}).get("annotations"), before)
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
-                # A mark still held at the end is a mark cut off: never text.
-                self._visible("", final=True)
+                # A mark still held at the end ends with the stream: its URLs
+                # become links (Luna writes URL-only marks without a closing
+                # mark), other references go.
+                rest = self._visible("", final=True)
+                if rest and not text_capped:
+                    self.text += rest
+                    yield {"type": "delta", "text": rest}
                 self._drop_presearch_text(model)
                 if text_capped and self.finish_reason == "stop":
                     self.finish_reason = "length"

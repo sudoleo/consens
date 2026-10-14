@@ -6,6 +6,7 @@ from functools import partial
 import hashlib
 import json
 import logging
+import random
 import re
 import threading
 import time
@@ -1058,9 +1059,13 @@ class ComparisonTools:
             missing = [{"family": p, "model": self.models[p].label,
                         "reason": (self._failures[cid].get(p) or {}).get("error") or "No answer in time."}
                        for p in comparison["asked"] if p not in self._raw[cid]]
-        answers = [{"family": a["provider"], "model": a["model"].get("label"), "text": a["text"],
-                    "sources": [s["url"] for s in a["sources"] if s.get("url")],
+        # Anonymous and shuffled, as the former answer step and the Consensus
+        # synthesis got them: the agent weighs reasoning and evidence, not a
+        # model's name or its place in the list. Missing ones stay named
+        # (free mode picks the families of a further comparison).
+        answers = [{"text": a["text"], "sources": [s["url"] for s in a["sources"] if s.get("url")],
                     **({"truncated": True} if a.get("truncated") else {})} for a in delivered]
+        random.Random(cid).shuffle(answers)
         time_left = getattr(loop, "answer_time_left", None)
         left = time_left() if time_left else None
 
@@ -1087,7 +1092,14 @@ class ComparisonTools:
             logging.warning("Agent comparison result continues without source excerpts category=%s",
                             safe_exception(exc))
             sources = []
-        if last:
+        if len(answers) < 2:
+            # One answer cannot be checked against another (review_issues:
+            # insufficient_answers): never promise a check.
+            instruction = ("Fewer than two models answered, so this comparison cannot be checked. "
+                           + ("Answer from what you have and say plainly that it rests on a single model." if last else
+                              "Compare again for what is missing, or answer and say plainly that it rests on a "
+                              "single model."))
+        elif last:
             instruction = ("This was the last comparison allowed for this message. Complete any document or action "
                            "preparation, then write the answer; the app checks it.")
         else:

@@ -87,8 +87,9 @@ Cite supplied URLs where you use external information; never invent citations or
 # separate answer step, whose whole request was about writing).
 AGENT_WRITE_NOTE = (
     "App note, not from the user: the comparison results above are the evidence for the user's latest request. "
-    "Once they suffice, your next message is the answer the user reads: the complete, best possible answer from "
-    "all of them, as set out under WRITING THE ANSWER. A comparison's depth only set how its models answered.")
+    "Once they suffice and anything else the user asked for (a document, an action) is done, your next message "
+    "is the answer the user reads: the complete, best possible answer from all of them, as set out under "
+    "WRITING THE ANSWER. A comparison's depth only set how its models answered.")
 
 
 AGENT_SYSTEM_PROMPT = _AGENT_STEERING + "\n\n" + AGENT_ANSWER_SECTION

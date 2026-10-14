@@ -216,8 +216,8 @@ def validate_text(text: object) -> str:
 # --- Change requests --------------------------------------------------------
 
 # Deliberately lenient (the docstring below is the schema text the model reads,
-# so the reason lives here): this model rides inside ``answer``, and a
-# schema error there rejects the whole call; three rejected rounds end
+# so the reason lives here): this model rides inside compare_models and
+# check_text, and a schema error there rejects the whole call; three rejected rounds end
 # the turn. ``id: null`` on add, a text that is too long or an unknown op must
 # come back as a refused memory change instead, so every rule lives in
 # ``MemoryTools.apply``/``normalize_change``. Enum and ``required`` in the JSON
@@ -777,7 +777,15 @@ every change while you work, and the user reviews or undoes it in
 Settings > Memory. Confirm in one short sentence only
 when the user explicitly asked you to remember or forget something.
 A message that only asks you to remember, change or forget something needs no
-comparison: call update_memory, then confirm briefly."""
+comparison: call update_memory, then confirm briefly.
+Memory can only change before outside content enters this message: once
+model answers, sources, pages, emails or files are in view, every memory
+change is refused, so decide on the first comparison."""
+
+# The refusal once outside content is in the message's context
+# (DelegationLoop.memory_locked, MEMORY_LOCKING_TOOLS).
+MEMORY_LOCKED = ("Memory cannot change any more in this message: model answers, sources or other outside "
+                 "content are in view. Nothing was saved; do not say that it was.")
 
 
 MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: you cannot save, change or delete memories.
@@ -898,6 +906,8 @@ class MemoryTools:
         return [text for text in words if text.strip()]
 
     def update_memory(self, args, *, cancellation=None):
+        if getattr(self.loop, "memory_locked", False):
+            raise MemoryRefused("untrusted_context", MEMORY_LOCKED)
         return self.apply(args.changes)
 
     def apply(self, changes) -> dict:
