@@ -213,6 +213,8 @@ def main():
     parser.add_argument("--tier", default="pro", choices=("free", "plus", "pro"),
                         help="Token allowance of the test account (default pro)")
     args = parser.parse_args()
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
     os.chdir(ROOT)
@@ -240,10 +242,12 @@ def main():
 
     def emit(line):
         text = json.dumps(line, ensure_ascii=False)
-        print(text, flush=True)
+        # The file first: a console that cannot print a character ("→" on a
+        # Windows code page) must not lose a paid turn's line.
         if out:
             out.write(text + "\n")
             out.flush()
+        print(text, flush=True)
 
     rows, wins = [], {"separate": 0, "merged": 0, "tie": 0}
     for index, (kind, question) in enumerate(CASES):
