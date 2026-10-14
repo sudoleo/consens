@@ -177,7 +177,7 @@ def extract_document(url, content, kind, headers, truncated, limits):
         decoded = soup.get_text(' ', strip=False)
     text = '\n'.join(' '.join(line.split()) for line in decoded.splitlines() if line.strip())
     # Numeric references to surrogates ("&#55357;") decode to lone surrogates,
-    # which no UTF-8 request body (judge, Agent answer step) can carry.
+    # which no UTF-8 request body (judge, Agent step) can carry.
     text, title = (re.sub('[\ud800-\udfff]', '\ufffd', value) for value in (text, title))
     dates = [{key: re.sub('[\ud800-\udfff]', '\ufffd', value) for key, value in item.items()} for item in dates]
     if headers.get('last-modified'):

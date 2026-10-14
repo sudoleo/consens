@@ -1,21 +1,19 @@
-"""Live A/B: where the Agent writes its answer (agent_answer_mode).
+"""Live check of the Agent's answers, optionally against saved answers.
 
-separate: the agent ends its steering with ``answer`` and a fresh answer step
-of the same model writes the answer (the default until this comparison).
-merged:   the agent writes the answer itself as its last step
-          (AGENT_MERGED_ANSWER=1, docs/agent-mode.md "Antwort im selben Aufruf").
+Per question one full turn: the chat model, the six comparison families, real
+judges, on an in-memory store (nothing is written to Firestore). Paid: every
+turn asks the comparison models and the judges.
 
-Per question one full turn in each mode: same chat model, the same six
-comparison families, real judges, on an in-memory store (nothing is written to
-Firestore). Paid: every turn asks the comparison models and the judges, so a
-question costs about twice a normal message. The comparison answers differ
-between the two runs; read the quality numbers as a trend, not a verdict.
+    venv/Scripts/python.exe scripts/evaluate_agent_answers.py --live --model gpt-6-luna
+    venv/Scripts/python.exe scripts/evaluate_agent_answers.py --live --only 0 --only 3 --baseline old.jsonl --pairwise claude-sonnet-5.5
 
-    venv/Scripts/python.exe scripts/evaluate_agent_answer_mode.py --live --model gpt-6-luna
-    venv/Scripts/python.exe scripts/evaluate_agent_answer_mode.py --live --model claude-opus-5.5 --only 0 --only 3
-
-Per turn one JSON line (answer text included), then a summary per mode.
---pairwise MODEL lets a blind judge pick the better answer per question.
+Per turn one JSON line (answer text included), then a summary.
+--baseline FILE: JSON lines of an earlier run (rows with case and answer;
+--baseline-mode picks rows by their "mode", default "separate", the answers
+of the former separate answer step until 2026-10-14). With --pairwise MODEL a
+blind judge then picks the better answer per question: "agent" (this run) or
+"baseline". The comparison answers differ between the runs; read the quality
+numbers as a trend, not a verdict.
 --out FILE also writes everything as JSON lines.
 
 Measured per turn:
@@ -337,7 +335,7 @@ def receipts(store, uid, chat_id, turn_id):
         index += 1
 
 
-def run_turn(case, question, *, merged, model, families, config, key, check_sources):
+def run_turn(case, question, *, model, families, config, key, check_sources):
     from app.services.agent_comparison import comparison_selection
     from app.services.agent_delegation import DelegationLoop
     from app.services.agent_policy import AgentPolicy
@@ -358,7 +356,7 @@ def run_turn(case, question, *, merged, model, families, config, key, check_sour
                           policy=AgentPolicy.for_chat(delegation_config), delegation_config=delegation_config,
                           completion_factory=timing.completion(AgentCompletion),
                           comparison_models=comparison_selection(families),
-                          check_sources=check_sources, merged_answer=merged)
+                          check_sources=check_sources)
     timing.started = time.perf_counter()
     events, error = [], None
     try:
@@ -395,7 +393,7 @@ def run_turn(case, question, *, merged, model, families, config, key, check_sour
     def at(value):
         return None if value is None else round(value, 1)
     return {
-        "case": case, "mode": "merged" if merged else "separate", "model": model.selection_id,
+        "case": case, "mode": "agent", "model": model.selection_id,
         "question": question[:120], "status": saved.get("status"), "error": error,
         "failure": (saved.get("agent_failure") or {}).get("code"),
         "seconds": round(total, 1),
@@ -432,7 +430,7 @@ def run_turn(case, question, *, merged, model, families, config, key, check_sour
 
 
 def pairwise(question, first, second, *, judge_model, key, seed):
-    """Blind pick between two answers, in random order. Returns the mode or "tie"."""
+    """Blind pick between two answers, in random order. Returns the winner's mode or "tie"."""
     from app.services.llm.agent_client import AgentCompletion
     from app.services.llm.provider_runtime import (AnalysisBudget, ProviderCancellation, bind_analysis_budget,
                                                    bind_provider_cancellation)
@@ -452,14 +450,14 @@ def pairwise(question, first, second, *, judge_model, key, seed):
             "cost_usd": usd((value.usage or {}).get("estimated_cost_nano_usd"))}
 
 
-def summary(rows, mode):
-    mine = [r for r in rows if r["mode"] == mode]
+def summary(rows):
+    mine = rows
 
     def mean(key):
         values = [r[key] for r in mine if isinstance(r.get(key), (int, float))]
         return round(statistics.mean(values), 3) if values else None
     scores = [s for r in mine for s in r["agreement"] if isinstance(s, (int, float))]
-    return {"mode": mode, "turns": len(mine), "completed": sum(r["status"] == "completed" for r in mine),
+    return {"turns": len(mine), "completed": sum(r["status"] == "completed" for r in mine),
             "seconds": mean("seconds"), "seconds_to_answer_text": mean("seconds_to_answer_text"),
             "seconds_after_comparison": mean("seconds_after_comparison"), "steps": mean("steps"),
             "chat_cost_usd": mean("chat_cost_usd"), "after_comparison_cost_usd": mean("after_comparison_cost_usd"),
@@ -479,7 +477,8 @@ def main():
     parser.add_argument("--model", default="gpt-6-luna", help="Chat model (selection id)")
     parser.add_argument("--effort", default="default", help="Reasoning effort of the chat model")
     parser.add_argument("--only", type=int, action="append", help="Case index (repeatable)")
-    parser.add_argument("--modes", default="separate,merged", help="Comma-separated: separate, merged")
+    parser.add_argument("--baseline", help="JSON lines of an earlier run to compare against (with --pairwise)")
+    parser.add_argument("--baseline-mode", default="separate", help="Rows of --baseline with this mode")
     parser.add_argument("--check-sources", action="store_true", help="Also run the source check of contradictions")
     parser.add_argument("--pairwise", help="Model id of a blind judge that picks the better answer per question")
     parser.add_argument("--out", help="Write every line to this JSON lines file as well")
@@ -511,7 +510,14 @@ def main():
     families = {p: cfg.FREE_DEFAULT_MODEL_BY_PROVIDER[p]
                 for p in ("openai", "anthropic", "gemini", "deepseek", "grok", "glm")
                 if p in cfg.FREE_DEFAULT_MODEL_BY_PROVIDER}
-    modes = [mode.strip() for mode in args.modes.split(",") if mode.strip() in {"separate", "merged"}]
+    baseline = {}
+    if args.baseline:
+        with open(args.baseline, encoding="utf-8") as lines:
+            saved = [json.loads(line) for line in lines]
+        for row in saved:
+            if (row.get("mode") == args.baseline_mode and row.get("status") == "completed"
+                    and row.get("answer")):
+                baseline[row["case"]] = {**row, "mode": "baseline"}
     out = open(args.out, "a", encoding="utf-8") if args.out else None
 
     def emit(line):
@@ -523,26 +529,22 @@ def main():
             out.flush()
         print(text, flush=True)
 
-    rows, wins = [], {"separate": 0, "merged": 0, "tie": 0}
+    rows, wins = [], {"agent": 0, "baseline": 0, "tie": 0}
     for index, (kind, question) in enumerate(CASES):
         if args.only and index not in args.only:
             continue
-        pair = {}
-        # Alternate the order so neither mode always runs first (provider caches).
-        for mode in (modes if index % 2 == 0 else list(reversed(modes))):
-            row = run_turn(index, question, merged=mode == "merged", model=model, families=families,
-                           config=config, key=key, check_sources=args.check_sources)
-            row["kind"] = kind
-            rows.append(row)
-            pair[mode] = row
-            emit(row)
-        if judge_model and len(pair) == 2 and all(r["status"] == "completed" and r["answer"] for r in pair.values()):
-            verdict = pairwise(question, pair["separate"], pair["merged"], judge_model=judge_model, key=key, seed=index)
+        row = run_turn(index, question, model=model, families=families, config=config, key=key,
+                       check_sources=args.check_sources)
+        row["kind"] = kind
+        rows.append(row)
+        emit(row)
+        before = baseline.get(index)
+        if judge_model and before and row["status"] == "completed" and row["answer"]:
+            verdict = pairwise(question, before, row, judge_model=judge_model, key=key, seed=index)
             wins[verdict["winner"]] += 1
             emit({"case": index, "pairwise": verdict})
-    for mode in modes:
-        emit({"summary": summary(rows, mode)})
-    if judge_model:
+    emit({"summary": summary(rows)})
+    if judge_model and baseline:
         emit({"pairwise_wins": wins, "judge": judge_model.selection_id})
     if out:
         out.close()

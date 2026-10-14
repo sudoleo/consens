@@ -167,20 +167,20 @@ def test_legacy_clients_cannot_store_prompts_and_saving_cleans_old_documents(cli
 
 def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services import agent_comparison
-    from app.services.prompt_defaults import AGENT_ANSWER_PROMPT
+    from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_WRITE_NOTE
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "agent_answer", "agent_direct_answer", "agent_merged", "comparison", "answers", "consensus",
-        "delegation_orchestrator", "delegation_worker"]
+        "agent", "comparison", "answers", "consensus", "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
     texts = {entry["key"]: entry["text"] for entry in entries}
-    assert texts["agent"] == AGENT_SYSTEM_PROMPT
-    assert texts["agent_answer"] == AGENT_ANSWER_PROMPT
-    from app.services.prompt_defaults import AGENT_DIRECT_ANSWER_PROMPT
-    assert texts["agent_direct_answer"] == AGENT_DIRECT_ANSWER_PROMPT
-    from app.services.prompt_defaults import AGENT_MERGED_SYSTEM_PROMPT
-    assert texts["agent_merged"] == AGENT_MERGED_SYSTEM_PROMPT
+    # One Agent prompt: it steers and writes the answer itself (no answer step).
+    assert texts["agent"] == AGENT_SYSTEM_PROMPT and texts["agent"].endswith(AGENT_ANSWER_SECTION)
+    assert "call answer" not in texts["agent"] and "answer step" not in texts["agent"]
+    agent = next(entry for entry in entries if entry["key"] == "agent")
+    assert "AGENT_WRITE_NOTE" in agent["used_for"] and AGENT_WRITE_NOTE.strip()
+    assert not any(retired in entry["used_for"] for entry in entries
+                   for retired in ("AGENT_ANSWER_PROMPT", "AGENT_MERGED", "AGENT_ANSWER_APP_FACTS", "answer step"))
     assert texts["answers"] == ANSWER_SYSTEM_PROMPT and texts["consensus"] == CONSENSUS_SYSTEM_PROMPT
     assert texts["delegation_orchestrator"] == agent_delegation_config.ORCHESTRATOR_PROMPT
     assert texts["delegation_worker"] == agent_delegation_config.WORKER_PROMPT

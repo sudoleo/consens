@@ -24,7 +24,6 @@ from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.source_verification import Limits as SourceCheckLimits
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_policy import AgentPolicy, supports_delegation
-from app.services import agent_answer_mode
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
 from app.services.agent_tools import configured_model
@@ -347,8 +346,6 @@ def run_agent(request: Request, payload: AgentRequest):
         comparisons = comparison_selection(payload.comparison_models)
         source_limits = SourceCheckLimits.configured() if payload.check_sources and not google_data else None
         memory = _memory_snapshot(uid)
-        # Where the answer is written (agent_answer_mode), read once per turn.
-        merged_answer = agent_answer_mode.enabled()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -365,7 +362,7 @@ def run_agent(request: Request, payload: AgentRequest):
                             "source_check_limits": asdict(source_limits) if source_limits else None,
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "memory": memory.settings(),
-                            "answer_mode": "merged" if merged_answer else "separate",
+                            "answer_mode": "merged",
                             "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
         )
         if turn["status"] == "completed":
@@ -382,7 +379,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
                          source_limits=source_limits, agent_preferences=payload.agent_preferences, memory=memory,
-                         chat_sources=chat_sources, merged_answer=merged_answer,
+                         chat_sources=chat_sources,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)

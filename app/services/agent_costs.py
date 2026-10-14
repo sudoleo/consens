@@ -109,7 +109,7 @@ class RunCosts:
         as measured. Otherwise a worst-case bound for several rounds and six
         parallel answers exceeds a whole daily allowance.
 
-        ``answer_output`` (a merged step, which may write the answer): the
+        ``answer_output`` (a step that may write the answer): the
         call's output limit, above ``model.max_output_tokens`` (the routing
         allowance). The answer is written once, so one segment reserves it
         and every further search continuation the routing allowance."""

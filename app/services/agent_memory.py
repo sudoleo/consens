@@ -739,9 +739,12 @@ relevance test for this task, as the user's stated background or preference
 
 MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user switched on "Let Agent update memory", so you decide
 what to remember across chats, like an attentive assistant keeping brief notes.
-Decide on EVERY message when you call answer: its `memory` field is
-required. Most messages reveal nothing new: then pass []. When you reply with
-plain text instead, use update_memory.
+Decide on EVERY message. compare_models and check_text carry a required
+`memory` field: pass [] when the message reveals nothing new, which is the
+usual case, and on further comparisons of the same message once one was
+accepted (its decision stands; after a refused call, decide again). When you
+answer without a comparison and the message reveals something to remember,
+call update_memory before you answer.
 The test: would knowing this make a noticeably better answer in a future,
 unrelated chat? Save what the user states about themselves, also in passing
 while asking something else ("I'm vegetarian, how do I get more protein?" ->
@@ -774,30 +777,7 @@ every change while you work, and the user reviews or undoes it in
 Settings > Memory. Confirm in one short sentence only
 when the user explicitly asked you to remember or forget something.
 A message that only asks you to remember, change or forget something needs no
-comparison: call update_memory, then confirm briefly without tools."""
-
-# Merged answer (agent_answer_mode): there is no answer call. The required
-# decision rides on the calls that start the work, compare_models and
-# check_text; a message answered without a comparison uses update_memory.
-MERGED_MEMORY_DECISION = (
-    ("Decide on EVERY message when you call answer: its `memory` field is\n"
-     "required. Most messages reveal nothing new: then pass []. When you reply with\n"
-     "plain text instead, use update_memory.",
-     "Decide on EVERY message. compare_models and check_text carry a required\n"
-     "`memory` field: pass [] when the message reveals nothing new, which is the\n"
-     "usual case, and on every further comparison of the same message (the first\n"
-     "call's decision stands). When you answer without a comparison and the\n"
-     "message reveals something to remember, call update_memory before you answer."),
-    ("call update_memory, then confirm briefly without tools.",
-     "call update_memory, then confirm briefly."),
-)
-
-
-def _merged_write_prompt():
-    text = MEMORY_WRITE_PROMPT
-    for old, new in MERGED_MEMORY_DECISION:
-        text = text.replace(old, new, 1)
-    return text
+comparison: call update_memory, then confirm briefly."""
 
 
 MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: you cannot save, change or delete memories.
@@ -820,26 +800,15 @@ comparison: memory is unavailable right now, so nothing was saved; they can try
 again in a moment or add it in Settings > Memory."""
 
 
-def orchestrator_prompt(snapshot: MemorySnapshot, *, merged: bool = False) -> str:
-    """Memory data plus the rules that fit the user's switches; ``merged``:
-    the agent writes the answer itself (agent_answer_mode)."""
+def orchestrator_prompt(snapshot: MemorySnapshot) -> str:
+    """Memory data plus the rules that fit the user's switches."""
     if not snapshot.available:
         return MEMORY_UNAVAILABLE_PROMPT
     if not snapshot.enabled:
         return MEMORY_PAUSED_PROMPT
     block = render_memory_block(snapshot)
-    rules = ((_merged_write_prompt() if merged else MEMORY_WRITE_PROMPT) if snapshot.writable
-             else MEMORY_READ_ONLY_PROMPT)
+    rules = MEMORY_WRITE_PROMPT if snapshot.writable else MEMORY_READ_ONLY_PROMPT
     return "\n\n".join(part for part in (block, MEMORY_USE_PROMPT if block else "", rules) if part)
-
-
-def synthesis_prompt(snapshot: MemorySnapshot) -> str:
-    """Read-only memory for the dedicated answer step (no ids, no write rules)."""
-    block = render_memory_block(snapshot, with_ids=False)
-    if not block:
-        return ""
-    return (block + "\n" + MEMORY_RELEVANCE_RULES + "\nMemory never decides what is true, and you "
-            "never claim to have saved or changed it: the app reports memory changes itself.")
 
 
 # --- Agent tools ------------------------------------------------------------
@@ -847,7 +816,7 @@ def synthesis_prompt(snapshot: MemorySnapshot) -> str:
 def _memory_changes(value):
     """The ``memory`` field as a list of changes, whatever shape a model sent.
 
-    A schema error here rejects the whole answer, and three rejected rounds
+    A schema error here rejects the whole comparison call, and three rejected rounds
     ended a turn whose comparisons were paid (review 2026-10-12): ``null`` or
     unreadable text is no change, one object is one change, and an item that
     is no object stays a change that ``apply`` refuses visibly."""
@@ -863,27 +832,20 @@ def _memory_changes(value):
     return [item if isinstance(item, dict) else {} for item in value]
 
 
-def memory_field(*, merged: bool = False):
-    """The ``memory`` field that rides along on answer (merged answer:
-    on compare_models and check_text).
+def memory_field():
+    """The ``memory`` field that rides along on compare_models and check_text.
 
     Required on purpose: an optional field was simply left out while the
     orchestrator concentrated on the comparison (2026-10-04, "ich lebe
     vegetarisch" with the opt-in on and nothing saved). A required field turns
     remembering into a decision on every call; ``[]`` is the explicit "nothing".
+    No max_length: more than MAX_CHANGES_PER_CALL changes are refused in
+    MemoryTools.apply, as a memory refusal instead of a rejected comparison.
     """
-    if merged:
-        return (Annotated[list[MemoryChange], BeforeValidator(_memory_changes)], Field(description=
-            "Required memory decision for the user's latest message. [] when it reveals nothing new and "
-            "lasting about the user, which is the usual case, and on every further comparison of the same "
-            "message. Otherwise the add, update or delete changes "
-            f"(as with update_memory, at most {MAX_CHANGES_PER_CALL}), for example a stated diet, home town, job, "
-            "tools or answer preference."))
-    # No max_length: more than MAX_CHANGES_PER_CALL changes are refused in
-    # MemoryTools.apply, as a memory refusal instead of a rejected comparison.
     return (Annotated[list[MemoryChange], BeforeValidator(_memory_changes)], Field(description=
         "Required memory decision for the user's latest message. [] when it reveals nothing new and "
-        "lasting about the user, which is the usual case. Otherwise the add, update or delete changes "
+        "lasting about the user, which is the usual case, and on further comparisons of the same message "
+        "once one was accepted (after a refused call, decide again). Otherwise the add, update or delete changes "
         f"(as with update_memory, at most {MAX_CHANGES_PER_CALL}), for example a stated diet, home town, job, "
         "tools or answer preference."))
 
@@ -906,18 +868,15 @@ class MemoryTools:
     def changed(self) -> bool:
         return bool(self.applied)
 
-    def tools(self, *, merged: bool = False):
+    def tools(self):
         from app.services.agent_tools import ReadOnlyTool
         if not self.writable:
             return []
-        usage = ("Use it when you answer without a comparison; compare_models and check_text carry the decision "
-                 "in their memory field." if merged else
-                 "Use it only when you reply with plain text; when you call answer, put the changes into its "
-                 "memory field.")
         return [ReadOnlyTool(
             "update_memory",
             "Save, update or delete the user's persistent memories. Each change needs an exact quote of "
-            "the user's own words as evidence. " + usage,
+            "the user's own words as evidence. Use it when you answer without a comparison; compare_models "
+            "and check_text carry the decision in their memory field.",
             UpdateMemoryArgs, self.update_memory)]
 
     def _user_messages(self) -> list[str]:

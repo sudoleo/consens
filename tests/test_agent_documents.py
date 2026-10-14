@@ -102,16 +102,59 @@ def test_limits_unsupported_glyphs_and_cancellation(setup):
     assert not files.list("owner", chat)
 
 
-def test_synthesis_keeps_actual_document_results(setup):
-    from test_agent_comparison import Script, make_loop
+def test_the_answer_is_written_from_the_actual_document_results(setup):
+    """The agent writes the answer itself after create_document: the step
+    that writes it reads the real result (title, saved files) and the rule
+    never to invent links to the cards."""
+    import json
+    from test_agent_comparison import Script
+    from test_agent_runs import UID, pending
+    from app.services.agent_comparison import comparison_selection, review_is_bound
+    from app.services.agent_delegation import DelegationLoop
+    from app.services.agent_delegation_config import defaults
+    from app.services.agent_policy import AgentPolicy
     from app.services.agent_runs import AgentRunStore
+    from app.services.llm.agent_client import measured_usage, resolve_agent_model
     files, _ = setup
-    loop = make_loop(AgentRunStore(files.db), Script())
-    loop.documents = SimpleNamespace(results=[{"title": "Decision", "files": [{"id": "a" * 32}]}])
-    messages = loop.comparison.synthesis_messages(loop.answer_conversation)
-    assert '"saved_documents"' in messages[-1]["content"] and '"Decision"' in messages[-1]["content"]
-    from app.services.prompt_defaults import AGENT_ANSWER_EVIDENCE_FIELDS
-    assert AGENT_ANSWER_EVIDENCE_FIELDS["saved_documents"] in messages[0]["content"]
+    store = AgentRunStore(files.db)
+    chat, turn = pending(store)
+    script = Script()
+    base = type(script.factory())
+    steps = {}
+
+    class Workflow(base):
+        def stream(self, **kwargs):
+            if self.step_id.startswith("completion:"):
+                steps[int(self.step_id.split(":")[-1])] = kwargs
+            if self.step_id == "completion:1" and kwargs["tools"]:
+                self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, kwargs["model"])
+                self.tool_calls = [{"id": "doc", "type": "function", "function": {
+                    "name": "create_document", "arguments": json.dumps(sample())}}]
+                self.finish_reason = "tool_calls"
+                return
+            yield from super().stream(**kwargs)
+
+    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
+    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+        model=resolve_agent_model("claude-haiku-4-5"),
+        messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare the offers and write a brief."}],
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
+        delegation_config=config, completion_factory=Workflow, file_context=FileContext(files, UID, chat, []),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+    script.loop = loop
+    events = list(loop.run())
+    saved = store.get_turn(UID, chat, turn["id"])
+    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+    document = loop.documents.results[-1]
+    assert document["title"] == "Decision brief" and len(document["files"]) == 2
+    # Compare, create the document, write the answer: no further step.
+    assert sorted(steps) == [0, 1, 2] and saved["consensus"] == "The first option costs 100."
+    writer = steps[2]
+    assert "never invent links to them" in writer["messages"][0]["content"]
+    result = json.loads(next(m["content"] for m in writer["messages"] if m.get("tool_call_id") == "doc"))
+    assert result["document_id"] == document["document_id"] and result["title"] == "Decision brief"
+    assert {f["id"] for f in result["files"]} == {f["id"] for f in document["files"]}
+    assert any(e.get("type") == "resources" for e in events)
 
 
 def test_chat_deletion_removes_document_versions_and_manifest(setup):

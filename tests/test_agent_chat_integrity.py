@@ -7,7 +7,6 @@ from app.services.agent_comparison import review_is_bound
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage
 from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded
-from test_agent_answer_lifecycle import answer_factory, ANSWER
 from test_agent_comparison import Script, make_loop
 from test_agent_runs import UID, pending, store
 
@@ -39,16 +38,22 @@ def test_comparisons_in_a_batch_finish_before_its_judge_and_synthesis(store, bef
                                    tool("judge_answer", {}, "review")]
                 self.finish_reason = "tool_calls"
                 return
-            if self.step_id.startswith("completion:") and not kwargs["tools"]:
+            if self.step_id == f"completion:{before + 1}":
+                # The step after the batch writes the answer.
+                answer_steps.append(self.step_id)
                 assert len(script.loop.comparison.comparisons) == before + 1
                 assert all(c["status"] == "succeeded" for c in script.loop.comparison.comparisons)
             yield from super().stream(model=model, **kwargs)
 
+    answer_steps = []
     loop = chat_loop(store, script)
     loop.factory = Batched
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed"
+    assert saved["status"] == "completed" and answer_steps == [f"completion:{before + 1}"]
+    # The judges are the app's: the model's own judge_answer call is refused.
+    review_call = next(json.loads(m["content"]) for m in loop.messages if m.get("tool_call_id") == "review")
+    assert "error" in review_call
     assert len(saved["agent_review"]["comparisons"]) == before + 1
     assert review_is_bound(saved["agent_review"], saved["consensus"])
     assert "".join(e["text"] for e in events if e["type"] == "delta") == saved["consensus"]
@@ -82,14 +87,34 @@ def test_direct_reply_is_published_once_after_complete_non_tool_response(store, 
 
 def test_interrupted_visible_answer_is_in_next_turn_context_without_private_failure(store):
     script = Script()
+    base = type(script.factory())
+    # Long enough to stream while it is written (ANSWER_HOLD_CHARS).
+    answer = "The first option costs 100 euros a month and includes the support plan. " * 6
+
+    class Cut(base):
+        def stream(self, *, model, **kwargs):
+            if self.step_id == "completion:1":
+                # The step after the comparison writes the answer and stops at its output limit.
+                self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
+                for start in range(0, len(answer), 100):
+                    self.text += answer[start:start + 100]
+                    yield {"type": "delta", "text": answer[start:start + 100]}
+                self.finish_reason = "length"
+                return
+            yield from super().stream(model=model, **kwargs)
+
     loop = chat_loop(store, script)
-    loop.factory = answer_factory(script, ending="length")
-    with pytest.raises(AnalysisBudgetExceeded):
-        list(loop.run())
+    loop.factory = Cut
+    events = []
+    with pytest.raises(AnalysisBudgetExceeded, match="output token limit"):
+        for event in loop.run():
+            events.append(event)
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == answer
     _, followup = pending(store, chat_id=loop.chat_id, request_id="next", question="Explain point 2.")
     messages = store.messages(UID, loop.chat_id, followup)
     assert messages[1]["role"] == "user" and messages[1]["content"] == "Question one"
-    assert messages[2]["role"] == "assistant" and ANSWER in messages[2]["content"]
+    assert messages[2]["role"] == "assistant" and answer in messages[2]["content"]
+    assert "output token limit" not in messages[2]["content"]
     assert "incomplete or unreviewed" in messages[2]["content"]
     assert messages[-1]["content"].endswith("\n\nExplain point 2.")
 
@@ -127,13 +152,15 @@ def test_valid_comparison_text_is_retained_with_consistent_session_status(store,
     assert all(a["status"] == "completed" for a in agents if a.get("kind") == "comparison")
 
 
-def test_missing_judge_call_starts_existing_judges_without_more_orchestrator_requests(store):
-    script = Script(missing=True)
+def test_the_app_starts_the_judges_without_more_orchestrator_requests(store):
+    """The written answer ends the steering; the app runs its checks itself."""
+    script = Script()
     loop = chat_loop(store, script)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
-    assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 3
+    # The comparison step and the step that writes the answer.
+    assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 2
     assert loop.comparison.judge_calls == 2
 
 
@@ -159,11 +186,15 @@ def test_repeated_invalid_tools_stop_without_exhausting_daily_allowance(store):
 
 
 @pytest.mark.parametrize("mode", ["accepted", "rework", "fallback"])
-def test_late_worker_results_reach_synthesis_after_review_without_stale_or_private_data(store, mode):
+def test_late_worker_results_reach_the_answer_only_after_review_without_private_data(store, mode):
+    """The agent writes the answer itself once every worker result is
+    reviewed; worker reasoning never reaches it, and a result sent back for
+    rework stands before the rework request, superseded by the new one."""
     from test_agent_delegation import assignment
     script = Script()
     base = type(script.factory())
     captured = []
+    answer_steps = []
     action_number = []
     did_rework = []
 
@@ -180,42 +211,55 @@ def test_late_worker_results_reach_synthesis_after_review_without_stale_or_priva
                 self.finish_reason = "stop"
                 yield {"type": "delta", "text": self.text}
                 return
-            if self.step_id.startswith("completion:"):
-                if not tools:
-                    captured.append(json.dumps(messages))
-                elif script.loop.comparison.comparisons:
-                    assert not captured, "No new routing generation after the complete answer and checks"
-                    script.calls.append((self.step_id, model.model))
-                    self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
-                    workers = list(script.loop.workers.values())
-                    action_number.append(True)
-                    identity = str(len(action_number))
-                    if not workers:
-                        self.tool_calls = [tool("start_agent", assignment("Supporting constraint"), identity)]
+            if self.step_id.startswith("completion:") and script.loop.comparison.comparisons:
+                assert not answer_steps, "No routing generation after the answer"
+                script.calls.append((self.step_id, model.model))
+                self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
+                workers = list(script.loop.workers.values())
+                action_number.append(True)
+                identity = str(len(action_number))
+                if not workers:
+                    self.tool_calls = [tool("start_agent", assignment("Supporting constraint"), identity)]
+                else:
+                    worker = workers[0]
+                    if worker.reviewed and not worker.inbox:
+                        # Every result is reviewed: this step writes the answer.
+                        captured.append(json.dumps(messages))
+                        answer_steps.append(self.step_id)
+                        self.text, self.finish_reason = "The first option costs 100.", "stop"
+                        yield {"type": "delta", "text": self.text}
+                        return
+                    if worker.state in {"review", "failed"} and not worker.reviewed:
+                        self.tool_calls = [tool("review_agent", {"agent_id": worker.id, "accepted": mode != "fallback",
+                            "use_fallback": mode == "fallback", "check": "VERIFIED_FALLBACK_FINDING" if mode == "fallback" else "Checked the supporting fact."}, identity)]
+                        if mode == "rework" and not did_rework:
+                            did_rework.append(True)
+                            self.tool_calls.append(tool("send_agent", {"agent_id": worker.id, "kind": "rework", "text": "Update the stale finding."}, identity + "_rework"))
                     else:
-                        worker = workers[0]
-                        if worker.state in {"review", "failed"} and not worker.reviewed:
-                            self.tool_calls = [tool("review_agent", {"agent_id": worker.id, "accepted": mode != "fallback",
-                                "use_fallback": mode == "fallback", "check": "VERIFIED_FALLBACK_FINDING" if mode == "fallback" else "Checked the supporting fact."}, identity)]
-                            if mode == "rework" and not did_rework:
-                                did_rework.append(True)
-                                self.tool_calls.append(tool("send_agent", {"agent_id": worker.id, "kind": "rework", "text": "Update the stale finding."}, identity + "_rework"))
-                            else:
-                                self.tool_calls.append(tool("judge_answer", {}, identity + "_judge"))
-                        else:
-                            self.tool_calls = [tool("wait_agents", {"seconds": 1}, identity)]
-                    self.finish_reason = "tool_calls"
-                    return
+                        self.tool_calls = [tool("wait_agents", {"seconds": 1}, identity)]
+                self.finish_reason = "tool_calls"
+                return
             yield from super().stream(model=model, messages=messages, tools=tools, **kwargs)
 
     loop = chat_loop(store, script, delegation=True)
     loop.factory = Delegated
     list(loop.run())
     assert len(captured) == 1
-    assert ("VERIFIED_FALLBACK_FINDING" if mode == "fallback" else "VERIFIED_CURRENT_FINDING") in captured[0]
-    assert "OUTDATED_FINDING" not in captured[0] and "PRIVATE_WORKER_THOUGHTS" not in captured[0]
+    # The answer is the last orchestrator step.
+    assert [s for s, _ in script.calls if s.startswith("completion:")][-1] == answer_steps[0]
+    context = captured[0]
+    assert ("VERIFIED_FALLBACK_FINDING" if mode == "fallback" else "VERIFIED_CURRENT_FINDING") in context
+    assert "PRIVATE_WORKER_THOUGHTS" not in context
+    if mode == "rework":
+        # The agent keeps its own history: the stale result stays in its context,
+        # before its rework request and the current result.
+        assert (context.index("OUTDATED_FINDING") < context.index("Update the stale finding.")
+                < context.rindex("VERIFIED_CURRENT_FINDING"))
+    else:
+        assert "OUTDATED_FINDING" not in context
     if mode != "fallback":
-        assert "https://example.org/worker" in captured[0]
+        assert "https://example.org/worker" in context
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+    assert saved["status"] == "completed" and saved["consensus"] == "The first option costs 100."
+    assert review_is_bound(saved["agent_review"], saved["consensus"])
     assert all(not w.thread.is_alive() for w in loop.workers.values())

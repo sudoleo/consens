@@ -1,11 +1,18 @@
-"""Merged answer (agent_answer_mode, AGENT_MERGED_ANSWER=1): the agent writes
-the answer itself as its last step, no separate answer step.
+"""The Agent writes its answer itself (agent_answer_mode): its plain-text
+message without tool calls is the answer; after a comparison the step that
+reads the answers writes it, a direct answer is one call.
 
-The separate path keeps its own tests (test_agent_comparison and others);
-these cover what changes when the switch is on.
+Until 2026-10-14 this was the merged path behind AGENT_MERGED_ANSWER next to
+a separate, tool-free answer step (git tag agent-separate-answer-last); now
+it is the only path. test_agent_comparison covers the checks and accounting
+with the shared Script; these tests cover streaming, holding back and
+retracting the answer text, the write note, memory and Watch replies, limits
+and the live evaluation script.
 """
 from dataclasses import replace
 import json
+import re
+import sys
 
 import pytest
 
@@ -26,7 +33,7 @@ from test_agent_runs import UID, api, pending, store  # noqa: F401  (fixtures)
 ANSWER = ("The first option costs 100 euros a month and includes the support plan. "
           "The second option is cheaper at first but adds fees once the team grows, "
           "so over two years the first option ends up cheaper for a team of ten. ") * 3
-# Longer than the routing gist of the separate path (result_chars 8000).
+# A long comparison answer: the agent reads it whole (no routing gist).
 MODEL_ANSWER = "The first option costs 100. The constraint matters. " + "Details on pricing. " * 500
 COMPARE = ("compare_models", {"question": "Which option is cheaper over two years?", "context": "Team of ten.",
                               "status_update": "Comparing the options."})
@@ -37,7 +44,7 @@ def tool_call(index, n, name, args):
 
 
 class Merged(Script):
-    """A scripted merged turn. ``plan[i]`` is what step completion:i does:
+    """A scripted Agent turn. ``plan[i]`` is what step completion:i does:
     ``text`` (streamed in chunks of 50), then ``tools`` [(name, args)];
     ``sources`` arrive before the text (the step's own search found them)."""
 
@@ -61,7 +68,7 @@ class Merged(Script):
                     if schema:
                         yield from super().stream(model=model, messages=messages, **kwargs)
                         return
-                    # A comparison answer, longer than the routing gist.
+                    # A comparison answer.
                     script.calls.append((self.step_id, model.model))
                     self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                     self.text, self.finish_reason = MODEL_ANSWER, "stop"
@@ -105,7 +112,7 @@ class Merged(Script):
         return Completion()
 
 
-def merged_loop(store, script, *, merged=True, messages=None, memory=None, check_sources=False):
+def merged_loop(store, script, *, messages=None, memory=None, check_sources=False):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -115,7 +122,7 @@ def merged_loop(store, script, *, merged=True, messages=None, memory=None, check
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory, check_sources=check_sources,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        memory=memory, merged_answer=merged)
+        memory=memory)
     script.loop = loop
     return loop
 
@@ -137,49 +144,46 @@ def tool_result(loop, call_id):
                            if m.get("role") == "tool" and m.get("tool_call_id") == call_id))
 
 
-# --- Switch and prompts ----------------------------------------------------------
+# --- Prompts and tools -----------------------------------------------------------
 
-def test_the_switch_is_off_by_default_and_needs_a_chat_turn(store, monkeypatch):
-    monkeypatch.delenv(agent_answer_mode.ENABLED_ENV, raising=False)
-    assert not agent_answer_mode.enabled()
-    assert not merged_loop(store, Merged([{}]), merged=None).merged
-    monkeypatch.setenv(agent_answer_mode.ENABLED_ENV, "1")
-    assert agent_answer_mode.enabled() and merged_loop(store, Merged([{}]), merged=None).merged
-    # An explicit choice wins over the environment (live comparison script).
-    assert not merged_loop(store, Merged([{}]), merged=False).merged
-    # Bounded legacy runs keep the separate answer step.
+def test_every_turn_with_comparison_tools_writes_its_own_answer(store):
+    """No switch any more: chat turns and bounded runs alike have no answer
+    tool and get the writing rules."""
     from test_agent_comparison import make_loop
-    assert not make_loop(store, Script()).merged
+    for loop in (merged_loop(store, Merged([{}])), make_loop(store, Script())):
+        assert loop.merged and "answer" not in loop.registry.tools
+        assert prompt_defaults.AGENT_ANSWER_SECTION in loop.messages[0]["content"]
 
 
-def test_every_changed_sentence_exists_once():
-    for old, _ in prompt_defaults.AGENT_MERGED_REPLACEMENTS:
-        assert prompt_defaults.AGENT_SYSTEM_PROMPT.count(old) == 1, old
-    for old, _ in prompt_defaults.AGENT_MERGED_READ_SOURCE_REPLACEMENTS:
-        assert prompt_defaults.AGENT_MERGED_SYSTEM_PROMPT.count(old) == 1, old
-    for old, _ in agent_memory.MERGED_MEMORY_DECISION:
-        assert agent_memory.MEMORY_WRITE_PROMPT.count(old) == 1, old
-    from app.services.agent_watch import MERGED_ORCHESTRATOR_PROMPT, ORCHESTRATOR_PROMPT
-    assert ORCHESTRATOR_PROMPT.count("then call answer.") == 1
-    for text in (prompt_defaults.AGENT_MERGED_SYSTEM_PROMPT, prompt_defaults.AGENT_MERGED_READ_SOURCE_PROMPT,
-                 agent_memory._merged_write_prompt(), MERGED_ORCHESTRATOR_PROMPT):
-        assert "call answer" not in text and "answer step" not in text
+def test_no_prompt_points_to_the_removed_answer_step():
+    from app.services import agent_read_source, agent_watch
+    assert prompt_defaults.AGENT_SYSTEM_PROMPT == (prompt_defaults._AGENT_STEERING + "\n\n"
+                                                   + prompt_defaults.AGENT_ANSWER_SECTION)
+    reading = prompt_defaults.AGENT_SYSTEM_PROMPT
+    for old, new in prompt_defaults.AGENT_READ_SOURCE_REPLACEMENTS:
+        assert reading.count(old) == 1, old
+        reading = reading.replace(old, new)
+    for text in (prompt_defaults.AGENT_SYSTEM_PROMPT, reading, prompt_defaults.AGENT_READ_SOURCE_PROMPT,
+                 prompt_defaults.AGENT_WRITE_NOTE, agent_memory.MEMORY_WRITE_PROMPT, agent_watch.ORCHESTRATOR_PROMPT,
+                 agent_read_source.UNTRUSTED_NOTE):
+        assert "call answer" not in text and "answer step" not in text and "answer call" not in text, text[:80]
 
 
-def test_the_steering_prompt_becomes_the_merged_one_with_reading_and_memory(store, monkeypatch):
+def test_the_steering_prompt_has_the_writing_reading_and_memory_rules(store, monkeypatch):
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
     set_profile(store.db, auto_memory=True)
     loop = merged_loop(store, Merged([{}]), memory=repo(store).snapshot(UID), messages=[
         {"role": "system", "content": prompt_defaults.AGENT_SYSTEM_PROMPT}, {"role": "user", "content": "Hi"}])
     system = loop.messages[0]["content"]
-    assert system.startswith(prompt_defaults.AGENT_MERGED_SYSTEM_PROMPT.split("COMPARE OR ANSWER DIRECTLY")[0])
-    assert "WRITING THE ANSWER" in system and "READING SOURCES" in system
+    assert system.startswith(prompt_defaults.AGENT_SYSTEM_PROMPT.split("COMPARE OR ANSWER DIRECTLY")[0])
+    # The code prompt already carries the writing rules: not appended twice.
+    assert system.count("WRITING THE ANSWER") == 1 and "READING SOURCES" in system
     assert "Include status_update in every compare_models, check_text and read_source call" in system
     assert "call answer" not in system
-    assert agent_memory.MERGED_MEMORY_DECISION[0][1] in system
+    assert "compare_models and check_text carry a required" in system
     names = list(loop.registry.tools)
     assert "answer" not in names and {"compare_models", "check_text", "read_source", "update_memory"} <= set(names)
-    # The required memory decision moved to the calls that start the work.
+    # The required memory decision rides on the calls that start the work.
     for name in ("compare_models", "check_text"):
         schema = loop.registry.tools[name].schema()["function"]["parameters"]
         assert "memory" in schema["properties"] and "memory" in schema["required"]
@@ -189,7 +193,7 @@ def test_the_steering_prompt_becomes_the_merged_one_with_reading_and_memory(stor
 def test_a_custom_steering_prompt_still_gets_the_writing_rules(store):
     loop = merged_loop(store, Merged([{}]))
     system = loop.messages[0]["content"]
-    assert system.startswith("Answer.") and prompt_defaults.AGENT_MERGED_ANSWER_SECTION in system
+    assert system.startswith("Answer.") and prompt_defaults.AGENT_ANSWER_SECTION in system
 
 
 # --- Comparison and answer in one call -------------------------------------------
@@ -215,7 +219,7 @@ def test_the_step_that_reads_the_answers_writes_the_checked_answer(store):
     # reminders; the depth that steered the comparison models is not shown.
     assert "depth" not in result
     request = script.requests[1]
-    assert request[-1] == {"role": "user", "content": prompt_defaults.AGENT_MERGED_WRITE_NOTE}
+    assert request[-1] == {"role": "user", "content": prompt_defaults.AGENT_WRITE_NOTE}
     assert request[-2]["role"] == "tool" and request[-2]["tool_call_id"] == "call_0_0"
     # The answer streamed and was complete before the check started.
     assert deltas(events) == ANSWER
@@ -226,17 +230,12 @@ def test_the_step_that_reads_the_answers_writes_the_checked_answer(store):
     assert loop.completion.text == ANSWER
 
 
-def test_the_write_note_follows_only_usable_comparisons_of_merged_turns(store):
-    note = prompt_defaults.AGENT_MERGED_WRITE_NOTE
+def test_the_write_note_follows_only_usable_comparisons(store):
     # A refused comparison (invalid task) gives nothing to write from.
     refused = ("compare_models", {"question": "", "status_update": "Comparing."})
     script = Merged([{"tools": [refused]}, {"text": "Hello! How can I help?"}])
     list(merged_loop(store, script).run())
-    assert note not in json.dumps(script.requests[1])
-    # The separate path keeps its steering messages as before.
-    loop = merged_loop(store, Script(), merged=False)
-    list(loop.run())
-    assert loop.comparison.comparisons and note not in json.dumps(loop.messages)
+    assert prompt_defaults.AGENT_WRITE_NOTE not in json.dumps(script.requests[1])
 
 
 def test_a_direct_answer_is_one_call_and_unchecked(store):
@@ -328,21 +327,24 @@ def test_a_short_reply_after_research_stands_like_a_clarification_question(store
     assert deltas(events) == loop.completion.text == "Which team size do you mean?"
 
 
-def test_an_answer_cut_at_its_limit_is_kept_unchecked(store):
-    script = Merged([{"tools": [COMPARE]}, {"text": ANSWER, "finish": "length"}])
+# A short one was held back for its length and never streamed: it is shown
+# whole and saved too (DelegationLoop._keep_cut_answer, review 2026-10-14).
+@pytest.mark.parametrize("text", [ANSWER, "The first option is cheaper over two years."])
+def test_an_answer_cut_at_its_limit_is_kept_unchecked(store, text):
+    script = Merged([{"tools": [COMPARE]}, {"text": text, "finish": "length"}])
     loop = merged_loop(store, script)
     events = []
     with pytest.raises(AnalysisBudgetExceeded, match="output token limit"):
         for event in loop.run():
             events.append(event)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "failed" and saved["assistant_response"] == ANSWER
-    assert saved["agent_review"]["versions"][-1]["text"] == ANSWER
-    assert deltas(events) == ANSWER
+    assert saved["status"] == "failed" and saved["assistant_response"] == text
+    assert saved["agent_review"]["versions"][-1]["text"] == text
+    assert deltas(events) == text
     assert not any(e.get("kind") == "tool" and e.get("name") == "judge_answer" for e in events)
 
 
-def test_every_merged_step_may_write_a_whole_answer_but_is_admitted_like_a_routing_step(store):
+def test_every_step_may_write_a_whole_answer_but_is_admitted_like_a_routing_step(store):
     from app.services.llm.agent_client import answer_output_limit, routing_output_limit
     script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
     loop = merged_loop(store, script)
@@ -352,8 +354,6 @@ def test_every_merged_step_may_write_a_whole_answer_but_is_admitted_like_a_routi
     # ...but admission and further search segments use the routing allowance.
     assert loop._routing_model().max_output_tokens == routing_output_limit(loop.model)
     assert loop._answer_output() == answer_output_limit(loop.model)
-    separate = merged_loop(store, Merged([{}]), merged=False)
-    assert separate._routing_model().max_output_tokens == routing_output_limit(separate.model)
 
 
 def free_account(store, monkeypatch, remaining):
@@ -364,18 +364,15 @@ def free_account(store, monkeypatch, remaining):
     return ref
 
 
-@pytest.mark.parametrize("merged", [False, True])
-def test_a_free_account_keeps_its_research_after_a_first_message(store, monkeypatch, merged):
-    """Until 2026-10-14 a merged first step reserved the answer allowance for
-    every search round (~460k tokens here): a Free account (660k a day) got one
-    research round instead of three once ~190k were used, the separate path
-    only near the end of the allowance. Both now admit research alike."""
+def test_a_free_account_keeps_its_research_after_a_first_message(store, monkeypatch):
+    """Until 2026-10-14 a first step that may write the answer reserved the
+    answer allowance for every search round (~460k tokens here): a Free
+    account (660k a day) got one research round instead of three once ~190k
+    were used. It is admitted like a routing step now."""
     from app.services.agent_delegation import ORCHESTRATOR_SEARCH_ROUNDS
     ref = free_account(store, monkeypatch, 350_000)
-    answer = ("answer", {"status_update": "Writing the answer."})
-    script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}] if merged else
-                    [{"tools": [COMPARE]}, {"tools": [answer]}, {"text": ANSWER}])
-    loop = merged_loop(store, script, merged=merged)
+    script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
+    loop = merged_loop(store, script)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["consensus"] == ANSWER
@@ -383,9 +380,9 @@ def test_a_free_account_keeps_its_research_after_a_first_message(store, monkeypa
     assert ref.get().to_dict()["reserved"] == 0
 
 
-def test_near_the_limit_a_merged_direct_answer_keeps_its_whole_allowance(store, monkeypatch):
-    """Admitted like a routing step, the answer on top may overdraw, as the
-    separate answer step may after a direct answer; the search still yields."""
+def test_near_the_limit_a_direct_answer_keeps_its_whole_allowance(store, monkeypatch):
+    """Admitted like a routing step, the answer on top may overdraw; the
+    search still yields."""
     from app.services.llm.agent_client import answer_output_limit
     ref = free_account(store, monkeypatch, 30_000)
     used = ref.get().to_dict()["used"]
@@ -522,27 +519,17 @@ def test_a_watch_is_prepared_and_the_agent_points_to_its_card(store, monkeypatch
     assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
     assert saved["agent_watch"]["question"] == QUESTION
     system = script.requests[0][0]["content"]
-    assert agent_watch.MERGED_ORCHESTRATOR_PROMPT in system and "points to the card" in system
+    assert agent_watch.ORCHESTRATOR_PROMPT in system and "points to the card" in system
     assert ("agent_review" in saved) == compare
 
 
-def test_the_separate_path_is_unchanged_when_the_switch_is_off(store):
-    script = Script()
-    loop = merged_loop(store, script, merged=False)
-    list(loop.run())
-    assert "answer" in loop.registry.tools
-    # Steering, answer call, dedicated answer step without tools.
-    assert len(orchestrator_steps(script)) == 3
-
-
 def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
-    """The whole path: POST /agent with the switch on, the real stream client,
-    the saved turn and the recovered answer."""
+    """The whole path: POST /agent, the real stream client, the saved turn
+    and the recovered answer."""
     from test_agent_loop import REAL_STREAM, packet, transport, usage
     from test_agent_runs import AUTH
     from app.services.llm.agent_client import AgentCompletion
     client, store, _ = api
-    monkeypatch.setenv(agent_answer_mode.ENABLED_ENV, "1")
     monkeypatch.setattr(AgentCompletion, "stream", REAL_STREAM)
     chunks = [ANSWER[i:i + 100] for i in range(0, len(ANSWER), 100)]
     requests, _, _ = transport(monkeypatch, [[*(packet({"content": chunk}) for chunk in chunks),
@@ -557,80 +544,75 @@ def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
     assert "compare_models" in names and "answer" not in names
     assert requests[0]["tool_choice"] == "auto"
     assert requests[0]["messages"][0]["content"].startswith(
-        prompt_defaults.AGENT_MERGED_SYSTEM_PROMPT.split("COMPARE OR ANSWER DIRECTLY")[0])
+        prompt_defaults.AGENT_SYSTEM_PROMPT.split("COMPARE OR ANSWER DIRECTLY")[0])
     replay = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
     assert replay.status_code == 200 and replay.json()["response"] == ANSWER
     assert replay.json()["turn"]["agent_settings"]["answer_mode"] == "merged"
 
 
-def test_the_live_comparison_script_measures_both_modes(store, monkeypatch):
-    """scripts/evaluate_agent_answer_mode.py, offline: one scripted turn per mode."""
+# --- scripts/evaluate_agent_answers.py, offline ----------------------------------
+
+def evaluation_script():
+    """The live evaluation script as a module (scripts/ is no package)."""
     import importlib.util
     from pathlib import Path
-    from app.services import prompt_config
-    from app.services.llm import agent_client
-    path = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_agent_answer_mode.py"
-    spec = importlib.util.spec_from_file_location("evaluate_agent_answer_mode", path)
+    path = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_agent_answers.py"
+    spec = importlib.util.spec_from_file_location("evaluate_agent_answers", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    rows = {}
-    for merged in (False, True):
-        script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}]) if merged else Script()
-        monkeypatch.setattr(agent_client, "AgentCompletion", type(script.factory()))
-        rows[merged] = module.run_turn(0, "Which option is cheaper?", merged=merged,
-                                       model=resolve_agent_model("claude-haiku-4-5"),
-                                       families={"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"},
-                                       config=prompt_config.get_config(), key="test", check_sources=False)
-    separate, one = rows[False], rows[True]
-    assert separate["mode"] == "separate" and one["mode"] == "merged"
-    assert separate["status"] == one["status"] == "completed" and not separate["error"] and not one["error"]
-    # Steering, answer call, answer step against steering and answer in one.
-    assert (separate["steps"], one["steps"]) == (3, 2)
-    assert one["after_comparison_cost_usd"] < separate["after_comparison_cost_usd"]
-    assert one["answer"] == ANSWER and not one["leaks"] and one["retractions"] == 0
-    assert one["review"] == "succeeded" and one["seconds_after_comparison"] is not None
-    summary = module.summary([separate, one], "merged")
+    return module
+
+
+def test_the_live_script_measures_a_turn(store, monkeypatch):
+    """One scripted turn: steps, cost, review and where the time goes."""
+    from app.services import prompt_config
+    from app.services.llm import agent_client
+    module = evaluation_script()
+    script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
+    monkeypatch.setattr(agent_client, "AgentCompletion", type(script.factory()))
+    row = module.run_turn(0, "Which option is cheaper?", model=resolve_agent_model("claude-haiku-4-5"),
+                          families={"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"},
+                          config=prompt_config.get_config(), key="test", check_sources=False)
+    assert row["mode"] == "agent" and row["status"] == "completed" and not row["error"]
+    # Steering and the answer in one step after the comparison.
+    assert row["steps"] == 2 and 0 < row["after_comparison_cost_usd"] < row["chat_cost_usd"]
+    assert row["answer"] == ANSWER and not row["leaks"] and row["retractions"] == 0
+    assert row["review"] == "succeeded" and row["seconds_after_comparison"] is not None
+    summary = module.summary([row])
     assert summary["turns"] == summary["completed"] == 1 and summary["steps"] == 2
 
     # Where the time goes: every provider call with claim, request, first
     # token and settlement; the time after the comparison split by step.
-    for row, chat in ((separate, ["completion:0", "completion:1", "completion:2"]), (one, ["completion:0", "completion:1"])):
-        calls = row["timeline"]
-        assert [c["call"] for c in calls if c["kind"] == "chat"] == chat
-        assert sum(c["kind"] == "comparison" for c in calls) == 2 and any(c["kind"] == "judge" for c in calls)
-        for c in calls:
-            assert c["status"] == "succeeded" and "error" not in c
-            assert c["start"] <= c["claimed"] <= c["request"] <= c["end"] <= c["settled"]
-            assert c["request"] <= c.get("first_progress", c["request"]) <= c["end"]
-            assert c["seconds"] >= 0 and c["max_silence"] >= 0 and c["output_tokens"] == 20
-        # The step that writes the answer streams text.
-        assert "first_text" in next(c for c in calls if c["call"] == chat[-1])
-        assert all(c["title"].startswith("Comparison 1") for c in calls if c["kind"] == "comparison")
-        phases = row["phases"]
-        assert (phases["comparison_started"] <= phases["comparison_done"] <= phases["judges_started"]
-                <= phases["judges_done"] <= phases["end"])
-        assert row["rate_limits"] == row["stalls"] == row["retries"] == 0
-        # The test account's allowance does not hold the first step's three
-        # search rounds: one refused claim, then it searches less.
-        assert row["allowance_refusals"] == 1 and next(c for c in calls if c["call"] == "completion:0")["refused"] == 1
-    assert separate["after_comparison"]["calls"] == ["completion:1", "completion:2"]
-    assert one["after_comparison"]["calls"] == ["completion:1"]
-    split = one["after_comparison"]
+    calls = row["timeline"]
+    assert [c["call"] for c in calls if c["kind"] == "chat"] == ["completion:0", "completion:1"]
+    assert sum(c["kind"] == "comparison" for c in calls) == 2 and any(c["kind"] == "judge" for c in calls)
+    for c in calls:
+        assert c["status"] == "succeeded" and "error" not in c
+        assert c["start"] <= c["claimed"] <= c["request"] <= c["end"] <= c["settled"]
+        assert c["request"] <= c.get("first_progress", c["request"]) <= c["end"]
+        assert c["seconds"] >= 0 and c["max_silence"] >= 0 and c["output_tokens"] == 20
+    # The step that writes the answer streams text.
+    assert "first_text" in next(c for c in calls if c["call"] == "completion:1")
+    assert all(c["title"].startswith("Comparison 1") for c in calls if c["kind"] == "comparison")
+    phases = row["phases"]
+    assert (phases["comparison_started"] <= phases["comparison_done"] <= phases["judges_started"]
+            <= phases["judges_done"] <= phases["end"])
+    assert row["rate_limits"] == row["stalls"] == row["retries"] == 0
+    # The test account's allowance does not hold the first step's three
+    # search rounds: one refused claim, then it searches less.
+    assert row["allowance_refusals"] == 1 and next(c for c in calls if c["call"] == "completion:0")["refused"] == 1
+    split = row["after_comparison"]
+    assert split["calls"] == ["completion:1"]
     assert split["read_seconds"] == 0 and split["chat_seconds"] + split["other_seconds"] >= 0
-    assert one["phases"]["answer_text"] is not None and one["longest_silence"]["seconds"] >= 0
+    assert row["phases"]["answer_text"] is not None and row["longest_silence"]["seconds"] >= 0
 
 
-def test_the_live_comparison_script_shows_429s_and_stalls(store, monkeypatch):
-    """A free 429 of the answer step and a comparison answer the stall
-    watchdog ended show up in the script's timeline and counters."""
-    import importlib.util
-    from pathlib import Path
+def test_the_live_script_shows_429s_and_stalls(store, monkeypatch):
+    """A free 429 of the step that writes the answer and a comparison answer
+    the stall watchdog ended show up in the script's timeline and counters."""
     from app.services import prompt_config
     from app.services.llm import agent_client
-    path = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_agent_answer_mode.py"
-    spec = importlib.util.spec_from_file_location("evaluate_agent_answer_mode", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = evaluation_script()
     monkeypatch.setattr(agent_delegation.DelegationLoop, "_pause", lambda self, seconds: iter(()))
     monkeypatch.setattr(agent_delegation, "provider_cooldowns", ProviderCooldowns())
     base = type(Merged([{"tools": [COMPARE]}, {"rate_limited": True}, {"text": ANSWER}]).factory())
@@ -643,7 +625,7 @@ def test_the_live_comparison_script_shows_429s_and_stalls(store, monkeypatch):
             yield from super().stream(model=model, messages=messages, **kwargs)
 
     monkeypatch.setattr(agent_client, "AgentCompletion", Stalling)
-    row = module.run_turn(0, "Which option is cheaper?", merged=True, model=resolve_agent_model("claude-haiku-4-5"),
+    row = module.run_turn(0, "Which option is cheaper?", model=resolve_agent_model("claude-haiku-4-5"),
                           families={"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini",
                                     "gemini": "gemini-3.5-flash-lite"},
                           config=prompt_config.get_config(), key="test", check_sources=False)
@@ -655,22 +637,17 @@ def test_the_live_comparison_script_shows_429s_and_stalls(store, monkeypatch):
     stalled = [c for c in row["timeline"] if c.get("stalled")]
     assert [(c["kind"], c["error"], c["status"]) for c in stalled] == [("comparison", "TimeoutError", "failed")]
     assert row["after_comparison"]["calls"] == ["completion:1", "completion:2"]
-    summary = module.summary([row], "merged")
+    summary = module.summary([row])
     assert (summary["rate_limits"], summary["stalls"], summary["retries"]) == (1, 1, 1)
 
 
-def test_the_live_comparison_script_times_real_provider_streams(monkeypatch):
+def test_the_live_script_times_real_provider_streams(monkeypatch):
     """The real stream path: the stall watchdog's progress gives the first
     token and the longest silence (keepalive comments are none), and a
     stream the watchdog ends is marked stalled."""
-    import importlib.util
-    from pathlib import Path
     import time
     from app.services.llm import agent_client, provider_runtime
-    path = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_agent_answer_mode.py"
-    spec = importlib.util.spec_from_file_location("evaluate_agent_answer_mode", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = evaluation_script()
 
     def packet(delta, finish=None):
         return "data: " + json.dumps({"id": "gen", "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]})
@@ -708,3 +685,70 @@ def test_the_live_comparison_script_times_real_provider_streams(monkeypatch):
     assert answered["call"] == "completion:0" and answered["ttft"] >= .1 and answered["max_silence"] >= .1
     assert answered["first_text"] == answered["first_progress"] and "stalled" not in answered
     assert stalled["call"] == "completion:1" and stalled["stalled"] and "first_progress" not in stalled
+
+
+def test_the_live_script_judges_each_answer_against_its_saved_baseline(monkeypatch, tmp_path):
+    """--baseline FILE --pairwise MODEL: one turn per question, then a blind
+    pick against the saved answer of the same case, taken only from completed
+    rows of --baseline-mode. Winners are "agent" or "baseline", whatever mode
+    the saved rows had."""
+    import os
+    import dotenv
+    from app.core import config as cfg
+    from app.services.llm import agent_client
+    module = evaluation_script()
+    # Nothing live: no .env, no Firestore, no model call. main() pins the
+    # account lookups and the working directory; both are restored afterwards.
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cfg, "load_models_from_db", lambda **kwargs: None)
+    monkeypatch.setattr(agent_quota, "_stored_tier", agent_quota._stored_tier)
+    monkeypatch.setattr(agent_quota, "_admin_role", agent_quota._admin_role)
+    monkeypatch.chdir(os.getcwd())
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    turns = []
+
+    def run_turn(case, question, *, model, families, config, key, check_sources):
+        turns.append(case)
+        return {"case": case, "mode": "agent", "model": model.selection_id, "status": "completed",
+                "answer": f"Agent answer {case}.", "steps": 2, "agreement": [80], "retractions": 0, "leaks": [],
+                "major_contradictions": 0, "rate_limits": 0, "stalls": 0, "retries": 0, "longest_silence": None}
+
+    # The judge prefers the agent's answer on case 0, the saved one on case 1
+    # and ties on case 2, wherever the shuffle put them.
+    prefer = {0: "agent", 1: "baseline", 2: "tie"}
+
+    class Judge:
+        def __init__(self):
+            self.text, self.usage = "", {"estimated_cost_nano_usd": 1000}
+
+        def stream(self, *, model, messages, api_key):
+            prompt = messages[-1]["content"]
+            case = int(re.search(r"Agent answer (\d+)\.", prompt).group(1))
+            agent_first = "Agent answer" in prompt.split("Answer 2:")[0]
+            want = prefer[case]
+            better = "tie" if want == "tie" else "1" if (want == "agent") == agent_first else "2"
+            self.text = json.dumps({"better": better, "reason": "Clearer."})
+            return iter(())
+
+    monkeypatch.setattr(module, "run_turn", run_turn)
+    monkeypatch.setattr(agent_client, "AgentCompletion", Judge)
+    baseline, out = tmp_path / "baseline.jsonl", tmp_path / "out.jsonl"
+    saved = [{"case": case, "mode": "separate", "status": "completed", "answer": f"Saved answer {case}."}
+             for case in (0, 1, 2)]
+    # Neither a failed row nor a row of another mode is a baseline.
+    saved += [{"case": 3, "mode": "separate", "status": "failed", "answer": "Partial."},
+              {"case": 3, "mode": "merged", "status": "completed", "answer": "Other mode."}]
+    baseline.write_text("".join(json.dumps(row) + "\n" for row in saved), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["evaluate_agent_answers.py", "--live", "--model", "claude-haiku-4-5",
+                                      *(arg for case in range(4) for arg in ("--only", str(case))),
+                                      "--baseline", str(baseline), "--pairwise", "claude-haiku-4-5",
+                                      "--out", str(out)])
+    module.main()
+    lines = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    # A single run per question.
+    assert turns == [0, 1, 2, 3]
+    assert [line["case"] for line in lines if "answer" in line] == [0, 1, 2, 3]
+    verdicts = {line["case"]: line["pairwise"]["winner"] for line in lines if "pairwise" in line}
+    assert verdicts == prefer
+    assert lines[-2]["summary"]["turns"] == lines[-2]["summary"]["completed"] == 4
+    assert lines[-1] == {"pairwise_wins": {"agent": 1, "baseline": 1, "tie": 1}, "judge": "claude-haiku-4-5"}

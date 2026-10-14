@@ -207,7 +207,7 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     j.control('release', {})
     state = j.settled()
     Path(f'test-results/{j.uid}-state.json').write_text(json.dumps(state, indent=2), encoding='utf-8')
-    assert len(state['calls']) == 8  # orchestrator + six comparison providers + partial synthesis
+    assert len(state['calls']) == 8  # comparison call + six comparison providers + the agent's partial answer
     chat_id, chat = next(iter(state['collections']['chats'].items()))
     turn_id, turn = next(iter(chat['children']['turns'].items()))
     assert turn['data']['status'] == 'failed'

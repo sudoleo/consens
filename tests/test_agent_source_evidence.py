@@ -1,4 +1,4 @@
-"""Source excerpts for the Agent answer step: capture, binding, budget, pages."""
+"""Source excerpts in the Agent's comparison results: capture, binding, budget, pages."""
 from concurrent.futures import wait
 import json
 import threading
@@ -352,13 +352,19 @@ def test_a_comparison_answer_cites_the_page_behind_a_grounding_redirect(store, m
     monkeypatch.setattr(evidence, "fetch_document",
                         lambda url, limits: fetched.append(url) or {"text": long_text("the deposit facility rate")})
     plan = Plan(steps=[[compare()]], cited=(GOOGLE + "rates", RATES, "https://example.net/other"))
-    _, _, saved = run(store, plan)
+    loop, _, saved = run(store, plan)
     answers = saved["agent_review"]["comparisons"][0]["answers"]
     assert answers and all([s["url"] for s in a["sources"]] == [RATES, "https://example.net/other"] for a in answers)
     assert GOOGLE not in json.dumps(saved["sources"]) and RATES in json.dumps(saved["sources"])
-    # The answer step sees the page, and its text was fetched from the page itself.
-    evidence_message = plan.answer_messages[-1]["content"]
-    assert GOOGLE not in evidence_message and RATES in evidence_message and "deposit facility rate" in evidence_message
+    # The agent sees the page in the comparison result (the only way excerpts
+    # reach it), and the excerpt was fetched from the page itself.
+    [result] = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    [page] = [s for s in result["sources"] if s["url"] == RATES]
+    assert "deposit facility rate" in page["excerpt"]
+    assert all(a["sources"] == [RATES, "https://example.net/other"] for a in result["answers"])
+    assert GOOGLE not in json.dumps(result)
+    # Nothing the agent reads before writing the answer names the redirect.
+    assert GOOGLE not in json.dumps(plan.answer_messages, ensure_ascii=False)
     assert GOOGLE + "rates" not in fetched and RATES in fetched
 
 
@@ -389,7 +395,7 @@ def test_client_keeps_citation_text_and_offsets_in_memory_only(monkeypatch):
     # Repeated snapshots are dropped; an invalid offset becomes no offset.
     assert len(citations) == 11
     assert citations[-1]["start_index"] is None and len(citations[-1]["content"]) == 4000
-    # Source text is evidence for the answer step, never an event or stored activity.
+    # Source text is evidence for the agent, never an event or stored activity.
     assert "x" * 100 not in json.dumps(events) + json.dumps(completion.activity)
 
 
@@ -444,7 +450,7 @@ O, C, S = CITE_OPEN, CITE_CLOSE, CITE_SEP
 MARKED = (f"Breite ETFs streuen das Risiko. {O}cite{S}https://www.finra.org/investors/x{C}\n\n"
           f"Einzelaktien bündeln es. {O}cite{S}turn2search0{S}turn2search1{C}\n- Fazit. "
           f"{O}https://a.example/1{S}https://b.example/2\n\nEnde.{S}")
-# The URLs become links like the answer step writes them; other references go.
+# The URLs become links like the agent writes them; other references go.
 LINKED = ("Breite ETFs streuen das Risiko. [finra.org](https://www.finra.org/investors/x)\n\n"
           "Einzelaktien bündeln es. \n- Fazit. [a.example](https://a.example/1) · [b.example](https://b.example/2)"
           "\n\nEnde.")

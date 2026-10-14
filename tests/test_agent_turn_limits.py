@@ -1,8 +1,10 @@
 """Soft per-turn guards of account-mode Agent chat (AgentPolicy.for_chat).
 
 The daily token ledger stays the spending limit. A turn that loops on valid
-calls still ends: at most four comparisons, a step cap and a deadline (both
-answer from a usable comparison when there is one), and no identical calls.
+calls still ends: at most four comparisons, a step cap and a deadline, and no
+identical calls. A limit with a usable comparison ends in one last step whose
+tools are listed but not callable: the agent writes the answer from the
+comparisons it has (_merged_wrap_up). Without one the turn stops.
 """
 from dataclasses import replace
 import json
@@ -28,9 +30,14 @@ def tool_result(loop, call_id):
 
 
 def routing_steps(script):
-    # Comparison answers and judges run as agent:<id> steps; synthesis as a
-    # completion step, so count the steps that offered tools via the script.
+    # Comparison answers and judges run as agent:<id> steps; every step of the
+    # agent, also the one that writes the answer, is a completion step.
     return [step for step, _ in script.calls if step.startswith("completion:")]
+
+
+def steering(kwargs):
+    """A step whose tools the agent may call (not the wrap-up's last step)."""
+    return bool(kwargs["tools"]) and kwargs.get("allow_tool_calls") is not False
 
 
 def saved_turn(store, loop):
@@ -78,21 +85,36 @@ def test_fifth_comparison_is_refused_and_the_answer_uses_the_first_four(store):
     assert "last comparison allowed" in tool_result(loop, "call_3")["instruction"]
     for refused in ("call_4", "call_5"):
         error = tool_result(loop, refused)["error"]
-        assert "maximum of 4 comparisons" in error and "call answer now" in error
+        assert "maximum of 4 comparisons" in error and "write the answer now" in error
     # Nothing paid started for the refused calls: four comparisons of two answers.
     assert len([s for s, _ in script.calls if not s.startswith("completion:")]) == 4 * 2 + 4 * 2
 
 
 def test_step_cap_answers_from_existing_comparisons(store):
     script = Script(compares=10)
+    base = type(script.factory())
+    requests = []
+
+    class Recorded(base):
+        def stream(self, **kwargs):
+            if self.step_id.startswith("completion:"):
+                # A copy: the loop appends to its live conversation afterwards.
+                requests.append({**kwargs, "messages": json.loads(json.dumps(kwargs["messages"]))})
+            yield from super().stream(**kwargs)
+
     loop = chat_loop(store, script)
+    loop.factory = Recorded
     loop.policy = replace(loop.policy, turn_steps=3, turn_comparisons=10)
     list(loop.run())
     saved = saved_turn(store, loop)
     assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 3
     assert review_is_bound(saved["agent_review"], saved["consensus"])
-    # Three routing steps, then the synthesis step; no fourth routing step.
+    # Three steering steps, then one step writes the answer; no fourth steering step.
     assert len(routing_steps(script)) == 4
+    assert [steering(kwargs) for kwargs in requests] == [True, True, True, False]
+    # The last step keeps the tools listed (prompt cache) but cannot call them.
+    assert requests[-1]["tools"] and requests[-1]["native_searches"] == 0
+    assert requests[-1]["messages"][-1]["content"].startswith("App rule: this message has reached its limit.")
 
 
 def test_step_cap_without_a_usable_comparison_stops_and_keeps_partial_results(store):
@@ -106,7 +128,7 @@ def test_step_cap_without_a_usable_comparison_stops_and_keeps_partial_results(st
     assert saved["agent_failure"] == {"code": "run_limit", "error": TURN_STEP_LIMIT}
     comparisons = saved["agent_review"]["comparisons"]
     assert len(comparisons) == 2 and all(len(c["answers"]) == 1 for c in comparisons)
-    assert len(routing_steps(script)) == 2  # No synthesis from single answers.
+    assert len(routing_steps(script)) == 2  # No answer step from single answers.
 
 
 @pytest.mark.parametrize("fail_model", [False, True])
@@ -153,7 +175,7 @@ def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
 
     class Looping(base):
         def stream(self, *, model, messages, **kwargs):
-            if not self.step_id.startswith("completion:") or not kwargs["tools"]:
+            if not self.step_id.startswith("completion:") or not steering(kwargs):
                 yield from super().stream(model=model, messages=messages, **kwargs)
                 return
             index = int(self.step_id.split(":")[-1])
@@ -183,20 +205,26 @@ def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
     assert len(saved["agent_review"]["comparisons"]) == 2
     error = tool_result(loop, "same_2")["error"]
     assert "identical compare_models call already ran 2 times" in error
-    assert not any(m.get("tool_call_id") == "same_3" for m in loop.messages)
+    if fail_model:
+        assert not any(m.get("tool_call_id") == "same_3" for m in loop.messages)
+    else:
+        # Never run; closed with a result before the last step writes the
+        # answer (providers reject a tool call without one).
+        assert tool_result(loop, "same_3") == {"error": "Not run: this message reached its limit."}
     assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 4 + (0 if fail_model else 1)
 
 
 def planned(script, plan):
-    """Routing step n sends the tool calls plan[n] (the last entry repeats)."""
+    """Steering step n sends the tool calls plan[n] (the last entry repeats);
+    an entry None writes the answer as plain text (Script)."""
     base = type(script.factory())
 
     class Planned(base):
         def stream(self, *, model, messages, **kwargs):
-            if not self.step_id.startswith("completion:") or not kwargs["tools"]:
+            index = int(self.step_id.split(":")[-1]) if self.step_id.startswith("completion:") else None
+            if index is None or not steering(kwargs) or plan[min(index, len(plan) - 1)] is None:
                 yield from super().stream(model=model, messages=messages, **kwargs)
                 return
-            index = int(self.step_id.split(":")[-1])
             script.calls.append((self.step_id, model.model))
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
             self.tool_calls = [{"id": f"s{index}_{n}", "type": "function",
@@ -207,41 +235,55 @@ def planned(script, plan):
     return Planned
 
 
-def test_a_legitimate_answer_after_refused_ones_is_no_repeat(store):
-    """Review 2026-10-12: answer has (almost) no arguments, so the guard took
-    the third answer for a loop although the turn had moved on, and the turn
-    ended without an answer."""
+def test_an_answer_after_rejected_calls_is_no_repeat_and_completes_the_turn(store):
+    """The answer is the agent's plain text, never a tool call: rejected
+    calls before it neither count against it nor keep the turn from ending."""
     invalid = ("compare_models", {"question": "Who won?", "depth": "deep"})
     script = Script()
     loop = chat_loop(store, script)
-    loop.factory = planned(script, [[invalid, ("answer", {})], [invalid, ("answer", {})], [("answer", {})]])
-    list(loop.run())
-    assert tool_result(loop, "s0_1")["status"] == tool_result(loop, "s1_1")["status"] == "refused"
-    assert tool_result(loop, "s2_0")["status"] == "accepted"
-    assert saved_turn(store, loop)["status"] == "completed" and loop.comparison.direct
-    # Without any progress, refused answers still end the turn.
-    fresh = chat_loop(store, Script())
-    answer = {"id": "a", "type": "function", "function": {"name": "answer", "arguments": '{"status_update": "x"}'}}
-    assert [fresh._identical_call(answer) for _ in range(4)] == [None, None, "refuse", "stop"]
+    loop.factory = planned(script, [[invalid], [invalid], None])
+    events = list(loop.run())
+    assert "error" in tool_result(loop, "s0_0") and "error" in tool_result(loop, "s1_0")
+    saved = saved_turn(store, loop)
+    assert saved["status"] == "completed" and loop.comparison.direct
+    assert saved["assistant_response"] == "The first option costs 100."
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == "The first option costs 100."
 
 
 @pytest.mark.parametrize("fail_model", [False, True])
 def test_three_invalid_rounds_answer_from_a_usable_comparison(store, fail_model):
-    """Review 2026-10-12: three rejected answer calls (a malformed field)
-    ended a turn whose comparisons were paid, without an answer."""
+    """Review 2026-10-12: three rejected calls (a malformed field) ended a
+    turn whose comparisons were paid, without an answer."""
     script = Script(fail_model=fail_model)
-    loop = chat_loop(store, script)
+    requests = []
     compare = ("compare_models", {"question": "Evaluate option 1", "context": "Budget is 100."})
-    loop.factory = planned(script, [[compare], *([("answer", {"bogus": n})] for n in range(1, 4))])
+    # Different each round (no identical call), each refused by the schema.
+    malformed = [("compare_models", {"question": "Evaluate option 1", "context": "Budget is 100.", "bogus": n})
+                 for n in range(1, 4)]
+    loop = chat_loop(store, script)
+    planned_type = planned(script, [[compare], *([call] for call in malformed)])
+
+    class Recorded(planned_type):
+        def stream(self, **kwargs):
+            if self.step_id.startswith("completion:"):
+                requests.append(kwargs)
+            yield from super().stream(**kwargs)
+
+    loop.factory = Recorded
     if fail_model:
         with pytest.raises(AnalysisBudgetExceeded, match="invalid tool requests"):
             list(loop.run())
         assert saved_turn(store, loop)["status"] == "failed"
+        # Single answers: no step writes an unchecked answer.
+        assert len(requests) == 4
         return
     list(loop.run())
     saved = saved_turn(store, loop)
     assert all("error" in tool_result(loop, f"s{n}_0") for n in (1, 2, 3))
     assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+    # The answer comes from one last step without callable tools.
+    assert len(requests) == 5 and not steering(requests[-1])
+    assert len(saved["agent_review"]["comparisons"]) == 1
 
 
 def test_repeated_polling_is_not_counted_as_identical_calls(store):

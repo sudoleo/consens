@@ -314,7 +314,7 @@ def reserve(data, amount, *, limit=None, overdraft=False):
     beyond the limit (finishing an Agent message whose comparison already ran);
     the next admission then fails, as after an overdrawn pipeline run. An int
     ``overdraft`` lets only that many tokens of ``amount`` lie beyond the limit
-    (the answer a merged Agent step may write, like the separate answer step)."""
+    (the answer an Agent step may write after its routing allowance)."""
     data = normalize(data)
     remaining = _remaining(data, daily_limit() if limit is None else limit)
     required = 0 if overdraft is True else amount - max(0, int(overdraft or 0))

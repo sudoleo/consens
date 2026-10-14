@@ -11,7 +11,6 @@ from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import turn_detail
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation
-from app.services.prompt_defaults import AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_WATCH_FACT
 from test_agent_comparison import Script
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
@@ -20,6 +19,7 @@ pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 QUESTION = "When will OpenAI release GPT-6 to the public?"
 WATCH = {"question": QUESTION, "goals": ["GPT-6 is officially released", "OpenAI announces a release date"]}
+CARD_NOTE = "When prepare_watch prepared a Watch in this message, a card below your answer shows its question and goal"
 
 
 def outlook(**fields):
@@ -29,13 +29,15 @@ def outlook(**fields):
 
 
 class WatchScript(Script):
-    """prepare_watch first, then a comparison and the checked answer; or a
-    watch-only message that the orchestrator answers directly."""
+    """prepare_watch first, then a comparison and the answer the agent
+    writes from it; or a watch-only message that it answers directly.
+    ``requests`` keeps the messages of each orchestrator step: the last one
+    wrote the answer."""
 
     def __init__(self, *, watch=WATCH, direct_reply=None, **kwargs):
         super().__init__(compares=2, **kwargs)
         self.watch, self.direct_reply = watch, direct_reply
-        self.tools, self.system, self.answer_messages = [], "", []
+        self.tools, self.system, self.requests = [], "", {}
 
     def factory(self):
         script = self
@@ -44,6 +46,8 @@ class WatchScript(Script):
         class Completion(base):
             def stream(self, *, model, messages, **kwargs):
                 tools = kwargs.get("tools") or []
+                if self.step_id.startswith("completion:"):
+                    script.requests[self.step_id] = json.loads(json.dumps(messages))
                 if self.step_id == "completion:0":
                     script.system = messages[0]["content"]
                     script.tools = [tool["function"]["name"] for tool in tools if tool.get("type") == "function"]
@@ -59,10 +63,12 @@ class WatchScript(Script):
                     self.text, self.finish_reason = script.direct_reply, "stop"
                     yield {"type": "delta", "text": self.text}
                     return
-                if self.step_id.startswith("completion:") and not tools:
-                    script.answer_messages.append(messages)
                 yield from super().stream(model=model, messages=messages, **kwargs)
         return Completion()
+
+    def writer(self):
+        """The messages of the step that wrote the answer."""
+        return self.requests[max(self.requests, key=lambda step: int(step.split(":")[-1]))]
 
 
 def watch_loop(store, script, *, watch_outlook=None, question="Tell me when GPT-6 comes out.",
@@ -95,8 +101,10 @@ def tool_results(loop, name="call_watch"):
     return [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool" and m.get("tool_call_id") == name]
 
 
-def evidence(messages):
-    return json.loads(messages[-1]["content"].split("\n", 1)[1])
+def seen_watch(messages):
+    """The prepare_watch result as the step that wrote the answer read it."""
+    return json.loads(next(m["content"] for m in messages
+                           if m.get("role") == "tool" and m.get("tool_call_id") == "call_watch"))
 
 
 @pytest.mark.usefixtures("no_watch_writes")
@@ -111,16 +119,17 @@ def test_a_requested_watch_is_prepared_saved_and_handed_to_the_answer(store):
     assert saved["agent_watch"] == proposal
     result = tool_results(loop)[0]
     assert result["status"] == "prepared" and "nothing is watched yet" in result["instruction"]
-    # The orchestrator learns the rules once; the tool is offered with the comparison.
-    assert "prepare_watch" in script.tools and "compare_models" in script.tools
+    # The agent learns the rules once; the tool is offered with the comparison.
+    assert "prepare_watch" in script.tools and "compare_models" in script.tools and "answer" not in script.tools
     assert agent_watch.ORCHESTRATOR_PROMPT in script.system
-    # The answer step knows the card exists and what it says, and must not claim more.
-    answer = script.answer_messages[-1]
-    assert agent_watch.SYNTHESIS_PROMPT in answer[0]["content"]
-    # It also knows that the app can watch and remind, card or not.
-    assert AGENT_ANSWER_APP_FACTS in answer[0]["content"] and AGENT_ANSWER_WATCH_FACT in answer[0]["content"]
-    assert evidence(answer)["prepared_watch"] == {**proposal, "status": "prepared"}
+    # The step that writes the answer knows the card exists and what it
+    # says, and the rule that it must not claim more.
+    writer = script.writer()
+    assert CARD_NOTE in writer[0]["content"] and "Never say the Watch is active" in writer[0]["content"]
+    assert seen_watch(writer)["status"] == "prepared" and seen_watch(writer)["question"] == QUESTION
+    assert saved["consensus"] == "The first option costs 100."
     assert saved["agent_review"]["comparisons"], "the current state is still compared and checked"
+    assert saved["agent_review"]["status"] == "succeeded"
     steps = [event for event in saved["agent_activity"] if event.get("name") == "prepare_watch"]
     assert steps and steps[-1]["status"] == "succeeded"
 
@@ -144,7 +153,10 @@ def test_an_existing_watch_or_a_full_account_is_said_not_offered(store, fields, 
     loop = watch_loop(store, script, watch_outlook=outlook(**fields))
     list(loop.run())
     assert tool_results(loop)[0]["status"] == status
-    assert evidence(script.answer_messages[-1])["prepared_watch"]["status"] == status
+    writer = script.writer()
+    assert seen_watch(writer)["status"] == status
+    assert "If its status is already_watched" in writer[0]["content"]
+    assert "if it is limit_reached" in writer[0]["content"]
     # The card still shows the question; it reads the live state itself.
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]["question"] == QUESTION
 
@@ -166,9 +178,12 @@ def test_a_watch_only_message_ends_with_an_acknowledgement(store, autonomy):
     assert reminders == []
 
 
-class WatchThenAnswer(WatchScript):
-    """prepare_watch and answer in one step: no comparison (2026-10-11,
-    "kannst du den Watch für mich starten?" ran six models)."""
+class WatchWithReply(WatchScript):
+    """The acknowledgement and prepare_watch in one step: the text is the
+    answer, with no comparison and no further step (2026-10-11, "kannst du
+    den Watch für mich starten?" ran six models)."""
+
+    REPLY = "Here is the Watch again: start it from the card below."
 
     def factory(self):
         script = self
@@ -176,34 +191,35 @@ class WatchThenAnswer(WatchScript):
 
         class Completion(base):
             def stream(self, *, model, messages, **kwargs):
-                tools = kwargs.get("tools") or []
                 if self.step_id == "completion:0":
                     script.system = messages[0]["content"]
                     script.calls.append((self.step_id, model.model))
                     self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
-                    self.tool_calls = [{"id": "call_watch", "type": "function", "function": {
-                        "name": "prepare_watch", "arguments": json.dumps(script.watch)}},
-                        {"id": "call_answer", "type": "function", "function": {"name": "answer", "arguments": "{}"}}]
-                    self.finish_reason = "tool_calls"
+                    self.text = script.REPLY
+                    yield {"type": "delta", "text": self.text}
+                    calls = [{"id": "call_watch", "type": "function", "function": {
+                        "name": "prepare_watch", "arguments": json.dumps(script.watch)}}]
+                    self._tool_parts = dict(enumerate(calls))
+                    self.tool_calls, self.finish_reason = calls, "tool_calls"
                     return
-                if self.step_id.startswith("completion:") and not tools:
-                    script.answer_messages.append(messages)
                 yield from super().stream(model=model, messages=messages, **kwargs)
         return Completion()
 
 
 @pytest.mark.usefixtures("no_watch_writes")
 def test_starting_an_earlier_watch_prepares_it_again_and_answers_without_a_comparison(store):
-    script = WatchThenAnswer()
+    script = WatchWithReply()
     loop = watch_loop(store, script, question="Kannst du den Watch bitte für mich starten?")
-    list(loop.run())
+    events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["agent_watch"]["question"] == QUESTION
     assert not loop.comparison.comparisons and loop.comparison.direct
-    answer = script.answer_messages[-1]
-    # The card stands below this answer, and the answer step knows it.
-    assert agent_watch.SYNTHESIS_PROMPT in answer[0]["content"]
-    assert evidence(answer)["prepared_watch"]["question"] == QUESTION
+    # The text of that step stands as the answer: shown, never retracted.
+    assert saved["consensus"] == WatchWithReply.REPLY
+    assert "".join(e["text"] for e in events if e.get("type") == "delta") == WatchWithReply.REPLY
+    assert not any(e.get("clear_response") for e in events)
+    assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0"]
+    assert "to start or set up a Watch prepared earlier, call prepare_watch" in script.system
 
 
 def test_a_reminder_request_counts_and_the_answer_never_denies_reminders():
@@ -212,11 +228,15 @@ def test_a_reminder_request_counts_and_the_answer_never_denies_reminders():
     and the answer said consens.io could not notify anyone."""
     prompt = agent_watch.ORCHESTRATOR_PROMPT
     assert "to remind, notify or alert them" in prompt and "there is no other way to reach them later" in prompt
+    assert "A Watch is how consens.io reminds and notifies users" in prompt
     assert "call prepare_watch once, about whatever can still happen or change" in prompt
     # A follow-up "start the Watch" gets a new card: the old one is gone.
     assert "to start or set up a Watch prepared earlier, call prepare_watch with that question" in prompt
-    assert "never point to a card otherwise" in AGENT_ANSWER_WATCH_FACT
-    assert "Never say that you or consens.io cannot remind or notify the user." in AGENT_ANSWER_WATCH_FACT
+    # The agent writes the answer itself: the card note is part of its
+    # prompt, and nothing refers to the removed answer tool or step.
+    assert CARD_NOTE in prompt and "Never say the Watch is active or that you will notify anyone" in prompt
+    assert "never claim a Watch is active" in prompt
+    assert "call answer" not in prompt and "answer step" not in prompt and "evidence" not in prompt
 
 
 def test_no_watch_tool_with_google_data_or_without_comparisons(store):

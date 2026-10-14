@@ -1,10 +1,12 @@
 """Reasoning that outgrows its allowance, its live progress, and the turn clock.
 
-Routing steps get reasoning headroom and one lighter retry like the answer
-step; a cut tool call or a silent stop after thinking is an output limit, not
-a provider error; thinking past the stored bound keeps the progress line
-alive; waiting for every comparison model never eats the answer's time; a
-free 429 in the answer step is retried once. No real paid model calls.
+Every step of the agent may write the answer (agent_answer_mode): it gets
+reasoning headroom and the answer allowance, and one lighter retry when it
+thinks through it, also the last step at a turn limit (_merged_wrap_up). A
+cut tool call or a silent stop after thinking is an output limit, not a
+provider error; thinking past the stored bound keeps the progress line alive;
+waiting for every comparison model never eats the answer's time; a free 429
+after paid comparisons is retried once. No real paid model calls.
 """
 from dataclasses import replace
 import json
@@ -133,6 +135,7 @@ def test_reasoning_past_the_stored_bound_still_streams_but_is_not_stored(monkeyp
 
 
 def test_answer_step_thinking_excerpts_keep_updating_past_the_stored_bound(store, monkeypatch):
+    """The step after the comparison thinks before it writes the answer."""
     monkeypatch.setattr(agent_delegation, "THINKING_UPDATE_SECONDS", 0)
     chunk = "Some filler about weighing evidence and costs carefully. " * 20
     late = REASONING_STORAGE_CHARS // len(chunk) + 5
@@ -200,12 +203,19 @@ def test_thought_out_routing_step_is_retried_once_with_lighter_reasoning(store, 
     turn = saved(store, loop)
     assert turn["status"] == "completed" and review_is_bound(turn["agent_review"], turn["consensus"])
     first, retry = script.routing[:2]
-    # Headroom on top of the text allowance; the retry claims its own step.
-    assert first[0] == "completion:0" and retry == ("completion:1", "low", first[2])
-    assert first[2] == routing_output_limit(loop.model) >= loop.model.max_output_tokens
+    # Every step may write the answer: reasoning headroom and the answer
+    # allowance (a bounded run reserves it whole). The retry claims its own step.
+    allowance = max(routing_output_limit(loop.model), answer_output_limit(loop.model))
+    assert first == ("completion:0", loop.model.reasoning_effort, allowance)
+    assert allowance >= routing_output_limit(loop.model) >= loop.model.max_output_tokens
+    assert retry == ("completion:1", "low",
+                     max(routing_output_limit(low(loop.model)), answer_output_limit(low(loop.model))))
     assert any(e.get("kind") == "progress" and e["id"] == "completion:1/retry" for e in events)
-    # The thought-out step is paid and settled; the answer keeps the chosen level.
+    # The thought-out step is paid and settled. The rest of the turn, also
+    # the step that writes the answer, stays at the lighter level; the
+    # chosen model itself is unchanged.
     assert turn["agent_usage"]["output_tokens"] >= first[2]
+    assert [effort for _, effort, _ in script.routing[1:]] == ["low", "low"]
     assert loop.routing_lighter.reasoning_effort == "low"
     assert loop.model.reasoning_effort != "low"
 
@@ -230,7 +240,52 @@ def test_routing_that_thinks_out_twice_ends_as_output_limit_not_provider_error(s
     assert [step for step, *_ in script.routing] == ["completion:0", "completion:1"]
 
 
-# --- A free 429 in the answer step: one short retry ------------------------
+# --- A thought-only last step at a turn limit -----------------------------
+
+@pytest.mark.parametrize("lighter", [low, None])
+def test_a_thought_only_wrap_up_answer_is_written_again_with_lighter_reasoning(store, monkeypatch, lighter):
+    """At a turn limit one last step with tools listed but not callable
+    writes the answer (_merged_wrap_up). Thinking through its allowance
+    there gets the same single retry with lighter reasoning."""
+    monkeypatch.setattr(agent_delegation, "lighter_reasoning", lambda model: lighter(model) if lighter else None)
+    script = Script(compares=10)
+    base = type(script.factory())
+    wrap_up = []
+
+    class ThoughtOutWrapUp(base):
+        def stream(self, *, model, messages, **kwargs):
+            if self.step_id.startswith("completion:") and kwargs.get("allow_tool_calls") is False:
+                wrap_up.append((self.step_id, model.reasoning_effort, model.max_output_tokens))
+                if len(wrap_up) == 1:
+                    script.calls.append((self.step_id, model.model))
+                    self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": model.max_output_tokens,
+                                                 "cost": .001}, model)
+                    self.finish_reason, self.output_limited = "length", True
+                    raise ModelOutputLimit()
+            yield from super().stream(model=model, messages=messages, **kwargs)
+
+    loop = chat_loop(store, script)
+    loop.factory = ThoughtOutWrapUp
+    loop.policy = replace(loop.policy, turn_steps=1, turn_comparisons=10)
+    if lighter is None:
+        with pytest.raises(ModelOutputLimit):
+            list(loop.run())
+        assert saved(store, loop)["agent_failure"] == {"code": "output_limit", "error": TURN_OUTPUT_LIMIT}
+        assert len(wrap_up) == 1 and loop.comparison.judge_calls == 0
+        return
+    events = list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == "The first option costs 100."
+    assert review_is_bound(turn["agent_review"], turn["consensus"])
+    # The comparison, the thought-out last step, its retry at the lighter level.
+    assert [step for step, *_ in wrap_up] == ["completion:1", "completion:2"]
+    assert wrap_up[0][2] == answer_output_limit(loop.model) and wrap_up[1][1] == "low"
+    retry = [e for e in events if e.get("kind") == "progress" and e["id"] == "completion:2/retry"]
+    assert retry and "Writing the answer again" in retry[0]["text"]
+    assert turn["agent_usage"]["output_tokens"] >= wrap_up[0][2]
+
+
+# --- A free 429 after paid comparisons: one short retry -------------------
 
 def _answer_with(monkeypatch, store, first, *, retry_seconds=0):
     monkeypatch.setattr(agent_delegation, "RATE_LIMIT_RETRY_SECONDS", retry_seconds)
@@ -245,6 +300,7 @@ def _answer_with(monkeypatch, store, first, *, retry_seconds=0):
 
 
 def test_rate_limited_answer_step_is_retried_once_and_the_429_costs_nothing(store, monkeypatch):
+    """The step after the comparison is refused with a free 429 and retried."""
     loop, requests, answer = _answer_with(monkeypatch, store, _ProviderHTTPStatusError(429, retry_after=1))
     monkeypatch.setattr(agent_delegation.DelegationLoop, "_pause", lambda self, seconds: iter(()))
     events = list(loop.run())
@@ -296,8 +352,28 @@ def test_answer_reserve_follows_the_reasoning_level_and_moves_the_soft_limit(sto
     assert make_loop(store, Script()).answer_time_left() is None  # bounded runs
 
 
+class AnswerContext(Straggler):
+    """Records what the step that writes the answer sees."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.answer_context = self.answer_kwargs = None
+
+    def factory(self):
+        base = type(super().factory())
+        script = self
+
+        class Completion(base):
+            def stream(self, *, model, messages, **kwargs):
+                if self.step_id.startswith("completion:") and int(self.step_id.split(":")[-1]) >= script.compares:
+                    script.answer_context = json.dumps(messages)
+                    script.answer_kwargs = kwargs
+                yield from super().stream(model=model, messages=messages, **kwargs)
+        return Completion()
+
+
 def test_waiting_for_every_model_stops_when_only_the_answer_time_is_left(store):
-    script = Straggler(release_on_answer=False)
+    script = AnswerContext(release_on_answer=False)
     loop = chat_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="all"))
     hard = loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS
     # Once a comparison runs, the turn is just past the answer's reserve
@@ -306,7 +382,7 @@ def test_waiting_for_every_model_stops_when_only_the_answer_time_is_left(store):
     assert late < loop.policy.turn_seconds
     loop.clock = lambda: loop.turn_started + (late if loop.comparison.comparisons else 0)
     # Without the deadline the straggler would only end the wait here, and
-    # then show up in the synthesis below.
+    # then show up in the comparison result the answer is written from.
     timer = threading.Timer(5, script.release.set)
     timer.start()
     try:
@@ -318,5 +394,7 @@ def test_waiting_for_every_model_stops_when_only_the_answer_time_is_left(store):
     comparison = turn["agent_review"]["comparisons"][0]
     assert turn["status"] == "completed" and review_is_bound(turn["agent_review"], turn["consensus"])
     assert sorted(comparison["synthesis_providers"]) == ["anthropic", "openai"]
-    assert "second option is cheaper" not in script.synthesis_evidence
+    assert "second option is cheaper" not in script.answer_context
+    # Only the answer's time is left: one last step writes it without tools.
+    assert script.answer_kwargs["allow_tool_calls"] is False
     assert [m["failure"]["code"] for m in comparison["failed_models"]] == ["late_cutoff"]

@@ -24,14 +24,15 @@ ANSWER = "Heat pumps work in old buildings with low flow temperatures. Larger ra
 
 class Script:
     """Orchestrator steps from a list of comparison argument dicts (one with a
-    "check" becomes a check_text call); answers and judges are deterministic.
+    "check" becomes a check_text call); the step after them writes the answer
+    as plain text (agent_answer_mode). Answers and judges are deterministic.
     The coverage judge of the passage check says one model contradicts the
     underfloor heating sentence."""
 
     def __init__(self, compares, *, fail_coverage=False, fail_model=False):
         self.compares = list(compares)
         self.fail_coverage, self.fail_model = fail_coverage, fail_model
-        self.prompts, self.tool_results, self.synthesis, self.coverage_prompts = [], [], [], []
+        self.prompts, self.tool_results, self.answer_steps, self.coverage_prompts = [], [], [], []
         # (system message, prompt) of every judge call.
         self.judge_calls = []
 
@@ -43,20 +44,17 @@ class Script:
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                 if self.step_id.startswith("completion:"):
                     script.tool_results.extend(m["content"] for m in messages if m.get("role") == "tool")
-                    if not kwargs["tools"]:
-                        script.synthesis.append(messages)
+                    index = int(self.step_id.split(":")[-1])
+                    if (index >= len(script.compares) or not kwargs["tools"]
+                            or kwargs.get("allow_tool_calls") is False):
+                        # The agent writes the answer itself: plain text.
+                        script.answer_steps.append(messages)
                         self.text, self.finish_reason = ANSWER, "stop"
                         yield {"type": "delta", "text": self.text}
                         return
-                    index = int(self.step_id.split(":")[-1])
-                    if index < len(script.compares):
-                        args = dict(script.compares[index])
-                        passage = args.pop("check", None)
-                        action, args = ("check_text", {**args, **passage}) if passage else ("compare_models", args)
-                    else:
-                        self.text = ANSWER
-                        yield {"type": "delta", "text": self.text}
-                        action, args = "answer", {}
+                    args = dict(script.compares[index])
+                    passage = args.pop("check", None)
+                    action, args = ("check_text", {**args, **passage}) if passage else ("compare_models", args)
                     self.tool_calls = [{"id": f"call_{index}", "type": "function",
                                         "function": {"name": action, "arguments": json.dumps(args)}}]
                     self.finish_reason = "tool_calls"
@@ -207,20 +205,23 @@ def test_checked_passage_is_marked_and_never_reaches_the_comparison_models(store
     # Independent answers: no comparison prompt carries the pasted text.
     assert script.prompts and all("underfloor" not in m[1]["content"] and "55 degrees" not in m[1]["content"]
                                   for m in script.prompts)
-    # The answer step reads the same verdicts the user sees.
-    evidence = json.loads(script.synthesis[0][-1]["content"].split("\n", 1)[1])
-    checked = evidence["checked_text"]
-    assert checked["answers_question"] == CHECK["answer_to"]
-    assert [s["contradicted_by"] for s in checked["sentences"]] == [0, 1, 0]
-    assert checked["sentences"][1]["counter_quotes"] == ["Larger radiators are often enough"]
     # Visible while it runs, not only at the end.
     states = [e["review"]["passage_check"]["status"] for e in events
               if e["type"] == "review" and e["review"].get("passage_check")]
     assert states[0] == "waiting" and "running" in states and states[-1] == "succeeded"
-    # The orchestrator learns the outcome; the activity names the check.
+    # The agent learns the outcome in the check_text result and writes its
+    # verdict from the same sentence verdicts the user sees.
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert results[0]["passage_check"] == {"status": "succeeded", "checked_sentences": 3, "contradicted": 1,
                                            "issues": []}
+    checked = results[0]["checked_text"]
+    assert checked["answers_question"] == CHECK["answer_to"]
+    assert [s["contradicted_by"] for s in checked["sentences"]] == [0, 1, 0]
+    assert checked["sentences"][1]["counter_quotes"] == ["Larger radiators are often enough"]
+    assert all(s["of_answers"] == 2 for s in checked["sentences"])
+    # The step that writes the answer has that result in its context.
+    [answer_step] = script.answer_steps
+    assert any(m.get("role") == "tool" and "checked_text" in m["content"] for m in answer_step)
     titles = [a.get("title") for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]]
     assert "Text check" in titles
     # The answer gives a verdict and the correct information: its own
@@ -336,12 +337,16 @@ def test_an_oversized_review_drops_the_passages_quotes_before_failing(store):
 
 def test_a_failed_check_costs_the_marks_not_the_answer(store):
     script = Script([{**NEUTRAL, "check": CHECK}], fail_coverage=True)
-    _, _, saved = run(store, script)
+    loop, _, saved = run(store, script)
     assert saved["status"] == "completed"
     passage = saved["agent_review"]["passage_check"]
     assert passage["status"] == "failed"
     assert {"code": "coverage_unavailable"} in passage["issues"]
     assert "claims" not in passage
+    # The agent is told the check is unavailable, never verdicts it did not get.
+    result = json.loads(next(m["content"] for m in loop.messages if m.get("role") == "tool"))
+    assert result["checked_text"] == {"answers_question": CHECK["answer_to"], "check": "unavailable"}
+    assert result["passage_check"]["status"] == "failed"
     # The answer judges run either way, still told the answer restates the text.
     check = saved["agent_review"]["checks"][0]
     assert isinstance(check["differences_data"], dict)
@@ -359,9 +364,10 @@ def test_too_few_answers_leave_the_passage_unchecked(store):
 
 def test_turn_without_check_has_no_passage_record(store):
     script = Script([NEUTRAL])
-    _, _, saved = run(store, script)
+    loop, _, saved = run(store, script)
     assert "passage_check" not in saved["agent_review"]
-    assert "checked_text" not in script.synthesis[0][-1]["content"]
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert results and all("checked_text" not in r and "passage_check" not in r for r in results)
 
 
 def test_failed_run_never_leaves_the_check_looking_live(store):

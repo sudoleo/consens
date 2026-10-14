@@ -60,7 +60,7 @@ def _plan_only(sentence):
 
 class ReasoningProgress:
     def __init__(self, *, unlimited=False, min_seconds=0.0, clock=time.monotonic):
-        # unlimited: a long answer step keeps showing signs of life for its
+        # unlimited: a long step that writes the answer keeps showing signs of life for its
         # whole duration, paced by min_seconds instead of a fixed count.
         self.unlimited, self.min_seconds, self.clock = unlimited, min_seconds, clock
         self.text = ""

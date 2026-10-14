@@ -62,18 +62,18 @@ class Completion(AgentCompletion):
         calls.append({'uid': uid, 'model': model.model, 'step': self.step_id})
         self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 50}, model)
         if self.step_id == 'completion:0':
-            # Comparison and answer in one step: the app writes the answer
-            # right after the comparison, without another routing round.
             self.tool_calls = [{'id': 'compare', 'type': 'function', 'function': {
                 'name': 'compare_models', 'arguments': json.dumps({'question': 'Compare evidence for ' + uid,
                     'context': 'Use the supplied question.', 'status_update': 'Independent perspectives',
-                    'depth': 'full'})}},
-                {'id': 'answer', 'type': 'function', 'function': {'name': 'answer', 'arguments': '{}'}}]
+                    'depth': 'full'})}}]
             self.finish_reason = 'tool_calls'
             return
-        self.text = 'Saved partial answer for ' + uid
+        # The agent's next step writes the answer itself (agent_answer_mode).
+        # Longer than ANSWER_HOLD_CHARS, so it streams before the gate holds it.
+        self.text = 'Saved partial answer for ' + uid + '. ' + 'The evidence agrees on the main point. ' * 8
         yield {'type': 'delta', 'text': self.text}
-        if self.step_id.startswith('completion:') and not kwargs.get('tools') and uid in gates and not gates[uid].wait(45):
+        if (self.step_id.startswith('completion:') and self.step_id != 'completion:0' and uid in gates
+                and not gates[uid].wait(45)):
             raise TimeoutError('Test provider was not released')
         self.finish_reason = 'stop'
 

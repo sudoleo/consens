@@ -1135,7 +1135,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Agent-Synthese beginnt mit der eigentlichen Antwort, ohne interne Toolsyntax,
   Statusparameter, Arbeitsanweisungen oder Reasoning-Vorspann. Gesprächskontext,
   Quellen und bewusst angeforderte Codebeispiele bleiben erhalten.
-- [ ] Mit `AGENT_MERGED_ANSWER=1` (Antwort als letzter Agent-Schritt): eine
+- [ ] Agent schreibt die Antwort selbst (seit 2026-10-14): eine
   Vergleichsfrage zeigt nach den Vergleichen ohne zweite Denkpause direkt die
   Antwort, danach die Prüfung; eine Übersetzung oder ein Gruß braucht einen
   Schritt. Keine Werkzeugnamen, Statusfelder oder „Model A“ in der Antwort. Kurze

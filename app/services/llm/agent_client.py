@@ -117,8 +117,8 @@ ANSWER_OUTPUT_FALLBACK = 32_768
 # Reasoning counts against the same completion allowance. Adaptive thinking
 # (Claude) ignores effort and explicit thinking budgets alike and can spend the
 # whole allowance before writing a word (2026-10-07: Sonnet 5.5 at "max" used
-# all 32,768 tokens; at "high" all 8,000 in a probe). So a reasoning answer
-# step gets this much room on top of its text allowance.
+# all 32,768 tokens; at "high" all 8,000 in a probe). So a reasoning step
+# that may write the answer gets this much room on top of its text allowance.
 ANSWER_REASONING_HEADROOM = 32_768
 # Routing steps (plan, phrase the comparison, call a tool) have the same
 # problem on a smaller scale: in prod (2026-10-07) both Sonnet 5.5 "max" runs
@@ -126,7 +126,7 @@ ANSWER_REASONING_HEADROOM = 32_768
 # thinking and tool call together. Three times the text allowance on top
 # (16,384 in all by default) gives that thinking about four times its room,
 # while a routing reservation (multiplied per search round) stays well below
-# the answer step's 65,536.
+# the answer allowance of 65,536.
 ROUTING_REASONING_HEADROOM = 12_288
 # Reasoning for the one retry after a thought-only step, in this order. "low"
 # comes first on purpose, not the lightest level: live 2026-10-08 a forced
@@ -146,7 +146,7 @@ TEXT_STORAGE_CHARS = 100_000
 ANSWER_SOURCES_MAX = 10
 # Source text OpenRouter attaches to a URL citation (``url_citation.content``):
 # Exa highlights up to the requested 2000 characters, other engines measured
-# up to ~4000. Kept in memory for the answer step only, never stored or
+# up to ~4000. Kept in memory for the source excerpts only, never stored or
 # streamed (see agent_source_evidence).
 CITATION_CONTENT_CHARS = 4000
 # Citation records per call; providers repeat cumulative annotation snapshots.
@@ -158,7 +158,7 @@ CITATIONS_MAX = 40
 # into 5 of 13 merged Agent answers on 2026-10-14 (shown as "citeturn2search0")
 # instead of links, and dropping them dropped the answer's sources. While
 # streaming (AgentCompletion._visible) a mark's URLs become markdown links,
-# like the links the answer step writes; other references and stray mark
+# like the links the agent writes; other references and stray mark
 # characters go.
 CITE_OPEN, CITE_CLOSE, CITE_SEP = chr(0xE200), chr(0xE201), chr(0xE202)
 CITE_MARK = re.compile(CITE_OPEN + r"[^\s" + CITE_CLOSE + "]*" + CITE_CLOSE + "?|[" + CITE_CLOSE + "-" + chr(0xE2FF) + "]")
@@ -168,7 +168,7 @@ CITE_HOLD_CHARS = 8192
 
 def _cite_links(mark):
     """Markdown links for the URLs of one citation mark (CITE_MARK), joined
-    like the answer step's links; nothing for references without a URL."""
+    like the agent's own links; nothing for references without a URL."""
     links = []
     for ref in mark.strip(CITE_OPEN + CITE_CLOSE).split(CITE_SEP):
         try:
@@ -211,7 +211,7 @@ def reasoning_active(model, metadata=None):
 
 
 def answer_output_limit(model):
-    """Completion allowance of the chat model's dedicated answer step."""
+    """Completion allowance of a chat model step that may write the answer."""
     metadata = _metadata(model)
     limit = int((metadata.get("top_provider") or {}).get("max_completion_tokens") or ANSWER_OUTPUT_FALLBACK)
     allowance = ANSWER_OUTPUT_CEILING
@@ -558,7 +558,7 @@ class AgentCompletion:
         self.tool_calls = []
         self.sources = []
         # Per citation: the cited URL, its source text and where the answer
-        # cites it. Transient evidence for the answer step (see _annotations).
+        # cites it. Transient evidence for the source excerpts (see _annotations).
         self.citations = []
         self._citation_keys = set()
         # Text length when the first search results arrived (see _drop_presearch_text).

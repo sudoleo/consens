@@ -1,9 +1,10 @@
-"""read_source: the orchestrator reads a cited page through OpenRouter's web_fetch.
+"""read_source: the agent reads a cited page through OpenRouter's web_fetch.
 
-Only after a comparison, only for the orchestrator, only cited URLs or links in
-the chat itself, bounded, metered, kept as evidence for the answer step and the
-Coverage judge, and never for comparison models, the answer step, the judges or
-Google-data chats. On unless AGENT_READ_SOURCES=0.
+Only for the agent, only cited URLs or links in the chat itself, bounded,
+metered, given to the agent only as the read_source tool result (it writes the
+answer itself, agent_answer_mode), kept for the Coverage judge and the review,
+and never for comparison models, the judges or Google-data chats. No
+comparison after a read. On unless AGENT_READ_SOURCES=0.
 """
 import json
 
@@ -15,23 +16,35 @@ from app.services.agent_costs import FETCH_COST_NANOS, RunCosts, fetch_bounds
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
-from app.services.agent_read_source import (READ_CONTENT_TOKENS, READS_PER_MESSAGE, READS_PER_STEP, PageFetch,
-                                            ReadSourceArgs, resolve_redirect, url_key, user_urls)
+from app.services.agent_read_source import (READ_CONTENT_TOKENS, READS_PER_MESSAGE, READS_PER_STEP, UNTRUSTED_NOTE,
+                                            PageFetch, ReadSourceArgs, resolve_redirect, url_key, user_urls)
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.engines import web_fetch_tool
 from app.services.llm.provider_runtime import ProviderCancellation
-from app.services.prompt_defaults import (AGENT_ANSWER_APP_FACTS, AGENT_ANSWER_PROMPT, AGENT_ANSWER_READ_FACT,
-                                          AGENT_READ_SOURCE_PROMPT, AGENT_READ_SOURCE_REPLACEMENTS,
-                                          AGENT_SYSTEM_PROMPT)
+from app.services.prompt_defaults import (AGENT_ANSWER_SECTION, AGENT_READ_SOURCE_PROMPT,
+                                          AGENT_READ_SOURCE_REPLACEMENTS, AGENT_SYSTEM_PROMPT, AGENT_WRITE_NOTE)
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
 CITED = "https://example.org/report"
 PAGE = "Annual report 2026. The first option costs 100 euros per month, VAT included."
+ANSWER = "The first option costs 100 euros per month."
 
 
 @pytest.fixture
 def enabled(monkeypatch):
     monkeypatch.setenv("AGENT_READ_SOURCES", "1")
+
+
+@pytest.fixture(autouse=True)
+def offline_source_pages(monkeypatch):
+    """A comparison result fetches cited pages for its excerpts
+    (agent_source_evidence): never over the network here, and never with the
+    page text, which must reach the agent only through read_source."""
+    from app.services import agent_source_evidence
+
+    def fetch(url, limits):
+        raise ValueError("offline")
+    monkeypatch.setattr(agent_source_evidence, "fetch_document", fetch)
 
 
 def compare():
@@ -45,11 +58,16 @@ def read_call(url=CITED):
 
 
 class Plan:
-    """Scripted routing steps (lists of tool calls), then answer; records every step."""
+    """Scripted agent steps (lists of tool calls); the step after them writes
+    the answer as plain text (the agent writes it itself, agent_answer_mode).
+    ``texts``: text a step writes alongside its tool calls; ``searches``:
+    sources of a step's own web search. Records every step."""
 
-    def __init__(self, steps=None, cited=(CITED, "https://example.net/other")):
+    def __init__(self, steps=None, cited=(CITED, "https://example.net/other"), *, answer=ANSWER, texts=None,
+                 searches=None):
         self.script = steps if steps is not None else [[compare()], [read_call()]]
-        self.cited = cited
+        self.cited, self.answer = cited, answer
+        self.texts, self.searches = texts or {}, searches or {}
         self.steps, self.judge_prompts = [], {"coverage": [], "differences": []}
         self.answer_messages = None
 
@@ -62,19 +80,24 @@ class Plan:
                 names = [t.get("function", {}).get("name") or t.get("type") for t in tools]
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                 schema = (model.request_config.get("response_format") or {}).get("json_schema", {}).get("schema")
-                if self.step_id.startswith("completion:") and tools:
-                    plan.steps.append(("routing", names))
-                    index = int(self.step_id.split(":")[-1])
-                    calls = plan.script[index] if index < len(plan.script) else [("answer", {})]
-                    self.tool_calls = [{"id": f"call_{index}_{n}", "type": "function",
-                                        "function": {"name": name, "arguments": json.dumps(args)}}
-                                       for n, (name, args) in enumerate(calls)]
-                    self.finish_reason = "tool_calls"
-                    return
                 if self.step_id.startswith("completion:"):
+                    index = int(self.step_id.split(":")[-1])
+                    if index in plan.searches:
+                        self.sources = plan.searches[index]
+                    if index < len(plan.script) and kwargs.get("allow_tool_calls") is not False:
+                        plan.steps.append(("routing", names))
+                        if index in plan.texts:
+                            self.text = plan.texts[index]
+                            yield {"type": "delta", "text": self.text}
+                        self.tool_calls = [{"id": f"call_{index}_{n}", "type": "function",
+                                            "function": {"name": name, "arguments": json.dumps(args)}}
+                                           for n, (name, args) in enumerate(plan.script[index])]
+                        self.finish_reason = "tool_calls"
+                        return
+                    # The answer: the agent's plain text without tool calls.
                     plan.steps.append(("answer", names))
-                    plan.answer_messages = messages
-                    self.text = "The first option costs 100 euros per month."
+                    plan.answer_messages = list(messages)
+                    self.text = plan.answer
                 elif schema:
                     kind = "coverage" if "sentences" in schema["properties"] else "differences"
                     plan.steps.append((kind, names))
@@ -147,11 +170,15 @@ def results(loop):
     return [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool" and m["tool_call_id"] in ids]
 
 
-def test_reads_a_cited_page_after_the_comparison_and_keeps_it_as_evidence(store, monkeypatch, enabled):
+def test_reads_a_cited_page_after_the_comparison_and_writes_the_answer_from_it(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
     plan = Plan()
     loop, events, saved = run(store, plan)
     assert saved["status"] == "completed"
+    # Compare, read, then the agent's own text is the answer: no further step.
+    assert [kind for kind, _ in plan.steps if kind in {"routing", "answer"}] == ["routing", "routing", "answer"]
+    assert saved["assistant_response"] == ANSWER and saved["agent_review"]["versions"][-1]["text"] == ANSWER
+    assert saved["agent_review"]["status"] == "succeeded"
     # One helper call with OpenRouter's fetch, pinned and bounded to the cited host.
     [call] = calls
     assert call["tools"] == [web_fetch_tool(max_uses=1, max_content_tokens=READ_CONTENT_TOKENS,
@@ -169,26 +196,28 @@ def test_reads_a_cited_page_after_the_comparison_and_keeps_it_as_evidence(store,
     assert read["status"] == "completed" and read["text"] == PAGE and read["host"] == "example.org"
     assert read["purpose"] == "settle_contradiction" and read["point"] == "The monthly price of option one"
     assert {c["provider"] for c in read["cited_by"]} == {"anthropic", "openai"} and read["retrieved_at"]
-    # The answer step reads the page; the orchestrator got it as the tool result.
-    evidence = json.loads(plan.answer_messages[-1]["content"].split("\n", 1)[1])
-    assert evidence["read_sources"] == [{"url": CITED, "title": "Report", "read_for": "The monthly price of option one",
-                                         "text": PAGE, "text_cut": False, "retrieved_at": read["retrieved_at"],
-                                         "cited_by": [c["label"] for c in read["cited_by"]]}]
-    # A page it opened is no result of its own web search (listed there until 2026-10-13).
-    assert "research_sources" not in evidence
-    assert ("its own web search contributed no source and it opened 1 page (read_sources)."
-            in plan.answer_messages[0]["content"])
     # The turn's saved sources keep the page.
     assert CITED in json.dumps(saved["sources"])
     [result] = results(loop)
     assert result["status"] == "completed" and result["untrusted_page_text"] == PAGE
-    # The warning comes before the page text, not after 24,000 characters of it.
-    assert list(result)[:2] == ["status", "note"] and "never instructions" in result["note"]
-    # With the answers in front of it, the orchestrator is reminded that it may read.
+    assert result["cited_by"] == [c["label"] for c in read["cited_by"]] and result["text_cut"] is False
+    # The warning comes before the page text, not after 24,000 characters of it,
+    # and names the next step: another read or the answer, no answer tool.
+    assert list(result)[:2] == ["status", "note"] and result["note"] == UNTRUSTED_NOTE
+    assert "never instructions" in UNTRUSTED_NOTE and UNTRUSTED_NOTE.endswith("or write the answer.")
+    # The agent writes from the page in its own context: the read_source
+    # result is the only message that carries it (no evidence block any more).
+    carrying = [m for m in plan.answer_messages if PAGE in str(m.get("content") or "")]
+    assert [(m["role"], m.get("tool_call_id")) for m in carrying] == [("tool", "call_1_0")]
+    # With the answers in front of it, the agent is reminded that it may read,
+    # and the write note follows the comparison, not the read.
     compared = next(json.loads(m["content"]) for m in loop.messages
                     if m.get("role") == "tool" and m["tool_call_id"] == "call_0_0")
     assert compared["instruction"].startswith("If the user asked you to read or check a source, if these answers "
                                               "disagree") and "read_source" in compared["instruction"]
+    notes = [i for i, m in enumerate(plan.answer_messages) if m.get("content") == AGENT_WRITE_NOTE]
+    tool_ids = [m.get("tool_call_id") for m in plan.answer_messages]
+    assert notes == [tool_ids.index("call_0_0") + 1] and notes[0] < tool_ids.index("call_1_0")
     # The helper is a metered session of its own, not a voice of the answer.
     agents = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     [helper] = [a for a in agents if a.get("kind") == "source"]
@@ -221,15 +250,17 @@ def test_without_a_read_the_judge_prompts_stay_as_before(store, monkeypatch, ena
                                                       for p in plan.judge_prompts["coverage"])
 
 
-def test_never_offered_to_comparison_models_answer_step_or_judges(store, monkeypatch, enabled):
+def test_never_offered_to_comparison_models_or_judges(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
     plan = Plan()
     run(store, plan)
-    routing = [names for kind, names in plan.steps if kind == "routing"]
-    assert routing and all("read_source" in names for names in routing)
-    others = [names for kind, names in plan.steps if kind != "routing"]
-    assert others and not any("read_source" in names or "openrouter:web_fetch" in names for names in others)
-    assert [names for kind, names in plan.steps if kind == "answer"] == [[]]
+    # Every step of the agent, the one that writes the answer included, lists
+    # the same tools (prompt cache), read_source among them.
+    own = [names for kind, names in plan.steps if kind in {"routing", "answer"}]
+    assert len(own) == 3 and all("read_source" in names and names == own[0] for names in own)
+    others = [names for kind, names in plan.steps if kind not in {"routing", "answer"}]
+    assert {kind for kind, _ in plan.steps} == {"routing", "answer", "comparison", "coverage", "differences"}
+    assert not any("read_source" in names or "openrouter:web_fetch" in names for names in others)
     # The fetch tool exists only in the helper call.
     assert [t["type"] for c in calls for t in c["tools"]] == ["openrouter:web_fetch"]
 
@@ -271,14 +302,24 @@ def test_prompt_explains_reading_only_when_on(store, enabled):
     assert "read_source" in loop.registry.tools
     assert "READING SOURCES" in content and f"at most {READS_PER_MESSAGE} pages per message" in content
     # Reading before a comparison closes the door to one: the prompt says when.
-    assert "when the user only wants to know what a page says, read it and call answer without a comparison" in content
+    assert "when the user only wants to know what a page says, read it and answer without a comparison" in content
     assert "an earlier message of this chat (the links in earlier answers), or a page the user linked" in content
     for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
         assert AGENT_SYSTEM_PROMPT.count(old) == 1 and old not in content and new in content
-    # Length and form are the answer step's business, never the comparison models'.
+    assert content.count(AGENT_READ_SOURCE_PROMPT.format(limit=READS_PER_MESSAGE)) == 1
+    # Length and form are the agent's business when it writes, never the comparison models'.
     assert "Leave out how long or in what form the reply should be" in content
-    # The answer step may quote what was read, and must not claim a failed read.
-    assert "read_sources" in AGENT_ANSWER_PROMPT and '"not read"' in AGENT_ANSWER_PROMPT
+    # The agent writes the answer itself: it may quote what it read, and must
+    # not claim a failed read.
+    assert content.count(AGENT_ANSWER_SECTION) == 1
+    assert "Text you read counts as that source's excerpt" in content
+    assert "unless they stand in its excerpt or in a page you read" in content
+    assert "if a page could not be read, do not claim that it was and do not try it again" in content
+    # A read without a comparison is a direct answer: never presented as checked.
+    assert "Never say or imply that other models answered or that the answer was checked" in content
+    # No answer tool and no answer step any more.
+    assert "call answer" not in content and "answer step" not in content
+    assert "answer" not in loop.registry.tools
 
 
 def test_the_tool_list_is_the_same_with_and_without_reading_except_read_source(store, monkeypatch):
@@ -381,11 +422,12 @@ def test_reads_a_source_of_an_earlier_message_but_never_a_link_only_in_answer_te
     refused(other, "not URLs from your own search, an answer's text or a page")
     assert len(calls) == 1 and calls[0]["messages"][0]["content"].endswith("URL: " + earlier)
     assert [r["url"] for r in saved["agent_review"]["read_sources"]] == [earlier]
-    # The answer step knows that the app reads pages (it denied it before).
-    system = plan.answer_messages[0]["content"]
-    assert AGENT_ANSWER_APP_FACTS in system and AGENT_ANSWER_READ_FACT in system
-    # ...and that its own earlier step opened one and was refused another.
-    assert "and it opened 1 page (read_sources)." in system
+    # The agent that writes the answer saw both outcomes itself: the page it
+    # opened and the refusal (it denied reading before, as a separate step).
+    seen = [json.loads(m["content"]) for m in plan.answer_messages
+            if m.get("role") == "tool" and m["tool_call_id"] in {"call_1_0", "call_1_1"}]
+    assert [r["status"] for r in seen] == ["completed", "refused"] and seen[0]["untrusted_page_text"] == PAGE
+    assert saved["assistant_response"] == ANSWER
 
 
 def test_reads_a_page_the_user_linked(store, monkeypatch, enabled):
@@ -394,6 +436,22 @@ def test_reads_a_page_the_user_linked(store, monkeypatch, enabled):
     plan = Plan(steps=[[compare()], [read_call(linked)]])
     loop, _, _ = run(store, plan, conversation=[{"role": "user", "content": f"Was steht in {linked}?"}])
     assert results(loop)[0]["cited_by"] == ["your message"] and len(calls) == 1
+
+
+def test_text_sent_with_a_read_is_no_answer_the_read_runs_first(store, monkeypatch, enabled):
+    """Review 2026-10-12: [answer, read_source] in one step decided the answer
+    before the read and still paid for it. The agent's text next to a
+    read_source call is a preamble: the read runs, and its next message,
+    written with the page in view, is the answer."""
+    calls = fake_fetch(monkeypatch)
+    linked = "https://example.org/linked"
+    plan = Plan(steps=[[read_call(linked)]], texts={0: "It costs 90 euros."})
+    loop, events, saved = run(store, plan, conversation=[{"role": "user", "content": f"Was steht auf {linked}?"}])
+    assert len(calls) == 1 and [r["status"] for r in results(loop)] == ["completed"]
+    assert [kind for kind, _ in plan.steps] == ["routing", "answer"]
+    assert saved["assistant_response"] == ANSWER and "90 euros" not in json.dumps(saved["agent_review"])
+    assert not any(e.get("type") == "delta" and "90 euros" in e.get("text", "") for e in events)
+    assert any(m.get("role") == "tool" and PAGE in m["content"] for m in plan.answer_messages)
 
 
 def test_the_store_hands_earlier_sources_to_the_loop(store):
@@ -446,20 +504,35 @@ def test_no_comparison_after_a_read(store, monkeypatch, enabled):
     loop, _, saved = run(store, Plan(steps=[[compare()], [read_call()], [compare()]]))
     blocked = next(json.loads(m["content"]) for m in loop.messages
                    if m.get("role") == "tool" and m["tool_call_id"] == "call_2_0")
-    assert "no comparison is possible any more" in blocked["error"]
+    assert "no comparison is possible any more" in blocked["error"] and "Write the answer now" in blocked["error"]
     assert len(saved["agent_review"]["comparisons"]) == 1 and saved["status"] == "completed"
+    assert saved["assistant_response"] == ANSWER
 
 
-def test_after_a_read_a_search_does_not_force_a_comparison_any_more(store, enabled):
+def test_after_a_read_a_search_does_not_force_a_comparison_any_more(store, monkeypatch, enabled):
     """Review 2026-10-11: search, then read, then answer looped between two
-    refusals (answer: you searched; compare: a page was read)."""
-    from app.services.agent_comparison import AnswerArgs
+    refusals (answer: you searched; compare: a page was read). An answer after
+    the agent's own search is held back for a comparison (_tool_reminder); a
+    read page lifts that, since no comparison is possible after it."""
     loop = chat_loop(store, Plan())
     loop.completion.activity.append({"kind": "tool", "name": "web_search", "status": "succeeded"})
-    refused(loop.comparison.answer(AnswerArgs(), cancellation=loop.cancellation), "goes through a comparison")
+    assert loop._research_unchecked()
     loop.comparison.reader.reads.append({"status": "completed", "url": CITED})
-    accepted = loop.comparison.answer(AnswerArgs(), cancellation=loop.cancellation)
-    assert accepted["status"] == "accepted" and loop.comparison.direct
+    assert not loop._research_unchecked() and not loop._hold_answer()
+    # The whole turn: search and read, then a long answer (no clarification
+    # question) stands at once, as a direct answer with the page.
+    calls = fake_fetch(monkeypatch)
+    linked = "https://example.org/linked"
+    long_answer = " ".join([ANSWER] * 30)
+    plan = Plan(steps=[[read_call(linked)]], answer=long_answer,
+                searches={0: [{"url": "https://example.org/found", "title": "Found"}]})
+    loop, events, saved = run(store, plan, conversation=[{"role": "user", "content": f"Was steht auf {linked}?"}])
+    assert any(e.get("kind") == "tool" and e.get("name") == "web_search" for e in events)
+    assert len(calls) == 1 and [r["status"] for r in results(loop)] == ["completed"]
+    assert [kind for kind, _ in plan.steps] == ["routing", "answer"]
+    assert not any(m.get("role") == "user" and "App rule" in str(m.get("content")) for m in loop.messages)
+    assert saved["status"] == "completed" and saved["assistant_response"] == long_answer
+    assert saved["agent_review"]["status"] == "direct" and not loop.comparison.comparisons
 
 
 def test_reads_a_page_the_user_points_to_and_answers_without_a_comparison(store, monkeypatch, enabled):
@@ -474,42 +547,18 @@ def test_reads_a_page_the_user_points_to_and_answers_without_a_comparison(store,
     loop, events, saved = run(store, plan, conversation=conversation,
                               chat_sources=[{"url": earlier, "title": "Live"}])
     assert len(calls) == 1 and not loop.comparison.comparisons and loop.comparison.direct
-    assert saved["status"] == "completed" and saved["assistant_response"] == "The first option costs 100 euros per month."
+    assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
     # Saved with the read page, never as a checked review.
     review = saved["agent_review"]
     assert review["status"] == "direct" and not review["comparisons"] and review["read_sources"][0]["url"] == earlier
+    assert review["answer_hash"] and not review.get("checks")
     assert not any(step[0] in {"comparison", "coverage", "differences"} for step in plan.steps)
-    system, evidence = plan.answer_messages[0]["content"], plan.answer_messages[-1]["content"]
-    assert "No model comparison ran" in system and PAGE in evidence
-
-
-def test_a_read_sent_after_answer_in_one_step_runs_first(store, monkeypatch, enabled):
-    """Review 2026-10-12: [answer, read_source] decided the answer before the
-    read (after a search: refused it) and still paid for the read. answer
-    runs last, so the page it asked for already carries it."""
-    calls = fake_fetch(monkeypatch)
-    linked = "https://example.org/linked"
-
-    class Searched(Plan):
-        def factory(self):
-            base = type(super().factory())
-
-            class Completion(base):
-                def stream(self, *, model, messages, **kwargs):
-                    if self.step_id == "completion:0" and kwargs.get("tools"):
-                        self.sources = [{"url": "https://example.org/found", "title": "Found"}]
-                    yield from super().stream(model=model, messages=messages, **kwargs)
-            return Completion()
-
-    plan = Searched(steps=[[("answer", {}), read_call(linked)]])
-    loop, _, saved = run(store, plan, conversation=[{"role": "user", "content": f"Was steht auf {linked}?"}])
-    answer = next(json.loads(m["content"]) for m in loop.messages
-                  if m.get("role") == "tool" and m["tool_call_id"] == "call_0_0")
-    assert answer["status"] == "accepted" and loop.comparison.direct and not loop.comparison.comparisons
-    assert len(calls) == 1 and [r["status"] for r in results(loop)] == ["completed"]
+    # One read, then the agent's own text: two calls of the agent, no write
+    # note (it follows comparisons only), the page as the last tool result.
     assert [kind for kind, _ in plan.steps] == ["routing", "answer"]
-    assert saved["status"] == "completed" and saved["agent_review"]["read_sources"][0]["url"] == linked
-    assert PAGE in plan.answer_messages[-1]["content"]
+    assert not any(m.get("content") == AGENT_WRITE_NOTE for m in plan.answer_messages)
+    last = plan.answer_messages[-1]
+    assert last["role"] == "tool" and json.loads(last["content"])["untrusted_page_text"] == PAGE
 
 
 def test_no_read_hint_when_no_answer_cited_a_source(store, monkeypatch, enabled):
@@ -556,9 +605,11 @@ def test_at_most_five_reads_per_message_and_three_per_step(store, monkeypatch, e
     assert outcome[:READS_PER_STEP] == ["completed"] * READS_PER_STEP
     assert outcome[READS_PER_STEP].startswith(f"At most {READS_PER_STEP} sources per step")
     assert outcome[READS_PER_STEP + 1:-1] == ["completed"] * (READS_PER_MESSAGE - READS_PER_STEP)
-    assert outcome[-1].startswith(f"This message already read {READS_PER_MESSAGE} sources")
+    assert outcome[READS_PER_STEP].endswith("Continue with what you have.")
+    assert outcome[-1] == (f"This message already read {READS_PER_MESSAGE} sources, the maximum. Continue with what "
+                           "you have: write the answer.")
     assert len(calls) == READS_PER_MESSAGE == len(saved["agent_review"]["read_sources"])
-    assert saved["status"] == "completed"
+    assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
 
 
 def test_a_failed_fetch_is_saved_as_failed_not_as_content(store, monkeypatch, enabled):
@@ -570,8 +621,11 @@ def test_a_failed_fetch_is_saved_as_failed_not_as_content(store, monkeypatch, en
     assert "error" not in result  # a result, not a tool error (see read)
     [record] = saved["agent_review"]["read_sources"]
     assert record["status"] == "failed" and "text" not in record
-    evidence = json.loads(plan.answer_messages[-1]["content"].split("\n", 1)[1])
-    assert evidence["read_sources"] == [{"url": CITED, "status": "not read"}]
+    # The agent writes the answer knowing the page was not read: the failure
+    # is its last tool result, and no page text is anywhere in its context.
+    last = json.loads(plan.answer_messages[-1]["content"])
+    assert last == result and saved["assistant_response"] == ANSWER
+    assert not any("untrusted_page_text" in str(m.get("content") or "") for m in plan.answer_messages)
     assert not any("<page" in p for p in plan.judge_prompts["coverage"])
     # The helper's session says why.
     helper = next(a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "source")
@@ -708,7 +762,7 @@ def test_a_full_review_trims_saved_page_texts_before_it_fails(store, monkeypatch
     loop.comparison.checkpoint()
     assert all(len(r["text"]) == agent_read_source.READ_TRIM_CHARS and r["text_trimmed"]
                for r in saved[-1]["read_sources"])
-    # The answer step and the judges keep the full text.
+    # The judges keep the full text (only the saved copy is trimmed).
     assert len(reader.reads[0]["text"]) == 140_000
 
 
@@ -716,7 +770,9 @@ def test_no_read_starts_close_to_the_answer_deadline(store, monkeypatch, enabled
     calls = fake_fetch(monkeypatch)
     loop = comparison_ready(store)
     loop.answer_time_left = lambda: agent_read_source.READ_MIN_SECONDS - 1
-    refused(read(loop), "no time left")
+    result = read(loop)
+    refused(result, "no time left")
+    assert "call answer" not in json.dumps(result).lower()
     assert calls == [] and loop.comparison.reader.reads == []
 
 

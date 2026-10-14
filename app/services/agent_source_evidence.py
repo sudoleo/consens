@@ -1,15 +1,15 @@
-"""What the cited sources say, for the Agent answer step.
+"""What the cited sources say, for the Agent writing its answer.
 
 Comparison models cite URLs from their web search. OpenRouter sends source
 text with each URL citation (``url_citation.content``): Exa highlights for the
 families without their own search; for native search often nothing usable.
-Before this module the answer step saw only URL and title, so it could weigh
+Before this module the answer was written from URL and title only, so it could weigh
 what the answers claimed, but not what their sources say.
 
 Per turn this module keeps the cited source text in memory, binds each source
 to the answer sentences it supports, fetches the page for sources without
 usable text (the bounded, cached retrieval of the source checks, started as
-soon as an answer arrives) and gives the answer step one deduplicated source
+soon as an answer arrives) and gives the agent one deduplicated source
 list with relevant original excerpts under a fixed character budget.
 
 No model call, no search, nothing persisted or streamed. See
@@ -32,7 +32,7 @@ from app.services.llm.citations import citation_end
 from app.services.source_catalog import canonical_source_url
 from app.services.source_documents import fetch_document, select_passages
 
-# Excerpts and supported claims of all sources of one answer step together:
+# Excerpts and supported claims of all sources of one comparison result together:
 # about 4000 input tokens, roughly one cent at 3 $ per million input tokens.
 EXCERPT_BUDGET_CHARS = 16_000
 # The most cited sources get room for context and qualifications, the rest a
@@ -47,7 +47,7 @@ CLAIMS_PER_SOURCE, CLAIM_CHARS = 2, 300
 # Page fetches cost no tokens, only time and outbound requests: the first
 # sources of each answer, bounded per turn.
 PAGE_FETCHES_PER_ANSWER, PAGE_FETCHES_PER_TURN = 4, 12
-# Fetches start while slower models still answer; the answer step waits at
+# Fetches start while slower models still answer; the comparison result waits at
 # most this long for the rest.
 PAGE_WAIT_SECONDS = 4.0
 # The source documents' DNS gate admits four lookups at once (dns_busy beyond).
@@ -78,7 +78,7 @@ _CHARACTER_OFFSETS = "characters"
 # parallel) delays that answer by at most this long.
 REDIRECT_BUDGET_SECONDS = 3.0
 # Lone surrogates (a page's "&#55357;", text cut inside an emoji) cannot be
-# encoded as UTF-8: the answer step's request would fail with them.
+# encoded as UTF-8: the agent's next request would fail with them.
 _SURROGATES = re.compile(r"[\ud800-\udfff]")
 
 
@@ -182,7 +182,7 @@ def cited_claim(text, citation):
 
 
 def _scrub(value):
-    """Text the answer step's request can encode (see _SURROGATES)."""
+    """Text the agent's request can encode (see _SURROGATES)."""
     if isinstance(value, str):
         return _SURROGATES.sub("\ufffd", value)
     if isinstance(value, list):
@@ -221,7 +221,7 @@ def resolve_redirects(text, citations, sources):
     replaced by the pages they point to.
 
     Gemini cites signed redirects titled with a bare domain ("europa.eu",
-    2026-10-12) that expire after a while: the answer step could not tell
+    2026-10-12) that expire after a while: the agent could not tell
     which page stood behind them, and saved chats kept links that stop
     working. Offsets are converted to characters first, because _positions
     knows Google's byte offsets only by the redirect host. A redirect that
@@ -302,7 +302,7 @@ def _published(document):
 
 
 def source_entries(pooled, budget=EXCERPT_BUDGET_CHARS):
-    """The answer step's source list: most cited first, excerpts within budget.
+    """The source list of a comparison result: most cited first, excerpts within budget.
 
     Every source stays listed and citable; one without text or beyond the
     budget is listed without excerpt. Excerpts are original spans selected
@@ -344,7 +344,7 @@ class SourceEvidence:
     def record(self, comparison_id, provider, text, citations):
         """Keep one completed answer's citations and start its page fetches.
 
-        Called before the answer joins the comparison, so the answer step
+        Called before the answer joins the comparison, so the agent
         never sees an answer without its sources' text."""
         cited = answer_citations(text, citations)
         for entry in cited.values():

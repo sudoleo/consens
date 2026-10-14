@@ -230,12 +230,16 @@ def test_orchestrator_prompt_matches_the_users_switches():
     unavailable = agent_memory.orchestrator_prompt(MemorySnapshot())
     assert unavailable == agent_memory.MEMORY_UNAVAILABLE_PROMPT
     assert "paused" not in unavailable and "could not be loaded" in unavailable
-    synthesis = agent_memory.synthesis_prompt(snapshot())
-    assert "Prefers metric units." in synthesis and "m1a2b3c" not in synthesis and "update_memory" not in synthesis
-    # The step that writes the visible answer carries the full "use silently" rule.
-    assert agent_memory.MEMORY_RELEVANCE_RULES in synthesis and agent_memory.MEMORY_RELEVANCE_RULES in writable
-    assert "id, last updated" not in synthesis
-    assert "usual case" in str(agent_memory.memory_field()[1].description)
+    # The agent writes the visible answer itself: it carries the full "use
+    # silently" rule whenever it sees memory, with or without the opt-in.
+    assert agent_memory.MEMORY_RELEVANCE_RULES in writable and agent_memory.MEMORY_RELEVANCE_RULES in read_only
+    # The decision rides on the calls that start the work; there is no answer call.
+    assert "compare_models and check_text carry a required" in writable and "update_memory" in writable
+    assert "call answer" not in writable and "answer step" not in writable
+    description = str(agent_memory.memory_field()[1].description)
+    assert "usual case" in description and "further comparisons" in description
+    # A refused first call applied nothing: its decision is made again.
+    assert "after a refused call, decide again" in description
 
 
 def test_ask_profile_includes_saved_memories():
@@ -247,15 +251,22 @@ def test_ask_profile_includes_saved_memories():
 # --- Agent turn ---------------------------------------------------------------
 
 class MemoryScript(Script):
-    """A comparison, then answer carrying the memory changes; or a
-    memory-only message through update_memory."""
+    """Comparisons whose compare_models (or check_text) call carries the
+    memory decision, then the answer as plain text; or a memory-only message
+    through update_memory.
 
-    def __init__(self, *, memory=None, standalone=None, **kwargs):
+    ``memory`` rides on the first comparison call, later ones pass [];
+    ``omit_memory``: the step indexes whose comparison call leaves the
+    required field out; ``first``: [(name, args)] that step completion:0
+    calls instead of compare_models (args with ``memory`` keep it)."""
+
+    def __init__(self, *, memory=None, standalone=None, first=None, **kwargs):
         super().__init__(**kwargs)
-        self.memory, self.standalone = memory, standalone
-        self.omit_memory = False
+        self.memory, self.standalone, self.first = memory, standalone, first
+        self.omit_memory = set()
         self.memory_sent = False
         self.system_prompts = []
+        self.tools = []
 
     def factory(self):
         script = self
@@ -263,8 +274,9 @@ class MemoryScript(Script):
 
         class Completion(base):
             def stream(self, *, model, messages, **kwargs):
-                if self.step_id == "completion:0":
+                if self.step_id.startswith("completion:"):
                     script.system_prompts.append(messages[0]["content"])
+                if self.step_id == "completion:0":
                     script.tools = [tool["function"] for tool in kwargs.get("tools") or [] if tool.get("type") == "function"]
                 if script.standalone is not None and self.step_id.startswith("completion:"):
                     script.calls.append((self.step_id, model.model))
@@ -277,17 +289,30 @@ class MemoryScript(Script):
                     self.text, self.finish_reason = "Got it, I'll remember that.", "stop"
                     yield {"type": "delta", "text": self.text}
                     return
-                yield from super().stream(model=model, messages=messages, **kwargs)
-                answer = next((tool for tool in kwargs.get("tools") or []
-                               if tool.get("function", {}).get("name") == "answer"), None)
-                required = "memory" in ((answer or {}).get("function", {}).get("parameters", {}).get("required") or [])
+                if script.first is not None and self.step_id == "completion:0" and kwargs.get("tools"):
+                    script.calls.append((self.step_id, model.model))
+                    self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                    self.tool_calls = [{"id": f"call_0_{n}", "type": "function", "function": {
+                        "name": name, "arguments": json.dumps(args)}} for n, (name, args) in enumerate(script.first)]
+                    self.finish_reason = "tool_calls"
+                else:
+                    yield from super().stream(model=model, messages=messages, **kwargs)
+                if not self.step_id.startswith("completion:"):
+                    return
+                index = int(self.step_id.split(":")[-1])
                 for call in self.tool_calls or []:
-                    if call["function"]["name"] != "answer" or not (
-                            script.memory is not None or (required and not script.omit_memory)):
+                    name = call["function"]["name"]
+                    args = json.loads(call["function"]["arguments"])
+                    if name not in {"compare_models", "check_text"} or "memory" in args or index in script.omit_memory:
+                        continue
+                    tool = next((tool for tool in kwargs.get("tools") or []
+                                 if tool.get("function", {}).get("name") == name), None)
+                    required = "memory" in ((tool or {}).get("function", {}).get("parameters", {}).get("required") or [])
+                    if script.memory is None and not required:
                         continue
                     memory = script.memory if script.memory is not None and not script.memory_sent else []
                     script.memory_sent = True
-                    call["function"]["arguments"] = json.dumps({**json.loads(call["function"]["arguments"]), "memory": memory})
+                    call["function"]["arguments"] = json.dumps({**args, "memory": memory})
         return Completion()
 
 
@@ -318,12 +343,12 @@ def orchestrator_steps(script):
 
 
 def memory_result(loop):
-    """The memory outcome on the answer call (the first tool result that has one)."""
+    """The memory outcome on the comparison call (the first tool result that has one)."""
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     return next(result["memory"] for result in results if "memory" in result)
 
 
-def test_memory_changes_ride_on_answer_without_an_extra_step(store):
+def test_memory_changes_ride_on_the_comparison_without_an_extra_step(store):
     baseline = MemoryScript()
     list(memory_loop(store, baseline).run())
     snapshot = writable_snapshot(store, ["Lives in Berlin."])
@@ -333,26 +358,44 @@ def test_memory_changes_ride_on_answer_without_an_extra_step(store):
     loop = memory_loop(store, script, snapshot=snapshot)
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed"
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
     assert [item["text"] for item in repo(store).get(UID)[0]] == ["Lives in Munich (since October 2026)."]
     assert saved["agent_memory"][0]["op"] == "update" and saved["agent_memory"][0]["undone"] is False
-    # The same orchestrator steps as without memory: compare, answer, judge.
-    assert orchestrator_steps(script) == orchestrator_steps(baseline)
+    assert memory_result(loop)["changes"][0]["op"] == "update"
+    # The same orchestrator steps as without memory: compare, then the answer.
+    assert orchestrator_steps(script) == orchestrator_steps(baseline) == ["completion:0", "completion:1"]
     memory_events = [event for event in events if event.get("type") == "memory"]
     assert memory_events and memory_events[0]["changes"][0]["text"] == "Lives in Munich (since October 2026)."
-    # Memory changes are not part of the saved comparison or its hash basis.
+    # Memory changes are not part of the saved comparison or its hash basis,
+    # and the comparison models never see the decision that rode on the call.
     assert "memory" not in saved["agent_review"]["comparisons"][0]
-    # Memory closes the system prompt and answer offers the field, not compare_models.
+    assert script.prompts and "Munich" not in json.dumps(script.prompts)
+    # Memory closes the system prompt; the calls that start the work carry the
+    # required field, and update_memory is there for answers without a comparison.
     assert script.system_prompts[0].rstrip().endswith(agent_memory.MEMORY_WRITE_PROMPT.splitlines()[-1])
-    answer = next(tool for tool in script.tools if tool["name"] == "answer")
-    compare = next(tool for tool in script.tools if tool["name"] == "compare_models")
-    assert "memory" in answer["parameters"]["properties"] and "memory" not in compare["parameters"]["properties"]
-    assert any(tool["name"] == "update_memory" for tool in script.tools)
+    assert not any(tool["name"] == "answer" for tool in script.tools)
+    for name in ("compare_models", "check_text"):
+        parameters = next(tool for tool in script.tools if tool["name"] == name)["parameters"]
+        assert "memory" in parameters["properties"] and "memory" in parameters["required"]
+    update = next(tool for tool in script.tools if tool["name"] == "update_memory")
+    assert "answer without a comparison" in update["description"]
 
 
-def test_memory_sent_as_json_text_on_answer_is_saved(store):
+def test_the_step_that_writes_the_answer_sees_memory_and_its_use_rules(store):
+    """The agent writes the answer itself: the step that writes it keeps the
+    memory block and the "use silently" rules, so the answer is tailored."""
+    snapshot = writable_snapshot(store, ["Prefers metric units."])
+    script = MemoryScript()
+    loop = memory_loop(store, script, snapshot=snapshot)
+    list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["consensus"] == "The first option costs 100."
+    writer = script.system_prompts[-1]
+    assert "Prefers metric units." in writer and agent_memory.MEMORY_RELEVANCE_RULES in writer
+
+
+def test_memory_sent_as_json_text_on_the_comparison_is_saved(store):
     """Haiku 5.5 sends the field as JSON text ("memory": "[...]"), live probe
-    2026-10-11; the registry decodes it instead of rejecting the answer."""
+    2026-10-11; the registry decodes it instead of rejecting the call."""
     snapshot = writable_snapshot(store)
     script = MemoryScript(memory=json.dumps([{"op": "add", "text": "Lives in Munich.",
                                               "evidence": "I moved to Munich last week"}]))
@@ -365,18 +408,21 @@ def test_memory_sent_as_json_text_on_answer_is_saved(store):
 MUNICH = {"op": "add", "text": "Lives in Munich.", "evidence": "I moved to Munich last week"}
 
 
-def test_a_malformed_memory_field_never_rejects_the_answer(store):
+def test_a_malformed_memory_field_never_rejects_the_comparison(store):
     """Review 2026-10-12: null, one object instead of a list or a list of
-    texts rejected the whole answer, and three such rounds ended a turn whose
-    comparisons were paid, without an answer."""
+    texts rejected the whole call it rode on; three such rounds end a turn."""
     snapshot = writable_snapshot(store)
     loop = memory_loop(store, MemoryScript(), snapshot=snapshot)
 
-    def memory(value):
-        call = {"id": "a", "type": "function", "function": {"name": "answer", "arguments": json.dumps({"memory": value})}}
+    def memory(value, name="compare_models"):
+        args = {"question": "Which bike shop?", "memory": value}
+        if name == "check_text":
+            args.update(starts_with="a", ends_with="b", answer_to="c")
+        call = {"id": "a", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
         return [change.model_dump() for change in loop.registry.validate(call)[1].memory]
-    assert memory(None) == memory("none") == memory(7) == []
+    assert memory(None) == memory("none") == memory(7) == memory(None, "check_text") == []
     assert memory(MUNICH)[0]["text"] == memory(json.dumps(MUNICH))[0]["text"] == "Lives in Munich."
+    assert memory(MUNICH, "check_text")[0]["text"] == "Lives in Munich."
     # An item that is no object stays a change, which apply refuses visibly.
     assert memory(["Lives in Munich."]) == [{"op": "", "id": "", "text": "", "evidence": ""}]
     # End to end: one object instead of a list is saved, and the answer is checked.
@@ -388,18 +434,28 @@ def test_a_malformed_memory_field_never_rejects_the_answer(store):
     assert [item["text"] for item in repo(store).get(UID)[0]] == ["Lives in Munich."]
 
 
-def test_memory_rides_only_on_an_accepted_answer(store):
-    """A refused answer comes again with its decision; applied before the
-    refusal, a change was saved twice (review 2026-10-12)."""
+def test_memory_rides_only_on_an_accepted_comparison(store):
+    """A refused call comes again with its decision; applied before the
+    refusal, a change was saved twice (review 2026-10-12). Here check_text
+    is refused (the user's own question) and compare_models follows."""
+    question = "I moved to Munich last week, which bike shop is closest?"
+    check = {"question": "Which bike shop is closest?", "status_update": "Checking the text.",
+             "starts_with": "I moved to Munich last week", "ends_with": "which bike shop is closest?",
+             "answer_to": "Which bike shop is closest?", "memory": [MUNICH]}
     snapshot = writable_snapshot(store)
-    # One model fails: [compare_models, answer] got one answer, so answer is refused.
-    script = MemoryScript(memory=[MUNICH], direct=True, fail_model=True)
-    loop = memory_loop(store, script, snapshot=snapshot)
-    list(loop.run())
+    script = MemoryScript(memory=[MUNICH], first=[("check_text", check)], compares=2)
+    loop = memory_loop(store, script, snapshot=snapshot, question=question)
+    events = list(loop.run())
     refused = next(json.loads(m["content"]) for m in loop.messages
-                   if m.get("role") == "tool" and m["tool_call_id"] == "call_0_answer")
-    assert refused["status"] == "refused" and "memory" not in refused
-    assert repo(store).get(UID)[0] == []
+                   if m.get("role") == "tool" and m["tool_call_id"] == "call_0_0")
+    assert refused["status"] == "refused" and "only asks questions" in refused["reason"] and "memory" not in refused
+    # The decision is applied once, on the comparison that ran: an add, not a
+    # no-op after an earlier save.
+    assert memory_result(loop)["changes"][0]["op"] == "add"
+    assert [item["text"] for item in repo(store).get(UID)[0]] == ["Lives in Munich."]
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert len(saved["agent_memory"]) == 1 and len([e for e in events if e.get("type") == "memory"]) == 1
+    assert saved["agent_review"]["status"] == "succeeded" and len(saved["agent_review"]["comparisons"]) == 1
 
 
 def test_a_link_the_user_sent_is_no_evidence(store):
@@ -430,23 +486,45 @@ def test_memory_from_anything_but_the_users_words_is_refused(store):
     assert blocked and "evil.example" not in json.dumps(blocked)
 
 
-def test_the_memory_decision_is_required_on_every_answer(store):
-    """An optional field was left out in practice; [] must be an explicit choice.
-    A model that keeps leaving it out still gets its checked answer from the
-    paid comparison after three rejected rounds (review 2026-10-12)."""
+def test_the_memory_decision_is_required_on_every_comparison(store):
+    """An optional field was left out in practice; [] must be an explicit
+    choice. A comparison without it is rejected before anything is paid,
+    and the corrected call runs."""
     snapshot = writable_snapshot(store)
-    script = MemoryScript()
-    script.omit_memory = True
+    script = MemoryScript(compares=2)
+    script.omit_memory = {0}
     loop = memory_loop(store, script, snapshot=snapshot)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
-    rejected = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
-    first_error = next(result["error"] for result in rejected if "error" in result)
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    first_error = next(result["error"] for result in results if "error" in result)
     assert "memory" in first_error and "Field required" in first_error
-    answer = next(tool for tool in script.tools if tool["name"] == "answer")
-    assert "memory" in answer["parameters"]["required"]
+    # Only the corrected call reached the comparison models.
+    assert len(saved["agent_review"]["comparisons"]) == 1 and len(script.prompts) == 2
+    compare = next(tool for tool in script.tools if tool["name"] == "compare_models")
+    assert "memory" in compare["parameters"]["required"]
     assert "vegetarian" in script.system_prompts[0]
+
+
+def test_paid_comparisons_reach_a_checked_answer_when_the_memory_field_keeps_missing(store):
+    """After a paid comparison, three further comparison calls without the
+    field are rejected: the turn still ends with the answer written from the
+    paid comparison, and it is checked (review 2026-10-12)."""
+    snapshot = writable_snapshot(store)
+    script = MemoryScript(compares=4)
+    script.omit_memory = {1, 2, 3}
+    loop = memory_loop(store, script, snapshot=snapshot)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
+    assert saved["consensus"] == "The first option costs 100."
+    assert len(saved["agent_review"]["comparisons"]) == 1
+    errors = [json.loads(m["content"]).get("error", "") for m in loop.messages if m.get("role") == "tool"]
+    assert sum("Field required" in error for error in errors) == 3
+    # The answer came from the wrap-up step, which offers no tool call.
+    assert any("reached its limit" in str(m.get("content")) for m in loop.messages if m.get("role") == "user")
+    assert orchestrator_steps(script) == [f"completion:{index}" for index in range(5)]
 
 
 @pytest.mark.parametrize("autonomy", ["guided", "free"])
@@ -472,10 +550,12 @@ def test_without_the_opt_in_agent_reads_memory_but_gets_no_write_tools(store):
     loop = memory_loop(store, script, snapshot=repo(store).snapshot(UID))
     list(loop.run())
     prompt = script.system_prompts[0]
-    assert "Prefers metric units." in prompt and "read-only" in prompt
+    assert "Prefers metric units." in prompt and "read-only" in prompt and "MEMORY UPDATES" not in prompt
     assert not any(tool["name"] == "update_memory" for tool in script.tools)
-    answer = next(tool for tool in script.tools if tool["name"] == "answer")
-    assert "memory" not in answer["parameters"]["properties"]
+    for name in ("compare_models", "check_text"):
+        parameters = next(tool for tool in script.tools if tool["name"] == name)["parameters"]
+        assert "memory" not in parameters["properties"]
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
 
 
 def test_switching_auto_memory_off_mid_run_stops_the_next_write(store):
@@ -487,25 +567,6 @@ def test_switching_auto_memory_off_mid_run_stops_the_next_write(store):
     assert repo(store).get(UID)[0] == []
     result = json.loads(next(m for m in loop.messages if m.get("role") == "tool")["content"])
     assert "switched off" in result["error"]
-
-
-def test_synthesis_gets_memory_without_ids_or_write_rules(store):
-    snapshot = writable_snapshot(store, ["Prefers metric units."])
-    script = MemoryScript()
-    base = type(script.factory())
-    captured = []
-
-    class Completion(base):
-        def stream(self, **kwargs):
-            if self.step_id.startswith("completion:") and not kwargs["tools"]:
-                captured.append(kwargs["messages"][0]["content"])
-            yield from super().stream(**kwargs)
-
-    loop = memory_loop(store, script, snapshot=snapshot)
-    loop.factory = Completion
-    list(loop.run())
-    assert captured and "Prefers metric units." in captured[0]
-    assert snapshot.items[0]["id"] not in captured[0] and "MEMORY UPDATES" not in captured[0]
 
 
 def test_mock_runs_can_exercise_the_memory_flow(store):
@@ -530,18 +591,6 @@ def test_anthropic_requests_carry_automatic_cache_control(monkeypatch):
         list(AgentCompletion().stream(model=resolve_agent_model("claude-haiku-4-5"),
                                       messages=[{"role": "user", "content": "Hi"}], api_key="test"))
     assert requests[0]["cache_control"] == {"type": "ephemeral"}
-
-
-def test_answer_step_skips_cache_write(monkeypatch):
-    # Its prompt carries the clock to the second: a one-off prefix.
-    from app.services.llm.agent_client import AgentCompletion
-    requests, _, _ = transport(monkeypatch, [[packet({"content": "Hi"}, finish="stop",
-                                                     usage={"prompt_tokens": 5, "completion_tokens": 1})]])
-    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
-    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=1)):
-        list(AgentCompletion().stream(model=resolve_agent_model("claude-haiku-4-5"),
-                                      messages=[{"role": "user", "content": "Hi"}], api_key="test", prompt_cache=False))
-    assert "cache_control" not in requests[0]
 
 
 # --- Settings API -------------------------------------------------------------

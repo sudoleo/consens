@@ -176,32 +176,43 @@ Agent-Vergleiche: `tests/test_agent_comparison.py` führt den gemeinsamen
 Differences-/Coverage-Parser mit deterministischen Providern aus und prüft
 exakte Versionen, mehrere Teilgrundlagen, Ausfälle, Abbruch, UTC-Wechsel sowie
 atomare Tokenreservierungen. `tests/test_agent_answer_lifecycle.py` reproduziert
-einen frühen Judge-Aufruf mit bloßer Einleitung: Erst der vollständig gestreamte
-toolfreie Antwortschritt darf die Judges starten. Geprüft werden Event-Reihenfolge,
-gespeicherter Wortlaut, Hash-Bindung, leere Antworten, Tokenlimit und Nutzer-Stopp.
-`tests/test_agent_synthesis_context.py` prüft die isolierte Synthese ohne internen
-Tool-/Reasoning-Kontext, erhaltene Gesprächsinhalte und Quellen, mehrere/teilweise
-Vergleiche sowie den Provider-Payload mit unterdrücktem Reasoning bei unveränderter
-Denkstufe. Sichtbarer Stream, gespeicherter Text und Judge-Bindung bleiben identisch.
+einen frühen Judge-Aufruf mit bloßer Einleitung: Erst wenn der Schritt, in dem
+der Agent die Antwort selbst schreibt, mit vollständigem Text endet, dürfen die
+Judges starten, und sie prüfen genau den gezeigten Text. Geprüft werden Streaming,
+Event-Reihenfolge, gespeicherter Wortlaut, Hash-Bindung, leere Antworten,
+Tokenlimit und Nutzer-Stopp.
+`tests/test_agent_synthesis_context.py` prüft, woraus der Agent schreibt: volle
+Antworten mit Quellenauszügen im eigenen Verlauf (Auszüge nur im Speicher, ein
+fehlschlagender Auszug kostet nie die bezahlte Antwort), gewählte Denkstufe und
+Antwortbudget samt Headroom, Denk-Auszüge nur im Fortschritt, die Wiederholung
+eines ausgedachten Schritts mit leichterer Stufe und keine gespeicherten
+Reasoning-Fortsetzungen. Sichtbarer Stream, gespeicherter Text und Judge-Bindung
+bleiben identisch.
 `tests/test_agent_chat_integrity.py` prüft mit der echten Chat-Policy die Reihenfolge
 mehrerer Tools in einem Batch, automatische bestehende Prüfungen bei fehlendem
 Toolcall, Protokollstillstand und gepufferte Direktantworten. Weitere Regressionen
 decken fehlgeschlagene Turns im Folgekontext, gültige lange/mit „Error“ beginnende
 Vergleichstexte sowie tatsächliche Worker-Abläufe mit Annahme, Überarbeitung und
 geprüftem Ersatztext im Synthesekontext ab.
-`tests/test_agent_answer_mode.py` prüft den Schalter `AGENT_MERGED_ANSWER`
-(Antwort als letzter Agent-Schritt): Prompt-Ersetzungen, Werkzeugsatz ohne
-`answer`, Memory-Pflichtfeld an `compare_models`, volle Antworten und Quellen im
-Toolergebnis, Streaming ab 300 Zeichen, Rücknahme einer Einleitung vor einem
-Toolcall, Recherche ohne Vergleich, 429-Wiederholung, Turn-Grenze mit
-`tool_choice: none`, Lesen, Watch, den HTTP-Weg und das Vergleichsskript offline
-(samt Zeitachse je Aufruf, 429, Stall und echtem Stream-Pfad),
-außerdem die Zulassung wie ein Steuer-Schritt: Ein Free-Konto behält nach einer
-ersten Nachricht die Recherche in beiden Wegen, kurz vor dem Limit bekommt eine
-Direktantwort ihr ganzes Budget.
-Den Live-Vergleich beider Wege startet
-`.\venv\Scripts\python.exe scripts/evaluate_agent_answer_mode.py --live --model <id>`
-(bezahlt; `--only`, `--pairwise`, `--out`, siehe agent-mode.md).
+`tests/test_agent_answer_mode.py` prüft, wie der Agent die Antwort als letzte
+Nachricht seiner Tool-Schleife selbst schreibt (seit 2026-10-14, kein Schalter):
+Prompt mit Schreib-, Lese- und Memory-Regeln ohne Verweis auf den früheren
+Antwortschritt, Werkzeugsatz ohne `answer`, Memory-Pflichtfeld an
+`compare_models`, Schreibnotiz (`AGENT_WRITE_NOTE`) nur nach brauchbaren
+Vergleichen, Direktantwort in einem Aufruf, Streaming-Sperre bis 300 Zeichen,
+Rücknahme einer Einleitung vor einem Toolcall samt Notiz, Recherche ohne
+Vergleich (eine Erinnerung, danach steht die Antwort), Antwort plus reines
+Memory-Speichern, 429-Wiederholung, abgeschnittene Antwort, Wrap-up an der
+Turn-Grenze mit `tool_choice: none`, Lesen, Watch, den HTTP-Weg und das
+Messskript offline (Zeitachse je Aufruf, 429, Stall, echter Stream-Pfad,
+Vergleich gegen eine gespeicherte Baseline), außerdem die Zulassung wie ein
+Steuer-Schritt: Ein Free-Konto behält nach einer ersten Nachricht seine
+Recherche, kurz vor dem Limit bekommt eine Direktantwort ihr ganzes Budget.
+Den Live-Lauf startet
+`.\venv\Scripts\python.exe scripts/evaluate_agent_answers.py --live --model <id>`
+(bezahlt; `--only`, `--baseline FILE --pairwise MODEL` gegen gespeicherte
+Antworten, etwa die des früheren getrennten Antwortschritts, `--out`, siehe
+agent-mode.md).
 `tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsmeldungen aus validierten Toolargumenten, Reihenfolge vor Toolstart,
 Persistenz, unveränderte Übernahme mehrsprachiger Texte und Aufruf-/Tokenabrechnung. Provider-

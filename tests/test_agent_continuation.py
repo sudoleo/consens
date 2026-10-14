@@ -145,7 +145,7 @@ def test_mid_answer_provider_timeout_preserves_text_and_safe_reason_in_history(s
 
 
 def test_many_comparisons_use_actual_call_reservations_without_fixed_review_hold(store):
-    script = Script(compares=4, revise=True)  # The per-turn maximum.
+    script = Script(compares=4)  # The per-turn maximum.
     loop = comparison_loop(store, script)
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
@@ -165,25 +165,29 @@ def test_consensus_and_legacy_analysis_budgets_remain_bounded():
 
 
 def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_review(store):
+    """The agent's plain text after the comparison is the answer and ends the
+    message: the further comparison and revision it would send next never run."""
     from app.services.agent_comparison import review_is_bound
     script = Script()
     base = type(script.factory())
+    steps = []
     class Completion(base):
         def stream(self, *, model, messages, **kwargs):
-            if not self.step_id.startswith("completion:") or not kwargs["tools"]:
+            if not self.step_id.startswith("completion:"):
                 yield from super().stream(model=model, messages=messages, **kwargs)
                 return
             index = int(self.step_id.split(":")[-1])
+            steps.append(index)
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
             if index in {0, 2}:
-                action = "compare_models"
                 args = {"question": f"Check option {index}", "context": "Budget is 100.", "status_update": "New perspective"}
-            else:
-                self.text = "The first option costs 100." + (f" Revision {index - 2}." if index >= 4 else "")
-                yield {"type": "delta", "text": self.text}
-                action, args = "answer", {}
-            self.tool_calls = [{"id": str(index), "type": "function", "function": {"name": action, "arguments": json.dumps(args)}}]
-            self.finish_reason = "tool_calls"
+                self.tool_calls = [{"id": str(index), "type": "function",
+                                    "function": {"name": "compare_models", "arguments": json.dumps(args)}}]
+                self.finish_reason = "tool_calls"
+                return
+            self.text = "The first option costs 100." + (f" Revision {index - 2}." if index >= 3 else "")
+            yield {"type": "delta", "text": self.text}
+            self.finish_reason = "stop"
     loop = comparison_loop(store, script)
     loop.factory = Completion
     loop.policy = AgentPolicy.for_chat(loop.config)
@@ -192,6 +196,7 @@ def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_revie
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     review = saved["agent_review"]
+    assert steps == [0, 1]
     assert saved["status"] == "completed" and len(review["comparisons"]) == 1
     assert len(review["versions"]) == 1 and len(review["checks"]) == 1
     assert saved['consensus'] == 'The first option costs 100.'

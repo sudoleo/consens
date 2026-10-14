@@ -25,9 +25,14 @@ JUDGE_USAGE = {"prompt_tokens": 1200, "completion_tokens": 300}
 
 
 class SourceScript(Script):
-    def __init__(self, *, missing=False, repeat=False, revise=False, rewrite_during_check=False):
-        super().__init__(missing=missing)
-        self.repeat, self.revise = repeat, revise
+    """Step 0 compares, step 1 writes the answer as plain text
+    (agent_answer_mode); the app then judges it and queues the source check
+    itself (_finish_review). A steering step after the answer would be a bug:
+    it streams a rewrite (``rewrite_during_check``) and asks for another
+    comparison."""
+
+    def __init__(self, *, rewrite_during_check=False):
+        super().__init__()
         self.rewrite_during_check = rewrite_during_check
 
     def factory(self):
@@ -37,26 +42,22 @@ class SourceScript(Script):
                 script.calls.append((self.step_id, model.model))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                 if self.step_id.startswith("completion:"):
-                    if not tools:
+                    index = int(self.step_id.split(":")[-1])
+                    if index == 1 or not tools or kwargs.get("allow_tool_calls") is False:
+                        # The agent writes the answer itself, without a tool call.
                         self.text, self.finish_reason = CONSENSUS, "stop"
                         yield {"type": "delta", "text": self.text}
                         return
-                    index = int(self.step_id.split(":")[-1])
                     if index == 0:
                         action, args = "compare_models", {"question": "Price?", "context": "Compare published prices.", "status_update": "Conflicting prices"}
-                    elif index == 1 or (script.revise and index == 4):
-                        self.text = CONSENSUS + (" Check the applicable date." if index == 4 else "")
-                        yield {"type": "delta", "text": self.text}
-                        action, args = "answer", {}
                     else:
+                        # Never reached: once the answer is written the app runs
+                        # its checks and the model gets no further round.
                         if script.rewrite_during_check:
-                            self.text = 'Here is a completely rewritten answer.'
+                            # Long enough to stream (ANSWER_HOLD_CHARS) if a step ran.
+                            self.text = 'Here is a completely rewritten answer. ' * 10
                             yield {"type": "delta", "text": self.text}
-                        if script.missing:
-                            self.finish_reason = "stop"
-                            return
-                        # The app runs the source check itself; the model can only end.
-                        action, args = "answer", {}
+                        action, args = "compare_models", {"question": "Price again?", "context": "", "status_update": "Again"}
                     self.tool_calls = [{"id": f"call_{index}", "type": "function", "function": {"name": action, "arguments": json.dumps(args)}}]
                     self.finish_reason = "tool_calls"
                     return
@@ -171,7 +172,9 @@ def test_disabled_tool_never_queues_and_keeps_model_agreement_review(store, queu
 
 
 def test_missing_enabled_tool_still_queues_the_check(store, queue):
-    loop, _, saved = run(store, queue, SourceScript(missing=True))
+    # The model never calls check_contradictions (it is not its tool); the
+    # app queues it after the answer without asking the model.
+    loop, _, saved = run(store, queue, SourceScript())
     assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], CONSENSUS)
     assert not any("Call check_contradictions now" in m.get("content", "") for m in loop.messages if m["role"] == "user")
     assert saved["agent_review"]["checks"][0]["source_verification"]["status"] == "queued"
@@ -240,19 +243,19 @@ def test_api_freezes_setting_and_recovery_rejects_different_tool_permission(api)
     assert len(calls) == count
 
 
-@pytest.mark.parametrize("revise", [False, True])
-def test_source_check_is_queued_once_even_when_model_requests_more_rounds(store, queue, revise):
-    script = SourceScript(repeat=not revise, revise=revise)
+def test_source_check_is_queued_once_even_when_model_requests_more_rounds(store, queue):
+    script = SourceScript()
     _, _, saved = run(store, queue, script)
     assert len(queue.jobs()) == 1
     assert queue.ledger()["reserved"] == jobs.package_token_bound(Limits.configured())
     assert review_is_bound(saved["agent_review"], saved["consensus"])
     assert len(saved["agent_review"]["versions"]) == 1
     assert saved['consensus'] == CONSENSUS
-    # Compare, answer, the answer step; the app then queues the source
-    # check itself, so the model gets no further steering step to ask again.
+    # Compare, then the step that writes the answer; the app then queues the
+    # source check itself, so the model gets no further steering step in
+    # which it could compare again or ask for the check a second time.
     assert [step for step, _ in script.calls if step.startswith('completion:')] == [
-        'completion:0', 'completion:1', 'completion:2']
+        'completion:0', 'completion:1']
 
 
 def test_resubmitting_the_same_comparison_reuses_its_job_and_reservation(store, queue):

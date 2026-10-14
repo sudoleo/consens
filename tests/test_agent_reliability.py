@@ -112,12 +112,15 @@ def test_stop_between_status_event_and_provider_dispatch_is_known_zero(store):
 
 @pytest.mark.parametrize("ending", ["length", "timeout", "stop"])
 def test_partial_synthesis_survives_after_comparisons(store, ending):
+    # The step after the comparison writes the answer; long enough to stream
+    # (agent_answer_mode.ANSWER_HOLD_CHARS) before it breaks off.
+    partial = "The synthesis available so far. " * 12
     script = Script()
     base = type(script.factory())
     class Interrupted(base):
         def stream(self, **kwargs):
-            if self.step_id == "completion:2":
-                self.text = "The synthesis available so far."
+            if self.step_id == "completion:1":
+                self.text = partial
                 yield {"type": "delta", "text": self.text}
                 if ending == "timeout":
                     raise httpx.ReadTimeout("private provider details")
@@ -131,8 +134,9 @@ def test_partial_synthesis_survives_after_comparisons(store, ending):
     with pytest.raises((runtime.AnalysisBudgetExceeded, httpx.ReadTimeout, runtime.ProviderCancelled)):
         list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["consensus"] == "The synthesis available so far."
+    assert saved["consensus"] == partial
     assert saved["agent_review"]["versions"][-1]["text"] == saved["consensus"]
+    assert not saved["agent_review"].get("checks") and loop.comparison.judge_calls == 0
     assert saved["status"] == "failed"
     assert agent_quota.snapshot(store.db, UID)["reserved"] == 0
     assert totals(store)["unsettled_calls"] == 0
@@ -233,10 +237,22 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch):
     assert value.text == "Long answer with progress." and agent_quota.measured_tokens(value.usage) == 14
 
 
-@pytest.mark.parametrize("answer_step", [True, False])
-def test_answer_step_starts_with_a_smaller_allowance_instead_of_queueing(store, monkeypatch, answer_step):
+@pytest.mark.parametrize("compared", [True, False])
+def test_answer_step_after_paid_comparisons_starts_at_once_instead_of_queueing(store, monkeypatch, compared):
+    """Once comparisons are paid, the step that may write the answer starts
+    at once with its whole allowance (overdraft: the next message is refused
+    instead). Before any comparison a step waits for sibling reservations."""
     from dataclasses import replace
-    loop = chat_loop(store, Completion)
+    from test_agent_chat_integrity import chat_loop as comparison_chat_loop
+    limits = []
+    class Capture(Completion):
+        def stream(self, *, model, **kwargs):
+            limits.append(model.max_output_tokens)
+            yield from super().stream(model=model, **kwargs)
+    loop = comparison_chat_loop(store, Script())
+    loop.factory = Capture
+    if compared:
+        loop.comparison.comparisons.append({"id": "paid", "answers": []})
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
     ref.set({"used": 130000, "reserved": 100000})  # 20k free, 100k held by sibling calls
     waited = []
@@ -246,10 +262,11 @@ def test_answer_step_starts_with_a_smaller_allowance_instead_of_queueing(store, 
     monkeypatch.setattr(loop.condition, "wait", wait)
     model = replace(loop.model, max_output_tokens=60000)
     step = loop._step(model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation,
-                      searches_enabled=False, answer_step=answer_step)
-    if answer_step:
+                      searches_enabled=False, answer_candidate=True)
+    if compared:
         exhaust(step)
-        assert not waited
+        assert not waited and limits == [60000]
     else:
         with pytest.raises(RuntimeError, match="queued"):
             exhaust(step)
+        assert not limits
