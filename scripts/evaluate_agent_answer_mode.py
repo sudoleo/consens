@@ -219,10 +219,11 @@ def main():
     load_dotenv(ROOT / ".env")
     os.chdir(ROOT)
     from app.services import agent_quota
-    # The test account exists only in memory; looked up in Firestore it is
-    # Free, and the Free allowance queues the parallel comparison answers and
-    # judges behind each other and shrinks searches (2026-10-14: 518 s for a
-    # turn that takes 1-2 min on a Pro account).
+    # The test account exists only in memory; looked up in Firestore it would
+    # be Free. Every turn gets a fresh in-memory account, where Free does not
+    # wait either (replayed offline 2026-10-14: the 434-518 s of the first
+    # Free run did not come from the allowance; Pro runs took up to 672 s).
+    # Pinned anyway, so no turn depends on a Firestore lookup.
     agent_quota._stored_tier = lambda uid: args.tier
     agent_quota._admin_role = lambda uid: False
     from app.core import config as cfg

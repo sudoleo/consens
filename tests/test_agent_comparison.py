@@ -404,6 +404,26 @@ def test_overdraft_admits_a_reservation_beyond_the_limit_only_when_asked():
     with pytest.raises(AgentTokenBudgetExceeded):
         reserve({"used": 900}, 200, limit=1000)
     assert reserve({"used": 900}, 200, limit=1000, overdraft=True)["reserved"] == 200
+    # A merged step: only the answer on top of its routing allowance may lie beyond.
+    assert reserve({"used": 900}, 200, limit=1000, overdraft=150)["reserved"] == 200
+    with pytest.raises(AgentTokenBudgetExceeded) as refused:
+        reserve({"used": 900}, 200, limit=1000, overdraft=50)
+    assert (refused.value.required, refused.value.remaining) == (150, 100)
+
+
+def test_a_merged_step_reserves_its_answer_once_not_per_search_round():
+    from app.services.agent_costs import RunCosts
+    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
+    messages = [{"role": "user", "content": "Q"}]
+    routing = resolve_agent_model("claude-haiku-4-5")
+    answer = routing.max_output_tokens + 40_000
+    for searches in (0, 1, 3):
+        plain = costs.estimate(routing, messages, native_searches=searches)
+        merged = costs.estimate(routing, messages, native_searches=searches, answer_output=answer)
+        assert merged[0] - plain[0] == 40_000 and merged[1] > plain[1]
+    # The context window still has to hold the whole answer.
+    with pytest.raises(AnalysisBudgetExceeded, match="context limit"):
+        costs.estimate(routing, messages, answer_output=routing.context_length)
 
 
 def test_search_steps_down_by_rounds_and_reserves_one_bound_per_round():

@@ -194,7 +194,10 @@ geprüftem Ersatztext im Synthesekontext ab.
 `answer`, Memory-Pflichtfeld an `compare_models`, volle Antworten und Quellen im
 Toolergebnis, Streaming ab 300 Zeichen, Rücknahme einer Einleitung vor einem
 Toolcall, Recherche ohne Vergleich, 429-Wiederholung, Turn-Grenze mit
-`tool_choice: none`, Lesen, Watch, den HTTP-Weg und das Vergleichsskript offline.
+`tool_choice: none`, Lesen, Watch, den HTTP-Weg und das Vergleichsskript offline,
+außerdem die Zulassung wie ein Steuer-Schritt: Ein Free-Konto behält nach einer
+ersten Nachricht die Recherche in beiden Wegen, kurz vor dem Limit bekommt eine
+Direktantwort ihr ganzes Budget.
 Den Live-Vergleich beider Wege startet
 `.\venv\Scripts\python.exe scripts/evaluate_agent_answer_mode.py --live --model <id>`
 (bezahlt; `--only`, `--pairwise`, `--out`, siehe agent-mode.md).

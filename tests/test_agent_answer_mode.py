@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from app.services import agent_answer_mode, agent_delegation, agent_memory, prompt_defaults
+from app.services import agent_answer_mode, agent_budget_config, agent_delegation, agent_memory, agent_quota, prompt_defaults
 from app.services.agent_comparison import comparison_selection, review_is_bound
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
@@ -47,6 +47,8 @@ class Merged(Script):
         self.memory = memory
         self.cited = cited
         self.requests, self.kwargs = {}, {}
+        # Output limit of each orchestrator step's request.
+        self.limits = {}
 
     def factory(self):
         base = type(super().factory())
@@ -70,6 +72,7 @@ class Merged(Script):
                 script.calls.append((self.step_id, model.model))
                 script.requests[index] = json.loads(json.dumps(messages))
                 script.kwargs[index] = {key: value for key, value in kwargs.items() if key != "api_key"}
+                script.limits[index] = model.max_output_tokens
                 script.tools = [tool["function"] for tool in kwargs.get("tools") or [] if tool.get("type") == "function"]
                 step = script.plan[min(index, len(script.plan) - 1)]
                 if step.get("rate_limited"):
@@ -320,12 +323,63 @@ def test_an_answer_cut_at_its_limit_is_kept_unchecked(store):
     assert not any(e.get("kind") == "tool" and e.get("name") == "judge_answer" for e in events)
 
 
-def test_the_answer_step_allowance_applies_to_every_merged_step(store):
+def test_every_merged_step_may_write_a_whole_answer_but_is_admitted_like_a_routing_step(store):
     from app.services.llm.agent_client import answer_output_limit, routing_output_limit
-    loop = merged_loop(store, Merged([{}]))
-    assert loop._routing_model().max_output_tokens == answer_output_limit(loop.model)
+    script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
+    loop = merged_loop(store, script)
+    list(loop.run())
+    # Every request may write the answer...
+    assert script.limits == {0: answer_output_limit(loop.model), 1: answer_output_limit(loop.model)}
+    # ...but admission and further search segments use the routing allowance.
+    assert loop._routing_model().max_output_tokens == routing_output_limit(loop.model)
+    assert loop._answer_output() == answer_output_limit(loop.model)
     separate = merged_loop(store, Merged([{}]), merged=False)
     assert separate._routing_model().max_output_tokens == routing_output_limit(separate.model)
+
+
+def free_account(store, monkeypatch, remaining):
+    monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "free")
+    limit = agent_budget_config.DEFAULT_TIER_LIMITS["free"]
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref.set({"used": limit - remaining})
+    return ref
+
+
+@pytest.mark.parametrize("merged", [False, True])
+def test_a_free_account_keeps_its_research_after_a_first_message(store, monkeypatch, merged):
+    """Until 2026-10-14 a merged first step reserved the answer allowance for
+    every search round (~460k tokens here): a Free account (660k a day) got one
+    research round instead of three once ~190k were used, the separate path
+    only near the end of the allowance. Both now admit research alike."""
+    from app.services.agent_delegation import ORCHESTRATOR_SEARCH_ROUNDS
+    ref = free_account(store, monkeypatch, 350_000)
+    answer = ("answer", {"status_update": "Writing the answer."})
+    script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}] if merged else
+                    [{"tools": [COMPARE]}, {"tools": [answer]}, {"text": ANSWER}])
+    loop = merged_loop(store, script, merged=merged)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["consensus"] == ANSWER
+    assert script.kwargs[0]["native_searches"] == ORCHESTRATOR_SEARCH_ROUNDS
+    assert ref.get().to_dict()["reserved"] == 0
+
+
+def test_near_the_limit_a_merged_direct_answer_keeps_its_whole_allowance(store, monkeypatch):
+    """Admitted like a routing step, the answer on top may overdraw, as the
+    separate answer step may after a direct answer; the search still yields."""
+    from app.services.llm.agent_client import answer_output_limit
+    ref = free_account(store, monkeypatch, 30_000)
+    used = ref.get().to_dict()["used"]
+    script = Merged([{"text": ANSWER}])
+    loop = merged_loop(store, script)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
+    assert script.kwargs[0]["native_searches"] == 0
+    assert any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
+    assert script.limits[0] == answer_output_limit(loop.model) > 30_000
+    ledger = ref.get().to_dict()
+    assert ledger["reserved"] == 0 and ledger["used"] == used + 70
 
 
 def test_a_turn_limit_lets_the_agent_write_without_tools(store, monkeypatch):

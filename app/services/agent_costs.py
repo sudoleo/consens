@@ -85,12 +85,14 @@ class RunCosts:
             self.cost -= reservation[1]
             self.calls -= 1
 
-    def reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False):
+    def reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False, answer_output=0):
         with self._lock:
-            return self._reserve(model, messages, tools, native_searches=native_searches, soft_search=soft_search)
+            return self._reserve(model, messages, tools, native_searches=native_searches, soft_search=soft_search,
+                                 answer_output=answer_output)
 
-    def _reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False):
-        tokens, cost = self.estimate(model, messages, tools, native_searches=native_searches, soft_search=soft_search)
+    def _reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False, answer_output=0):
+        tokens, cost = self.estimate(model, messages, tools, native_searches=native_searches, soft_search=soft_search,
+                                     answer_output=answer_output)
         if not self.policy.account_budget_only and (self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
                 or self.cost + cost > self.policy.max_cost_nano_usd):
             raise AnalysisBudgetExceeded("The agent's token or simulated cost budget was reached.")
@@ -99,27 +101,33 @@ class RunCosts:
         self.calls += 1
         return tokens, cost
 
-    def estimate(self, model, messages, tools=(), *, native_searches=0, soft_search=False):
+    def estimate(self, model, messages, tools=(), *, native_searches=0, soft_search=False, answer_output=0):
         """Worst-case tokens and cost of one call.
 
         ``soft_search`` (comparison answers): the search must still fit the
         context window, but its tokens are not reserved; settlement books them
         as measured. Otherwise a worst-case bound for several rounds and six
-        parallel answers exceeds a whole daily allowance."""
+        parallel answers exceeds a whole daily allowance.
+
+        ``answer_output`` (a merged step, which may write the answer): the
+        call's output limit, above ``model.max_output_tokens`` (the routing
+        allowance). The answer is written once, so one segment reserves it
+        and every further search continuation the routing allowance."""
         from app.services.agent_tokens import input_estimate
+        extra = max(0, answer_output - model.max_output_tokens)
         inputs = (input_estimate(messages, tools, model.request_config) if self.policy.account_budget_only
                   else input_bound(messages, tools))
         initial_inputs = inputs
-        if inputs + model.max_output_tokens > model.context_length:
+        if inputs + model.max_output_tokens + extra > model.context_length:
             raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
         pages, fetched = fetch_bounds(tools)
         if native_searches or pages:
             # A provider can never add more than the window still holds.
-            room = model.context_length - model.max_output_tokens - inputs
+            room = model.context_length - model.max_output_tokens - extra - inputs
             if room <= 0:
                 raise AnalysisBudgetExceeded("The selected model's search context limit was reached.")
             if soft_search and not pages:
-                tokens, cost = self.estimate(model, messages, tools)
+                tokens, cost = self.estimate(model, messages, tools, answer_output=answer_output)
                 return tokens, cost + native_searches * (search_cost_nanos(model) or 10_000_000)
             inputs += min(native_searches * SEARCH_INPUT_TOKENS + fetched, room)
         # Account conservatively for native model continuations hidden behind
@@ -130,7 +138,7 @@ class RunCosts:
             # Search results do not exist in the pre-search generation. Each
             # result enters only its subsequent continuations.
             total_inputs = initial_inputs * segments + (inputs - initial_inputs) * segments // 2
-        outputs = model.max_output_tokens * segments
+        outputs = model.max_output_tokens * segments + extra
         tokens = total_inputs + outputs
         cost = int(((total_inputs * max(Decimal(model.input_usd_per_million), Decimal(model.cache_read_usd_per_million),
                                  Decimal(model.cache_write_usd_per_million or model.input_usd_per_million))

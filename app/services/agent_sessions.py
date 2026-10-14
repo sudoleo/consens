@@ -161,7 +161,7 @@ class AgentSessionStore:
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
             daily = agent_quota.reserve(daily, tokens - spend, limit=token_limit,
-                                        overdraft=overdraft and bool(limits.get("account_budget_only")))
+                                        overdraft=overdraft if limits.get("account_budget_only") else False)
             if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")

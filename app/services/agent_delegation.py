@@ -714,7 +714,7 @@ class DelegationLoop(AgentLoop):
         return {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
 
     def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
-                         clamp_floor=None, server_tools=()):
+                         clamp_floor=None, server_tools=(), answer_output=0):
         """Retry admission, never generation. All successful claims stay atomic.
 
         Contention is backpressure, not exhaustion. Wait for active receipts,
@@ -731,6 +731,12 @@ class DelegationLoop(AgentLoop):
         answer step and the judges may overdraw the daily allowance: paid
         comparisons always reach an answer and its check, and the next message
         is refused instead (see agent_quota.reserve).
+        A merged step (``answer_output``) is admitted like a routing step of
+        the separate path, with ``model``'s routing allowance per segment. The
+        answer it may write on top (one segment up to ``answer_output``) is
+        reserved too but may lie beyond the allowance, as the separate answer
+        step may overdraw after a direct ``answer``. So it neither loses its
+        research earlier nor is cut shorter than the separate path.
         """
         from app.services.agent_tokens import input_estimate, minimum_output
         soft = bool(worker and getattr(worker, "kind", None) == "comparison")
@@ -746,15 +752,21 @@ class DelegationLoop(AgentLoop):
                 if room < minimum_output(model):
                     raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
                 model = replace(model, max_output_tokens=min(model.max_output_tokens, room))
+                answer_output = min(answer_output, room)
             reservation = None
             # Searches whose tokens this admission reserves.
             reserved = 0 if soft else searches
+            # A merged step's answer above its routing allowance: reserved, not admitted.
+            extra = max(0, answer_output - model.max_output_tokens)
+            beyond = True if overdraft else extra
             try:
-                reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft)
-                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
+                reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft,
+                                                 answer_output=answer_output)
+                request = replace(model, max_output_tokens=model.max_output_tokens + extra)
+                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, request, step=step,
                     run_token=self.run_token, policy=claim_policy, reservation=reservation,
-                    **({"overdraft": True} if overdraft else {}))
-                return model, messages, tools, searches, reservation, claimed, search_limited
+                    **({"overdraft": beyond} if beyond else {}))
+                return request, messages, tools, searches, reservation, claimed, search_limited
             except BaseException as exc:
                 if reservation is not None:
                     self.costs.release(reservation)
@@ -820,7 +832,7 @@ class DelegationLoop(AgentLoop):
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               answer_step=False, search_rounds=1, retry_rate_limit=False, check_cooldown=True,
               server_tools=(), completion=None, answer_candidate=False, hold=False, research=False,
-              allow_tools=True):
+              allow_tools=True, answer_output=0):
         """One claimed, metered model call.
 
         ``answer_candidate``: a step of a merged turn (agent_answer_mode)
@@ -837,8 +849,16 @@ class DelegationLoop(AgentLoop):
         wait (the 429 itself set the process cooldown). ``server_tools`` are
         further OpenRouter tools of this call (a page read's web_fetch, which
         the reservation counts), ``completion`` replaces the loop's factory
-        (agent_read_source.PageFetch)."""
+        (agent_read_source.PageFetch).
+
+        ``answer_output``: the output limit of a merged step, which may write
+        the answer, above ``model``'s routing allowance. The step is admitted
+        like a routing step; the answer on top may overdraw the allowance like
+        the separate answer step after a direct ``answer`` (_admit_chat_step)."""
         self._check(cancellation)
+        if answer_output and not self.policy.account_budget_only:
+            # Bounded runs have no merged turns; keep their hard limits whole.
+            model, answer_output = replace(model, max_output_tokens=max(model.max_output_tokens, answer_output)), 0
         if (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data"):
             from app.services.google_connections import restricted_model, GoogleError
             if not self.google_data_consent:
@@ -902,7 +922,7 @@ class DelegationLoop(AgentLoop):
                                    else None)
                     model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(
                         model, messages, step, registry, cancellation, searches, claim_policy, worker, clamp_floor,
-                        server_tools=server_tools)
+                        server_tools=server_tools, answer_output=answer_output)
                 else:
                     claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
                         run_token=self.run_token, policy=claim_policy, reservation=reservation)
@@ -1304,10 +1324,14 @@ class DelegationLoop(AgentLoop):
         """The chat model for a routing step: reasoning headroom on top of
         its text allowance (routing_output_limit), at the lighter level once
         a routing step of this turn reasoned through its allowance. In a
-        merged turn every step may write the answer: the answer allowance."""
+        merged turn every step may write the answer: _orchestrate adds the
+        answer allowance (_answer_output), admitted like the separate path."""
         model = self.routing_lighter or self.model
-        limit = answer_output_limit(model) if self.merged else routing_output_limit(model)
-        return replace(model, max_output_tokens=limit)
+        return replace(model, max_output_tokens=routing_output_limit(model))
+
+    def _answer_output(self):
+        """Output limit of a merged step: the answer allowance."""
+        return answer_output_limit(self.routing_lighter or self.model)
 
     def _answer_attempt(self, model, messages, index, steps, registry=None, **step_args):
         """One answer step; a rate-limited start waits briefly and tries once more.
@@ -1398,7 +1422,8 @@ class DelegationLoop(AgentLoop):
         if not self.merged:
             return (yield from self._step(model, self.messages, f"completion:{index}", self.registry,
                                           self.cancellation, **search))
-        args = {**search, "answer_candidate": True, "research": research, "hold": self._hold_answer()}
+        args = {**search, "answer_candidate": True, "research": research, "hold": self._hold_answer(),
+                "answer_output": self._answer_output()}
         if self.comparison.comparisons:
             # Paid comparisons: a free 429 before any output is retried once,
             # as for the separate answer step (_answer_attempt).

@@ -547,6 +547,16 @@ bis zu drei).
 - Jeder Schritt hat das Antwortbudget samt Denk-Reserve, zeigt Denk-Auszüge und
   läuft mit Prompt-Cache. Nach bezahlten Vergleichen wird ein kostenloser 429
   einmal wiederholt, ein ausgedachter Schritt einmal leichter.
+- Zugelassen wird jeder Schritt wie ein Steuer-Schritt des getrennten Wegs
+  (Steuer-Budget je Such-Segment, `_routing_model`). Das Antwortbudget darüber
+  (`_answer_output`) reserviert er einmal, nicht pro Suchrunde, und dieser Teil
+  darf das Tageslimit überziehen wie der Antwortschritt nach einer
+  Direktantwort (`agent_quota.reserve(..., overdraft=<Tokens>)`). Bis
+  2026-10-14 reservierte der erste Schritt mit drei Recherche-Runden rund 470k
+  Tokens statt 270k wie im getrennten Weg: Ein Free-Konto (660k) bekam schon ab
+  ≈ 190k Tagesverbrauch nur noch eine statt drei Recherche-Runden, und kurz vor
+  dem Limit wurde eine Direktantwort gekürzt, wo der getrennte Weg überzogen
+  hätte. Jetzt sind es rund 330k, zugelassen ab 270k.
 - Danach prüfen die Judges genau den sichtbaren Text, wie bisher.
 
 **Was der Nutzer sieht.** Text erscheint erst ab 300 Zeichen
@@ -589,21 +599,19 @@ zum ersten Antworttext und ab dem letzten Vergleich, Kosten und Tokens der
 Chatmodell-Schritte, Rücknahmen, verdächtige Wörter (`leaks`) und das Urteil der
 Judges. `--pairwise <modell>` lässt zusätzlich einen blinden Richter die bessere
 Antwort wählen, `--only` beschränkt auf einzelne Fragen. Weil jeder Lauf eigene
-Vergleichsantworten bekommt, sind die Qualitätszahlen ein Trend. Das Testkonto
-rechnet als Pro (`--tier`, Standard `pro`): In Firestore nachgeschlagen wäre es
-Free, und das Free-Kontingent ließ am 2026-10-14 Vergleichsantworten und Judges
-nacheinander statt parallel laufen und kürzte die Suche (EZB-Frage 434–518 s
-statt 214 s, davon 330 s statt 27 s nach dem Vergleich).
+Vergleichsantworten bekommt, sind die Qualitätszahlen ein Trend, auch die Zeiten:
+Dieselbe Frage brauchte am 2026-10-14 als Pro 181–219 s, andere Fragen als Pro
+bis 672 s mit bis zu 299 s nach dem Vergleich. Das Testkonto rechnet als Pro
+(`--tier`, Standard `pro`); in Firestore nachgeschlagen wäre es Free. Der erste
+Verdacht, das Free-Kontingent habe die EZB-Frage verlangsamt (434–518 s statt
+214 s), bestätigte sich nicht: Jeder Turn bekommt ein frisches Konto, und dort
+wartet auch Free nicht (siehe „Tageskontingent“, Stufe und Parallelität).
 
 **Offen vor dem Einschalten** (Gegenprüfung 2026-10-14, bewusst nicht behoben):
 
 - Denk-Auszüge erscheinen in jedem Schritt, auch in Steuer-Schritten, die
   Systemprompt und Toolergebnisse sehen; Toolnamen oder Prompt-Regeln können so
   als Fortschrittszeile auftauchen (gespeichert in `agent_activity`).
-- Jeder Schritt reserviert das Antwortbudget, und eine Direktantwort darf nicht
-  überziehen (`direct` steht erst nach dem Schritt): Kurz vor dem Tageslimit fällt
-  zuerst die Suche weg oder der Turn wird abgelehnt, wo der Antwortschritt im
-  getrennten Weg überzogen hätte.
 - An der Turn-Grenze nicht live geprüft: Liefert ein Anbieter trotz
   `tool_choice: none` einen Toolcall, scheitert der Turn („Unexpected tool call“).
 - Stoppt der Wiederholungs- oder Ungültig-Schutz im selben Schritt wie eine
@@ -771,6 +779,22 @@ Budget, endet der Lauf weiterhin vor dem bezahlten Aufruf.
 Web Search bleibt nach Reasoning und Tool-Fortsetzungen erlaubt. „Skipped ·
 budget reserve“ bezeichnet eine unzureichende Reserve für Suchkontext und
 Folgeantwort, kein generelles Suchverbot nach dem Denken.
+
+**Stufe und Parallelität (Nachbau 2026-10-14).** Im Agent-Lauf hängt nur das
+Limit an der Stufe. Nachgestellt ohne Modellaufrufe (Testharness aus
+`test_agent_answer_mode`/`test_agent_runs`, echte Reservierungs- und Kontocodes,
+EZB-Frage, sechs Daily-Familien, lange Vergleichsantworten, drei
+Coverage-Fenster): Ein frisches Free-Konto wartet in keinem der beiden Wege,
+genau wie Pro. Die größte Einzelreservierung ist der erste Steuer-Schritt mit
+drei Recherche-Runden (getrennt ≈ 276k, zusammengelegt ≈ 329k, zugelassen ab
+276k); die sechs Vergleichsantworten reservieren je ≈ 13k (Suche gebucht, nicht
+reserviert), Antwortschritt und Judges dürfen nach dem Vergleich überziehen.
+Bei bereits verbrauchtem Konto wird zuerst die Recherche des ersten Schritts
+abgestuft (drei Runden brauchen ≈ 276k Rest, eine ≈ 70k). Erst wenn der Rest
+die sechs parallelen Vergleichsantworten nicht mehr deckt (unter ≈ 55k, bei
+Free die letzten 8 %), starten einige mit kleinerem Budget oder warten auf
+Geschwister: gewollte Bremse am Limit, die nächste Nachricht wird ohnehin
+abgelehnt.
 
 Die Wiederherstellungsaktion prüft denselben Lauf mit derselben Request-Identität.
 „Recover saved answer“ erscheint bei bestätigt gespeichertem Antworttext,
@@ -1013,7 +1037,10 @@ zuletzt gestarteten Modelle abgestuft. Damit ein Vergleich, der das Tageslimit
 dabei überzieht, nicht bezahlte Antworten verwirft, dürfen nach dem Start
 eines Vergleichs Orchestrator, Antwortschritt und Judges das Limit überziehen
 (`agent_quota.reserve(..., overdraft=True)`, nur im Kontomodus); die nächste
-Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Grundlage, gemessen 2026-10-01 pro Runde: eigene
+Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Ein
+Schritt des zusammengelegten Wegs reserviert je Such-Segment das
+Steuer-Budget und das Antwortbudget darüber nur einmal (`answer_output`, siehe
+„Antwort im selben Aufruf“). Grundlage, gemessen 2026-10-01 pro Runde: eigene
 OpenAI-Suche bis ≈ 11k Tokens, Exa (5 × 2000 Zeichen) ≈ 2,5k, Anthropic ≈ 2k,
 Google ≈ 0 (pro Anfrage abgerechnet). Die Abrechnung bucht den echten Verbrauch;
 eine ungewöhnlich große Runde kann das Tageslimit deshalb leicht überschreiten

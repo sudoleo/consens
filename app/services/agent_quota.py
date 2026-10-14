@@ -310,13 +310,16 @@ def normalize(data):
 
 
 def reserve(data, amount, *, limit=None, overdraft=False):
-    """Hold ``amount`` for an active call. ``overdraft`` admits it even beyond
-    the limit (finishing an Agent message whose comparison already ran); the
-    next admission then fails, as after an overdrawn pipeline run."""
+    """Hold ``amount`` for an active call. ``overdraft=True`` admits it even
+    beyond the limit (finishing an Agent message whose comparison already ran);
+    the next admission then fails, as after an overdrawn pipeline run. An int
+    ``overdraft`` lets only that many tokens of ``amount`` lie beyond the limit
+    (the answer a merged Agent step may write, like the separate answer step)."""
     data = normalize(data)
     remaining = _remaining(data, daily_limit() if limit is None else limit)
-    if amount > remaining and not overdraft:
-        raise AgentTokenBudgetExceeded(remaining, amount, reserved=data.get("reserved", 0))
+    required = 0 if overdraft is True else amount - max(0, int(overdraft or 0))
+    if required > remaining:
+        raise AgentTokenBudgetExceeded(remaining, required, reserved=data.get("reserved", 0))
     data["reserved"] = data.get("reserved", 0) + amount
     data["revision"] = data.get("revision", 0) + 1
     return data

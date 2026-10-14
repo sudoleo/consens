@@ -2781,7 +2781,12 @@ ihre Suche wird gebucht, nicht reserviert, `soft_search`) und mit
 `comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
 Orchestrator sucht vor dem ersten Vergleich nur für sich selbst. Nach dem Start eines Vergleichs
 dürfen Orchestrator, Antwortschritt und Judges das Tageslimit überziehen
-(`_admit_chat_step` → `claim(overdraft=True)`). Suchkonfiguration (`search_tools`: eine für alle
+(`_admit_chat_step` → `claim(overdraft=True)`). Ein Schritt des zusammengelegten
+Wegs (`AGENT_MERGED_ANSWER`) wird mit dem Steuer-Budget zugelassen
+(`_routing_model`); sein Antwortbudget darüber (`_answer_output`) reserviert er
+einmal statt pro Suchrunde (`RunCosts.estimate(answer_output=…)`), und nur dieser
+Teil darf überziehen (`claim(overdraft=<Tokens>)` → `agent_quota.reserve`), wie
+der Antwortschritt nach einer Direktantwort. Suchkonfiguration (`search_tools`: eine für alle
 Modelle, Engine `auto`, nur Grok fest Exa), Reservierung
 (`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte stehen
 ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“. Die Output-Grenze ist die Completion-Grenze des
