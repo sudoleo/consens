@@ -4651,10 +4651,12 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
 - Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei
   wiederholbaren Provider-Fehlern (429, 5xx, Timeout, ...) ein zweites Mal
   (`CONSENSUS_MAX_ATTEMPTS`), danach einmal auf einer Fallback-Familie.
-  400/403/404 überspringen den zweiten Versuch und gehen direkt zum Fallback
-  (`_provider_error_is_retryable`); 401/402 beenden die Synthese sofort, weil
-  jeder Versuch denselben OpenRouter-Key nutzt (`_provider_error_ends_run`,
-  Audit C10). Läuft die Zeit der Synthese-Phase ab, lautet der Text
+  400/402/403/404 überspringen den zweiten Versuch und gehen direkt zum Fallback
+  (`_provider_error_is_retryable`; ein 402 kann heißen, dass nur diese eine
+  Anfrage mehr kostet als das Restguthaben, das günstigere Fallback darf es
+  also noch versuchen); nur ein 401 (am Statuscode, nie am Fehlertext erkannt)
+  beendet die Synthese sofort, weil jeder Versuch denselben OpenRouter-Key
+  nutzt (`_provider_error_ends_run`, Audit C10). Läuft die Zeit der Synthese-Phase ab, lautet der Text
   `CONSENSUS_TIME_LIMIT_TEXT` statt „empty response“; das Stream-Final trägt
   `code: "synthesis_time_limit"`, und der Chat-Turn scheitert mit diesem
   `error_code` (`consensus_failure_code`, Audit C3).

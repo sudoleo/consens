@@ -517,11 +517,15 @@ def _analysis_time_spent() -> bool:
 
 
 def _provider_error_ends_run(error: Exception) -> bool:
-    """401/402: the OpenRouter key is invalid or out of credit. Every attempt,
-    the fallback included, uses the same key, so none of them can succeed."""
-    if getattr(error, "status_code", None) in {401, 402}:
-        return True
-    return bool(re.search(r"(?:^|[\s:])(?:401|402)(?:[\s:\-]|$)", str(error or "")))
+    """401: the OpenRouter key is invalid. Every attempt, the fallback
+    included, uses the same key, so none of them can succeed.
+
+    Only the typed status counts: a number in an error text (a JSON parse
+    error's "column 401") must not end a run. A 402 can also mean that this
+    one request costs more than the remaining credit, so it only skips the
+    engine's retries (_provider_error_is_retryable) and the cheaper fallback
+    still gets its turn."""
+    return getattr(error, "status_code", None) == 401
 
 
 @analysis_budgeted(max_calls=SYNTHESIS_MAX_CALLS)
@@ -1944,7 +1948,7 @@ def _provider_error_is_retryable(error: Exception) -> bool:
     """4xx-Konfigurations/Auth-/Model-Fehler werden durch denselben Request
     nicht besser. Rate limits (429), 5xx und Transportfehler duerfen retryen."""
     status_code = getattr(error, "status_code", None)
-    if status_code in {400, 401, 403, 404}:
+    if status_code in {400, 401, 402, 403, 404}:
         return False
     return not bool(_NON_RETRYABLE_PROVIDER_STATUS_RE.search(str(error or "")))
 

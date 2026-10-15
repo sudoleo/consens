@@ -262,16 +262,42 @@ class QueryConsensusFallbackTests(unittest.TestCase):
         self.assertEqual(result, "rescued answer")
         self.assertEqual(calls, ["openai", "gemini"])
 
-    def test_an_invalid_or_empty_key_ends_the_run_after_one_call(self):
-        """Audit C10: 401/402 hit every attempt, the fallback uses the same key."""
-        for status in (401, 402):
-            with self.subTest(status=status):
-                def engine(*args, **kwargs):
-                    raise _ProviderHTTPStatusError(status)
+    def test_an_invalid_key_ends_the_run_after_one_call(self):
+        """Audit C10: a 401 hits every attempt, the fallback uses the same key."""
+        def engine(*args, **kwargs):
+            raise _ProviderHTTPStatusError(401)
 
-                result, patched = self._query(engine, {"OpenRouter": "sk-or"})
-                self.assertEqual(patched.call_count, 1)
-                self.assertEqual(result, "Consensus error: provider request failed.")
+        result, patched = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(patched.call_count, 1)
+        self.assertEqual(result, "Consensus error: provider request failed.")
+
+    def test_a_request_too_expensive_for_the_credit_still_reaches_the_fallback(self):
+        """A 402 can mean "this request needs more credit": no retry of the
+        same request, but the cheaper fallback may still answer."""
+        calls = []
+
+        def engine(provider, *args, **kwargs):
+            calls.append(provider)
+            if provider == "openai":
+                raise _ProviderHTTPStatusError(402)
+            return "rescued answer"
+
+        result, _ = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(result, "rescued answer")
+        self.assertEqual(calls, ["openai", "gemini"])
+
+    def test_a_status_number_in_an_error_text_does_not_end_the_run(self):
+        calls = []
+
+        def engine(provider, *args, **kwargs):
+            calls.append(provider)
+            if provider == "openai":
+                raise ValueError("Expecting value: line 1 column 401 (char 400)")
+            return "rescued answer"
+
+        result, _ = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(result, "rescued answer")
+        self.assertIn("gemini", calls)
 
     def test_a_synthesis_out_of_time_says_so_instead_of_empty_response(self):
         """Audit C3: the phase deadline used to read as an empty response."""
@@ -300,7 +326,8 @@ class StreamConsensusFallbackTests(unittest.TestCase):
 
     def test_stream_skips_the_retry_of_a_rejected_request_and_stops_on_a_dead_key(self):
         """Audit C10, streaming path."""
-        for status, expected in ((400, ["OpenAI", cfg.DEFAULT_GEMINI_MODEL]), (401, ["OpenAI"]), (402, ["OpenAI"])):
+        for status, expected in ((400, ["OpenAI", cfg.DEFAULT_GEMINI_MODEL]), (401, ["OpenAI"]),
+                                 (402, ["OpenAI", cfg.DEFAULT_GEMINI_MODEL])):
             with self.subTest(status=status):
                 calls = []
 
@@ -312,7 +339,7 @@ class StreamConsensusFallbackTests(unittest.TestCase):
 
                 events = self._events(fake_engine)
                 self.assertEqual(calls, expected)
-                self.assertEqual(events[-1].get("error", False), status != 400)
+                self.assertEqual(events[-1].get("error", False), status == 401)
 
     def test_stream_out_of_time_ends_with_its_own_text_and_code(self):
         """Audit C3, streaming path: shown deltas are replaced by the final."""
