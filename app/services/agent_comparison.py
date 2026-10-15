@@ -1396,5 +1396,42 @@ class ComparisonTools:
             self.versions[-1].update(status=self.review["status"], checks=self.review["checks"])
             self.checkpoint()
         self.finalized = True
+        self.record_stats()
         return {"status": self.review["status"], "answer_hash": answer_hash(self.text),
                 "checks": self.review["checks"], "finalized": True}
+
+    def record_stats(self):
+        """Anonymous Differences telemetry like a Consensus run's
+        (differences_stats.py): one document per checked comparison, counts
+        and model metadata only. Since 2026-10-15; until then only Consensus
+        wrote it, and with Agent as the default the data set ran dry. Never
+        fails the turn."""
+        from app.services.llm.mock_llm import mock_llm_enabled
+        if mock_llm_enabled():
+            return
+        from app.services import agent_quota
+        from app.services.differences_stats import record_differences_stats
+        from app.services.llm.base import count_words
+        loop = self.loop
+        try:
+            try:
+                pro = agent_quota.account_tier(loop.uid) in {"pro", "admin"}
+            except Exception:
+                pro = False
+            # The user's own words, as Consensus counts them; the comparison
+            # task (written by the orchestrator) only without them.
+            conversation = getattr(loop, "answer_conversation", None) or []
+            question = next((m["content"] for m in reversed(conversation) if m.get("role") == "user"
+                             and isinstance(m.get("content"), str) and m["content"].strip()), "")
+            # A checked pasted text is its own kind of run: kept apart.
+            source = "agent_text" if self.passage is not None else "agent"
+            for comparison, check in zip(self.comparisons, self.review["checks"]):
+                if not isinstance(check.get("differences_data"), dict):
+                    continue
+                labels = {a["provider_label"]: a["model"].get("label") for a in comparison["answers"]
+                          if not a.get("late")}
+                record_differences_stats(check["differences_data"], db=loop.store.db,
+                    consensus_model=loop.model.model, model_labels=labels, is_pro_user=pro,
+                    question_word_count=count_words(question or comparison["question"]), source=source)
+        except Exception as exc:
+            logging.warning("Agent differences stats failed category=%s", safe_exception(exc))

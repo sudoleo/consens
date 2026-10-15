@@ -578,3 +578,12 @@ def test_a_check_that_outlasts_the_time_before_the_answer_is_stopped(store, monk
     assert saved["agent_review"]["passage_check"]["status"] == "failed"
     assert {"code": "no_time"} in saved["agent_review"]["passage_check"]["issues"]
     assert saved["status"] == "completed"
+
+
+def test_a_checked_text_feeds_the_differences_stats_as_its_own_kind(store, monkeypatch):
+    from app.services import differences_stats
+    sources = []
+    monkeypatch.setattr(differences_stats, "record_differences_stats",
+                        lambda data, **meta: sources.append(meta["source"]))
+    run(store, Script([{**NEUTRAL, "check": CHECK}]))
+    assert sources and set(sources) == {"agent_text"}

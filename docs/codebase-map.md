@@ -6300,7 +6300,12 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `schema_version`) — **niemals** Frage-/Antwort-/Claim-Texte, Zitate, UID
   oder IP (anonym i. S. v. ErwGr. 26 DSGVO). Schema + Datenschutz-Regeln in
   `app/services/differences_stats.py`; geschrieben aus `chat.py::consensus`
-  (fire-and-forget, Mock-Läufe schreiben nicht).
+  (`source: "app"`) und seit 2026-10-15 aus `ComparisonTools.record_stats`
+  nach `judge_answer`, ein Dokument je geprüftem Agent-Vergleich (`source:
+  "agent"`, bei einem geprüften eingefügten Text `"agent_text"`;
+  `consensus_model` = Chatmodell). Vorher schrieb nur Consensus, mit Agent als
+  Standard (seit 2026-10-02) fiel der Datensatz von ~90 auf 2 Läufe pro Woche.
+  Fire-and-forget, Mock-Läufe schreiben nicht.
 - `feedback`, `pro_waitlist`, `leaderboard`. Feedback speichert nur den
   validierten Inhalt und die UID; Abuse-Grenzen liegen separat in
   `persistence_usage`. Leaderboard-Zähler können nur über den transaktionalen,

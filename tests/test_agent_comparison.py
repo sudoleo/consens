@@ -95,6 +95,38 @@ def make_loop(store, script, *, messages=None, delegation=False, models=None, pr
 
 
 @pytest.mark.parametrize("compares", [1, 2])
+def test_each_checked_comparison_feeds_the_anonymous_differences_stats(store, compares, monkeypatch):
+    """Agent turns write differences_stats like Consensus runs (since
+    2026-10-15), marked as Agent and without any text."""
+    from app.services import differences_stats
+    recorded = []
+    monkeypatch.setattr(differences_stats, "record_differences_stats",
+                        lambda data, **meta: recorded.append((data, meta)))
+    loop = make_loop(store, Script(compares=compares))
+    list(loop.run())
+    checks = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["checks"]
+    assert [data for data, _ in recorded] == [c["differences_data"] for c in checks]
+    for data, meta in recorded:
+        assert meta["source"] == "agent" and meta["db"] is store.db
+        assert meta["consensus_model"] == loop.model.model and meta["is_pro_user"] is True
+        assert meta["question_word_count"] == 2  # "Compare options"
+        doc = differences_stats.build_differences_stats_doc(data, **{k: v for k, v in meta.items() if k != "db"})
+        assert doc["source"] == "agent" and set(doc["model_ids"]) <= set(doc["models_compared"])
+        # Counts and metadata only, never the answers or the question.
+        assert "first option costs" not in json.dumps(doc) and "Compare options" not in json.dumps(doc)
+
+
+def test_mock_runs_write_no_differences_stats(store, monkeypatch):
+    from app.services import differences_stats
+    from app.services.llm import mock_llm
+    recorded = []
+    monkeypatch.setattr(differences_stats, "record_differences_stats", lambda data, **meta: recorded.append(data))
+    monkeypatch.setattr(mock_llm, "mock_llm_enabled", lambda: True)
+    list(make_loop(store, Script()).run())
+    assert recorded == []
+
+
+@pytest.mark.parametrize("compares", [1, 2])
 def test_real_judges_exact_versions_context_sources_and_all_usage(store, compares):
     script = Script(compares=compares)
     loop = make_loop(store, script)

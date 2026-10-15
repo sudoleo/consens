@@ -52,7 +52,10 @@ Consensus-Engine. Nur Provider-/Modell-Metadaten, keine Texte.
   question_word_count   int    Länge der Frage (Zahl, nicht der Text)
   is_pro_user           bool
   used_own_keys         bool
-  source                str    "app"
+  source                str    "app" (Consensus), seit 2026-10-15 auch "agent"
+                               (je geprüftem Agent-Vergleich, consensus_model =
+                               Chatmodell) und "agent_text" (Prüfung eines
+                               eingefügten Texts); getrennt auswerten
 """
 
 import logging
