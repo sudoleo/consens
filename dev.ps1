@@ -27,7 +27,8 @@ if ($Command -eq 'help') {
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
     Write-Host 'rules:    client SDK access checks using a disposable Firestore emulator'
-    Write-Host 'CI: pushes run backend/frontend; full checks run when a PR becomes ready for review or by manual selection.'
+    Write-Host 'CI: pushes run backend/frontend and the dependency audit; browser-and-rules also runs nightly;'
+    Write-Host '    full checks run when a PR becomes ready for review or by manual selection.'
     Write-Host 'Setup and maintenance: docs/testing.md'
     exit 0
 }
@@ -57,6 +58,18 @@ function Find-DevCommand([string]$Name, [string]$Hint) {
     $found = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $found) { throw "Missing $Name. $Hint" }
     return $found.Source
+}
+
+# .python-version is the one place that names the project's Python version;
+# Render, CI and Dependabot read it. A venv built with another version is
+# rebuilt (docs/testing.md), never patched with pip.
+function Assert-VenvPython([string]$Python, [string]$Expected) {
+    if (-not $Expected.Trim()) { return }
+    $wanted = (($Expected.Trim() -split '\.')[0..1]) -join '.'
+    $actual = "$(& $Python -c 'import sys; print(*sys.version_info[:2], sep=chr(46))')".Trim()
+    if ($actual -ne $wanted) {
+        throw "venv uses Python $actual, the project expects $wanted (.python-version). Rebuild the venv as described in docs/testing.md."
+    }
 }
 
 function Invoke-DevStep([string]$Label, [string]$Executable, [string[]]$Arguments) {
@@ -89,9 +102,14 @@ function Update-DevCheckout {
     if ($LASTEXITCODE -ne 0) { throw 'Local main has commits that are not on origin/main. Push or rebase them first.' }
     $changed = @(& $git diff --name-only $before $after)
 
-    if ($changed -contains 'requirements.txt') {
+    if ($changed -contains 'requirements.txt' -or $changed -contains '.python-version') {
         $python = Join-Path $PSScriptRoot 'venv/Scripts/python.exe'
         if (-not (Test-Path -LiteralPath $python)) { throw 'Missing venv/Scripts/python.exe. Create it with python -m venv venv; see docs/testing.md.' }
+        # Checked against the incoming version, before anything is installed.
+        $versionFile = "$(& $git ls-tree --name-only $after -- .python-version)".Trim()
+        if ($versionFile) { Assert-VenvPython $python "$(& $git show "${after}:.python-version")" }
+    }
+    if ($changed -contains 'requirements.txt') {
         $temporary = Join-Path ([IO.Path]::GetTempPath()) 'consens-requirements.txt'
         [IO.File]::WriteAllLines($temporary, [string[]](& $git show "${after}:requirements.txt"))
         try {
@@ -181,6 +199,9 @@ try {
         $python = Join-Path $PSScriptRoot 'venv/Scripts/python.exe'
         if (-not (Test-Path -LiteralPath $python)) {
             throw 'Missing venv/Scripts/python.exe. Create it with python -m venv venv; see docs/testing.md.'
+        }
+        if (Test-Path -LiteralPath '.python-version') {
+            Assert-VenvPython $python (Get-Content -LiteralPath '.python-version' -TotalCount 1)
         }
         Invoke-DevStep 'Python test dependencies (setup: python -m pip install -r requirements-test.txt in venv)' $python @('-c', 'import pytest; from app.services.agent_tokens import encoding; encoding()')
         Set-DevEnvironment 'PYTHONUTF8' '1'

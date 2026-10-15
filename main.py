@@ -388,6 +388,27 @@ async def handle_unexpected_exception(request, exc: Exception):
         headers={"x-correlation-id": corr},
     )
 
+
+def allow_head_on_get_routes(routes) -> None:
+    """Answer HEAD wherever GET works, as Starlette's plain routes do.
+
+    FastAPI routes list only the methods they were declared with, so HEAD on
+    /, /benchmark, /sitemap.xml or a share page was a 405; uptime monitors and
+    link checkers use HEAD. uvicorn sends the headers without the body. Called
+    on each internal router BEFORE it is included: since FastAPI 0.14x,
+    include_router no longer copies routes into app.routes, so changing them
+    afterwards has no effect. Not called for the documented /api/v1 router (its
+    schema would grow HEAD operations); the Firebase auth proxy is skipped
+    because it forwards the method it receives.
+    """
+    for route in routes:
+        if not isinstance(route, APIRoute) or "GET" not in route.methods:
+            continue
+        if route.path.startswith("/__/"):
+            continue
+        route.methods.add("HEAD")
+
+
 # Include Routers
 #
 # Nur /api/v1 ist die dokumentierte, oeffentliche Consensus-API und erscheint
@@ -411,26 +432,13 @@ for internal_router in (
     watch.router,
     topics.router,
 ):
+    allow_head_on_get_routes(internal_router.routes)
     app.include_router(internal_router, include_in_schema=False)
 
 app.include_router(api_v1.router)
 
-
-def allow_head_on_get_routes(application: FastAPI) -> None:
-    """Answer HEAD wherever GET works, as Starlette's plain routes do.
-
-    FastAPI routes list only the methods they were declared with, so HEAD on
-    /, /benchmark, /sitemap.xml or a share page was a 405; uptime monitors and
-    link checkers use HEAD. uvicorn sends the headers without the body. Left
-    out: the documented /api/v1 schema (it would grow HEAD operations) and the
-    Firebase auth proxy, which forwards the method it receives.
-    """
-    for route in application.routes:
-        if not isinstance(route, APIRoute) or "GET" not in route.methods:
-            continue
-        if route.include_in_schema or route.path.startswith("/__/"):
-            continue
-        route.methods.add("HEAD")
-
-
-allow_head_on_get_routes(app)
+# Routes declared on the app itself (health endpoints) stay in app.routes.
+allow_head_on_get_routes(
+    route for route in app.routes
+    if isinstance(route, APIRoute) and not route.include_in_schema
+)

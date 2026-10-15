@@ -192,8 +192,12 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 (ab Plus), öffentliche Share-Seiten. Es gibt drei Kontostufen: **Free**,
 **Plus** und **Pro** (siehe §4 „Auth / Usage / Tier").
 
-- **Backend**: Python, FastAPI (`fastapi==0.128.8`), via `uvicorn` ausgeliefert.
-  SSE-Streaming über `StreamingResponse`. Rate-Limiting via `slowapi`.
+- **Backend**: Python 3.12, FastAPI (`fastapi==0.143.2` mit `starlette==1.8.0`),
+  via `uvicorn` ausgeliefert. SSE-Streaming über `StreamingResponse`.
+  Rate-Limiting via `slowapi`. Die Python-Version steht nur in
+  `.python-version` (Render, CI, Dependabot und `dev.ps1` lesen sie). Direkte
+  Abhängigkeiten in `requirements.in`, daraus erzeugt die voll gepinnte
+  `requirements.txt` (pip-compile, mit `# via`); Ablauf in `docs/testing.md`.
 - **LLM-Modelle**: neun Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
   DeepSeek, Grok, Kimi, GLM, Meta/Muse), alle über einen OpenRouter-Chat-
   Completions-Transport mit ZDR. Ein Lauf wählt davon höchstens sechs.
@@ -206,6 +210,10 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 - **Markdown/Mathematik**: `marked` + `DOMPurify` clientseitig und
   `markdown-it-py` + `nh3` für Share-Seiten; KaTeX setzt in beiden Ansichten
   LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
+- **CI**: `.github/workflows/tests.yml` (Backend/Frontend bei jedem Push,
+  `dependency-audit` mit pip-audit, nachts zusätzlich Browser/Emulator/Rules),
+  `.github/dependabot.yml` (wöchentlich pip, npm, Actions). Details in
+  `docs/testing.md`.
 - **Hosting**: Render. Der tägliche Render-Restart setzt weiterhin flüchtigen
   Prozess-State zurück; Retention/Cleanup läuft davon unabhängig periodisch
   im überwachten Background-Task (siehe §7).
@@ -224,8 +232,10 @@ Seit 2026-10-15 fängt ein Handler für Starlettes `HTTPException` (Routing,
 ab: Eine GET/HEAD-Navigation mit `Accept: text/html` bekommt die HTML-404
 `templates/not_found.html` (`app/core/not_found.py`, `noindex`), Skripte
 weiter FastAPIs `{"detail": "Not Found"}`. `allow_head_on_get_routes` nimmt
-nach dem Einbinden `HEAD` in jede interne GET-Route auf (uvicorn sendet nur die
-Header); ausgenommen bleiben die dokumentierte `/api/v1` (sonst wüchse das
+`HEAD` in jede interne GET-Route auf (uvicorn sendet nur die Header), und zwar
+am Router VOR `include_router`: Seit FastAPI 0.14x landen eingebundene Router
+nicht mehr als Kopie in `app.routes`, ein nachträgliches Ändern wirkt nicht.
+Ausgenommen bleiben die dokumentierte `/api/v1` (sonst wüchse das
 OpenAPI-Schema) und der Auth-Proxy `/__/*`.
 Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
 content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
@@ -6897,8 +6907,11 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   Markdown im Repository-Stamm lösen sie nicht aus. Der Wechsel von Entwurf zu
   reviewbereit führt alle vier Gruppen aus; manuell sind `quick`, einzelne
   Gruppen oder `full` wählbar, sobald der Workflow auf dem Default-Branch liegt.
-  Spätere Pushes wiederholen nur die schnellen Prüfungen. Node 24, Java 21 und
-  Demo-Projekt sind festgelegt; kein Produktcredential nötig.
+  Spätere Pushes wiederholen nur die schnellen Prüfungen. Nachts (02:17 UTC)
+  läuft `browser-and-rules` auf `main` in eigener Concurrency-Gruppe; der
+  eigene Job `dependency-audit` (pip-audit) läuft bei Push/PR und nachts.
+  Python aus `.python-version`, Node 24, Java 21 und Demo-Projekt sind
+  festgelegt; kein Produktcredential nötig.
   `dev.ps1 check rules` kapselt den separaten Client-Regelrunner mit demselben
   Emulator-Lebenszyklus wie `browser`; `npm run test:rules` nutzt einen bereits
   laufenden lokalen Emulator. Tests/Details: `docs/testing.md`.
