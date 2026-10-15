@@ -10,7 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 import main
-from app.api.routers import topics as topics_router
+from app.api.routers import api_v1, topics as topics_router
 from app.core.rate_limit import limiter
 
 BROWSER = {"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
@@ -84,8 +84,8 @@ def test_head_answers_like_get_without_a_body():
 
 
 def test_head_is_not_added_to_the_documented_api():
-    for route in main.app.routes:
-        if getattr(route, "path", "").startswith("/api/v1/"):
-            assert "HEAD" not in (getattr(route, "methods", None) or set()), route.path
+    # The router itself: newer FastAPI keeps included routers out of app.routes.
+    for route in api_v1.router.routes:
+        assert "HEAD" not in (getattr(route, "methods", None) or set()), route.path
     for operations in main.app.openapi()["paths"].values():
         assert "head" not in operations

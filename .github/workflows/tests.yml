@@ -11,6 +11,11 @@ on:
     paths-ignore:
       - 'docs/**'
       - '*.md'
+  schedule:
+    # Nightly on main: browser/emulator suite and the dependency audit, so both
+    # run without a ready-for-review PR. Off the full hour, when GitHub delays
+    # scheduled runs the most.
+    - cron: '17 2 * * *'
   workflow_dispatch:
     inputs:
       suite:
@@ -24,19 +29,21 @@ on:
           - frontend
           - browser-and-rules
           - windows-entry-points
+          - dependency-audit
           - full
 
 permissions:
   contents: read
 
 concurrency:
-  # A quick push must not cancel an explicitly requested full/individual run.
-  group: regression-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.suite || github.event.action == 'ready_for_review' && 'full' || 'quick' }}
+  # A quick push must not cancel an explicitly requested full/individual run,
+  # and a push to main must not cancel the nightly run (or the other way round).
+  group: regression-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.suite || github.event_name == 'schedule' && 'nightly' || github.event.action == 'ready_for_review' && 'full' || 'quick' }}
   cancel-in-progress: true
 
 jobs:
   backend:
-    if: github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'backend' || inputs.suite == 'full'
+    if: github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'backend' || inputs.suite == 'full')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -49,7 +56,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version-file: .python-version
           cache: pip
           cache-dependency-path: |
             requirements.txt
@@ -78,7 +85,7 @@ jobs:
           if-no-files-found: error
 
   frontend:
-    if: github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'frontend' || inputs.suite == 'full'
+    if: github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'frontend' || inputs.suite == 'full')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -98,7 +105,7 @@ jobs:
           if-no-files-found: error
 
   browser-and-rules:
-    if: github.event.action == 'ready_for_review' || (github.event_name == 'workflow_dispatch' && (inputs.suite == 'browser-and-rules' || inputs.suite == 'full'))
+    if: github.event_name == 'schedule' || github.event.action == 'ready_for_review' || (github.event_name == 'workflow_dispatch' && (inputs.suite == 'browser-and-rules' || inputs.suite == 'full'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -114,7 +121,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version-file: .python-version
           cache: pip
           cache-dependency-path: |
             requirements.txt
@@ -147,6 +154,23 @@ jobs:
             artifacts/source-verification-ui/
           if-no-files-found: error
 
+  dependency-audit:
+    # Own job: a newly published advisory turns this red without hiding whether
+    # the tests pass. Also nightly, so advisories surface without a push.
+    if: github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'dependency-audit' || inputs.suite == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install "pip-audit>=2.10,<3"
+      - name: Production dependencies (fully pinned by pip-compile)
+        run: python -m pip_audit --strict --no-deps -r requirements.txt
+      - name: Test and browser dependencies (resolved)
+        run: python -m pip_audit --strict -r requirements-e2e.txt
+
   windows-entry-points:
     if: github.event.action == 'ready_for_review' || (github.event_name == 'workflow_dispatch' && (inputs.suite == 'windows-entry-points' || inputs.suite == 'full'))
     runs-on: windows-latest
@@ -158,7 +182,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version-file: .python-version
           cache: pip
           cache-dependency-path: |
             requirements.txt

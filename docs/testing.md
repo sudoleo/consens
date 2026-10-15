@@ -146,7 +146,10 @@ Browsertests geprüft. Ergebnisse und Grenzen:
 
 Die Abhängigkeiten sind nach Zweck getrennt:
 
-- `requirements.txt`: produktive Laufzeit,
+- `requirements.in`: die direkten Laufzeitabhängigkeiten, von Hand gepflegt,
+- `requirements.txt`: daraus mit pip-compile erzeugt, vollständig gepinnt, jede
+  Zeile mit `# via` (wer das Paket braucht); Render installiert genau diese
+  Datei. Nie von Hand bearbeiten,
 - `requirements-test.txt`: reguläre Unit-/Integrationstests einschließlich
   `pandas` für den DataFrame-Konvertierungstest des Benchmarks,
 - `requirements-e2e.txt`: zusätzlich Python Playwright und das gepinnte
@@ -167,6 +170,62 @@ Für E2E zusätzlich:
 venv\Scripts\python.exe -m pip install -r requirements-e2e.txt
 venv\Scripts\python.exe -m playwright install chromium
 ```
+
+### Python-Version und venv
+
+Die Python-Version steht an genau einer Stelle: `.python-version` (derzeit
+`3.12`). Render nimmt daraus die neueste 3.12-Patchversion, die CI liest sie über
+`python-version-file`, Dependabot ebenfalls. `dev.ps1 check` bricht mit Hinweis
+ab, wenn die venv mit einer anderen Version gebaut wurde; `dev.ps1 update` prüft
+die ankommende Version, bevor es Pakete installiert oder den Code einspielt.
+
+Bei einem Versionswechsel wird die venv neu gebaut, nicht per pip umgestellt.
+Im Haupt-Checkout (Python 3.12 einmalig per winget, falls noch nicht da):
+
+```powershell
+winget install --id Python.Python.3.12 --exact --scope user
+Rename-Item venv venv-alt
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" -m venv venv
+venv\Scripts\python.exe -m pip install -r requirements-e2e.txt pip-tools pip-audit
+venv\Scripts\python.exe -m playwright install chromium
+.\dev.ps1 check backend
+```
+
+Erst wenn der Check grün ist, `venv-alt` löschen. Die venv direkt unter ihrem
+endgültigen Namen bauen: Die `.exe`-Starter in `venv\Scripts` (`uvicorn.exe`,
+`pip.exe`) enthalten den absoluten Pfad und gehen beim Umbenennen kaputt. In
+`.claude/worktrees/…` ist `venv` meist eine Junction auf die Haupt-venv; sie
+dort nur mit `cmd /c rmdir venv` entfernen, nie mit `Remove-Item -Recurse`.
+
+### Pakete ändern
+
+Neue oder entfallene Laufzeitpakete kommen in `requirements.in`, danach wird
+`requirements.txt` neu erzeugt (pip-tools und pip-audit liegen in der venv,
+siehe oben):
+
+```powershell
+venv\Scripts\python.exe -m piptools compile requirements.in
+venv\Scripts\python.exe -m piptools compile -P fastapi -P starlette requirements.in
+venv\Scripts\python.exe -m pip install -r requirements-test.txt
+venv\Scripts\python.exe -m pip_audit --strict --no-deps -r requirements.txt
+```
+
+pip-compile behält vorhandene Pins und bewegt nur, was nötig ist; `-P <paket>`
+zieht gezielt ein Paket (samt Abhängigkeiten) hoch, `--upgrade` alles auf
+einmal, nur bewusst. FastAPI und Starlette immer gemeinsam hochziehen. Unter
+Windows erzeugt, steht `colorama` mit in der Datei (braucht `click` nur dort);
+fehlt es nach einem Dependabot-Lauf unter Linux, ist das harmlos.
+
+Dependabot (`.github/dependabot.yml`) öffnet montags je Ökosystem (pip, npm,
+GitHub Actions) einen gesammelten PR für Minor-/Patch-Updates; Major-Updates
+kommen einzeln, etwa `openai` 2.x und `firebase-admin` 7.x, die bewusst noch
+nicht mitgezogen sind. Ein npm-PR für esbuild oder eine Vendor-Bibliothek
+(marked, DOMPurify, KaTeX) bleibt bei `build:check` rot, bis jemand auf dem
+PR-Branch `npm run build` ausführt und committet.
+
+`pip-audit` läuft in der CI als eigener Job (siehe unten). Stand 2026-10-15:
+keine offenen Funde, keine Ausnahmen. Eine Ausnahme bekäme `--ignore-vuln <ID>`
+im Workflow, mit Begründung im Kommentar daneben.
 
 ## Reguläre Suite
 
@@ -435,11 +494,21 @@ Prüfungen und bewusst angeforderte vollständige Regressionen:
 
 | Anlass | Prüfungen |
 |---|---|
-| Push auf `main`, PR geöffnet/aktualisiert/wieder geöffnet | Python und JavaScript/Build; keine Browser-/Emulator- oder Windows-Suite |
-| PR wechselt von Entwurf zu „Ready for review“ | Alle vier Testgruppen, einschließlich Chromium/Firestore/Clientregeln und Windows-Einstiegen |
-| „Run workflow“ → `quick` (Standard) | Python und JavaScript/Build |
-| „Run workflow“ → einzelne Suite | Nur `backend`, `frontend`, `browser-and-rules` oder `windows-entry-points` |
-| „Run workflow“ → `full` | Alle vier Testgruppen |
+| Push auf `main`, PR geöffnet/aktualisiert/wieder geöffnet | Python und JavaScript/Build, `dependency-audit`; keine Browser-/Emulator- oder Windows-Suite |
+| Nachts um 02:17 UTC auf `main` | `browser-and-rules` und `dependency-audit` |
+| PR wechselt von Entwurf zu „Ready for review“ | Alle vier Testgruppen, einschließlich Chromium/Firestore/Clientregeln und Windows-Einstiegen, dazu `dependency-audit` |
+| „Run workflow“ → `quick` (Standard) | Python und JavaScript/Build, `dependency-audit` |
+| „Run workflow“ → einzelne Suite | Nur `backend`, `frontend`, `browser-and-rules`, `windows-entry-points` oder `dependency-audit` |
+| „Run workflow“ → `full` | Alle vier Testgruppen und `dependency-audit` |
+
+Alle Jobs nehmen die Python-Version aus `.python-version`. `dependency-audit`
+prüft mit `pip-audit --strict` die voll gepinnte `requirements.txt` und die
+aufgelösten Test-/Browser-Abhängigkeiten aus `requirements-e2e.txt`. Er ist ein
+eigener Job, damit eine neu veröffentlichte Schwachstelle ihn rot färbt, ohne zu
+verdecken, ob die Tests grün sind. Der nächtliche Lauf hat eine eigene
+Concurrency-Gruppe; ein Push auf `main` bricht ihn nicht ab. GitHub startet
+geplante Läufe oft verspätet. Die Windows-Suite läuft weiterhin nur auf Anfrage
+oder bei „Ready for review“.
 
 Auch weitere Pushes auf einen bereits reviewbereiten PR starten nur die schnellen
 Prüfungen. Vor der Integration nach relevanten Folgeänderungen den vollständigen

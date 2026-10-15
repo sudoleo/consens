@@ -70,10 +70,10 @@ data model, `window.*` contracts) is [docs/codebase-map.md](docs/codebase-map.md
 
 ## Run locally
 
-Requirements: Python 3.9+, Node 18+.
+Requirements: Python 3.12 (the version in `.python-version`), Node 18+.
 
 ```bash
-python -m venv venv && source venv/bin/activate   # Windows: venv\Scriptsctivate
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 npm ci && npm run build
 cp .env.example .env                              # fill in Firebase + OpenRouter values
