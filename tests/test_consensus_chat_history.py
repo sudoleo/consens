@@ -454,11 +454,18 @@ def test_consensus_rejects_question_mismatch_before_engine(chat_consensus_api):
 
 def test_non_streaming_completion_maps_answers_labels_sources_and_result(chat_consensus_api):
     client, store, _ = chat_consensus_api
+    # The browser's run-wide numbering survives for a document a model
+    # returned; a document of its own does not enter the turn (audit S3).
     turn_sources = [{
+        "id": "S1",
+        "url": "https://mistral.example/source",
+        "title": "Renamed by the browser",
+        "ignored": "discard me",
+    }, {
+        "id": "S2",
         "url": "https://global.example/source",
         "title": "Global source",
         "provider": "Search",
-        "ignored": "discard me",
     }]
 
     response = client.post(
@@ -480,11 +487,11 @@ def test_non_streaming_completion_maps_answers_labels_sources_and_result(chat_co
     assert completion["differences"] == "Differences"
     assert completion["differences_data"]["agreement"]["score"] == 88
     assert completion["result_id"] == RESULT_ID
-    assert [(source["id"], source["url"]) for source in completion["sources"]] == [
-        ("S1", "https://global.example/source"),
-        ("S2", "https://openai.example/source"),
-        ("S3", "https://mistral.example/source"),
+    assert [(source["id"], source["url"], source["title"]) for source in completion["sources"]] == [
+        ("S1", "https://mistral.example/source", "Mistral source"),
+        ("S2", "https://openai.example/source", "OpenAI source"),
     ]
+    assert "global.example" not in json.dumps(completion)
     assert set(completion["model_answers"]) == {"OpenAI", "Mistral"}
     model = completion["model_answers"]["OpenAI"]
     # R09: the label names the concrete model of the /ask receipt; the

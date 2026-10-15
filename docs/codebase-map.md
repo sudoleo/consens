@@ -4150,7 +4150,8 @@ literaler Code und Mathematik bleiben erhalten. Synthese-Prompts behalten die
 Quelleninformationen der Modellantworten. Bestehende Antworten werden beim
 Laden nicht umgeschrieben. `source_catalog.py` vereinheitlicht weiterhin lokale
 Modell-IDs, dedupliziert URLs mit Modellprovenienz und erhält unbekannte oder
-mehrdeutige Referenzen ohne erfundenen Link. Alle Modellquellen bleiben zugänglich.
+mehrdeutige Referenzen ohne erfundenen Link; Browser-`turn_sources` nummerieren
+nur Dokumente, die ein Modell geliefert hat (Audit S3). Alle Modellquellen bleiben zugänglich.
 Chat-/Bookmark-/Share-Normalizer behalten vollständige Quellenlisten; vorhandene
 Request- und Dokument-Bytebudgets (750.000 Bytes für Turn/Modellantwort) gelten
 weiterhin ausdrücklich, ohne stilles Abschneiden nach einer Quellenanzahl.
@@ -4307,7 +4308,13 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Version und komprimieren nicht selbst.
 - Mit Chat-IDs sendet `executeConsensusRun` zusätzlich die contextgebundenen
   `turn_sources` sowie
-  bei fortgesetzten Turns dieselbe `context_version_id`.
+  bei fortgesetzten Turns dieselbe `context_version_id`. `turn_sources` sind
+  nur Nummerierungs-Hinweise: `source_catalog.normalize_source_catalog`
+  übernimmt einen Eintrag nur, wenn eine Modellantwort des Laufs (Receipt)
+  dieselbe URL geliefert hat, und dann mit deren Titel/Inhalt. Fremde Links
+  oder umbenannte Titel aus dem Browser erreichen weder Turn noch Bookmark,
+  Consensus-Prompt oder Share (seit 2026-10-15, Audit S3; die Liste des
+  Browsers entsteht ohnehin nur aus den `/ask_*`-Quellen desselben Laufs).
   `/consensus` akzeptiert IDs nur paarweise im 32-Hex-Format, prüft UID,
   Chat/Turn, Status, normalisierte Frage und die exakte Context-Verknüpfung
   read-only **vor** dem teuren Engine-
@@ -5466,7 +5473,8 @@ keinen Abgleich.
   `POST /bookmark/consensus/share-result` einen noch gültigen Pending-Verweis
   oder baut einen neuen Pending-Snapshot aus dem **completed Chat-Turn**, auf
   den das Bookmark zeigt (`chat_id`/`turn_id`): Frage, Antwort,
-  Differences-Text, Quellen und Modell-Labels kommen nur von dort, nie aus
+  Differences-Text, Quellen (nur von Modellen gelieferte, siehe
+  `turn_sources` unter „Consensus & Differences“) und Modell-Labels kommen nur von dort, nie aus
   `query`/`sources`/`model_labels` des Bookmarks, die auch der Modell-Save
   `POST /bookmark` schreibt (seit 2026-10-15, Audit S3: vorher ließ sich so
   eine echte Antwort unter erfundener Frage mit fremden Quell-Links öffentlich

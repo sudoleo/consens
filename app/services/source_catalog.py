@@ -1,7 +1,8 @@
 """Assign run-wide citation IDs before synthesis, without losing source identity.
 
 Provider IDs are local namespaces. Browser-supplied turn IDs are global hints,
-never authority to overwrite a provider's own source mapping. Unknown or
+never authority to overwrite a provider's own source mapping or to add a
+document no provider returned. Unknown or
 ambiguous references retain a reserved, unresolvable ID instead of acquiring an
 unrelated link. No fetching, persistence, truncation or model calls happen here.
 """
@@ -137,8 +138,7 @@ def normalize_source_catalog(answers: Mapping, *, model_sources=None, turn_sourc
                 explicit[source_id].add(identity)
         return source_id, identity
 
-    for index, source in enumerate(turn_sources if isinstance(turn_sources, list) else []):
-        add(source, "turn", index, True)
+    answer_parts = {}
     for key in ordered:
         answer = answers[key]
         if isinstance(answer, dict):
@@ -149,6 +149,24 @@ def normalize_source_catalog(answers: Mapping, *, model_sources=None, turn_sourc
             label = _label(getattr(answer, "provider", key))
             text = str(getattr(answer, "response", answer) or "")
             sources = getattr(answer, "sources", by_label.get(label, []))
+        answer_parts[key] = label, text, sources
+
+    # A browser turn source only numbers a document some provider returned;
+    # its content comes from that provider's entry. Anything else would put a
+    # link and title of the browser's choosing into the turn, the consensus
+    # prompt and public shares (audit S3).
+    provided = {}
+    for _, _, sources in answer_parts.values():
+        for source in sources if isinstance(sources, list) else []:
+            url = canonical_source_url(source.get("url")) if isinstance(source, dict) else ""
+            if url and url not in provided:
+                provided[url] = source
+    for index, source in enumerate(turn_sources if isinstance(turn_sources, list) else []):
+        url = canonical_source_url(source.get("url")) if isinstance(source, dict) else ""
+        if url in provided:
+            add({**provided[url], "id": source.get("id")}, "turn", index, True)
+    for key in ordered:
+        label, text, sources = answer_parts[key]
         mapping = defaultdict(set)
         identities = []
         for index, source in enumerate(sources if isinstance(sources, list) else []):

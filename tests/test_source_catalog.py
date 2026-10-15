@@ -67,17 +67,39 @@ def test_browser_global_numbering_and_explicit_turn_sources_stay_stable():
         raw, model_sources={"OpenAI": [explicit[2]], "Gemini": [explicit[1]]}, turn_sources=explicit,
     )
     assert normalized == raw
-    assert [(s["id"], s["url"]) for s in catalog] == [(s["id"], s["url"]) for s in explicit]
+    # a.test came from no provider, so it does not enter the catalog; the
+    # numbering of the others stays the browser's.
+    assert [(s["id"], s["url"]) for s in catalog] == [(s["id"], s["url"]) for s in explicit[1:]]
     assert per_model["OpenAI"][0]["id"] == "S3"
 
 
 def test_explicit_turn_catalog_cannot_override_provider_local_mapping():
     normalized, _, catalog = normalize_source_catalog(
-        {"openai": answer("OpenAI", "B [S1]", [source("S1", "https://b.test")])},
+        {"openai": answer("OpenAI", "B [S1]", [source("S1", "https://b.test"), source("S2", "https://a.test")])},
         turn_sources=[source("S1", "https://a.test")],
     )
     assert normalized["openai"].response == "B [S2]"
     assert {row["id"]: row["url"] for row in catalog} == {"S1": "https://a.test", "S2": "https://b.test"}
+
+
+def test_browser_turn_sources_cannot_add_a_document_or_rename_one():
+    """Audit S3: a client-sent turn source must not reach the turn or a share."""
+    provided = {"id": "S1", "url": "https://real.test/report", "title": "Real report", "provider": "OpenAI"}
+    normalized, per_model, catalog = normalize_source_catalog(
+        # The question can make a model print any tag, here [S9].
+        {"openai": answer("OpenAI", "Fact [S1]. Also [S9].", [provided])},
+        turn_sources=[
+            {"id": "S1", "url": "https://real.test/report", "title": "Account locked, log in here",
+             "providers": ["Search"]},
+            {"id": "S9", "url": "https://phish.test/login", "title": "Verify your account"},
+        ],
+    )
+    assert [(row["id"], row["url"], row["title"]) for row in catalog] == [
+        ("S1", "https://real.test/report", "Real report"),
+    ]
+    assert catalog[0]["providers"] == ["OpenAI"]
+    assert normalized["openai"].response == "Fact [S1]. Also [S9]."
+    assert [row["url"] for row in per_model["OpenAI"]] == ["https://real.test/report"]
 
 
 def test_ambiguous_local_ids_never_acquire_a_link_and_neither_document_is_lost():
@@ -127,7 +149,8 @@ def test_normalization_is_idempotent():
 
 def test_explicit_catalog_fills_sources_for_string_answers_and_accepts_aliases():
     normalized, per_model, catalog = normalize_source_catalog(
-        {"anthropic": "C [S7]"}, turn_sources=[source("S7", "https://a.test")],
+        {"anthropic": "C [S7]"}, model_sources={"Anthropic": [source("S1", "https://a.test")]},
+        turn_sources=[source("S7", "https://a.test")],
     )
     assert normalized == {"anthropic": "C [S7]"}
     assert per_model["Anthropic"][0]["id"] == "S7"
