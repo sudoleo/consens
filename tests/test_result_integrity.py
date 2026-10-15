@@ -277,6 +277,22 @@ def test_truncated_streaming_synthesis_is_never_a_completed_result(api, monkeypa
     assert seen["pending"] == []
 
 
+def test_a_synthesis_out_of_time_fails_its_turn_with_its_own_code(api, monkeypatch):
+    """Audit C3: the time limit is named, not reported as an empty response."""
+    from app.services.llm.consensus_engine import CONSENSUS_TIME_LIMIT_TEXT, SYNTHESIS_TIME_LIMIT_CODE
+    client, receipts, store, _ = api
+    monkeypatch.setattr(chat_router, "stream_consensus", lambda *a, **k: iter([
+        {"type": "final", "text": CONSENSUS_TIME_LIMIT_TEXT, "error": True, "code": SYNTHESIS_TIME_LIMIT_CODE}]))
+    monkeypatch.setattr(chat_router, "stream_differences",
+                        lambda *a, **k: pytest.fail("no judge without a synthesis"))
+    ids = {"openai": _issue(receipts, "OpenAI", "One"), "mistral": _issue(receipts, "Mistral", "Two")}
+    final = _final(client.post("/consensus", headers=AUTH, json=_payload(
+        ids, stream=True, chat_id=CHAT_ID, turn_id=TURN_ID)))
+    assert final["consensus_response"] == CONSENSUS_TIME_LIMIT_TEXT
+    assert final["chat_turn_state"] == "failed"
+    assert store.failures == [SYNTHESIS_TIME_LIMIT_CODE]
+
+
 def test_complete_streaming_synthesis_reports_complete(api, monkeypatch):
     client, receipts, store, _ = api
     monkeypatch.setattr(chat_router, "stream_consensus", lambda *a, **k: iter([

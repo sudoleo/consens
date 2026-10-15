@@ -1,0 +1,46 @@
+# Direct runtime dependencies. requirements.txt is generated from this file:
+#   venv\Scripts\python.exe -m piptools compile requirements.in
+# Add or remove packages here, never by hand in requirements.txt. Upgrading
+# one package: add --upgrade-package <name>; details in docs/testing.md.
+
+# Web server and API
+fastapi
+starlette  # imported directly (middleware, responses); upgrade together with fastapi
+uvicorn  # Render start command and the E2E app server
+anyio
+Jinja2  # starlette.templating
+pydantic
+python-dotenv
+slowapi
+
+# HTTP clients and model providers
+httpx
+requests
+urllib3
+openai
+tiktoken  # agent admission; pulls in regex
+
+# Firebase and Google Cloud
+firebase-admin
+google-api-core
+google-auth
+google-cloud-firestore
+google-cloud-storage
+protobuf
+cachetools
+cryptography
+PyJWT
+
+# Documents, HTML and images
+beautifulsoup4
+markdown-it-py
+MarkupSafe
+nh3
+pillow
+pypdf
+python-docx
+reportlab
+
+# Time
+python-dateutil
+tzdata  # zoneinfo has no system time zone database on Windows

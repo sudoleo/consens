@@ -173,6 +173,26 @@ def test_run_reports_moves_noindexes_dormant_pages_and_releases_the_lease(monkey
     assert len(note.splitlines()) <= 12
 
 
+def test_a_process_with_a_stale_due_read_does_not_sweep_or_notify_again(monkeypatch):
+    """Audit C14: in a deploy overlap the second process read "due" before the
+    first one finished. Its lease claim must read due-ness again."""
+    db, notes, moderated = Db(), [], []
+    client = Client(seo_pulse.report_window(NOW.date()))
+    first = service_with(db, client, [], notes, monkeypatch, moderated)
+    second = service_with(db, client, [], notes, monkeypatch, moderated)
+    db.doc.set({"next_run_at": NOW - timedelta(minutes=1)})
+    stale = second._config()
+    assert first.run() == {"status": "completed"}
+    calls = len(client.calls)
+    fresh = second._config
+    reads = iter([stale])
+    second._config = lambda: next(reads, None) or fresh()
+    assert second.run() == {"status": "not_due"}
+    assert len(notes) == 1 and len(client.calls) == calls
+    # An admin's "run now" still runs although the sweep is not due.
+    assert second.run(force=True) == {"status": "completed"}
+
+
 def test_rerunning_the_same_week_replaces_its_history_entry(monkeypatch):
     db, notes, moderated = Db(), [], []
     client = Client(seo_pulse.report_window(NOW.date()))

@@ -293,12 +293,14 @@ def test_landing_field_arrives_with_the_caret_in_the_composer(browser, phase4_se
         assert "focus=" not in page.url
     finally:
         context.close()
-    # A guest cannot type yet: the plain app with its sign-in line, no demo.
+    # A guest types too (signs in on Send, test_composer_invite.py): the
+    # caret is in the field, no dialog and no demo in the way.
     context, page = _guest_page(browser, phase4_server, path="/app?focus=1")
     try:
-        expect(page.locator("#questionInput")).to_be_disabled()
+        expect(page.locator("#questionInput")).to_be_enabled()
+        expect(page.locator("#questionInput")).to_be_focused()
         expect(page.locator("#questionInput")).to_have_attribute(
-            "placeholder", "Sign in to start asking questions for free.")
+            "placeholder", "Ask anything, or paste an AI answer to check it")
         assert "focus=" not in page.url
         expect(page.locator("#loginModal")).to_be_hidden()
     finally:

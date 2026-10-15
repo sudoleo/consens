@@ -89,12 +89,14 @@ DEFAULT_LIMITS = {
     "watch_plus_daily_interval_allowed": 1,
 }
 
+OPENAI_LUNA_MODEL = "gpt-5.6-luna"
+
 # Persistente Admin-Konfiguration fuer explizite User-Memory-Edits. Diese
 # Defaults sind absichtlich konservativ und werden fuer jedes fehlende oder
 # ungueltige Firestore-Feld einzeln verwendet.
 DEFAULT_MEMORY_EDIT_CONFIG = {
     "memory_edit_enabled": True,
-    "memory_edit_model": "gpt-5.6-luna",
+    "memory_edit_model": OPENAI_LUNA_MODEL,
     "memory_free_chars": 12_000,
     "memory_plus_chars": 18_000,
     "memory_pro_chars": 24_000,
@@ -113,9 +115,7 @@ MEMORY_EDIT_CONFIG = DEFAULT_MEMORY_EDIT_CONFIG.copy()
 LIMITS = DEFAULT_LIMITS.copy()
 _RUNTIME_CONFIG_LOCK = threading.RLock()
 
-MAX_WORDS = LIMITS["free_max_words"]
 MAX_TOKENS = LIMITS["pro_max_tokens"]
-REASONING_MAX_TOKENS = LIMITS["reasoning_max_tokens"]
 CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
 DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
 COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
@@ -129,9 +129,7 @@ REASONING_EFFORT_ON = "high"
 REASONING_EFFORT_FOR_JUDGE = "low"
 REASONING_EFFORT_FOR_JUDGE_BY_PROVIDER = {"mistral": "none"}
 REASONING_EFFORT_FOR_MEMORY_EDIT = "none"
-GEMINI_MAX_TOKENS = MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
-OPENAI_LUNA_MODEL = "gpt-5.6-luna"
 OPENAI_SOL_MODEL = "gpt-5.6-sol"
 # Offene Modelle (Gewichte auf Hugging Face) fuer das Preset "Open Models".
 # gpt-oss-120b liest nur Text und denkt zwingend (Stufe "low", siehe
@@ -622,19 +620,6 @@ LEADERBOARD_MODEL_ALIASES = {
     "Claude": "Anthropic",
 }
 
-# Die erlaubten Modelle stehen in der Provider-Registry. Diese Namen bleiben
-# als Aliasse auf DASSELBE Set-Objekt bestehen: Admin-Loads mutieren in place,
-# und Module/Tests importieren sie direkt.
-ALLOWED_OPENAI_MODELS = PROVIDERS["openai"].models
-ALLOWED_MISTRAL_MODELS = PROVIDERS["mistral"].models
-ALLOWED_ANTHROPIC_MODELS = PROVIDERS["anthropic"].models
-ALLOWED_GEMINI_MODELS = PROVIDERS["gemini"].models
-ALLOWED_DEEPSEEK_MODELS = PROVIDERS["deepseek"].models
-ALLOWED_GROK_MODELS = PROVIDERS["grok"].models
-ALLOWED_KIMI_MODELS = PROVIDERS["kimi"].models
-ALLOWED_GLM_MODELS = PROVIDERS["glm"].models
-ALLOWED_META_MODELS = PROVIDERS["meta"].models
-
 MISTRAL_REASONING_MODELS = {
     DEFAULT_MISTRAL_MODEL,
     MISTRAL_PRO_MODEL,
@@ -933,6 +918,26 @@ def _fallback_label(model_id: str) -> str:
     return label
 
 
+def _replace_set(target: set, values) -> None:
+    """Gives a shared set new members without an empty moment (audit C8).
+
+    Requests read the model sets without the config lock, and modules hold
+    them by reference, so they change in place: first add, then drop what
+    left. A reader sees old, old plus new, or new members, never none; a
+    leaving Premium model stays Pro a moment longer, it never turns Free."""
+    fresh = set(values)
+    target |= fresh
+    target &= fresh
+
+
+def _replace_dict(target: dict, values) -> None:
+    """dict counterpart of _replace_set: update, then drop stale keys."""
+    fresh = dict(values)
+    target.update(fresh)
+    for key in [key for key in target if key not in fresh]:
+        target.pop(key, None)
+
+
 def _provider_allowed_sets() -> dict[str, set]:
     return {provider.key: provider.models for provider in PROVIDERS.values()}
 
@@ -954,9 +959,7 @@ def rebuild_model_configs():
                 accepts_attachments=PROVIDERS[provider].model_accepts_attachments(model_id),
                 request_config=dict(MODEL_REQUEST_CONFIG.get(model_id, {})),
             )
-    MODEL_CONFIGS.update(fresh)
-    for model_id in [key for key in MODEL_CONFIGS if key not in fresh]:
-        del MODEL_CONFIGS[model_id]
+    _replace_dict(MODEL_CONFIGS, fresh)
 
 
 def virtual_model_ids() -> dict[str, str]:
@@ -1276,8 +1279,7 @@ def apply_consensus_preset_models(config: dict | None) -> None:
             consensus = "Gemini"
         if not get_consensus_model_config(consensus):
             consensus = "Gemini"
-        CONSENSUS_PRESET_MODELS[preset_id].clear()
-        CONSENSUS_PRESET_MODELS[preset_id].update({
+        _replace_dict(CONSENSUS_PRESET_MODELS[preset_id], {
             "answers": clean_answers,
             "consensus": consensus,
         })
@@ -1403,11 +1405,12 @@ def apply_judge_families(overrides: dict | None) -> None:
     faellt auf Auto (Prioritaetsliste) zurueck. Mutiert das dict in-place."""
     data = overrides if isinstance(overrides, dict) else {}
     providers = set(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
-    JUDGE_FAMILY_BY_ENGINE.clear()
+    families = {}
     for engine_provider in providers:
         chosen = str(data.get(engine_provider) or "").strip()
         if chosen in providers:
-            JUDGE_FAMILY_BY_ENGINE[engine_provider] = chosen
+            families[engine_provider] = chosen
+    _replace_dict(JUDGE_FAMILY_BY_ENGINE, families)
 
 
 def get_judge_families() -> dict:
@@ -1557,8 +1560,7 @@ def apply_watch_models(config: dict | None) -> None:
                     clean[provider] = model
                 if len(clean) >= 3:
                     break
-        WATCH_MODELS_BY_TIER[tier].clear()
-        WATCH_MODELS_BY_TIER[tier].update(clean)
+        _replace_dict(WATCH_MODELS_BY_TIER[tier], clean)
 
 
 def get_watch_models(tier) -> dict[str, str]:
@@ -1628,28 +1630,36 @@ def get_watch_consensus_model(tier) -> str:
 rebuild_model_configs()
 
 
-def _coerce_limit(value, fallback: int) -> int:
+def _coerce_limit(value, fallback: int, minimum: int = 0) -> int:
     if isinstance(value, bool):
         return fallback
     try:
         parsed = int(value)
     except (TypeError, ValueError):
         return fallback
-    return parsed if parsed >= 0 else fallback
+    return parsed if parsed >= minimum else fallback
+
+
+# Below these values a limit no longer tunes runs, it breaks them (audit C16):
+# an admin typo of 0 or 8 for 8192 output tokens silences every synthesis. A
+# smaller value falls back to the default, like a negative one. Counters such
+# as the Watch limits keep 0 as a real setting, and the follow-up caps only
+# shorten the carried-over context.
+_LIMIT_MINIMUMS = {
+    **{key: 1024 for key in DEFAULT_LIMITS if key.endswith("_max_tokens")},
+    **{key: 50 for key in DEFAULT_LIMITS if key.endswith("_max_words")},
+    "consensus_max_answer_chars": 1_000,
+    "consensus_max_question_chars": 200,
+}
 
 
 def _sync_limit_constants():
-    global MAX_WORDS, MAX_TOKENS, REASONING_MAX_TOKENS
-    global CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS, COVERAGE_MAX_TOKENS
-    global GEMINI_MAX_TOKENS
+    global MAX_TOKENS, CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS, COVERAGE_MAX_TOKENS
 
-    MAX_WORDS = LIMITS["free_max_words"]
     MAX_TOKENS = LIMITS["pro_max_tokens"]
-    REASONING_MAX_TOKENS = LIMITS["reasoning_max_tokens"]
     CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
     DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
     COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
-    GEMINI_MAX_TOKENS = MAX_TOKENS
 
 
 # Frueheres Deep-Think-Feld -> heutiges Reasoning-Feld. Greift nur, solange
@@ -1664,16 +1674,13 @@ def normalize_limits_config(limits_data=None) -> dict:
         if key not in incoming and legacy_key in incoming:
             incoming[key] = incoming[legacy_key]
     return {
-        key: _coerce_limit(incoming.get(key, fallback), fallback)
+        key: _coerce_limit(incoming.get(key, fallback), fallback, _LIMIT_MINIMUMS.get(key, 0))
         for key, fallback in DEFAULT_LIMITS.items()
     }
 
 
 def apply_limits(limits_data=None):
-    normalized = normalize_limits_config(limits_data)
-
-    LIMITS.clear()
-    LIMITS.update(normalized)
+    _replace_dict(LIMITS, normalize_limits_config(limits_data))
     _sync_limit_constants()
 
 
@@ -1702,7 +1709,7 @@ def normalize_memory_edit_config(value=None) -> dict:
     if isinstance(incoming.get("memory_edit_enabled"), bool):
         result["memory_edit_enabled"] = incoming["memory_edit_enabled"]
     model = incoming.get("memory_edit_model")
-    if isinstance(model, str) and model.strip() in ALLOWED_OPENAI_MODELS:
+    if isinstance(model, str) and model.strip() in PROVIDERS["openai"].models:
         result["memory_edit_model"] = model.strip()
     for key, (minimum, maximum) in _MEMORY_EDIT_INTEGER_RANGES.items():
         raw = incoming.get(key)
@@ -1727,8 +1734,7 @@ def normalize_memory_edit_config(value=None) -> dict:
 
 
 def apply_memory_edit_config(value=None) -> None:
-    MEMORY_EDIT_CONFIG.clear()
-    MEMORY_EDIT_CONFIG.update(normalize_memory_edit_config(value))
+    _replace_dict(MEMORY_EDIT_CONFIG, normalize_memory_edit_config(value))
 
 
 def get_memory_edit_config() -> dict:
@@ -1873,23 +1879,23 @@ def _capture_runtime_config() -> dict:
 
 def _restore_runtime_config(state: dict) -> None:
     global ALL_ALLOWED_MODELS
-    for provider, target in _provider_allowed_sets().items():
-        target.clear()
-        target.update(state["providers"].get(provider, set()))
-    PREMIUM_MODELS.clear()
+    # Same order as load_models_from_db: Premium grows before the model sets
+    # change and shrinks after, so the rollback never opens the Pro gate.
     PREMIUM_MODELS.update(state["premium"])
-    ALLOWED_CONSENSUS_MODELS.clear()
-    ALLOWED_CONSENSUS_MODELS.extend(state["consensus"])
-    CONSENSUS_PRESET_MODELS.clear()
-    CONSENSUS_PRESET_MODELS.update(
-        {
-            key: {
-                "answers": dict(value["answers"]),
-                "consensus": value["consensus"],
-            }
-            for key, value in state["presets"].items()
-        }
-    )
+    for provider, target in _provider_allowed_sets().items():
+        _replace_set(target, state["providers"].get(provider, set()))
+    _replace_set(PREMIUM_MODELS, state["premium"])
+    ALLOWED_CONSENSUS_MODELS[:] = state["consensus"]
+    # The preset dicts themselves stay (modules hold them); their content is
+    # swapped like everything else.
+    for key, value in state["presets"].items():
+        restored = {"answers": dict(value["answers"]), "consensus": value["consensus"]}
+        if key in CONSENSUS_PRESET_MODELS:
+            _replace_dict(CONSENSUS_PRESET_MODELS[key], restored)
+        else:
+            CONSENSUS_PRESET_MODELS[key] = restored
+    for key in [key for key in CONSENSUS_PRESET_MODELS if key not in state["presets"]]:
+        CONSENSUS_PRESET_MODELS.pop(key, None)
     for target, key in (
         (DIFFERENCES_JUDGE_MODEL_BY_PROVIDER, "judges"),
         (PRO_JUDGE_MODEL_BY_PROVIDER, "pro_judges"),
@@ -1897,19 +1903,14 @@ def _restore_runtime_config(state: dict) -> None:
         (JUDGE_FAMILY_BY_ENGINE, "families"),
         (FREE_DEFAULT_MODEL_BY_PROVIDER, "defaults"),
     ):
-        target.clear()
-        target.update(state[key])
+        _replace_dict(target, state[key])
     for provider in MODEL_ORDER_BY_PROVIDER:
         MODEL_ORDER_BY_PROVIDER[provider] = list(state["order"].get(provider, []))
     for tier in WATCH_MODELS_BY_TIER:
-        WATCH_MODELS_BY_TIER[tier].clear()
-        WATCH_MODELS_BY_TIER[tier].update(state["watch"].get(tier, {}))
-    WATCH_CONSENSUS_MODELS_BY_TIER.clear()
-    WATCH_CONSENSUS_MODELS_BY_TIER.update(state["watch_consensus"])
-    LIMITS.clear()
-    LIMITS.update(state["limits"])
-    MEMORY_EDIT_CONFIG.clear()
-    MEMORY_EDIT_CONFIG.update(state["memory_edit_config"])
+        _replace_dict(WATCH_MODELS_BY_TIER[tier], state["watch"].get(tier, {}))
+    _replace_dict(WATCH_CONSENSUS_MODELS_BY_TIER, state["watch_consensus"])
+    _replace_dict(LIMITS, state["limits"])
+    _replace_dict(MEMORY_EDIT_CONFIG, state["memory_edit_config"])
     apply_reasoning_policy(state["reasoning_policy"])
     _sync_limit_constants()
     ALL_ALLOWED_MODELS = _all_allowed_models()
@@ -1994,35 +1995,45 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             ]
             
             # Modellliste je Familie: Firestore ist autoritativ, danach
-            # Migration alter IDs und Abzug der stillgelegten.
+            # Migration alter IDs und Abzug der stillgelegten. Neue Mengen
+            # werden erst berechnet und dann ohne leeren Moment getauscht
+            # (_replace_set): Requests lesen sie ohne Lock (Audit C8).
+            models_by_provider = {}
             for provider in PROVIDERS.values():
                 incoming = data.get(provider.key)
                 if incoming is None:
+                    models_by_provider[provider.key] = set(provider.models)
                     continue
-                provider.models.clear()
-                provider.models.update(canonical_model_ids(incoming, provider.key))
-                provider.models.difference_update(
+                models = set(canonical_model_ids(incoming, provider.key))
+                models.difference_update(
                     PROVIDER_DEPRECATED_MODELS.get(provider.key, set())
                 )
-                provider.models.difference_update(REMOVED_MODEL_IDS)
+                models.difference_update(REMOVED_MODEL_IDS)
+                models_by_provider[provider.key] = models
 
-            # Update Premium
+            premium = set(PREMIUM_MODELS)
             if "premium" in data:
-                PREMIUM_MODELS.clear()
-                PREMIUM_MODELS.update(data["premium"])
-                PREMIUM_MODELS.difference_update(REMOVED_MODEL_IDS)
+                premium = set(data["premium"])
+                premium.difference_update(REMOVED_MODEL_IDS)
                 for deprecated in PROVIDER_DEPRECATED_MODELS.values():
-                    PREMIUM_MODELS.difference_update(deprecated)
-                PREMIUM_MODELS.intersection_update(_all_allowed_models())
+                    premium.difference_update(deprecated)
+                premium.intersection_update(set().union(*models_by_provider.values()))
                 if predates_grok_merge(data):
-                    PREMIUM_MODELS.discard(GROK_BASE_MODEL)
+                    premium.discard(GROK_BASE_MODEL)
                 # Der <Familie>-Pro-Alias ist ein harter Produktvertrag. Bei
                 # neuen Registry-Familien kennt ein altes Firestore-Dokument
                 # deren Pro-Modell noch nicht; es darf dadurch nicht Free sein.
-                PREMIUM_MODELS.update(
+                premium.update(
                     provider.pro_model for provider in PROVIDERS.values()
-                    if provider.pro_model in provider.models
+                    if provider.pro_model in models_by_provider[provider.key]
                 )
+            # Premium zuerst ergaenzen, dann die Modelle tauschen, dann erst
+            # Premium kuerzen: ein neues Pro-Modell ist nie kurz Free, und
+            # das Pro-Gate (z. B. agent.require_model_access) steht immer.
+            PREMIUM_MODELS.update(premium)
+            for provider in PROVIDERS.values():
+                _replace_set(provider.models, models_by_provider[provider.key])
+            _replace_set(PREMIUM_MODELS, premium)
             ALL_ALLOWED_MODELS = _all_allowed_models()
             rebuild_model_configs()
 
@@ -2049,17 +2060,15 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             apply_judge_families(data.get("judge_families"))
             apply_chat_memory_models(data.get("chat_memory_models"))
 
-            if "consensus" in data:
-                ALLOWED_CONSENSUS_MODELS.clear()
-                ALLOWED_CONSENSUS_MODELS.extend(normalize_consensus_models(data["consensus"]))
-            else:
-                ALLOWED_CONSENSUS_MODELS.clear()
-                ALLOWED_CONSENSUS_MODELS.extend(normalize_consensus_models(DEFAULT_CONSENSUS_MODELS))
+            consensus_models = normalize_consensus_models(
+                data["consensus"] if "consensus" in data else DEFAULT_CONSENSUS_MODELS
+            )
             for provider_key in new_provider_keys:
                 label = PROVIDERS[provider_key].label
                 for alias in (label, f"{label}-Pro"):
-                    if alias not in ALLOWED_CONSENSUS_MODELS:
-                        ALLOWED_CONSENSUS_MODELS.append(alias)
+                    if alias not in consensus_models:
+                        consensus_models.append(alias)
+            ALLOWED_CONSENSUS_MODELS[:] = consensus_models
 
             apply_watch_models(data.get("watch_models"))
             apply_watch_consensus_models(data.get("watch_consensus_models"))

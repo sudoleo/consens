@@ -58,6 +58,8 @@ FAILED_TURN_ERROR_CODES = frozenset({
     "consensus_failed",
     # The synthesis stopped at the output limit or was interrupted (R06).
     "consensus_incomplete",
+    # The synthesis phase used up its time budget (audit C3).
+    "synthesis_time_limit",
     "cancelled",
     "insufficient_answers",
     "persistence_interrupted",

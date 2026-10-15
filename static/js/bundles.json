@@ -179,6 +179,10 @@
         },
         "static/js/composer-autosize.js",
         {
+          "file": "static/js/composer-invite.js",
+          "note": "App.composerInvite: a guest's Send (query-send.js), the send after sign-in (app-init.js updateQuestionInputAccess), the example questions and the source of the ask event (app-core.js trackAsk). Called at runtime only."
+        },
+        {
           "file": "static/js/app-init.js",
           "note": "Must follow every feature module: aliases window.App.* and runs initApp() on DOMContentLoaded. app-dom-events.js then installs the remaining document-level listeners."
         },

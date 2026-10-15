@@ -1,6 +1,8 @@
 # Ignoriere Umgebungsvariablen und sensible Daten
 .env
 venv/
+# Vorige venv beim Neuaufbau (docs/testing.md, „Python-Version und venv“)
+venv-alt/
 __pycache__/
 *.log
 *json
@@ -79,3 +81,8 @@ artifacts/**/*.png
 /docs/consensus-evidence-feasibility-*.md
 /docs/agent-mode-effort-assessment-*.md
 /docs/source-verification-manual-review.md
+
+# Zugangsdaten explizit, unabhaengig von der globalen *json-Regel oben. Diese
+# Zeilen stehen am Ende, damit keine !-Ausnahme sie wieder freigibt.
+gen-lang-client-*.json
+*-firebase-adminsdk-*.json

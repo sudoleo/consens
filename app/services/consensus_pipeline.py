@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Iterable, Mapping
 
 import app.core.config as cfg
-from app.services.llm.provider_runtime import analysis_budgeted
+from app.services.llm.provider_runtime import analysis_run
 from app.services.llm.citations import to_plain
 from app.services.llm.consensus_citations import strip_consensus_source_markers
 from app.services.llm.consensus_engine import (
@@ -50,7 +50,7 @@ def _answer_slots(answers: Mapping[str, ProviderAnswer | str]) -> dict[str, str]
     }
 
 
-@analysis_budgeted
+@analysis_run
 def analyze_provider_answers(
     *,
     question: str,

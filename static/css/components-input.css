@@ -122,6 +122,16 @@ body.is-hero .input-section {
     transform: none;
   }
 }
+/* A guest on a phone gets the sentence too: it is the only line that says
+   what the field is for (Agent has the same rule in agent-chat.css). */
+@media (min-height: 620px) {
+  body.is-guest.is-hero:not(.direct-comparison-active) .hero-greeting {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    font-size: clamp(1.375rem, 4.6vw, 1.75rem);
+  }
+}
 
 /* Leere Antwort-Platzhalter (Response-Boxen, Agent-Panel) erst nach der
    ersten Frage zeigen; sanftes Einblenden nach dem Slide-up. */

@@ -7,12 +7,17 @@ from unittest import mock
 import app.core.config as cfg
 from app.services.llm.consensus_engine import (
     CONSENSUS_TEMPERATURE,
+    CONSENSUS_TIME_LIMIT_TEXT,
+    SYNTHESIS_TIME_LIMIT_CODE,
     _build_consensus_prompt,
     _effective_temperature,
     _engine_request_config,
+    consensus_failure_code,
     query_consensus,
     stream_consensus,
 )
+from app.services.llm.engines import _ProviderHTTPStatusError
+from app.services.llm.provider_runtime import AnalysisBudgetExceeded
 
 REAL_MODEL_NAMES = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
 
@@ -243,8 +248,111 @@ class QueryConsensusFallbackTests(unittest.TestCase):
         self.assertEqual(patched.call_count, 3)
         self.assertEqual(result, "Consensus error: provider request failed.")
 
+    def test_a_rejected_request_skips_its_retry_and_goes_to_the_fallback(self):
+        """Audit C10: 400/403/404 do not improve on the same request."""
+        calls = []
+
+        def engine(provider, *args, **kwargs):
+            calls.append(provider)
+            if provider == "openai":
+                raise _ProviderHTTPStatusError(400)
+            return "rescued answer"
+
+        result, _ = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(result, "rescued answer")
+        self.assertEqual(calls, ["openai", "gemini"])
+
+    def test_an_invalid_key_ends_the_run_after_one_call(self):
+        """Audit C10: a 401 hits every attempt, the fallback uses the same key."""
+        def engine(*args, **kwargs):
+            raise _ProviderHTTPStatusError(401)
+
+        result, patched = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(patched.call_count, 1)
+        self.assertEqual(result, "Consensus error: provider request failed.")
+
+    def test_a_request_too_expensive_for_the_credit_still_reaches_the_fallback(self):
+        """A 402 can mean "this request needs more credit": no retry of the
+        same request, but the cheaper fallback may still answer."""
+        calls = []
+
+        def engine(provider, *args, **kwargs):
+            calls.append(provider)
+            if provider == "openai":
+                raise _ProviderHTTPStatusError(402)
+            return "rescued answer"
+
+        result, _ = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(result, "rescued answer")
+        self.assertEqual(calls, ["openai", "gemini"])
+
+    def test_a_status_number_in_an_error_text_does_not_end_the_run(self):
+        calls = []
+
+        def engine(provider, *args, **kwargs):
+            calls.append(provider)
+            if provider == "openai":
+                raise ValueError("Expecting value: line 1 column 401 (char 400)")
+            return "rescued answer"
+
+        result, _ = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(result, "rescued answer")
+        self.assertIn("gemini", calls)
+
+    def test_a_synthesis_out_of_time_says_so_instead_of_empty_response(self):
+        """Audit C3: the phase deadline used to read as an empty response."""
+        def engine(*args, **kwargs):
+            raise AnalysisBudgetExceeded("analysis deadline exceeded")
+
+        result, patched = self._query(engine, {"OpenRouter": "sk-or"})
+        self.assertEqual(patched.call_count, 1)
+        self.assertEqual(result, CONSENSUS_TIME_LIMIT_TEXT)
+        self.assertEqual(consensus_failure_code(result), SYNTHESIS_TIME_LIMIT_CODE)
+        self.assertEqual(consensus_failure_code("Consensus error: provider request failed."), "consensus_failed")
+
 
 class StreamConsensusFallbackTests(unittest.TestCase):
+    def _events(self, fake_engine):
+        with mock.patch(
+            "app.services.llm.consensus_engine._stream_consensus_engine",
+            side_effect=fake_engine,
+        ):
+            return list(stream_consensus(
+                "Q?", {"openai": "a", "mistral": "b"},
+                excluded_models=[],
+                consensus_model="OpenAI",
+                api_keys={"OpenRouter": "sk-or"},
+            ))
+
+    def test_stream_skips_the_retry_of_a_rejected_request_and_stops_on_a_dead_key(self):
+        """Audit C10, streaming path."""
+        for status, expected in ((400, ["OpenAI", cfg.DEFAULT_GEMINI_MODEL]), (401, ["OpenAI"]),
+                                 (402, ["OpenAI", cfg.DEFAULT_GEMINI_MODEL])):
+            with self.subTest(status=status):
+                calls = []
+
+                def fake_engine(engine_model, api_keys, prompt):
+                    calls.append(engine_model)
+                    if engine_model == "OpenAI":
+                        raise _ProviderHTTPStatusError(status)
+                    yield {"type": "delta", "text": "rescued."}
+
+                events = self._events(fake_engine)
+                self.assertEqual(calls, expected)
+                self.assertEqual(events[-1].get("error", False), status == 401)
+
+    def test_stream_out_of_time_ends_with_its_own_text_and_code(self):
+        """Audit C3, streaming path: shown deltas are replaced by the final."""
+        def fake_engine(engine_model, api_keys, prompt):
+            yield {"type": "delta", "text": "Half a synthesis"}
+            raise AnalysisBudgetExceeded("analysis deadline exceeded")
+
+        events = self._events(fake_engine)
+        self.assertEqual(events[-1], {
+            "type": "final", "text": CONSENSUS_TIME_LIMIT_TEXT, "error": True,
+            "code": SYNTHESIS_TIME_LIMIT_CODE,
+        })
+
     def test_fallback_engine_delivers_final_answer(self):
         calls = []
 

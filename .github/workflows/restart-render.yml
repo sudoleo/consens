@@ -3,11 +3,17 @@ name: Restart Render Service Daily
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 22 * * *'  # 00:00 Uhr MESZ
+    # 22:00 UTC = 00:00 MESZ (Sommerzeit) bzw. 23:00 MEZ (Winterzeit, ab 25.10.).
+    # GitHub startet geplante Läufe oft verspätet, manchmal um Stunden.
+    - cron: '0 22 * * *'
+
+# The job only calls the Render API with its own secrets; it needs no repo token.
+permissions: {}
 
 jobs:
   restart:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Trigger Render Restart
         run: |

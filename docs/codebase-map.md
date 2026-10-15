@@ -192,8 +192,12 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 (ab Plus), öffentliche Share-Seiten. Es gibt drei Kontostufen: **Free**,
 **Plus** und **Pro** (siehe §4 „Auth / Usage / Tier").
 
-- **Backend**: Python, FastAPI (`fastapi==0.128.8`), via `uvicorn` ausgeliefert.
-  SSE-Streaming über `StreamingResponse`. Rate-Limiting via `slowapi`.
+- **Backend**: Python 3.12, FastAPI (`fastapi==0.143.2` mit `starlette==1.8.0`),
+  via `uvicorn` ausgeliefert. SSE-Streaming über `StreamingResponse`.
+  Rate-Limiting via `slowapi`. Die Python-Version steht nur in
+  `.python-version` (Render, CI, Dependabot und `dev.ps1` lesen sie). Direkte
+  Abhängigkeiten in `requirements.in`, daraus erzeugt die voll gepinnte
+  `requirements.txt` (pip-compile, mit `# via`); Ablauf in `docs/testing.md`.
 - **LLM-Modelle**: neun Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
   DeepSeek, Grok, Kimi, GLM, Meta/Muse), alle über einen OpenRouter-Chat-
   Completions-Transport mit ZDR. Ein Lauf wählt davon höchstens sechs.
@@ -206,6 +210,10 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 - **Markdown/Mathematik**: `marked` + `DOMPurify` clientseitig und
   `markdown-it-py` + `nh3` für Share-Seiten; KaTeX setzt in beiden Ansichten
   LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
+- **CI**: `.github/workflows/tests.yml` (Backend/Frontend bei jedem Push,
+  `dependency-audit` mit pip-audit, nachts zusätzlich Browser/Emulator/Rules),
+  `.github/dependabot.yml` (wöchentlich pip, npm, Actions). Details in
+  `docs/testing.md`.
 - **Hosting**: Render. Der tägliche Render-Restart setzt weiterhin flüchtigen
   Prozess-State zurück; Retention/Cleanup läuft davon unabhängig periodisch
   im überwachten Background-Task (siehe §7).
@@ -224,8 +232,10 @@ Seit 2026-10-15 fängt ein Handler für Starlettes `HTTPException` (Routing,
 ab: Eine GET/HEAD-Navigation mit `Accept: text/html` bekommt die HTML-404
 `templates/not_found.html` (`app/core/not_found.py`, `noindex`), Skripte
 weiter FastAPIs `{"detail": "Not Found"}`. `allow_head_on_get_routes` nimmt
-nach dem Einbinden `HEAD` in jede interne GET-Route auf (uvicorn sendet nur die
-Header); ausgenommen bleiben die dokumentierte `/api/v1` (sonst wüchse das
+`HEAD` in jede interne GET-Route auf (uvicorn sendet nur die Header), und zwar
+am Router VOR `include_router`: Seit FastAPI 0.14x landen eingebundene Router
+nicht mehr als Kopie in `app.routes`, ein nachträgliches Ändern wirkt nicht.
+Ausgenommen bleiben die dokumentierte `/api/v1` (sonst wüchse das
 OpenAPI-Schema) und der Auth-Proxy `/__/*`.
 Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
 content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
@@ -2348,6 +2358,18 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Compare-Start) sind bewusst ausgenommen. Ein
   stehendes Zitat (`#composerQuote`) zählt wie ein Anhang als „Angefangenes“
   und verhindert das automatische Zuklappen.
+- **`composer-invite.js`** (seit 2026-10-15, vor `app-init.js`, nur zur Laufzeit
+  gerufen) — lädt zur ersten Frage ein. `window.App.composerInvite`:
+  `sendAsGuest()` (erste Prüfung in `window.sendQuestion`, `query-send.js`):
+  für einen Gast Entwurf speichern (`App.saveQuestionDraft`), den Sendewunsch
+  `localStorage["consensio.sendAfterLogin.v1"] = {at, source}` merken und den
+  Registrierungsdialog mit Begründungszeile öffnen; `afterAccessUpdate(canStartRun)`
+  (Ende von `updateQuestionInputAccess`): sobald die neue Sitzung laufen darf,
+  einmal `window.sendQuestion()` (höchstens 1 h alt, nur in einen neuen Chat,
+  nie während `App.reloadingAfterSignIn` aus `firebase.js::continueSignedIn`,
+  der Wunsch wird beim ersten Versuch gelöscht); `takeAskContext()` für
+  `App.trackAsk` (`source` typed/example/pasted, `after_login`). Dazu die
+  Klicks auf die Beispielfragen `#composerStarters` (füllen nur das Feld).
 - **`composer-keyboard.js`** (seit 2026-10-04, nach `composer-collapse.js`) —
   hält den fixierten Thread-Composer auf dem Handy (≤1099 px) an der
   Tastaturkante. Safari auf iOS ignoriert `interactive-widget=resizes-content`
@@ -4295,14 +4317,22 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   sowie `scored_claims`/`thin_claims`/`total_claims` und den Null-Score.
   Watch/Topic-Verläufe akzeptieren fehlende Scores; daraus entstehen weder
   künstliche Nullpunkte noch numerische Drift-Alarme.
-- `llm/provider_runtime.py::analysis_budgeted` bindet ein gemeinsames,
-  threadsicheres Budget von Synthesestart bis zum Abschluss beider Judges.
-  Default: 180 Sekunden und höchstens acht externe Analyse-Aufrufe insgesamt
-  (einschließlich Fallbacks und Coverage-Repair), konfigurierbar über
-  `ANALYSIS_TIMEOUT_SECONDS` (10–600) und `ANALYSIS_MAX_CALLS` (3–12).
-  Der Browser-SSE-Producer und `consensus_pipeline.analyze_provider_answers`
-  bilden die äußere Grenze; einzelne Engine-Einstiege erhalten denselben
-  Schutz bei direkter Nutzung. Der davor liegende Antwort-Fan-out bleibt
+- Analyse-Budget pro Phase (Audit C3): Der Browser-SSE-Producer und
+  `consensus_pipeline.analyze_provider_answers` laufen in
+  `llm/provider_runtime.py::analysis_run_scope` (`@analysis_run`). Der Lauf
+  trägt die gemeinsame Cancellation; Synthese (`query/stream_consensus`) und
+  Judges (`query/stream_differences`, beide Judges samt Coverage-Thread) sind
+  Phasen mit je eigenem threadsicherem `AnalysisBudget` (`@analysis_budgeted`
+  mit `max_calls`): je `ANALYSIS_TIMEOUT_SECONDS` (Default 180 s, 10–600) und
+  so viele Calls, wie der längste Versuchsplan braucht —
+  `SYNTHESIS_MAX_CALLS` = 3 (zweimal die gewählte Engine, ein Fallback),
+  `JUDGE_PHASE_MAX_CALLS` = 8 (Pro-Differences-Plan 4 + Coverage 3 + Repair 1;
+  ein Test hält beide gegen die Pläne). Eine langsame Synthese kostet die
+  Judges also keine Zeit mehr. `AnalysisBudget.snapshot()` einer Phase meldet
+  die Summe aller Phasen des Laufs (`analysis_runtime`). Ein schon gebundenes
+  Budget (Agent) regiert dagegen jede Phase weiter; ein Engine-Einstieg ohne
+  Lauf öffnet sein eigenes Budget (Agent-Judges je Prüfung im Tool-Thread).
+  `ANALYSIS_MAX_CALLS` (3–12) gilt für alle übrigen Budgets. Der davor liegende Antwort-Fan-out bleibt
   durch seine bestehenden Provider-Limits geschützt.
 - Nicht streamende Engine-Aufrufe und Analyse-SSE verwenden HTTPX-Tasks auf
   dem vorhandenen synchronen Provider-Worker. Disconnect und Deadline brechen
@@ -4677,9 +4707,19 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Coverage-Judge sichtbar, aber eine einzelne Stimme belegt nichts. Dieselbe
   Schwelle filtert sie aus der Opinion-Map.
   alte Bookmarks/Snapshots ohne die Felder degradieren aufs bisherige Rendering.
-- Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei Provider-
-  Fehlern (503, Timeout, ...) ein zweites Mal (`CONSENSUS_MAX_ATTEMPTS`);
-  gescheiterte Finals tragen `error: true`. `chat.py` erkennt Fehlertexte über
+- Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei
+  wiederholbaren Provider-Fehlern (429, 5xx, Timeout, ...) ein zweites Mal
+  (`CONSENSUS_MAX_ATTEMPTS`), danach einmal auf einer Fallback-Familie.
+  400/402/403/404 überspringen den zweiten Versuch und gehen direkt zum Fallback
+  (`_provider_error_is_retryable`; ein 402 kann heißen, dass nur diese eine
+  Anfrage mehr kostet als das Restguthaben, das günstigere Fallback darf es
+  also noch versuchen); nur ein 401 (am Statuscode, nie am Fehlertext erkannt)
+  beendet die Synthese sofort, weil jeder Versuch denselben OpenRouter-Key
+  nutzt (`_provider_error_ends_run`, Audit C10). Läuft die Zeit der Synthese-Phase ab, lautet der Text
+  `CONSENSUS_TIME_LIMIT_TEXT` statt „empty response“; das Stream-Final trägt
+  `code: "synthesis_time_limit"`, und der Chat-Turn scheitert mit diesem
+  `error_code` (`consensus_failure_code`, Audit C3).
+  Gescheiterte Finals tragen `error: true`. `chat.py` erkennt Fehlertexte über
   `is_consensus_error_text` und überspringt dann Differences (Judge darf nie
   den Fehlertext "analysieren") sowie die Share-Persistenz; die Differences-
   Spalte zeigt `DIFFERENCES_SKIPPED_TEXT`.
@@ -4783,7 +4823,13 @@ das Menü vollständig. Reasoning trägt überall
 denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Leiste stehen
 Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
 ruhen einfarbig (Filter auf dem Badge, damit invertierte Mono-Logos im Dark
-Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Rechtliches steht
+Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Unter einem leeren
+neuen Chat (Hero) stehen seit 2026-10-15 vier Beispielfragen
+(`#composerStarters`, Pillen ohne Rahmen; auf dem Handy eine seitlich
+scrollende Zeile): ein Klick füllt nur das Feld (`composer-invite.js`). Sobald
+Text im Feld steht, werden sie per `#questionInput:not(:placeholder-shown)`
+unsichtbar, behalten aber ihren Platz, damit der zentrierte Composer nicht
+springt. Rechtliches steht
 in der Sidebar-Fußzeile, seit der Todo-Runde 3 in EINER Zeile
 (`.sidebar-footer-meta`): links Imprint · Privacy · Terms als leise Wörter
 (Impressum direkt erreichbar), rechts `.sidebar-footer-icons` mit zwei gleich
@@ -5222,6 +5268,19 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   (Senden) sind zwei getrennte Rechte, und der Entwurf liegt bis zum ersten
   echten Lauf unter `consensio.questionDraft.v1` — die Frage überlebt den
   Umweg über das Postfach.
+- **Gäste tippen (seit 2026-10-15).** `window.App.isGuestComposer()` (app-init.js:
+  keine Firebase-Sitzung, Login erreichbar, keine noch wiederhergestellte
+  Sitzung) zählt zu `userCanTypeQuestions()`; nur `data-auth-unavailable`
+  sperrt das Feld noch („Sign in to start…“). Gäste bekommen den Platzhalter
+  eines neuen Chats (`App.askPlaceholder()`, app-bootstrap.js, auch für Agent),
+  `body.is-guest` (ab dem ersten Paint) blendet den Modell-Chip aus und zeigt die
+  Begrüßung auch auf dem Handy. Senden ist aktiv, sobald Text im Feld steht, und
+  öffnet über `composer-invite.js` den Registrierungsdialog
+  (`openAuthModal(mode, trigger, source, {lead})`: die Begründungszeile gilt
+  für beide Tabs bis zum Schließen). Nach dem Login lädt die Seite neu, der
+  Entwurf kommt zurück ins Feld (auch im Gast-Zweig von `onIdTokenChanged`)
+  und geht einmal von selbst raus. Ohne Konto läuft weiterhin nichts, was
+  Modellkosten erzeugt.
 - Eigene API-Keys sind ein eingeloggtes Feature: `/check_keys`, `/ask_*` mit
   User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
 - **Unvertrauenswürdige Request-Größen sind vor teurer Arbeit begrenzt:** Das
@@ -5516,7 +5575,10 @@ keinen Abgleich.
   Restarbeit wieder auf und reconciled pre-provider Usage-Reservierungen.
 - Run-Inhalt und Idempotenz-Mapping tragen `expires_at` (30 Tage ab Annahme);
   periodischer Cleanup löscht beide, bestehende v1-Dokumente werden beim
-  ersten Maintenance-Lauf nachmigriert. `DELETE /api/v1/consensus/runs/{run_id}`
+  ersten Maintenance-Lauf nachmigriert. Ein vollständiger Scan hinterlässt den
+  Erledigt-Marker `app_config/api_consensus_runs_retention_backfill`
+  (`completed_at`, `updated`); jeder spätere Prozessstart liest nur diesen
+  Marker statt der ganzen Collection (Audit C12). `DELETE /api/v1/consensus/runs/{run_id}`
   löscht Inhalt eigener terminaler Runs früher: Das Run-Dokument wird durch
   einen inhaltsfreien Tombstone (`status=deleted`, UID, Key-Hash, Zeitstempel,
   ursprüngliches `expires_at`) ersetzt, das Idempotenz-Mapping bleibt. Derselbe
@@ -5807,7 +5869,11 @@ keinen Abgleich.
   15 Minuten; fällig ist der Lauf montags 09:00 Europe/Berlin. Der erste Tick
   nach einem Deploy setzt nur `next_run_at` und feuert nie sofort. Ein
   transaktionaler 15-Minuten-Lease (`lease_until`/`lease_run_id`, `_acquire`)
-  verhindert prozessübergreifende Doppelläufe.
+  verhindert prozessübergreifende Doppelläufe. Der geplante Lauf prüft
+  `enabled`/`next_run_at` in derselben Lease-Transaktion noch einmal
+  (`_acquire(..., due_only=True)`, Audit C14): ein zweiter Prozess, der vor dem
+  Ende des ersten „fällig“ gelesen hat, sweept und meldet nicht ein zweites
+  Mal; nur der erzwungene Admin-Lauf überspringt diese Prüfung.
 - **Daten.** Fenster: die letzten 7 Tage bis heute−2 (GSC-Verzug) gegen die
   7 Tage davor. Genau fünf Search-Console-Abfragen über
   `GoogleSearchConsoleClient.search(start_date, end_date, dimensions, *,
@@ -6291,12 +6357,26 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Reload muss dabei vollständig sein: `apply_model_order`/`apply_default_models`
   laufen vor Preset-/Judge-/Watch-Normalisierung, die auf sie zurückfällt, und
   `rebuild_model_configs` baut `MODEL_CONFIGS` daneben auf und tauscht dann ein
-  (nie leer für Leser). Grenze: ein
+  (nie leer für Leser). Dasselbe gilt für alle geteilten Mengen, Listen und
+  Dicts, die Requests ohne Lock lesen (Provider-Modelle, `PREMIUM_MODELS`,
+  `ALLOWED_CONSENSUS_MODELS`, `LIMITS`, Presets, Watch-Modelle, Judge-Familien,
+  `MEMORY_EDIT_CONFIG`; Audit C8): neue Werte werden vorher berechnet und in
+  place ohne leeren Moment getauscht (`_replace_set`: erst ergänzen, dann
+  kürzen; `_replace_dict`; Listen per `lst[:] = neu`). `PREMIUM_MODELS` wächst
+  vor dem Tausch der Modellmengen und schrumpft danach, damit ein neues
+  Pro-Modell nie kurz Free ist; der Rollback (`_restore_runtime_config`) folgt
+  derselben Reihenfolge. Grenze: ein
   einzelner Lauf liest weiter die prozessweiten Maps; eine Aktivierung während
   eines laufenden Requests ist nicht als Snapshot pro Lauf eingefroren.
   `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
+  `normalize_limits_config` erzwingt Mindestwerte (`_LIMIT_MINIMUMS`, Audit
+  C16): `*_max_tokens` ≥ 1024, `*_max_words` ≥ 50,
+  `consensus_max_answer_chars` ≥ 1000, `consensus_max_question_chars` ≥ 200;
+  ein kleinerer Wert (z. B. ein Tippfehler 0) fällt auf den Default zurück,
+  auch beim Admin-Speichern. Zähler wie die Watch-Limits behalten 0 als echte
+  Einstellung, die Follow-up-Kontext-Caps kürzen nur den Kontext.
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
   den Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
   Checkbox in diese Liste aufgenommen werden. Das frühere Feld
@@ -6319,6 +6399,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   nächsten geplanten fremden Familie nicht. In Serverpfaden verwenden
   alle Familien denselben OpenRouter-Key; im Own-Key-Modus gibt es keinen
   Fallback auf das Server-Credential.
+- `app_config/api_consensus_runs_retention_backfill` — Erledigt-Marker des
+  einmaligen `expires_at`-Backfills der v1-API-Runs (`completed_at`, Zahl der
+  ergänzten Runs); fehlt er, scannt der nächste Maintenance-Lauf einmal.
 - `app_config/seo_pulse` — einziger Zustand des SEO-Pulses (§4 „SEO-Puls“):
   `enabled` (Default true), `next_run_at`, `last_run_at`, Lease
   `lease_until`/`lease_run_id` (15 min), `report` (Fenster, Woche/Vorwoche mit
@@ -6629,8 +6712,9 @@ pflegen: `DEFAULT_MODEL_BY_PROVIDER`, `FREE_DEFAULT_MODEL_BY_PROVIDER`,
 Basiswerte, `MODEL_ORDER_BY_PROVIDER`, der Firestore-Load samt Backfill sowie
 `provider_transport.PROVIDER_ORDER/PROVIDER_LABELS`, `engines`, `topics`,
 `opinion_map`, `share_snapshots`, `chat_store`, `watch_scheduler`, Admin und
-Picker. Die `ALLOWED_*_MODELS`-Namen bleiben Aliasse auf DASSELBE Set-Objekt der
-Registry (der Firestore-Load mutiert in place). Familienspezifische Hygiene
+Picker. Die Modellmenge einer Familie heißt nur noch `PROVIDERS[key].models`
+(die früheren `ALLOWED_*_MODELS`-Aliasse sind seit Audit C16 entfernt; der
+Firestore-Load mutiert die Menge in place). Familienspezifische Hygiene
 steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
 Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6 sendet
 `reasoning.enabled=false`, K3 zwingend `reasoning.enabled=true` (auch mit Reasoning-Schalter;
@@ -6946,8 +7030,11 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   Markdown im Repository-Stamm lösen sie nicht aus. Der Wechsel von Entwurf zu
   reviewbereit führt alle vier Gruppen aus; manuell sind `quick`, einzelne
   Gruppen oder `full` wählbar, sobald der Workflow auf dem Default-Branch liegt.
-  Spätere Pushes wiederholen nur die schnellen Prüfungen. Node 24, Java 21 und
-  Demo-Projekt sind festgelegt; kein Produktcredential nötig.
+  Spätere Pushes wiederholen nur die schnellen Prüfungen. Nachts (02:17 UTC)
+  läuft `browser-and-rules` auf `main` in eigener Concurrency-Gruppe; der
+  eigene Job `dependency-audit` (pip-audit) läuft bei Push/PR und nachts.
+  Python aus `.python-version`, Node 24, Java 21 und Demo-Projekt sind
+  festgelegt; kein Produktcredential nötig.
   `dev.ps1 check rules` kapselt den separaten Client-Regelrunner mit demselben
   Emulator-Lebenszyklus wie `browser`; `npm run test:rules` nutzt einen bereits
   laufenden lokalen Emulator. Tests/Details: `docs/testing.md`.
@@ -7894,7 +7981,8 @@ Sidebar-Zustand (`sidebar_collapsed`, Overlay < 1100 px), `#authTopActions`
 nur für Gäste ohne `id_token` und bei `html.agent-shell-expected` die
 Agent-Texte (Begrüßung, „New chat“, Composer-Platzhalter), die `renderShellNow`
 bzw. `syncComposer` bis zur bekannten Berechtigung hält; Gäste ohne `id_token`
-bekommen sofort den Sign-in-Platzhalter. Solange eine gespeicherte Sitzung
+bekommen sofort denselben Platzhalter eines neuen Chats (`App.askPlaceholder()`)
+und `body.is-guest` (seit 2026-10-15, Gäste tippen). Solange eine gespeicherte Sitzung
 noch wiederhergestellt wird (Auth unbekannt, `id_token` vorhanden), lässt
 `updateQuestionInputAccess` den Platzhalter stehen — vorher wechselte er beim
 Reload Vorlage → „Sign in…“ → „Enter your question“ → Agent-Text.

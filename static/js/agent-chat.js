@@ -928,10 +928,8 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     // A new chat names the one thing nobody would guess: a pasted AI answer
     // gets checked (the Agent decides; there is no extra mode or button).
-    const width = window.innerWidth || 1024;
     input.placeholder = running ? 'Write your next message…' : basis?.chatId && !basis.continuationUnavailable
-      ? 'Ask a follow-up' : width <= 360 ? 'Ask or check an AI answer'
-        : width <= 640 ? 'Ask, or paste an AI answer to check' : 'Ask anything, or paste an AI answer to check it';
+      ? 'Ask a follow-up' : App.askPlaceholder?.() ?? input.placeholder;
   }
   // Attachments still in the composer are this run's own when an upload
   // failed (agent-workspace keeps the chips and marks the run).

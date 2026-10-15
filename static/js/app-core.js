@@ -48,7 +48,10 @@
       files: (context.attachments?.length || context.attachmentMeta?.length || 0) > 0,
       reasoning: config.executionMode === "agent"
         ? (config.agentSettings?.reasoning_effort || "default") !== "default"
-        : config.deepSearch === true
+        : config.deepSearch === true,
+      // typed, example or pasted; after_login for a guest's question
+      // (composer-invite.js).
+      ...(window.App.composerInvite?.takeAskContext?.() || { source: "typed" })
     });
   }
 

@@ -902,6 +902,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Legacy-Passwort erlaubt bei einer neuen Adresse keinen direkten Login;
       beide Fälle führen ausschließlich über den Link im Postfach.
 - [ ] Login (E-Mail + Google), Logout.
+- [ ] Gast tippt und meldet sich beim Senden an (seit 2026-10-15): Als Gast
+      eine Beispielfrage unter dem leeren Feld antippen, das Feld füllt sich,
+      nichts wird gesendet. Senden öffnet „Create your free account“ mit
+      „Your question stays here…“; Login mit Google (Popup und auf dem Handy
+      Redirect) lädt neu, die Frage steht im Feld und läuft einmal von selbst
+      als neuer Chat. Ein weiteres Neuladen sendet nichts mehr. Über die
+      E-Mail-Registrierung kommt die Frage nach dem Passwort-Setzen ebenfalls
+      zurück (innerhalb einer Stunde läuft sie von selbst).
 - [ ] Login-Dialog auf echtem iPhone (Safari) und Android (Chrome): Öffnen
       fokussiert kein Feld (Google bleibt sichtbar), Tabs Log in/Sign up,
       „Los“ auf der Tastatur loggt ein, falsches Passwort zeigt „E-mail or

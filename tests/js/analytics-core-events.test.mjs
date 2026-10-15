@@ -115,9 +115,19 @@ describe('ask and answer', () => {
       conversationLockKey: 'chat-1', attachments: [], attachmentMeta: [{ name: 'a.pdf' }] });
     App.trackAsk({ config: { autoConsensus: false, deepSearch: false }, conversationLockKey: '', attachments: [] });
     expect(events).toEqual([
-      ['ask', { mode: 'agent', follow_up: true, files: true, reasoning: true }],
-      ['ask', { mode: 'compare', follow_up: false, files: false, reasoning: false }],
+      ['ask', { mode: 'agent', follow_up: true, files: true, reasoning: true, source: 'typed' }],
+      ['ask', { mode: 'compare', follow_up: false, files: false, reasoning: false, source: 'typed' }],
     ]);
+  });
+
+  it('name where the question came from, read once per question', () => {
+    const { App, events } = harness();
+    const taken = [{ source: 'example', after_login: true }];
+    App.composerInvite = { takeAskContext: () => taken.shift() || { source: 'typed' } };
+    const context = { config: { executionMode: 'agent' }, conversationLockKey: '', attachments: [] };
+    App.trackAsk(context);
+    App.trackAsk(context);
+    expect(events.map(([, data]) => [data.source, data.after_login])).toEqual([['example', true], ['typed', undefined]]);
   });
 
   it('count only the first terminal state of a run', () => {

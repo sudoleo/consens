@@ -1,5 +1,5 @@
 {
-  "sources": "3560b4790ba6",
+  "sources": "1ae357f2a81c",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -78,6 +78,7 @@
     "static/js/chat-session.js",
     "static/js/composer-autosize.js",
     "static/js/composer-collapse.js",
+    "static/js/composer-invite.js",
     "static/js/composer-keyboard.js",
     "static/js/composer-quote.js",
     "static/js/consensus-actions.js",
@@ -189,7 +190,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.d9aa010e3a5b.js",
+      "src": "/static/dist/head.6b7b8b51b1b7.js",
       "module": false,
       "defer": false
     },
@@ -201,7 +202,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.d960c934b344.js",
+      "src": "/static/dist/firebase.f6c93229bdd7.js",
       "module": true,
       "defer": false
     },
@@ -213,25 +214,25 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.897e651266b7.js",
+      "src": "/static/dist/app.1612db7aad08.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.0afa73031e7e.css"
+    "app": "/static/dist/app.bba35d2eb0d6.css"
   },
   "previous_assets": [
+    "app.dfbb73a40bc7.css",
     "app.f47c4e0d17dd.css",
-    "app.9d4c682125a4.css",
+    "app.27a8c805166f.js",
     "app.a1a769945fa0.js",
-    "app.7fd72cdc0ffb.js",
     "auth.5e487d1e2570.js",
     "demo.f96893d39783.js",
     "demo.cc796fe01278.js",
+    "firebase.74c633fb5cfd.js",
     "firebase.b33b107bb2a1.js",
-    "firebase.2a78dd8ed797.js",
-    "head.7c3f4a473869.js",
-    "head.6612250cc116.js"
+    "head.d9aa010e3a5b.js",
+    "head.7c3f4a473869.js"
   ]
 }

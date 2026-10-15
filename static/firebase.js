@@ -772,6 +772,9 @@ onIdTokenChanged(auth, async (user) => {
         if (typeof window.updateQuestionInputAccess === "function") {
           window.updateQuestionInputAccess();
         }
+        // Guests type too: resetLoadedRunAfterLogout() just emptied the
+        // composer, and a question written before a reload belongs back in it.
+        window.App?.restoreQuestionDraft?.();
         loginContainer.innerHTML = "";
         loginContainer.hidden = true;
 
@@ -897,6 +900,9 @@ const AUTH_MODE_COPY = {
     lead: "Ask once and see where leading AI models agree and where they don’t.",
   },
 };
+// Opened for a reason (a guest's Send): that reason replaces the lead on both
+// tabs until the dialog closes.
+let authContextLead = "";
 
 function mapFirebaseLoginError(error) {
   // SDK 9.22 predates Firebase's e-mail enumeration protection: a wrong
@@ -1019,6 +1025,9 @@ function forgetRememberedEmail() {
 // A fresh page starts the signed-in app from a clean slate (a guest's demo
 // run does not belong to the account) and keeps the page the user was on.
 function continueSignedIn() {
+  // A guest's question waiting for this sign-in goes out on the fresh page,
+  // not in this one while it unloads (composer-invite.js).
+  window.App.reloadingAfterSignIn = true;
   const url = new URL(window.location.href);
   url.searchParams.delete("setup");
   window.location.replace(url.pathname + url.search);
@@ -1118,7 +1127,7 @@ function setMode(mode) {
 
   const copy = AUTH_MODE_COPY[formEl.dataset.mode];
   titleEl.textContent = copy.title;
-  leadEl.textContent = copy.lead;
+  leadEl.textContent = authContextLead || copy.lead;
   [[tabLoginEl, !isRegister], [tabRegisterEl, isRegister]].forEach(([tab, selected]) => {
     tab.setAttribute("aria-selected", String(selected));
     tab.tabIndex = selected ? 0 : -1;
@@ -1502,6 +1511,7 @@ function closeAuthModal() {
   const modal = document.getElementById("loginModal");
   if (!modal || modal.style.display !== "block") return;
   modal.style.display = "none";
+  authContextLead = "";
   hidePassword();
   if (authModalReturnFocus?.isConnected && typeof authModalReturnFocus.focus === "function") {
     authModalReturnFocus.focus({ preventScroll: true });
@@ -1518,13 +1528,15 @@ document.getElementById("loginContainer").addEventListener("click", event => {
 
 // Auth-Buttons oben rechts (nur ausgeloggt sichtbar): öffnen das Modal direkt
 // im passenden Modus — "Sign up" landet ohne Umweg im Registrierungsformular.
-function openAuthModal(mode, trigger, source) {
+function openAuthModal(mode, trigger, source, { lead = "" } = {}) {
   if (auth.currentUser) return;
+  authContextLead = lead;
   showAuthModal(mode, trigger);
   trackAppEvent("auth_modal_open", source ? { mode, source } : { mode });
 }
 
-// Demo end and the locked attachment menu open the same dialog.
+// Demo end, the locked attachment menu and a guest's Send
+// (composer-invite.js) open the same dialog.
 window.App.openAuthModal = openAuthModal;
 
 document.getElementById("authTopLoginBtn")?.addEventListener("click", event => openAuthModal("login", event.currentTarget));

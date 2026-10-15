@@ -242,6 +242,26 @@ def test_rejects_tests_outside_selected_suite(cli, target, path):
     assert not calls
 
 
+@pytest.mark.parametrize("target", ["backend", "browser"])
+def test_venv_on_another_python_version_must_be_rebuilt(cli, target):
+    root, run = cli
+    (root / ".python-version").write_text("2.7\n", encoding="utf-8")
+    result, calls = run(target)
+    assert result.returncode == 1
+    current = "%d.%d" % sys.version_info[:2]
+    assert f"venv uses Python {current}, the project expects 2.7" in result.stderr
+    assert "docs/testing.md" in result.stderr
+    assert not calls
+
+
+def test_venv_matching_python_version_passes_with_patch_level(cli):
+    root, run = cli
+    (root / ".python-version").write_text("%d.%d.99\n" % sys.version_info[:2], encoding="utf-8")
+    result, calls = run("backend", test_path="tests/test_example.py")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [call["tool"] for call in calls] == ["pytest"]
+
+
 def test_missing_dependencies_have_actionable_error(cli):
     root, run = cli
     (root / "node_modules/vitest/vitest.mjs").unlink()
