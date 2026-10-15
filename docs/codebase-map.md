@@ -432,10 +432,10 @@ Rechnung aus `consensus_scoring.py` auf genau diese Daten. Zahl und Einheit
 Quellen gibt es bewusst keine – erfundene Belege waeren die schlechtere Demo,
 und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
 Landing-Walkthrough (Szene 01–03) zeigt denselben Lauf, damit Hero, Demo und
-Mockups eine Geschichte erzählen. Die Demo aktiviert vor jedem Start das konfigurierte Balanced-Preset ueber
-`App.selectConsensusPreset('balanced')`, einschliesslich aller sechs Familien
-und ihrer aktuellen Modelllabels. Daily-/Custom-Ausschluesse werden dabei durch
-Balanced ersetzt. Die sechs redaktionell geschriebenen Demo-Perspektiven werden
+Mockups eine Geschichte erzählen. Die Demo zeigt vor jedem Start das konfigurierte Daily-Preset ueber
+`App.previewConsensusPreset('fast')`, einschliesslich aller sechs Familien
+und ihrer aktuellen Modelllabels (seit 2026-10-15; vorher Balanced). Eine eigene
+Open-Models-/Custom-Wahl wird dabei nur für die Vorführung durch Daily ersetzt. Die sechs redaktionell geschriebenen Demo-Perspektiven werden
 bei geaenderten Preset-Familien samt Claims, Zitaten und Differences konsistent
 auf die aktuelle Aufstellung abgebildet; es werden keine LLMs aufgerufen.
 Modell-Spinner setzen `responseState=pending` ohne Antworttext. Waehrend des
@@ -696,7 +696,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   eigene Wahl; innerhalb von Custom wird nur das Geänderte gespeichert, dazu
   Familien ohne gespeichertes Modell (eine gespeicherte Pro-Wahl, die vor dem
   Laden der Stufe gesperrt erscheint, bleibt so erhalten). Der Consensus-Picker hat seit 2026-07-18
-  eine Preset-Ebene (Daily/Balanced/High Quality + Custom): Presets kommen aus
+  eine Preset-Ebene (Daily/Open Models/High Quality + Custom): Presets kommen aus
   `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set genau
   sechs aus den Registry-Familien gewählte Antwortmodelle plus Consensus-Engine. High Quality (interne ID
   `thorough`) ist Pro-only und zeigt
@@ -2640,8 +2640,8 @@ abgelehnt. Der Browser validiert zwei bis sechs Vergleichsmodelle, sperrt Senden
 bei ungültiger Auswahl und erhält auch bei direkten Aufrufen den Entwurf vor
 Chat-Erstellung/Netzwerkzugriff. Er sendet nie `null` als Ersatz für eine leere
 Auswahl. API-Aufrufe ohne Auswahl behalten das zentrale Default-Preset
-(`cfg.DEFAULT_CONSENSUS_PRESET`, Balanced; die App startet seit 2026-10-12 mit
-`cfg.APP_DEFAULT_CONSENSUS_PRESET`, Daily). Der öffentliche
+(`cfg.DEFAULT_CONSENSUS_PRESET`, seit 2026-10-15 Daily wie
+`cfg.APP_DEFAULT_CONSENSUS_PRESET`, mit dem die App seit 2026-10-12 startet). Der öffentliche
 Metering-Katalog ergänzt die gemeinsame Registry automatisch um aktuelle
 Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeeintrag.
 
@@ -4679,7 +4679,7 @@ ein Kuchen (Tagesrest) in einem feinen Ring statt eines offenen Bogens, der wie
 ein Ladekreisel aussah (`#quotaRingArc` r=3.5, stroke-width 7, gleiche
 dashoffset-Logik in `sidebar-quota.js`). Unter dem Feld steht nur der
 Hinweissatz. Pro Modus gibt es genau EINEN
-Modell-Chip; er nennt nur, wer antwortet („6 models · Balanced“ mit Consensus,
+Modell-Chip; er nennt nur, wer antwortet („6 models · Daily“ mit Consensus,
 „6 models“ in Compare, „<Chatmodell> +6“ in Agent: Chatmodell plus Zahl
 der Vergleichsmodelle, deren Menü beide Abschnitte trägt), nie den Modusnamen.
 
@@ -5274,8 +5274,8 @@ richten keinen Fehler an). System-Prompt, Display, Agent-Einstellungen/-Modell
 und Check sources bleiben. Das App-Preset steht in
 `cfg.APP_DEFAULT_CONSENSUS_PRESET` (`fast` = Daily, an die Seite als
 `default_consensus_preset`); API und der Rückfall eines Agent-Vergleichs ohne
-Auswahl behalten `cfg.DEFAULT_CONSENSUS_PRESET` (Balanced). Die Demo zeigt
-Balanced über `App.previewConsensusPreset` nur an (bis zum Neuladen oder zur
+Auswahl nehmen `cfg.DEFAULT_CONSENSUS_PRESET` (seit 2026-10-15 ebenfalls Daily).
+Die Demo zeigt Daily über `App.previewConsensusPreset` nur an (bis zum Neuladen oder zur
 nächsten eigenen Wahl), sie speichert es nicht.
 
 **Abgleich**: `firebase.js` ruft nach einer verifizierten Anmeldung
@@ -5349,9 +5349,9 @@ keinen Abgleich.
   Schalter weiter als `request.deep_think` (Idempotenz alter Runs), die Antwort
   trägt `reasoning` und `deep_think` mit demselben Wert. Der Server wählt die
   sechs Antwortmodelle und die Consensus-Engine aus dem konfigurierten
-  Balanced-Preset — mit und ohne Reasoning dieselben. Kosten, Limits, Modelle
+  Daily-Preset (`cfg.DEFAULT_CONSENSUS_PRESET`) — mit und ohne Reasoning dieselben. Kosten, Limits, Modelle
   oder Modellanzahl sind keine Request-Felder.
-- API-v1-Runs verwenden bewusst immer die sechs Familien des Balanced-Presets,
+- API-v1-Runs verwenden bewusst immer die sechs Familien des Daily-Presets,
   einschließlich DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Der
   frühere DeepSeek-Ausschluss in Antwort-Fan-out, Consensus-Engine/Fallback und
   Differences-Judges ist entfernt — er war nirgends sichtbar und hat nach einem
@@ -6568,15 +6568,23 @@ Providerlisten, Reihenfolge, Free-Defaults und Premium-Zuordnung aus
 `app_config/models` autoritativ. Ebenfalls in `config.py`: die festen
 Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und Basiswerte ausschließlich
 für ein fehlendes/noch nicht migriertes Dokument.
-Firestore `preset_models` speichert pro Daily/Balanced/High Quality (ID:
-`thorough`) unter `answers` genau sechs unterschiedliche Familienmodelle plus
-`consensus`; das alte Top-Level-Provider-Schema wird beim Laden migriert.
-Daily/Balanced bleiben Free-faehig und
-High Quality bleibt unabhaengig von der Konfiguration Pro-only.
+Firestore `preset_models` speichert pro Daily/Open Models (ID: `balanced`)/High
+Quality (ID: `thorough`) unter `answers` genau sechs unterschiedliche
+Familienmodelle plus `consensus`; das alte Top-Level-Provider-Schema wird beim
+Laden migriert. Daily/Open Models bleiben Free-faehig und
+High Quality bleibt unabhaengig von der Konfiguration Pro-only. Open Models
+(seit 2026-10-15, vorher das mit Daily deckungsgleiche „Balanced“) ist eine
+zweite Meinung aus sechs Modellen mit offenen Gewichten (gpt-oss-120b,
+Gemma 4 31B, DeepSeek V4.1 Flash, Kimi K2.6, GLM 5.3 Flash, Muse Glimmer 30B;
+Beleg je Modell: `hugging_face_id` im OpenRouter-Katalog) mit demselben
+Schreiber wie Daily. Free-Presets haben je Familie praktisch nur ein aktuelles
+Modell, ein zweites Free-Preset unterscheidet sich deshalb nur in der
+Aufstellung. gpt-oss-120b liest nur Text: `ProviderConfig.text_only_models`
+nimmt einzelne Modelle einer sonst anhangfähigen Familie von Anhängen aus.
 `scripts/model_release_check.py` (lokaler geplanter Task
 `consens-model-release-check`, alle 3 Tage) prüft das Dokument nur lesend
 (`.get()`): neue OpenRouter-Modelle, verschwundene konfigurierte IDs,
-Preset-Befunde (Modell nicht in der Familienliste, Premium in Daily/Balanced,
+Preset-Befunde (Modell nicht in der Familienliste, Premium in Daily/Open Models,
 neueres Modell derselben Reihe, identische Presets) und je eine ZDR-Probe der
 genutzten Modelle. Zustand liegt neben dem Task
 (`~/.claude/scheduled-tasks/consens-model-release-check/last-seen.json`), damit
@@ -6615,7 +6623,7 @@ abzulehnen; Admin-Saves bleiben strikt.
   Variante `grok-4.3-no-reasoning` mit HTTP 400 „Model not found“. Das Admin-Dashboard
   blendet die Auflösung als `→ <api_model>` hinter dem Optionsnamen ein.
   Die Admin-Dropdowns blenden Premium-Modelle in Free-Kontexten (Free Watch,
-  Daily/Balanced-Preset) nicht mehr aus, sondern zeigen sie deaktiviert mit dem
+  Daily/Open-Models-Preset) nicht mehr aus, sondern zeigen sie deaktiviert mit dem
   Zusatz „— Pro only“, damit die Liste vollständig bleibt.
 
 Die frühere Early-/Frontier-Low-Schicht ist vollständig entfernt. Es gibt nur

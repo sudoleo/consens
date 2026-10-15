@@ -133,6 +133,11 @@ GEMINI_MAX_TOKENS = MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 OPENAI_LUNA_MODEL = "gpt-5.6-luna"
 OPENAI_SOL_MODEL = "gpt-5.6-sol"
+# Offene Modelle (Gewichte auf Hugging Face) fuer das Preset "Open Models".
+# gpt-oss-120b liest nur Text und denkt zwingend (Stufe "low", siehe
+# MODEL_REQUEST_CONFIG); Gemma 4 31B nimmt Text und Bilder.
+OPENAI_OSS_MODEL = "gpt-oss-120b"
+GEMMA_MODEL = "gemma-4-31b-it"
 DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
 MISTRAL_PRO_MODEL = "mistral-medium-3-5"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
@@ -240,11 +245,15 @@ class ProviderConfig:
     # ist bewusst feiner als Provider-Support: GLM 5.3 Flash ist multimodal,
     # GLM 5.3 dagegen text-only.
     attachment_models: frozenset[str] | None = None
+    # Einzelne Modelle einer sonst anhangfaehigen Familie, die nur Text lesen
+    # (gpt-oss-120b): eine Liste aller uebrigen waere bei jedem neuen
+    # Admin-Modell nachzupflegen.
+    text_only_models: frozenset[str] = frozenset()
 
     def model_accepts_attachments(self, model_id: str | None) -> bool:
-        return (
-            self.attachment_models is None
-            or str(model_id or "") in self.attachment_models
+        model = str(model_id or "")
+        return model not in self.text_only_models and (
+            self.attachment_models is None or model in self.attachment_models
         )
 
     @property
@@ -270,7 +279,7 @@ class ProviderConfig:
 
 def _provider(key, label, prefix, base, pro, models, required=(),
               dom_key="", title="", short_label="", icon="", icon_class="",
-              citation_label="", attachment_models=None):
+              citation_label="", attachment_models=None, text_only_models=()):
     dom_key = dom_key or key
     title = title or label
     short_label = short_label or title
@@ -291,6 +300,7 @@ def _provider(key, label, prefix, base, pro, models, required=(),
         attachment_models=(
             None if attachment_models is None else frozenset(attachment_models)
         ),
+        text_only_models=frozenset(text_only_models),
     )
 
 
@@ -303,11 +313,12 @@ PROVIDERS: dict[str, ProviderConfig] = {
                 "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o",
                 "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
                 OPENAI_PRO_MODEL, DEFAULT_OPENAI_MODEL,
-                OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL,
+                OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, OPENAI_OSS_MODEL,
             },
-            required=(OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL),
+            required=(OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, OPENAI_OSS_MODEL),
             title="ChatGPT", short_label="OpenAI",
             icon="chatgpt.png", icon_class="chatgpt-logo",
+            text_only_models=(OPENAI_OSS_MODEL,),
         ),
         _provider(
             "mistral", "Mistral", "mistralai/", DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL,
@@ -325,9 +336,9 @@ PROVIDERS: dict[str, ProviderConfig] = {
                 GEMINI_FLASH_MODEL, GEMINI_36_FLASH_MODEL, "gemini-3.1-flash-lite",
                 "gemini-2.5-flash",
                 GEMINI_35_FLASH_MODEL,
-                GEMINI_PRO_MODEL, "gemini-2.5-pro",
+                GEMINI_PRO_MODEL, "gemini-2.5-pro", GEMMA_MODEL,
             },
-            required=(GEMINI_36_FLASH_MODEL, GEMINI_35_FLASH_MODEL),
+            required=(GEMINI_36_FLASH_MODEL, GEMINI_35_FLASH_MODEL, GEMMA_MODEL),
             icon="gemini-icon.png", citation_label="Google Gemini",
         ),
         _provider(
@@ -466,10 +477,15 @@ ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
 # Consensus-Engine koennen getrennt davon aus Firestore ueberschrieben werden;
 # "Custom" oeffnet weiterhin die volle Engine-Liste.
 # High Quality (interne ID: thorough) bleibt als Produktregel Pro-only; Daily
-# (interne ID: fast) und Balanced werden bei der
+# (interne ID: fast) und Open Models (interne ID: balanced) werden bei der
 # Admin-Normalisierung strikt auf Free-faehige Modelle begrenzt.
 # Die IDs sind Vertrag (Firestore-Overrides, gespeicherte Nutzerauswahl) und
 # bleiben deshalb unveraendert, auch wenn sich das Label aendert.
+# Open Models (seit 2026-10-15, vorher "Balanced" und deckungsgleich mit
+# Daily): sechs Modelle mit offenen Gewichten als zweite Meinung. Free-Presets
+# haben je Familie praktisch nur ein aktuelles Modell, ein zweites Free-Preset
+# kann sich also nur in der Aufstellung unterscheiden. Der Schreiber bleibt
+# derselbe wie in Daily, damit nur das Panel wechselt.
 CONSENSUS_PRESET_DEFINITIONS = [
     {
         "id": "fast",
@@ -479,8 +495,8 @@ CONSENSUS_PRESET_DEFINITIONS = [
     },
     {
         "id": "balanced",
-        "label": "Balanced",
-        "hint": "Reliable default for most questions",
+        "label": "Open Models",
+        "hint": "Six open models, for a second opinion",
         "pro_only": False,
     },
     {
@@ -505,12 +521,12 @@ _BASE_CONSENSUS_PRESET_MODELS = {
     },
     "balanced": {
         "answers": {
-            "openai": OPENAI_LUNA_MODEL,
-            "mistral": DEFAULT_MISTRAL_MODEL,
-            "anthropic": DEFAULT_ANTHROPIC_MODEL,
-            "gemini": DEFAULT_GEMINI_MODEL,
+            "openai": OPENAI_OSS_MODEL,
+            "gemini": GEMMA_MODEL,
             "deepseek": DEEPSEEK_FLASH_MODEL,
-            "grok": DEFAULT_GROK_MODEL,
+            "kimi": KIMI_BASE_MODEL,
+            "glm": GLM_BASE_MODEL,
+            "meta": MUSE_BASE_MODEL,
         },
         "consensus": OPENAI_LUNA_MODEL,
     },
@@ -539,11 +555,12 @@ CONSENSUS_PRESET_MODELS = {
     }
     for preset_id, models in _BASE_CONSENSUS_PRESET_MODELS.items()
 }
-DEFAULT_CONSENSUS_PRESET = "balanced"
+# Lineup of the API and the fallback lineup of an Agent comparison. Daily since
+# 2026-10-15: "balanced" became Open Models, a second opinion rather than a
+# default, and Daily carried the same models as the old Balanced.
+DEFAULT_CONSENSUS_PRESET = "fast"
 # The preset the app's model picker starts from. Daily since 2026-10-12, when
-# every browser was reset once to Agent + Daily (static/js/user-settings.js);
-# the API and the fallback lineup of an Agent comparison keep
-# DEFAULT_CONSENSUS_PRESET.
+# every browser was reset once to Agent + Daily (static/js/user-settings.js).
 APP_DEFAULT_CONSENSUS_PRESET = "fast"
 
 VALID_LEADERBOARD_MODELS = {
@@ -791,6 +808,8 @@ MODEL_LABEL_OVERRIDES = {
     GLM_PRO_MODEL: "GLM 5.3",
     MUSE_BASE_MODEL: "Muse Glimmer 30B",
     MUSE_PRO_MODEL: "Muse Spark 1.3",
+    OPENAI_OSS_MODEL: "gpt-oss-120b",
+    GEMMA_MODEL: "Gemma 4 31B",
 }
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {}
@@ -816,6 +835,8 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     # Output abgerechneten Reasoning-Tokens klein.
     MUSE_BASE_MODEL: {"reasoning": {"effort": "low"}},
     MUSE_PRO_MODEL: {"reasoning": {"effort": "low"}},
+    # Ebenso zwingend denkend (OpenRouter: mandatory, Standard "medium").
+    OPENAI_OSS_MODEL: {"reasoning": {"effort": "low"}},
 }
 
 # Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.
@@ -1236,7 +1257,7 @@ def _consensus_engine_available(model_id: str | None) -> bool:
 
 
 def apply_consensus_preset_models(config: dict | None) -> None:
-    """Validiert und aktiviert die Firestore-Model-Sets. Fast/Balanced duerfen
+    """Validiert und aktiviert die Firestore-Model-Sets. Daily/Open Models duerfen
     keine Pro-Modelle enthalten; High Quality (ID: thorough) ist durch
     die Produktdefinition Pro-gated und darf die Premium-Modelle nutzen."""
     incoming = config if isinstance(config, dict) else {}

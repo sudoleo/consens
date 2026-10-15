@@ -2023,7 +2023,7 @@ def test_reasoning_switch_keeps_the_selected_consensus_engine(app_page):
 
 
 def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
-    """Fast/Balanced sind vollstaendige Model-Sets; High Quality bleibt fuer Free
+    """Daily/Open Models sind vollstaendige Model-Sets; High Quality bleibt fuer Free
     sichtbar, oeffnet mit Pro-Badge aber den Kosten-Hinweis statt eines Kaufdialogs."""
     result = app_page.evaluate(
         """() => {

@@ -549,7 +549,7 @@ def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_ser
 
 
 @pytest.mark.parametrize('agent_mode', [False, True])
-def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser, phase4_server, agent_mode):
+def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, phase4_server, agent_mode):
     context, page = _real_firebase_page(browser, phase4_server,
         init_script=f"localStorage.setItem('runMode','{'consensus' if agent_mode else 'compare'}');localStorage.setItem('consensio.settingsReset','2026-10-12');")
     try:
@@ -567,17 +567,17 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
                 page.add_script_tag(url=url)
         page.wait_for_function("typeof window.runDemoFlow === 'function'")
         if agent_mode:
-            # Simulate a registry-updated Balanced preset with the newer families.
+            # Simulate a registry-updated Daily preset with the newer families.
             page.evaluate("""() => {
               const wanted = ['OpenAI','Gemini','DeepSeek','Kimi','GLM','Meta'];
-              CONSENSUS_PRESETS.find(p => p.id === 'balanced').models = Object.fromEntries(
+              CONSENSUS_PRESETS.find(p => p.id === 'fast').models = Object.fromEntries(
                 App.modelPrefs.filter(p => wanted.includes(p.key)).map(p => [p.provider,
                   Array.from(document.getElementById(p.selectId).options).find(o => !o.disabled && o.value).value]));
             }""")
+        # The visitor's own choice (Open Models, ID balanced) differs from the
+        # Daily lineup the demo shows.
         page.evaluate("""() => {
-          App.selectConsensusPreset('fast');
-          App.modelPrefs.filter(p => ['Mistral','Anthropic','Grok'].includes(p.key)).forEach(p =>
-            App.setModelSelectionState(p, false, {persist:false, animate:false}));
+          App.selectConsensusPreset('balanced');
           window.__demoFinished = false;
           window.runDemoFlow().then(() => window.__demoFinished = true);
         }""")
@@ -591,20 +591,20 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
               && document.querySelectorAll('.is-direct .answer-reader-answer').length === 6
               && document.querySelectorAll('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton').length === 6
             """, polling=16, timeout=5000)
-            reader_screenshot(page, 'demo-balanced-waiting')
+            reader_screenshot(page, 'demo-daily-waiting')
         page.wait_for_function('() => window.__demoFinished === true', timeout=60000)
         result = page.evaluate("""() => App.modelPrefs.filter(p => !document.getElementById(p.responseId).classList.contains('excluded')).map(p => {
           const box = document.getElementById(p.responseId);
           return {provider:p.provider, model:document.getElementById(p.selectId).value,
             text:box.dataset.consensusAnswer, state:box.dataset.responseState};
         })""")
-        expected = page.evaluate("CONSENSUS_PRESETS.find(p => p.id === 'balanced').models")
+        expected = page.evaluate("CONSENSUS_PRESETS.find(p => p.id === 'fast').models")
         assert len(result) == 6
         assert {r['provider']:r['model'] for r in result} == expected
         assert all(r['state'] == 'complete' and len(r['text']) > 100 for r in result)
         assert all('<span' not in r['text'] and '<div' not in r['text'] and 'thinking-wrap' not in r['text'] for r in result)
-        # The demo shows Balanced without making it the visitor's choice.
-        assert page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'fast'
+        # The demo shows Daily without making it the visitor's choice.
+        assert page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'balanced'
         if agent_mode:
             expect(page.locator('#consensusOutput')).to_be_visible(timeout=30000)
             expect(page.locator('#differencesCards .diff-card')).to_have_count(3, timeout=60000)
@@ -623,6 +623,6 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
 
             expect(page.locator('#consensusOutput')).not_to_be_visible()
         assert page.evaluate("localStorage.getItem('runMode')") == ('consensus' if agent_mode else 'compare')
-        reader_screenshot(page, f'demo-balanced-{agent_mode}')
+        reader_screenshot(page, f'demo-daily-{agent_mode}')
     finally:
         context.close()

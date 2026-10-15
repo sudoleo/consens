@@ -50,7 +50,7 @@ BookmarkModelName = Literal.__getitem__(tuple(cfg.PROVIDER_LABEL_BY_ID.values())
 # grosszuegiger Schutz gegen unautorisierte Request-Fluten bestehen; nach der
 # Token-Pruefung begrenzt dieses Budget den tatsaechlichen Kontoinhaber. So
 # sperren weder ein gemeinsamer Proxy/NAT noch andere Nutzer einen laufenden
-# Daily-, Balanced- oder High-Quality-Save mitten im Snapshot.
+# Daily-, Open-Models- oder High-Quality-Save mitten im Snapshot.
 BOOKMARK_UID_RATE_LIMITS = {
     "model_save": 120,
     "consensus_save": 60,

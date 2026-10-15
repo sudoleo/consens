@@ -389,7 +389,7 @@ All six models agree that the house can work with a heat pump, that a room-by-ro
 BestModel: Anthropic`
 };
 
-// Six authored viewpoints are instantiated for the configured Balanced families.
+// Six authored viewpoints are instantiated for the configured Daily families.
 // Keep every claim/quote attached to the same viewpoint if an admin changes
 // a preset family (for example Claude -> Kimi). These are local demo fixtures.
 function buildDemoDataForModels(models) {
@@ -966,13 +966,14 @@ function whenAppReady() {
 
 async function runDemoFlow() {
   await whenAppReady();
-  // The demonstration always uses the complete Balanced lineup, not the
-  // intersection of its fixture authors with a previous Daily/Custom choice.
+  // The demonstration always uses the complete Daily lineup (the app's default
+  // preset), not the intersection of its fixture authors with a previous
+  // Open Models/Custom choice.
   // Shown only: it does not become the visitor's (or the account's) choice.
-  window.App.previewConsensusPreset?.('balanced');
+  window.App.previewConsensusPreset?.('fast');
   window.App.answerReader?.reset?.();
-  const balanced = window.CONSENSUS_PRESETS?.find(preset => preset.id === 'balanced');
-  activeDemoModels = (window.App.modelPrefs || []).filter(pref => balanced?.models?.[pref.provider]).map(pref => pref.key);
+  const daily = window.CONSENSUS_PRESETS?.find(preset => preset.id === 'fast');
+  activeDemoModels = (window.App.modelPrefs || []).filter(pref => daily?.models?.[pref.provider]).map(pref => pref.key);
   activeDemoData = buildDemoDataForModels(activeDemoModels);
   // Agent (the default, also for guests who come from the landing page)
   // plays an Agent turn; a chosen Compare or Consensus plays that mode.

@@ -260,8 +260,8 @@ def test_post_returns_accepted_run_and_duplicate_run_id(monkeypatch):
 def test_server_model_plan_uses_exactly_the_configured_preset_models():
     plan = api_consensus_runner.build_server_model_plan(deep_think=False, is_pro=True)
 
-    balanced = cfg.get_consensus_preset_models()["balanced"]["answers"]
-    assert plan["providers"] == balanced
+    default = cfg.get_consensus_preset_models()[cfg.DEFAULT_CONSENSUS_PRESET]["answers"]
+    assert plan["providers"] == default
     assert len(plan["providers"]) == cfg.MAX_RUN_FAMILIES
     assert "deepseek" in plan["providers"]
 

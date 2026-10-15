@@ -8,7 +8,7 @@
 //   2) Custom-Model-Picker: das eigene, getunte Listbox-Dropdown, das die
 //      nativen <select> ueberlagert (expandedModelPicker ist modul-privat).
 //   3) Consensus-Presets: der Consensus-Picker zeigt primaer die Presets
-//      Daily/Balanced/High Quality (window.CONSENSUS_PRESETS) plus "Custom" fuer
+//      Daily/Open Models/High Quality (window.CONSENSUS_PRESETS) plus "Custom" fuer
 //      die volle Modell-Liste. Ein Preset setzt die sechs Antwortmodelle und
 //      die Consensus-Engine gemeinsam. High Quality bleibt Pro-only.
 //   4) Verknuepfte Picker (linkModelPicker): ein Chip, ein Menue fuer zwei
@@ -311,7 +311,7 @@
     }
   };
 
-  // --- CONSENSUS-PRESETS (Daily/Balanced/High Quality + Custom) ---
+  // --- CONSENSUS-PRESETS (Daily/Open Models/High Quality + Custom) ---
 
   // Zuletzt angezeigtes Preset-/Modell-Label OHNE die Modellanzahl davor.
   // Der gefuehrte Lauf nennt es rechts im Kopf ("Daily · 6 models"); die Zahl
@@ -520,7 +520,7 @@
       }
       // Der Consensus-Trigger ist im rahmenlosen Composer der EINZIGE
       // Lauf-Schalter. Er sagt deshalb beides: wie viele Modelle antworten
-      // und welche Stufe den Konsens schreibt ("6 models · Balanced").
+      // und welche Stufe den Konsens schreibt ("6 models · Daily").
       const count = window.App.getSelectedModelCount?.() || 0;
       const countLabel = `${count} ${count === 1 ? "model" : "models"}`;
       lastPresetDisplayLabel = displayLabel;
@@ -1081,7 +1081,7 @@
       return;
     }
 
-    // Preset-Ebene: Daily/Balanced/High Quality + Custom statt der Modell-Liste.
+    // Preset-Ebene: Daily/Open Models/High Quality + Custom statt der Modell-Liste.
     if (state.presets && state.view !== "custom" && !isModelListView(state.view)) {
       renderConsensusPresetMenu(select, state);
       syncCustomModelPicker(select);

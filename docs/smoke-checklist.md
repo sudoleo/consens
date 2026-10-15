@@ -433,7 +433,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Der Custom-Picker listet alle neun Familien (inkl. Kimi, GLM und Muse); sind
       sechs gewaehlt, ist die siebte sichtbar gesperrt. Eine Familie abwaehlen
       gibt die gesperrten wieder frei, und jede Handauswahl schaltet die
-      Kopfzeile von Daily/Balanced/High Quality auf die Custom-Anzeige um.
+      Kopfzeile von Daily/Open Models/High Quality auf die Custom-Anzeige um.
 - [ ] Echter Bild-/PDF-Anhang pausiert DeepSeek mit sichtbarer Erklärung; nach
       Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
 - [ ] Die Anhang-Sperre haengt am gewaehlten MODELL, nicht an der Familie:
@@ -579,7 +579,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „…Start a new comparison to continue."
 
 ## Consensus (höchstes Risiko)
-- [ ] Presets: Daily/Balanced setzen sichtbar alle sechs Antwortmodelle und die
+- [ ] Presets: Daily/Open Models setzen sichtbar alle sechs Antwortmodelle und die
       konfigurierte Consensus-Engine; eine manuelle Modellwahl wechselt zu Custom.
 - [ ] High Quality zeigt ein Pro-Badge, hat beim Hover/Fokus eine dezente
       Power-Animation, oeffnet fuer Free den Kosten-Erklaerdialog (kein Kauf-,
@@ -849,7 +849,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       zuvor explizit im Picker gewählte Provider-Auswahl bleibt erhalten.
 - [ ] Modell-Auswahl bleibt nach Reload erhalten.
 - [ ] Erster Besuch nach dem Reset vom 2026-10-12 (oder `consensio.settingsReset` im localStorage löschen, neu laden; als Gast oder mit einem Konto ohne gespeicherte Einstellungen): Modus Agent, Preset Daily; System-Prompt und Display-Optionen unverändert.
-- [ ] Demo starten: sie zeigt Balanced; nach dem Neuladen steht wieder die eigene Wahl (Daily), nichts davon im Konto.
+- [ ] Demo starten: sie zeigt Daily; nach dem Neuladen steht wieder die eigene Wahl (z. B. Open Models), nichts davon im Konto.
 
 ## Kontoeinstellungen
 - [ ] Angemeldet Modus, Modellauswahl, eine Display-Option und den System-Prompt

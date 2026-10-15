@@ -203,8 +203,16 @@ class ExistingModelFlowTests(unittest.TestCase):
             self.assertEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
             self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
             self.assertTrue(preset["consensus_model"])
-        self.assertEqual(presets["balanced"]["models"]["openai"], cfg.OPENAI_LUNA_MODEL)
+        # Open Models (ID balanced): only open-weight models, same writer as Daily.
+        self.assertEqual(presets["balanced"]["label"], "Open Models")
+        self.assertEqual(presets["balanced"]["models"], {
+            "openai": cfg.OPENAI_OSS_MODEL, "gemini": cfg.GEMMA_MODEL,
+            "deepseek": cfg.DEEPSEEK_FLASH_MODEL, "kimi": cfg.KIMI_BASE_MODEL,
+            "glm": cfg.GLM_BASE_MODEL, "meta": cfg.MUSE_BASE_MODEL,
+        })
+        self.assertFalse(set(presets["balanced"]["models"].values()) & cfg.PREMIUM_MODELS)
         self.assertEqual(presets["balanced"]["consensus_model"], cfg.OPENAI_LUNA_MODEL)
+        self.assertEqual(cfg.DEFAULT_CONSENSUS_PRESET, "fast")
         self.assertEqual(presets["thorough"]["models"]["openai"], cfg.OPENAI_SOL_MODEL)
         self.assertEqual(presets["thorough"]["label"], "High Quality")
         self.assertIn(cfg.OPENAI_SOL_MODEL, cfg.PREMIUM_MODELS)

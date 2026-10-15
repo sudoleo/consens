@@ -135,6 +135,20 @@ class RegistryCoverageTests(unittest.TestCase):
         )
         self.assertTrue(cfg.MODEL_CONFIGS[cfg.MUSE_BASE_MODEL].accepts_attachments)
 
+    def test_open_models_have_labels_and_gpt_oss_reads_text_only(self):
+        # gpt-oss-120b is the one text-only model of an attachment-capable
+        # family; every other OpenAI model keeps taking files.
+        self.assertFalse(cfg.MODEL_CONFIGS[cfg.OPENAI_OSS_MODEL].accepts_attachments)
+        self.assertTrue(cfg.MODEL_CONFIGS[cfg.OPENAI_LUNA_MODEL].accepts_attachments)
+        self.assertTrue(cfg.PROVIDERS["openai"].model_accepts_attachments("gpt-new-admin-model"))
+        self.assertTrue(cfg.MODEL_CONFIGS[cfg.GEMMA_MODEL].accepts_attachments)
+        self.assertEqual(
+            cfg.MODEL_CONFIGS[cfg.OPENAI_OSS_MODEL].request_config,
+            {"reasoning": {"effort": "low"}},
+        )
+        self.assertEqual(cfg.get_model_label(cfg.OPENAI_OSS_MODEL), "gpt-oss-120b")
+        self.assertEqual(cfg.get_model_label(cfg.GEMMA_MODEL), "Gemma 4 31B")
+
 
 class ConsumerCoverageTests(unittest.TestCase):
     """Die Module rund um den Lauf ziehen ihre Familien aus der Registry."""

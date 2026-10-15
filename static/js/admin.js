@@ -502,7 +502,7 @@ function appendPresetOption(select, value, label, locked, showValue = true) {
     if (showValue && option.textContent !== value) option.textContent += ` (${value})`;
     const apiModel = showValue ? apiModelFor(value) : '';
     if (apiModel) option.textContent += ` → ${apiModel}`;
-    // Daily/Balanced sind Free-faehig und duerfen keine Premium-Modelle
+    // Daily/Open Models sind Free-faehig und duerfen keine Premium-Modelle
     // setzen. Sichtbar lassen statt ausblenden: sonst wirkt die Liste
     // unvollstaendig, ohne dass der Grund erkennbar waere.
     if (locked) {

@@ -39,6 +39,7 @@ STATE_FILE = STATE_DIR / "last-seen.json"
 PENDING_FILE = STATE_DIR / "pending.json"
 MODELS_URL = "https://openrouter.ai/api/v1/models"
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPEN_WEIGHT_PRESET = "balanced"  # label "Open Models"
 PROBE_MAX_TOKENS = 200
 PROBE_TIMEOUT = 90
 MAX_PROBE_IDS = 8
@@ -231,6 +232,12 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
             if openrouter_id not in catalog:
                 findings.append((f"{preset_id}:{role}:gone:{openrouter_id}",
                                  f"{label}/{role}: {openrouter_id} gibt es bei OpenRouter nicht mehr"))
+            # Open Models promises open weights; the catalog's Hugging Face
+            # entry is the evidence (the writer is exempt, it stays Daily's).
+            if (preset_id == OPEN_WEIGHT_PRESET and index < len(answers) and openrouter_id in catalog
+                    and not catalog[openrouter_id].get("hugging_face_id")):
+                findings.append((f"{preset_id}:{role}:closed:{openrouter_id}",
+                                 f"{label}/{role}: {openrouter_id} hat keine offenen Gewichte (kein Hugging-Face-Eintrag)"))
             if not preset["pro_only"] and (model in conf.premium or model.endswith("-Pro")):
                 findings.append((f"{preset_id}:{role}:premium:{model}",
                                  f"{label}/{role}: Premium-Modell {model} in einem Free-Preset (App ersetzt es still)"))

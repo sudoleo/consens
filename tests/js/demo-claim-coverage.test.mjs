@@ -19,7 +19,7 @@ function readDemoData() {
 }
 
 describe("interactive demo claim coverage", () => {
-  it("provides six complete viewpoints and consistent claims for updated Balanced families", () => {
+  it("provides six complete viewpoints and consistent claims for updated preset families", () => {
     const data = readDemoData();
     const models = ['OpenAI', 'Gemini', 'DeepSeek', 'Kimi', 'GLM', 'Meta'];
     const demo = data.buildForModels(models);
