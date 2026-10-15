@@ -1,5 +1,5 @@
 {
-  "sources": "b241e60774f4",
+  "sources": "a96a82196039",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -36,6 +36,7 @@
     "static/css/foundation.css",
     "static/css/landing.css",
     "static/css/layout.css",
+    "static/css/letter-clouds.css",
     "static/css/model-answer-reader.css",
     "static/css/model-pulse.css",
     "static/css/public-nav.css",
@@ -90,6 +91,7 @@
     "static/js/email-verify.js",
     "static/js/error-reporter.js",
     "static/js/feature-access.js",
+    "static/js/letter-clouds.js",
     "static/js/markdown-stream.js",
     "static/js/math-render.js",
     "static/js/memory-edit.js",
@@ -212,17 +214,18 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.27a8c805166f.js",
+      "src": "/static/dist/app.606116af6eaa.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.dfbb73a40bc7.css"
+    "app": "/static/dist/app.22af20fc13b2.css"
   },
   "previous_assets": [
+    "app.dfbb73a40bc7.css",
     "app.f47c4e0d17dd.css",
-    "app.9d4c682125a4.css",
+    "app.27a8c805166f.js",
     "app.a1a769945fa0.js",
     "auth.5e487d1e2570.js",
     "demo.f96893d39783.js",

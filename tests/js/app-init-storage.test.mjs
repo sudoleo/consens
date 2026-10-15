@@ -63,6 +63,9 @@ async function bootApp({ storage = {}, prefersDark = false } = {}) {
         addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
       });
       window.fetch = () => new Promise(() => {});
+      // jsdom zeichnet nicht; ohne Kontext bleibt letter-clouds.js still,
+      // statt bei jedem Aufruf „Not implemented“ nach stderr zu schreiben.
+      window.HTMLCanvasElement.prototype.getContext = () => null;
       // Kommt aus static/demo.js (ES-Modul, hier nicht geladen).
       window.createStartDemoChip = () => { window.demoChipShown = true; };
     },
