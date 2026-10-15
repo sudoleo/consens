@@ -1041,7 +1041,10 @@ class WatchPageTests(unittest.TestCase):
         template = open("templates/watch_share.html", encoding="utf-8").read()
         og_block = template.split("<script type=\"application/ld+json\">")[0]
         self.assertNotIn("watch_image", og_block)
-        self.assertIn('class="wp-image is-', template)
+        # The picture is drawn by the part Watch and Topic pages share.
+        self.assertIn("check.head(watch_page.status, question, watch_page.image)", template)
+        parts = open("templates/partials/check_page.html", encoding="utf-8").read()
+        self.assertIn('class="wp-image is-', parts)
 
 
 if __name__ == "__main__":

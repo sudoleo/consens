@@ -802,24 +802,26 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 ## Curated Topics
 - [ ] Belegmodell auf Topics: ohne `?version` zeigt die Seite den geltenden Run
       (`accepted_run_id`); ein neuester Check mit „held“/„confirming“ erscheint als
-      „Latest check: …“-Hinweis, in Timeline und Check-Streifen als eigener,
-      nicht-materieller Zustand, und seine Claims zählen im Claim Ledger als Lücke.
-      Der Hub zeigt Score und Satz des geltenden Runs.
-- [ ] `/topics` zeigt nur Topics mit mindestens einem veröffentlichten Snapshot;
-      Suche und Kategorie-Filter funktionieren ohne Reload. Navigation, Footer,
-      Light/Dark, Focus States und Mobile-Layout bleiben ohne horizontalen
-      Overflow.
-- [ ] `/topics/{slug}` zeigt das vollständige Dossier und die Timeline beim
-      ersten Laden bereits geöffnet. Die fünf bestgereihten aktuellen Quellen
-      sind sichtbar, alle weiteren starten in einem eigenen Detail eingeklappt;
-      ältere Evidence bleibt separat eingeklappt. Quellen tragen die Rollen
-      Primary source, Research paper, Documentation, Reporting, Community oder
-      Rumor und sind nach Qualität sortiert. Alle Links öffnen sicher in einem
+      „Latest check: …“-Hinweis in der Zustandszeile und im Verlauf als eigener,
+      nicht-materieller Eintrag. Der Hub zeigt Anfang und Zustand des geltenden Runs.
+- [ ] `/topics` zeigt nur Topics mit mindestens einem veröffentlichten Snapshot,
+      je eine Zeile mit Bild (falls vorhanden), Titel, Antwortanfang und
+      „Changed on …“/„No change …“. Navigation, Footer, Light/Dark, Focus States
+      und Mobile-Layout bleiben ohne horizontalen Overflow.
+- [ ] `/topics/{slug}` sieht aus wie eine Watch-Seite: Kicker „Topic · …“,
+      Titel mit Leitfrage, Bild rechts (Handy: neben dem Kicker), eine
+      Zustandszeile mit Belegen, bis zu vier Direktlinks, die Antwort offen (ohne
+      „Here's …:“-Einleitung, „Short answer“ und „If you want, I can …“), Quellen
+      ab 6 gefaltet, keine `vertexaisearch`-Links. Alle Links öffnen in einem
       neuen Tab.
-- [ ] Die visuelle Timeline zeigt alle versionierten Stände und ihre Agreement-
-      Entwicklung. Ein historischer `?version=<run_id>`-Link rendert den
-      unveränderlichen alten Consensus samt damaligen Modellen/Evidence,
-      kennzeichnet die historische Ansicht und verlinkt zur aktuellen Version.
+- [ ] Abbildungen (falls der Run welche hat): Zeitleiste, Status-Tafel oder
+      Zahlen sitzen unter ihrer Überschrift bzw. nach dem ersten Absatz, jede
+      Angabe steht auch im Antworttext, „disputed“ ist gestrichelt markiert,
+      Light/Dark lesbar, auf 390 px kein horizontaler Überlauf.
+- [ ] Der Verlauf zeigt Bewegungen einzeln und ruhige Checks gefaltet, die
+      Kurve nur auf dem Desktop. Ein historischer `?version=<run_id>`-Link zeigt
+      „Answer from …“ mit „See the current answer“, ist `noindex` und rendert den
+      unveränderlichen alten Consensus.
 - [ ] Topic-Follow sendet mit Test-SMTP eine Double-Opt-in-Mail; erst der
       Bestätigungslink persistiert das Abo. Ein neuer Minor-/Major-Snapshot
       versendet genau ein Update, Stable nicht; der Abmelde-Link entfernt nur

@@ -12,8 +12,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("UNIT_TEST_MODE", "1")
 
-from app.services import claim_ledger, evidence_change, topic_runner, watch_probe, watch_service  # noqa: E402
-from test_claim_ledger import dimension, run  # noqa: E402
+from app.services import drift_signal, evidence_change, topic_runner, watch_probe, watch_service  # noqa: E402
 from test_watch_feature import FakeDb, share  # noqa: E402
 
 
@@ -90,35 +89,25 @@ def test_the_judge_sees_which_new_sources_it_has_seen_before():
 # --- Topics: the GPT-6 record -------------------------------------------------
 
 
-def test_a_held_topic_run_is_a_gap_in_the_claim_record_not_a_retraction():
-    released = dimension("OpenAI has officially released GPT-6 Astra", key="astra")
-    priced = dimension("Official pricing is published for the GPT-6 line", key="price")
+def run(index, change_type="stable", cause=None):
+    return {"id": f"run-{index}", "version": index + 1, "change_type": change_type, "cause": cause}
+
+
+def test_a_held_topic_run_leaves_the_released_answer_standing():
     runs = [
-        run(0, [dimension("No successor model has been announced", key="none"),
-                dimension("GPT-5.5 is the current flagship", key="flag")]),
-        {**run(1, [released, priced], change_type="major", summary="Astra released."),
-         "cause": "new_evidence"},
-        {**run(2, [dimension("GPT-6 cannot be confirmed from official sources", key="x"),
-                   dimension("Variant names are speculative", key="y")],
-               change_type="major", summary="No longer confirmed."),
-         "cause": "evidence_missing"},
+        run(0),
+        run(1, "major", "new_evidence"),  # Astra released
+        run(2, "major", "evidence_missing"),  # the search missed it
     ]
 
-    ledger = claim_ledger.build_claim_ledger(runs)
-    record = claim_ledger.build_record_summary(runs)
-    strip = claim_ledger.build_check_strip(runs, ledger)
+    annotated = drift_signal.annotate_runs(runs)
 
-    holding = {claim["label"] for claim in ledger["holding"] + ledger["new"]}
-    assert "OpenAI has officially released GPT-6 Astra" in holding
-    assert "GPT-6 cannot be confirmed from official sources" not in holding
-    assert ledger["thin"] == 1
-    assert record["material_count"] == 1
-    assert record["anchor_run_id"] == "run-1"
-    assert [cell["kind"] for cell in strip] == ["first", "material", "held"]
+    assert [item["signal"] for item in annotated] == ["stable", "moved", "held"]
+    assert drift_signal.accepted_index(annotated) == 1
 
 
 def test_a_topic_run_outcome_asks_for_a_recheck_on_a_reassessment():
-    recent = [run(0, [], change_type="stable")]
+    recent = [run(0)]
     pending = topic_runner.run_outcome(recent, "major", "reassessment")
     assert pending == {"signal": "confirming", "accepted": False, "recheck": True}
     moved = topic_runner.run_outcome(recent, "major", "new_evidence")

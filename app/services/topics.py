@@ -18,7 +18,8 @@ from urllib.parse import parse_qs, urlsplit
 import app.core.config as cfg
 from google.cloud.firestore_v1.base_query import FieldFilter
 from app.core.security import db_firestore
-from app.services import drift_signal, follow_challenges
+from app.services import drift_signal, follow_challenges, topic_figures
+from app.services.public_markdown import lead_sentences
 from app.services.watch_service import WatchError, parse_token_payload, sign_token_payload
 
 
@@ -830,9 +831,8 @@ def create_run(
         "cause": drift_signal.normalize_cause(data.get("cause")),
         "held_summary": _clean(data.get("held_summary"), limit=240, label="Held summary"),
         "evidence_sources": normalize_evidence_sources(data.get("evidence_sources")),
-        # Optional editorial one-liner. When empty -- which it is for every run
-        # published so far -- the page derives the finding from the claim
-        # record instead, so this field never has to be backfilled.
+        # Optional editorial one-liner; nothing writes or reads it since the
+        # page leads with the answer itself (2026-10-15). Kept for old runs.
         "headline": _clean(data.get("headline"), limit=240, label="Headline"),
         "opinion_changes": normalize_opinion_changes(data.get("opinion_changes")),
         "evidence": evidence,
@@ -848,6 +848,9 @@ def create_run(
             data.get("opinion_map")
             if isinstance(data.get("opinion_map"), dict) else {}
         ),
+        # Figures drawn from this answer (topic_figures.py); a run keeps its
+        # own, so an older version shows the figure of its time.
+        "figures": topic_figures.stored_figures(data.get("figures")),
         "topic_state": {
             "title": topic.get("title"),
             "slug": topic.get("slug"),
@@ -896,6 +899,9 @@ def create_run(
                 "accepted_agreement_score": run["agreement_score"],
                 "accepted_change_summary": run["change_summary"],
                 "accepted_signal": outcome["signal"],
+                # The opening of the standing answer, for the hub card: it
+                # lists every Topic without reading their runs.
+                "accepted_lead": lead_sentences(run["consensus_md"], limit=220),
             })
         if current.get("status") != "active":
             scheduled = None
@@ -981,57 +987,6 @@ def list_runs(topic_id: str, *, db=None, max_items: int = 100) -> list[dict]:
             item["id"],
         )
     )
-    return runs[-max_items:]
-
-
-def _run_order_key(run: dict):
-    """The chronology list_runs sorts by; undated legacy runs come first."""
-    observed_at = run.get("observed_at")
-    return (
-        observed_at if isinstance(observed_at, datetime)
-        else datetime.min.replace(tzinfo=timezone.utc),
-        run.get("version") or 0,
-        run["id"],
-    )
-
-
-def list_runs_until(topic_id: str, run: dict, *, db=None, max_items: int = 100) -> list[dict]:
-    """The newest ``max_items`` runs up to and including ``run``, oldest first.
-
-    This is the as-of window for a version that is older than the latest
-    ``list_runs`` page: one bounded range read ending at the selected run
-    instead of the whole history. The result may be shorter than the record
-    before it; callers compare it with the run's version to say so.
-    """
-    db = db if db is not None else db_firestore
-    ref = db.collection(TOPICS_COLLECTION).document(topic_id).collection("runs")
-    limit_key = _run_order_key(run)
-    observed_at = run.get("observed_at")
-    expected = int(run.get("version") or 0)
-
-    def full_history():
-        runs = [{"id": doc.id, **(doc.to_dict() or {})} for doc in ref.stream()]
-        runs = [item for item in runs if _run_order_key(item) <= limit_key]
-        runs.sort(key=_run_order_key)
-        return runs[-max_items:] if max_items > 0 else runs
-
-    if max_items <= 0 or not isinstance(observed_at, datetime):
-        return full_history()
-    try:
-        query = ref.where(filter=FieldFilter("observed_at", "<=", observed_at))
-    except TypeError:  # in-memory test doubles use the positional form
-        query = ref.where("observed_at", "<=", observed_at)
-    fetched = [
-        {"id": doc.id, **(doc.to_dict() or {})}
-        for doc in query.order_by("observed_at", direction="DESCENDING")
-        .limit(max_items + 1).stream()
-    ]
-    runs = [item for item in fetched if _run_order_key(item) <= limit_key]
-    runs.sort(key=_run_order_key)
-    if len(fetched) <= max_items and expected > len(runs):
-        # The range read excludes runs without a date. Only when it provably
-        # misses versions of a short window is the complete history worth it.
-        return full_history()
     return runs[-max_items:]
 
 
@@ -1203,6 +1158,10 @@ def topic_public_view(topic: dict) -> dict:
         # none, and there the newest run stands.
         "accepted_run_id": str(topic.get("accepted_run_id") or topic.get("latest_run_id") or ""),
         "latest_signal": str(topic.get("latest_signal") or ""),
+        "accepted_run_at": _public_datetime(topic.get("accepted_run_at") or topic.get("latest_run_at")),
+        "lead": str(topic.get("accepted_lead") or ""),
+        # Picture state for topic_images.image_view (the bytes live elsewhere).
+        "image_state": dict(topic.get("image")) if isinstance(topic.get("image"), dict) else {},
         **_standing_view(topic),
         # The page promises a next check, so it has to know when that is.
         "next_run_at": _public_datetime(topic.get("next_run_at")),
@@ -1237,6 +1196,7 @@ def run_public_view(run: dict) -> dict:
         "excluded_evidence_count": len(run.get("excluded_evidence") or []),
         "models": list(run.get("models") or []),
         "opinion_map": dict(run.get("opinion_map") or {}),
+        "figures": topic_figures.stored_figures(run.get("figures")),
         "topic_state": dict(run.get("topic_state") or {}),
     }
 

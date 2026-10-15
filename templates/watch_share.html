@@ -56,123 +56,21 @@
     und wann sie sich bewegt hat, und wie man davon erfährt. Score, Kurven,
     Modell-Chips und die Positions-Karte standen früher drumherum und haben
     genau das verdeckt; was davon noch hilft, steht zugeklappt ganz unten.
+    Die Teile teilt sie sich mit den Topic-Seiten (partials/check_page.html).
   #}
-  {% macro version_link(point, start=false) %}
-  {% if point.run_id and point.run_id == watch_selected_version.id %}<span class="wp-version is-current">Shown above</span>
-  {% elif point.has_snapshot and point.run_id %}<a class="wp-version" href="{{ watch_selected_version.current_url }}?version={{ point.run_id }}">Read this version</a>
-  {% elif start and not watch_selected_version.is_original %}<a class="wp-version" href="{{ watch_selected_version.original_url }}">Read the first answer</a>{% endif %}
-  {% endmacro %}
-
-  {# Die Agreement-Kurve nur auf breiten Bildschirmen (CSS blendet sie unter
-     700 px aus): dort ist Platz, auf dem Handy war sie nur Lärm. Jeder Punkt
-     springt zu seinem Check in der Zeitleiste. #}
-  {% macro agreement_chart(history) %}
-  <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
-       aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}. Select a point to jump to that check.">
-    <line class="watch-grid" x1="38" y1="18" x2="38" y2="160"></line>
-    <line class="watch-grid" x1="38" y1="18" x2="622" y2="18"></line>
-    <line class="watch-grid" x1="38" y1="89" x2="622" y2="89"></line>
-    <line class="watch-grid" x1="38" y1="160" x2="622" y2="160"></line>
-    <text class="watch-axis-label" x="4" y="23">100</text>
-    <text class="watch-axis-label" x="13" y="94">50</text>
-    <text class="watch-axis-label" x="21" y="165">0</text>
-    <path class="watch-chart-line" d="{{ history.path }}"></path>
-    {% for point in history.points if point.y is not none %}
-    <a class="watch-chart-target" href="#watch-run-{{ point.anchor_id }}"
-       aria-label="{{ point.day }}: {{ point.agreement_score }} out of 100 agreement{% if point.trigger == 'changed' and point.change_summary %}. {{ point.change_summary }}{% endif %}">
-      <circle class="watch-chart-point{% if point.trigger == 'changed' %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.trigger == 'changed' %}5{% else %}4{% endif %}">
-        <title>{{ point.day }}: {{ point.agreement_score }}/100{% if point.trigger == 'changed' %} · the answer changed{% endif %}</title>
-      </circle>
-    </a>
-    {% endfor %}
-    <text class="watch-date-label" x="38" y="184">{{ history.start_date }}</text>
-    <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ history.end_date }}</text>
-  </svg>
-  {% endmacro %}
+  {% import "partials/check_page.html" as check with context %}
 
   <main class="page-shell wp-shell" data-math-render>
-    {# Das Bild zeigt den Gegenstand oder das Thema (Produktseite, passender
-       Artikel oder die Logos der Seiten, um die es geht -- unter den Quellen,
-       services/watch_images.py) -- oder es fehlt. Ausgeliefert von consens.io,
-       verlinkt auf seine Quelle; nie in og:image/JSON-LD. #}
-    {% set watch_image = watch_page.image %}
-    {% set image_noun = 'Logo' if watch_image and watch_image.kind == 'logo' else 'Image' %}
-    <header class="wp-head{% if watch_image %} has-image{% endif %}">
-      <div class="wp-head-text">
-      <p class="wp-kicker"><span class="wp-dot is-{{ watch_page.status }}" aria-hidden="true"></span>Watch{% if watch_page.interval %} · checked {{ watch_page.interval }}{% endif %}{% if is_private %} · private{% endif %}</p>
-      <!-- Lange Fragen klappen auf drei Zeilen ein; ohne JS bleibt der volle Text. -->
-      <h1 id="shareQuestion" class="wp-question share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
-      <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
-      </div>
-      {% if watch_image %}
-      <figure class="wp-image is-{{ watch_image.kind if watch_image.kind in ('article', 'logo') else 'item' }}">
-        {% if watch_image.source_url %}<a href="{{ watch_image.source_url }}" target="_blank" rel="nofollow noopener noreferrer" title="{{ image_noun }}: {{ watch_image.source_host }}" aria-label="{{ image_noun }} from {{ watch_image.source_host }}">{% endif %}
-        <img src="{{ watch_image.url }}" alt="" width="{{ watch_image.width }}" height="{{ watch_image.height }}" decoding="async">
-        {% if watch_image.source_url %}</a>{% endif %}
-      </figure>
-      {% endif %}
-    </header>
+    {# Das Bild ist consens.io-eigen ausgeliefert, verlinkt auf seine Quelle;
+       nie in og:image/JSON-LD (services/watch_images.py). #}
+    {% call check.head(watch_page.status, question, watch_page.image) %}Watch{% if watch_page.interval %} · checked {{ watch_page.interval }}{% endif %}{% if is_private %} · private{% endif %}{% endcall %}
 
-    <section class="wp-state is-{{ watch_state.tone }}" aria-label="What this Watch found">
-      {% if watch_state.headline %}<p class="wp-state-headline"><span class="wp-state-mark" aria-hidden="true"></span>{{ watch_state.headline }}</p>{% endif %}
-      {% if watch_state.text %}<p class="wp-state-text">{{ watch_state.text }}</p>{% endif %}
-      {% if watch_state.sources %}
-      <ul class="wp-evidence" aria-label="Sources behind this">
-        {% for item in watch_state.sources %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
-      </ul>
-      {% endif %}
-      {% if watch_state.back %}<a class="wp-back" href="{{ watch_selected_version.current_url }}">See the current answer &rarr;</a>{% endif %}
-      {% if watch_page.goal and not watch_page.resolution %}<p class="wp-goal"><span>Waiting for</span> {{ watch_page.goal }}</p>{% endif %}
-      {% if watch_state.note %}<p class="wp-note">{{ watch_state.note }}</p>{% endif %}
-      {% if watch_state.facts %}<p class="wp-facts">{{ watch_state.facts | join(" · ") }}</p>{% endif %}
-    </section>
+    {{ check.state(watch_state, watch_selected_version.current_url, "What this Watch found", watch_page.goal if watch_page.goal and not watch_page.resolution else "") }}
 
-    {# Direkt zu den Seiten, um die es geht (source_links.key_links): wer ein
-       Thema beobachtet, will selbst nachsehen, nicht erst die Quellenliste
-       am Ende suchen. Navigation, kein Beleg einzelner Sätze. #}
-    {% if watch_key_links and not watch_awaiting_first_run %}
-    <section class="wp-links" aria-labelledby="wpLinksHeading">
-      <h2 id="wpLinksHeading" class="wp-label">Direct links</h2>
-      <ul class="wp-links-list">
-        {% for link in watch_key_links %}
-        <li>
-          <a class="wp-link" href="{{ link.url }}" target="_blank" rel="nofollow noopener noreferrer">
-            <img class="wp-link-icon" src="/api/topics/favicon?d={{ link.domain | urlencode }}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">
-            <span class="wp-link-body">
-              <span class="wp-link-title">{{ link.title }}</span>
-              {% if link.domain != link.title %}<span class="wp-link-domain">{{ link.domain }}</span>{% endif %}
-            </span>
-            <svg class="wp-link-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 10.5l5-5M6.5 5.5h4v4"/></svg>
-          </a>
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
+    {% if not watch_awaiting_first_run %}{{ check.direct_links(watch_key_links) }}{% endif %}
 
     {% if not watch_awaiting_first_run %}
-    <section class="wp-answer" aria-labelledby="wpAnswerHeading">
-      <h2 id="wpAnswerHeading" class="wp-label">{% if watch_state.back %}The answer then{% elif watch_state.tone == "past" %}First answer{% else %}Current answer{% endif %}</h2>
-      <div class="share-md">{{ consensus_html | safe }}</div>
-      {% if sources %}
-      <h3 class="wp-label wp-sources-label">Sources</h3>
-      <ol id="shareSources" class="share-sources">
-        {% for source in sources %}
-        <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
-          <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
-          {% if source.domain %}<img class="share-source-favicon" src="/api/topics/favicon?d={{ source.domain | urlencode }}" alt="" loading="lazy" width="18" height="18" referrerpolicy="no-referrer">{% endif %}
-          <span class="share-source-body">
-            <a class="share-source-title" href="{{ source.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ source.title }}</a>
-            {% if source.domain and source.domain != source.title %}<span class="share-source-domain">{{ source.domain }}</span>{% endif %}
-          </span>
-        </li>
-        {% endfor %}
-      </ol>
-      {% if sources | length > 5 %}
-      <button type="button" id="shareSourcesToggle" class="share-sources-toggle" hidden>Show all {{ sources | length }} sources</button>
-      {% endif %}
-      {% endif %}
-    </section>
+    {{ check.answer("The answer then" if watch_state.back else ("First answer" if watch_state.tone == "past" else "Current answer"), consensus_html, sources) }}
     {% endif %}
 
     {% if can_follow %}
@@ -190,90 +88,10 @@
     </section>
     {% endif %}
 
-    {% if watch_history and watch_history.timeline %}
-    <section class="wp-history" aria-labelledby="wpHistoryHeading">
-      <h2 id="wpHistoryHeading" class="wp-label">History</h2>
-      {% if watch_history.points | length > 1 and watch_history.path %}
-      <figure class="wp-chart">
-        {{ agreement_chart(watch_history) }}
-        <figcaption>How strongly the models agree, per check. Filled points mark checks that changed the answer.</figcaption>
-      </figure>
-      {% endif %}
-      <ol class="wp-timeline">
-        {% for entry in watch_history.timeline %}
-        {% set point = entry.points[0] %}
-        {% if entry.kind == "quiet" %}
-        <li class="wp-event is-quiet">
-          <details{% if watch_selected_version.id in entry.run_ids %} open{% endif %}>
-            <summary>
-              <time datetime="{{ entry.points[-1].ts.isoformat() }}">{{ entry.points[-1].day }}{% if entry.points | length > 1 %} – {{ point.day }}{% endif %}</time>
-              <span class="wp-event-title">{% if entry.points | length > 1 %}{{ entry.points | length }} checks, no change{% else %}Checked, no change{% endif %}</span>
-            </summary>
-            <ul class="wp-quiet-list">
-              {% for item in entry.points %}
-              <li id="watch-run-{{ item.anchor_id }}" tabindex="-1"><time datetime="{{ item.ts.isoformat() }}">{{ item.day }}</time>{% if item.restated %}<span>same answer, new wording</span>{% elif item.signal == "held" %}<span>sources did not come up, answer stands</span>{% elif item.signal == "reverted" %}<span>a different reading, set aside</span>{% endif %}{{ version_link(item) }}</li>
-              {% endfor %}
-            </ul>
-          </details>
-        </li>
-        {% else %}
-        <li id="watch-run-{{ point.anchor_id }}" class="wp-event is-{{ entry.kind }}{% if point.run_id and point.run_id == watch_selected_version.id %} is-selected{% endif %}" tabindex="-1">
-          <time datetime="{{ point.ts.isoformat() }}">{{ point.day }}{% if entry.kind == "start" %}, {{ point.ts.year }}{% endif %}</time>
-          {% if entry.kind == "moved" %}
-          <p class="wp-event-title">The answer changed</p>
-          {% if point.change_summary %}<p class="wp-event-text">{{ point.change_summary }}</p>{% endif %}
-          {% if point.evidence_sources %}
-          <ul class="wp-evidence">
-            {% for item in point.evidence_sources[:3] %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
-          </ul>
-          {% endif %}
-          {% elif entry.kind == "start" %}
-          <p class="wp-event-title">Watch started</p>
-          <p class="wp-event-text">The first answer. Every later check is compared with it.</p>
-          {% elif point.signal == "confirming" %}
-          <p class="wp-event-title">Checked: a different reading, re-checking</p>
-          <p class="wp-event-text">It only counts if the next check sees it too.</p>
-          {% elif point.signal == "held" %}
-          <p class="wp-event-title">Checked: the answer stands</p>
-          <p class="wp-event-text">Its sources did not come up this time, and nothing contradicted them.</p>
-          {% elif point.restated %}
-          <p class="wp-event-title">Checked: same answer, new wording</p>
-          {% else %}
-          <p class="wp-event-title">Checked: no change</p>
-          {% endif %}
-          {{ version_link(point, entry.kind == "start") }}
-        </li>
-        {% endif %}
-        {% endfor %}
-      </ol>
-    </section>
-    {% endif %}
+    {{ check.history(watch_history, watch_selected_version, "Watch started", "The first answer. Every later check is compared with it.") }}
 
     {% if has_differences_view and not watch_awaiting_first_run %}
-    <details class="wp-more">
-      <summary>How the {% if model_count %}{{ model_count }} {% endif %}models compared{% if contradiction_count %} &middot; {{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }}{% endif %}</summary>
-      {% if consulted_models %}<p class="wp-models">{% for m in consulted_models %}{{ m.label }}{% if m.model %} {{ m.model }}{% endif %}{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>{% endif %}
-      {% if differences %}
-      {% for diff in differences %}
-      <article class="diff-card">
-        <span class="diff-type{% if diff.type == 'contradiction' %} diff-type-contradiction{% endif %}">{{ diff.type or "difference" }}{% if diff.severity == 'major' %} &middot; critical{% elif diff.severity == 'minor' %} &middot; minor detail{% endif %}</span>
-        <h3>{{ diff.claim }}</h3>
-        {% for position in diff.positions %}
-        <div class="diff-position">
-          <p class="diff-stance">{{ position.stance }}</p>
-          {% if position.models %}<p class="diff-models">{{ position.models | join(", ") }}</p>{% endif %}
-          {% if position.quote %}<blockquote>&ldquo;{{ position.quote }}&rdquo;</blockquote>{% endif %}
-        </div>
-        {% endfor %}
-        {% if diff.verify %}<p class="diff-verify">How to verify: {{ diff.verify }}</p>{% endif %}
-      </article>
-      {% endfor %}
-      {% elif differences_fallback_html %}
-      <div class="share-md share-differences-md">{{ differences_fallback_html | safe }}</div>
-      {% else %}
-      <p class="wp-models">The models broadly agree; no notable differences.</p>
-      {% endif %}
-    </details>
+    {{ check.models_compared(model_count, contradiction_count, consulted_models, differences, differences_fallback_html) }}
     {% endif %}
 
     <footer class="wp-foot">
@@ -299,110 +117,10 @@
 
   {% include "partials/public_footer.html" %}
 
+  {# Frage einklappen, Bild/Favicons, Quellen und ruhige Checks: dieselben
+     Skripte wie auf Topic-Seiten. #}
+  <script defer src="{{ asset_url('/static/js/check-page.js') }}"></script>
   <script>
-    // Lange Fragen: auf drei Zeilen einklappen; ist nichts abgeschnitten,
-    // bleibt der Link versteckt.
-    (function () {
-      const question = document.getElementById("shareQuestion");
-      const more = document.getElementById("shareQuestionMore");
-      if (!question || !more) return;
-      question.classList.add("is-clamped");
-      function measure() {
-        const clamped = question.getBoundingClientRect().height;
-        question.classList.remove("is-clamped");
-        const full = question.getBoundingClientRect().height;
-        const clipped = full - clamped > 4;
-        if (clipped) question.classList.add("is-clamped");
-        more.hidden = !clipped;
-      }
-      requestAnimationFrame(measure);
-      more.addEventListener("click", function () {
-        const open = question.classList.toggle("is-clamped") === false;
-        more.setAttribute("aria-expanded", String(open));
-        more.textContent = open ? "Collapse question" : "Show full question";
-      });
-    })();
-
-    // Watch-Bild: die Seite ist kurz gecacht; wurde das Bild inzwischen
-    // entfernt, verschwindet die Kachel statt als kaputtes Bild zu stehen.
-    (function () {
-      const img = document.querySelector(".wp-image img");
-      if (!img) return;
-      function drop() {
-        const figure = img.closest(".wp-image");
-        if (figure && figure.parentNode) figure.parentNode.classList.remove("has-image");
-        if (figure) figure.remove();
-      }
-      img.addEventListener("error", drop);
-      if (img.complete && img.naturalWidth === 0) drop();
-    })();
-
-    // Quellen: eingeklappt starten; Sprünge aus Inline-Zitaten (#src-N)
-    // klappen auf.
-    (function () {
-      const list = document.getElementById("shareSources");
-      const toggle = document.getElementById("shareSourcesToggle");
-      if (!list || !toggle) return;
-      list.classList.add("is-collapsed", "is-short");
-      toggle.hidden = false;
-      function expand() {
-        list.classList.remove("is-collapsed", "is-short");
-        toggle.hidden = true;
-      }
-      toggle.addEventListener("click", expand);
-      function expandForHash() {
-        const hash = window.location.hash || "";
-        if (hash.indexOf("#src-") !== 0) return;
-        expand();
-        const target = document.getElementById(hash.slice(1));
-        if (target) target.scrollIntoView({ block: "center" });
-      }
-      window.addEventListener("hashchange", expandForHash);
-      expandForHash();
-    })();
-
-    // Favicons: fehlende ausblenden; Inline-Zitate bekommen das ihrer Quelle.
-    (function () {
-      document.querySelectorAll(".share-source-favicon").forEach(function (img) {
-        function fail() { img.remove(); }
-        img.addEventListener("error", fail);
-        if (img.complete && img.naturalWidth === 0) fail();
-      });
-      document.querySelectorAll('.share-md a[href^="#src-"]').forEach(function (link) {
-        const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
-        const srcImg = target && target.querySelector(".share-source-favicon");
-        const url = srcImg && srcImg.getAttribute("src");
-        if (!url) return;
-        const fav = document.createElement("img");
-        fav.className = "cite-favicon";
-        fav.setAttribute("src", url);
-        fav.setAttribute("alt", "");
-        fav.setAttribute("aria-hidden", "true");
-        fav.addEventListener("error", function () {
-          fav.remove();
-          link.classList.remove("has-favicon");
-        });
-        link.insertBefore(fav, link.firstChild);
-        link.classList.add("has-favicon");
-      });
-    })();
-
-    // Ein Link auf einen Check (#watch-run-…) in einer zugeklappten Gruppe
-    // ruhiger Checks klappt die Gruppe auf.
-    (function () {
-      function reveal() {
-        const hash = window.location.hash || "";
-        if (hash.indexOf("#watch-run-") !== 0) return;
-        const target = document.getElementById(hash.slice(1));
-        const group = target && target.closest("details");
-        if (!group || group.open) return;
-        group.open = true;
-        target.scrollIntoView({ block: "center" });
-      }
-      window.addEventListener("hashchange", reveal);
-      reveal();
-    })();
-
     {% if can_follow %}
     // Follow-Formular: Double-Opt-in-Anfrage, rein serverseitig verarbeitet.
     (function () {

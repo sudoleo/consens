@@ -334,3 +334,59 @@ def markdown_to_plaintext(md_text, limit=None, sources=None):
     if limit is not None and len(text) > limit:
         text = text[: limit - 1].rstrip() + "…"
     return text
+
+
+# Chat framing around an answer that is published as a page: an opening line
+# that announces the answer ("Here's the current picture ...:"), a "Short
+# answer" heading right after it, and a closing offer ("If you want, I can
+# also ..."). On a page that is updated every week nobody can take the offer,
+# and the opening line ended up as the page's search snippet.
+_FRAMING_OPENER_RE = re.compile(
+    r"^(?:here(?:'|’)s|here is|below is|based on)\b[^\n]*:\s*$", re.IGNORECASE
+)
+_FRAMING_HEADING_RE = re.compile(
+    r"^(?:#{1,6}\s*)?\**\s*(?:short answer|short version|quick answer|tl;?\s?dr|in short)\s*\**:?\s*$",
+    re.IGNORECASE,
+)
+_FRAMING_OFFER_RE = re.compile(
+    r"^\W*(?:if you(?:'|’)?d like|if you would like|if you want|would you like|want me to"
+    r"|let me know|i can also|i could also)\b",
+    re.IGNORECASE,
+)
+
+
+def strip_chat_framing(md_text) -> str:
+    """The answer without the chat around it; the answer itself is untouched.
+
+    Only whole paragraphs at the very start or end are dropped, and only when
+    they are pure framing. Anything else stays as written.
+    """
+    blocks = re.split(r"\n\s*\n", str(md_text or "").strip())
+    if len(blocks) > 1 and _FRAMING_OPENER_RE.match(blocks[0].strip()):
+        blocks = blocks[1:]
+    if blocks:
+        # The heading is its own paragraph or the first line of the answer's.
+        first, _, rest = blocks[0].strip().partition("\n")
+        if _FRAMING_HEADING_RE.match(first.strip()):
+            if rest.strip():
+                blocks[0] = rest.strip()
+            elif len(blocks) > 1:
+                blocks = blocks[1:]
+    while len(blocks) > 1 and _FRAMING_OFFER_RE.match(blocks[-1].strip()):
+        blocks = blocks[:-1]
+    return "\n\n".join(blocks)
+
+
+def lead_sentences(md_text, limit=160) -> str:
+    """The opening of an answer as plain text, cut at a sentence end if one
+    fits: what a search snippet or a hub card shows of it."""
+    # Headings label a section; the snippet wants its first sentences.
+    body = re.sub(r"^\s{0,3}#{1,6}\s.*$", "", strip_chat_framing(md_text), flags=re.MULTILINE)
+    text = markdown_to_plaintext(body)
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! "))
+    if end >= limit // 3:
+        return cut[: end + 1]
+    return cut[: limit - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"

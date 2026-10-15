@@ -17,3 +17,39 @@ def test_latex_in_bare_brackets_becomes_display_math_but_links_stay():
     assert r"\[" "\n" r"P(\text{a}\mid b) =\frac12." "\n" r"\]" in html
     assert '<a href="https://e.example"' in html
     assert "[S1]" in html
+
+
+def test_chat_framing_around_a_published_answer_is_dropped_but_the_answer_stays():
+    from app.services.public_markdown import lead_sentences, strip_chat_framing
+
+    # The real opening of /topics/gemini-4-release-date on 2026-10-14.
+    md = (
+        "Here’s the current evidence-based picture of Google Gemini 4 as of 2026-10-14:\n\n"
+        "## Short answer\nGoogle has **officially announced Gemini 4**. Argon is the only variant.\n\n"
+        "## Pricing\n\n$2 per 1M input tokens.\n\n"
+        "If you want, I can also turn this into a one-table fact sheet."
+    )
+    clean = strip_chat_framing(md)
+    assert clean.startswith("Google has **officially announced Gemini 4**.")
+    assert "## Pricing" in clean
+    assert "If you want" not in clean and "Here’s" not in clean
+    assert lead_sentences(md) == "Google has officially announced Gemini 4. Argon is the only variant. $2 per 1M input tokens."
+
+    # Only pure framing goes: an answer that merely starts with "Here" or
+    # ends with an ordinary sentence keeps every word.
+    assert strip_chat_framing("Here the models disagree.\n\nThey do.") == "Here the models disagree.\n\nThey do."
+    assert strip_chat_framing("Yes.\n\nThat is all.") == "Yes.\n\nThat is all."
+    # A lone framing paragraph is never turned into an empty answer.
+    assert strip_chat_framing("If you want, I can help.") == "If you want, I can help."
+    assert strip_chat_framing("## Short answer\n\nYes.") == "Yes."
+
+
+def test_lead_sentences_cut_at_a_sentence_end_and_skip_headings():
+    from app.services.public_markdown import lead_sentences
+
+    assert lead_sentences("## Current consensus\n\nNo confirmed release date exists.") == (
+        "No confirmed release date exists."
+    )
+    long = "First sentence is here. " + "word " * 60
+    assert lead_sentences(long, limit=60) == "First sentence is here."
+    assert lead_sentences("word " * 60, limit=40).endswith("…")

@@ -854,32 +854,19 @@ def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
     admin = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
     nav = (ROOT / "templates" / "partials" / "public_nav.html").read_text(encoding="utf-8")
 
-    assert 'class="topic-timeline"' in detail
-    assert 'id="evidence"' in detail
-    assert 'id="record"' in detail
-    assert 'class="claim-lifeline"' in detail
-    # The finding leads, the statements it is made of follow, and the
-    # apparatus that produced them sits behind a disclosure below both.
-    assert detail.index("topic-finding-line") < detail.index("topic-facts")
-    assert detail.index("topic-facts") < detail.index('class="topic-deep"')
-    assert 'id="topicStrip"' in detail
-    # The band is for readers who have been here before; it ships empty and
-    # hidden, and CSS has to leave the hidden attribute alone.
-    assert 'id="topicReturn" hidden' in detail
-    # The Position Map grid takes exactly two children: the label block and
-    # the clusters. A bare type + heading + clusters puts the clusters under
-    # the label and stretches the type across the row.
-    assert 'class="watch-position-question"' in detail
-    assert 'id="topicFollowForm"' in detail
-    assert 'class="topic-now-grid"' not in detail
-    # The apparatus opens on demand; nothing above it is hidden.
-    assert '<details class="legal-panel topic-deep-item" id="answer">' in detail
-    assert 'topic-deep-item" id="answer" open' not in detail
-    assert 'class="legal-panel topic-timeline-card" open' in detail
-    assert "selected.evidence[:5]" in detail
-    assert "selected.evidence[5:]" in detail
-    assert 'item.role_label' in detail
+    # A Topic page is built from the parts it shares with Watch pages, in the
+    # same order: state line, direct links, answer, follow, history.
+    assert '{% import "partials/check_page.html" as check with context %}' in detail
+    order = ["check.head(", "check.state(", "check.direct_links(", "check.answer(",
+             'id="topicFollowForm"', "check.history(", "check.models_compared("]
+    positions = [detail.index(marker) for marker in order]
+    assert positions == sorted(positions)
+    # The apparatus that hid the answer until 2026-10-15 stays gone.
+    for gone in ("topicStrip", "claim-lifeline", "topic-finding", "topic-deep", "watch-position"):
+        assert gone not in detail
+    assert "/static/js/check-page.js" in detail
     assert 'rel="canonical" href="https://www.consens.io/topics"' in hub
+    assert 'class="topics-row"' in hub
     assert 'id="tab-topics"' in admin
     assert 'id="runAdminTopicBtn"' in admin
     assert "Seed links and manual Consensus text are not required." in admin
@@ -1002,7 +989,7 @@ def test_preferred_domain_orders_sources_without_making_them_primary():
     assert preferred["is_preferred"] is True
 
 
-def test_topic_page_says_insufficient_eligible_evidence_when_all_sources_are_excluded(monkeypatch):
+def test_topic_page_shows_no_source_list_when_all_sources_are_excluded(monkeypatch):
     db = FakeFirestore()
     monkeypatch.setattr(topics, "db_firestore", db)
     topic = topics.create_topic(
@@ -1034,104 +1021,12 @@ def test_topic_page_says_insufficient_eligible_evidence_when_all_sources_are_exc
     app.include_router(topics_router.router)
     page = TestClient(app).get("/topics/gpt-6")
     assert page.status_code == 200
-    assert "Insufficient eligible evidence" in page.text
-    assert "Primary source" not in page.text
+    assert "Only press coverage exists." in page.text
+    # An excluded source is no evidence: no list, no link, no [S1] marker.
+    assert 'id="shareSources"' not in page.text
     assert 'id="src-1"' not in page.text
-
-
-def test_topic_run_carries_the_tracked_claims_into_the_identity_judge(monkeypatch):
-    """A new run has to know which claims the Topic already tracks, otherwise
-    every reworded claim starts a new life in the Claim Ledger."""
-    db = FakeFirestore()
-    topic = topics.create_topic(topic_payload(evidence=[]), actor_uid="admin", db=db, now=NOW)
-    topics.create_run(
-        topic["id"],
-        run_payload(opinion_map={
-            "schema_version": 1,
-            "dimensions": [{
-                "label": "No release date has been announced for GPT-6",
-                "type": "claim",
-                "key": "seed-0",
-                "positions": [{"stance": "No date", "models": ["OpenAI", "Gemini"]}],
-            }],
-            "models": [],
-            "shift_score": 0,
-            "shift_label": "Stable",
-            "center": [],
-        }),
-        actor_uid="admin", db=db, now=NOW,
-    )
-    db.documents[("topics", topic["id"])].update({
-        "current_run_id": "second-run",
-        "claimed_until": NOW,
-        "last_run_status": "running",
-    })
-    stored = topics.get_topic(topic["id"], db=db)
-    claimed = {**stored, "id": topic["id"], "current_run_id": "second-run"}
-    seen = {}
-
-    def execute(question, previous_consensus, **kwargs):
-        seen.update(kwargs)
-        return {
-            "consensus": "## Current consensus\n\nStill no date.",
-            "agreement_score": 82,
-            "changed": False,
-            "severity": "minor",
-            "change_summary": "No material shift.",
-            "opinion_map": {},
-            "differences_data": {},
-            "sources": [],
-            "included_models": ["OpenAI: GPT-5.6", "Google Gemini: Gemini 3.5"],
-        }
-
-    topic_runner.execute_claimed_topic(
-        claimed, actor_uid="admin", db=db, now=NOW, executor=execute
-    )
-
-    assert seen["known_claims"] == [
-        {"key": "seed-0", "label": "No release date has been announced for GPT-6"}
-    ]
-    # The run id keys this run's new claims, so two runs can never collide.
-    assert seen["claim_key_prefix"] == "second-run"
-
-
-def test_claim_identity_falls_back_to_fresh_keys_when_the_judge_is_unavailable():
-    """An unreachable identity Judge may cost the Ledger a link between two
-    wordings. It may never cost the Topic its run."""
-    position_map = {"dimensions": [
-        {"label": "No release date has been announced", "positions": []},
-        {"label": "GPT-5.6 is the frontier line", "positions": []},
-    ]}
-
-    def explode(*args, **kwargs):
-        raise RuntimeError("judge offline")
-
-    with mock.patch.object(topic_pipeline, "query_claim_identity", explode):
-        topic_pipeline._stamp_claim_keys(
-            position_map,
-            [{"key": "k1", "label": "No date announced"}],
-            {}, "OpenAI", "run-7",
-        )
-
-    assert [item["key"] for item in position_map["dimensions"]] == ["run-7-0", "run-7-1"]
-
-
-def test_claim_identity_result_maps_claims_onto_the_keys_they_continue():
-    position_map = {"dimensions": [
-        {"label": "No launch window is on record", "positions": []},
-        {"label": "A brand new claim about pricing", "positions": []},
-    ]}
-
-    with mock.patch.object(
-        topic_pipeline, "query_claim_identity", lambda *args, **kwargs: {0: "k1"}
-    ):
-        topic_pipeline._stamp_claim_keys(
-            position_map,
-            [{"key": "k1", "label": "No release date has been announced"}],
-            {}, "OpenAI", "run-8",
-        )
-
-    assert [item["key"] for item in position_map["dimensions"]] == ["k1", "run-8-1"]
+    assert "news.example.com" not in page.text
+    assert "[S1]" not in page.text
 
 
 def test_admin_topic_api_creates_updates_and_versions_without_share_data(
@@ -1184,7 +1079,7 @@ def opinion_map_payload(*, stance="A late-2026 launch", moved=False):
     }
 
 
-def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
+def test_topic_page_leads_with_the_state_line_and_the_answer(monkeypatch):
     db = FakeFirestore()
     monkeypatch.setattr(topics, "db_firestore", db)
     topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
@@ -1193,15 +1088,23 @@ def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
         run_payload(opinion_map=opinion_map_payload()),
         actor_uid="admin", db=db, now=NOW,
     )
+    later = NOW + timedelta(days=1)
     topics.create_run(
         topic["id"],
         run_payload(
+            observed_at=later.isoformat(),
             agreement_score=52,
             change_type="major",
             change_summary="Anthropic moved to a 2027 window.",
-            opinion_map=opinion_map_payload(stance="A 2027 launch", moved=True),
+            consensus_md="Here's the current picture:\n\n## Short answer\n\nA 2027 launch is now expected.\n\nIf you want, I can also turn this into a table.",
+            models=["OpenAI: gpt-6-luna", "Anthropic: claude-sonnet-5-5", "Grok: grok-4.3"],
+            differences_data={"differences": [{
+                "type": "contradiction", "claim": "When does the model ship?",
+                "positions": [{"stance": "2027", "models": ["OpenAI"]},
+                              {"stance": "Late 2026", "models": ["Grok"]}],
+            }]},
         ),
-        actor_uid="admin", db=db, now=NOW,
+        actor_uid="admin", db=db, now=later,
     )
     app = FastAPI()
     app.state.limiter = limiter
@@ -1212,23 +1115,28 @@ def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
     historical = client.get(f"/topics/gpt-6?version={first['id']}")
 
     assert current.status_code == 200
-    assert "Where the models actually split" in current.text
-    assert "No launch before 2027" in current.text
-    assert "Direction Shift" in current.text
-    assert "How this answer held up" in current.text
-    assert "Anthropic moved to a 2027 window." in current.text
-    assert "</b> AI models" in current.text
-    assert "<b>1</b> contradiction" in current.text
-    assert "<b>2</b> checks since" in current.text
+    text = current.text
+    assert '<section class="wp-state is-moved"' in text
+    assert "Changed on Jul 24" in text
+    assert "Anthropic moved to a 2027 window." in text
+    # The answer is on the page, without the chat around it.
+    assert "A 2027 launch is now expected." in text
+    assert "Short answer" not in text
+    assert "Here&#39;s the current picture" not in text and "Here's the current picture" not in text
+    assert "If you want, I can" not in text
+    assert text.index("wp-state") < text.index("Current answer") < text.index("wp-history")
+    assert "Topic started" in text
+    assert "How the 3 models compared &middot; 1 contradiction" in text
+    assert "<h1 id=\"shareQuestion\" class=\"wp-question share-question\">GPT-6</h1>" in text
+    assert "What is the current evidence about GPT-6?" in text
 
-    # A historical version shows the state of knowledge at that time, so the
-    # later snapshot must not leak into its curve or its map. The sidebar
-    # timeline stays complete, because it is navigation.
+    # An older version says it is one, and links back to the standing answer.
     assert historical.status_code == 200
-    assert "A late-2026 launch" in historical.text
-    assert "A 2027 launch" not in historical.text
-    assert "How this answer held up" not in historical.text
-    assert "Return to the current consensus" in historical.text
+    assert "No confirmed release date exists." in historical.text
+    assert "A 2027 launch is now expected." not in historical.text
+    assert "Answer from Jul 23" in historical.text
+    assert 'href="/topics/gpt-6">See the current answer' in historical.text
+    assert historical.headers["x-robots-tag"] == "noindex, follow"
 
 
 def _topic_with_runs(db, count, *, summary_for=None):
@@ -1265,7 +1173,7 @@ def test_old_topic_version_links_survive_more_than_one_page_of_runs(monkeypatch)
     assert "immutable" not in oldest.headers["Cache-Control"]
     assert "max-age=31536000" not in oldest.headers["Cache-Control"]
     assert "Answer number 1." in oldest.text
-    assert "Answer number 2." not in oldest.text.split('class="topic-timeline')[0]
+    assert "Answer number 2." not in oldest.text
     assert "noindex" in oldest.headers["X-Robots-Tag"]
 
     boundary = client.get(f"/topics/gpt-6?version={created[2]['id']}")
@@ -1295,70 +1203,48 @@ def test_topic_page_counts_do_not_claim_a_complete_history_beyond_the_window(mon
     current = client.get("/topics/gpt-6")
     assert current.status_code == 200
     text = current.text
-    # 103 checks are stored; the page reads the newest 100 and says so.
-    assert "Browse the latest 100 of 103 saved checks" in text
-    assert "<b>103</b> checks</li>" in text
-    assert "103 checks kept in full" in text
-    assert "latest 100 read here" in text
-    assert "The latest checks, oldest first" in text
-    assert "No material change since the first check on" not in text
-    assert "Checked 103 times since" not in text
+    # 103 checks are stored; the page reads the newest 100, and every count
+    # it prints comes with the date the window starts at.
+    assert "Checked 100 times since Jul 26" in text
+    assert "103 times" not in text
+    assert "100 times since Jul 26, 2026." in text
 
-    # A version in the middle reads the 100 runs ending at it.
-    middle = client.get(f"/topics/gpt-6?version={created[101]['id']}")
-    assert middle.status_code == 200
-    assert "102 checks kept in full" in middle.text
-    assert "Answer number 102." in middle.text
+    # A version beyond the window is still readable.
+    oldest = client.get(f"/topics/gpt-6?version={created[1]['id']}")
+    assert oldest.status_code == 200
+    assert "Answer number 2." in oldest.text
 
 
-def test_list_runs_until_reads_a_bounded_window_ending_at_the_run():
-    db = FakeFirestore()
-    topic, created = _topic_with_runs(db, 150)
-    db.query_reads.clear()
-
-    window = topics.list_runs_until(topic["id"], topics.get_run(topic["id"], created[119]["id"], db=db), db=db, max_items=100)
-
-    assert [run["id"] for run in window] == [run["id"] for run in created[20:120]]
-    assert db.query_reads == [((("topics", topic["id"], "runs")), ("observed_at", "DESCENDING"), 101, 101)]
-
-    first = topics.list_runs_until(topic["id"], topics.get_run(topic["id"], created[0]["id"], db=db), db=db)
-    assert [run["id"] for run in first] == [created[0]["id"]]
-
-
-def test_topic_page_keeps_unscored_latest_run_and_its_position_map(monkeypatch):
+def test_topic_page_keeps_an_unscored_latest_run(monkeypatch):
     db = FakeFirestore()
     monkeypatch.setattr(topics, "db_firestore", db)
     topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
     topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
-    latest = topics.create_run(topic["id"], run_payload(
-        agreement_score=None, change_type="major", change_summary="Unscored material change.",
-        opinion_map=opinion_map_payload(stance="A 2027 launch", moved=True),
-    ), actor_uid="admin", db=db, now=NOW)
+    later = NOW + timedelta(days=1)
+    topics.create_run(topic["id"], run_payload(
+        observed_at=later.isoformat(), agreement_score=None, change_type="major",
+        change_summary="Unscored material change.",
+    ), actor_uid="admin", db=db, now=later)
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(topics_router.router)
     response = TestClient(app).get("/topics/gpt-6")
     assert response.status_code == 200
-    assert "Insufficient evidence at this check" in response.text
     assert "Unscored material change." in response.text
-    assert "A 2027 launch" in response.text
-    assert latest["id"] in response.text
+    # The unscored check is the one shown, and it stays in the history.
+    assert "Shown above" in response.text
+    assert "The answer changed" in response.text
     assert 'cy="None"' not in response.text
     assert "None/100" not in response.text
 
 
-def test_topic_page_leads_with_the_finding_and_folds_unchanged_checks(monkeypatch):
-    """The page states the finding first, then the statements it is made of,
-    then the record that produced them.
-
-    The record is what makes this page worth more than one model's answer, but
-    it is the second question a reader has. A page that opens on the archive
-    makes them work for the sentence they came for.
-    """
+def test_topic_page_folds_unchanged_checks_and_answers_in_the_snippet(monkeypatch):
+    """The search snippet is the opening of the answer, then what separates
+    the page from asking one model once. The hand-set SEO description of the
+    Topic is stale by design and only a fallback."""
     db = FakeFirestore()
     monkeypatch.setattr(topics, "db_firestore", db)
     topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
-    held = "OpenAI has not announced a release date for GPT-6"
     for index in range(5):
         observed = datetime(2026, 7, 23 + index, 12, 0, tzinfo=timezone.utc)
         material = index == 1
@@ -1371,88 +1257,16 @@ def test_topic_page_leads_with_the_finding_and_folds_unchanged_checks(monkeypatc
                     "A rumoured window entered the answer." if material
                     else "Only the wording changed."
                 ),
+                models=["OpenAI: gpt-6-luna", "Anthropic: claude-sonnet-5-5", "Grok: grok-4.3"],
                 evidence=[{
                     "type": "primary",
                     "title": "Release notes",
                     "url": f"https://openai.com/index/note-{min(index, 1)}",
                     "publisher": "OpenAI",
                 }],
-                opinion_map={
-                    "schema_version": 1,
-                    "dimensions": [
-                        {
-                            "label": held if index else held + " so far",
-                            "type": "claim",
-                            "positions": [{"stance": held, "models": ["OpenAI", "Gemini", "Anthropic"]}],
-                        },
-                        {
-                            "label": "The GPT-5.6 family is the current frontier line",
-                            "type": "claim",
-                            "positions": [{
-                                "stance": "GPT-5.6 is current", "models": ["OpenAI", "Gemini", "Anthropic"],
-                            }],
-                        },
-                    ],
-                    "models": [],
-                    "shift_score": 0,
-                    "shift_label": "Stable",
-                    "center": [held],
-                },
             ),
             actor_uid="admin", db=db, now=observed,
         )
-    app = FastAPI()
-    app.state.limiter = limiter
-    app.include_router(topics_router.router)
-    client = TestClient(app)
-
-    page = client.get("/topics/gpt-6")
-
-    assert page.status_code == 200
-    # The finding is a sentence about the world, not a score, and it is the
-    # first thing on the page after the question itself.
-    assert '<h2 class="topic-finding-line' in page.text
-    assert held + "." in page.text
-    assert page.text.index("topic-finding-line") < page.text.index("What the answer is made of")
-    assert page.text.index("What the answer is made of") < page.text.index("Read the full answer")
-    # How long it has stood is stated next to the finding, not instead of it.
-    assert "Unchanged through 3 checks" in page.text
-    assert "Last material change on Jul 24, 2026" in page.text
-    # One strip cell per check, oldest first, each one a link into that check.
-    strip = page.text.split('id="topicStrip"')[1].split("</div>")[0]
-    assert strip.count('<a class="topic-strip-cell') == 5
-    assert strip.count('href="/topics/gpt-6?version=') == 4
-    # The newest check is the page itself, so its cell carries no version.
-    assert strip.count('href="/topics/gpt-6"') == 1
-    # Each statement carries its own life, not one row per run.
-    assert "Held 5 of 5 checks" in page.text
-    assert "Restated check after check" in page.text
-    # Unchanged checks are folded away instead of listed one by one.
-    assert "2 checks, no material change" in page.text
-    # A wording-only score step is not presented as a change event.
-    assert "No check in this window was graded a material change" not in page.text
-    assert "A rumoured window entered the answer." in page.text
-    # Sources carry their place in the record.
-    assert "Cited since Jul 24, 2026" in page.text
-    assert "Sources that left the record" in page.text
-    # Snippet and JSON-LD say what the page says now; the hand-set SEO
-    # description of the Topic is stale by design and only a fallback.
-    line = page.text.split('class="topic-finding-line')[1].split(">", 1)[1].split("</h2>")[0]
-    assert line
-    assert f'<meta name="description" content="{line} Checked 5 times' in page.text
-    assert f'<meta property="og:description" content="{line}' in page.text
-    assert "Track the evidence and model consensus around GPT-6." not in page.text
-    assert f'"description": "{line}' in page.text
-
-
-def test_topic_meta_description_falls_back_to_the_hand_set_text_without_a_finding(monkeypatch):
-    db = FakeFirestore()
-    monkeypatch.setattr(topics, "db_firestore", db)
-    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
-    # Two models are not enough of a panel for a derived finding.
-    topics.create_run(topic["id"], run_payload(
-        models=["OpenAI · GPT-5.4 mini", "Mistral · Mistral Small 4"],
-    ), actor_uid="admin", db=db, now=NOW)
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(topics_router.router)
@@ -1460,9 +1274,20 @@ def test_topic_meta_description_falls_back_to_the_hand_set_text_without_a_findin
     page = TestClient(app).get("/topics/gpt-6")
 
     assert page.status_code == 200
-    assert 'class="topic-finding-line' not in page.text
-    assert ('<meta name="description" content="Track the evidence and model consensus '
-            'around GPT-6.">') in page.text
+    text = page.text
+    assert "Unchanged since Jul 24" in text
+    assert "Checked 5 times since Jul 23" in text
+    # Only the move stands on its own; the quiet checks fold into one entry.
+    assert "A rumoured window entered the answer." in text
+    assert "2 checks, no change" in text
+    assert "Only the wording changed." not in text
+    # A direct link to the page the answer stands on.
+    assert 'class="wp-link" href="https://openai.com/index/note-1"' in text
+    snippet = "No confirmed release date exists. Checked by 3 AI models, 5 times since Jul 23, 2026."
+    assert f'<meta name="description" content="{snippet}">' in text
+    assert f'<meta property="og:description" content="{snippet}">' in text
+    assert '"abstract": "No confirmed release date exists."' in text
+    assert "Track the evidence and model consensus around GPT-6." not in text
 
 
 def test_public_topic_history_is_ssr_and_historical_version_is_noindex(monkeypatch):
@@ -1498,74 +1323,7 @@ def test_public_topic_history_is_ssr_and_historical_version_is_noindex(monkeypat
     assert historical.status_code == 200
     assert "No confirmed release date exists." in historical.text
     assert historical.headers["x-robots-tag"] == "noindex, follow"
-    assert "Return to the current consensus" in historical.text
-
-
-def test_disagreement_leads_the_statement_list_and_is_labelled_as_its_own_kind(
-    monkeypatch,
-):
-    """Where the models split is the one thing asking a single model cannot
-    show. It opens the list, and every row says which kind of statement it is
-    in a word, a colour and a shape -- not by its position alone."""
-    db = FakeFirestore()
-    monkeypatch.setattr(topics, "db_firestore", db)
-    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
-    for index in range(3):
-        observed = datetime(2026, 7, 23 + index, 12, 0, tzinfo=timezone.utc)
-        topics.create_run(
-            topic["id"],
-            run_payload(
-                observed_at=observed,
-                opinion_map={
-                    "schema_version": 1,
-                    "dimensions": [
-                        {
-                            "label": "When does the model ship?",
-                            "type": "contradiction",
-                            "positions": [
-                                {"stance": "A late-2026 launch", "models": ["OpenAI"]},
-                                {"stance": "Nothing before 2027", "models": ["Gemini"]},
-                            ],
-                        },
-                        {
-                            "label": "OpenAI has not announced a release date",
-                            "type": "claim",
-                            "positions": [{
-                                "stance": "No date announced",
-                                "models": ["OpenAI", "Gemini", "Anthropic"],
-                            }],
-                        },
-                    ],
-                    "models": [],
-                    "shift_score": 0,
-                    "shift_label": "Stable",
-                    "center": [],
-                },
-            ),
-            actor_uid="admin", db=db, now=observed,
-        )
-    app = FastAPI()
-    app.state.limiter = limiter
-    app.include_router(topics_router.router)
-    client = TestClient(app)
-
-    page = client.get("/topics/gpt-6")
-
-    assert page.status_code == 200
-    assert "The models do not agree here" in page.text
-    assert page.text.index("The models do not agree here") < page.text.index(
-        "Restated check after check"
-    )
-    # Each row repeats its kind, so a linked row still says what it is.
-    assert '<span class="fact-tag is-split">' in page.text
-    assert '<span class="fact-tag is-settled">' in page.text
-    # The finding names the disagreement without claiming a contested statement.
-    assert "OpenAI has not announced a release date." in page.text
-    assert "The models disagree" in page.text
-    assert "1 open disagreement" in page.text
-    # Models on opposite sides of a dispute address it; they do not state it.
-    assert "Addressed by 2 of 3 models" in page.text
-    assert "Stated by 2 of 3 models" not in page.text
+    assert "See the current answer" in historical.text
 
 
 def test_topic_judge_writes_english_statements_while_the_app_keeps_the_answer_language(monkeypatch):

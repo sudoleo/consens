@@ -21,14 +21,14 @@ from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token
 from app.services import (
-    claim_ledger, drift_signal, favicons, mailer, topic_finding, topic_runner,
-    topics,
+    check_page, drift_signal, favicons, mailer, source_links, topic_figures,
+    topic_images, topic_runner, topics,
 )
-from app.services.history_view import build_history_view
+from app.services.history_view import build_history_view, day_label
 from app.services.public_markdown import (
-    markdown_to_plaintext,
+    lead_sentences,
     render_public_markdown,
-    source_site_name,
+    strip_chat_framing,
 )
 
 
@@ -39,6 +39,10 @@ _FAVICON_ACQUIRE_TIMEOUT_SECONDS = 1.0
 # A public Topic page reads a bounded window of its record: the newest runs
 # for the timeline, and for an older version the runs ending at it.
 TOPIC_PAGE_RUNS = 100
+HUB_DESCRIPTION = (
+    "Questions about AI that several AI models answer again every week: the "
+    "current answer, direct links to the sources, and every time it changed."
+)
 templates = Jinja2Templates(directory="templates")
 register_asset_globals(templates)
 
@@ -63,72 +67,76 @@ _STATUS_BY_CODE = {
 }
 
 
-def _topic_history_view(runs_raw, selected_version: int):
-    """Agreement curve and Position Map as of the selected snapshot.
+def _direct_sources(items) -> list[dict]:
+    """The sources behind a change, without Google redirects: those expire
+    within weeks and never name the page they stand for."""
+    return [
+        item for item in topics.normalize_evidence_sources(items)
+        if not topics.classify_evidence(item["url"])["is_indirect"]
+    ]
 
-    Later runs are excluded on purpose: an older version has to show the state
-    of knowledge at that time, otherwise browsing the history only ever repeats
-    today's picture with an older answer above it.
-    """
+
+def _history_points(runs_raw) -> list[dict]:
+    """Topic runs as points for the parts Topic and Watch pages share
+    (check_page, history_view). Movement follows the Topic's own rule -- the
+    Judge grade and its cause, never the score (drift_signal.topic_point)."""
     points = []
     for run in runs_raw:
         observed_at = run.get("observed_at")
+        if not isinstance(observed_at, datetime):
+            continue
         score = run.get("agreement_score")
-        if not isinstance(observed_at, datetime) or (score is not None and not isinstance(score, (int, float))):
-            continue
-        if int(run.get("version") or 0) > selected_version:
-            continue
-        opinion_map = run.get("opinion_map")
         points.append({
+            **drift_signal.topic_point(run),
             "ts": observed_at,
-            "agreement_score": int(score) if score is not None else None,
-            "changed": str(run.get("change_type") or "stable") != "stable",
+            "agreement_score": (
+                int(score) if isinstance(score, (int, float)) and not isinstance(score, bool)
+                else None
+            ),
             "change_summary": str(run.get("change_summary") or ""),
-            "severity": "major" if run.get("change_type") == "major" else "",
-            "cause": run.get("cause"),
-            "opinion_map": opinion_map if isinstance(opinion_map, dict) and opinion_map else None,
+            "evidence_sources": _direct_sources(run.get("evidence_sources")),
             "run_id": run["id"],
             "has_snapshot": True,
         })
-    return build_history_view(points)
+    return points
 
 
-def _plain_position_labels(history) -> None:
-    """Position Map labels are quoted model text and arrive with markdown and
-    [S3] citation markers in them. They are rendered as plain sentences here,
-    the same way the Claim Ledger renders them."""
-    position_map = (history or {}).get("position_map") or {}
-    for dimension in position_map.get("dimensions") or []:
-        dimension["label"] = markdown_to_plaintext(dimension.get("label"), limit=200)
-        for position in dimension.get("positions") or []:
-            position["stance"] = markdown_to_plaintext(
-                position.get("stance"), limit=220
-            )
+def _sources_view(evidence, preferred_domains):
+    """The run's evidence as the shared source list, direct sources first.
+
+    Returns ``(sources, entries, hidden)``: the stored sources and their list
+    entries in display order, and the Google redirects, which are left out of
+    the list, the direct links and the inline names (their [S#] markers drop).
+    """
+    ranked, hidden = [], []
+    for position, item in enumerate(evidence or []):
+        if not isinstance(item, dict):
+            continue
+        classification = topics.classify_evidence(
+            item.get("url"), item.get("type"), preferred_domains,
+            title=str(item.get("title") or ""),
+            publisher=str(item.get("publisher") or ""),
+        )
+        if classification["is_indirect"]:
+            hidden.append(item)
+            continue
+        source = {**item, "url": classification["url"]}
+        entry = source_links.source_entries([source])[0]
+        match = re.match(r"^S(\d+)$", str(item.get("id") or ""))
+        entry.update({"id": str(item.get("id") or ""), "num": match.group(1) if match else ""})
+        rank = (classification["rank"], not classification["is_preferred"], position)
+        ranked.append((rank, source, entry))
+    ranked.sort(key=lambda row: row[0])
+    return [row[1] for row in ranked], [row[2] for row in ranked], hidden
 
 
-def _topic_scoreboard(topic: dict, selected: dict, runs) -> dict:
-    """The facts that separate this page from asking one model once."""
-    position_map = selected.get("opinion_map") or {}
-    dimensions = position_map.get("dimensions") or []
-    first_run = runs[0] if runs else None
-    return {
-        "model_count": len(selected.get("models") or []) or len(topic.get("models") or []),
-        "contradiction_count": sum(
-            1 for dimension in dimensions if dimension.get("type") == "contradiction"
-        ),
-        "position_count": len(dimensions),
-        "source_count": len(selected.get("evidence") or []),
-        "direct_source_count": sum(
-            1 for item in selected.get("evidence") or []
-            if item.get("quality") == "high"
-        ),
-        "context_source_count": sum(
-            1 for item in selected.get("evidence") or []
-            if item.get("quality") != "high"
-        ),
-        "version_count": len(runs),
-        "tracked_since": (first_run or {}).get("date_display") or "",
-    }
+def _consulted_models(labels) -> list[dict]:
+    """"OpenAI: gpt-6-luna" as the label/model pair the shared part prints."""
+    models = []
+    for label in labels or []:
+        provider, _, model = str(label or "").partition(":")
+        models.append({"label": provider.strip(), "model": model.strip()})
+    return models
 
 
 def _raise_topic(exc: topics.TopicError):
@@ -162,68 +170,6 @@ def _date_label(value: str) -> str:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%b %d, %Y")
     except (TypeError, ValueError):
         return str(value or "")[:10]
-
-
-_VIDEO_HOST_RE = re.compile(r"(?:^|\.)(youtube\.com|youtu\.be|vimeo\.com)$")
-
-
-def _x_handle(url: str) -> str:
-    """Best-effort @handle from an X/Twitter status URL (x.com/<handle>/status/..)."""
-    try:
-        parts = [p for p in urlsplit(str(url or "")).path.split("/") if p]
-    except ValueError:
-        return ""
-    if parts and parts[0].lower() not in {"i", "intent", "search", "hashtag"}:
-        handle = re.sub(r"[^A-Za-z0-9_]", "", parts[0])[:30]
-        return f"@{handle}" if handle else ""
-    return ""
-
-
-def _is_video_url(url: str) -> bool:
-    try:
-        host = (urlsplit(str(url or "")).hostname or "").lower()
-    except ValueError:
-        return False
-    host = re.sub(r"^www\.", "", host)
-    return bool(_VIDEO_HOST_RE.search(host))
-
-
-def _host_of(url) -> str:
-    try:
-        host = (urlsplit(str(url or "")).hostname or "").lower()
-    except ValueError:
-        return ""
-    return re.sub(r"^www\.", "", host)
-
-
-def _enrich_evidence(item: dict, preferred_domains=None) -> None:
-    """Attach self-hosted embed hints (no third-party requests at view time)."""
-    classification = topics.classify_evidence(
-        item.get("url"), item.get("type"), preferred_domains,
-        title=str(item.get("title") or ""),
-        publisher=str(item.get("publisher") or ""),
-    )
-    item["url"] = classification["url"]
-    item["role"] = classification["role"]
-    item["role_label"] = classification["role_label"]
-    item["quality"] = classification["quality"]
-    item["quality_label"] = classification["quality_label"]
-    item["quality_rank"] = classification["rank"]
-    item["is_indirect"] = classification["is_indirect"]
-    item["is_preferred"] = classification["is_preferred"]
-    url = item.get("url")
-    item["site"] = source_site_name(url)
-    item["host"] = _host_of(url)
-    item["is_video"] = _is_video_url(url)
-    handle = _x_handle(url) if item.get("role") == "community" else ""
-    item["handle"] = handle
-    seed = str(item.get("publisher") or handle.lstrip("@") or item.get("site") or "X")
-    initial = next((ch for ch in seed if ch.isalnum()), "X")
-    item["initial"] = initial.upper()
-    # Auto-generated runs sometimes carry a bare citation index ("7") as the
-    # title. Suppress those so the card stays clean (favicon + site + badge).
-    title = str(item.get("title") or "").strip()
-    item["show_title"] = bool(title) and not title.isdigit()
 
 
 def _admin_topic_view(topic: dict) -> dict:
@@ -265,17 +211,25 @@ async def topics_hub(request: Request):
     except Exception as exc:
         logging.error("topics_hub failed category=%s", safe_exception(exc))
         entries = []
-    categories = sorted({entry["category"] for entry in entries if entry["category"]})
+    for entry in entries:
+        # A card says what a reader of the page would see first: the picture,
+        # the opening of the answer, and whether the latest check moved it.
+        entry["image"] = topic_images.image_view(entry["id"], {"image": entry["image_state"]})
+        try:
+            day = day_label(datetime.fromisoformat(entry["accepted_run_at"]))
+        except (TypeError, ValueError):
+            day = ""
+        if entry["standing_moved"]:
+            entry["state_line"] = f"Changed on {day}" if day else "Changed in the latest check"
+        else:
+            entry["state_line"] = f"No change in the check of {day}" if day else "No change in the latest check"
     jsonld = {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
         "@id": SITE_URL + "/topics",
         "url": SITE_URL + "/topics",
         "name": "AI Consensus Topics",
-        "description": (
-            "Curated AI topics with versioned consensus timelines, agreement "
-            "scores, opinion changes, and time-matched evidence."
-        ),
+        "description": HUB_DESCRIPTION,
         "mainEntity": {
             "@type": "ItemList",
             "numberOfItems": len(entries),
@@ -289,7 +243,7 @@ async def topics_hub(request: Request):
     }
     response = templates.TemplateResponse(request=request, name="topics.html", context={
         "entries": entries,
-        "categories": categories,
+        "description": HUB_DESCRIPTION,
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
     })
     response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300"
@@ -356,11 +310,11 @@ async def topic_page(
         redirect.headers["Cache-Control"] = "public, max-age=3600"
         return redirect
 
-    # The timeline is the newest page of the record; it is navigation, not
+    # The history is the newest page of the record; it is navigation, not
     # the lookup for an explicit version link.
-    recent_raw = drift_signal.annotate_runs(await asyncio.to_thread(
+    recent_raw = await asyncio.to_thread(
         topics.list_runs, topic["id"], max_items=TOPIC_PAGE_RUNS
-    ))
+    )
     # Without an explicit version the page shows the answer that stands, not
     # the newest run: a run whose search missed the evidence does not replace
     # it (docs/watch-evidence-model.md).
@@ -373,182 +327,133 @@ async def topic_page(
         selected_raw = await asyncio.to_thread(topics.get_run, topic["id"], wanted)
     if not selected_raw:
         raise HTTPException(status_code=404, detail="Topic version not found")
-    if any(run["id"] == selected_raw["id"] for run in recent_raw):
-        record_raw = [
-            run for run in recent_raw
-            if int(run.get("version") or 0) <= int(selected_raw.get("version") or 0)
-        ]
-    else:
-        record_raw = drift_signal.annotate_runs(await asyncio.to_thread(
-            topics.list_runs_until, topic["id"], selected_raw,
-            max_items=TOPIC_PAGE_RUNS,
-        ))
-    preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
+    current = selected_raw["id"] == standing_id
+    selected = topics.run_public_view(selected_raw)
 
-    def public_runs(raw_runs):
-        views = [topics.run_public_view(run) for run in raw_runs]
-        for run in views:
-            run["date_display"] = _date_label(run["observed_at"])
-            run["consensus_excerpt"] = markdown_to_plaintext(
-                run["consensus_md"], limit=190
-            )
-            run["is_selected"] = run["id"] == selected_raw["id"]
-            for item in run["evidence"]:
-                _enrich_evidence(item, preferred_domains)
-            run["evidence"].sort(key=lambda item: (
-                item.get("quality_rank", 99), not item.get("is_preferred"),
-                item.get("published_at") or "", item.get("title") or ""
-            ))
-        return views
-
-    runs = public_runs(recent_raw)
-    views_by_id = {run["id"]: run for run in runs}
-    views_by_id.update({
-        run["id"]: run
-        for run in public_runs([raw for raw in record_raw if raw["id"] not in views_by_id])
-    })
-    record_views = [views_by_id[raw["id"]] for raw in record_raw]
-    selected = views_by_id.get(selected_raw["id"])
-    if selected is None:
-        selected = public_runs([selected_raw])[0]
-        record_views.append(selected)
-    current = selected["id"] == standing_id
-    runs_desc = list(reversed(runs))
-    # The newest check, when its answer does not stand. The page names it
-    # above the standing answer instead of silently showing an older one.
-    pending_check = (
-        runs[-1] if current and runs and runs[-1]["id"] != standing_id
-        and not runs[-1].get("accepted") else None
-    )
-    # Everything that describes the record is built from the runs up to the
-    # selected one: an older version has to show what was known then, not
-    # today's picture with an older answer above it.
-    runs_upto = record_views
-    # Versions are numbered 1..n per Topic, so a window that holds fewer runs
-    # than the selected version number does not reach back to the first check.
-    # Legacy runs without a version never claim more than they show.
-    record_total = max(int(selected.get("version") or 0), len(runs_upto))
-    record_truncated = record_total > len(runs_upto)
-    history = _topic_history_view(record_raw, int(selected.get("version") or 0))
-    _plain_position_labels(history)
-    scoreboard = _topic_scoreboard(topic, selected, runs)
-    # The timeline is the newest page; beyond it the stored count is the truth
-    # and its first date is not the first check.
-    timeline_total = max(int(topic.get("run_count") or 0), len(runs))
-    timeline_truncated = timeline_total > len(runs)
-    if timeline_truncated:
-        scoreboard["version_count"] = timeline_total
-        scoreboard["tracked_since"] = ""
-    ledger = claim_ledger.build_claim_ledger(runs_upto)
-    record = claim_ledger.build_record_summary(runs_upto)
-    if record and record_truncated:
-        # Checks outside the window are stored but not read here: counts use
-        # the stored total, and nothing claims to know where the record began.
-        record["checks"] = record_total
-        record["truncated"] = True
-        record["window_checks"] = len(runs_upto)
-    sources = claim_ledger.apply_source_chronicle(runs_upto, selected)
-    claim_ledger.attach_claim_sources(ledger, runs_upto)
-    strip = claim_ledger.build_check_strip(runs_upto, ledger)
-    finding = topic_finding.build_finding(
-        ledger, record, selected, lead_question=topic.get("lead_question") or ""
-    )
-    if finding and record_truncated:
-        finding["tracked_since"] = ""
-    # The timeline stays complete even on an older version, because it is the
-    # navigation between versions.
-    timeline = claim_ledger.collapse_timeline(runs_desc)
-    selected["consensus_html"] = render_public_markdown(
-        selected["consensus_md"], selected["evidence"],
-        excluded_sources=selected.get("excluded_evidence") or [],
-    )
-    for change in selected["opinion_changes"]:
-        change["summary_html"] = render_public_markdown(change.get("summary"))
-
+    # The page is built from the parts it shares with Watch pages
+    # (partials/check_page.html): state line, direct links, answer, history.
+    points = _history_points(recent_raw)
+    if not any(point["run_id"] == selected_raw["id"] for point in points):
+        points = sorted(
+            points + _history_points([selected_raw]), key=lambda point: point["ts"]
+        )
+    history = build_history_view(points)
     public_topic = topics.topic_public_view(topic)
-    # A page that promises a next check has to name the date, and only for the
-    # version that is actually still being checked.
-    public_topic["next_run_display"] = (
-        _date_label(public_topic["next_run_at"])
-        if current and public_topic.get("next_run_at")
-        and public_topic.get("status") == "active" else ""
+    next_run = topic.get("next_run_at")
+    page = {
+        "is_active": public_topic["status"] == "active",
+        "next_run": {
+            "day": day_label(next_run) if isinstance(next_run, datetime) and current else ""
+        },
+        "status_label": "Paused" if public_topic["status"] == "paused" else "Active",
+        "resolution": None,
+    }
+    page_state = check_page.state_view(
+        page, history, check_page.drift_view(points, selected_raw["id"]),
+        awaiting=False,
+        version_kind="historical" if version and not current else "current",
+        selected_run_id=selected_raw["id"],
+        requested=bool(version) and not current,
     )
+
+    preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
+    answer_md = strip_chat_framing(selected["consensus_md"])
+    sources, source_list, hidden = _sources_view(selected["evidence"], preferred_domains)
+    # Figures drawn from this answer sit under the heading they belong to.
+    figure_md, figures = topic_figures.place(answer_md, selected["figures"])
+    answered = selected_raw.get("observed_at")
+    answer_html = topic_figures.fill(
+        render_public_markdown(
+            figure_md, sources,
+            excluded_sources=list(selected_raw.get("excluded_evidence") or []) + hidden,
+            site_links=source_links.site_mentions(source_list, answer_md),
+        ),
+        figures,
+        answered_on=(
+            f"{answered:%b} {answered.day}, {answered.year}" if isinstance(answered, datetime) else ""
+        ),
+    )
+    differences_data = selected_raw.get("differences_data")
+    differences_data = differences_data if isinstance(differences_data, dict) else {}
+    differences = [
+        item for item in differences_data.get("differences") or [] if isinstance(item, dict)
+    ]
+
     canonical_url = f"{SITE_URL}/topics/{public_topic['slug']}"
     page_url = canonical_url + (f"?version={selected['id']}" if version else "")
     seo = public_topic.get("seo") or {}
-    title = seo.get("title") or f"{public_topic['title']} Consensus Timeline"
-    # A description that answers the query outranks one that describes the
-    # apparatus, so the finding leads when there is no editorial override.
-    default_description = (
-        f"{public_topic['lead_question']} Current agreement "
-        + (f"{selected['agreement_score']}/100" if selected.get("agreement_score") is not None else "not assessable")
-        + ", with a versioned consensus timeline "
-        "and time-matched evidence."
-    )
-    if finding:
-        default_description = (
-            f"{finding['line']} Checked {record_total} time"
-            f"{'s' if record_total != 1 else ''} across "
-            f"{scoreboard['model_count'] or 'several'} AI models, most recently "
-            f"{selected['observed_at'][:10]}. {public_topic['lead_question']}"
-        )[:300]
-    # The page's own finding wins over the hand-set description: a stored
-    # description is written once and goes stale, while search snippets and
-    # the JSON-LD have to say what the page says now (gpt-6-release-date
-    # announced "not announced" in its snippet while the page led with a
-    # release). The hand-set text only fills in when there is no finding.
-    meta_description = (
-        default_description if finding
-        else seo.get("description") or default_description
+    title = seo.get("title") or public_topic["title"]
+    # The snippet answers the query: the opening of the answer, then what
+    # separates this page from asking one model once. A hand-set description
+    # only fills in for an answer without a usable opening.
+    model_count = len(selected["models"]) or len(public_topic["models"])
+    checks = max(int(public_topic.get("run_count") or 0), len(points))
+    record = f" Checked by {model_count or 'several'} AI models"
+    if len(points) > 1:
+        # Count and date come from the same window, so the sentence holds
+        # even when older checks lie beyond it.
+        first = points[0]["ts"]
+        record += f", {len(points)} times since {first:%b} {first.day}, {first.year}"
+    record += "."
+    lead = lead_sentences(answer_md, limit=max(80, 300 - len(record)))
+    meta_description = (lead + record) if lead else (
+        seo.get("description") or public_topic["lead_question"]
     )
     robots = "noindex, follow" if seo.get("noindex") or version else "index, follow"
-    citations = [item["url"] for run in runs for item in run["evidence"]]
+    # Only when the window reaches back to the first check does its date say
+    # when the page was first published.
+    window_complete = bool(recent_raw) and len(recent_raw) >= checks
     jsonld = {
         "@context": "https://schema.org",
         "@type": "Article",
         "headline": title[:110],
         "description": meta_description[:300],
         "datePublished": (
-            public_topic.get("created_at") or selected["observed_at"]
-            if timeline_truncated or not runs else runs[0]["observed_at"]
+            topics._public_datetime(recent_raw[0].get("observed_at")) if window_complete
+            else public_topic.get("created_at") or selected["observed_at"]
         ),
-        "dateModified": runs[-1]["observed_at"] if runs else selected["observed_at"],
+        "dateModified": (
+            topics._public_datetime(recent_raw[-1].get("observed_at")) if recent_raw
+            else selected["observed_at"]
+        ),
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical_url},
         "author": seo_entity.ORG_REF,
         "publisher": seo_entity.ORG_REF,
         "isPartOf": seo_entity.SITE_REF,
-        "citation": list(dict.fromkeys(citations))[:30],
+        "citation": list(dict.fromkeys(
+            entry["url"] for entry in source_list if entry["is_direct"]
+        ))[:30],
         "isAccessibleForFree": True,
     }
-    if finding:
-        jsonld["abstract"] = finding["line"][:300]
+    if lead:
+        jsonld["abstract"] = lead[:300]
     response = templates.TemplateResponse(request=request, name="topic.html", context={
         "topic": public_topic,
-        "selected": selected,
-        "runs": runs_desc,
-        "history": history,
-        "scoreboard": scoreboard,
-        "ledger": ledger,
-        "finding": finding,
-        "strip": strip,
-        "record": record,
-        "sources": sources,
-        "timeline": timeline,
-        "timeline_total": timeline_total,
-        "record_window": {
-            "truncated": record_truncated,
-            "shown": len(runs_upto),
-            "total": record_total,
+        "topic_image": topic_images.image_view(topic["id"], topic),
+        "page_state": page_state,
+        "key_links": source_links.key_links(source_list, answer_md),
+        "answer_html": answer_html,
+        "sources": source_list,
+        "page_history": history,
+        "selected_version": {
+            "id": selected_raw["id"],
+            "current_url": f"/topics/{public_topic['slug']}",
+            "original_url": "",
+            "is_original": True,
         },
+        "model_count": model_count,
+        "contradiction_count": sum(
+            1 for item in differences if item.get("type") == "contradiction"
+        ),
+        "consulted_models": _consulted_models(selected["models"]),
+        "differences": differences,
+        "is_current": current,
         "canonical_url": canonical_url,
         "page_url": page_url,
         "page_title": title,
         "meta_description": meta_description,
         "robots_meta": robots,
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
-        "is_current": current,
-        "pending_check": pending_check,
-        "signal_notes": claim_ledger.SIGNAL_NOTES,
     })
     response.headers["X-Robots-Tag"] = robots
     # A stored version never changes, but the Topic can be archived and then
@@ -557,6 +462,29 @@ async def topic_page(
         "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
     )
     return response
+
+
+@router.get("/api/topics/{topic_id}/image/{token}")
+@limiter.limit("60/minute")
+def topic_image(request: Request, topic_id: str, token: str):
+    """The Topic's picture, served by consens.io (no request to the source).
+
+    Topics are public and the token changes with the picture, so it may be
+    cached long.
+    """
+    try:
+        found = topic_images.load_image(topic_id, token)
+    except Exception as exc:
+        logging.warning("topic_image failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Image unavailable")
+    if not found:
+        raise HTTPException(status_code=404, detail="Not found")
+    content, content_type = found
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=2592000, immutable"},
+    )
 
 
 _GLOBE_SVG = (

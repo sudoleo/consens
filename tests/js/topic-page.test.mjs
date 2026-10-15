@@ -1,10 +1,9 @@
 /**
- * topic-page.js -- the check strip readout on public Topic pages (R01).
+ * topic-page.js -- the follow form on public Topic pages, and
+ * check-page.js -- the parts Topic and Watch pages share.
  *
- * A strip cell's note is a change summary from a model run. Jinja escapes it
- * into data-note, the browser decodes it again for dataset.note, so the
- * readout must insert it as text. Parsing it as HTML would turn model output
- * into markup on a public page.
+ * The follow form prints a message from the server. It is inserted as text:
+ * parsing it as HTML would turn a response into markup on a public page.
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,102 +12,106 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 const HOSTILE = '<img src=x onerror="window.__pwned=1"><span id="injected">not text</span>';
 
-async function boot({ note = HOSTILE, score = "72", hover = true, storage } = {}) {
-  const body = [
-    '<div class="topic-strip" id="topicStrip" data-slug="gpt-6">',
-    '<a class="topic-strip-cell is-first" href="/topics/gpt-6?version=a" data-date="Jul 1" data-iso="2026-07-01" data-kind="first" data-note="First check." data-score="60"></a>',
-    '<a class="topic-strip-cell is-material" id="hostile" href="/topics/gpt-6" data-date="Jul 8" data-iso="2026-07-08" data-kind="material"></a>',
-    "</div>",
-    '<p class="topic-strip-read" id="topicStripRead" role="status">Jul 8 &mdash; resting line</p>',
-    '<section class="topic-return" id="topicReturn" hidden></section>',
-  ].join("");
-  const loaded = loadScripts(["static/js/topic-page.js"], {
+async function boot(files, body, before) {
+  const loaded = loadScripts(files, {
     body,
     before(window) {
-      const cell = window.document.getElementById("hostile");
-      // setAttribute stores exactly what dataset returns after the server's
-      // attribute escaping has been decoded by the HTML parser.
-      cell.setAttribute("data-note", note);
-      cell.setAttribute("data-date", "Jul 8 <b id=\"date-injected\">x</b>");
-      if (score !== null) cell.setAttribute("data-score", score);
-      window.matchMedia = () => ({ matches: hover });
-      if (storage) {
-        Object.defineProperty(window, "localStorage", { value: storage, configurable: true });
-      }
+      // jsdom does not lay out; the jump to a source still has to run.
+      window.Element.prototype.scrollIntoView = () => {};
+      before?.(window);
     },
   });
-  // The module starts on DOMContentLoaded, exactly like in the browser.
+  // The modules start on DOMContentLoaded, exactly like in the browser.
   if (loaded.document.readyState === "loading") {
     await new Promise(resolve => loaded.document.addEventListener("DOMContentLoaded", resolve));
   }
   return loaded;
 }
 
-function readout(document) {
-  return document.getElementById("topicStripRead");
+const FOLLOW = [
+  '<form id="topicFollowForm" data-slug="gpt 6">',
+  '<input id="topicFollowEmail" name="email" type="email" value="reader@example.com">',
+  '<button type="submit">Follow</button>',
+  "</form>",
+  '<p id="topicFollowStatus" role="status" hidden></p>',
+].join("");
+
+function respond(ok, payload, calls) {
+  return (window) => {
+    window.fetch = (url, options) => {
+      calls.push({ url, options });
+      return Promise.resolve({ ok, json: () => Promise.resolve(payload) });
+    };
+  };
 }
 
-describe("topic strip readout treats data as text", () => {
-  for (const [label, fire] of [
-    ["hover", (window, cell) => cell.dispatchEvent(new window.Event("mouseenter"))],
-    ["keyboard focus", (window, cell) => cell.dispatchEvent(new window.Event("focus"))],
-    ["touch preview", (window, cell) => cell.dispatchEvent(new window.MouseEvent("click", { cancelable: true }))],
-  ]) {
-    it(`shows HTML-like notes literally on ${label}`, async () => {
-      const { window, document } = await boot({ hover: label !== "touch preview" });
-      const cell = document.getElementById("hostile");
-      fire(window, cell);
+async function submit(window, document) {
+  const form = document.getElementById("topicFollowForm");
+  form.dispatchEvent(new window.Event("submit", { cancelable: true }));
+  // Let the fetch and json promises settle.
+  for (let i = 0; i < 5; i += 1) await new Promise(resolve => setTimeout(resolve, 0));
+}
 
-      const read = readout(document);
-      expect(read.textContent).toContain(HOSTILE);
-      expect(document.getElementById("injected")).toBeNull();
-      expect(document.getElementById("date-injected")).toBeNull();
-      expect(read.querySelector("img")).toBeNull();
-      expect(read.querySelectorAll("[onerror]").length).toBe(0);
-      expect(window.__pwned).toBeUndefined();
-    });
-  }
+describe("topic follow form", () => {
+  it("posts the address to the Topic and prints the reply as text", async () => {
+    const calls = [];
+    const { window, document } = await boot(
+      ["static/js/topic-page.js"], FOLLOW, respond(true, { message: HOSTILE }, calls),
+    );
+    await submit(window, document);
 
-  it("keeps the bold date and the score formatting", async () => {
-    const { window, document } = await boot({ note: "The answer moved." });
-    document.getElementById("hostile").dispatchEvent(new window.Event("focus"));
-
-    const read = readout(document);
-    expect(read.children.length).toBe(2);
-    expect(read.querySelector("b").textContent).toBe('Jul 8 <b id="date-injected">x</b>');
-    expect(read.querySelector(".topic-strip-score").textContent).toBe("72/100 agreement");
-    expect(read.textContent).toBe('Jul 8 <b id="date-injected">x</b> — The answer moved. 72/100 agreement');
-  });
-
-  it("omits the score for an unscored cell", async () => {
-    const { window, document } = await boot({ note: "Insufficient evidence.", score: null });
-    document.getElementById("hostile").dispatchEvent(new window.Event("mouseenter"));
-    expect(readout(document).querySelector(".topic-strip-score")).toBeNull();
-  });
-
-  it("restores the server-rendered resting line after leaving the strip", async () => {
-    const { window, document } = await boot();
-    const read = readout(document);
-    const resting = read.innerHTML;
-    document.getElementById("hostile").dispatchEvent(new window.Event("mouseenter"));
-    document.getElementById("topicStrip").dispatchEvent(new window.Event("mouseleave"));
-    expect(read.innerHTML).toBe(resting);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("/api/topics/gpt%206/follow");
+    expect(JSON.parse(calls[0].options.body)).toEqual({ email: "reader@example.com" });
+    const status = document.getElementById("topicFollowStatus");
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toBe(HOSTILE);
     expect(document.getElementById("injected")).toBeNull();
+    expect(window.__pwned).toBeUndefined();
+    expect(document.getElementById("topicFollowForm").hidden).toBe(true);
   });
 
-  it("builds the returning-reader band from text, including hostile dates", async () => {
-    const store = new Map([["topic-seen:gpt-6", "2026-07-02"]]);
-    const storage = {
-      getItem: key => (store.has(key) ? store.get(key) : null),
-      setItem: (key, value) => store.set(key, String(value)),
-    };
-    const { document } = await boot({ storage });
-    const band = document.getElementById("topicReturn");
-    expect(band.hidden).toBe(false);
-    expect(band.querySelector(".topic-return-tag").textContent).toBe("Since your last visit");
-    expect(band.querySelector('a[href="#facts"]').textContent).toBe("See the statements");
-    expect(band.textContent).toContain('the answer moved on Jul 8 <b id="date-injected">x</b>.');
-    expect(document.getElementById("date-injected")).toBeNull();
-    expect(store.get("topic-seen:gpt-6")).toBe("2026-07-08");
+  it("keeps the form and marks an error", async () => {
+    const calls = [];
+    const { window, document } = await boot(
+      ["static/js/topic-page.js"], FOLLOW, respond(false, { detail: "Too many requests." }, calls),
+    );
+    await submit(window, document);
+
+    const status = document.getElementById("topicFollowStatus");
+    expect(status.textContent).toBe("Too many requests.");
+    expect(status.classList.contains("is-error")).toBe(true);
+    expect(document.getElementById("topicFollowForm").hidden).toBe(false);
+    expect(document.querySelector("#topicFollowForm button").disabled).toBe(false);
+  });
+});
+
+describe("shared check page parts", () => {
+  it("folds the source list and opens it for a jump to a source", async () => {
+    const items = Array.from({ length: 7 }, (_, i) => `<li id="src-${i + 1}">Source ${i + 1}</li>`).join("");
+    const { window, document } = await boot(
+      ["static/js/check-page.js"],
+      `<ol id="shareSources">${items}</ol><button id="shareSourcesToggle" hidden>Show all</button>`,
+    );
+    const list = document.getElementById("shareSources");
+    const toggle = document.getElementById("shareSourcesToggle");
+    expect(list.classList.contains("is-collapsed")).toBe(true);
+    expect(toggle.hidden).toBe(false);
+
+    window.location.hash = "#src-6";
+    window.dispatchEvent(new window.HashChangeEvent("hashchange"));
+    expect(list.classList.contains("is-collapsed")).toBe(false);
+    expect(toggle.hidden).toBe(true);
+  });
+
+  it("opens a folded group of quiet checks for a link to one of them", async () => {
+    const { window, document } = await boot(
+      ["static/js/check-page.js"],
+      '<details id="group"><summary>3 checks, no change</summary><ul><li id="watch-run-check-2">Jul 2</li></ul></details>',
+    );
+    expect(document.getElementById("group").open).toBe(false);
+    window.location.hash = "#watch-run-check-2";
+    window.dispatchEvent(new window.HashChangeEvent("hashchange"));
+    expect(document.getElementById("group").open).toBe(true);
   });
 });

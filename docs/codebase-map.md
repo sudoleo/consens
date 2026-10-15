@@ -300,7 +300,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call, 6/min; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel), `/api/watch/{id}/image/{token}` (GET ohne Login, 60/min: die gespeicherte Watch-Vorschau aus `watch_images`, nur mit passendem Inhalts-Token, `Cache-Control: private` 30 Tage; siehe §4 „Watch-Bild“), `/api/watch/{id}/image` (DELETE, Owner: Bild entfernen, danach wird nie wieder eins gesucht), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
+| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`; seit 2026-10-15 aus denselben Teilen wie die Watch-Seiten gebaut, siehe §4 „Kuratierte Topics“), `/api/topics/{topic_id}/image/{token}` (GET ohne Login, 60/min: das Topic-Bild aus `topic_images`, nur mit passendem Inhalts-Token, öffentlich 30 Tage cachebar), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der frühere Scheduled Publisher (`GET /api/v1/publisher/config`, Header `X-Consensus-Publisher`, `POST /api/v1/shares/{share_id}/watch`) ist seit 2026-10-04 entfernt (siehe §4 „SEO-Puls“). Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Gemeinsame OpenRouter-URLs/Headers liegen dependency-frei in
@@ -324,7 +324,10 @@ Consensus-Seite), `watch_share.html` (dieselbe Route `/s/…`, sobald die Seite
 Watch-Metadaten oder -History hat), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
 `topics.html` und `topic.html` bilden den öffentlichen Topics-Hub bzw. die
-Timeline-/Evidence-Detailseite; die Topic-Redaktion liegt als eigener Tab in
+Detailseite; `topic.html` und `watch_share.html` setzen sich seit 2026-10-15 aus
+denselben Makros in `templates/partials/check_page.html` zusammen (Kopf mit
+Bild, Zustandszeile, Direktlinks, Antwort mit Quellen, Verlauf,
+Modellvergleich); die Topic-Redaktion liegt als eigener Tab in
 `admin.html` unter `/admin#topics` (`/admin/topics` redirectet dorthin).
 Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
 `templates/partials/public_nav.html` und `public_footer.html`. Das Umami-Snippet
@@ -507,9 +510,9 @@ zusätzlich die rahmenlose Shell-Sprache: Der Verdict ist eine Zeile (Score-Ring
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
 Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und
-`consensus-engine.css`. `topics.css` ergänzt ausschließlich Hub-, Dossier-,
-Timeline-, Evidence- und Follow-Komponenten der beiden Topic-Templates und importiert
-dieselbe Token-Schicht mit eigenem Cache-Buster.
+`consensus-engine.css`. `topics.css` trägt seit 2026-10-15 nur noch die Zeilen des Hubs `/topics`;
+die Topic-Detailseite nutzt die `.wp-*`-Regeln der Watch-Seite in
+`public-pages.css` (dort auch `.wp-subheading` für die Leitfrage unter dem Titel).
 Die gemeinsame Typografie-Grundlage liegt in `static/css/typography.css` und
 wird von `variables.css` (App/Admin) sowie `public-tokens.css` (Marketing/Public)
 importiert. Sie hostet Inter Variable lokal als normale und kursive WOFF2-Datei,
@@ -549,10 +552,12 @@ HTML-Eventhandler mehr. Jinja-Konfiguration liegt ausschließlich in escaped
 Handler. Die routenspezifische CSP für `/app`, `/app/watches`, `/admin` und alle `/admin/*`-Unterpfade
 kommt deshalb bei `script-src` ohne `'unsafe-inline'` aus. Seit 2026-09-29 gilt
 das auch für die öffentlichen Topic-Detailseiten `/topics/{slug}` (Review R01):
-`topic.html` lädt das Theme per `static/js/public-theme.js` und bündelt Strip,
-Rückkehrer-Band, Follow-Formular und Zitat-Chips in `static/js/topic-page.js`;
-Datentext (z. B. `change_summary` im Check-Strip) wird dort nur per
-`textContent`/DOM-Knoten eingesetzt, nie erneut als HTML geparst. Die übrigen
+`topic.html` lädt das Theme per `static/js/public-theme.js`, die mit der
+Watch-Seite geteilten Skripte per `static/js/check-page.js` (lange Frage
+einklappen, fehlendes Bild/Favicons ausblenden, Quellenliste falten,
+`#src-N`/`#watch-run-…`-Sprünge) und das Follow-Formular per
+`static/js/topic-page.js`; die Serverantwort wird dort nur per `textContent`
+eingesetzt, nie als HTML geparst. Die übrigen
 öffentlichen Seiten (einschließlich des Hubs `/topics`) behalten die bisherige
 Policy während der weiteren Style-Migration.
 
@@ -4552,7 +4557,7 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   `MIN_SCORED_CLAIM_SUPPORT` (2) behandelnden Modellen gehen NICHT in den Score
   ein (`scored_claims`/`thin_claims` weisen das aus): sie sind seit dem
   Coverage-Judge sichtbar, aber eine einzelne Stimme belegt nichts. Dieselbe
-  Schwelle filtert sie aus der Opinion-Map (und damit aus dem Claim Ledger).
+  Schwelle filtert sie aus der Opinion-Map.
   alte Bookmarks/Snapshots ohne die Felder degradieren aufs bisherige Rendering.
 - Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei Provider-
   Fehlern (503, Timeout, ...) ein zweites Mal (`CONSENSUS_MAX_ATTEMPTS`);
@@ -5495,13 +5500,6 @@ keinen Abgleich.
   keine Topics. Der gemeinsame HMAC-Unterbau von Topic-/Watch-Follow-Tokens
   bedeutet keine Austauschbarkeit: Watch-, Share-Follower- und Topic-Aktionen
   verlangen ihre eigene Payloadform, bevor ein Dokumentzugriff erfolgt.
-- `query_claim_identity` akzeptiert ausschließlich JSON-Integer als Index,
-  keine Bool-/Float-/String-Coercion. Nur bekannte, einmal verwendete Keys und
-  Indices im übergebenen Fenster werden gebunden. Ungültige Antworten bzw.
-  ein unbekanntes Modell ergeben keine Zuordnung; der Aufrufer behält seinen
-  bisherigen Fallback für neue Claims. Promptfenster und Retryplan bleiben
-  begrenzt. Die Entscheidung und Nachweise stehen unter
-  [Adapter-Implementierung](test-coverage/product/implementation-adapters.md).
 - `topics.list_runs` liest lange Historien über `observed_at DESC` mit
   `max_items + 1` als Limit und gibt die letzten Runs weiter chronologisch
   nach Datum/Version/Dokument-ID aus. Bei kurzen Historien beweist eine
@@ -5511,16 +5509,13 @@ keinen Abgleich.
   bleibt der vollständige Kompatibilitätsread erhalten. Kein neuer Topic-Index
   oder Backfill nötig; der normale kurze Verlauf kostet N Dokumente plus
   die Count-Aggregation statt zweier Vollabfragen.
-- `/topics/{slug}` liest für Timeline und aktuelle Ansicht die neuesten 100 Runs
+- `/topics/{slug}` liest für Verlauf und aktuelle Ansicht die neuesten 100 Runs
   (`TOPIC_PAGE_RUNS`). Ein expliziter `?version=<run_id>` außerhalb dieses
   Fensters wird direkt per `topics.get_run` unter dem bereits aufgelösten Topic
-  geladen (Review R33); fremde oder unbekannte IDs bleiben 404. Das As-of-Bild
-  einer solchen Version stammt aus `topics.list_runs_until` (ein begrenzter
-  `observed_at <= run`-Read, neueste 100 bis einschließlich der Version). Ist ein
-  Fenster abgeschnitten (`run_count` bzw. Versionsnummer größer als die
-  gelesenen Runs), nennen Zähler den gespeicherten Gesamtwert, und Texte wie
-  „since the first check“, „Every check“ oder „since {Datum}“ behaupten keine
-  Vollständigkeit mehr.
+  geladen (Review R33) und in den Verlauf einsortiert; fremde oder unbekannte
+  IDs bleiben 404. Zähler und Datum („Checked 100 times since …“, auch in der
+  Meta-Description) stammen immer aus demselben gelesenen Fenster und
+  behaupten deshalb keine Vollständigkeit über das Fenster hinaus.
 - Topics sind bewusst **keine Shares und keine Nutzer-Watches**. `topics/{id}`
   hält redaktionelle Metadaten plus die ausführbare `run_config` mit konkretem
   `provider_models`-Mapping, `update_interval`, Quellenpräferenzen, SEO, Status
@@ -5553,44 +5548,79 @@ keinen Abgleich.
   normale Runs eingegeben. Der eigene 60-Sekunden-Scheduler in `main.py`
   beansprucht fällige Topics per Firestore-Lease; manuelle Admin-Runs benutzen
   denselben Claim. Paused/archived Topics werden nicht ausgeführt.
-- `/topics/{slug}` rendert SSR, sanitisiertes Markdown, JSON-LD, Current- und
-  historische `?version=`-Ansichten. Das vollständige Dossier mit Consensus,
-  Position Map, Agreement-Verlauf und aktuellen Quellen sowie die Timeline
-  starten geöffnet; die schwer scanbaren separaten „What holds now / What
-  changed / Why“-Karten sind entfallen. Von den nach Qualität sortierten
-  aktuellen Quellen sind die besten fünf direkt sichtbar, der Rest und ältere
-  Evidence starten separat eingeklappt. Die
-  Hub-Karte verwendet den letzten Snapshot-/Change-Status statt freien
-  redaktionellen Beschreibungstexts. Evidence bekommt die Rollen
-  `primary|research|documentation|reporting|community|rumor`, wird nach Rolle
-  sortiert und trennt direkte Quellen von nachrangigen Community-/Gerüchte-/
-  Redirect-Signalen. Seit Review R14 ändern Quellenregeln nie das Etikett:
-  `topic_runner.split_evidence_from_sources` behält die erkannte Rolle und
-  schließt Quellen mit nicht erlaubter Rolle aus (`excluded_evidence` am Run,
-  mit Original-ID/URL, öffentlich nur als Anzahl). Bleibt keine erlaubte Quelle,
-  zeigt die Seite „Insufficient eligible evidence“. `preferred_domains` sind nur
-  noch ein Sortierhinweis innerhalb einer Rolle (`is_preferred`) und machen eine
-  Quelle nicht mehr zur Primärquelle. Nur Topics mit
-  Run und Status Active/Paused erscheinen im Hub; `seo.noindex` entfernt sie
-  zusätzlich aus `sitemap-topics.xml`. Historische Query-Ansichten sind
-  `noindex` und werden wie die aktuelle Ansicht nur kurz gecacht (max-age 60,
-  s-maxage 300), damit ein archiviertes Topic auch mit seinen Versionen
-  verschwindet (Review R18).
-- Befund oben auf der Seite (`app/services/topic_finding.py`, abgeleitet aus
-  dem Claim Ledger, kein Modellaufruf): seit 2026-10-05 nur aus Claims, die
-  `_headline_ok` erfüllen — nicht umstritten (auch nicht unter „new“: das Ledger
-  listet neue Claims umstritten oder nicht gemeinsam, so wurde auf
-  gpt-6-release-date ein Streitpunkt „GPT-6 Astra released“ zum Befund),
-  mindestens `MIN_HEADLINE_MODELS` (3) Modelle, keine Frage/„Whether …“-Formel,
-  kein fremdsprachiges Label. Sonst der nächste gültige Claim, dann der erste
-  Konsens-Satz (nicht bei Läufen mit weniger als drei Modellen), sonst kein
-  Befund. Umstrittene Claims heißen in der Liste „Addressed by“ statt „Stated
-  by“. Meta-/OG-Description und JSON-LD `description` kommen aus dem Befund;
-  das handgesetzte `seo.description` greift nur ohne Befund. Neue Läufe
-  liefern die Labels gleich passend: `topic_pipeline.execute_topic` ruft den
-  Differences-Judge mit `output_language="English", statement_claims=True`
-  (claim/stance/verify englisch, claim als Aussage statt „Whether …“; Zitate
-  bleiben wörtlich). App, Watches und Agent behalten die Antwortsprache.
+- **Seitenaufbau seit 2026-10-15: wie die Watch-Seite.** `/topics/{slug}`
+  rendert SSR aus `templates/partials/check_page.html` (geteilt mit
+  `watch_share.html`): Kicker („Topic · Kategorie · checked weekly“, „Topic“
+  führt zum Hub), redaktioneller Titel als H1 mit der Leitfrage darunter, das
+  Topic-Bild rechts; dann **eine Zustandszeile**
+  (`check_page.state_view`/`drift_view`, dieselbe Regel wie bei Watches:
+  „Changed on …“ mit Satz und Belegen, „Unchanged since …“, „Answer from …“
+  mit Rücklink für `?version=`, Hinweis auf einen nicht geltenden neuesten
+  Check); bis zu vier **Direktlinks** (`source_links.key_links`); die
+  **Antwort offen** mit Quellen (direkte Quellen nach Rolle zuerst, ab 6
+  gefaltet) und Quellennamen im Text als Links (`site_mentions`); Follow;
+  **Verlauf** nur mit Bewegungen, ruhige Checks gefaltet, Agreement-Kurve nur
+  Desktop; der Modellvergleich zugeklappt. Die Punkte baut
+  `routers/topics._history_points` aus den Runs mit der Topic-eigenen Regel
+  (`drift_signal.topic_point`: Judge-Grad und Ursache, nie der Score).
+  Entfernt wurden Befund-Satz (`topic_finding.py`), Claim Ledger
+  (`claim_ledger.py`: Aussagenliste Split/Settled/New/Dropped, Check-Streifen,
+  Quellen-Chronik, Rückkehrer-Band), Positionskarte/Direction Shift,
+  Seiten-Balken, Score-Seitenleiste und das As-of-Fenster `list_runs_until`.
+  Damit entfällt auch der Claim-Identity-Judge (`query_claim_identity`) pro
+  Lauf, den nur der Ledger las. `opinion_map` wird weiter gespeichert
+  (Opinion-Changes), aber nicht mehr gezeigt.
+- **Antworttext ohne Chat-Rahmen** (`public_markdown.strip_chat_framing`):
+  Eine Einleitungszeile, die die Antwort nur ankündigt („Here's the current
+  picture …:“), eine „Short answer“-Überschrift direkt danach und ein
+  Schlussangebot („If you want, I can also …“) fallen beim Rendern weg; nur
+  ganze Absätze am Anfang/Ende, die Antwort selbst bleibt wörtlich. Die
+  gespeicherten Runs bleiben unverändert.
+- **Snippet = Antwortanfang.** Meta-/OG-Description und JSON-LD `abstract`
+  sind `public_markdown.lead_sentences` (erste Sätze ohne Überschriften, an
+  einem Satzende gekürzt) plus „Checked by N AI models, M times since …“; das
+  handgesetzte `seo.description` greift nur ohne verwertbaren Antwortanfang.
+  `create_run` schreibt denselben Anfang der geltenden Antwort als
+  `accepted_lead` ans Topic, damit der Hub ihn ohne Run-Reads zeigt.
+- **Weiterleitungen.** `topic_pipeline.execute_topic` löst Google-Grounding-
+  Weiterleitungen vor Judge und Speicherung über
+  `source_redirects.resolve_sources` auf (wie Watches). Alte Runs tragen sie
+  noch: die Seite blendet `is_indirect`-Quellen aus Liste, Direktlinks und
+  Text aus und lässt ihre `[S#]`-Marker fallen (`_sources_view`).
+- **Topic-Bild** (`app/services/topic_images.py`, seit 2026-10-15): dieselbe
+  Suche wie bei Watches (`watch_images.search`: Produktfoto → Logos der
+  offiziellen Seiten → Artikelbild; nie KI-Bild/Stockfoto). Nach jedem Check im
+  Hintergrund (`schedule_after_run`, nur ohne fertiges Bild), die offiziellen
+  Seiten wählt einmal pro Topic der Visual-Judge (`watch_scheduler.pick_visual`,
+  das Symbol wird ignoriert). Bytes in `topic_images/{topic_id}`, Stand im Feld
+  `image` des Topics (`status`, `token`, Maße, Quelle, Versuche, `sites`);
+  ein fertiges Bild wird nicht ersetzt, Fehlversuche sind wie bei Watches
+  gedeckelt. Ausgeliefert über `/api/topics/{id}/image/{token}`, nie in
+  og:image/JSON-LD.
+- **Abbildungen aus der Antwort** (`app/services/topic_figures.py`, seit
+  2026-10-15): Nach jedem Check füllt ein Judge-Call
+  (`consensus_engine.query_answer_figures`, Differences-Judge-Kette,
+  Structured Output) aus der bereinigten Antwort höchstens zwei von drei festen
+  Vorlagen: `timeline` (datierte Ereignisse), `status` (bestätigt / behauptet /
+  nicht bestätigt), `numbers` (vergleichbare Zahlen einer Einheit). Die Regeln
+  liegen im Code, nicht im Prompt (`clean_figures`): jedes Datum, jede Zahl und
+  jeder Status-Name muss wörtlich in der Antwort stehen, sonst fällt der
+  Eintrag; unter zwei Einträgen fällt die Abbildung; je Vorlage nur eine
+  (die vollere); Status-Namen ohne `%`/Währung; Notizen in Ich-Form, doppelte
+  oder den Namen wiederholende Notizen fallen weg; „disputed“ wird gestrichelt
+  in Bernstein gezeichnet. Gespeichert als `figures` am Run (ältere Versionen
+  behalten ihre eigene), gezeichnet als HTML/CSS (`figure_html`, `.af-*` in
+  `public-pages.css`, alle Texte escaped) unter der Überschrift, zu der sie
+  gehört (`place`/`fill`; liegt die im letzten Drittel, rückt sie nach dem
+  ersten Absatz nach oben). Ein Fehlschlag kostet nur die Abbildung, nie den
+  Check; in Unit-/E2E-/Mock-Läufen wird kein Modell gefragt. Probe 2026-10-15
+  auf den drei Live-Antworten: 6–39 s, 17 von 19 Einträgen bestanden.
+  Nachtrag für bestehende Runs: `scripts/backfill_topic_visuals.py`
+  (`--figures` übernimmt schon erzeugte Abbildungen, `--apply` = Prod-Write).
+- **Hub `/topics`**: eine flache Zeile pro Topic mit Bild, Kategorie, Titel,
+  `accepted_lead` (sonst Leitfrage) und einer Zustandszeile („Changed on …“ /
+  „No change in the check of …“). Kein Score, keine Snapshot-Zahl, kein
+  Filter.
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
   teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs legen bei
   konfiguriertem SMTP je Follower ein Outbox-Item im selben Commit wie den Run an
@@ -7026,8 +7056,11 @@ Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
 Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
 (HTTP 400), geht dieselbe Nachricht als Klartext raus.
 **Watch-Seiten** (`templates/watch_share.html`, seit 2026-10-10) sind eine
-ruhige Spalte mit genau drei Aussagen: (1) eine Zustandszeile
-(`_watch_state_view` in `routers/share.py`: „Unchanged since …“, „Changed on …“
+ruhige Spalte mit genau drei Aussagen; ihre Teile liegen seit 2026-10-15 als
+Makros in `templates/partials/check_page.html` und bauen auch die Topic-Seiten,
+die geteilten Skripte in `static/js/check-page.js`: (1) eine Zustandszeile
+(`app/services/check_page.state_view`, in `routers/share.py` als
+`_watch_state_view` eingebunden: „Unchanged since …“, „Changed on …“
 mit Satz und Belegen, „Resolved on …“, „Waiting for the first check“, „Answer
 from …“ für `?version=` und „Latest version unavailable“), darunter Ziel,
 „Latest check: …“ für einen nicht geltenden neuesten Check und eine Faktenzeile
@@ -7106,8 +7139,9 @@ Quellen, Answer-Zeit und Citation; kompakte History-Metadaten werden nie in den
 Share-Snapshot gemischt. Fehlt die aktuelle Vollversion (auch bei
 Legacy-History), sagt die Zustandszeile das und die Seite rendert den
 Original-Snapshot konsistent.
-Die **Position Map** (`opinion_map`) wird weiter pro Check gespeichert und auf
-Topic-Seiten gezeigt: statt einer universellen Ja/Nein-Achse pro
+Die **Position Map** (`opinion_map`) wird weiter pro Check gespeichert, seit
+2026-10-15 aber auf keiner Seite mehr gezeigt (Topic-Seiten folgen dem
+Watch-Bauplan): statt einer universellen Ja/Nein-Achse pro
 frage-spezifischer Dimension benannte Positionen samt Modellen und ein
 gemeinsamer **Direction Shift**. Die Berechnung ist deterministisch aus dem ohnehin
 vorhandenen Differences-JSON plus dem Change-Judge-Ergebnis und verursacht

@@ -194,9 +194,21 @@ def annotate_points(points) -> list[dict]:
     return annotated
 
 
-# Signals whose claim inventory a Topic record does not read: their answer
-# does not stand, so the claims they drop or add are not part of the record.
+# Signals of checks whose answer does not stand (yet): the page keeps showing
+# the standing answer and names the newer check beside it.
 NON_RECORD_SIGNALS = frozenset({SIGNAL_HELD, SIGNAL_CONFIRMING, SIGNAL_REVERTED})
+
+# What a reader is told about a check that did not move the answer the usual
+# way. Watch and Topic pages print the same sentence for the same signal.
+SIGNAL_NOTES = {
+    SIGNAL_HELD: (
+        "The sources behind the answer did not come up this time and nothing "
+        "contradicted them, so the answer stands."
+    ),
+    SIGNAL_CONFIRMING: "A different reading is being re-checked before it counts.",
+    SIGNAL_PRELIMINARY: "First seen here; the next check confirmed it.",
+    SIGNAL_REVERTED: "A re-check did not repeat this reading, so it was set aside.",
+}
 
 
 def topic_point(run: dict) -> dict:

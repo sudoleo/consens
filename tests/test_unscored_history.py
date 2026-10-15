@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from app.api.routers.share import _build_watch_drift_view
-from app.api.routers.topics import _topic_history_view
+from app.api.routers.topics import _history_points
 from app.services import share_snapshots, watch_service
 from app.services.history_view import build_history_view
 from test_watch_feature import FakeDb, share
@@ -60,11 +60,11 @@ def test_history_keeps_unscored_events_and_maps_but_breaks_the_chart_line():
     assert build_history_view([point(None)])['path'] == ''
 
 
-def test_topic_history_retains_unscored_selected_version_without_future_runs():
+def test_topic_history_retains_an_unscored_run_and_its_change():
     runs = [dict(point(score, i), id=f'run-{i}', observed_at=point(score, i)['ts'],
                  version=i + 1, change_type='major' if i == 1 else 'stable')
             for i, score in enumerate([70, None, 80])]
-    view = _topic_history_view(runs, selected_version=2)
-    assert [p['run_id'] for p in view['points']] == ['run-0', 'run-1']
-    assert view['latest_score'] is None
+    view = build_history_view(_history_points(runs))
+    assert [p['run_id'] for p in view['points']] == ['run-0', 'run-1', 'run-2']
+    assert view['points'][1]['agreement_score'] is None
     assert view['events'][0]['run_id'] == 'run-1'

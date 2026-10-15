@@ -130,8 +130,9 @@ def test_watch_page_leads_with_one_state_line_and_keeps_the_curve_off_phones():
     public_css = read("static/css/public-pages.css")
     phone_rules = public_css.split(".wp-shell { width: calc(100% - 32px)", 1)[1].split("}\n}", 1)[0]
 
-    assert 'class="wp-state is-{{ watch_state.tone }}"' in template
-    assert template.index("wp-state") < template.index("wp-answer") < template.index("wp-history")
+    parts = read("templates/partials/check_page.html")
+    assert 'class="wp-state is-{{ page_state.tone }}"' in parts
+    assert template.index("check.state(") < template.index("check.answer(") < template.index("check.history(")
     # No scoreboard, model chips or differences toggle above the answer.
     assert "share-scoreboard" not in template
     assert "toggleDifferencesView" not in template

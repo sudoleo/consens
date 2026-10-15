@@ -11,17 +11,17 @@ import app.core.config as cfg
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.services import (
-    drift_signal, mailer, notification_delivery, notification_outbox, topic_pipeline, topics,
+    drift_signal, mailer, notification_delivery, notification_outbox, topic_figures,
+    topic_images, topic_pipeline, topics,
 )
+from app.services.public_markdown import strip_chat_framing
 from app.services.llm.mock_llm import mock_llm_enabled
 
 
 TOPIC_SCHEDULER_INTERVAL_SECONDS = 60
-# How far back a claim may have been stated and still be recognised as the
-# same claim when it reappears, and how many claims the identity Judge is
-# asked to consider at once.
-KNOWN_CLAIM_RUNS = 8
-MAX_KNOWN_CLAIMS = 24
+# The recent runs a check is classified against (a re-check confirms or
+# sets aside the run before it, drift_signal).
+RECENT_RUNS = 8
 
 
 def _guard_mock_mode() -> None:
@@ -146,25 +146,6 @@ def opinion_changes_from_maps(current: dict, previous: dict) -> list[dict]:
     return changes
 
 
-def known_claims_from_runs(runs) -> list[dict]:
-    """The current wording of every claim the Topic already tracks.
-
-    Newest wording wins, so the identity Judge compares against how a claim is
-    stated today rather than how it was stated when it entered the record.
-    """
-    claims: dict[str, dict] = {}
-    for run in reversed(list(runs or [])):
-        for dimension in (run.get("opinion_map") or {}).get("dimensions") or []:
-            key = str(dimension.get("key") or "").strip()
-            label = str(dimension.get("label") or "").strip()
-            if not key or not label or key in claims:
-                continue
-            claims[key] = {"key": key, "label": label}
-            if len(claims) >= MAX_KNOWN_CLAIMS:
-                return list(claims.values())
-    return list(claims.values())
-
-
 def run_outcome(recent_runs, change_type: str, cause) -> dict:
     """The drift verdict for a new Topic run on top of its recent record."""
     latest = drift_signal.annotate_runs(
@@ -189,7 +170,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
     # yardstick (docs/watch-evidence-model.md).
     standing_id = str(claimed.get("accepted_run_id") or claimed.get("latest_run_id") or "")
     standing = topics.get_run(claimed["id"], standing_id, db=db) or {}
-    recent = topics.list_runs(claimed["id"], db=db, max_items=KNOWN_CLAIM_RUNS)
+    recent = topics.list_runs(claimed["id"], db=db, max_items=RECENT_RUNS)
     latest = recent[-1] if recent else standing
     run_config = claimed.get("run_config") or {}
     # The stored plan names models as they were when the Topic was saved. A
@@ -203,8 +184,6 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             str(standing.get("consensus_md") or ""),
             previous_opinion_map=latest.get("opinion_map"),
             model_overrides=provider_models,
-            known_claims=known_claims_from_runs(recent),
-            claim_key_prefix=str(claimed.get("current_run_id") or ""),
             previous_sources=(
                 list(standing.get("evidence") or [])
                 + list(standing.get("excluded_evidence") or [])
@@ -218,6 +197,13 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
         )
         if change_type not in {"minor", "major"}:
             change_type = "minor" if changed else "stable"
+        # Figures from the answer as the page shows it; failing here only
+        # costs the figures, never the check (topic_figures.py).
+        figures = topic_figures.build(
+            str(claimed.get("lead_question") or ""),
+            strip_chat_framing(result.get("consensus") or ""),
+            engine=str(result.get("consensus_model") or "OpenAI"),
+        )
         source_rules = topics.normalize_source_rules(claimed.get("source_rules") or {})
         evidence, excluded_evidence = split_evidence_from_sources(
             result.get("sources"), source_rules
@@ -247,6 +233,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                 ),
                 "differences_data": result.get("differences_data") or {},
                 "opinion_map": result.get("opinion_map") or {},
+                "figures": figures,
                 "run_mode": "automatic",
             },
             actor_uid=actor_uid,
@@ -257,7 +244,6 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             notifications=notifications,
             outcome=run_outcome(recent, change_type, result.get("cause")),
         )
-        return run
     except Exception as exc:
         topics.fail_topic_run(
             claimed["id"],
@@ -267,6 +253,13 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             expected_claim_id=str(claimed.get("current_run_id") or ""),
         )
         raise
+    try:
+        # The picture from this check's sources, in the background; a failure
+        # here never touches the stored check (topic_images.py).
+        topic_images.schedule_after_run(claimed["id"], claimed, evidence)
+    except Exception as exc:
+        logging.warning("Topic image scheduling failed category=%s", safe_exception(exc))
+    return run
 
 
 def run_topic_now(topic_id: str, *, actor_uid: str, db=None, now=None,

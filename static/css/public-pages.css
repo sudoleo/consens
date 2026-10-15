@@ -1615,6 +1615,18 @@ canvas {
   line-height: var(--line-height-heading);
 }
 
+/* Topic-Seiten (templates/topic.html) tragen einen redaktionellen Titel;
+   die Leitfrage steht leiser darunter, der Kicker führt zur Übersicht. */
+.wp-subheading {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-reading);
+}
+.wp-kicker a { color: inherit; text-decoration: none; }
+.wp-kicker a:hover { color: var(--heading); }
+
 /* Das Bild des Gegenstands oder Themas (services/watch_images.py), rechts
    neben der Frage, als 3:2-Kachel wie im Dashboard: ein Produktfoto ganz auf
    Weiß, ein Artikelfoto füllend, Logos als eigene abgerundete Kacheln ohne
@@ -1849,10 +1861,73 @@ canvas {
   .wp-links-list { grid-template-columns: minmax(0, 1fr); }
   .wp-image.is-logo img { height: 40px; }
   .wp-head.has-image .wp-question,
-  .wp-head.has-image .share-question-more { grid-column: 1 / -1; justify-self: start; }
+  .wp-head.has-image .share-question-more,
+  .wp-head.has-image .wp-subheading { grid-column: 1 / -1; justify-self: start; }
   .wp-chart { display: none; }
   .wp-state { margin-top: 18px; padding: 16px; }
   .wp-follow { padding: 16px; }
+}
+
+/* ==========================================================================
+   Abbildungen aus der Antwort (app/services/topic_figures.py, seit
+   2026-10-15): Zeitleiste, Status-Tafel, Zahlen. Gezeichnet von consens.io,
+   ohne Kasten: Linien, Punkte, Schrift; Semantikfarbe nur auf dem Zeichen,
+   Streit gestrichelt in Bernstein.
+   ========================================================================== */
+.af {
+  --af-on-glyph: var(--page-bg);
+  margin: 22px 0 26px;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+.af-title { margin: 0 0 14px; color: var(--heading); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.af-cap { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line-soft, var(--border)); color: var(--muted); font-size: var(--font-size-xs); }
+.af-label { color: var(--text); }
+.af-note { display: block; margin-top: 2px; color: var(--muted); font-size: var(--font-size-xs); }
+.af .is-disputed > .af-label::after,
+.af-row.is-disputed .af-value::after { content: " · disputed"; color: var(--partial); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+
+/* Zeitleiste: Punkte maßstabsgetreu auf einer Achse, darunter die Ereignisse. */
+.af-track { position: relative; height: 34px; margin: 0 0 8px; }
+.af-axis { position: absolute; left: 0; right: 0; top: 16px; height: 1px; background: var(--border); }
+.af-span { position: absolute; top: 13px; height: 7px; border-radius: 4px; background: color-mix(in srgb, var(--heading) 22%, transparent); }
+.af-span.is-disputed { background: none; border: 1.5px dashed var(--partial); }
+.af-gap { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); color: var(--muted); font-size: var(--font-size-xs); white-space: nowrap; }
+.af-dot { position: absolute; top: 10px; width: 13px; height: 13px; border-radius: 50%; background: var(--heading); border: 3px solid var(--page-bg); transform: translateX(-50%); }
+.af-dot.is-disputed { background: var(--partial); }
+.af-events { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px 22px; }
+.af-event { min-width: 0; }
+.af-events.is-ends { grid-template-columns: repeat(var(--af-count), minmax(0, 1fr)); }
+.af-events.is-ends .af-event:last-child:not(:first-child) { text-align: right; }
+.af-event time { display: block; color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
+
+/* Status-Tafel: eine Spalte je Stand, Form + Farbe im Kopf. */
+.af-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px 26px; }
+.af-column { min-width: 0; }
+.af-column-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--heading); font-weight: var(--font-weight-semibold); }
+.af-column ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.af-column li { padding-top: 8px; border-top: 1px solid var(--line-soft, var(--border)); }
+.af-glyph { flex: none; width: 16px; height: 16px; }
+.af-glyph.is-confirmed { color: var(--agree); }
+.af-glyph.is-claimed { color: var(--partial); }
+.af-glyph.is-not-confirmed { color: var(--muted); }
+
+/* Zahlen: Balken nur, wenn alle dieselbe Einheit haben. */
+.af-unit { margin: -8px 0 12px; color: var(--muted); font-size: var(--font-size-xs); }
+.af-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.af-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; }
+.af-rows.has-bars .af-row { grid-template-columns: minmax(0, 14em) minmax(0, 1fr) auto; }
+.af-bar { position: relative; height: 12px; }
+.af-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--heading); }
+.af-row.is-disputed .af-bar i { background: none; border: 1.5px dashed var(--partial); }
+.af-value { color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+@media (max-width: 700px) {
+  .af-events.is-ends { grid-template-columns: minmax(0, 1fr); }
+  .af-events.is-ends .af-event:last-child:not(:first-child) { text-align: left; }
+  .af-rows.has-bars .af-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .af-rows.has-bars .af-bar { grid-column: 1 / -1; grid-row: 2; }
 }
 
 /* ==========================================================================
