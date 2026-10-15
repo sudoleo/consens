@@ -35,10 +35,11 @@ class Bucket:
 
 def cloud_files(db, monkeypatch):
     bucket = Bucket()
-    from google.cloud import storage
     monkeypatch.delenv("AGENT_FILES_LOCAL_DIR", raising=False)
     monkeypatch.setenv("AGENT_FILES_BUCKET", "demo-private-bucket")
-    monkeypatch.setattr(storage, "Client", lambda: SimpleNamespace(bucket=lambda name: bucket))
+    # The client factory, not storage.Client: on a machine with the Firebase
+    # Admin key file the factory takes from_service_account_json instead.
+    monkeypatch.setattr(agent_files, "_storage_client", lambda: SimpleNamespace(bucket=lambda name: bucket))
     return agent_files.AgentFiles(db), bucket
 
 
