@@ -18,7 +18,7 @@ from app.services import agent_delegation
 from app.services.agent_comparison import AgentPreferences, review_is_bound
 from app.services.agent_delegation import TURN_TIME_LIMIT, TURN_WRAP_UP_SECONDS
 from app.services.agent_provider_limits import (
-    TURN_OUTPUT_LIMIT, ModelOutputLimit, ProviderCooldowns, agent_failure,
+    TURN_OUTPUT_LIMIT, ModelEmptyAnswer, ModelOutputLimit, ProviderCooldowns, agent_failure,
 )
 from app.services.llm.agent_client import (
     ANSWER_OUTPUT_CEILING, ANSWER_REASONING_HEADROOM, REASONING_STORAGE_CHARS, ROUTING_REASONING_HEADROOM,
@@ -110,6 +110,9 @@ def test_a_model_that_thought_and_stopped_without_writing_is_an_output_limit(mon
         packet({}, finish=finish, usage={"prompt_tokens": 50, "completion_tokens": 900,
                                          "completion_tokens_details": {"reasoning_tokens": 900}})])
     assert isinstance(error, ModelOutputLimit) and value.output_limited
+    # A stop is not the limit: its own type, so a comparison answer can retry.
+    assert isinstance(error, ModelEmptyAnswer)
+    assert agent_failure(error)["code"] == "empty_answer"
 
 
 def test_an_empty_stop_without_any_reasoning_stays_a_provider_error(monkeypatch):

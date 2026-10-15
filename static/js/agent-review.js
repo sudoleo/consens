@@ -14,6 +14,7 @@
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
     provider_unavailable: 'the model was unavailable at its provider', provider_access: 'the provider declined the request',
     output_limit: 'it used its whole output allowance before finishing',
+    empty_answer: 'it stopped twice without writing an answer',
     late_cutoff: 'it was still writing when the answer was checked', stopped: 'the run was stopped' };
   function failureReason(failure) {
     return reasons[failure?.code] || 'no complete answer arrived';

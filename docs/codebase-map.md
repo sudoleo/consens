@@ -2893,9 +2893,14 @@ Endet ein Agent-Schritt ohne verwertbares Ergebnis (`_output_limited`:
 `length` ohne Text, `length` mit halb geschriebenem Toolcall, oder nach Reasoning
 `stop`/kein finish_reason ohne Text und Toolcall), wirft `AgentCompletion.stream`
 `ModelOutputLimit` und setzt `output_limited` (Code `output_limit`, nicht mehr
-`provider_error`); `_step` wertet das für Agent-Schritte (nicht
-Worker/Vergleichsantworten) als erledigten, bezahlten Schritt (`_thought_only`),
-damit der nächste Claim nicht an einem fehlgeschlagenen Vorgänger scheitert.
+`provider_error`); der `stop`-Fall ist die Unterklasse `ModelEmptyAnswer`
+(Code `empty_answer`, seit 2026-10-15): kein Limit, sondern Zufall. `_step` wertet
+das für Agent-Schritte (nicht Worker) als erledigten, bezahlten Schritt
+(`_thought_only`), damit der nächste Claim nicht an einem fehlgeschlagenen
+Vorgänger scheitert; eine Vergleichsantwort mit `retry_empty` ebenso
+(`value.empty_answer`), und `AgentComparison.call` versucht sie genau einmal unter
+`agent:<id>:1` erneut (gpt-oss-120b: 1 von 13 gleichen Aufrufen endete nach
+Denken und Suche ohne Wort).
 `run` wiederholt ihn genau einmal mit `lighter_reasoning` (`RETRY_EFFORTS`:
 bewusst zuerst `low`, dann minimal → none, nie eine Stufe über der aktuellen)
 unter eigenem `completion:N` (Fortschrittszeile `completion:N/retry`, schon

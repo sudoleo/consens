@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from app.core import config as cfg
 from app.core.observability import record_metric
-from app.services.agent_provider_limits import ModelOutputLimit
+from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
 from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
 from app.services.llm import agent_model_metadata
 
@@ -988,9 +988,12 @@ class AgentCompletion:
                 elif self._output_limited():
                     # The whole allowance went into reasoning, or into reasoning
                     # and a tool call cut in half. Not a provider fault: the
-                    # same request would end the same way again.
+                    # same request would end the same way again. A stop
+                    # without a word after reasoning is chance instead
+                    # (ModelEmptyAnswer): a comparison answer tries once more.
                     self.output_limited = True
-                    raise ModelOutputLimit()
+                    raise (ModelOutputLimit() if self.finish_reason in {"length", "max_tokens"}
+                           else ModelEmptyAnswer())
                 elif self._tool_parts or self.finish_reason not in {"stop", "length"} or not self.text.strip():
                     raise RuntimeError("Agent stream ended without a completed answer")
             finally:

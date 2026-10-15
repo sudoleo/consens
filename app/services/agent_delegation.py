@@ -23,7 +23,8 @@ from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
 from app.services.agent_policy import supports_delegation
 from app.services.agent_provider_limits import (
-    TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelOutputLimit, agent_failure, provider_cooldowns,
+    TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelEmptyAnswer, ModelOutputLimit, agent_failure,
+    provider_cooldowns,
 )
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
 from app.services.llm.agent_client import (
@@ -816,7 +817,7 @@ class DelegationLoop(AgentLoop):
                     "Use existing evidence, state uncertainty, and do not imply new web research."}
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
-              search_rounds=1, retry_rate_limit=False, check_cooldown=True,
+              search_rounds=1, retry_rate_limit=False, retry_empty=False, check_cooldown=True,
               server_tools=(), completion=None, answer_candidate=False, hold=False, research=False,
               allow_tools=True, answer_output=0):
         """One claimed, metered model call.
@@ -832,7 +833,10 @@ class DelegationLoop(AgentLoop):
         ``retry_rate_limit``: a free 429 (_free_rate_limit) returns the settled
         step with ``value.rate_limited`` instead of raising, so the caller can
         claim its one retry. ``check_cooldown=False`` is that retry, after its
-        wait (the 429 itself set the process cooldown). ``server_tools`` are
+        wait (the 429 itself set the process cooldown). ``retry_empty``: a
+        worker whose answer ended without a word (ModelEmptyAnswer) settles
+        like a finished step without text and returns ``value.empty_answer``
+        instead of raising, so its caller can claim the next step. ``server_tools`` are
         further OpenRouter tools of this call (a page read's web_fetch, which
         the reservation counts), ``completion`` replaces the loop's factory
         (agent_read_source.PageFetch).
@@ -996,14 +1000,16 @@ class DelegationLoop(AgentLoop):
                                 continue
                             if event:
                                 yield event
-                except ModelOutputLimit:
+                except ModelOutputLimit as limit:
                     # A thought-only orchestrator step is a completed, paid
                     # step without a result; run() decides on its one retry. A failed step would
                     # also block the next step's claim. Workers and comparison
-                    # answers report it as their failure.
-                    if worker:
+                    # answers report it as their failure, unless the answer
+                    # ended empty and the caller retries (``retry_empty``).
+                    if worker and not (retry_empty and isinstance(limit, ModelEmptyAnswer)):
                         raise
                     value.output_limited = True
+                    value.empty_answer = bool(worker)
                 finally:
                     source.close()
             self._check(cancellation)

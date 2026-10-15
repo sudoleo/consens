@@ -58,6 +58,17 @@ class ModelOutputLimit(RuntimeError):
         super().__init__(message or "This model used its whole output allowance before it finished an answer.")
 
 
+class ModelEmptyAnswer(ModelOutputLimit):
+    """The model reasoned (and maybe searched), then stopped without a word.
+
+    Unlike a real output limit this is chance: gpt-oss-120b did it once in
+    thirteen identical comparison calls (2026-10-15). A comparison answer
+    tries once more (AgentComparison.call); everything else treats it as an
+    output limit."""
+    def __init__(self, message=None):
+        super().__init__(message or "The model ended without writing an answer.")
+
+
 # The chat model reasoned through its allowance, also on its lighter retry:
 # the user can change the reasoning level, the app cannot do more by itself.
 TURN_OUTPUT_LIMIT = ("The chat model used its whole output allowance on reasoning before it could finish. "
@@ -82,6 +93,8 @@ def agent_failure(error):
         return {"code": "run_interrupted", "error": str(error)}
     if isinstance(error, (AgentCapacityExceeded, TurnStatusConflict)):
         return {"code": "run_state_conflict", "error": str(error)}
+    if isinstance(error, ModelEmptyAnswer):
+        return {"code": "empty_answer", "error": str(error)}
     if isinstance(error, ModelOutputLimit):
         return {"code": "output_limit", "error": str(error)}
     if isinstance(error, AgentProviderCooldown):

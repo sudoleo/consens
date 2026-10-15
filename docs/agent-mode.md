@@ -1033,7 +1033,7 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 | Parallele Vergleichsantworten | alle gewählten Modelle eines Vergleichs |
 | Parallele Judge-Aufrufe | 6 |
 | Antwortmodelle pro Vergleich | vorhandene Auswahl, mindestens 2 |
-| Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch fairen Budgetanteil und Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit` |
+| Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch fairen Budgetanteil und Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit`. Endet sie nach Denken ohne ein Wort mit `stop` (`empty_answer`), versucht die App sie einmal neu |
 | Antwort (Ausgabegrenze jedes Schritts mit Vergleichstools) | Completion-Grenze des Chatmodells (höchstens 32768, mit aktivem Reasoning 65536; `answer_output_limit`), begrenzt durch Kontextfenster und Restbudget; der Teil über dem Steuer-Budget wird einmal reserviert und darf überziehen |
 | Orchestrierungsschritte (Zulassung) | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096; mit aktivem Reasoning zusätzlich 12288 (`ROUTING_REASONING_HEADROOM`), reserviert je Suchrunde |
 | Geprüfte Antwortsätze | 320; Coverage prüft in parallelen Fenstern zu 80 Sätzen |

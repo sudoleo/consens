@@ -211,6 +211,7 @@ def review_is_bound(review, text):
 
 COMPARISON_FAILURES = {
     "output_limit": "The model used its whole output allowance before it finished an answer.",
+    "empty_answer": "The model ended without writing an answer, twice.",
     "provider_timeout": "The provider stopped responding.",
     "provider_rate_limited": "The provider was busy.",
     "provider_unavailable": "The model is unavailable at its provider right now.",
@@ -811,14 +812,20 @@ class ComparisonTools:
                     # Comparison answers search (see SEARCH_ROUNDS): without
                     # current world knowledge, independent answers agree on the
                     # same outdated facts. Judges only read the answers.
-                    generator = loop._step(model, messages, f"agent:{worker.id}:0", ToolRegistry(), cancellation,
-                                           worker=worker, searches_enabled=kind == "comparison",
-                                           search_rounds=search_rounds)
-                    try:
-                        while True:
-                            next(generator)
-                    except StopIteration as done:
-                        value = done.value
+                    # An answer that ended without a word (ModelEmptyAnswer)
+                    # is chance, not a limit: it gets one more paid attempt.
+                    for attempt in range(2 if kind == "comparison" else 1):
+                        generator = loop._step(model, messages, f"agent:{worker.id}:{attempt}", ToolRegistry(),
+                                               cancellation, worker=worker, searches_enabled=kind == "comparison",
+                                               search_rounds=search_rounds, retry_empty=attempt == 0 and kind == "comparison")
+                        try:
+                            while True:
+                                next(generator)
+                        except StopIteration as done:
+                            value = done.value
+                        if not getattr(value, "empty_answer", False):
+                            break
+                        logging.warning("Agent comparison answer ended empty, retrying model=%s", model.model)
                 finally:
                     slots.release()
             # A comparison answer that reached its output limit is still paid,

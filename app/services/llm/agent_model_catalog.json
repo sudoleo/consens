@@ -1116,6 +1116,44 @@
         "max_completion_tokens": 450000,
         "is_moderated": false
       }
+    },
+    "openai/gpt-oss-120b": {
+      "pricing": {
+        "prompt": "0.00000015",
+        "completion": "0.0000006",
+        "input_cache_read": "0.000000075"
+      },
+      "reasoning": {
+        "mandatory": true,
+        "supported_efforts": [
+          "high",
+          "medium",
+          "low"
+        ],
+        "default_effort": "medium"
+      },
+      "context_length": 131072,
+      "top_provider": {
+        "context_length": 131072,
+        "max_completion_tokens": 65536,
+        "is_moderated": false
+      }
+    },
+    "google/gemma-4-31b-it": {
+      "pricing": {
+        "prompt": "0.0000002",
+        "completion": "0.0000004"
+      },
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": false
+      },
+      "context_length": 262144,
+      "top_provider": {
+        "context_length": 262144,
+        "max_completion_tokens": 16384,
+        "is_moderated": false
+      }
     }
   }
 }

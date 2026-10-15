@@ -11,6 +11,7 @@ from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
+from app.services.agent_provider_limits import ModelEmptyAnswer
 from app.services.llm.agent_client import AgentCompletion, measured_usage, metered_model, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, AnalysisBudgetExceeded
 from app.services.prompt_defaults import AGENT_WRITE_NOTE
@@ -24,8 +25,10 @@ class Script:
     ``revise`` described the former answer tool and stay accepted."""
 
     def __init__(self, *, compares=1, revise=False, missing=False, fail_coverage=False, fail_model=False, length_model=None,
-                 direct=False, depth=None, pick=None):
+                 direct=False, depth=None, pick=None, empty_model=0):
         self.length_model = length_model
+        # OpenAI comparison answers that reason and stop without a word.
+        self.empty_model, self.answer_calls = empty_model, []
         self.pick = pick
         self.direct, self.depth = direct, depth
         self.compares, self.revise, self.missing = compares, revise, missing
@@ -68,6 +71,11 @@ class Script:
                         self.text = json.dumps({"differences": [], "best_model": "Model A"})
                 else:
                     script.prompts.append(messages)
+                    script.answer_calls.append((self.step_id, model.model))
+                    if script.empty_model and model.model.startswith("openai"):
+                        script.empty_model -= 1
+                        self.finish_reason, self.output_limited = "stop", True
+                        raise ModelEmptyAnswer()
                     if script.fail_model and model.model.startswith("anthropic"):
                         raise RuntimeError("Comparison unavailable")
                     self.text = "The first option costs 100. The constraint matters."
@@ -775,6 +783,23 @@ def test_output_limit_without_text_names_the_cause_without_retry_advice(store, m
     assert [f["failure"]["code"] for f in failed] == ["output_limit"]
     assert notes == ["The model used its whole output allowance before it finished an answer. "
                      "The comparison uses the other answers."]
+
+
+@pytest.mark.parametrize("empties, failed", [(1, []), (2, ["empty_answer"])])
+def test_an_answer_that_ends_without_a_word_gets_one_more_attempt(store, empties, failed):
+    # gpt-oss-120b reasoned, searched and stopped without text once in thirteen
+    # identical calls (2026-10-15): chance, not an output limit.
+    script = Script(empty_model=empties)
+    loop = make_loop(store, script)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    comparison = saved["agent_review"]["comparisons"][0]
+    assert [f["failure"]["code"] for f in comparison["failed_models"]] == failed
+    assert len(comparison["answers"]) == 2 - len(failed)
+    openai = [step for step, model in script.answer_calls if model.startswith("openai")]
+    assert [step.rsplit(":", 1)[1] for step in openai] == ["0", "1"]
+    assert len({step.rsplit(":", 1)[0] for step in openai}) == 1
+    assert saved["status"] == "completed"
 
 
 THREE = {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini", "gemini": "gemini-3.5-flash-lite"}
