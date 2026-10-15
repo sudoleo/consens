@@ -1803,6 +1803,31 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `html { scrollbar-gutter: stable }` (shell.css) hält die Spalte beim
   Erscheinen der Scrollleiste still; die Agent-Spalte zentriert über `100%`
   statt `100vw` und steht damit exakt wie der normale Thread.
+- **Buchstabenwolken im Hero (seit 2026-10-16)** — `static/js/letter-clouds.js`
+  (App-Gruppe vor `app-init.js`, `App.letterClouds` `{state(), splash(x, y)}`)
+  und `static/css/letter-clouds.css`. Das Modul hängt `.letter-clouds` als
+  erstes Kind in `<body>` (fixed, `z-index: 0`, `pointer-events: none`; jede
+  spätere positionierte Ebene liegt darüber) und läuft nur, solange
+  `body.is-hero` gesetzt und keine `.watch-page` sichtbar ist (MutationObserver
+  auf `body.class` und `.watch-page[hidden]`). Verlässt der Nutzer den Hero
+  (erste Frage, Bookmark, Demo, Watches), bekommt die Ebene `.is-off`
+  (ausblenden, dann `visibility: hidden`) und die rAF-Schleife endet; im Chat
+  kostet sie nichts. Bauweise: ein Glyphen-Canvas (Atlas, fast nie neu
+  gemalt, Deckkraft 0.26) unter einem winzigen Nebel-Canvas in der
+  berechneten Seitenfarbe (1 Punkt je 10 px, vom Browser weich hochskaliert);
+  pro Bild ändert sich nur der Nebel. Wolken = zwei gedrehte Abtastungen
+  eines normierten, kachelbaren Wertrauschens (ungedreht zeichnet das Gitter
+  gerade Kanten, ohne Normierung schwankte die Bedeckung 0–50 %), blenden
+  über 7 s ein und lichten sich um `.input-section`. Ruhe 15 Bilder/s,
+  Welle im vollen Bildtakt; die Wolken werden auch dann nur im Ruhetakt neu
+  gerechnet. `pointerdown` auf einer freien Stelle (nicht Steuerelemente,
+  `.input-section`, Sidebar, Navigation, Dialoge) startet die Welle: Radius
+  und Breite schwanken je Richtung, sie bremst ab, zerfällt in Flecken und
+  hat 1–2 Nachläufer. Theme-Wechsel (`body.dark-mode`, System) malt neu,
+  verdeckter Tab rechnet nicht. Ohne `matchMedia` (reduzierte Bewegung nicht
+  prüfbar) oder Canvas bleibt das Modul aus; `prefers-reduced-motion` zeigt
+  ruhende Wolken ohne Welle. Tests: `tests/js/letter-clouds.test.mjs`,
+  Browser `tests/e2e/test_letter_clouds.py`.
 - **Thread-Layout: Composer unten (2026-07-27)** — ab dem ersten Lauf liest
   sich `/app` als Thread: Frage oben, Lauf, Antwort, Modellantworten, Composer
   am unteren Bildrand. Das DOM behaelt die Reihenfolge Input → Consensus →

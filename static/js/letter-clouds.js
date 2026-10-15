@@ -1,0 +1,373 @@
+/**
+ * Buchstabenwolken im leeren Startbildschirm (body.is-hero).
+ *
+ * Rund um Begrüßung und Composer ziehen langsam Wolken aus Zeichen vorbei;
+ * ein Klick auf eine freie Stelle schickt eine unregelmäßige Welle durch.
+ * Mit der ersten Frage, einem geöffneten Chat oder der Watch-Seite blendet
+ * die Ebene aus und die Schleife hält ganz an: im Chat kostet sie nichts.
+ *
+ * Sparsam gebaut: unten ein Raster aus Zeichen, das fast nie neu gemalt wird,
+ * darüber ein winziger Nebel-Canvas in Seitenfarbe (ein Punkt je 10 px), den
+ * der Browser weich hochskaliert. Pro Bild ändert sich nur der Nebel. Ruhig
+ * 15 Bilder/s, nur während einer Welle im vollen Bildtakt; ein verdeckter
+ * Tab rechnet gar nicht. Reduzierte Bewegung zeigt ruhende Wolken ohne Welle.
+ *
+ * Öffentlich: window.App.letterClouds { state(), splash(x, y) }.
+ */
+(function () {
+  "use strict";
+
+  window.App = window.App || {};
+
+  const CH = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const NCH = CH.length;
+  const GLYPH_A = 0.26;   // Deckkraft eines voll freigelegten Zeichens
+  const PEAK = 0.62;      // dichteste Wolke legt so viel davon frei
+  const FOG = 10;         // CSS-Pixel je Nebelpunkt
+  const IDLE_MS = 1000 / 15;
+  const FADE_IN = 7;      // Sekunden, bis die Wolken ganz da sind
+  const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  // Klicks auf Bedienelemente und Flächen mit eigener Aufgabe lösen keine Welle aus.
+  const SKIP = [
+    "a", "button", "input", "textarea", "select", "label", "summary",
+    "[role='button']", "[role='menu']", "[role='dialog']", "[contenteditable='true']",
+    "dialog", ".modal", ".input-section", ".sidebar", ".app-nav-float",
+    ".view-switch", ".app-mobile-header"
+  ].join(",");
+
+  const body = document.body;
+  // Ohne matchMedia lässt sich „reduzierte Bewegung“ nicht respektieren:
+  // dann lieber gar keine Animation (betrifft auch jsdom in den Tests).
+  if (!body || !window.matchMedia) {
+    window.App.letterClouds = {
+      state: () => ({ supported: false, active: false, running: false, ripples: 0 }),
+      splash: () => false
+    };
+    return;
+  }
+
+  const reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const reduced = () => !!reduceQuery.matches;
+  const now = () => performance.now() / 1000;
+  const ss = v => { v = v < 0 ? 0 : v > 1 ? 1 : v; return v * v * (3 - 2 * v); };
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  const layer = document.createElement("div");
+  layer.className = "letter-clouds is-off";
+  layer.setAttribute("aria-hidden", "true");
+  const gc = document.createElement("canvas");
+  gc.className = "letter-clouds-glyphs";
+  const fc = document.createElement("canvas");
+  fc.className = "letter-clouds-fog";
+  layer.append(gc, fc);
+  body.prepend(layer);
+
+  const g = gc.getContext("2d");
+  const f = fc.getContext("2d");
+  const supported = !!(g && f);
+
+  let dpr = 1, cw = 7, rh = 13, W = 0, H = 0, cols = 0, rows = 0;
+  let chars = null, fw = 0, fh = 0, img = null, cvis = null, atlas = null;
+  let noise = null, theme = "", calm = null, calmAt = -1e9;
+  let active = false, raf = 0, lastCloud = -1e9, born = now();
+  const rip = [];
+
+  // Kachelbares Wertrauschen, beim ersten Start einmal berechnet und auf
+  // Mittelwert 0 / Streuung 1 gebracht, damit jeder Aufruf ähnlich viel bedeckt.
+  const NS = 128;
+  function buildNoise() {
+    noise = new Float32Array(NS * NS);
+    for (const [p, w] of [[32, 0.5], [16, 0.3], [8, 0.2]]) {
+      const n = NS / p, lat = new Float32Array(n * n);
+      for (let i = 0; i < lat.length; i++) lat[i] = Math.random();
+      for (let y = 0; y < NS; y++) for (let x = 0; x < NS; x++) {
+        const gx = x / p, gy = y / p, x0 = Math.floor(gx), y0 = Math.floor(gy);
+        const sx = ss(gx - x0), sy = ss(gy - y0), x1 = (x0 + 1) % n, y1 = (y0 + 1) % n;
+        const a = lat[y0 * n + x0], b = lat[y0 * n + x1], c = lat[y1 * n + x0], d = lat[y1 * n + x1];
+        const top = a + (b - a) * sx;
+        noise[y * NS + x] += w * (top + ((c + (d - c) * sx) - top) * sy);
+      }
+    }
+    let m = 0, v = 0;
+    for (const x of noise) m += x;
+    m /= noise.length;
+    for (const x of noise) v += (x - m) * (x - m);
+    const sd = Math.sqrt(v / noise.length) || 1;
+    for (let i = 0; i < noise.length; i++) noise[i] = (noise[i] - m) / sd;
+  }
+  function sample(u, v) {
+    u %= NS; if (u < 0) u += NS;
+    v %= NS; if (v < 0) v += NS;
+    const x0 = u | 0, y0 = v | 0, fx = u - x0, fy = v - y0;
+    const x1 = (x0 + 1) & (NS - 1), y1 = (y0 + 1) & (NS - 1);
+    const a = noise[y0 * NS + x0], b = noise[y0 * NS + x1], c = noise[y1 * NS + x0], d = noise[y1 * NS + x1];
+    const top = a + (b - a) * fx;
+    return top + ((c + (d - c) * fx) - top) * fy;
+  }
+
+  // Seitenfarbe und Tinte so, wie sie gerade gerendert werden (hell, dunkel, System).
+  function readTheme() {
+    const cs = getComputedStyle(body);
+    let bg = cs.backgroundColor;
+    if (!bg || bg === "transparent" || /rgba\(.*,\s*0\)$/.test(bg)) bg = getComputedStyle(document.documentElement).backgroundColor;
+    return { bg: bg || "rgb(250, 250, 250)", ink: cs.getPropertyValue("--ink").trim() || cs.color || "#222428" };
+  }
+  function rgbOf(color) {
+    f.fillStyle = "#000";
+    f.fillStyle = color;
+    const v = String(f.fillStyle);
+    if (v[0] === "#") return [1, 3, 5].map(i => parseInt(v.slice(i, i + 2), 16));
+    const m = v.match(/[\d.]+/g) || [0, 0, 0];
+    return [+m[0], +m[1], +m[2]];
+  }
+
+  function drawCell(k) {
+    const i = k % cols, j = (k / cols) | 0;
+    g.clearRect(i * cw, j * rh, cw, rh);
+    g.drawImage(atlas, chars[k] * cw, 0, cw, rh, i * cw, j * rh, cw, rh);
+  }
+  function paintAll() {
+    const tk = readTheme();
+    theme = tk.bg + "|" + tk.ink;
+    atlas = document.createElement("canvas");
+    atlas.width = NCH * cw;
+    atlas.height = rh;
+    const a = atlas.getContext("2d");
+    a.font = "500 " + Math.round(11 * dpr) + "px " + MONO;
+    a.textBaseline = "middle";
+    a.textAlign = "center";
+    a.fillStyle = tk.ink;
+    for (let i = 0; i < NCH; i++) a.fillText(CH[i], i * cw + cw / 2, rh / 2);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, gc.width, gc.height);
+    g.globalAlpha = GLYPH_A;
+    for (let k = 0; k < chars.length; k++) drawCell(k);
+    const [r, gr, b] = rgbOf(tk.bg);
+    const d = img.data;
+    for (let p = 0; p < d.length; p += 4) { d[p] = r; d[p + 1] = gr; d[p + 2] = b; d[p + 3] = 255; }
+    f.putImageData(img, 0, 0);
+  }
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cw = Math.round(7.2 * dpr);
+    rh = Math.round(13 * dpr);
+    W = layer.clientWidth || window.innerWidth;
+    H = layer.clientHeight || window.innerHeight;
+    gc.width = Math.round(W * dpr);
+    gc.height = Math.round(H * dpr);
+    cols = Math.ceil(gc.width / cw);
+    rows = Math.ceil(gc.height / rh);
+    chars = new Uint8Array(cols * rows);
+    for (let k = 0; k < chars.length; k++) chars[k] = (Math.random() * NCH) | 0;
+    fw = Math.ceil(W / FOG) + 1;
+    fh = Math.ceil(H / FOG) + 1;
+    fc.width = fw;
+    fc.height = fh;
+    fc.style.width = fw * FOG + "px";
+    fc.style.height = fh * FOG + "px";
+    img = f.createImageData(fw, fh);
+    cvis = new Float32Array(fw * fh);
+    calmAt = -1e9;
+    lastCloud = -1e9;
+    paintAll();
+  }
+
+  // Begrüßung, Composer und Hinweiszeile bleiben lesbar: um den Eingabeblock
+  // herum lichten sich die Wolken.
+  function measureCalm(t) {
+    if (t - calmAt < 1) return;
+    calmAt = t;
+    const el = document.querySelector(".input-section");
+    const r = el && el.getBoundingClientRect();
+    calm = r && r.width > 0 && r.height > 0
+      ? { x0: r.left - 40, x1: r.right + 40, y0: r.top - 36, y1: r.bottom + 36 }
+      : null;
+  }
+
+  function clouds(t) {
+    const still = reduced();
+    const tt = still ? born : t;
+    const fade = still ? 1 : ss((t - born) / FADE_IN);
+    const ax = tt * 0.55, ay = tt * 0.1, bx = 37.3 - tt * 0.27, by = 11.9 + tt * 0.32;
+    // Gedrehte Abtastung, sonst zeichnet das Gitter des Rauschens gerade Kanten.
+    const c1 = 0.866 / 12, s1 = 0.5 / 12, c2 = 0.643 / 8, s2 = -0.766 / 8;
+    measureCalm(t);
+    for (let j = 0, q = 0; j < fh; j++) {
+      const py = (j + 0.5) * FOG;
+      const cy = calm ? Math.max(calm.y0 - py, 0, py - calm.y1) : 0;
+      for (let i = 0; i < fw; i++, q++) {
+        const px = (i + 0.5) * FOG;
+        const n = 0.62 * sample(px * c1 - py * s1 + ax, px * s1 + py * c1 + ay)
+          + 0.38 * sample(px * c2 - py * s2 + bx, px * s2 + py * c2 + by);
+        let vis = ss((n - 0.55) / 0.6) * PEAK * fade;
+        if (calm && vis > 0) {
+          const cx = Math.max(calm.x0 - px, 0, px - calm.x1);
+          vis *= 0.12 + 0.88 * ss(Math.sqrt(cx * cx + cy * cy) / 70);
+        }
+        cvis[q] = vis;
+      }
+    }
+    if (!still) {
+      const n = Math.max(1, (chars.length * 0.0012) | 0);
+      for (let s = 0; s < n; s++) {
+        const k = (Math.random() * chars.length) | 0;
+        chars[k] = (Math.random() * NCH) | 0;
+        drawCell(k);
+      }
+    }
+  }
+
+  // Eine Welle ist nie ein sauberer Kreis: Radius und Breite schwanken je
+  // Richtung, sie bremst ab, zerfällt in Flecken und zieht Nachläufer hinter sich her.
+  function addRipple(x, y, t, a) {
+    rip.push({
+      x, y, t, a, speed: rnd(170, 250), life: rnd(1.8, 2.5), sf: Math.random(),
+      p: [rnd(0, 6.28), rnd(0, 6.28), rnd(0, 6.28)],
+      h: [2 + ((Math.random() * 3) | 0), 5 + ((Math.random() * 4) | 0)]
+    });
+  }
+  function splash(x, y) {
+    if (!active || !supported || reduced()) return false;
+    const t = now();
+    addRipple(x, y, t, 0.7);
+    const echoes = 1 + ((Math.random() * 2) | 0);
+    for (let e = 0; e < echoes; e++) {
+      const an = rnd(0, 6.28), d = rnd(15, 60);
+      addRipple(x + Math.cos(an) * d, y + Math.sin(an) * d, t + rnd(0.12, 0.5), rnd(0.25, 0.4));
+    }
+    while (rip.length > 6) rip.shift();
+    wake();
+    return true;
+  }
+
+  function frame(t, doClouds) {
+    for (let k = rip.length - 1; k >= 0; k--) if (t - rip[k].t > rip[k].life) rip.splice(k, 1);
+    if (doClouds) clouds(t);
+    const act = [];
+    for (const r of rip) {
+      const age = t - r.t;
+      if (age <= 0) continue;
+      const R0 = r.speed * Math.pow(age, 0.78), lo = Math.max(0, R0 * 0.6 - 60), hi = R0 * 1.35 + 60;
+      act.push({
+        x: r.x, y: r.y, R0, lo2: lo * lo, hi, hi2: hi * hi, fade: Math.pow(1 - age / r.life, 1.5) * r.a,
+        h0: r.h[0], h1: r.h[1], p0: r.p[0], p1: r.p[1] + age * 1.7, p2: r.p[2] + age, sf: r.sf
+      });
+    }
+    const d = img.data, rowAct = [];
+    for (let j = 0, p = 3, q = 0; j < fh; j++) {
+      const py = (j + 0.5) * FOG;
+      rowAct.length = 0;
+      for (const r of act) if (Math.abs(py - r.y) < r.hi) rowAct.push(r);
+      const nr = rowAct.length;
+      if (!nr) {
+        for (let i = 0; i < fw; i++, p += 4, q++) d[p] = 255 - ((cvis[q] * 255) | 0);
+        continue;
+      }
+      const cj = ((py * dpr / rh) | 0) * cols;
+      for (let i = 0; i < fw; i++, p += 4, q++) {
+        const px = (i + 0.5) * FOG;
+        let a = 0;
+        for (let s = 0; s < nr; s++) {
+          const r = rowAct[s], dx = px - r.x;
+          if (dx > r.hi || dx < -r.hi) continue;
+          const dy = py - r.y, d2 = dx * dx + dy * dy;
+          if (d2 < r.lo2 || d2 > r.hi2) continue;
+          const dd = Math.sqrt(d2), th = Math.atan2(dy, dx);
+          const R = r.R0 * (1 + 0.16 * Math.sin(r.h0 * th + r.p0) + 0.08 * Math.sin(r.h1 * th + r.p1));
+          const z = (dd - R) / (24 * (1 + 0.5 * Math.sin(2 * th + r.p2)));
+          if (z > 3 || z < -3) continue;
+          let gq = Math.exp(-z * z) * r.fade, h = q * 0.6180339 + r.sf;
+          h -= Math.floor(h);
+          if (h > gq * 1.6) gq *= 0.25;
+          a += gq;
+        }
+        let vis = cvis[q];
+        if (a > 0) {
+          if (a > 1) a = 1;
+          vis += a * (1 - vis);
+          // Unter der Wellenfront springen einzelne Zeichen um.
+          if (a > 0.5 && Math.random() < 0.05) {
+            const ci = (px * dpr / cw) | 0, k = cj + ci;
+            if (ci < cols && k < chars.length) { chars[k] = (Math.random() * NCH) | 0; drawCell(k); }
+          }
+        }
+        d[p] = 255 - ((vis * 255) | 0);
+      }
+    }
+    f.putImageData(img, 0, 0);
+  }
+
+  function loop(ts) {
+    raf = 0;
+    if (!active || document.hidden) return;
+    const busy = rip.length > 0, due = ts - lastCloud >= IDLE_MS - 1;
+    if (busy || due) {
+      if (due) lastCloud = ts;
+      frame(ts / 1000, due);
+    }
+    if (reduced() && !busy) return;
+    raf = window.requestAnimationFrame(loop);
+  }
+  function wake() {
+    if (!raf && active && supported && !document.hidden) raf = window.requestAnimationFrame(loop);
+  }
+
+  function wanted() {
+    if (!body.classList.contains("is-hero")) return false;
+    return !document.querySelector(".watch-page:not([hidden])");
+  }
+  function themeCheck() {
+    if (!active || !img) return;
+    const tk = readTheme();
+    if (tk.bg + "|" + tk.ink !== theme) { paintAll(); lastCloud = -1e9; wake(); }
+  }
+  function sync() {
+    if (!supported) return;
+    const want = wanted();
+    if (want && !active) {
+      active = true;
+      born = now();
+      if (!noise) buildNoise();
+      if (!img) resize(); else paintAll();
+      lastCloud = -1e9;
+      layer.classList.remove("is-off");
+      wake();
+    } else if (!want && active) {
+      active = false;
+      rip.length = 0;
+      layer.classList.add("is-off");
+      if (raf) { window.cancelAnimationFrame(raf); raf = 0; }
+    } else if (want) {
+      themeCheck();
+    }
+  }
+
+  if (supported) {
+    new MutationObserver(sync).observe(body, { attributes: true, attributeFilter: ["class"] });
+    const watchPage = document.querySelector(".watch-page");
+    if (watchPage) new MutationObserver(sync).observe(watchPage, { attributes: true, attributeFilter: ["hidden"] });
+    darkQuery?.addEventListener?.("change", themeCheck);
+    reduceQuery?.addEventListener?.("change", () => { lastCloud = -1e9; wake(); });
+    document.addEventListener("visibilitychange", wake);
+    let resizeTimer = 0;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { if (img) { resize(); wake(); } }, 150);
+    }, { passive: true });
+    document.addEventListener("pointerdown", event => {
+      if (!active || event.button !== 0) return;
+      const target = event.target;
+      if (target && target.closest && target.closest(SKIP)) return;
+      splash(event.clientX, event.clientY);
+    }, { passive: true });
+    sync();
+  } else {
+    layer.remove();
+  }
+
+  window.App.letterClouds = {
+    state: () => ({ supported, active, running: !!raf, ripples: rip.length }),
+    splash
+  };
+})();

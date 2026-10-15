@@ -183,6 +183,10 @@
           "note": "App.composerInvite: a guest's Send (query-send.js), the send after sign-in (app-init.js updateQuestionInputAccess), the example questions and the source of the ask event (app-core.js trackAsk). Called at runtime only."
         },
         {
+          "file": "static/js/letter-clouds.js",
+          "note": "App.letterClouds: the drifting letter clouds behind the empty start screen. Self-contained; follows body.is-hero and stops outside it."
+        },
+        {
           "file": "static/js/app-init.js",
           "note": "Must follow every feature module: aliases window.App.* and runs initApp() on DOMContentLoaded. app-dom-events.js then installs the remaining document-level listeners."
         },

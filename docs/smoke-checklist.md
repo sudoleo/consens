@@ -947,6 +947,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       selben Chat sowie im selben Bookmark.
 - [ ] Bookmark aus dem frischen Leerzustand öffnen: Input dockt ohne Hero-Sprung
       oben an und die gespeicherten Antworten sind direkt sichtbar.
+- [ ] Startbildschirm hell und dunkel: Buchstabenwolken blenden über einige
+      Sekunden ein, ziehen langsam und bleiben dezent; Begrüßung, Composer und
+      Hinweiszeile stehen frei. Klick auf eine freie Stelle schickt eine
+      unregelmäßige Welle, Klicks auf Bedienelemente nicht. Mit der ersten
+      Frage oder einem Bookmark verschwinden die Wolken; „New comparison“
+      bringt sie zurück.
 - [ ] Einen gespeicherten Consensus nach Reload öffnen: Share-Link und Watch
       lassen sich ohne erneuten Consensus-Lauf erstellen (während der kurzen
       Vorbereitung zeigt der Dialog einen deaktivierten Ladezustand).

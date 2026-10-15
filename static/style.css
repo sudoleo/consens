@@ -36,6 +36,8 @@
 @import url('./css/select.css');
 /* The login / sign-up dialog, standalone after every component layer. */
 @import url('./css/auth-modal.css');
+/* Letter clouds behind the empty start screen (letter-clouds.js). */
+@import url('./css/letter-clouds.css');
 
 /* Template-only utilities live after every component import so they preserve
    the old inline-style initial state. They intentionally do not use

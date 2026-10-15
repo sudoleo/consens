@@ -1,0 +1,38 @@
+/* Buchstabenwolken hinter dem leeren Startbildschirm (letter-clouds.js).
+   Erstes Kind von <body>, z-index 0: jede spätere positionierte Ebene
+   (Container mit Begrüßung und Composer, Sidebar, Menüs) liegt darüber.
+   Nimmt keine Klicks an; die Welle hört auf pointerdown am Dokument. */
+.letter-clouds {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+/* Im Chat: ausblenden und danach ganz aus dem Rendering nehmen. */
+.letter-clouds.is-off {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+}
+
+.letter-clouds canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+}
+
+.letter-clouds .letter-clouds-glyphs {
+  width: 100%;
+  height: 100%;
+}
+
+@media print {
+  .letter-clouds {
+    display: none;
+  }
+}
