@@ -49,7 +49,7 @@ def main(argv=None) -> int:
     for name in COLLECTIONS:
         collection = db.collection(name)
         # An aggregation reads one document per thousand counted.
-        count = collection.count().get()[0][0].value
+        count = int(collection.count().get()[0][0].value)
         if args.apply and count:
             deleted = db.recursive_delete(collection)
             print(f"{name}: {count} top-level documents, {deleted} deleted with their subcollections")
