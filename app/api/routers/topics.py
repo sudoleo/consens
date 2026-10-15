@@ -24,7 +24,7 @@ from app.services import (
     check_page, drift_signal, favicons, mailer, source_links, topic_figures,
     topic_images, topic_runner, topics,
 )
-from app.services.history_view import build_history_view, day_label
+from app.services.history_view import PAGE_CHART_WIDTH, build_history_view, day_label
 from app.services.public_markdown import (
     lead_sentences,
     render_public_markdown,
@@ -214,7 +214,9 @@ async def topics_hub(request: Request):
     for entry in entries:
         # A card says what a reader of the page would see first: the picture,
         # the opening of the answer, and whether the latest check moved it.
-        entry["image"] = topic_images.image_view(entry["id"], {"image": entry["image_state"]})
+        entry["image"] = topic_images.visual_view(
+            entry["id"], {"image": entry["image_state"], "symbol": entry["symbol"]}
+        )
         try:
             day = day_label(datetime.fromisoformat(entry["accepted_run_at"]))
         except (TypeError, ValueError):
@@ -339,7 +341,7 @@ async def topic_page(
         points = sorted(
             points + _history_points([selected_raw]), key=lambda point: point["ts"]
         )
-    history = build_history_view(points)
+    history = build_history_view(points, width=PAGE_CHART_WIDTH)
     public_topic = topics.topic_public_view(topic)
     next_run = topic.get("next_run_at")
     page = {
@@ -448,7 +450,7 @@ async def topic_page(
         jsonld["abstract"] = lead[:300]
     response = templates.TemplateResponse(request=request, name="topic.html", context={
         "topic": public_topic,
-        "topic_image": topic_images.image_view(topic["id"], topic),
+        "topic_image": topic_images.visual_view(topic["id"], topic),
         "page_state": page_state,
         "state_detail": state_detail,
         "state_more_href": state_more_href,

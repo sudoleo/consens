@@ -90,7 +90,7 @@ def main(argv=None) -> int:
                 print(f"    picture: {outcome}")
                 continue
             # The dry run calls the Judge for real (same cost as --apply).
-            sites = topic_images._pick_sites(pick, str(raw.get("lead_question") or ""), sources)
+            sites, _symbol = topic_images._pick_visual(pick, str(raw.get("lead_question") or ""), sources)
             found, _looked = watch_images.search(sources, str(raw.get("lead_question") or ""), "", sites=sites)
             print(f"    sites={sites} -> "
                   + (f"{found['kind']} from {found['source_host']} ({found['width']}x{found['height']})"

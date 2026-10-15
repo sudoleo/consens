@@ -5561,7 +5561,8 @@ keinen Abgleich.
   Quellen (direkte Quellen nach Rolle zuerst, ab 6
   gefaltet) und Quellennamen im Text als Links (`site_mentions`); Follow;
   **Verlauf** nur mit Bewegungen, ruhige Checks gefaltet, Agreement-Kurve nur
-  Desktop; der Modellvergleich zugeklappt. Die Punkte baut
+  Desktop und über die volle Spalte (`build_history_view(width=PAGE_CHART_WIDTH)`,
+  860, auch auf Watch-Seiten); der Modellvergleich zugeklappt. Die Punkte baut
   `routers/topics._history_points` aus den Runs mit der Topic-eigenen Regel
   (`drift_signal.topic_point`: Judge-Grad und Ursache, nie der Score).
   Entfernt wurden Befund-Satz (`topic_finding.py`), Claim Ledger
@@ -5597,7 +5598,13 @@ keinen Abgleich.
   `image` des Topics (`status`, `token`, Maße, Quelle, Versuche, `sites`);
   ein fertiges Bild wird nicht ersetzt, Fehlversuche sind wie bei Watches
   gedeckelt. Ausgeliefert über `/api/topics/{id}/image/{token}`, nie in
-  og:image/JSON-LD.
+  og:image/JSON-LD. Ohne gutes Bild zeigt die Seite (und der Hub) das
+  **Symbol** des Topics (`topic.symbol`, vom selben Judge-Call gewählt, Liste
+  `watch_symbols.SYMBOLS`, Zeichnungen serverseitig in
+  `watch_symbols.SYMBOL_PATHS` = `SYMBOL_ICONS` in watch-dashboard.js, ein Test
+  hält beide gleich; seit 2026-10-15 auch `sigma` für Mathematik).
+  `image.status = dismissed` beendet die Suche, wenn das gefundene Bild nicht
+  taugt (Mathe-Topic: nur eine reißerische Thumbnail-Grafik).
 - **Abbildungen aus der Antwort** (`app/services/topic_figures.py`, seit
   2026-10-15): Nach jedem Check füllt ein Judge-Call
   (`consensus_engine.query_answer_figures`, Differences-Judge-Kette,

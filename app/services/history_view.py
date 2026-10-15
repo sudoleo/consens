@@ -79,13 +79,17 @@ def _timeline(coords):
     return entries
 
 
-def build_history_view(points):
+# Watch and Topic pages draw the curve across their 860 px column.
+PAGE_CHART_WIDTH = 860
+
+
+def build_history_view(points, width=640):
     if not points:
         return None
     # One shared rule decides which checks moved the answer; the curve marks
     # exactly those, so a page cannot highlight more events than it alerts on.
     points = drift_signal.annotate_points(points)
-    width, height = 640, 190
+    height = 190
     left, right, top, bottom = 38, 18, 18, 30
     plot_w, plot_h = width - left - right, height - top - bottom
     count = len(points)
@@ -160,6 +164,9 @@ def build_history_view(points):
         "events": events,
         "start_date": points[0]["ts"].strftime("%Y-%m-%d"),
         "end_date": points[-1]["ts"].strftime("%Y-%m-%d"),
+        "start_label": f"{day_label(points[0]['ts'])}, {points[0]['ts'].year}",
+        "end_label": f"{day_label(points[-1]['ts'])}, {points[-1]['ts'].year}",
+        "plot_right": width - right,
         "latest_score": points[-1]["agreement_score"],
         "position_map": position_view,
     }

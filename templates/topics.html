@@ -43,7 +43,9 @@
       {% for entry in entries %}
       <li>
         <a class="topics-row" href="/topics/{{ entry.slug }}" data-umami-event="topic_open">
-          {% if entry.image %}
+          {% if entry.image and entry.image.kind == "symbol" %}
+          <span class="topics-row-image is-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">{{ entry.image.paths | safe }}</svg></span>
+          {% elif entry.image %}
           <img class="topics-row-image is-{{ entry.image.kind }}" src="{{ entry.image.url }}" alt="" width="{{ entry.image.width }}" height="{{ entry.image.height }}" loading="lazy" decoding="async">
           {% endif %}
           <span class="topics-row-body">

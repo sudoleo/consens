@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 
 from app.api.routers import topics as topics_router
 from app.core.rate_limit import limiter
-from app.services import source_redirects, topic_images, topic_pipeline, topics, watch_images
+from app.services import (
+    source_redirects, topic_images, topic_pipeline, topics, watch_images, watch_symbols,
+)
 from test_topics_feature import NOW, FakeFirestore, run_payload, topic_payload
 
 REDIRECT = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbC123"
@@ -175,3 +177,32 @@ def test_a_topic_check_resolves_redirects_before_the_judge_and_the_page(monkeypa
     assert seen["before"] == [REDIRECT]
     assert seen["judge"] == ["https://www.reuters.com/story"]
     assert [item["url"] for item in result["sources"]] == ["https://www.reuters.com/story"]
+
+
+def test_without_a_good_picture_a_topic_shows_its_symbol(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    monkeypatch.setattr(watch_images, "search", lambda *a, **k: (None, True))
+
+    # The one Judge call that picks the sites also names the symbol.
+    outcome = topic_images.refresh_for_topic(
+        topic["id"], topics.get_topic(topic["id"], db=db),
+        [{"url": "https://www.nature.com/articles/x"}], db=db,
+        pick=lambda question, condition, domains: {"symbol": "sigma", "sites": []},
+    )
+    assert outcome == "none"
+    stored = topics.get_topic(topic["id"], db=db)
+    assert stored["symbol"] == "sigma"
+    assert topic_images.visual_view(topic["id"], stored)["kind"] == "symbol"
+
+    page = client().get("/topics/gpt-6")
+    assert '<figure class="wp-image is-symbol" aria-hidden="true">' in page.text
+    assert watch_symbols.SYMBOL_PATHS["sigma"] in page.text
+    hub = client().get("/topics")
+    assert '<span class="topics-row-image is-symbol"' in hub.text
+
+    # A topic whose found picture is not fit for the page is closed for good.
+    db.documents[("topics", topic["id"])]["image"]["status"] = "dismissed"
+    assert not topic_images.needs_image(topics.get_topic(topic["id"], db=db))

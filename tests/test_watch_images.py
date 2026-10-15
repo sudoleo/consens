@@ -1029,6 +1029,9 @@ class SymbolTests(unittest.TestCase):
         self.assertIn(watch_symbols.DEFAULT_SYMBOL, watch_symbols.SYMBOLS)
         self.assertEqual(watch_symbols.clean_symbol("nope"), watch_symbols.DEFAULT_SYMBOL)
         self.assertEqual(watch_symbols.clean_symbol("trophy"), "trophy")
+        # Public pages draw the same symbols without script (Topic pages).
+        drawings = dict(re.findall(r"^\s{4}(\w+): '(.*)',?$", block, flags=re.MULTILINE))
+        self.assertEqual(drawings, watch_symbols.SYMBOL_PATHS)
 
 
 class WatchPageTests(unittest.TestCase):

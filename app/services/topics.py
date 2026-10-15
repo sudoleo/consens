@@ -1162,6 +1162,7 @@ def topic_public_view(topic: dict) -> dict:
         "lead": str(topic.get("accepted_lead") or ""),
         # Picture state for topic_images.image_view (the bytes live elsewhere).
         "image_state": dict(topic.get("image")) if isinstance(topic.get("image"), dict) else {},
+        "symbol": str(topic.get("symbol") or ""),
         **_standing_view(topic),
         # The page promises a next check, so it has to know when that is.
         "next_run_at": _public_datetime(topic.get("next_run_at")),

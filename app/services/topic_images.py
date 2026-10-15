@@ -10,6 +10,11 @@ auf seine Quelle und steht nie in og:image/JSON-LD.
 Gespeichert wie bei Watches: die Bytes in ``topic_images/{topic_id}``, der
 Stand (``status``, ``token``, Maße, Quelle, Versuche, gewählte Seiten) im
 Feld ``image`` des Topics. Ein fertiges Bild wird nicht ersetzt.
+
+Ohne gutes Bild zeigt die Seite ein Symbol (``symbol``, aus derselben festen
+Liste wie bei Watches, ``watch_symbols``), das der Judge bei seiner einen
+Wahl mitliefert. ``status: dismissed`` beendet die Suche für ein Topic, dessen
+gefundenes Bild nicht taugt (z. B. eine reißerische Thumbnail-Grafik).
 """
 
 from __future__ import annotations
@@ -22,12 +27,13 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 
 from app.core.observability import safe_exception
-from app.services import topics, watch_images
+from app.services import topics, watch_images, watch_symbols
 
 TOPIC_IMAGES_COLLECTION = "topic_images"
 TOPIC_ID_RE = re.compile(r"^[A-Za-z0-9]{8,40}$")
 STATUS_READY = watch_images.STATUS_READY
 STATUS_NONE = watch_images.STATUS_NONE
+STATUS_DISMISSED = watch_images.STATUS_DISMISSED
 MAX_ATTEMPTS = watch_images.MAX_ATTEMPTS
 MAX_TRIES = watch_images.MAX_TRIES
 
@@ -50,7 +56,7 @@ def _counts(state: dict) -> tuple[int, int]:
 
 def needs_image(topic: dict) -> bool:
     state = _state(topic)
-    if state.get("status") == STATUS_READY:
+    if state.get("status") in (STATUS_READY, STATUS_DISMISSED):
         return False
     attempts, tries = _counts(state)
     return attempts < MAX_ATTEMPTS and tries < MAX_TRIES
@@ -70,24 +76,27 @@ def _default_pick():
     return watch_scheduler.pick_visual
 
 
-def _pick_sites(pick, question: str, sources):
-    """Die offiziellen Seiten unter den Quell-Domains, wie bei Watches; das
-    Symbol, das der Judge dabei auch wählt, brauchen Topics nicht."""
+def _pick_visual(pick, question: str, sources):
+    """(offizielle Seiten unter den Quell-Domains, Symbol) wie bei Watches;
+    (None, None), wenn der Judge nichts wählen konnte."""
     domains = [domain for domain, _urls in watch_images.source_sites(sources)]
     if pick is None or not domains:
-        return None
+        return None, None
     try:
         verdict = pick(question, "", domains)
     except Exception as exc:
         logging.warning("Topic visual pick failed category=%s", safe_exception(exc))
-        return None
-    sites = verdict.get("sites") if isinstance(verdict, dict) else None
+        return None, None
+    verdict = verdict if isinstance(verdict, dict) else {}
+    symbol = verdict.get("symbol") if verdict.get("symbol") in watch_symbols.SYMBOLS else None
+    sites = verdict.get("sites")
     if not isinstance(sites, list):
-        return None
-    return [site for site in dict.fromkeys(sites) if site in domains][:watch_images.MAX_LOGOS]
+        return None, symbol
+    return [site for site in dict.fromkeys(sites) if site in domains][:watch_images.MAX_LOGOS], symbol
 
 
-def store_result(topic_id: str, found: dict | None, *, db, looked: bool, sites=None) -> str:
+def store_result(topic_id: str, found: dict | None, *, db, looked: bool, sites=None,
+                 symbol=None) -> str:
     """Ergebnis eines Versuchs festhalten; ein fertiges Bild bleibt."""
     topic_ref = db.collection(topics.TOPICS_COLLECTION).document(topic_id)
     image_ref = db.collection(TOPIC_IMAGES_COLLECTION).document(topic_id)
@@ -130,7 +139,10 @@ def store_result(topic_id: str, found: dict | None, *, db, looked: bool, sites=N
             outcome = STATUS_READY
         if kept_sites is not None:
             state["sites"] = kept_sites
-        transaction.update(topic_ref, {"image": state})
+        updates = {"image": state}
+        if symbol in watch_symbols.SYMBOLS and not current.get("symbol"):
+            updates["symbol"] = symbol
+        transaction.update(topic_ref, updates)
         return outcome
 
     return topics._run_transaction(db, write)
@@ -148,15 +160,15 @@ def refresh_for_topic(topic_id: str, topic: dict, sources, *, db=None, fetch=Non
         return "skipped"
     if db is None:
         from app.core.security import db_firestore as db
-    sites = _stored_sites(_state(topic))
+    sites, symbol = _stored_sites(_state(topic)), None
     if sites is None:
-        sites = _pick_sites(pick if pick is not None else _default_pick(), question, sources)
+        sites, symbol = _pick_visual(pick if pick is not None else _default_pick(), question, sources)
     try:
         found, looked = watch_images.search(sources, question, "", fetch=fetch, sites=sites)
     except Exception as exc:
         logging.warning("Topic image search failed category=%s", safe_exception(exc))
         found, looked = None, False
-    return store_result(topic_id, found, db=db, looked=looked, sites=sites)
+    return store_result(topic_id, found, db=db, looked=looked, sites=sites, symbol=symbol)
 
 
 def schedule_after_run(topic_id: str, topic: dict, sources) -> bool:
@@ -193,6 +205,19 @@ def image_view(topic_id: str, topic: dict) -> dict | None:
         "source_url": source_url,
         "source_host": str(state.get("source_host") or "")[:120],
     }
+
+
+def symbol_view(topic: dict) -> dict | None:
+    """The drawn symbol a page shows when there is no picture."""
+    name = topic.get("symbol") if isinstance(topic, dict) else None
+    if name not in watch_symbols.SYMBOL_PATHS:
+        return None
+    return {"kind": "symbol", "name": name, "paths": watch_symbols.SYMBOL_PATHS[name]}
+
+
+def visual_view(topic_id: str, topic: dict) -> dict | None:
+    """The picture if there is one, else the symbol, else nothing."""
+    return image_view(topic_id, topic) or symbol_view(topic)
 
 
 def load_image(topic_id: str, token: str, *, db=None) -> tuple[bytes, str] | None:

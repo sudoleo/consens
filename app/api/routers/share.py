@@ -17,7 +17,7 @@ from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.services import check_page, og_image, source_links
 from app.services import share_snapshots as snapshots
-from app.services.history_view import build_history_view, day_label
+from app.services.history_view import PAGE_CHART_WIDTH, build_history_view, day_label
 from app.services import watch_service
 from app.services.share_snapshots import ShareError
 from app.services.public_markdown import (
@@ -688,7 +688,7 @@ def share_page(request: Request, slug_id: str):
                 "list_related_shares failed category=%s", safe_exception(exc)
             )
 
-    watch_history = _build_watch_history_view(history_points)
+    watch_history = _build_watch_history_view(history_points, width=PAGE_CHART_WIDTH)
     watch_drift = _build_watch_drift_view(
         history_points,
         selected_run_id,
