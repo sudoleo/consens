@@ -251,13 +251,12 @@ def main():
                       "you can see of the fetched text, and say whether the text looked cut off.")
             record(f"{slug}-limit-tokens", run_responses(key, model, prompt, fetch_tool(max_content_tokens=500)))
     if "coverage" in cases:
-        from app.services.source_documents import fetch_document
-        from app.services.source_verification import Limits
+        from app.services.source_documents import FetchLimits, fetch_document
         rows = []
         for url in COVERAGE_URLS:
             started = time.monotonic()
             try:
-                own = {"status": "completed", "chars": len(fetch_document(url, Limits())["text"])}
+                own = {"status": "completed", "chars": len(fetch_document(url, FetchLimits())["text"])}
             except ValueError as exc:
                 own = {"status": "failed", "error": str(exc)}
             own["s"] = round(time.monotonic() - started, 2)

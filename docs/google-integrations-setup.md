@@ -117,7 +117,7 @@ processing by the chat's models, including comparison and review models. The fir
 consented run stores `google_consent` on the chat; the browser then sends the
 consent with every later message of that chat, and the server still refuses any
 request of a Google-data chat without it (older chats without the stored consent
-ask once more). Such chats disable web search and external source-checking to
+ask once more). Such chats disable web search and reading cited pages to
 avoid sending private excerpts as search queries. Users can still combine prior
 research, their uploaded files, comparisons, documents and selected Google data.
 Drive files are Agent-only: a draft that leaves Agent mode loses them, with a notice.

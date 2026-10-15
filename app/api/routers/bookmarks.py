@@ -252,7 +252,6 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
                 "consensus": str(pending.get("consensus_md") or ""),
                 "differences": str(pending.get("differences_text") or ""),
                 "differences_data": pending.get("differences_data"),
-                "source_verification": pending.get("source_verification"),
                 "sources": pending.get("sources"),
                 "included_models": pending.get("included_models"),
                 "consensus_model": str(pending.get("consensus_model") or ""),
@@ -291,7 +290,6 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
                 "consensus": str(turn.get("consensus") or ""),
                 "differences": str(turn.get("differences") or ""),
                 "differences_data": turn.get("differences_data"),
-                "source_verification": turn.get("source_verification"),
                 "sources": turn.get("sources"),
                 "model_responses": clean_answers,
                 "included_models": turn.get("included_models"),
@@ -366,6 +364,7 @@ def _bookmark_meta(bookmark_id, data):
         "timestamp": data.get("timestamp"),
         "has_consensus": bool(str(responses.get("consensus") or "").strip()),
         "model_count": sum(
+            # Older bookmarks still carry a source_verification report.
             1 for key, value in responses.items()
             if key not in {"consensus", "differences", "differences_data", "source_verification"}
             and str(value or "").strip()
@@ -777,9 +776,6 @@ def persist_authoritative_consensus_bookmark(
     # Share-Snapshot) und mitspeichern, damit das Bookmark Verdict, Karten und
     # Modellvergleiche wie eine echte Query rendern kann.
     sanitized_diff_data = sanitize_differences_data(differencesData)
-    from app.services.source_verification import stored_verification
-    dataToMerge["responses"]["source_verification"] = stored_verification(
-        authoritative.get("source_verification"), authoritative.get("consensus"))
     if sanitized_diff_data is not None:
         dataToMerge["responses"]["differences_data"] = sanitized_diff_data
 
@@ -918,7 +914,6 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
         question=question,
         consensus_md=consensus_text,
         differences_data=responses.get("differences_data"),
-        source_verification=responses.get("source_verification"),
         differences_text=responses.get("differences") or "",
         model_sources=bookmark.get("sources") or [],
         included_providers=included_providers,

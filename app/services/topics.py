@@ -824,7 +824,6 @@ def create_run(
         "created_at": now,
         "created_by": actor_uid,
         "consensus_md": consensus_md,
-        "source_verification": data.get("source_verification"),
         "agreement_score": _normalize_score(data.get("agreement_score")),
         "change_type": change_type,
         "change_summary": change_summary,

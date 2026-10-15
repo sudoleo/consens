@@ -1,4 +1,4 @@
-"""New-answer sanitation and structured dispute checkability contracts."""
+"""New-answer sanitation and verified dispute quotes."""
 import json
 from unittest import mock
 
@@ -43,10 +43,8 @@ def test_unicode_differences_payload_keeps_verified_anchors_and_quotes():
     data, _ = parse_differences_payload(json.dumps(payload), {"Model A": "OpenAI", "Model B": "Kimi"},
         consensus_answer=original, model_answers={"OpenAI": original, "Kimi": opposite})
     diff = data["differences"][0]
-    assert diff["consensus_anchor_validated"] is True
     assert diff["consensus_anchor"] == original
     assert [pos["quote"] for pos in diff["positions"]] == [original, opposite]
-    assert [pos["quote_models"] for pos in diff["positions"]] == [["OpenAI"], ["Kimi"]]
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -88,19 +86,17 @@ def test_synthesis_keeps_source_information_but_prohibits_tags():
     assert "include the existing source tag" not in prompt
 
 
-def test_differences_prompt_keeps_source_eligibility_separate_from_detection():
+def test_differences_prompt_treats_disputed_events_as_facts():
     prompt = _build_differences_prompt(
         {"openai": "Choose PostgreSQL.", "gemini": "Choose MongoDB."},
         "Choose PostgreSQL.", [],
     )[0]
-    assert "never a filter for reporting differences" in prompt
-    assert "competing preferences or recommendations" in prompt
-    assert "must not remove a difference or change its type or severity" in prompt
     assert "Current date:" in prompt
     assert "Reference timezone: Europe/Berlin" in prompt
     assert "Whether an event happened" in prompt
     assert "Do not infer a fictional user scenario" in prompt
-    assert "do not make a factual dispute non-checkable" in prompt
+    # The source check and its checkability field were removed (2026-10-15).
+    assert "factual_check" not in prompt
 
 
 def test_model_quote_matching_accepts_only_formatting_omissions_and_keeps_original_span():
@@ -141,9 +137,7 @@ def test_real_original_position_span_survives_markdown_and_interleaved_citations
         consensus_answer="Das Turnier hat stattgefunden.", model_answers={"OpenAI": original, "Kimi": opposite})
     positions = data["differences"][0]["positions"]
     assert positions[0]["quote"] == original
-    assert positions[0]["quote_models"] == ["OpenAI"]
     assert positions[1]["quote"] == opposite
-    assert positions[1]["quote_models"] == ["Kimi"]
 
 
 def test_prose_streams_immediately_and_partial_markers_never_leak():
@@ -171,14 +165,12 @@ def test_query_and_stream_remove_tags_before_final_or_delta():
     assert "".join(event["text"] for event in events if event["type"] == "delta") == answer
 
 
-def _parsed(factual=None, anchor="The rate is 5%."):
+def _parsed(anchor="The rate is 5%."):
     diff = {"claim": "Which rate applies?", "type": "contradiction", "severity": "major",
             "consensus_anchor": anchor, "positions": [
                 {"stance": "Five percent", "models": ["Model A", "Model C"], "quote": "The rate is 5%."},
                 {"stance": "Ten percent", "models": ["Model B"], "quote": "The rate is 10%."},
             ]}
-    if factual is not None:
-        diff["factual_check"] = factual
     data, _ = parse_differences_payload(json.dumps({"differences": [diff], "best_model": "Model A"}),
         {"Model A": "OpenAI", "Model B": "Gemini", "Model C": "Grok"},
         consensus_answer="The rate is 5%.", model_answers={
@@ -187,35 +179,20 @@ def _parsed(factual=None, anchor="The rate is 5%."):
     return data["differences"][0]
 
 
-def test_checkability_and_original_quote_provenance_are_preserved():
-    diff = _parsed({"checkable": True, "question": "Which rate applies in 2026?", "reason": "A documented rate."})
-    assert diff["factual_check"]["checkable"] is True
-    assert diff["consensus_anchor_validated"] is True
-    assert diff["positions"][0]["quote_models"] == ["OpenAI"]
+def test_original_quotes_and_the_models_of_each_position_are_kept():
+    diff = _parsed()
+    assert diff["consensus_anchor"] == "The rate is 5%."
+    assert [pos["quote"] for pos in diff["positions"]] == ["The rate is 5%.", "The rate is 10%."]
     assert diff["positions"][0]["models"] == ["OpenAI", "Grok"]
-    assert diff["positions"][1]["quote_models"] == ["Gemini"]
+    assert "factual_check" not in diff
 
 
-@pytest.mark.parametrize("factual", [None, {}, "yes", {"checkable": "true", "question": "Rate?"},
-                                     {"checkable": True}, {"checkable": False, "question": "Best choice?"}])
-def test_legacy_or_uncertain_classification_fails_closed(factual):
-    assert _parsed(factual)["factual_check"]["checkable"] is False
+def test_unmatched_anchor_is_cleared():
+    assert _parsed(anchor="The rate is 91%.")["consensus_anchor"] == ""
 
 
-def test_unmatched_anchor_cannot_be_marked_validated():
-    diff = _parsed({"checkable": True, "question": "Rate?"}, anchor="The rate is 91%.")
-    assert diff["consensus_anchor"] == ""
-    assert diff["consensus_anchor_validated"] is False
-
-
-@pytest.mark.parametrize("factual", [None, {"checkable": False, "question": "Which option is preferable?"},
-                                     {"checkable": True, "question": "Which documented limit applies?"}])
-def test_source_check_eligibility_never_filters_differences_or_claims(factual):
-    """Regression: the new field is metadata, not a display or scoring gate.
-
-    The non-checkable recommendation case was also exercised with a live
-    Differences judge: it remains a major contradiction in the returned data.
-    """
+def test_recommendations_stay_contradictions_and_claims_stay_scored():
+    """A recommendation dispute is reported like any other difference."""
     consensus = "Choose PostgreSQL. Both products store data."
     positions = [
         {"stance": "Choose PostgreSQL", "models": ["Model A"], "quote": "Choose PostgreSQL."},
@@ -227,9 +204,6 @@ def test_source_check_eligibility_never_filters_differences_or_claims(factual):
         {"claim": "A side-detail disagreement", "type": "contradiction", "severity": "minor", "positions": positions},
         {"claim": "Different priorities", "type": "emphasis", "positions": positions},
     ]
-    if factual is not None:
-        for diff in raw_differences:
-            diff["factual_check"] = factual
     payload = {"differences": raw_differences, "best_model": "Model A", "claims": [
         {"anchor": "Both products store data.", "agree": ["Model A", "Model B"], "dissent": []},
     ]}

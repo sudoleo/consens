@@ -83,13 +83,7 @@
         }
       } else if (check.status === 'partial') issues.push({code: 'incomplete'});
     }
-    issues = [...issues];
-    const sources = check.source_verification;
-    if (sources?.answer_version === check.answer_hash && sources.run_id === comparison.id
-        && sources.basis_hash === comparison.basis_hash && ['partial', 'failed'].includes(sources.status)) {
-      issues.push({code: 'sources_incomplete'});
-    }
-    return issues;
+    return [...issues];
   }
   function issueText(issue) {
     const n = issue.count;
@@ -100,7 +94,6 @@
       sentences_unchecked: `${n} sentence${n === 1 ? '' : 's'} could not be checked`,
       unindexed_sentences: `${n} sentence${n === 1 ? '' : 's'} fell outside the coverage check`,
       truncated_answers: 'Some model answers were too long to check in full',
-      sources_incomplete: 'Some contradiction source checks did not finish',
       incomplete: 'The saved check is incomplete'})[issue.code] || 'The check is incomplete';
   }
   function statusText(state, issues) {
@@ -203,24 +196,6 @@
         card.append(node('p', '', 'The completed comparison check reported no differences.'));
       }
       for (const issue of issues) card.append(node('p', 'agent-activity-limitation', issueText(issue)));
-      const verification = check?.source_verification;
-      if (passageChecked) {
-        // No answer judges, so no disagreements to source either.
-      } else if (verification?.answer_version === check?.answer_hash && verification?.run_id === comparison.id
-          && verification?.basis_hash === comparison.basis_hash) {
-        const scope = verification.scope;
-        if (Number.isInteger(scope?.checked_contradictions) && Number.isInteger(scope?.contradictions)) {
-          // Count what the judges found, like source-verification.js: "0 of 0"
-          // hid disagreements that had no checkable claim (2026-10-11).
-          const total = Number.isInteger(scope.detected_contradictions) ? scope.detected_contradictions : scope.contradictions;
-          const excluded = Number.isInteger(scope.excluded_contradictions) ? scope.excluded_contradictions : 0;
-          // "0 of 0" said nothing: no disagreement needed a source check.
-          if (total > 0) card.append(node('p', '', `Source checks: ${scope.checked_contradictions} of ${total} disagreements checked`
-            + (excluded ? ` · ${excluded} not checkable.` : '.')));
-        }
-      } else if (review.check_sources === false) {
-        card.append(node('p', '', 'Contradiction source checks were off for this message.'));
-      }
       const actions = node('div', 'agent-activity-insight-actions');
       for (const [section, label] of [['answers', 'Read model answers'], ['differences', 'Explore review and sources']]) {
         const button = node('button', 'consensus-tab', label); button.type = 'button';
@@ -296,12 +271,12 @@
     panel.append(sources.length ? list : node('p', 'agent-review-note', 'No source URLs were supplied for this answer.'));
     return panel;
   }
-  function evidenceButton(section, label, count, note = '') {
+  function evidenceButton(section, label, count) {
     const button = node('button', 'consensus-tab agent-evidence-link');
     button.type = 'button';
     button.dataset.section = section;
     button.setAttribute('aria-controls', 'modelAnswerReader');
-    button.setAttribute('aria-label', [count === null ? label : `${label} ${count}`, note].filter(Boolean).join(', '));
+    button.setAttribute('aria-label', count === null ? label : `${label} ${count}`);
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     icon.classList.add('agent-evidence-icon');
     icon.setAttribute('viewBox', '0 0 24 24');
@@ -315,8 +290,6 @@
     icon.append(path);
     button.append(icon, node('span', 'consensus-tab-label', label));
     if (count !== null) button.append(node('span', 'consensus-tab-count', String(count)));
-    // The source check speaks where the contradictions are, not in a switch.
-    if (note) button.append(node('span', 'agent-evidence-note', note));
     return button;
   }
   // The first time a live answer receives its marks they stroke on in reading
@@ -362,70 +335,8 @@
       body.classList.remove('is-marks-settling');
     }, Math.max(0, body._revealTotal - elapsed));
   }
-  // A contradiction source check settles after its turn: the turn ends with a
-  // queued job reference per comparison (agent_contradictions.py). Each
-  // answer follows the jobs its shown review names and repaints its evidence
-  // row and reader as their snapshots arrive. The newest snapshot of a job
-  // also replaces the stored reference when a saved turn is drawn again.
-  const settledSources = new Map();
-  const sourceWatches = new WeakMap();
-  // An observer ends without its job settling when no user was signed in yet
-  // at the first paint, on sign-out or when the page went into the
-  // back/forward cache. The job then read "queued" until a reload. These
-  // answers start their observers again once the page can follow them.
-  const followingBodies = new Set();
-  function refollowSources() {
-    for (const body of followingBodies) {
-      if (!body.isConnected) { followingBodies.delete(body); continue; }
-      followSources(body, body._sourceReview.review, body._sourceReview.evidence);
-    }
-  }
-  window.addEventListener('consensio:auth-state', refollowSources);
-  window.addEventListener('pageshow', refollowSources);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refollowSources(); });
-  const pendingSource = value => Boolean(value?.job_id) && ['queued', 'running'].includes(value.status);
-  function adoptSources(review) {
-    for (const check of review?.checks || []) {
-      const value = check?.source_verification;
-      const latest = value?.job_id && settledSources.get(value.job_id);
-      if (latest && latest !== value && (latest.revision ?? -1) >= (value.revision ?? -1)) check.source_verification = latest;
-    }
-  }
-  function followSources(body, review, evidence) {
-    const watches = sourceWatches.get(body) || new Map();
-    sourceWatches.set(body, watches);
-    body._sourceReview = { review, evidence };
-    const shownCheck = jobId => (body._sourceReview.review?.checks || []).find(c => c?.source_verification?.job_id === jobId);
-    const pending = new Set();
-    for (const check of review?.checks || []) {
-      const value = check?.source_verification;
-      if (!pendingSource(value)) continue;
-      const jobId = value.job_id;
-      pending.add(jobId);
-      if (watches.has(jobId) && !watches.get(jobId).stopped?.()) continue;
-      const user = window.auth?.currentUser;
-      const stop = App.sourceVerification?.observe?.({ snapshot: value,
-        auth: { user, uid: user?.uid, generation: App.authState?.generation },
-        isActive: () => body.isConnected && Boolean(shownCheck(jobId)),
-        onUpdate(next) {
-          const target = shownCheck(jobId);
-          if (!target) return;
-          // The job id carries the answer binding; the reference keeps the basis.
-          const settled = { basis_hash: target.source_verification.basis_hash, ...next };
-          settledSources.set(jobId, settled);
-          target.source_verification = settled;
-          const shown = body._sourceReview;
-          render(body, shown.review, { ...shown.evidence, reveal: false });
-        } });
-      watches.set(jobId, stop || (() => {}));
-    }
-    for (const [jobId, stop] of watches) if (!pending.has(jobId)) { stop(); watches.delete(jobId); }
-    if (pending.size) followingBodies.add(body); else followingBodies.delete(body);
-  }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
-    adoptSources(review);
-    followSources(body, review?.comparisons?.length ? review : null, evidence);
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown ?? version?.text;
     // A source pill carries a favicon and may stand for several sources.
@@ -537,21 +448,6 @@
             modelLabel: name => findAnswer(name)?.model?.label || name, answerNavigation: navigation
           });
           panel.append(cards);
-          const verification = check.source_verification;
-          if (verification?.answer_version === review.answer_hash && verification.run_id === comparison.id
-              && verification.basis_hash === comparison.basis_hash) {
-            // The per-card results sit in the cards; the overall report is
-            // supporting detail and follows them instead of preceding them.
-            const report = node('div', 'agent-source-check');
-            footer.append(report);
-            App.sourceVerification?.render(cards, report, verification, {
-              differencesData: check.differences_data, differenceCards: cards, compact: true
-            });
-          } else if (typeof review.check_sources === 'boolean') {
-            footer.append(node('p', 'agent-review-note', !review.check_sources ? 'Contradiction source checks were off for this message.'
-              : ['failed', 'cancelled', 'missing'].includes(state) ? 'Contradiction source checks did not complete.'
-              : 'Contradiction source checks pending.'));
-          }
         }
         if ((review.versions || []).length > 1) {
           const history = node("details", "agent-evidence-context"); history.append(node("summary", "", "Earlier answer version"));
@@ -595,11 +491,7 @@
       context.links = () => {
         const differences = check?.differences_data?.differences || [];
         const contradictions = differences.filter(d => d.type === "contradiction").length;
-        const verification = check?.source_verification;
-        const bound = Boolean(verification) && verification.answer_version === review.answer_hash && verification.run_id === comparison.id
-          && verification.basis_hash === comparison.basis_hash;
-        const note = contradictions && bound ? App.sourceVerification?.brief?.(verification) || '' : '';
-        return [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null, note],
+        return [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null],
           ["answers", "Answers", answers.length], ["sources", "Sources", sources.length]];
       };
       return context;
@@ -620,8 +512,8 @@
       host.querySelector(':scope > .agent-agreement')?.remove();
       const agreement = agreementNode(context.check, context.modelCount);
       if (agreement) host.append(agreement);
-      for (const [section, label, count, note] of context.links()) {
-        const button = evidenceButton(section, label, count, note);
+      for (const [section, label, count] of context.links()) {
+        const button = evidenceButton(section, label, count);
         button.addEventListener("click", () => App.answerReader?.openContext(context, { section, trigger: button }));
         tabs.append(button);
       }
@@ -634,8 +526,7 @@
       label.append(picker); summary.append(label);
     }
     select(chosen);
-    // A later render of the same answer (a settled source check, the end of
-    // the run) may rebuild the marks while they still stroke on; it carries
+    // A later render of the same answer (e.g. the end of the run) may rebuild the marks while they still stroke on; it carries
     // the stroke on instead of dropping every mark in at once.
     if (evidence.reveal || body._revealedMarks === review.answer_hash) revealMarks(body, review.answer_hash);
     summary.hidden = [...summary.children].every(child => child.hidden);

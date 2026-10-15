@@ -16,7 +16,6 @@ const BODY = `
     <button id="composerReasoningToggle"></button><span id="composerReasoningState"></span>
     <button id="composerAttachButton"></button>
   </div>
-  <label><input id="sourceCheckSwitch" type="checkbox"></label>
   <label><input id="reasoningToggle" type="checkbox"></label><button id="attachUploadOption"></button>
   <button id="agentReasoningMenuOption" hidden></button><span id="agentReasoningMenuState"></span>
   <button id="agentComparisonMenuOption" hidden></button>
@@ -26,7 +25,7 @@ const BODY = `
   <div id="openaiResponse" class="response-box"><div class="collapsible-content"></div></div>
 `;
 
-function boot({ mode = "consensus", checkSources = true } = {}) {
+function boot({ mode = "consensus" } = {}) {
   return loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
@@ -46,7 +45,6 @@ function boot({ mode = "consensus", checkSources = true } = {}) {
       };
       window.localStorage.setItem("runMode", mode);
       window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
-      window.localStorage.setItem("checkSources", String(checkSources));
     }
   });
 }
@@ -72,7 +70,6 @@ describe("agent mode panel projection", () => {
     select.dispatchEvent(new window.Event('change'));
     expect(window.localStorage.getItem('runMode')).toBe('compare');
     expect(select.value).toBe('agent');
-    expect(window.App.isSourceCheckEnabled()).toBe(true);
     // An open Agent chat names its fixed mode on the (+) trigger only.
     expect(document.getElementById('attachTrigger').title).toBe('Chat options');
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
@@ -102,53 +99,8 @@ describe("agent mode panel projection", () => {
     expect(rows.find(row => row.dataset.value === 'consensus').getAttribute('aria-pressed')).toBe('true');
     window.App.runMode.set('compare');
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
-    // Compare has nothing to check: the setting is locked off.
-    expect(document.getElementById('sourceCheckSwitch').disabled).toBe(true);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(true);
     expect(document.getElementById('reasoningToggle').closest('label').hidden).toBe(false);
-    dom.window.close();
-  });
-
-  it("keeps Check contradictions as one setting that persists and is locked in Compare", () => {
-    const { window, document, dom } = boot();
-    window.updateAgentModeUI();
-    const setting = document.getElementById('sourceCheckSwitch');
-    expect(window.App.isSourceCheckEnabled()).toBe(true);
-    expect(setting.checked).toBe(true);
-    // No switch in the composer bar or the (+) menu any more.
-    expect(document.getElementById('composerSourcesToggle')).toBeNull();
-    expect(document.getElementById('sourceCheckMenuSwitch')).toBeNull();
-    setting.click();
-    expect(window.App.isSourceCheckEnabled()).toBe(false);
-    expect(window.localStorage.getItem('checkSources')).toBe('false');
-    window.App.runMode.set('compare');
-    window.projectAgentModeRun({runId: 'old', config: {agentMode: false, checkSources: true}});
-    expect(setting.disabled).toBe(true);
-    expect(setting.checked).toBe(false);
-    window.App.runMode.set('consensus');
-    expect(setting.disabled).toBe(false);
-    expect(window.App.isSourceCheckEnabled()).toBe(false);
-    setting.click();
-    expect(window.localStorage.getItem('checkSources')).toBe('true');
-    expect(window.App.isSourceCheckEnabled()).toBe(true);
-    dom.window.close();
-  });
-
-  it.each([true, false])("gates the saved source preference %s on reload without changing it", checkSources => {
-    const { window, document, dom } = boot({ mode: "compare", checkSources });
-    window.updateAgentModeUI();
-    expect(window.App.isSourceCheckEnabled()).toBe(false);
-    const setting = document.getElementById('sourceCheckSwitch');
-    expect(setting.checked).toBe(false);
-    expect(setting.disabled).toBe(true);
-    setting.checked = true;
-    setting.dispatchEvent(new window.Event('change'));
-    expect(setting.checked).toBe(false);
-    expect(window.localStorage.getItem('checkSources')).toBe(String(checkSources));
-    window.App.runMode.set('consensus');
-    expect(window.App.isSourceCheckEnabled()).toBe(checkSources);
-    window.App.runMode.set('compare');
-    expect(window.App.isSourceCheckEnabled()).toBe(false);
     dom.window.close();
   });
 

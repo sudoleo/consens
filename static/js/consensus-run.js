@@ -27,33 +27,6 @@
     return (window.App.modelPrefs || []).map(pref => pref.key);
   }
 
-  const sourceRunObservers = new WeakMap();
-  window.App.watchRunSources = function (context) {
-    const registry = window.App.runRegistry;
-    const snapshot = context?.consensus?.sourceVerification;
-    if (!snapshot?.job_id || context.consensus.status !== 'complete' || !registry?.isAuthCurrent(context)) return;
-    const existing = sourceRunObservers.get(context);
-    if (existing?.jobId === snapshot.job_id) return;
-    existing?.stop();
-    const jobId = snapshot.job_id;
-    const stop = window.App.sourceVerification?.observe({ snapshot, auth: context.auth,
-      useOwnKeys: context.config?.useOwnKeys === true,
-      getOwnKey: () => window.localStorage.getItem('openrouterKey'),
-      isActive: () => registry.get(context.runId) === context && context.consensus.sourceVerification?.job_id === jobId,
-      onUpdate(value) {
-        context.consensus.sourceVerification = value;
-        if (context.consensus.completedTurn) context.consensus.completedTurn.source_verification = value;
-        if (context.consensus.bookmarkPayload) context.consensus.bookmarkPayload.sourceVerification = value;
-        if (context.completedBasis?.currentTurn) context.completedBasis.currentTurn.source_verification = value;
-        // Keep the continuation basis current too. Its projection remains bound
-        // to the visible run; a hidden completion cannot repaint another answer.
-        if (context.completedBasis) registry.setCompletedBasis(context.runId, context.completedBasis);
-        window.App.runView?.projectSources?.(context);
-      }
-    });
-    sourceRunObservers.set(context, {jobId, stop: stop || (() => {})});
-  };
-
   function isAbortError(error) {
     return error && error.name === "AbortError";
   }
@@ -101,7 +74,7 @@
             consensus_response: turn.consensus,
             differences: turn.differences || '', differences_data: turn.differences_data || null,
             sources: turn.sources || [], model_answers: turn.model_answers || {},
-            source_verification: turn.source_verification || null, result_id: turn.result_id || null,
+            result_id: turn.result_id || null,
             chat_id: payload.chat_id, turn_id: payload.turn_id,
             chat_persisted: true, chat_turn_state: 'completed', chat_replayed: true
           } };
@@ -338,11 +311,14 @@
         answer.append(answerLabel);
       }
       const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
+      const agentTurn = turnData.execution_mode === "agent" || turnData.mode === "Agent";
       const answerBody = document.createElement("div");
       answerBody.className = "consensus-answer-body";
       answerBody.dataset.markdown = turnData.consensus;
-      const sourceReferences = turnData.source_verification?.check_type !== 'contradiction_evidence';
-      answerBody.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
+      // Consensus prose has carried no source references since 2026-09-11, so
+      // a numeric [1] in it never picks up a citation (as in the live run).
+      // Older answers with [S1] tags and Agent prose keep their citations.
+      answerBody.dataset.sourceReferences = agentTurn || /\[S\d/i.test(turnData.consensus || '') ? 'legacy' : 'none';
       if (typeof window.injectMarkdown === "function") {
         window.injectMarkdown(answerBody, turnData.consensus,
           turnData.execution_mode === "agent" || turnData.mode === "Agent" ? [] : turnSources);
@@ -357,7 +333,7 @@
         answerBody,
         turnData.differences_data,
         claimsFallback,
-        sourceReferences ? turnSources : []
+        agentTurn ? turnSources : []
       );
       const verdict = this.staticizeHistoryNode(liveVerdict)
         || this.buildStoredAgreement(turnData.differences_data);
@@ -497,8 +473,7 @@
         );
       }
 
-      let sourceReport = null;
-      if (turnSources.length || turnData.source_verification) {
+      if (turnSources.length) {
         const list = document.createElement("ol");
         list.className = "thread-history-sources";
         turnSources.forEach((source, index) => {
@@ -520,13 +495,8 @@
           item.appendChild(label);
           list.appendChild(item);
         });
-        addDrawer("Verify sources", "Sources", turnSources.length, panel => {
-          const report = document.createElement("div");
-          sourceReport = report;
-          report.className = "source-verification-report";
-          panel.appendChild(report);
+        addDrawer("Sources", "Sources", turnSources.length, panel => {
           panel.appendChild(list);
-          window.App.sourceVerification?.render(answerBody, report, turnData.source_verification, {differencesData: turnData.differences_data});
         });
       }
 
@@ -563,19 +533,6 @@
       history.appendChild(turn);
       history.hidden = false;
       if (agentResources) window.App.agentWorkspace?.renderTurnResources?.(agentResources, turnId);
-      if (sourceReport && turnData.source_verification?.job_id) {
-        const user = window.auth?.currentUser;
-        const jobId = turnData.source_verification.job_id;
-        window.App.sourceVerification?.observe({snapshot: turnData.source_verification,
-          auth: {user, uid: user?.uid, generation: window.App.authState?.generation},
-          getOwnKey: () => window.localStorage.getItem('openrouterKey'),
-          isActive: () => turn.isConnected && answerBody.isConnected && turnData.source_verification?.job_id === jobId,
-          onUpdate(value) {
-            turnData.source_verification = value;
-            window.App.sourceVerification?.render(answerBody, sourceReport, value, {differencesData: turnData.differences_data});
-          }
-        });
-      }
       // Erst im DOM laesst sich messen, ob der Clamp ueberhaupt greift; nur
       // dann bekommt der Turn seinen Aufklapp-Link.
       window.App.observeQuestionFold?.(question, questionText);
@@ -910,7 +867,6 @@
         useOwnKeys: context.config.useOwnKeys,
         usage_run_key: context.usage?.key || null,
         deep_search: context.config.deepSearch,
-        check_sources: context.config.checkSources !== false,
         question: context.question,
         run_id: context.runId,
         answer_receipts: runReceipts(context),
@@ -932,22 +888,12 @@
       }
 
       const requestResult = await streamSSERequest("/consensus", payload, controller.signal, {
-        "sources.status": { receive(data) {
-          if (!registry.isExecuting(context.runId)) return;
-          context.consensus.sourceVerification = { status: data.status };
-          window.App.runView?.projectSources?.(context);
-        } },
-        "sources.final": { receive(data) {
-          if (!registry.isExecuting(context.runId)) return;
-          context.consensus.sourceVerification = data.source_verification;
-          window.App.runView?.projectSources?.(context);
-        } },
         "differences.final": { receive(data) {
           if (!registry.isExecuting(context.runId)) return;
           context.consensus.differences = String(data.differences || "");
           context.consensus.differencesData = data.differences_data || null;
           context.consensus.differencesComplete = true;
-          context.phase = context.consensus.sourceVerification?.status === "pending" ? "sources" : "finalizing";
+          context.phase = "finalizing";
           if (registry.isVisible(context.runId)) registry.renderVisible();
         } },
         "consensus.delta": contextConsensusRenderer(context, "consensus"),
@@ -961,7 +907,6 @@
         "differences.delta": contextConsensusRenderer(context, "differences")
       }).catch(error => recoverConsensusResult(context, payload, controller.signal, error));
       const data = requestResult.data || {};
-      if (data.chat_replayed) context.consensus.sourceReferenceMode = data.source_verification?.check_type === 'contradiction_evidence' ? 'none' : 'legacy';
       if (!data.consensus_response && context.consensus.text) data.consensus_response = context.consensus.text;
       updateContextUsage(context, data);
       if (!registry.isExecuting(context.runId)) return data;
@@ -1041,7 +986,6 @@
       context.consensus.differences = String(data.differences || context.consensus.differences || "");
       context.consensus.differencesData = data.differences_data || context.consensus.differencesData || null;
       context.consensus.differencesComplete = true;
-      context.consensus.sourceVerification = data.source_verification || context.consensus.sourceVerification || null;
       context.consensus.sources = context.evidenceSources.map(source => ({ ...source }));
       context.consensus.resultId = data.result_id || null;
       context.consensus.modelLabels = modelLabels;
@@ -1057,7 +1001,6 @@
         consensus: context.consensus.text,
         differences: context.consensus.differences,
         differences_data: context.consensus.differencesData,
-        source_verification: context.consensus.sourceVerification,
         sources: context.evidenceSources.map(source => ({ ...source })),
         model_answers: modelAnswers,
         attachments: context.attachmentMeta.map(item => ({ ...item }))
@@ -1138,7 +1081,6 @@
       context.attachments = [];
       registry.setStatus(context.runId, "succeeded");
       registry.setCompletedBasis(context.runId, completedBasis);
-      window.App.watchRunSources(context);
 
       if (registry.isAuthCurrent(context) && data.chat_replayed !== true) {
         const best = context.consensus.differencesData?.best_model || parseBestModel(context.consensus.differences);

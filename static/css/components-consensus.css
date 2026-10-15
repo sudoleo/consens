@@ -1,6 +1,8 @@
 /* --------------------------------------------------------------------------
    Response & Consensus Boxes
    -------------------------------------------------------------------------- */
+/* A stopped answer stays readable, with this note above its partial text. */
+.response-incomplete-notice { margin: .55rem 0; padding: .55rem .65rem; border-left: 2px solid currentColor; color: var(--muted, #697386); font-size: var(--font-size-ui); }
 .response-section {
   display: flex;
   gap: 15px;

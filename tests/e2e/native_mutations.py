@@ -44,9 +44,6 @@ CASES = {
     "WP-10": ("app.services.memory_edit", "_lossless_profile", [
         ('if isinstance(notes, str) and len(notes) > max(0, int(memory_limit)):', 'if False:')],
         "test_memory_edit_transactions.py::test_native_undo_is_lossless_owner_bound_idempotent_and_revision_checked"),
-    "WP-14": ("app.services.source_check_repository", "SourceCheckRepository.finish_package", [
-        ("or job.get('lease_token') != claimed['lease_token']", "or False")],
-        "test_source_check_transactions.py::test_native_source_claim_takeover_and_exactly_once_package"),
     "WP-19": ("app.services.seo_pulse", "SeoPulseService._acquire", [
         ('if current and current > now:', 'if False:')],
         "test_scheduler_transactions.py::test_native_seo_pulse_lease_is_exclusive_and_released"),

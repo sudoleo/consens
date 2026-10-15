@@ -119,9 +119,8 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('#runModeSelect')).to_have_value('agent')
         # Agent Beta uploads into the private chat store, so upload stays available.
         expect(page.locator('#attachUploadOption')).to_be_enabled()
-        # The mode leads the menu; Check contradictions is a setting, not a row here.
+        # The mode leads the menu.
         expect(page.locator('#runModeControl [data-value="agent"]')).to_have_attribute('aria-pressed', 'true')
-        expect(page.locator('#sourceCheckMenuSwitch')).to_have_count(0)
         _snapshot(page, f'agent-plus-options-{width}')
         page.locator('#agentComparisonMenuOption').tap()
         expect(page.locator('#attachMenu')).not_to_be_visible()
@@ -207,20 +206,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
             "differences_data": {"claims": [], "differences": [{"claim": "Whether the smaller plan includes five seats", "consensus_anchor": anchor, "type": "contradiction", "severity": "major", "positions": [
                 {"models": ["OpenAI"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
                 {"models": ["DeepSeek"], "stance": "The seat limit needs confirmation.", "quote": "Confirm the seat limit"}]}], "models_compared": [m[1] for m in models]}}]}
-    review["check_sources"] = True
     review["read_sources"] = [{"id": 1, "url": "https://example.org/terms", "host": "example.org", "title": "Seat terms",
                                "status": "completed", "text": "The smaller plan includes five seats."}]
-    difference = review["checks"][0]["differences_data"]["differences"][0]
-    difference["factual_check"] = {"checkable": True, "question": "Are five seats included?"}
-    review["checks"][0]["source_verification"] = {
-        "schema_version": 4, "check_type": "contradiction_evidence", "run_id": "c1", "answer_version": digest,
-        "basis_hash": "basis", "status": "complete", "scope": {"contradictions": 1, "checked_contradictions": 1},
-        "sources": [{"id": "D1", "url": "https://example.org/billing", "title": "Billing terms"}],
-        "findings": [{"contradiction_id": "source-one", "difference_index": 0, "run_id": "c1", "answer_version": digest,
-            "question": "Are five seats included?", "consensus_anchor": anchor, "checked": True, "state": "checked",
-            "positions": [{"id": f"P{i+1}", "summary": p["stance"], "models": p["models"], "quote": p["quote"]} for i, p in enumerate(difference["positions"])],
-            "supported_position_id": "P1", "verdict": "supports_position", "reason": "The terms explicitly include five seats.",
-            "evidence": [{"source_id": "D1", "position_id": "P1", "quote": "The smaller plan includes five seats."}]}]}
     saved = {"id": turn, "question": "Compare plans for our team", "status": "completed", "execution_mode": "agent", "mode": "Agent",
         "consensus": text, "sources": [], "model_answers": {}, "agent_review": review, "agent_activity": activity,
         "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "policy": {"delegation": True}}}
@@ -289,7 +276,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         expect(page.locator('#attachTrigger')).to_be_visible()
-        assert requests[0]['check_sources'] is True
+        assert 'check_sources' not in requests[0]
         assert requests[0]['reasoning_effort'] == 'high'
         expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^56% of today'))
         expect(page.locator('.agent-evidence-link[data-section="sources"]')).to_have_text('Sources3')
@@ -353,7 +340,6 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(insights).to_contain_text('Compare cost and flexibility')
         expect(insights).to_contain_text('6 model answers')
         expect(insights).to_contain_text('Disagreement: Whether the smaller plan includes five seats')
-        expect(insights).to_contain_text('Source checks: 1 of 1 disagreements checked.')
         expect(details.locator('.agent-activity-history')).to_contain_text('Read source · example.org')
         expect(insights).to_have_css('opacity', '1')
         page.wait_for_function("""() => {
@@ -378,9 +364,6 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#modelAnswerReader')).to_be_visible()
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_count(1)
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_attribute('open', '')
-        expect(page.locator('#answerReaderInspector .contradiction-source-verdict')).to_contain_text('Sources support: Five seats')
-        page.locator('#answerReaderInspector .contradiction-source-evidence-details > summary').click()
-        expect(page.locator('#answerReaderInspector .contradiction-source-quote')).to_have_text(anchor)
         expect(page.locator('#agentSidebar')).not_to_be_visible()
         page.locator('.answer-reader-dialog').evaluate("async el => { await Promise.all(el.getAnimations().map(a => a.finished.catch(() => {}))); }")
         if width >= 1400:

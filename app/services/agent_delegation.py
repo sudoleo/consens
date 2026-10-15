@@ -176,7 +176,7 @@ class Worker:
 
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
-                 check_sources=False, source_limits=None, file_context=None, google_selection=None, google_data_consent=False,
+                 file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=False, chat_sources=None, **kwargs):
         super().__init__(**kwargs)
         # With comparison tools the agent writes the answer itself as its last
@@ -261,7 +261,7 @@ class DelegationLoop(AgentLoop):
             from app.services import agent_read_source
             read_sources = (agent_read_source.enabled() and self.policy.account_budget_only
                             and not google_selection and not google_data)
-            self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
+            self.comparison = ComparisonTools(self, comparison_models,
                                               preferences=agent_preferences, memory_changes=self.memory.writable,
                                               read_sources=read_sources)
             limit = self.policy.turn_comparisons if self.policy.account_budget_only else BOUNDED_COMPARISONS
@@ -275,8 +275,8 @@ class DelegationLoop(AgentLoop):
                     "Plan them: put related subquestions into one comparison instead of repeating similar ones.")
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
-            # The answer check and the source check of contradictions: run by
-            # the app once the answer is written, never offered to the model.
+            # The answer check: run by the app once the answer is written,
+            # never offered to the model.
             self.app_registry = ToolRegistry(self.comparison.app_tools)
             if read_sources:
                 # Reading cited sources after a comparison (docs/agent-mode.md,
@@ -640,8 +640,6 @@ class DelegationLoop(AgentLoop):
         try:
             tool, args = registry.validate(call)
             self._check(cancellation)
-            if tool.name == "check_contradictions" and (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data"):
-                raise ValueError("External source checks are disabled for Google-data chats.")
             if registry is self.registry:
                 update = " ".join(getattr(args, "status_update", "").split())
                 if update:
@@ -1325,15 +1323,10 @@ class DelegationLoop(AgentLoop):
             yield from self._events()
 
     def _finish_review(self, value):
-        """A completed answer needs checks, not another routing generation."""
-        names = ["judge_answer"]
-        if self.comparison.contradictions:
-            names.append("check_contradictions")
-        for name in names:
-            if self.comparison.finalized:
-                break
-            call = {"id": f"server_{name}", "type": "function",
-                    "function": {"name": name, "arguments": "{}"}}
+        """A completed answer needs its check, not another routing generation."""
+        if not self.comparison.finalized:
+            call = {"id": "server_judge_answer", "type": "function",
+                    "function": {"name": "judge_answer", "arguments": "{}"}}
             result = yield from self._execute_stream(value, call, self.app_registry)
             if "error" in json.loads(result["content"]):
                 raise AnalysisBudgetExceeded("The answer check could not finish. The answer itself has been saved.")
@@ -1727,9 +1720,9 @@ class DelegationLoop(AgentLoop):
                             # deliverable there, as Claude Code's reminders do.
                             from app.services.prompt_defaults import AGENT_WRITE_NOTE
                             self.messages.append({"role": "user", "content": AGENT_WRITE_NOTE})
-                        # Once the answer is fixed only its checks remain, and the
-                        # app runs them itself (_finish_review): no further
-                        # steering step just to call check_contradictions.
+                        # Once the answer is fixed only its check remains, and the
+                        # app runs it itself (_finish_review): no further
+                        # steering step for it.
                         if (not (self.comparison and (self.comparison.finalized or self.comparison.text))
                                 and not answered_with_tools):
                             continue

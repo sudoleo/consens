@@ -193,20 +193,3 @@ def test_chat_model_and_turn_normalization_roundtrip_entire_source_catalog():
     assert restored["sources"] == stored["sources"]
     assert normalize_turn_sources(sources) == stored["sources"]
     assert restored["sources"][-1]["id"] == "S100"
-
-
-def test_source_check_plan_preserves_validated_shared_provider_provenance():
-    from app.services.source_verification import source_records, plan_source_verification
-
-    raw = {
-        "OpenAI": [dict(source("S1", "https://example.test/Page"), providers=["OpenAI", "unknown", {"bad": "input"}])],
-        "Gemini": [dict(source("S1", "https://EXAMPLE.test/Page#details"), providers=["claude", "Gemini"])],
-        "Grok": [source("S1", "https://different.test")],
-    }
-    records = source_records(raw)
-    assert len(records) == 2
-    assert records[0]["providers"] == ["OpenAI", "Anthropic", "Gemini"]
-    assert records[1]["providers"] == ["Grok"]
-    plan = plan_source_verification(question="Q", consensus="The product has a price of 20 euros. [S1]", sources=raw)
-    assert plan["snapshot"]["sources"][0]["providers"] == ["OpenAI", "Anthropic", "Gemini"]
-    assert plan["packages"][0]["sources"] == plan["snapshot"]["sources"]

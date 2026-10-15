@@ -231,7 +231,7 @@ class QuoteVerificationTests(unittest.TestCase):
         return data["differences"][0]["positions"][0]
 
     def test_changed_number_unit_negation_or_condition_is_never_a_verified_quote(self):
-        """R08: a partial/fuzzy overlap must not grant quote_models."""
+        """R08: a partial/fuzzy overlap never keeps the quote."""
         original = "The annual operating cost for this complete configuration is 400 euros."
         forged = [
             original.replace("400", "4000"),
@@ -242,14 +242,14 @@ class QuoteVerificationTests(unittest.TestCase):
         for quote in forged:
             with self.subTest(quote=quote):
                 position = self._position_after_verification(quote, original)
-                self.assertEqual(position["quote_models"], [])
                 self.assertEqual(position["quote"], "")
 
     def test_typographic_variants_of_a_full_quote_stay_verified(self):
         original = "Das Modell sagt: „Die Frist endet am 1. 3. – nicht später.“"
         quote = 'die frist endet am 1.  3. - nicht später.'
         position = self._position_after_verification('"' + quote + '"', original)
-        self.assertEqual(position["quote_models"], ["OpenAI"])
+        self.assertIn(position["quote"], original)
+        self.assertNotIn("quote_rejection", position)
 
     def test_harmless_formatting_keeps_a_full_quote_verified(self):
         """Layout and typography never decide whether a model wrote a passage."""
@@ -267,7 +267,7 @@ class QuoteVerificationTests(unittest.TestCase):
         for original, quote in cases:
             with self.subTest(quote=quote):
                 position = self._position_after_verification(quote, original)
-                self.assertEqual(position["quote_models"], ["OpenAI"])
+                self.assertTrue(position["quote"])
                 self.assertIn(position["quote"], original)
                 self.assertNotIn("quote_rejection", position)
 
@@ -278,7 +278,7 @@ class QuoteVerificationTests(unittest.TestCase):
             ("Er wurde nicht verurteilt.", "Er wurde verurteilt."),
         ]:
             with self.subTest(quote=quote):
-                self.assertEqual(self._position_after_verification(quote, original)["quote_models"], [])
+                self.assertEqual(self._position_after_verification(quote, original)["quote"], "")
 
     def test_rejected_quote_records_a_content_free_reason(self):
         original = "Er wurde 2023 in Spanien von den Vorwürfen freigesprochen."
@@ -299,7 +299,7 @@ class QuoteVerificationTests(unittest.TestCase):
                 self.assertTrue(all(not isinstance(v, str) or len(v) < 20 for v in rejection.values()))
         self.assertEqual(self._position_after_verification("Irgendein Satz.", "")["quote_rejection"], {"reason": "no_answer"})
 
-    def test_fuzzy_consensus_anchor_navigates_but_is_not_validated(self):
+    def test_fuzzy_consensus_anchor_still_navigates(self):
         payload = valid_payload()
         payload["differences"][0]["consensus_anchor"] = "the capital of France is certainly Paris"
         consensus = "Well. The capital of France is Paris. End."
@@ -309,7 +309,6 @@ class QuoteVerificationTests(unittest.TestCase):
         )
         diff = data["differences"][0]
         self.assertTrue(diff["consensus_anchor"].startswith("The capital of France is"))
-        self.assertFalse(diff["consensus_anchor_validated"])
 
     def test_difference_consensus_anchor_is_verified_against_the_consensus(self):
         """Der Widerspruchs-Anker zeigt in die Konsensantwort (nicht in eine

@@ -112,10 +112,10 @@
           // "consensus_highlights" (none or a filter below) and "claim_counts".
           const settings = window.App.userSettings;
           const MARKER_FILTERS = {
-            all: "Highlight all model and source checks. Agreement is not proof of correctness.",
-            contradictions: "Highlight model contradictions, including minor details, and sources that contradict a claim.",
-            concerns: "Highlight model contradictions, including minor details, and split model views, plus contradicting, problematic or unclear sources.",
-            critical: "Highlight critical model contradictions and sources that contradict a claim (red).",
+            all: "Highlight all model checks. Agreement is not proof of correctness.",
+            contradictions: "Highlight model contradictions, including minor details.",
+            concerns: "Highlight model contradictions, including minor details, and split model views.",
+            critical: "Highlight critical model contradictions (red).",
           };
           const highlightSelect = $("consensusHighlightsSelect");
           const highlightHelp = $("consensusHighlightsHelp");
@@ -250,7 +250,7 @@
             if (highlightSelect) highlightSelect.value = show ? highlightMode : "none";
             if (highlightHelp) highlightHelp.textContent = show
               ? MARKER_FILTERS[highlightMode]
-              : "Sentence and source-check highlights are hidden. All analysis remains available in the details.";
+              : "Sentence highlights are hidden. All analysis remains available in the details.";
 
           }
 
@@ -2417,9 +2417,6 @@
                 const diff = entry.diff;
                 const card = document.createElement("details");
                 card.dataset.differenceIndex = String(entry.index);
-                // Source checks are advisory. A malformed check must never
-                // interrupt the original cards or the subsequent claim marks.
-                try { window.App.sourceVerification?.bindDifferenceCard(card, diff); } catch (_) {}
                 let cardClass = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
                 if (diff.type === "contradiction" && diff.severity === "major") cardClass += " is-major";
                 card.className = cardClass;
@@ -2546,7 +2543,6 @@
                 if (diff.resolution) markCardResolved(card, diff.resolution.outcome);
               });
             }
-            try { window.App.sourceVerification?.refreshDifferences(cards); } catch (_) {}
             return cards;
           }
 

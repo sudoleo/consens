@@ -84,8 +84,6 @@ class UserSettings(_Strict):
     run_mode: Optional[Literal["compare", "consensus", "agent"]] = None
     agent_model: Optional[AgentModelSetting] = None
     agent_preferences: Optional[AgentPreferencesSetting] = None
-    # "Check sources" for Consensus and Agent; on unless switched off.
-    check_sources: Optional[bool] = None
     # Keyed by the family label the app shows (OpenAI, Gemini, ...).
     compare_models: Optional[dict[FamilyLabel, CompareModelSetting]] = Field(
         default=None, max_length=MAX_COMPARE_FAMILIES

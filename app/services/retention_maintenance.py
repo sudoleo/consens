@@ -30,7 +30,6 @@ PARTIAL_FAILURE_ALERT_AFTER = 3
 def _cleanup_steps():
     """(detail key, callable) pairs; imports stay lazy to keep startup light."""
     from app.services.answer_receipts import cleanup_expired as cleanup_answer_receipts
-    from app.services.source_check_jobs import repository
     from app.services.agent_files import cleanup_expired_files
     from app.services.agent_documents import cleanup_expired_documents
     from app.services.google_connections import cleanup_google_data
@@ -42,7 +41,6 @@ def _cleanup_steps():
         ("expired_pending_deleted", cleanup_expired_pending),
         ("expired_answer_receipts_deleted", cleanup_answer_receipts),
         ("revoked_shares_deleted", cleanup_revoked_shares),
-        ("source_checks_deleted", lambda: repository().cleanup()),
         ("files_deleted", cleanup_expired_files),
         ("documents_deleted", cleanup_expired_documents),
         ("google_records_deleted", cleanup_google_data),

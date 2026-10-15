@@ -137,8 +137,8 @@ function appendInlineSourceRefs(fragment, refs) {
 // source backs a sentence without decoding a footnote number. Adjacent
 // citations collapse into one pill ("njaped.no +2"); the hover/focus teaser
 // lists all of them. The display number stays on the element
-// (data-source-number / data-source-numbers) — the sources drawer, source
-// verification and the teaser index still address sources by it.
+// (data-source-number / data-source-numbers) — the sources drawer and the
+// teaser index still address sources by it.
 // Model answers keep their own `.source-link` chips (scannable evidence).
 
 function sourceNumberFromToken(token) {
@@ -824,7 +824,7 @@ const sourceTeaser = (function () {
     return getSourceRefs(`[S${number}]`, list)[0]?.src || null;
   }
 
-  function fill(node, src, number, target) {
+  function fill(node, src, number) {
     node.innerHTML = "";
 
     const head = document.createElement("div");
@@ -868,26 +868,10 @@ const sourceTeaser = (function () {
       body.textContent = String(snippet);
       node.appendChild(body);
     }
-    const check = window.App.sourceVerification?.getCitationCheck(target);
-    appendCheck(node, check, 'This citation has not been checked.');
-  }
-
-  function appendCheck(node, check, fallback) {
-    const note = document.createElement("div");
-    note.className = "source-teaser-check";
-    note.dataset.state = check?.state || 'unchecked';
-    note.textContent = check?.summary || fallback;
-    node.appendChild(note);
-    if (check?.detail) {
-      const detail = document.createElement("div");
-      detail.className = "source-teaser-check-detail";
-      detail.textContent = check.detail;
-      node.appendChild(detail);
-    }
   }
 
   // One pill, several sources: the teaser is where they are all named.
-  function fillGroup(node, entries, target) {
+  function fillGroup(node, entries) {
     node.innerHTML = "";
     const head = document.createElement("div");
     head.className = "source-teaser-head";
@@ -896,8 +880,6 @@ const sourceTeaser = (function () {
 
     const list = document.createElement("ol");
     list.className = "source-teaser-list";
-    const verification = window.App.sourceVerification;
-    let checked = false;
     entries.forEach(entry => {
       const src = entry.src;
       const item = document.createElement("li");
@@ -923,19 +905,9 @@ const sourceTeaser = (function () {
       title.className = "source-teaser-title is-single-line";
       title.textContent = getSourceTitle(src, label);
       item.appendChild(title);
-      // Only a verdict bound to exactly this source number; never the
-      // group's worst state copied onto every row.
-      const own = entry.number ? verification?.getCitationCheck(target, String(entry.number)) : null;
-      if (own) {
-        checked = true;
-        appendCheck(item, own, '');
-      }
       list.appendChild(item);
     });
     node.appendChild(list);
-    if (!checked) {
-      appendCheck(node, verification?.getCitationCheck(target), 'These citations have not been checked.');
-    }
   }
 
   function place(node, target) {
@@ -975,8 +947,8 @@ const sourceTeaser = (function () {
     anchor = target;
     const node = ensure();
     const group = (target.sourceGroup || []).filter(entry => entry && entry.src);
-    if (group.length > 1) fillGroup(node, group, target);
-    else fill(node, src, number, target);
+    if (group.length > 1) fillGroup(node, group);
+    else fill(node, src, number);
     const descriptions = new Set((target.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
     descriptions.add(node.id);
     target.setAttribute('aria-describedby', [...descriptions].join(' '));
@@ -1020,10 +992,6 @@ const sourceTeaser = (function () {
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && anchor) hide();
-  });
-  document.addEventListener('source-check-updated', event => {
-    if (anchor && !anchor.isConnected) hide();
-    else if (anchor && event.target.contains(anchor)) show(anchor);
   });
   window.addEventListener("scroll", () => { if (anchor) hide(); }, { passive: true });
   window.addEventListener("resize", () => { if (anchor) hide(); });

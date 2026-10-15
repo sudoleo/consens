@@ -124,7 +124,7 @@ def main():
                               api_key=key, cancellation=ProviderCancellation(),
                               policy=AgentPolicy.for_chat(delegation_config), delegation_config=delegation_config,
                               completion_factory=AgentCompletion, comparison_models=comparison_selection(families),
-                              check_sources=True, chat_sources=sources,
+                              chat_sources=sources,
                               memory=MemorySnapshot(available=True, enabled=True, auto=True,
                                                     profile=user_memory.empty_profile()) if args.memory else None)
         value = AgentCompletion()

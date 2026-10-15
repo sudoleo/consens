@@ -99,21 +99,19 @@ def _final_sse_payload(response):
 
 
 @pytest.mark.parametrize('stream', [False, True])
-def test_source_verification_replays_from_completed_turn(chat_consensus_api, stream):
+def test_replay_leaves_out_an_old_source_check(chat_consensus_api, stream):
+    """Turns saved before 2026-10-15 may still hold a source-check report."""
     client, store, monkeypatch = chat_consensus_api
-    from app.services import source_verification as sv
-    snapshot = {'schema_version': 1, 'answer_version': sv.answer_version('Stored consensus'),
-                'status': 'partial', 'scope': {'pairs': 1, 'checked_pairs': 0}, 'findings': []}
+    snapshot = {'schema_version': 4, 'status': 'complete', 'findings': []}
     store.validation_result = {'id': TURN_ID, 'status': 'completed', 'question': 'What changed?'}
     store.turn_detail = {'id': TURN_ID, 'status': 'completed', 'consensus': 'Stored consensus',
                          'differences': 'Stored differences', 'source_verification': snapshot}
-    monkeypatch.setattr(sv, 'start_source_verification', lambda **_: pytest.fail('replay must not verify again'))
     response = client.post('/consensus', headers=AUTH, json=_base_payload(stream=stream))
     payload = _final_sse_payload(response) if stream else response.json()
-    assert payload['source_verification'] == snapshot
     assert payload['consensus_response'] == 'Stored consensus'
+    assert 'source_verification' not in payload
     if stream:
-        assert response.text.index('event: consensus.final') < response.text.index('event: sources.final')
+        assert 'event: sources.' not in response.text
 
 
 @pytest.fixture
@@ -139,97 +137,30 @@ def chat_consensus_api(monkeypatch):
     return receipt_helpers.ReceiptClient(TestClient(app), receipts, UID), store, monkeypatch
 
 
-@pytest.mark.parametrize("source_status", ["queued", "complete"])
-def test_durable_source_check_does_not_delay_consensus_completion(chat_consensus_api, source_status):
-    from app.services import source_check_jobs
+@pytest.mark.parametrize("stream", [False, True])
+def test_a_run_ends_with_its_analysis_and_no_source_check(chat_consensus_api, stream):
+    """The contradiction source check was removed (2026-10-15): no third
+    judge, no sources.* event, nothing stored for it; a client that still
+    sends the old switch gets the same run."""
     client, store, monkeypatch = chat_consensus_api
-    snapshot = {"schema_version": 4, "check_type": "contradiction_evidence",
-                "job_id": "a" * 64, "status": source_status, "findings": []}
     original = {"agreement": {"score": 88}, "claims": [{"text": "Original claim"}]}
-    submitted = []
-    def submit(**kwargs):
-        submitted.append(kwargs)
-        return snapshot
-    monkeypatch.setattr(source_check_jobs, "submit_advisory", submit)
     monkeypatch.setattr(chat_router, "stream_consensus", lambda *a, **kw: iter([
         {"type": "final", "text": "Consensus"}]))
     monkeypatch.setattr(chat_router, "stream_differences", lambda *a, **kw: iter([
         {"type": "final", "text": "Differences", "data": original}]))
-    response = client.post("/consensus", headers=AUTH, json=_base_payload(stream=True))
-    assert response.status_code == 200
-    events = [(name, json.loads(data)) for name, data in re.findall(
-        r"event: ([\w.]+)\r?\ndata: (.+?)\r?\n\r?\n", response.text)]
-    names = [name for name, _ in events]
-    assert names.index("consensus.final") < names.index("differences.final") < names.index("sources.final") < names.index("final")
-    assert dict(events)["final"]["source_verification"] == snapshot
-    assert store.completions[0][3]["differences_data"] == original
-    assert store.completions[0][3]["source_verification"] == snapshot
-    assert submitted[0]["context"]["uid"] == UID
-    assert submitted[0]["context"]["references"] == [f"users/{UID}/chats/{CHAT_ID}"]
-    assert submitted[0]["differences_data"] is original
-    assert submitted[0]["model_answers"]["openai"] == "OpenAI answer"
-    assert submitted[0]["model_sources"]["Mistral"]
-
-
-@pytest.mark.parametrize("stream", [False, True])
-def test_disabled_source_check_skips_third_judge_and_keeps_analysis(chat_consensus_api, stream):
-    from app.services import source_verification as sv, consensus_pipeline
-    client, store, monkeypatch = chat_consensus_api
-    def unexpected(**kwargs):
-        pytest.fail("Disabled source checks must not start fetching or judging")
-    monkeypatch.setattr(sv, "start_source_verification", unexpected)
-    monkeypatch.setattr(consensus_pipeline, "start_source_verification", unexpected)
-    monkeypatch.setattr(chat_router, "stream_consensus", lambda *a, **kw: iter([
-        {"type": "final", "text": "Consensus"}]))
-    monkeypatch.setattr(chat_router, "stream_differences", lambda *a, **kw: iter([
-        {"type": "final", "text": "Differences", "data": {"agreement": {"score": 88}}}]))
-    response = client.post("/consensus", headers=AUTH,
-                           json=_base_payload(stream=stream, check_sources=False))
+    monkeypatch.setattr(chat_router, "query_differences", lambda *a, **kw: ("Differences", original))
+    response = client.post("/consensus", headers=AUTH, json=_base_payload(stream=stream, check_sources=True))
     assert response.status_code == 200
     payload = _final_sse_payload(response) if stream else response.json()
     assert payload["consensus_response"] == "Consensus"
-    assert payload["differences_data"]["agreement"]["score"] == 88
-    assert payload["source_verification"]["status"] == "disabled"
-    assert payload["source_verification"]["check_type"] == "contradiction_evidence"
-    assert store.completions[0][3]["source_verification"] == payload["source_verification"]
+    assert payload["differences_data"] == original
+    assert "source_verification" not in payload
+    assert store.completions[0][3]["differences_data"] == original
+    assert "source_verification" not in store.completions[0][3]
     if stream:
-        assert "event: sources." not in response.text
-
-
-@pytest.mark.parametrize('stream', [False, True])
-def test_failed_differences_never_start_source_job(chat_consensus_api, stream):
-    from app.services import source_check_jobs
-    client, store, monkeypatch = chat_consensus_api
-    monkeypatch.setattr(source_check_jobs, 'submit_advisory',
-                        lambda **_: pytest.fail('No successful Differences result'))
-    monkeypatch.setattr(chat_router, 'query_differences', lambda *a, **kw: ('', None))
-    monkeypatch.setattr(chat_router, 'stream_consensus', lambda *a, **kw: iter([
-        {'type': 'final', 'text': 'Consensus'}]))
-    monkeypatch.setattr(chat_router, 'stream_differences', lambda *a, **kw: iter([
-        {'type': 'final', 'text': '', 'data': None, 'error': True}]))
-    response = client.post('/consensus', headers=AUTH, json=_base_payload(stream=stream))
-    assert response.status_code == 200
-    payload = _final_sse_payload(response) if stream else response.json()
-    assert payload['consensus_response'] == 'Consensus'
-    assert payload['source_verification']['status'] == 'failed'
-    assert payload['source_verification']['reason_code'] == 'differences_failed'
-    assert store.completions[0][3]['source_verification'] == payload['source_verification']
-
-
-@pytest.mark.parametrize('stream', [False, True])
-def test_no_checkable_differences_skips_sources_without_job(chat_consensus_api, stream):
-    from app.services import source_check_jobs
-    client, store, monkeypatch = chat_consensus_api
-    monkeypatch.setattr(source_check_jobs, 'repository', lambda: pytest.fail('No eligible work to persist'))
-    monkeypatch.setattr(chat_router, 'stream_consensus', lambda *a, **kw: iter([
-        {'type': 'final', 'text': 'Consensus'}]))
-    monkeypatch.setattr(chat_router, 'stream_differences', lambda *a, **kw: iter([
-        {'type': 'final', 'text': 'Differences', 'data': {'differences': []}}]))
-    response = client.post('/consensus', headers=AUTH, json=_base_payload(stream=stream))
-    payload = _final_sse_payload(response) if stream else response.json()
-    assert payload['source_verification']['status'] == 'skipped'
-    assert payload['source_verification']['reason_code'] == 'no_checkable_contradictions'
-    assert 'job_id' not in payload['source_verification']
+        names = re.findall(r"event: ([\w.]+)", response.text)
+        assert names.index("consensus.final") < names.index("differences.final") < names.index("final")
+        assert not any(name.startswith("sources.") for name in names)
 
 
 def test_consensus_without_chat_ids_remains_legacy_compatible(chat_consensus_api):
@@ -1208,8 +1139,6 @@ def test_disconnect_after_the_answer_persists_the_run_instead_of_failing_it(
     assert completed["differences"] == ""
     assert completed["differences_data"] is None
     assert completed["result_id"] == RESULT_ID
-    # Dieselbe Marke wie eine gescheiterte Analyse: die UI kennt den Zustand.
-    assert completed["source_verification"]["reason_code"] == "differences_failed"
     assert len(pending) == 1
     assert pending[0]["consensus_md"] == "Consensus"
     assert pending[0]["differences_data"] is None
@@ -1242,22 +1171,17 @@ def test_disconnect_while_the_judge_runs_persists_without_an_alert(chat_consensu
     assert len(store.completions) == 1
     assert store.completions[0][3]["consensus"] == "Consensus"
     assert store.completions[0][3]["differences_data"] is None
-    assert store.completions[0][3]["source_verification"]["reason_code"] == "differences_failed"
 
 
 def test_disconnect_after_a_settled_analysis_keeps_the_analysis(chat_consensus_api):
-    from app.services import source_check_jobs
     client, store, monkeypatch = chat_consensus_api
-    snapshot = {"schema_version": 4, "check_type": "contradiction_evidence",
-                "job_id": "a" * 64, "status": "queued", "findings": []}
     original = {"agreement": {"score": 88}}
-    monkeypatch.setattr(source_check_jobs, "submit_advisory", lambda **_: snapshot)
     monkeypatch.setattr(chat_router, "stream_consensus",
                         lambda *a, **kw: iter([{"type": "final", "text": "Consensus"}]))
     monkeypatch.setattr(chat_router, "stream_differences", lambda *a, **kw: iter([
         {"type": "final", "text": "Differences", "data": original}]))
     source = _open_consensus_stream(client, monkeypatch, _base_payload(stream=True))
-    _read_until(source, "sources.final")
+    _read_until(source, "differences.final")
     source.close()
 
     assert store.failures == []
@@ -1265,7 +1189,6 @@ def test_disconnect_after_a_settled_analysis_keeps_the_analysis(chat_consensus_a
     completed = store.completions[0][3]
     assert completed["differences_data"] == original
     assert completed["differences"] == "Differences"
-    assert completed["source_verification"] == snapshot
 
 
 def test_disconnect_before_the_answer_still_cancels_the_turn(chat_consensus_api):

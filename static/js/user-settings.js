@@ -1,8 +1,8 @@
 // =====================================================================
 // user-settings.js
 // Account settings: the choices that follow an account to every device --
-// run mode, Agent model and preferences, Check sources, the Compare and
-// Consensus models, the system prompt and three display options.
+// run mode, Agent model and preferences, the Compare and Consensus
+// models, the system prompt and three display options.
 //
 // The server keeps them per account (GET/PATCH /api/my/settings,
 // app/services/user_settings.py). This browser keeps a copy under the
@@ -367,7 +367,6 @@
     run_mode: runMode,
     agent_model: agentModel,
     agent_preferences: agentPreferences,
-    check_sources: booleanSetting("checkSources"),
     compare_models: compareModels,
     consensus_model: patternSetting(CONSENSUS_MODEL_KEY, MODEL_ID),
     consensus_preset: patternSetting(CONSENSUS_PRESET_KEY, PRESET_ID),

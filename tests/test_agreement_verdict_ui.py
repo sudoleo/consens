@@ -43,10 +43,8 @@ def test_settings_offer_three_agreement_display_levels_persistently():
 
 def test_footer_status_is_separate_from_navigation_and_tools_follow_it():
     template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-    source_tab = template.split('id="consensusSourcesTab"', 1)[1].split("</button>", 1)[0]
-    assert 'aria-describedby="consensusSourceCheckStatus"' in source_tab
-    assert 'id="consensusSourceCheckStatus"' not in source_tab
-    assert template.index('id="consensusFooterTabs"') < template.index('id="consensusSourceCheckStatus"')
+    # The source-check status beside the Sources tab went with the check (2026-10-15).
+    assert 'consensusSourceCheckStatus' not in template
     assert template.index('id="consensusFooterTabs"') < template.index('id="consensusFooterActions"')
     assert 'id="consensusMarkerLegend"' not in template
     assert "About these highlights" not in template

@@ -29,9 +29,7 @@ Hintergrund-Writer mehr (Watch-/Topic-/SEO-Scheduler, API-Maintenance,
 Retention, Account-Cleanups, Startup-Backfills); sie laufen nur in Produktion
 und stehen lokal in `GET /health/maintenance` als `disabled`. Wer einen davon
 lokal braucht, startet mit `LOCAL_BACKGROUND_JOBS=1` (wirkt nicht zusammen mit
-`MOCK_LLM=1`). Der Modell-Config-Sync läuft immer, die Quellenprüfungs-Worker
-auf jedem Nicht-Mock-Server (eigene lokale Queue);
-die Worker scannen eine leere Queue nur noch höchstens alle 30 s.
+`MOCK_LLM=1`). Der Modell-Config-Sync läuft immer.
 
 ## Gemeinsamer Einstieg unter Windows
 
@@ -334,16 +332,11 @@ Providerfehlern und ungültige Metadaten sind abgedeckt. Der Picker-Browsertest
 Einträge in ihrer Reihenfolge und deaktivierte, nicht auflösbare IDs auf Desktop
 und Mobil. `AGENT_SCREENSHOTS=<Verzeichnis>` speichert die Ansichten.
 
-`tests/test_agent_contradictions.py` prüft Tool-Freigabe, dass der Turn mit
-einem gebundenen Jobverweis endet (kein Abruf/Judge im Turn), die Auswertung
-durch den Worker, Reservierung und Settlement auf dem Tokenkonto,
-eingefrorene Limits, Budgetabsage, Versionsbindung, Stop vor dem Einreihen,
-Chat-Löschung und Wiederholung ohne zweiten Job; `tests/test_contradiction_jobs.py`
-deckt das Job-Metering (Messwerte, Schätzung, kein Call, Löschung) ab. Die Agent-Frontend-Tests prüfen
+Die Agent-Frontend-Tests prüfen
 zusätzlich eingefrorene Einstellungen, die Startleiste und die Reasoning-Verknüpfung.
 `tests/e2e/test_agent_comparison_frontend.py` prüft den einzeiligen Composer nach
-dem Senden und bei gespeicherten Chats, das (+)-Menü per Touch mit Quellenprüfung,
-Reasoning und Compare sowie Quellenbelege an Widerspruchskarten auf Desktop und Mobil.
+dem Senden und bei gespeicherten Chats sowie das (+)-Menü per Touch mit Reasoning
+und Compare auf Desktop und Mobil.
 Die Transaktionsprüfung `tests/e2e/test_agent_transactions.py` prüft mit
 `dev.ps1 check browser -TestPath tests/e2e/test_agent_transactions.py` auch
 mehrere bezahlte Schritte innerhalb desselben Owner-Slots im lokalen Emulator.

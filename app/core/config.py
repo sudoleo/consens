@@ -1369,53 +1369,6 @@ def get_chat_memory_models() -> dict:
     return dict(CHAT_MEMORY_MODEL_BY_PROVIDER)
 
 
-DEFAULT_SOURCE_VERIFICATION_MODEL = "google/gemini-3.5-flash-lite"
-SOURCE_VERIFICATION_MODEL = DEFAULT_SOURCE_VERIFICATION_MODEL
-SOURCE_VERIFICATION_FALLBACK_MODEL = ""
-
-
-def source_verification_model_options(provider_models=None) -> list[dict]:
-    """Actual OpenRouter IDs for the independent source judge (no engine aliases)."""
-    catalogs = provider_models if provider_models is not None else _provider_allowed_sets()
-    options = {DEFAULT_SOURCE_VERIFICATION_MODEL: "Gemini 3.5 Flash Lite"}
-    for provider in PROVIDERS:
-        for model in catalogs.get(provider) or []:
-            api_model = openrouter_model_id(model, provider)
-            options.setdefault(api_model, get_model_label(model))
-    return [{"id": model, "label": label} for model, label in sorted(options.items())]
-
-
-def normalize_source_verification_model(value, provider_models=None) -> str:
-    chosen = value.strip() if isinstance(value, str) else ""
-    allowed = {item["id"] for item in source_verification_model_options(provider_models)}
-    return chosen if chosen in allowed else DEFAULT_SOURCE_VERIFICATION_MODEL
-
-
-def apply_source_verification_model(value=None) -> None:
-    global SOURCE_VERIFICATION_MODEL
-    SOURCE_VERIFICATION_MODEL = normalize_source_verification_model(value)
-
-
-def get_source_verification_model() -> str:
-    return SOURCE_VERIFICATION_MODEL
-
-
-def normalize_source_verification_fallback_model(value, provider_models=None, primary_model=None) -> str:
-    chosen = value.strip() if isinstance(value, str) else ""
-    primary = SOURCE_VERIFICATION_MODEL if primary_model is None else primary_model
-    allowed = {item["id"] for item in source_verification_model_options(provider_models)}
-    return chosen if chosen in allowed and chosen != primary else ""
-
-
-def apply_source_verification_fallback_model(value=None) -> None:
-    global SOURCE_VERIFICATION_FALLBACK_MODEL
-    SOURCE_VERIFICATION_FALLBACK_MODEL = normalize_source_verification_fallback_model(value)
-
-
-def get_source_verification_fallback_model() -> str:
-    return SOURCE_VERIFICATION_FALLBACK_MODEL
-
-
 def get_chat_memory_model(provider: str) -> str:
     """Modell, mit dem die Chat-Memory dieser Provider-Familie fortgeschrieben
     wird. Leer heisst: keine gueltige Wahl — der Aufrufer bleibt dann bei der
@@ -1886,8 +1839,6 @@ def _capture_runtime_config() -> dict:
         "judges": dict(DIFFERENCES_JUDGE_MODEL_BY_PROVIDER),
         "pro_judges": dict(PRO_JUDGE_MODEL_BY_PROVIDER),
         "memory": dict(CHAT_MEMORY_MODEL_BY_PROVIDER),
-        "source_verification_model": get_source_verification_model(),
-        "source_verification_fallback_model": get_source_verification_fallback_model(),
         "families": dict(JUDGE_FAMILY_BY_ENGINE),
         "order": {key: list(value) for key, value in MODEL_ORDER_BY_PROVIDER.items()},
         "defaults": dict(FREE_DEFAULT_MODEL_BY_PROVIDER),
@@ -1900,8 +1851,7 @@ def _capture_runtime_config() -> dict:
 
 
 def _restore_runtime_config(state: dict) -> None:
-    global ALL_ALLOWED_MODELS, SOURCE_VERIFICATION_MODEL
-    global SOURCE_VERIFICATION_FALLBACK_MODEL
+    global ALL_ALLOWED_MODELS
     for provider, target in _provider_allowed_sets().items():
         target.clear()
         target.update(state["providers"].get(provider, set()))
@@ -1919,8 +1869,6 @@ def _restore_runtime_config(state: dict) -> None:
             for key, value in state["presets"].items()
         }
     )
-    SOURCE_VERIFICATION_MODEL = state["source_verification_model"]
-    SOURCE_VERIFICATION_FALLBACK_MODEL = state.get("source_verification_fallback_model", "")
     for target, key in (
         (DIFFERENCES_JUDGE_MODEL_BY_PROVIDER, "judges"),
         (PRO_JUDGE_MODEL_BY_PROVIDER, "pro_judges"),
@@ -2079,8 +2027,6 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             apply_pro_judge_models(data.get("judge_models_pro"))
             apply_judge_families(data.get("judge_families"))
             apply_chat_memory_models(data.get("chat_memory_models"))
-            apply_source_verification_model(data.get("source_verification_model"))
-            apply_source_verification_fallback_model(data.get("source_verification_fallback_model"))
 
             if "consensus" in data:
                 ALLOWED_CONSENSUS_MODELS.clear()
@@ -2139,8 +2085,6 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 "judge_models": get_judge_models(),
                 "judge_models_pro": get_pro_judge_models(),
                 "chat_memory_models": get_chat_memory_models(),
-                "source_verification_model": get_source_verification_model(),
-                "source_verification_fallback_model": get_source_verification_fallback_model(),
             }
             for field_name, normalized_value in normalized_runtime_fields.items():
                 current_value = data.get(field_name)
@@ -2172,8 +2116,6 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 "judge_models_pro": get_pro_judge_models(),
                 "judge_families": get_judge_families(),
                 "chat_memory_models": get_chat_memory_models(),
-                "source_verification_model": get_source_verification_model(),
-                "source_verification_fallback_model": get_source_verification_fallback_model(),
                 "watch_models": {
                     tier: dict(models) for tier, models in WATCH_MODELS_BY_TIER.items()
                 },

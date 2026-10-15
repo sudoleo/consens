@@ -2,15 +2,14 @@
 import uuid
 import pytest
 from google.cloud.firestore_v1.document import DocumentReference
-from app.services import account_deletion, agent_files, persistence_guard, share_snapshots, source_check_repository
+from app.services import account_deletion, agent_files, persistence_guard, share_snapshots
 from app.services.chat_store import ChatStore
-from test_source_check_repository import make_plan
 from native_support import native_db, tree
 from test_file_storage_transactions import cloud_files, save
 
 
 AREAS = {"api_access", "user_subcollections", "chats", "waitlist_feedback", "owned_shares", "pending_results",
-    "answer_receipts", "source_check_jobs", "orphan_watches", "watch_indexes", "watch_brief", "notification_outbox",
+    "answer_receipts", "orphan_watches", "watch_indexes", "watch_brief", "notification_outbox",
     "persistence_guards", "email_follows", "profile", "firebase_auth"}
 
 
@@ -49,9 +48,6 @@ def seed(db, uid):
     ref = db.tracked("memory_edit_usage", persistence_guard._hash_uid(uid))
     ref.set({"used": 1})
     refs.append(ref)
-    repo = source_check_repository.SourceCheckRepository(db)
-    job = repo.create(uid=uid, run_key="cleanup", plan=make_plan(1))
-    refs.append(db.tracked(repo.collection, job["job_id"]))
     db.tracked("api_consensus_account_blocks", uid)
     db.tracked("account_deletion_jobs", uid)
     return refs

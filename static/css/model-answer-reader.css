@@ -436,54 +436,7 @@ body.answer-reader-modal { overflow: hidden; }
 }
 .answer-reader-dialog li.answer-reader-source-card .consensus-source-title { order: -1; color: var(--ink); line-height: 1.5; }
 .answer-reader-dialog li.answer-reader-source-card .consensus-source-host { margin: 2px 0 0; line-height: 1.4; }
-.answer-reader-dialog .source-check-card-status { margin-top: 3px; font-size: var(--font-size-xs); font-weight: 400; background: transparent; }
 .answer-reader-dialog .answer-reader-source-excerpt { width: 100%; margin-top: 8px; padding-top: 6px; }
-.answer-reader-dialog .source-verification { margin-bottom: 12px; }
-.answer-reader-dialog .source-verification-status { font-size: var(--font-size-sm); color: var(--ink); }
-.answer-reader-dialog .source-check-coverage { color: var(--ink-2); font-size: var(--font-size-xs); }
-.answer-reader-dialog .source-check-diagnostics { margin: 4px 0 12px; color: var(--ink-2); }
-.answer-reader-dialog .source-check-diagnostics > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0;
-  list-style: none;
-  color: var(--ink);
-}
-.answer-reader-dialog .source-check-diagnostics > summary::-webkit-details-marker { display: none; }
-.answer-reader-dialog .source-check-diagnostics > summary::after,
-.answer-reader-dialog .source-check-row-summary::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  flex: 0 0 6px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  margin-top: -3px;
-  color: var(--ink-2);
-}
-.answer-reader-dialog .source-check-diagnostics[open] > summary::after,
-.answer-reader-dialog .source-check-row[open] > summary::before {
-  content: '';
-  transform: rotate(225deg);
-  margin-top: 3px;
-}
-.answer-reader-dialog .source-verification-panel { gap: 20px; }
-.answer-reader-dialog .source-check-group { padding: 0 0 14px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; }
-.answer-reader-dialog .source-check-statement { padding: 0 0 8px; }
-.answer-reader-dialog .source-check-statement-label { font-size: var(--font-size-xs); color: var(--ink-2); }
-.answer-reader-dialog .source-check-statement > .source-check-claim { font-size: var(--font-size-sm); line-height: 1.6; color: var(--ink); }
-.answer-reader-dialog .source-check-statement .source-check-model-evidence { margin-top: 6px; font-size: var(--font-size-xs); line-height: 1.5; color: var(--ink-2); }
-.answer-reader-dialog .source-check-row { padding: 0; }
-.answer-reader-dialog .source-check-row-summary { grid-template-columns: minmax(0, 1fr) auto 10px; gap: 8px; min-height: 40px; padding: 0; }
-.answer-reader-dialog .source-check-row-summary::before { grid-column: 3; grid-row: 1; }
-.answer-reader-dialog .source-check-badges { grid-column: 2; grid-row: 1; margin: 0; }
-.answer-reader-dialog .source-check-domain { font-size: var(--font-size-ui); color: var(--ink); }
-.answer-reader-dialog .source-check-badge { font-size: var(--font-size-xs); }
-.answer-reader-dialog .source-check-badge.is-unchecked { font-style: normal; color: var(--ink-2); }
-.answer-reader-dialog .source-check-detail { color: var(--ink); }
 .answer-reader-dialog .diff-resolve { margin-top: 12px; }
 .answer-reader-dialog .diff-resolve-btn {
   display: inline-flex;
@@ -508,8 +461,7 @@ body.answer-reader-modal { overflow: hidden; }
 }
 .answer-reader-dialog .diff-resolve-btn[hidden] { display: none; }
 @media (pointer: coarse) {
-  .answer-reader-dialog :is(.source-check-row-summary,
-    .source-check-diagnostics > summary, .diff-resolve-btn) { min-height: 44px; }
+  .answer-reader-dialog .diff-resolve-btn { min-height: 44px; }
 }
 @media (max-width: 759px) {
   .answer-reader-dialog { --reader-inset: 16px; --reader-card-inset: 14px; }
@@ -728,7 +680,7 @@ body.comparison-layout-changing .input-section { transition: none; }
   color: var(--ink-2);
 }
 .model-answer-reader .answer-reader-inspector .diff-jump-link:is(:hover, :focus-visible) { background: transparent; color: var(--ink); }
-.answer-reader-inspector .diff-card-body > :is(.diff-resolve, .contradiction-source-check) { margin-top: 12px; }
+.answer-reader-inspector .diff-card-body > .diff-resolve { margin-top: 12px; }
 
 /* Agent comparisons: one status line, the findings, then a quiet footer. */
 .answer-reader-inspector .agent-evidence-panel { font-size: var(--font-size-xs); line-height: 1.6; }
@@ -784,15 +736,8 @@ body.comparison-layout-changing .input-section { transition: none; }
 .answer-reader-inspector .agent-evidence-footer .agent-evidence-context[open] > summary::after { transform: rotate(225deg); margin-top: 3px; }
 .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary:hover { color: var(--ink-2); }
 .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > p { margin: 4px 0 0; font-size: var(--font-size-xs); color: var(--ink-2); }
-.answer-reader-inspector .agent-evidence-footer .source-verification { margin: 0; padding: 0; border: 0; background: transparent; }
-.answer-reader-inspector .agent-evidence-footer .source-verification-status { margin: 0; font-size: var(--font-size-xs); font-weight: 400; color: var(--ink-2); }
-.answer-reader-inspector .agent-evidence-footer .source-check-coverage { margin: 2px 0 0; font-size: var(--font-size-xs); color: var(--ink-3); }
-/* A footer whose only content is a hidden source-check line ("nothing to
-   check") leaves no empty band below the findings. */
-.answer-reader-inspector .agent-evidence-footer:not(:has(> :not(.agent-source-check), .source-verification:not([hidden]))) { display: none; }
-/* Inside Differences, "results appear with each contradiction in Differences"
-   points at the panel the reader is already in. */
-.answer-reader-inspector .agent-source-check .source-verification-explanation { display: none; }
+/* An empty footer (no earlier answer version) leaves no band below the findings. */
+.answer-reader-inspector .agent-evidence-footer:empty { display: none; }
 
 @media (pointer: coarse) {
   .answer-reader-inspector details.agent-evidence-status > summary,

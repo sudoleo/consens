@@ -17,20 +17,10 @@
 // =====================================================================
 
 (function () {
-  const settings = window.App.userSettings;
-  // "Check sources" is an account setting, on unless switched off. Preserve
-  // the preference, but direct comparisons have no judges.
-  const checkSources = () => settings.get("check_sources") !== false;
   const isBeta = () => window.App.agentChat?.isSelected?.() === true;
   const runMode = () => window.App.runMode.effective();
   // The consensus pipeline runs unless the next message is a Compare.
   const pipelineEnabled = () => window.App.runMode.pipeline();
-  window.App.isSourceCheckEnabled = () => pipelineEnabled() && checkSources();
-
-  function setSourceCheckEnabled(enabled) {
-    if (pipelineEnabled()) settings.set("check_sources", !!enabled);
-    renderComposerMode();
-  }
 
   let agentModeStatus = "idle";
   // When a RunContext is selected, the run view is a projection of that frozen
@@ -336,20 +326,6 @@
       trigger.title = modeShown ? "Mode, files and options" : beta ? "Chat options" : "Add attachment";
       trigger.setAttribute("aria-label", trigger.title);
     }
-    // Check contradictions is a standing setting (Settings → Runs), not a
-    // per-question tool: it starts on and shows its result at the
-    // contradiction under the answer (agent-review.js), not as a switch in
-    // the composer that promises more than the run shows.
-    const sourcesEnabled = window.App.isSourceCheckEnabled();
-    const sourceSetting = document.getElementById("sourceCheckSwitch");
-    if (sourceSetting) {
-      sourceSetting.checked = sourcesEnabled;
-      sourceSetting.disabled = !enabled;
-      const title = enabled ? "" : "Compare has no consensus to check. Choose Consensus or Agent.";
-      sourceSetting.title = title;
-      const label = sourceSetting.closest("label");
-      if (label) label.title = title;
-    }
     const bar = document.getElementById("composerModeBar");
     if (!bar) return;
     // One rule for every mode and width: the tools belong to the start
@@ -438,7 +414,7 @@
 
     // Seit 2026-07-27 haengt die Einzelantworten-Disclosure NICHT mehr am
     // Agent Mode. Sie ist eine der drei Aufklapp-Flaechen in der Fusszeile
-    // ("Review differences · Compare answers · Verify sources") und war dort
+    // ("Review differences · Compare answers · Sources") und war dort
     // in zwei von
     // drei Faellen unsichtbar, obwohl sie das Wichtigste dahinter oeffnet:
     // worauf die Antwort beruht. Der Footer selbst wird erst zusammen mit
@@ -614,11 +590,6 @@
     window.App.runMode.set(this.value, { source: "settings" });
   });
   window.addEventListener("consensio:run-mode-change", onRunModeChange);
-  document.getElementById("sourceCheckSwitch")?.addEventListener("change", function () {
-    setSourceCheckEnabled(this.checked);
-  });
-  // The account's value arrived (server, another tab, sign-out).
-  settings.onChange("check_sources", detail => { if (detail.source !== "local") renderComposerMode(); });
   // Reuse the original controls, including their plan checks and file picker.
   document.getElementById("composerReasoningToggle")?.addEventListener("click", function (event) {
     if (isBeta()) {

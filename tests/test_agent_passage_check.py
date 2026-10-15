@@ -248,20 +248,6 @@ def test_answers_without_a_checked_text_keep_the_plain_judge_line(store):
     assert script.judge_calls and all("checking a synthesis against" in s for s, _ in script.judge_calls)
 
 
-def test_the_answer_of_a_checked_text_gets_the_usual_source_check(store):
-    script = Script([{**NEUTRAL, "check": CHECK}])
-    loop = make_loop(store, script, check_sources=True,
-                     messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": MESSAGE}])
-    list(loop.run())
-    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed"
-    review = saved["agent_review"]
-    assert review_is_bound(review, saved["consensus"], check_sources=True)
-    verification = review["checks"][0]["source_verification"]
-    assert verification["reason_code"] != "passage_checked"
-    assert verification["run_id"] == review["comparisons"][0]["id"]
-
-
 def test_copying_the_passage_into_the_task_is_refused_before_anything_is_paid(store):
     leaking = {**NEUTRAL, "context": "ChatGPT wrote: " + PASTED, "check": CHECK}
     script = Script([leaking, {**NEUTRAL, "check": CHECK}])

@@ -81,15 +81,13 @@ class Script:
         return Completion()
 
 
-def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None, delegation=False, models=None,
-              preferences=None):
+def make_loop(store, script, *, messages=None, delegation=False, models=None, preferences=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": delegation, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"), messages=messages or [{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=script.factory,
-        check_sources=check_sources, source_limits=source_limits,
         comparison_models=comparison_selection(models or {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=preferences)
     script.loop = loop
@@ -953,12 +951,12 @@ def test_compare_models_offers_only_question_context_and_depth():
 
 
 def test_the_orchestrator_sees_only_its_own_tools_and_the_app_runs_the_checks(store):
-    loop = make_loop(store, Script(), check_sources=True)
+    loop = make_loop(store, Script())
     assert list(loop.registry.tools)[:2] == ["compare_models", "check_text"]
     # The answer is the agent's plain text: no tool ends the steering.
     assert "answer" not in loop.registry.tools
-    assert not {"judge_answer", "check_contradictions"} & set(loop.registry.tools)
-    assert set(loop.app_registry.tools) == {"judge_answer", "check_contradictions"}
+    assert "judge_answer" not in loop.registry.tools
+    assert set(loop.app_registry.tools) == {"judge_answer"}
 
 
 def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store, quick_quorum):
@@ -1209,14 +1207,14 @@ def test_a_long_answer_without_research_or_comparison_is_one_streamed_unchecked_
     """Without its own research and without a comparison the agent's text is
     a direct answer: one call, streamed and saved, never checked."""
     script = Plan([{"text": LONG_REPLY}])
-    loop = make_loop(store, script, check_sources=True)
+    loop = make_loop(store, script)
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["assistant_response"] == LONG_REPLY
     assert orchestrator_steps(script) == ["completion:0"] and loop.comparison.direct
     # Nothing compared, nothing checked, no review, nothing sent back.
     assert "agent_review" not in saved and not script.prompts
-    assert not any(e.get("kind") == "tool" and e.get("name") in {"judge_answer", "check_contradictions"} for e in events)
+    assert not any(e.get("kind") == "tool" and e.get("name") == "judge_answer" for e in events)
     assert not any(m["content"].startswith("App rule") for m in loop.messages if m["role"] == "user")
     assert deltas(events) == LONG_REPLY
 

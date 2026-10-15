@@ -67,7 +67,7 @@
       box.dataset.consensusAnswer = markdown;
       window.injectMarkdown?.(output, markdown, context.evidenceSources);
       const note = document.createElement("p");
-      note.className = "source-check-refresh-notice response-incomplete-notice";
+      note.className = "response-incomplete-notice";
       note.setAttribute("role", "note");
       note.textContent = result?.error || "This answer is incomplete.";
       output.prepend(note);
@@ -115,16 +115,12 @@
     const differences = response?.querySelector(".consensus-differences p");
     if (!response || !body || !differences) return;
     const state = context.consensus;
-    const sourceReferences = state.sourceReferenceMode !== 'none'
-      && state.sourceVerification?.check_type !== 'contradiction_evidence';
+    const sourceReferences = state.sourceReferenceMode !== 'none';
     body.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
     const signature = JSON.stringify([context.runId, state.text || state.streamText || "",
       state.status === "streaming", state.differencesData, state.differences,
       state.error, context.evidenceSources, sourceReferences]);
-    if (!force && consensusProjection?.body === body && consensusProjection.signature === signature) {
-      projectSources(context);
-      return;
-    }
+    if (!force && consensusProjection?.body === body && consensusProjection.signature === signature) return;
     consensusProjection = { body, signature };
 
     window.resetConsensusInsights?.();
@@ -138,7 +134,6 @@
     if (!visible) {
       body.replaceChildren();
       differences.replaceChildren();
-      projectSources(context);
       return;
     }
 
@@ -149,7 +144,7 @@
         // R06: a stopped synthesis stays readable but is never presented as
         // the finished consensus of this run.
         const note = document.createElement("p");
-        note.className = "source-check-refresh-notice response-incomplete-notice";
+        note.className = "response-incomplete-notice";
         note.setAttribute("role", "note");
         note.textContent = String(state.error.message || "The consensus is incomplete.");
         body.prepend(note);
@@ -164,7 +159,6 @@
 
     if (!state.text) {
       differences.replaceChildren();
-      projectSources(context);
       return;
     }
 
@@ -191,17 +185,8 @@
         differences.replaceChildren();
       }
     }
-    projectSources(context);
   }
 
-  // A third-judge event never projects the answer, model responses or insights.
-  function projectSources(context) {
-    window.App.watchRunSources?.(context);
-    if (!registry.isVisible(context.runId)) return;
-    const verification = context.consensus.sourceVerification?.status === "pending"
-      && ["failed", "canceled"].includes(context.status) ? { status: "failed" } : context.consensus.sourceVerification;
-    window.App.sourceVerification?.renderCurrent(verification, {differencesData: context.consensus.differencesData});
-  }
 
   function syncCompatibilityState(context) {
     window.App.state.set("lastQuestion", context.question, "run");
@@ -439,7 +424,6 @@
     if (context.phase === "answers") return "Models answering";
     if (context.phase === "consensus") return "Writing consensus";
     if (context.phase === "differences") return "Checking differences";
-    if (context.phase === "sources") return "Checking sources";
     if (context.phase === "finalizing") return "Saving result";
     return "Running";
   }
@@ -498,6 +482,6 @@
     }
   });
 
-  window.App.runView = Object.freeze({ project, projectSources, ensureRunRow });
+  window.App.runView = Object.freeze({ project, ensureRunRow });
   registry.setProjector(project);
 })();

@@ -11,7 +11,7 @@ Dieses Modul wählt aus den vorhandenen Quellen
   Namen nennt ("bei Idealo und Geizhals"), führt der Name zu ihr.
 
 Bewusst keine Satz-für-Satz-Belege: die Synthese hängt Quellen dabei oft
-falsch an (docs/source-verification.md, seit 2026-09 abgeschaltet). Ein Name,
+falsch an (seit 2026-09 abgeschaltet, docs/codebase-map.md „Quellen in der Synthese“). Ein Name,
 der zu genau dieser Seite führt, ist Navigation, kein Beleg -- er kann nicht
 falsch zitieren. Keine Modell-Calls, keine Netzabrufe.
 """

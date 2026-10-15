@@ -126,7 +126,7 @@ def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, 
 
 
 def test_progress_arguments_are_bounded_and_published_only_after_validation(store):
-    loop = make_loop(store, Script(), check_sources=True)
+    loop = make_loop(store, Script())
     from app.services.llm.agent_client import AgentCompletion
     value = AgentCompletion()
     value.step_id = "completion:0"

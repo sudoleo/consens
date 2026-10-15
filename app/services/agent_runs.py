@@ -340,8 +340,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             review = (turn.to_dict() or {}).get("agent_review")
             if status == "succeeded" and review and review.get("comparisons"):
                 from app.services.agent_comparison import review_is_bound
-                if (not review_is_bound(review, completion.text,
-                        check_sources=(turn.to_dict() or {}).get("agent_settings", {}).get("check_sources", review.get("check_sources", False)))
+                if (not review_is_bound(review, completion.text)
                         or review.get("status") not in {"succeeded", "partial", "failed"}):
                     raise TurnStatusConflict("The exact answer version has not been reviewed")
             daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"]) if data.get("quota_day") else None
@@ -405,14 +404,6 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                             for read in review.get("read_sources") or []]
                         if not review["read_sources"]:
                             review.pop("read_sources")
-                        for version in [review, *review.get("versions", [])]:
-                            for check in version.get("checks", []):
-                                verification = check.get("source_verification")
-                                if verification and verification.get("status") in {"queued", "running", "pending"}:
-                                    verification.update(status="failed", reason_code="cancelled" if status == "cancelled" else "worker_interrupted")
-                                    for finding in verification.get("findings", []):
-                                        if finding.get("state") == "pending":
-                                            finding.update(state="unavailable", reason_code=verification["reason_code"], checked=False)
                         patch["agent_review"] = review
                 tx.update(turn_ref, patch)
                 if pick:

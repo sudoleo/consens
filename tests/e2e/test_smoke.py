@@ -1118,8 +1118,8 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert panel.evaluate("el => el.open") is False, "Differences starten zugeklappt"
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_hidden()
 
-    # Differences and Answers share the real Reader dialog. The new V4 run
-    # must not fabricate a legacy source tab or source-verification list.
+    # Differences and Answers share the real Reader dialog. The run must not
+    # fabricate a source list it has no sources for.
     expect(app_page.locator('#consensusSourcesList .consensus-source-item')).to_have_count(0)
     reader = app_page.locator('#modelAnswerReader')
     model_answers_toggle.click()

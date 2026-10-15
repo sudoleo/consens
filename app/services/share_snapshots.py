@@ -473,8 +473,6 @@ def sanitize_differences_data(data):
                 "models": _sanitize_str_list(position.get("models"), 40, 12),
                 "quote": _clip(position.get("quote"), 500),
             })
-            if isinstance(position.get("quote_models"), list):
-                positions[-1]["quote_models"] = _sanitize_str_list(position["quote_models"], 40, 12)
         if not claim_text or not positions:
             continue
         entry = {
@@ -485,15 +483,6 @@ def sanitize_differences_data(data):
             "positions": positions,
             "verify": _clip(diff.get("verify"), 500),
         }
-        factual = diff.get("factual_check")
-        if isinstance(factual, dict):
-            entry["factual_check"] = {
-                "checkable": factual.get("checkable") is True,
-                "question": _clip(factual.get("question"), 500),
-                "reason": _clip(factual.get("reason"), 500),
-            }
-        if type(diff.get("consensus_anchor_validated")) is bool:
-            entry["consensus_anchor_validated"] = diff["consensus_anchor_validated"]
         sentence_id = diff.get("sentence_id")
         occurrence = diff.get("anchor_occurrence")
         if isinstance(sentence_id, int) and not isinstance(sentence_id, bool) and 1 <= sentence_id <= 80:
@@ -601,8 +590,7 @@ def _sanitize_pending_model_responses(model_responses):
 
 def build_pending_result(uid, question, consensus_md, differences_data,
                          differences_text, model_sources, included_providers,
-                         model_labels, consensus_model, model_responses=None, source_verification=None,
-                         answer_provenance=None):
+                         model_labels, consensus_model, model_responses=None, answer_provenance=None):
     """Baut das pending_results-Dokument; None, wenn Pflichtfelder fehlen."""
     question = _clip(question, MAX_QUESTION_CHARS)
     consensus_md = str(consensus_md or "").strip()
@@ -611,13 +599,11 @@ def build_pending_result(uid, question, consensus_md, differences_data,
     if len(consensus_md) > MAX_CONSENSUS_CHARS:
         consensus_md = consensus_md[:MAX_CONSENSUS_CHARS].rstrip() + "\n\n*[truncated]*"
 
-    from app.services.source_verification import stored_verification
     payload = {
         "schema_version": 1,
         "owner_uid": uid,
         "question": question,
         "consensus_md": consensus_md,
-        "source_verification": stored_verification(source_verification, consensus_md),
         "differences_data": sanitize_differences_data(differences_data),
         "differences_text": _clip(differences_text, MAX_DIFFERENCES_TEXT_CHARS),
         "sources": sanitize_sources(model_sources),
@@ -662,15 +648,14 @@ def save_pending_result(payload, db=None):
 def persist_pending_result(uid, question, consensus_md, differences_data,
                            differences_text, model_sources, included_providers,
                            model_labels, consensus_model, model_responses=None,
-                           db=None, source_verification=None, answer_provenance=None):
+                           db=None, answer_provenance=None):
     """Best-effort-Persistenz aus /consensus heraus: Fehler dürfen den
     Konsens-Stream nie beeinträchtigen, daher wird hier alles geschluckt."""
     try:
         payload = build_pending_result(
             uid, question, consensus_md, differences_data, differences_text,
             model_sources, included_providers, model_labels, consensus_model,
-            model_responses, source_verification=source_verification,
-            answer_provenance=answer_provenance,
+            model_responses, answer_provenance=answer_provenance,
         )
         if payload is None:
             return None
@@ -864,7 +849,6 @@ def _build_share_document(
         "status": "active",
         "question": question,
         "consensus_md": consensus_md,
-        "source_verification": payload.get("source_verification"),
         "differences_data": payload.get("differences_data"),
         "differences_text": payload.get("differences_text") or "",
         "sources": sources,
@@ -938,7 +922,6 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
         model_labels,
         plan.get("consensus_model"),
         model_responses,
-        source_verification=result.get("source_verification"),
     )
     if payload is None:
         raise ShareError("bad_result", "The run has no publishable result.")
@@ -980,9 +963,6 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
                 "visibility": "public",
             }
 
-        source_retention = _prepare_source_check_retention(
-            db, transaction, uid, share_doc.get('source_verification'), share_id)
-
         if consume_quota is not None:
             if not consume_quota():
                 raise ShareError(
@@ -997,8 +977,6 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
                 limit=SHARE_DAILY_LIMIT,
             )
         transaction.set(share_ref, share_doc)
-        if source_retention:
-            transaction.update(*source_retention)
         return {
             "share_id": share_id,
             "slug": share_doc["slug"],
@@ -1007,25 +985,6 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
         }
 
     return _run_transaction(db, publish)
-
-
-def _prepare_source_check_retention(db, transaction, uid, snapshot, share_id):
-    """Read before quota/share writes; commit retention with publication itself."""
-    if not isinstance(snapshot, dict) or not snapshot.get('job_id'):
-        return None
-    from app.services.source_check_repository import SourceCheckRepository
-    ref = SourceCheckRepository(db).ref(snapshot['job_id'])
-    snap = ref.get(transaction=transaction)
-    if not snap.exists:
-        raise ShareError('bad_result', 'The source check is no longer available.')
-    job = snap.to_dict()
-    if job.get('uid') != uid or job.get('status') == 'deleting':
-        raise ShareError('bad_result', 'The source check is no longer available.')
-    references = list(job.get('references') or [])
-    path = f'{SHARES_COLLECTION}/{share_id}'
-    if path not in references:
-        references.append(path)
-    return ref, {'references': references, 'cleanup_at': _utcnow() + timedelta(days=30)}
 
 
 def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
@@ -1113,9 +1072,6 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
                     "visibility": visibility,
                 }
 
-        source_retention = _prepare_source_check_retention(
-            db, transaction, uid, share_doc.get('source_verification'), share_id)
-
         if consume_quota is not None:
             if not consume_quota():
                 raise ShareError(
@@ -1133,8 +1089,6 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
         if visibility == "public":
             backlinks["share_id"] = share_id
         transaction.set(share_ref, share_doc)
-        if source_retention:
-            transaction.update(*source_retention)
         transaction.update(pending_ref, backlinks)
         return {
             "share_id": share_id,
@@ -1154,9 +1108,7 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
 def clean_share_sources(share_id, *, db=None, check_expired=False, apply=True):
     """Google-Weiterleitungen einer Share durch ihr Ziel ersetzen (seit 2026-10-12).
 
-    Aufgelöste Adressen ersetzen Quellen und die Dokumente der
-    Quellenprüfung gleichermaßen, damit beide zusammenpassen. Mit
-    ``check_expired`` fallen eindeutig abgelaufene Weiterleitungen (404/410)
+    Mit ``check_expired`` fallen eindeutig abgelaufene Weiterleitungen (404/410)
     aus der Quellenliste; ihre Nummern landen in ``expired_source_ids``,
     damit alte ``[S3]``-Verweise beim Rendern wegfallen. Gibt
     ``{"redirects", "resolved", "expired", "changed"}`` zurück.
@@ -1170,8 +1122,7 @@ def clean_share_sources(share_id, *, db=None, check_expired=False, apply=True):
     stats = {"redirects": 0, "resolved": 0, "expired": 0, "changed": False}
     if not data:
         return stats
-    fields = ("sources", "source_verification")
-    redirects = set(source_redirects.collect_redirects([data.get(field) for field in fields]))
+    redirects = set(source_redirects.collect_redirects([data.get("sources")]))
     stats["redirects"] = len(redirects)
     if not redirects:
         return stats
@@ -1185,9 +1136,6 @@ def clean_share_sources(share_id, *, db=None, check_expired=False, apply=True):
         updates["sources"] = sources
     if removed:
         updates["expired_source_ids"] = list(dict.fromkeys([*_expired_ids(data), *removed]))
-    verification, moved = source_redirects.replace_urls(data.get("source_verification"), mapping)
-    if moved:
-        updates["source_verification"] = verification
     stats["changed"] = bool(updates)
     if updates and apply:
         ref.update(updates)
@@ -2063,8 +2011,6 @@ def _watch_version_payload(run_id, data):
         "run_id": str(run_id or ""),
         "ts": ts,
         "consensus_md": _clip(data.get("consensus_md"), MAX_CONSENSUS_CHARS),
-        # Older Watch runs accidentally inherited the chat-only source check.
-        "source_verification": None,
         "differences_data": sanitize_differences_data(data.get("differences_data")),
         "differences_text": _clip(data.get("differences_text"), MAX_DIFFERENCES_TEXT_CHARS),
         "sources": sanitize_sources(data.get("sources")),
@@ -2124,7 +2070,6 @@ def public_share_payload(data):
         "slug": data.get("slug") or "",
         "question": data.get("question") or "",
         "consensus_md": data.get("consensus_md") or "",
-        "source_verification": data.get("source_verification"),
         "differences_data": data.get("differences_data"),
         "differences_text": data.get("differences_text") or "",
         "sources": data.get("sources") or [],

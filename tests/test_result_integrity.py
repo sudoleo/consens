@@ -285,7 +285,7 @@ def test_complete_streaming_synthesis_reports_complete(api, monkeypatch):
         {"type": "final", "text": "D", "data": {"agreement": {"score": 1}}}]))
     ids = {"openai": _issue(receipts, "OpenAI", "One"), "mistral": _issue(receipts, "Mistral", "Two")}
     final = _final(client.post("/consensus", headers=AUTH, json=_payload(
-        ids, stream=True, chat_id=CHAT_ID, turn_id=TURN_ID, check_sources=False)))
+        ids, stream=True, chat_id=CHAT_ID, turn_id=TURN_ID)))
     assert final["consensus_completion"] == "complete"
     assert final["chat_turn_state"] == "completed"
 

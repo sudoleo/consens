@@ -194,7 +194,7 @@ def review_issues(comparison, data):
     return issues
 
 
-def review_is_bound(review, text, *, check_sources=None):
+def review_is_bound(review, text):
     digest = answer_hash(text)
     comparisons = review.get("comparisons") or []
     checks = review.get("checks") or []
@@ -206,10 +206,6 @@ def review_is_bound(review, text, *, check_sources=None):
                 or check.get("basis_hash") != basis or comparison.get("basis_hash") != basis
                 or check.get("status") not in {"succeeded", "partial", "failed"}):
             return False
-        if (check_sources if check_sources is not None else review.get("check_sources", False)):
-            from app.services.agent_contradictions import source_check_is_bound
-            if not source_check_is_bound(check, comparison, digest):
-                return False
     return True
 
 
@@ -534,8 +530,7 @@ def comparison_selection(value=None):
 
 
 class ComparisonTools:
-    def __init__(self, loop, models, *, check_sources=False, source_limits=None, preferences=None,
-                 memory_changes=False, read_sources=False):
+    def __init__(self, loop, models, *, preferences=None, memory_changes=False, read_sources=False):
         self.loop, self.models = loop, models
         # The agent writes the answer itself (agent_answer_mode): no answer
         # tool, full answers and source excerpts in every comparison result.
@@ -578,17 +573,12 @@ class ComparisonTools:
                    if self.free else
                    ReadOnlyTool("compare_models", "Ask the user's selected models the same neutral task and get their independent answers. Use it when independent answers add value; afterwards you see the answers.", arguments, self.compare))
         # The orchestrator's tools, in a fixed order (prompt cache). The app
-        # runs the answer check and the source check of contradictions itself
-        # once the answer is written (app_tools, DelegationLoop._finish_review).
+        # runs the answer check itself once the answer is written (app_tools,
+        # DelegationLoop._finish_review).
         self.tools = [compare,
                       ReadOnlyTool("check_text", "Check a text the user pasted from elsewhere, such as another AI's answer: the models answer the question it answers without seeing it, and the app checks every sentence of the text against their answers. Never for the user's own question or request.", check_args, self.check_text)]
         # The answer is the agent's own text: no tool ends the steering.
         self.app_tools = [ReadOnlyTool("judge_answer", "Check the fixed answer with the Differences and Coverage judges.", JudgeArgs, self.judge)]
-        self.contradictions = None
-        if check_sources:
-            from app.services.agent_contradictions import ContradictionChecks
-            self.contradictions = ContradictionChecks(self, JudgeArgs, source_limits)
-            self.app_tools.append(self.contradictions.tool)
 
     @property
     def free(self):
@@ -609,8 +599,7 @@ class ComparisonTools:
         default = "direct" if not self.comparisons else (self.review or {}).get("status", "required")
         data = {"version": 1, "status": status or default,
                 "answer_hash": answer_hash(self.text), "answer_version": len(self.versions),
-                "comparisons": self.comparisons, "versions": self.versions,
-                "check_sources": self.contradictions is not None}
+                "comparisons": self.comparisons, "versions": self.versions}
         if self.review:
             data["checks"] = self.review["checks"]
         if self.passage:
@@ -1355,9 +1344,8 @@ class ComparisonTools:
             raise ValueError("The answer has not been written yet.")
         if self.review is not None:
             if self.review["status"] in {"succeeded", "partial", "failed"}:
-                self.finalized = not self.contradictions or self.contradictions.complete()
-                return {"status": self.review["status"], "finalized": self.finalized,
-                        "next_tool": None if self.finalized else "check_contradictions"}
+                self.finalized = True
+                return {"status": self.review["status"], "finalized": True}
             raise ValueError("The fixed answer's review has not completed.")
         self.finish_comparisons()
         # Pages the orchestrator read: part of the Coverage judge's basis as
@@ -1408,8 +1396,5 @@ class ComparisonTools:
             self.versions[-1].update(status=self.review["status"], checks=self.review["checks"])
             self.checkpoint()
         self.finalized = True
-        if self.contradictions and not self.contradictions.complete():
-            self.finalized = False
         return {"status": self.review["status"], "answer_hash": answer_hash(self.text),
-                "checks": self.review["checks"], "finalized": self.finalized,
-                "next_tool": "check_contradictions" if not self.finalized and self.contradictions else None}
+                "checks": self.review["checks"], "finalized": True}

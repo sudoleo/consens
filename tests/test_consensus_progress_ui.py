@@ -345,7 +345,7 @@ def test_archived_turns_use_the_same_drawer_row_as_the_live_answer():
     assert drawer_classes is not None
     assert {"consensus-tab", "consensus-evidence-action"} <= set(drawer_classes[1].split())
     assert '"Review differences",\n          "Differences",' in history_block
-    assert 'addDrawer("Verify sources", "Sources", turnSources.length' in history_block
+    assert 'addDrawer("Sources", "Sources", turnSources.length' in history_block
     assert 'addDrawer("Compare answers", "Answers", usableAnswers.length' in history_block
     # Der Verlauf teilt sich den DOM mit dem Live-Renderbaum: keine ID darf
     # dort ein zweites Mal auftauchen.

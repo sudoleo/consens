@@ -11,6 +11,7 @@ import socket
 import time
 import zlib
 from collections import OrderedDict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Lock, BoundedSemaphore
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -21,6 +22,14 @@ from bs4 import BeautifulSoup
 
 _cache = OrderedDict()
 _inflight = {}
+
+
+@dataclass(frozen=True)
+class FetchLimits:
+    """Bounds of one document fetch; the cache keeps a page this long."""
+    max_bytes: int = 400000
+    fetch_seconds: int = 5
+    cache_seconds: int = 3600
 
 
 def fetch_failure_code(exc):

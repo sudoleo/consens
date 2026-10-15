@@ -1,7 +1,7 @@
 """String contracts for the source pills in chat prose (2026-10-01).
 
 Behaviour is covered in tests/js/agent-citations.test.mjs and
-tests/js/source-teaser-check.test.mjs; these checks guard the parts a DOM test
+tests/js/source-teaser.test.mjs; these checks guard the parts a DOM test
 cannot see: the stylesheet and the privacy boundary of the favicon.
 """
 

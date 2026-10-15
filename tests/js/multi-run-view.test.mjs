@@ -130,56 +130,6 @@ function createRunning(registry, question) {
 }
 
 describe("selected RunContext projection", () => {
-  it('continues source hydration after consensus succeeds without projecting a hidden run', () => {
-    const {registry, window, document, dom} = boot({realHistory: true});
-    const observe = vi.fn(() => vi.fn());
-    window.App.sourceVerification = {observe, renderCurrent: vi.fn()};
-    const run = createRunning(registry, 'First');
-    const queued = {job_id: 'job-first', status: 'queued', answer_version: 'first'};
-    run.consensus.status = 'complete'; run.consensus.text = 'Consensus First';
-    run.consensus.sourceVerification = queued;
-    run.consensus.completedTurn = {source_verification: queued};
-    run.consensus.bookmarkPayload = {};
-    run.completedBasis = {bookmarkId: run.bookmark.id, currentTurn: run.consensus.completedTurn};
-    registry.setStatus(run.runId, 'succeeded');
-    expect(observe).toHaveBeenCalledOnce();
-    const binding = observe.mock.calls[0][0];
-    expect(binding.isActive()).toBe(true);
-    const second = createRunning(registry, 'Second');
-    second.consensus.status = 'complete'; second.consensus.text = 'Consensus Second';
-    registry.renderVisible();
-    const before = document.getElementById('consensusAnswerBody').textContent;
-    const complete = {...queued, status: 'complete', findings: [{sentence_id: 1, source_id: 'S1'}]};
-    binding.onUpdate(complete);
-    expect(run.consensus.completedTurn.source_verification).toBe(complete);
-    expect(run.consensus.bookmarkPayload.sourceVerification).toBe(complete);
-    expect(run.completedBasis.currentTurn.source_verification).toEqual(complete);
-    expect(document.getElementById('consensusAnswerBody').textContent).toBe(before);
-    registry.show(run.runId);
-    expect(observe).toHaveBeenCalledOnce();
-    registry.clearAll();
-    expect(binding.isActive()).toBe(false);
-    dom.window.close();
-  });
-  it('hydrates a saved terminal source stub for a historical turn only while its body exists', () => {
-    const {window, document, dom} = boot({realHistory: true});
-    const observe = vi.fn(() => vi.fn()), render = vi.fn();
-    window.App.sourceVerification = {observe, render};
-    const turn = {turn_id: 'old', question: 'Old', consensus: 'Saved consensus',
-      source_verification: {job_id: 'old-job', status: 'complete', findings: []}};
-    window.App.followup.renderStoredTurn(turn);
-    expect(observe).toHaveBeenCalledOnce();
-    const binding = observe.mock.calls[0][0];
-    expect(binding.snapshot.status).toBe('complete');
-    expect(binding.isActive()).toBe(true);
-    const hydrated = {...turn.source_verification, findings: [{sentence_id: 1, source_id: 'S1'}]};
-    binding.onUpdate(hydrated);
-    expect(turn.source_verification).toBe(hydrated);
-    expect(render.mock.calls.at(-1)[2]).toBe(hydrated);
-    document.querySelector('.thread-history-turn').remove();
-    expect(binding.isActive()).toBe(false);
-    dom.window.close();
-  });
   it('gives an archived Agent turn one evidence row and no second Sources footer', () => {
     const {window, document, dom} = boot({realHistory: true});
     for (const src of ['static/js/agent-review.js']) {
@@ -188,7 +138,6 @@ describe("selected RunContext projection", () => {
       document.body.append(script);
     }
     window.App.answerReader = {openContext: vi.fn(), refreshContext: vi.fn(), registerTurn: vi.fn()};
-    window.App.sourceVerification = {observe: vi.fn(() => vi.fn()), render: vi.fn()};
     const text = 'Checked answer.';
     window.App.followup.renderStoredTurn({turn_id: 'agent-old', question: 'Q', consensus: text, execution_mode: 'agent',
       sources: [{url: 'https://example.org/a', title: 'A'}],
@@ -282,11 +231,9 @@ describe("selected RunContext projection", () => {
     dom.window.close();
   });
 
-  it("publishes insights while sources are pending and preserves their DOM through source and final events", () => {
+  it("publishes insights before the run finishes and preserves their DOM through the final event", () => {
     const { registry, window, document, dom } = boot();
     const run = createRunning(registry, "Independent judges");
-    const sourceRender = vi.fn();
-    window.App.sourceVerification = { renderCurrent: sourceRender };
     window.renderConsensusInsights = vi.fn(() => {
       document.getElementById("consensusAnswerBody").innerHTML = '<span class="cx-claim">Consensus claim</span>';
       document.querySelector(".consensus-differences p").innerHTML = '<span class="diff-card">Original difference</span>';
@@ -295,27 +242,17 @@ describe("selected RunContext projection", () => {
     registry.update(run.runId, context => {
       Object.assign(context.consensus, { text: "Consensus claim", status: "complete",
         differences: "Original difference", differencesData: { agreement: { score: 88 } },
-        differencesComplete: true, sourceVerification: { status: "pending" } });
-      context.phase = "sources";
+        differencesComplete: true });
+      context.phase = "finalizing";
     });
     const claim = document.querySelector(".cx-claim"), diff = document.querySelector(".diff-card");
     expect(claim).not.toBeNull(); expect(diff).not.toBeNull();
     expect(window.App.consensusPipeline.onConsensusEnd).toHaveBeenCalled();
-    expect(sourceRender).toHaveBeenLastCalledWith({ status: "pending" }, {differencesData: run.consensus.differencesData});
     const renders = window.renderConsensusInsights.mock.calls.length;
-    const resets = window.resetConsensusInsights.mock.calls.length;
-    run.consensus.sourceVerification = { status: "complete", findings: [] };
-    window.App.runView.projectSources(run);
-    expect(window.resetConsensusInsights).toHaveBeenCalledTimes(resets);
     registry.setStatus(run.runId, "succeeded");
     expect(window.renderConsensusInsights).toHaveBeenCalledTimes(renders);
     expect(document.querySelector(".cx-claim")).toBe(claim);
     expect(document.querySelector(".diff-card")).toBe(diff);
-    const other = createRunning(registry, "Other");
-    sourceRender.mockClear();
-    window.App.runView.projectSources(run);
-    expect(sourceRender).not.toHaveBeenCalled();
-    expect(registry.visible()).toBe(other);
     dom.window.close();
   });
   it("keeps late background updates out of the visible DOM and restores either run from its row", () => {

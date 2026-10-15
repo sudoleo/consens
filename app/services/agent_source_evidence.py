@@ -30,7 +30,7 @@ from urllib.parse import urlsplit
 from app.core.observability import record_metric, safe_exception
 from app.services.llm.citations import citation_end
 from app.services.source_catalog import canonical_source_url
-from app.services.source_documents import fetch_document, select_passages
+from app.services.source_documents import FetchLimits, fetch_document, select_passages
 
 # Excerpts and supported claims of all sources of one comparison result together:
 # about 4000 input tokens, roughly one cent at 3 $ per million input tokens.
@@ -363,8 +363,7 @@ class SourceEvidence:
                 if self._closed or url in self._pages or len(self._pages) >= PAGE_FETCHES_PER_TURN:
                     continue
                 if self._limits is None:
-                    from app.services.source_verification import Limits
-                    self._limits = Limits.configured()
+                    self._limits = FetchLimits()
                 self._pages[url] = _pages.submit(self._fetch, url, self._limits)
 
     def collect(self, comparisons, *, wait_seconds=PAGE_WAIT_SECONDS, check=None):

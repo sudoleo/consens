@@ -7,8 +7,7 @@ resolved in the background right after it is created
 (``share_snapshots.schedule_share_cleanup``); this backfills existing ones with
 ``share_snapshots.clean_share_sources(check_expired=True)``:
 
-* a redirect that still resolves becomes the page it points to, in the
-  sources and in the source check's documents alike;
+* a redirect that still resolves becomes the page it points to;
 * a redirect Google no longer knows (404/410) is removed from the sources and
   its number kept in ``expired_source_ids``, so old ``[S3]`` references are
   dropped instead of shown as bare text.

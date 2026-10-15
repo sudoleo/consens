@@ -948,7 +948,6 @@
 
           // Sichtbar wird das Panel erst ueber den Chip; hier zaehlt nur, dass
           // es Inhalt hat, damit der Chip erscheinen kann.
-          window.App?.sourceVerification?.applySourceList?.(listEl, document.getElementById('consensusAnswerBody'));
           window.App?.consensusPipeline?.renderProvenance?.();
         }
 

@@ -697,8 +697,6 @@ def _replay_completed_chat_turn(
         "chat_replayed": True,
     }
     result_id = turn.get("result_id")
-    if turn.get("source_verification") is not None:
-        payload["source_verification"] = turn["source_verification"]
     if isinstance(result_id, str) and result_id:
         payload["result_id"] = result_id
 
@@ -711,8 +709,6 @@ def _replay_completed_chat_turn(
         yield sse_pack("differences.final", {
             "differences": payload["differences"], "differences_data": payload["differences_data"],
         })
-        if payload.get("source_verification"):
-            yield sse_pack("sources.final", {"source_verification": payload["source_verification"]})
         yield sse_pack("final", payload)
 
     return StreamingResponse(
@@ -1395,7 +1391,6 @@ def consensus(request: Request, data: dict = Body(...)):
     # sonst unbegrenzte Eingaben gegen den Developer-Key (Kostenleck).
     answer_char_limit = cfg.get_consensus_answer_char_limit()
     excluded_models = data.get("excluded_models", [])
-    check_sources = data.get("check_sources", True) is not False
     if not isinstance(excluded_models, list):
         excluded_models = []
     excluded_models = list({normalize_model_name(model) for model in excluded_models if model})
@@ -1636,23 +1631,6 @@ def consensus(request: Request, data: dict = Body(...)):
         ]
     raw_turn_sources = canonical_sources
     sanitized_turn_sources = sanitize_sources(raw_turn_sources)
-    from app.services.source_verification import source_records
-    verification_sources = source_records(raw_turn_sources)
-    source_verification = None
-
-    def enqueue_verification(**options):
-        from app.services.source_check_jobs import submit_advisory
-        references = []
-        if validated_chat_turn_ids:
-            references.append(f"users/{uid}/chats/{validated_chat_turn_ids[0]}")
-        bookmark_id = str(data.get('bookmarkId') or '')
-        if re.fullmatch(r'[A-Za-z0-9_-]{1,160}', bookmark_id):
-            references.append(f'users/{uid}/bookmarks/{bookmark_id}')
-        context = dict(uid=uid, run_key=str(data.get('usage_run_key') or
-            (':'.join(validated_chat_turn_ids) if validated_chat_turn_ids else hashlib.sha256(
-                (question + options['consensus'] + str(time.time_ns())).encode()).hexdigest())),
-            own_keys=use_own_keys, references=references, origin='interactive')
-        return submit_advisory(**options, context=context)
 
     def record_run_stats(differences_data):
         # Anonyme Differences-Telemetrie (keine Texte, keine UID — siehe
@@ -1689,7 +1667,6 @@ def consensus(request: Request, data: dict = Body(...)):
             model_labels=model_labels,
             consensus_model=consensus_model,
             model_responses=included_answers,
-            source_verification=source_verification,
             answer_provenance=result_provenance,
         )
 
@@ -1714,7 +1691,6 @@ def consensus(request: Request, data: dict = Body(...)):
                 differences_data=differences_data,
                 sources=sanitized_turn_sources,
                 result_id=result_id,
-                source_verification=source_verification,
             )
             return True
         except Exception as exc:
@@ -1766,7 +1742,6 @@ def consensus(request: Request, data: dict = Body(...)):
             "differences": differences_text,
             "differences_data": differences_data,
             "sources": sanitized_turn_sources,
-            "source_verification": source_verification,
             "included_models": [
                 f"{provider}: {allowed_model_labels.get(provider, provider)}"
                 for provider in included_answers
@@ -1881,7 +1856,6 @@ def consensus(request: Request, data: dict = Body(...)):
 
         @analysis_budgeted
         def consensus_event_source():
-            nonlocal source_verification
             consensus_text = ""
             consensus_failed = False
             consensus_state = completion.COMPLETE
@@ -1891,8 +1865,8 @@ def consensus(request: Request, data: dict = Body(...)):
             # Ab der fertigen Konsensantwort gehoert der Lauf dem Nutzer: ein
             # Abbruch danach (Tab im Hintergrund, Funkloch, 30-s-Rueckstau im
             # SSE-Pump) persistiert die Antwort, statt den Turn scheitern zu
-            # lassen. analysis_settled sagt, ob differences_* und
-            # source_verification schon ihren endgueltigen Stand haben.
+            # lassen. analysis_settled sagt, ob differences_* schon ihren
+            # endgueltigen Stand haben.
             answer_committed = False
             analysis_settled = False
             differences_complete = False
@@ -1902,13 +1876,10 @@ def consensus(request: Request, data: dict = Body(...)):
                 # Widerspruchskarten, nie die Antwort. Derselbe Endstand fuer
                 # beide Wege, damit ein abgebrochener Lauf nach dem Reload wie
                 # eine gescheiterte Analyse aussieht (bekannter UI-Zustand).
-                nonlocal differences_text, differences_data, source_verification, analysis_settled
+                nonlocal differences_text, differences_data, analysis_settled
                 if not differences_complete:
                     differences_text = ""
                     differences_data = None
-                if check_sources:
-                    from app.services.consensus_pipeline import _differences_check_failed
-                    source_verification = _differences_check_failed(consensus_text)
                 analysis_settled = True
 
             # Reasoning-Marker der Engines gedrosselt weiterleiten (max. alle
@@ -1967,9 +1938,6 @@ def consensus(request: Request, data: dict = Body(...)):
                     # erase an answer the user already received: from here
                     # on a closed stream persists the run (see GeneratorExit
                     # below) instead of failing the turn.
-                    if not check_sources:
-                        from app.services.source_check_jobs import disabled_snapshot
-                        source_verification = disabled_snapshot(consensus_text)
                     answer_committed = True
                     yield sse_pack("consensus.final", {"text": consensus_text})
                     last_reasoning_at = None
@@ -1990,10 +1958,7 @@ def consensus(request: Request, data: dict = Body(...)):
                             resolved_question=resolved_question,
                         )
                         for item in differences_stream:
-                            if item.get("type") == "source_verification":
-                                source_verification = item["data"]
-                                yield sse_pack("sources.final", {"source_verification": source_verification})
-                            elif item.get("type") == "delta":
+                            if item.get("type") == "delta":
                                 # Das Frontend rendert diese Deltas nicht mehr (die Engine
                                 # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
                                 text = coerce_text(item.get("text"))
@@ -2011,24 +1976,7 @@ def consensus(request: Request, data: dict = Body(...)):
                                     "differences": differences_text,
                                     "differences_data": differences_data,
                                 })
-                        # The accepted plan is based on the successful structured
-                        # Differences result. Fetches and the evidence judge run
-                        # in durable workers, after the answer was delivered.
-                        if check_sources:
-                            if differences_complete and isinstance(differences_data, dict):
-                                source_verification = enqueue_verification(
-                                    question=question, consensus=consensus_text,
-                                    sources=verification_sources, keys=api_keys,
-                                    resolved_question=resolved_question,
-                                    differences_data=differences_data,
-                                    model_answers=included_by_provider, model_sources=model_sources,
-                                )
-                            else:
-                                from app.services.consensus_pipeline import _differences_check_failed
-                                source_verification = _differences_check_failed(consensus_text)
                         analysis_settled = True
-                        if check_sources:
-                            yield sse_pack("sources.final", {"source_verification": source_verification})
                     except GeneratorExit:
                         raise
                     except Exception as exc:
@@ -2045,8 +1993,6 @@ def consensus(request: Request, data: dict = Body(...)):
                             yield sse_pack("differences.final", {
                                 "differences": "", "differences_data": None, "error": True,
                             })
-                        if check_sources:
-                            yield sse_pack("sources.final", {"source_verification": source_verification})
             except GeneratorExit:
                 if not answer_committed:
                     consensus_state = completion.CANCELLED
@@ -2095,7 +2041,6 @@ def consensus(request: Request, data: dict = Body(...)):
                 "consensus_completion": consensus_state,
                 "differences": differences_text,
                 "differences_data": differences_data,
-                "source_verification": source_verification,
             }
             if stream_failed and consensus_state == completion.COMPLETE:
                 payload["consensus_completion"] = completion.ERROR
@@ -2146,15 +2091,11 @@ def consensus(request: Request, data: dict = Body(...)):
                 allow_consensus_error=True,
                 skipped_differences_text=DIFFERENCES_SKIPPED_TEXT,
                 require_differences_data=False,
-                verification_sources=verification_sources,
-                check_sources=check_sources,
-                verification_submit=enqueue_verification,
             )
         consensus_answer = analysis.consensus
         consensus_failed = is_consensus_error_text(consensus_answer)
         differences = analysis.differences_text
         differences_data = analysis.differences_data
-        source_verification = analysis.source_verification
     except Exception as exc:
         if booking is not None:
             # Calls that already ran are spent even though the analysis failed.
@@ -2185,7 +2126,6 @@ def consensus(request: Request, data: dict = Body(...)):
         ),
         "differences": differences,
         "differences_data": differences_data,
-        "source_verification": source_verification,
     }
     if incomplete:
         response.update(_incomplete_consensus_fields(completion.TOKEN_LIMIT))

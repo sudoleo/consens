@@ -678,23 +678,6 @@ class ShareFlowTests(unittest.TestCase):
         self.db.stores[snapshots.PENDING_COLLECTION][result_id] = make_pending(self.uid, **overrides)
         return result_id
 
-    def test_publication_retains_source_check_atomically(self):
-        job_id = 'a' * 64
-        job = {'uid': self.uid, 'status': 'queued', 'references': ['users/user-1/chats/chat-1']}
-        self.db.stores['source_check_jobs'][job_id] = dict(job)
-        result_id = self._store_pending(source_verification={'job_id': job_id})
-        # A failed transaction must not publish or extend the job lifetime.
-        self.db.fail_transaction_after_staged_writes = 2
-        with self.assertRaises(RuntimeError):
-            snapshots.create_share_from_pending(self.uid, result_id, db=self.db, consume_quota=lambda: True)
-        self.assertFalse(self.db.stores[snapshots.SHARES_COLLECTION])
-        self.assertEqual(self.db.stores['source_check_jobs'][job_id], job)
-        self.db.fail_transaction_after_staged_writes = None
-        result = snapshots.create_share_from_pending(self.uid, result_id, db=self.db, consume_quota=lambda: True)
-        saved = self.db.stores['source_check_jobs'][job_id]
-        self.assertEqual(saved['references'], job['references'] + ['shares/' + result['share_id']])
-        self.assertGreater(saved['cleanup_at'], datetime.now(timezone.utc) + timedelta(days=29))
-
     def test_a_new_share_gets_its_redirects_resolved_in_the_background(self):
         result_id = self._store_pending()
         with patch.object(snapshots, "schedule_share_cleanup") as schedule:
@@ -703,21 +686,6 @@ class ShareFlowTests(unittest.TestCase):
         # Once, for the share actually created; sharing again returns the same page.
         schedule.assert_called_once_with(created["share_id"])
         self.assertFalse(again["created"])
-
-    def test_publication_rejects_missing_foreign_or_deleting_source_check_before_quota(self):
-        for job in (None, {'uid': 'stranger', 'status': 'complete'}, {'uid': self.uid, 'status': 'deleting'}):
-            with self.subTest(job=job):
-                self.db = FakeDb()
-                job_id = 'b' * 64
-                if job:
-                    self.db.stores['source_check_jobs'][job_id] = job
-                result_id = self._store_pending(source_verification={'job_id': job_id})
-                charged = []
-                with self.assertRaises(ShareError):
-                    snapshots.create_share_from_pending(self.uid, result_id, db=self.db,
-                        consume_quota=lambda: charged.append(True) or True)
-                self.assertEqual(charged, [])
-                self.assertFalse(self.db.stores[snapshots.SHARES_COLLECTION])
 
     def test_unknown_result_id_raises_not_found(self):
         with self.assertRaises(ShareError) as ctx:

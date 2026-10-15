@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import asdict, replace
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse
@@ -21,7 +20,6 @@ from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
-from app.services.source_verification import Limits as SourceCheckLimits
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
@@ -115,6 +113,8 @@ class AgentRequest(BaseModel):
     model_id: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: str = Field(default="default", pattern=REASONING_EFFORT_PATTERN)
     comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
+    # Ignored since the contradiction source check was removed (2026-10-15);
+    # pages still open from before keep sending it.
     check_sources: bool = False
     file_ids: list[str] = Field(default_factory=list, max_length=5)
     google_selection: GoogleSelection | None = None
@@ -248,8 +248,6 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with different agent settings")
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
-            if existing.get("agent_settings", {}).get("check_sources", False) != payload.check_sources:
-                raise TurnStatusConflict("Request identity conflicts with different contradiction settings")
             if stored_preferences(existing.get("agent_settings", {}).get("agent_preferences")) \
                     != payload.agent_preferences.model_dump():
                 raise TurnStatusConflict("Request identity conflicts with different Agent settings")
@@ -344,7 +342,6 @@ def run_agent(request: Request, payload: AgentRequest):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
-        source_limits = SourceCheckLimits.configured() if payload.check_sources and not google_data else None
         memory = _memory_snapshot(uid)
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
@@ -357,9 +354,7 @@ def run_agent(request: Request, payload: AgentRequest):
                             "google_data_consent": payload.google_data_consent,
                             "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
-                            "check_sources": payload.check_sources,
                             "agent_preferences": payload.agent_preferences.model_dump(),
-                            "source_check_limits": asdict(source_limits) if source_limits else None,
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "memory": memory.settings(),
                             "answer_mode": "merged",
@@ -377,8 +372,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          google_selection=payload.google_selection,
                          google_data_consent=payload.google_data_consent, google_data=google_data,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
-                         comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
-                         source_limits=source_limits, agent_preferences=payload.agent_preferences, memory=memory,
+                         comparison_models=comparisons, agent_preferences=payload.agent_preferences, memory=memory,
                          chat_sources=chat_sources,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).

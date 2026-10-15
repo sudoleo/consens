@@ -389,7 +389,6 @@ button[class=""] {
 .admin-btn.danger { border-color: #b84848; color: #ffb2b2; background: rgba(184, 72, 72, 0.12); }
 
 /* Consensus-Tab */
-.admin-select-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .preset-model-cards {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -457,7 +456,6 @@ button[class=""] {
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-bold);
 }
-.admin-select-card select,
 .judge-row select,
 .judge-fam-row select,
 .consensus-add-row select {

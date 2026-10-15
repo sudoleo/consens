@@ -35,10 +35,6 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         assert second['x'] < first['x'] + first['width']
         choose(page, 'compare')
         expect(bar).to_be_visible()
-        # Check contradictions is a setting, not a tool in the bar.
-        expect(page.locator('#composerSourcesToggle')).to_have_count(0)
-        expect(page.locator('#sourceCheckSwitch')).to_be_disabled()
-        assert page.evaluate('App.isSourceCheckEnabled()') is False
         expect(page.locator('#composerModeDescription')).to_contain_text('no consensus')
         expect(page.locator('#modeNotice')).to_have_count(0)
         assert bar.evaluate("el => getComputedStyle(el).animationName") == 'composer-mode-reveal'
@@ -83,7 +79,6 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         choose(page, 'consensus')
         # The status line stays with the result on screen at every width.
         expect(bar).to_be_visible()
-        expect(page.locator('#sourceCheckSwitch')).to_be_enabled()
         # Bookmark provenance does not change when the next question changes mode.
         expect(page.locator('#composerComparisonStatus')).to_contain_text('Shown: Compare result')
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)

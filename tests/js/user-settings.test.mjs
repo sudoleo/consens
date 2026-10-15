@@ -101,7 +101,6 @@ describe("the local copy", () => {
   it("keeps every setting under the storage keys the app used before", () => {
     const { settings, local } = open();
     settings.set("run_mode", "compare");
-    settings.set("check_sources", false);
     settings.set("agent_preferences", { quorum: "fast" });
     settings.set("agent_model", { model_id: "openai/gpt-6-luna", reasoning_effort: "low" });
     settings.set("compare_models", { OpenAI: { enabled: false }, Gemini: { model: "gemini-3.6-flash" } });
@@ -114,7 +113,6 @@ describe("the local copy", () => {
     expect(Object.fromEntries(Object.keys(local).filter(key => key !== SYNC_KEY).map(key => [key, local.getItem(key)]))).toEqual({
       [RESET_KEY]: "2026-10-12",
       runMode: "compare",
-      checkSources: "false",
       "consensio.agentPreferences.v2": JSON.stringify({ quorum: "fast" }),
       "consensio.agentModel.v1": JSON.stringify({ model_id: "openai/gpt-6-luna", reasoning_effort: "low" }),
       pref_check_OpenAI: "false",
@@ -153,7 +151,7 @@ describe("the local copy", () => {
 
   it.each([
     ["run_mode", "fast"],
-    ["check_sources", "false"],
+    ["claim_counts", "true"],
     ["agent_model", { model_id: "openai gpt", reasoning_effort: "low" }],
     ["agent_preferences", { depth: "deep" }],
     ["compare_models", { "Open<AI>": { enabled: true } }],
@@ -193,7 +191,7 @@ describe("the one-time reset to Agent and the default preset", () => {
     pref_check_Grok: "false", pref_select_OpenAI: "gpt-4o", pref_select_consensus: "OpenAI-Pro",
     pref_consensus_preset: "custom",
     // Not part of the reset: the user's own choices without model IDs.
-    systemPrompt: "Answer in German.", checkSources: "false", "consensio.showClaimCounts.v1": "true",
+    systemPrompt: "Answer in German.", "consensio.showClaimCounts.v1": "true",
     "consensio.agentPreferences.v2": JSON.stringify({ depth: "quick" }),
     "consensio.agentModel.v1": JSON.stringify({ model_id: "gpt-6-luna", reasoning_effort: "low" }),
     theme: "dark",
@@ -211,7 +209,6 @@ describe("the one-time reset to Agent and the default preset", () => {
     expect(settings.get("run_mode")).toBeUndefined();
     expect(settings.get("compare_models")).toBeUndefined();
     expect(settings.get("system_prompt")).toBe("Answer in German.");
-    expect(settings.get("check_sources")).toBe(false);
     expect(settings.get("claim_counts")).toBe(true);
     expect(settings.get("agent_preferences")).toEqual({ depth: "quick" });
     expect(settings.get("agent_model")).toEqual({ model_id: "gpt-6-luna", reasoning_effort: "low" });
@@ -269,10 +266,10 @@ describe("the one-time reset to Agent and the default preset", () => {
 
 describe("change events", () => {
   it("announce a change on this page once, with the previous value", () => {
-    const { settings, events } = open({ storage: { checkSources: "false" } });
-    expect(settings.set("check_sources", false)).toBe(false);
-    settings.set("check_sources", true);
-    expect(events).toEqual([{ names: ["check_sources"], source: "local", previous: { check_sources: false } }]);
+    const { settings, events } = open({ storage: { "consensio.showClaimCounts.v1": "false" } });
+    expect(settings.set("claim_counts", false)).toBe(false);
+    settings.set("claim_counts", true);
+    expect(events).toEqual([{ names: ["claim_counts"], source: "local", previous: { claim_counts: false } }]);
   });
 
   it("follow another tab, but not a write that changes no value", () => {
@@ -317,24 +314,24 @@ describe("sync with the account", () => {
   it("applies the account's settings over this browser's and announces them", async () => {
     const server = fakeServer({ settings: { run_mode: "consensus", claim_counts: true }, revision: 3 });
     const { settings, start, events, local } = open({ server, storage: {
-      runMode: "compare", checkSources: "false",
+      runMode: "compare", "consensio.agreementDisplay.v1": "summary",
       [SYNC_KEY]: JSON.stringify({ owner: UID, pending: [] }),
     } });
     await start();
     expect(settings.get("run_mode")).toBe("consensus");
     expect(settings.get("claim_counts")).toBe(true);
     // Not on the server: back to the default.
-    expect(settings.get("check_sources")).toBeUndefined();
-    expect(local.getItem("checkSources")).toBeNull();
+    expect(settings.get("agreement_display")).toBeUndefined();
+    expect(local.getItem("consensio.agreementDisplay.v1")).toBeNull();
     expect(events).toEqual([{
-      names: ["run_mode", "check_sources", "claim_counts"], source: "server",
-      previous: { run_mode: "compare", check_sources: false, claim_counts: undefined },
+      names: ["run_mode", "agreement_display", "claim_counts"], source: "server",
+      previous: { run_mode: "compare", agreement_display: "summary", claim_counts: undefined },
     }]);
     expect(server.patches()).toEqual([]);
   });
 
   it("keeps a change made before the account answered and sends it", async () => {
-    const server = fakeServer({ settings: { run_mode: "agent", check_sources: false }, revision: 2 });
+    const server = fakeServer({ settings: { run_mode: "agent", claim_counts: false }, revision: 2 });
     const { settings, start } = open({ server });
     server.hold();
     const loading = start();
@@ -343,9 +340,9 @@ describe("sync with the account", () => {
     await loading;
     await settings.flush();
     expect(settings.get("run_mode")).toBe("compare");
-    expect(settings.get("check_sources")).toBe(false);
+    expect(settings.get("claim_counts")).toBe(false);
     expect(server.patches()).toEqual([{ run_mode: "compare" }]);
-    expect(server.settings).toEqual({ run_mode: "compare", check_sources: false });
+    expect(server.settings).toEqual({ run_mode: "compare", claim_counts: false });
   });
 
   it("sends what an earlier page of this account could not deliver", async () => {
@@ -400,12 +397,12 @@ describe("sync with the account", () => {
     const { settings, start } = open({ server });
     await start();
     settings.set("run_mode", "compare");
-    settings.set("check_sources", false);
+    settings.set("claim_counts", false);
     settings.set("run_mode", "consensus");
     expect(server.patches()).toEqual([]);
     await vi.advanceTimersByTimeAsync(400);
     await settings.flush();
-    expect(server.patches()).toEqual([{ run_mode: "consensus", check_sources: false }]);
+    expect(server.patches()).toEqual([{ run_mode: "consensus", claim_counts: false }]);
   });
 
   it("keeps a change pending through a failure and sends it again", async () => {
@@ -517,10 +514,10 @@ describe("sync with the account", () => {
     const server = fakeServer({ revision: 1 });
     const { window, settings, start } = open({ server });
     await start();
-    settings.set("check_sources", false);
+    settings.set("claim_counts", false);
     window.dispatchEvent(new window.Event("pagehide"));
     await settings.flush();
-    expect(server.calls.at(-1)).toMatchObject({ method: "PATCH", keepalive: true, body: { settings: { check_sources: false } } });
+    expect(server.calls.at(-1)).toMatchObject({ method: "PATCH", keepalive: true, body: { settings: { claim_counts: false } } });
   });
 
   it("lets a repair the app makes itself never win over the account's value", async () => {
@@ -558,26 +555,26 @@ describe("sync with the account", () => {
     const server = fakeServer({ settings: { agent_model: { model_id: "gpt-6-luna", reasoning_effort: "default" } },
       revision: 1, fieldRevisions: { agent_model: 1 } });
     const { settings, start } = open({ server, storage: {
-      systemPrompt: "Always answer in German.", checkSources: "false",
+      systemPrompt: "Always answer in German.", "consensio.showClaimCounts.v1": "false",
       "consensio.agentModel.v1": JSON.stringify({ model_id: "claude-opus-5-5", reasoning_effort: "default" }),
     } });
     await start();
     await settings.flush();
     expect(settings.get("system_prompt")).toBe("Always answer in German.");
-    expect(settings.get("check_sources")).toBe(false);
+    expect(settings.get("claim_counts")).toBe(false);
     // What the account has applies.
     expect(settings.get("agent_model")).toEqual({ model_id: "gpt-6-luna", reasoning_effort: "default" });
-    expect(server.patches()).toEqual([{ system_prompt: "Always answer in German.", check_sources: false }]);
+    expect(server.patches()).toEqual([{ system_prompt: "Always answer in German.", claim_counts: false }]);
   });
 
   it("takes the account's values as they are once this browser synced before", async () => {
     const server = fakeServer({ settings: { claim_counts: true }, revision: 3 });
     const { settings, start } = open({ server, storage: {
-      checkSources: "false", "consensio.settingsSeeded": "1",
+      "consensio.agreementDisplay.v1": "summary", "consensio.settingsSeeded": "1",
     } });
     await start();
     await settings.flush();
-    expect(settings.get("check_sources")).toBeUndefined();
+    expect(settings.get("agreement_display")).toBeUndefined();
     expect(settings.get("claim_counts")).toBe(true);
     expect(server.patches()).toEqual([]);
   });

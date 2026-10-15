@@ -55,8 +55,8 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         previews = page.locator('.lp-composer-preview:has(.lp-composer-tools)')
         for preview in previews.all():
             bar = preview.locator('.lp-composer-tools')
-            # The mode lives in the (+) menu (as in /app) and Check contradictions
-            # is a standing setting, so the lip starts with Reasoning.
+            # The mode lives in the (+) menu (as in /app), so the lip starts
+            # with Reasoning.
             expect(bar.locator('.lp-composer-tool').nth(0)).to_have_attribute('aria-label', 'Reasoning auto')
             expect(bar.locator('.lp-composer-tool')).to_have_count(2)
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)
@@ -97,7 +97,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         page.goto(phase4_server + '/consensus-engine', wait_until='networkidle')
         expect(page.locator('.public-product-result')).to_be_visible()
         expect(page.locator('.lp-composer-tools')).to_have_count(0)
-        expect(page.get_by_role('heading', name='Can I turn the source check off?')).to_have_count(1)
+        expect(page.get_by_role('heading', name='Is the consensus just the majority answer?')).to_have_count(1)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         assert errors == []
     finally:

@@ -95,7 +95,6 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         choose(page, "compare")
         assert page.evaluate("localStorage.getItem('runMode')") == "compare"
         assert page.evaluate("App.runMode.pipeline()") is False
-        assert page.evaluate("App.isSourceCheckEnabled()") is False
         expect(page.locator("#composerModeDescription")).to_contain_text("no consensus")
         _shot(page, f"{width}-{'dark' if dark else 'light'}-compare")
         # The chip for the models says who answers, never the mode's name.
@@ -108,7 +107,6 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         expect(page.locator("#attachTrigger")).to_be_visible()
         page.evaluate("App.composer.expand()")
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-        expect(page.locator('#sourceCheckMenuSwitch')).to_have_count(0)
 
         # (+) keeps its place whichever mode is chosen.
         def lead():

@@ -32,7 +32,8 @@ SETTINGS_PATH = ("users", UID, "settings", "app")
 def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
     stored = {
         "run_mode": "bogus",
-        "check_sources": "true",
+        # A setting the app no longer has (the source check, until 2026-10-15).
+        "check_sources": True,
         "agent_model": {"model_id": "openai/gpt-6-luna", "reasoning_effort": "low"},
         "agent_preferences": {"depth": "quick", "quorum": None},
         "compare_models": {"OpenAI": {"enabled": False}, "Gemini": {}, "<script>": {"enabled": True}},
@@ -61,7 +62,7 @@ def test_sanitize_drops_settings_that_hold_only_unchosen_parts():
 def test_changes_are_checked_setting_by_setting():
     changes, rejected = user_settings.validate_changes({
         "run_mode": None,
-        "check_sources": False,
+        "agreement_display": "off",
         # An empty prompt is the app default, the same as no prompt at all.
         "system_prompt": " ",
         "claim_counts": "yes",
@@ -70,7 +71,7 @@ def test_changes_are_checked_setting_by_setting():
     })
     assert changes == {
         "run_mode": None,
-        "check_sources": False,
+        "agreement_display": "off",
         "system_prompt": None,
         "agent_model": {"model_id": "gpt-6-luna", "reasoning_effort": "default"},
     }
@@ -108,10 +109,10 @@ def test_update_changes_only_the_named_settings_and_notes_when(repository, datab
     now = datetime(2026, 10, 12, tzinfo=timezone.utc)
     assert repository.update(UID, {"run_mode": "compare", "claim_counts": True}, now=now) == (
         {"run_mode": "compare", "claim_counts": True}, 1, {"run_mode": 1, "claim_counts": 1})
-    assert repository.update(UID, {"run_mode": None, "check_sources": False}) == (
-        {"claim_counts": True, "check_sources": False}, 2, {"run_mode": 2, "claim_counts": 1, "check_sources": 2})
+    assert repository.update(UID, {"run_mode": None, "agreement_display": "off"}) == (
+        {"claim_counts": True, "agreement_display": "off"}, 2, {"run_mode": 2, "claim_counts": 1, "agreement_display": 2})
     assert repository.get(UID) == (
-        {"claim_counts": True, "check_sources": False}, 2, {"run_mode": 2, "claim_counts": 1, "check_sources": 2})
+        {"claim_counts": True, "agreement_display": "off"}, 2, {"run_mode": 2, "claim_counts": 1, "agreement_display": 2})
     stored = database.documents[SETTINGS_PATH]
     assert set(stored) == {"values", "revision", "field_revisions", "updated_at"}
 
@@ -119,8 +120,8 @@ def test_update_changes_only_the_named_settings_and_notes_when(repository, datab
 def test_update_drops_a_stored_value_that_no_longer_validates(repository, database):
     database.documents[SETTINGS_PATH] = {"values": {"run_mode": "legacy", "claim_counts": True}, "revision": 4}
     assert repository.get(UID) == ({"claim_counts": True}, 4, {})
-    assert repository.update(UID, {"check_sources": True}) == (
-        {"claim_counts": True, "check_sources": True}, 5, {"check_sources": 5})
+    assert repository.update(UID, {"agreement_display": "summary"}) == (
+        {"claim_counts": True, "agreement_display": "summary"}, 5, {"agreement_display": 5})
 
 
 @pytest.mark.parametrize("stored", ["7", -3, None, True, 2.5])
@@ -235,7 +236,7 @@ def test_patch_changes_named_settings_and_null_resets(settings_api):
 @pytest.mark.parametrize("settings", [
     {"theme": "dark"},
     {"run_mode": "fast"},
-    {"check_sources": "false"},
+    {"agreement_display": "never"},
     {"agent_model": {"model_id": "x", "reasoning_effort": "turbo"}},
     {"agent_model": {"reasoning_effort": "low"}},
     {"agent_preferences": {"depth": "deep"}},

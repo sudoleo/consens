@@ -363,18 +363,28 @@ describe("single-model agent chat", () => {
   it('names the steps of a turn that only checked a pasted text', () => {
     const {window:w,document:d,dom} = boot();
     const host = d.querySelector('#agentAnswerActivity');
-    const events = [{kind:'tool',id:'j',name:'judge_answer',status:'succeeded'},
-      {kind:'tool',id:'s',name:'check_contradictions',status:'succeeded'}];
+    const events = [{kind:'tool',id:'j',name:'judge_answer',status:'succeeded'}];
     const review = {checks:[{comparison_id:'c1',status:'succeeded',skipped:'passage_checked'}]};
     w.App.agentActivity.render(host, {events, review});
     expect(host.textContent).toContain('Checked your text');
-    expect(host.textContent).toContain('Skipped the source check: your text was checked instead');
     expect(host.textContent).not.toContain('Checked the answer');
     // A turn with an answer check of its own keeps the usual words.
     review.checks.push({comparison_id:'c2',status:'succeeded'});
     w.App.agentActivity.render(host, {events, review});
     expect(host.textContent).toContain('Answer review · Completed');
     expect(host.textContent).not.toContain('Checked your text');
+    dom.window.close();
+  });
+
+  it('shows no step for the removed contradiction source check of an older turn', () => {
+    const {window:w,document:d,dom} = boot();
+    const host = d.querySelector('#agentAnswerActivity');
+    const events = [{kind:'tool',id:'j',name:'judge_answer',status:'succeeded'},
+      {kind:'tool',id:'s',name:'check_contradictions',status:'succeeded'}];
+    w.App.agentActivity.render(host, {events, review: {checks:[{comparison_id:'c1',status:'succeeded'}]}});
+    expect(host.querySelectorAll('.agent-activity-tool')).toHaveLength(1);
+    expect(host.textContent).toContain('Answer review · Completed');
+    expect(host.textContent).not.toMatch(/source check|Tool ·/i);
     dom.window.close();
   });
 
@@ -434,24 +444,18 @@ describe("single-model agent chat", () => {
     expect(d.querySelector('.agent-progress .agent-current-status').textContent).toBe('Writing answer…');
     dom.window.close();
   });
-  it('freezes source-check permission for sending and recovery while the next-message preference changes', async () => {
+  it('sends no source-check flag, neither for a message nor for its recovery', async () => {
     const {window, document, dom} = boot();
     await selectAgent(window);
-    window.App.isSourceCheckEnabled = vi.fn(() => true);
-    window.streamSSERequest.mockImplementationOnce(async () => {
-      window.App.isSourceCheckEnabled.mockReturnValue(false);
-      throw new Error('Connection lost');
-    });
+    window.streamSSERequest.mockImplementationOnce(async () => { throw new Error('Connection lost'); });
     document.getElementById('questionInput').value = 'Compare options';
     await window.App.agentChat.send();
     const context = window.App.runRegistry.visible();
-    expect(context.config.checkSources).toBe(true);
-    expect(window.streamSSERequest.mock.calls[0][1].check_sources).toBe(true);
+    expect(context.config).not.toHaveProperty('checkSources');
+    expect(window.streamSSERequest.mock.calls[0][1]).not.toHaveProperty('check_sources');
     await window.App.agentChat.send(context);
-    expect(window.streamSSERequest.mock.calls[1][1]).toMatchObject({check_sources: true, recover_only: true});
-    document.getElementById('questionInput').value = 'Next message';
-    await window.App.agentChat.send();
-    expect(window.streamSSERequest.mock.calls[2][1].check_sources).toBe(false);
+    expect(window.streamSSERequest.mock.calls[1][1]).toMatchObject({recover_only: true});
+    expect(window.streamSSERequest.mock.calls[1][1]).not.toHaveProperty('check_sources');
     dom.window.close();
   });
 
@@ -759,7 +763,7 @@ describe("single-model agent chat", () => {
     activity.render(host, {events, running:true, answerText:'The answer begins'});
     const preview = host.querySelector('.agent-progress');
     expect(preview.hidden).toBe(true);
-    for (const name of ['judge_answer', 'check_contradictions']) {
+    for (const name of ['judge_answer']) {
       activity.receive(events, {version:1, id:name, kind:'tool', name, status:'running'});
       activity.render(host, {events, running:true, answerText:'The answer begins and ends.', review:{status:'running'}});
       expect(preview.hidden).toBe(true);
@@ -1575,7 +1579,7 @@ describe("single-model agent chat", () => {
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(true);
     expect(w.App.agentReview.render).not.toHaveBeenCalledWith(body, expect.objectContaining({ status: 'running' }), expect.anything());
-    // Checks done while a source check still runs: marks now, with the reveal.
+    // Checks done while the run still finishes: marks now, with the reveal.
     handlers.review.receive({ review: { status: 'succeeded', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(false);
@@ -2047,7 +2051,7 @@ describe("agent turns that outlive their connection", () => {
       settings: { model_id: CATALOG.default_model_id, reasoning_effort: "default", label: "DeepSeek V4.1 Flash" },
       body: { chat_id: CHAT, question: "Resumed question", client_request_id: "req-resume", bookmark_id: "b_agent_resume",
         recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
-        check_sources: false, agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
         google_selection: null, google_data_consent: false } };
     const { window: w, dom } = bootFollow({
       before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),

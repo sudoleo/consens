@@ -261,40 +261,6 @@ def test_j02b_agent_turn_survives_a_reload_and_is_followed_to_its_answer(journey
     assert j.page.evaluate("() => sessionStorage.length === 0 || !Object.keys(sessionStorage).some(k => k.startsWith('agent_pending_runs_'))")
 
 
-def test_j03_historical_source_job_resumes_and_pages_a_native_revision(journey):
-    j = journey
-    j.open()
-    run = j.run('Historical source comparison ' + j.uid)
-    snapshot = j.control('legacy-source', run)
-    job_id = snapshot['job_id']
-    j.page.evaluate('() => localStorage.setItem("openrouterKey", "journey-own-source-key")')
-    j.page.reload()
-    j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
-    with j.page.expect_response(lambda r: r.url.endswith(f'/api/source-checks/{job_id}/resume')) as resumed:
-        j.page.evaluate('id => window.openBookmark(id)', run['bookmark'])
-    assert resumed.value.ok, resumed.value.text()
-    assert j.request('GET', f'/api/source-checks/{job_id}', uid='journey-'+'f'*32).status == 404
-    old = j.request('GET', f'/api/source-checks/{job_id}').json()
-    completion = j.control('source-finish', {'job_id': job_id})
-    assert completion['worker'] == {'provider_calls': 9, 'fetch_calls': 1,
-        'stale_commits_rejected': 9, 'own_key_only': True, 'key_forgotten': True, 'replay_worked': False}
-    finished = completion['snapshot']
-    assert finished['status'] == 'complete' and finished['scope']['checked_pairs'] == 9
-    assert finished['runtime']['calls'] == 9
-    assert finished['runtime']['prompt_tokens'] == 900 and finished['runtime']['completion_tokens'] == 450
-    assert j.request('GET', f'/api/source-checks/{job_id}?cursor=1&revision={old["source_verification"]["revision"]}').status == 409
-    # The actual bookmark observer gathers every page before publishing a revision.
-    j.page.wait_for_function('() => {const v=window.App.runRegistry.getSelectedConversationBasis()?.currentTurn?.source_verification; return v?.status === "complete" && v.findings.length === 9;}', timeout=20000)
-    expect(j.page.locator('.source-verification-status').first).to_have_text('Source check complete')
-    expect(j.page.locator('body')).to_contain_text('9/9 checked')
-    j.page.reload()
-    j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
-    j.page.evaluate('id => window.openBookmark(id)', run['bookmark'])
-    expect(j.page.locator('.source-verification-status').first).to_have_text('Source check complete', timeout=20000)
-    expect(j.page.locator('body')).to_contain_text('9/9 checked')
-    assert 'journey-own-source-key' not in json.dumps(j.control('state'))
-
-
 def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey):
     j = journey
     j.open()

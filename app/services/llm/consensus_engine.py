@@ -1133,7 +1133,6 @@ def _build_differences_prompt_from(context: _JudgeContext, *, output_language: s
         '      "s": 7,\n'
         '      "type": "contradiction",\n'
         '      "severity": "major",\n'
-        '      "factual_check": {"checkable": true, "question": "specific factual question", "reason": "why original sources can settle it"},\n'
         '      "positions": [\n'
         '        {"stance": "one short sentence", "models": ["Model A"], "quote": "verbatim short quote"}\n'
         "      ],\n"
@@ -1153,21 +1152,9 @@ def _build_differences_prompt_from(context: _JudgeContext, *, output_language: s
         "- \"severity\" (only for type \"contradiction\"): \"major\" when the disagreement changes the overall "
         "conclusion, recommendation, or a central fact of the answer; \"minor\" when it concerns a side detail "
         "that leaves the conclusion intact. For \"emphasis\" differences set \"minor\"; it is ignored there.\n"
-        "- \"factual_check\": classify source-checkability in this same analysis. Set \"checkable\" true "
-        "only for a specific, externally verifiable factual disagreement. Supply its precise \"question\" "
-        "and a short \"reason\", including relevant dates, scope or conditions. Set it false for preferences, "
-        "subjective values, competing recommendations, or mere differences of emphasis. A recommendation "
-        "is checkable only when the actual disputed point is an explicit factual premise, not which option "
-        "is preferable. When uncertain, set false. This classifies the dispute; it does not verify any fact.\n"
-        "Whether an event happened, its date, participants, and reported results are factual questions, "
+        "- Whether an event happened, its date, participants, and reported results are factual questions, "
         "even if a model denies the event or calls the other responses fictional or hallucinated. "
-        "Do not infer a fictional user scenario from those model claims or your own unfamiliarity. "
-        "Missing sources, disputed source reliability, or uncertainty about which side is correct do not "
-        "make a factual dispute non-checkable; the separate source judge determines evidential sufficiency.\n"
-        "- Source-checkability is additive metadata for a separate source check, never a filter for reporting "
-        "differences. Continue reporting all substantive contradictions and emphasis differences, including "
-        "competing preferences or recommendations, under the existing rules above. A false factual_check "
-        "must not remove a difference or change its type or severity; it does not affect claim coverage.\n"
+        "Do not infer a fictional user scenario from those model claims or your own unfamiliarity.\n"
         "- \"s\" inside a difference: the number of the consensus sentence that states the disputed point, so the "
         "reader can see it marked in place. Use 0 if the consensus answer does not state it at all.\n"
         "- Report every distinct disagreement you find, not just the most obvious one, and give each its own "
@@ -1355,9 +1342,6 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
         sentence_anchor, sentence_id, anchor_occurrence = _sentence_reference(
             entry.get("s"), sentences
         )
-        factual = entry.get("factual_check")
-        factual = factual if isinstance(factual, dict) else {}
-        factual_question = _clip(factual.get("question"), MAX_DIFF_TEXT_CHARS)
         difference = {
             "claim": claim,
             # Stelle im Konsenstext, an der der Widerspruch haengt: aus der
@@ -1372,13 +1356,6 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
             "type": diff_type,
             "severity": severity,
             "positions": positions,
-            "consensus_anchor_validated": False,
-            "factual_check": {
-                "checkable": factual.get("checkable") is True and bool(factual_question)
-                and diff_type == "contradiction",
-                "question": factual_question,
-                "reason": _clip(factual.get("reason"), MAX_DIFF_TEXT_CHARS),
-            },
             "verify": _clip(entry.get("verify"), MAX_DIFF_TEXT_CHARS),
         }
         if sentence_id is not None:
@@ -1695,7 +1672,6 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
     _verify_claims(data.get("claims") or [], consensus_text, model_answers, _find, _find_formatted_quote)
 
     for diff in data.get("differences") or []:
-        diff["consensus_anchor_validated"] = False
         # Der Widerspruchs-Anker zeigt in die KONSENSANTWORT (nicht in eine
         # Modellantwort). Nicht auffindbar = halluziniert -> leeren, damit das
         # Frontend keinen falschen Satz markiert.
@@ -1703,12 +1679,10 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             span = _find("__consensus__", consensus_text, diff["consensus_anchor"])
             if span:
                 diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
-                diff["consensus_anchor_validated"] = True
             elif span := _find(
                 "__consensus__", consensus_text, diff["consensus_anchor"], allow_fuzzy=True
             ):
-                # A similar consensus passage still helps the reader navigate,
-                # but it is not a validated anchor for evidence checks.
+                # A similar consensus passage still helps the reader navigate.
                 diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
             else:
                 logging.info(
@@ -1718,7 +1692,6 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
                 diff["consensus_anchor"] = ""
 
         for position in diff.get("positions") or []:
-            position["quote_models"] = []
             if not position.get("quote"):
                 continue
             span = None
@@ -1727,8 +1700,8 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
                 if not model_span:
                     model_span = _find_formatted_quote(model, model_answers.get(model) or "", position["quote"])
                 if model_span:
-                    position["quote_models"].append(model)
-                    span = span or model_span
+                    span = model_span
+                    break
             if span:
                 position["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
             else:
@@ -1885,16 +1858,6 @@ DIFFERENCES_JSON_SCHEMA = {
                     "s": {"type": "integer"},
                     "type": {"type": "string", "enum": ["contradiction", "emphasis"]},
                     "severity": {"type": "string", "enum": ["major", "minor"]},
-                    "factual_check": {
-                        "type": "object",
-                        "properties": {
-                            "checkable": {"type": "boolean"},
-                            "question": {"type": "string"},
-                            "reason": {"type": "string"},
-                        },
-                        "required": ["checkable", "question", "reason"],
-                        "additionalProperties": False,
-                    },
                     "positions": {
                         "type": "array",
                         "items": {
@@ -1911,7 +1874,7 @@ DIFFERENCES_JSON_SCHEMA = {
                     "verify": {"type": "string"},
                 },
                 "required": [
-                    "claim", "s", "type", "severity", "positions", "verify", "factual_check",
+                    "claim", "s", "type", "severity", "positions", "verify",
                 ],
                 "additionalProperties": False,
             },

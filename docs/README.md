@@ -15,7 +15,7 @@ Most documents are written in German (internal working notes). Start here.
 
 [agent-mode.md](agent-mode.md) · [agent-delegation.md](agent-delegation.md) ·
 [reasoning-policy.md](reasoning-policy.md) · [watch-evidence-model.md](watch-evidence-model.md) ·
-[source-verification.md](source-verification.md) · [consensus-api.md](consensus-api.md)
+[consensus-api.md](consensus-api.md)
 
 ## Research
 

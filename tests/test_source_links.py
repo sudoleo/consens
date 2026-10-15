@@ -2,7 +2,7 @@
 
 Direktlinks über der Antwort und die Namen der Quellen im Text als Links:
 Navigation, kein Satz-für-Satz-Beleg -- die Synthese schreibt bewusst keine
-S-Verweise (docs/source-verification.md).
+S-Verweise (docs/codebase-map.md, „Quellen in der Synthese“).
 """
 
 import re
@@ -261,8 +261,6 @@ class ShareCleanupTests(unittest.TestCase):
                 {"id": "S2", "url": REDIRECT + "dead", "title": "billiger.de"},
                 {"id": "S3", "url": "https://geizhals.de/p", "title": "Geizhals"},
             ],
-            "source_verification": {"documents": [{"source_id": "D1", "url": REDIRECT + "live",
-                                                   "source_url": REDIRECT + "live"}]},
         }
 
     def clean(self, **kwargs):
@@ -277,14 +275,12 @@ class ShareCleanupTests(unittest.TestCase):
             stats = share_snapshots.clean_share_sources("S" * 16, db=self.db, **kwargs)
         return stats, invalidate, target
 
-    def test_resolves_sources_and_the_source_check_alike(self):
+    def test_resolves_redirecting_sources(self):
         stats, invalidate, target = self.clean()
         share = self.db.stores["shares"]["S" * 16]
         self.assertEqual(stats, {"redirects": 2, "resolved": 1, "expired": 0, "changed": True})
         self.assertEqual(share["sources"][0]["url"], target)
         self.assertEqual(share["sources"][1]["url"], REDIRECT + "dead")  # no expiry check at share time
-        self.assertEqual(share["source_verification"]["documents"][0]["url"], target)
-        self.assertEqual(share["source_verification"]["documents"][0]["source_url"], target)
         invalidate.assert_called_once_with("S" * 16)
 
     def test_the_backfill_drops_dead_links_and_keeps_their_numbers(self):

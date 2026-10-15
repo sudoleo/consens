@@ -241,9 +241,6 @@
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
-/* What the source check made of the contradictions, on the link itself. */
-.agent-evidence-note { color: var(--ink-3); font-weight: 400; white-space: nowrap; }
-.agent-evidence-note::before { content: '·'; margin-right: 6px; }
 .agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
 .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
@@ -309,15 +306,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @media (max-width: 540px) {
   .agent-review > .agent-evidence-grid { flex: 1 0 100%; }
   .agent-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 4px; margin-left: 0; }
-  /* A link with a source-check note is taller; all three keep one top and height. */
+  /* All three links keep one top and height. */
   .agent-evidence-grid .agent-evidence-link { align-content: start; }
   .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 0; min-height: 56px; padding: 6px 0; }
   .agent-evidence-grid .agent-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }
   .agent-evidence-grid .consensus-tab-count { grid-row: 1; grid-column: 2; justify-self: start; line-height: 16px; }
   .agent-evidence-grid .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
   .agent-evidence-grid .agent-evidence-link:not(:has(.consensus-tab-count)) .agent-evidence-icon { grid-column: 1 / -1; justify-self: center; }
-  .agent-evidence-grid .agent-evidence-note { grid-row: 3; grid-column: 1 / -1; justify-self: center; font-size: var(--font-size-micro, 11px); white-space: normal; text-align: center; }
-  .agent-evidence-grid .agent-evidence-note::before { content: none; }
 }
 .agent-evidence-focus { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--ink-3); }
 .agent-evidence-focus select { min-width: 0; max-width: 260px; background: transparent; color: var(--ink-2); border: 0; font: inherit; padding: 6px 0; }
@@ -396,7 +391,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background-image: linear-gradient(105deg, transparent 43%,
       color-mix(in srgb, var(--bg-color, #fff) 55%, transparent) 50%, transparent 57%);
-    background-size: 250% 100%; animation: source-label-shine 2.4s linear infinite;
+    background-size: 250% 100%; animation: label-shine 2.4s linear infinite;
   }
   @supports (background-clip: text) or (-webkit-background-clip: text) {
     .agent-activity.is-running .agent-activity-tool[data-status="running"] > strong {
@@ -405,7 +400,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
         color-mix(in srgb, var(--agent-ink) 45%, var(--bg-color, #fff)) 50%, var(--agent-ink) 57%);
       background-size: 250% 100%; background-clip: text; -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      animation: source-label-shine 2.4s linear infinite;
+      animation: label-shine 2.4s linear infinite;
     }
   }
 }
@@ -467,7 +462,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     background-image: linear-gradient(105deg, transparent 38%,
       color-mix(in srgb, var(--bg-color, #fff) 40%, transparent) 50%, transparent 62%);
     background-size: 250% 100%;
-    animation: source-label-shine 2.8s linear infinite, agent-answer-sheen-in .5s ease backwards;
+    animation: label-shine 2.8s linear infinite, agent-answer-sheen-in .5s ease backwards;
     transition: opacity var(--dur-light) var(--ease-standard);
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
@@ -488,6 +483,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
 #agentAnswerBody.is-marks-settling .cx-claim { transition: none; }
 @keyframes agent-answer-sheen-in { from { opacity: 0; } }
+/* One period moves the repeating 250% gradient by exactly one tile, so the
+   loop is seamless. */
+@keyframes label-shine {
+  from { background-position: 150% 0; }
+  to { background-position: -16.667% 0; }
+}
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
 

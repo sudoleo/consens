@@ -12,7 +12,6 @@
     check_text: ['Text check', 'Checking your text against independent answers…', 'Checked your text against independent answers'],
     prepare_watch: ['Watch', 'Preparing a Watch…', 'Prepared a Watch for you to start'],
     judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
-    check_contradictions: ['Contradiction source check', 'Checking contradictions against sources…', 'Checked contradictions against sources'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
     send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
@@ -33,7 +32,7 @@
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
   // Checks the app runs once the answer is written (DelegationLoop._finish_review).
-  const answerChecks = new Set(['judge_answer', 'check_contradictions']);
+  const answerChecks = new Set(['judge_answer']);
   const toolName = name => tools[name]?.[0] || 'Tool';
   // "Searched the web · 3 sources: skat.dk, virk.dk, borger.dk" says what the
   // answer now rests on; the bare verb said nothing a reader could check.
@@ -68,9 +67,9 @@
     return null;
   }
   // A turn whose only check was that of a pasted text (saved on 2026-10-09
-  // before the answer of such a turn was judged too): the answer judges and
-  // the source check of their contradictions did not run.
-  const textOnlySteps = { judge_answer: 'Checked your text', check_contradictions: 'Skipped the source check: your text was checked instead' };
+  // before the answer of such a turn was judged too): the answer judges did
+  // not run.
+  const textOnlySteps = { judge_answer: 'Checked your text' };
   function textOnlyReview(review) {
     const checks = Array.isArray(review?.checks) ? review.checks : [];
     return checks.length > 0 && checks.every(check => check?.skipped === 'passage_checked');
@@ -332,7 +331,9 @@
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
     // `answer` only ends the steering; the answer itself is what follows.
-    const tools = events.filter(item => item.kind === "tool" && item.name !== "answer" && !(item.name === "web_search"
+    // Older saved turns also carry a step of the removed contradiction source
+    // check (`check_contradictions`); it has no result left to show.
+    const tools = events.filter(item => item.kind === "tool" && !["answer", "check_contradictions"].includes(item.name) && !(item.name === "web_search"
       && item.status === "unknown" && (item.server_tool || item.provider_native)
       && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
@@ -351,8 +352,8 @@
     const heading = running && reconnecting ? 'Reconnecting…'
       : waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
-    // A complete, checked answer whose run failed afterwards (for example in
-    // a late source check) reads as done: the same rule as failureNote.
+    // A complete, checked answer whose run failed afterwards reads as done:
+    // the same rule as failureNote.
     const settled = status === 'failed' && !running && answerText
       && App.agentReview?.failureNote?.({error: 'failed'}, review, answerText) === '';
     updateClock(view, elapsedMs, running, settled ? 'succeeded' : status);

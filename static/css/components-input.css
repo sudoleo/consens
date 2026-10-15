@@ -566,7 +566,7 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 /* --------------------------------------------------------------------------
-   Schalter im (+)-Kontextmenü (Reasoning, Check contradictions)
+   Schalter im (+)-Kontextmenü (Reasoning)
    -------------------------------------------------------------------------- */
 .attach-menu-divider {
   height: 1px;

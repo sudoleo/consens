@@ -25,8 +25,6 @@ it('explains the recorded comparison in the duration disclosure and opens its or
   const review = snapshot();
   review.comparisons[0].reason = '<img src=x> Compare costs';
   review.checks[0].differences_data.differences = [{type:'contradiction',claim:'Whether five seats are included'}];
-  review.checks[0].source_verification = {answer_version:'answer-hash',run_id:'c1',basis_hash:'b1',
-    scope:{checked_contradictions:1,contradictions:1},status:'complete'};
   // Activity renders before the answer's reader contexts are registered.
   w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
   w.App.agentReview.render(body, review);
@@ -34,7 +32,6 @@ it('explains the recorded comparison in the duration disclosure and opens its or
   expect(details.textContent).toContain('Comparison 1 · 1 model answer');
   expect(details.textContent).toContain('Models: GPT');
   expect(details.textContent).toContain('Disagreement: Whether five seats are included');
-  expect(details.textContent).toContain('Source checks: 1 of 1 disagreements checked.');
   expect(details.querySelector('img')).toBeNull();
   details.querySelector('button').click();
   expect(w.App.answerReader.openContext).toHaveBeenLastCalledWith(expect.objectContaining({key:'agent-evidence:c1'}),
@@ -46,23 +43,6 @@ it('explains the recorded comparison in the duration disclosure and opens its or
   details.querySelectorAll('button')[1].click();
   expect(w.App.answerReader.openContext).toHaveBeenLastCalledWith(expect.objectContaining({key:'agent-evidence:c1'}),
     expect.objectContaining({section:'differences'}));
-  dom.window.close();
-});
-it('counts a disagreement the source check could not take up instead of showing 0 of 0', () => {
-  const {window: w, document: d, dom} = setup();
-  const details = d.createElement('div');
-  const review = snapshot();
-  review.checks[0].differences_data.differences = [{type:'contradiction',claim:'Start times differ'}];
-  review.checks[0].source_verification = {answer_version:'answer-hash',run_id:'c1',basis_hash:'b1',
-    reason_code:'contradiction_inputs_unavailable', status:'skipped',
-    scope:{checked_contradictions:0,contradictions:0,detected_contradictions:1,excluded_contradictions:1}};
-  w.App.agentReview.renderActivity(details, review, 'Exact answer.');
-  expect(details.textContent).toContain('Source checks: 0 of 1 disagreements checked · 1 not checkable.');
-  expect(details.textContent).not.toContain('0 of 0');
-  // Nothing detected (only minor differences): no line at all.
-  review.checks[0].source_verification.scope = {checked_contradictions:0,contradictions:0,detected_contradictions:0,excluded_contradictions:0};
-  w.App.agentReview.renderActivity(details, structuredClone(review), 'Exact answer.');
-  expect(details.textContent).not.toContain('Source checks:');
   dom.window.close();
 });
 it('marks pages read for an answer without a comparison in its sources', () => {
@@ -135,26 +115,27 @@ it("uses the shared markers only for the exact answer and selected comparison ba
   expect(w.injectMarkdown).toHaveBeenLastCalledWith(body, "Changed answer.", []);
   dom.window.close();
 });
-it('renders bound source evidence with the shared contradiction cards and rejects stale evidence', () => {
+it('ignores the contradiction source check that older saved turns still carry', () => {
   const {window: w, document: d, dom} = setup();
-  w.App.sourceVerification = {render: vi.fn()};
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   const review = snapshot(); review.check_sources = true;
-  review.checks[0].source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'complete'};
+  review.checks[0].differences_data.differences = [{type: 'contradiction', claim: 'Start times differ'}];
+  review.checks[0].source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'partial',
+    job_id: 'job-1', check_type: 'contradiction_evidence',
+    scope: {checked_contradictions: 0, contradictions: 0, detected_contradictions: 1, excluded_contradictions: 1}};
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
+  expect(details.textContent).toContain('Disagreement: Start times differ');
+  expect(details.textContent).not.toMatch(/source check/i);
   w.App.agentReview.render(body, review);
-  d.querySelector('[data-section="differences"]').click();
-  let context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
-  const panel = context.renderPanel('differences');
-  expect(w.App.sourceVerification.render).toHaveBeenCalledWith(panel.querySelector('.agent-evidence-differences'),
-    panel.querySelector('.agent-source-check'), review.checks[0].source_verification,
-    expect.objectContaining({differenceCards: panel.querySelector('.agent-evidence-differences')}));
-  w.App.sourceVerification.render.mockClear();
-  review.checks[0].source_verification.basis_hash = 'other';
-  w.App.agentReview.render(body, review);
-  d.querySelector('[data-section="differences"]').click();
-  context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
-  expect(context.renderPanel('differences').textContent).toContain('source checks pending');
-  expect(w.App.sourceVerification.render).not.toHaveBeenCalled();
+  const link = d.querySelector('[data-section="differences"]');
+  expect(link.getAttribute('aria-label')).toBe('Contradictions 1');
+  expect(d.querySelector('.agent-review-status').textContent).toBe('');
+  link.click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(panel.querySelector('.agent-source-check')).toBeNull();
+  expect(panel.textContent).not.toMatch(/source check/i);
+  expect(panel.querySelector('.agent-evidence-footer').childElementCount).toBe(0);
   dom.window.close();
 });
 it('collects chat search, answer links and comparison citations into one source view', () => {
@@ -268,15 +249,13 @@ it('explains a missing model without reporting a failed check, including older s
 });
 it.each([
   ['coverage', 'The coverage check could not run', 'Partly checked'],
-  ['sentences', '2 sentences could not be checked', ''],
-  ['sources', 'Some contradiction source checks did not finish', '']
+  ['sentences', '2 sentences could not be checked', '']
 ])('keeps %s failures distinct from unavailable comparison models', (kind, reason, line) => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   const review = partialReview(); const check = review.checks[0];
   if (kind === 'coverage') delete check.differences_data.judges.coverage;
   if (kind === 'sentences') check.differences_data.judges.coverage.missing = 2;
-  if (kind === 'sources') check.source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'partial'};
   w.App.agentReview.render(body, review);
   // Only a missing check speaks under the answer; minor gaps stay in the panel.
   expect(d.querySelector('.agent-review-status').textContent).toBe(line);
@@ -297,12 +276,10 @@ it.each([
   }
   dom.window.close();
 });
-it('keeps a fully answered check to one line and the source report below the findings', () => {
+it('keeps a fully answered check to one line above the findings', () => {
   const {window: w, document: d, dom} = setup();
-  w.App.sourceVerification = {render: vi.fn()};
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   const review = snapshot();
-  review.checks[0].source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'complete'};
   w.App.agentReview.render(body, review);
   d.querySelector('[data-section="differences"]').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
@@ -312,11 +289,10 @@ it('keeps a fully answered check to one line and the source report below the fin
   const order = [...panel.children].map(child => child.className);
   expect(order).toEqual(['agent-evidence-status', 'agent-evidence-differences', 'agent-evidence-footer']);
   const footer = panel.querySelector('.agent-evidence-footer');
-  expect(footer.querySelector('.agent-source-check')).not.toBeNull();
-  // One quiet line at most: no standing disclaimers or context toggle.
+  // No standing disclaimers or context toggle: the footer stays empty.
   expect(footer.textContent).not.toContain('Model agreement is not independent fact checking.');
   expect(footer.querySelector('.agent-evidence-context')).toBeNull();
-  expect(w.App.sourceVerification.render.mock.calls[0][3]).toMatchObject({compact: true});
+  expect(footer.childElementCount).toBe(0);
   dom.window.close();
 });
 
@@ -407,7 +383,7 @@ it('strokes the marks on once, in reading order, when a live answer is first che
   expect(delay(badge)).toBeGreaterThan(delay(first));
   expect(delay(second)).toBeGreaterThan(delay(first));
   // So does a rebuild from a render that does not ask for the reveal itself
-  // (a settled source check repaints with reveal: false).
+  // (a repaint with reveal: false).
   now = 1500; body._agentRenderSerial = 3;
   w.App.agentReview.render(body, review, {});
   expect(delay(body.querySelector('.cx-claim'))).toBe(-500);
@@ -488,89 +464,6 @@ it('leads the evidence row with a quiet agreement score of the comparison it sho
   expect(score()).toBeNull();
   dom.window.close();
 });
-it('follows a queued contradiction job after the turn and repaints the answer evidence as it settles', () => {
-  const {window: w, document: d, dom} = setup();
-  const watches = [];
-  w.auth = {currentUser: {uid: 'owner'}};
-  w.App.sourceVerification = {render: vi.fn(), observe: vi.fn(options => { const stop = vi.fn(); watches.push({options, stop}); return stop; })};
-  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
-  const review = snapshot(); review.check_sources = true;
-  review.checks[0].differences_data.differences = [{type: 'contradiction', claim: 'Price'}];
-  const queued = {job_id: 'job-1', status: 'queued', revision: 0, schema_version: 4, check_type: 'contradiction_evidence',
-    answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', findings: []};
-  review.checks[0].source_verification = queued;
-  w.App.agentReview.render(body, review, {key: 'turn-1'});
-  // One watcher per pending job, bound to its reference and the owner.
-  expect(watches).toHaveLength(1);
-  expect(watches[0].options.snapshot).toBe(queued);
-  expect(watches[0].options.auth.uid).toBe('owner');
-  expect(watches[0].options.isActive()).toBe(true);
-  w.App.agentReview.render(body, review, {key: 'turn-1'});
-  expect(watches).toHaveLength(1);
-  w.App.answerReader.refreshContext.mockClear();
-  // The poll returns the job snapshot; the reference keeps its basis.
-  const {basis_hash, ...settledJob} = {...queued, status: 'complete', revision: 1, findings: [{contradiction_id: 'x', checked: true}]};
-  watches[0].options.onUpdate(settledJob);
-  expect(review.checks[0].source_verification).toMatchObject({status: 'complete', basis_hash: 'b1', revision: 1});
-  expect(w.App.answerReader.refreshContext).toHaveBeenCalledWith(expect.objectContaining({key: 'agent-evidence:c1'}));
-  expect(watches[0].stop).toHaveBeenCalled();
-  d.querySelector('[data-section="differences"]').click();
-  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  expect(w.App.sourceVerification.render).toHaveBeenLastCalledWith(panel.querySelector('.agent-evidence-differences'),
-    panel.querySelector('.agent-source-check'), review.checks[0].source_verification, expect.anything());
-  // A saved copy of the turn still names the queued job: it shows the settled
-  // snapshot at once instead of starting over.
-  const saved = structuredClone(review);
-  saved.checks[0].source_verification = {...queued};
-  w.App.agentReview.render(body, saved, {key: 'turn-1'});
-  expect(saved.checks[0].source_verification.status).toBe('complete');
-  expect(watches).toHaveLength(1);
-  dom.window.close();
-});
-it('starts a dead observer again instead of showing a queued job forever', () => {
-  // Without a signed-in user at the first paint (or after the page left the
-  // back/forward cache) the observer ended at once and the job read
-  // "Contradiction source check queued" until a reload.
-  const {window: w, document: d, dom} = setup();
-  const observers = [];
-  w.App.sourceVerification = {render: vi.fn(), observe: vi.fn(options => {
-    let ended = !options.auth.user;
-    const stop = Object.assign(vi.fn(() => { ended = true; }), {stopped: () => ended});
-    observers.push({options, stop});
-    return stop;
-  })};
-  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
-  const review = snapshot();
-  review.checks[0].source_verification = {job_id: 'job-1', status: 'queued', answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1'};
-  w.App.agentReview.render(body, review);
-  expect(observers).toHaveLength(1);
-  w.auth = {currentUser: {uid: 'owner'}};
-  w.dispatchEvent(new w.Event('consensio:auth-state'));
-  expect(observers).toHaveLength(2);
-  expect(observers[1].options.auth.uid).toBe('owner');
-  // A live observer is kept; one that ended on pagehide comes back on pageshow.
-  w.dispatchEvent(new w.Event('pageshow'));
-  expect(observers).toHaveLength(2);
-  observers[1].stop();
-  w.dispatchEvent(new w.Event('pageshow'));
-  expect(observers).toHaveLength(3);
-  dom.window.close();
-});
-it('stops following a job when its answer leaves the page or shows another review', () => {
-  const {window: w, document: d, dom} = setup();
-  const stops = [];
-  w.auth = {currentUser: {uid: 'owner'}};
-  w.App.sourceVerification = {render: vi.fn(), observe: vi.fn(() => { const stop = vi.fn(); stops.push(stop); return stop; })};
-  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
-  const review = snapshot();
-  review.checks[1].source_verification = {job_id: 'job-2', status: 'running', answer_version: 'answer-hash', run_id: 'c2', basis_hash: 'b2'};
-  w.App.agentReview.render(body, review);
-  const options = w.App.sourceVerification.observe.mock.calls[0][0];
-  w.App.agentReview.render(body, snapshot());
-  expect(stops[0]).toHaveBeenCalled();
-  expect(options.isActive()).toBe(false);
-  dom.window.close();
-});
 it('marks and scores the answer of a checked pasted text like any answer', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
@@ -634,17 +527,13 @@ it('explains a comparison whose answer check was skipped because it checked a pa
   const review = snapshot();
   review.comparisons = review.comparisons.slice(0, 1);
   review.checks = [{ comparison_id: 'c1', basis_hash: 'b1', answer_hash: 'answer-hash', status: 'succeeded',
-    differences_data: null, issues: [], skipped: 'passage_checked',
-    source_verification: { answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', check_type: 'contradiction_evidence',
-      status: 'skipped', reason_code: 'passage_checked', scope: { contradictions: 0, checked_contradictions: 0 } } }];
-  review.check_sources = true;
+    differences_data: null, issues: [], skipped: 'passage_checked' }];
   review.passage_check = { status: 'succeeded', comparison_id: 'c1', text: 'Pasted.', claims: [] };
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
   w.App.agentReview.render(body, review);
   const note = 'This comparison checked your text sentence by sentence; the result is shown above the answer.';
   expect(details.querySelector('.agent-activity-check').textContent).toBe(note);
-  expect(details.textContent).not.toContain('Source checks:');
   expect(details.textContent).not.toContain('Partly checked');
   const status = body._agentReview.querySelector('.agent-review-status');
   expect(status.dataset.state).toBe('succeeded');

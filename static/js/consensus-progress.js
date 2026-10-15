@@ -952,12 +952,6 @@
       togglePanel(diffTab, $("consensusDifferencesPanel"));
       return;
     }
-    const sourceCheckButton = event.target.closest("#consensusSourceCheckButton");
-    if (sourceCheckButton) {
-      if (window.App?.sourceVerification?.openResults(sourceCheckButton)) return;
-      $("consensusSourcesTab")?.click();
-      return;
-    }
     const sourcesTab = event.target.closest("#consensusSourcesTab");
     if (sourcesTab) {
       if (window.App?.answerReader?.openPanel('sources', sourcesTab)) return;

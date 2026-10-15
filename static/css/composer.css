@@ -387,8 +387,8 @@
 }
 
 /* ---- Each setting in one place --------------------------------------------
-   On a desktop the bar under the field already switches Reasoning, the
-   comparison models and Check contradictions, with their state written out.
+   On a desktop the bar under the field already switches Reasoning and the
+   comparison models, with their state written out.
    The (+) menu then only adds files (with the formats it takes). Phones keep
    the full menu: there the bar shows icons only. */
 @media (min-width: 701px) {

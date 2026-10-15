@@ -635,8 +635,8 @@
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.
-    // A checked answer shows its marks at once, even while a source check
-    // still runs: waiting for the end of the run made them appear late.
+    // A checked answer shows its marks at once, even while the run still
+    // finishes: waiting for the end of the run made them appear late.
     const answerBody = document.getElementById("agentAnswerBody");
     const liveReview = context.metadata.agentReview;
     const fixed = running && Boolean((state.text || state.streamText || '').trim()) && Boolean(liveReview?.versions?.length);
@@ -735,7 +735,6 @@
           bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
           reasoning_effort: settings.reasoning_effort || 'default',
           comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
-          check_sources: context.config.checkSources === true,
           agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
@@ -1104,7 +1103,7 @@
         attachments: [], attachmentMeta: record.attachmentMeta || [],
         requestIdentity: body.client_request_id, bookmarkId: body.bookmark_id, bookmarkTitle: record.title || body.question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false, deepSearch: false,
-          checkSources: body.check_sources === true, useOwnKeys: false, providers: [],
+          useOwnKeys: false, providers: [],
           agentSettings: { model_id: body.model_id, reasoning_effort: body.reasoning_effort },
           comparisonModels: body.comparison_models || {},
           agentPreferences: body.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided" },
@@ -1416,7 +1415,7 @@
         bookmarkId: retry?.bookmarkId || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
-          deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
+          deepSearch: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
           agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "all", autonomy: "guided" },
           googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
           googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
@@ -1480,7 +1479,6 @@
         model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: comparisonModels,
-        check_sources: context.config.checkSources === true,
         agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,

@@ -114,11 +114,6 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
     from app.services import answer_receipts
     monkeypatch.setattr(answer_receipts, "cleanup_expired", lambda: calls.append("receipts") or 5)
 
-    from app.services import source_check_jobs
-    from types import SimpleNamespace
-    monkeypatch.setattr(source_check_jobs, "repository",
-        lambda: SimpleNamespace(cleanup=lambda: calls.append("sources") or 4))
-
     from app.services import chat_store, memory_edit
     monkeypatch.setattr(chat_store, "resume_chat_deletions",
         lambda: calls.append("chat_deletions") or 5)
@@ -143,13 +138,12 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
             pass
 
     asyncio.run(exercise())
-    assert calls == ["pending", "receipts", "shares", "sources", "chat_deletions", "memory", "memory_changes", "outbox"]
+    assert calls == ["pending", "receipts", "shares", "chat_deletions", "memory", "memory_changes", "outbox"]
     health = background_tasks.task_health_snapshot()["retention-maintenance"]
     assert health["details"] == {
         "expired_pending_deleted": 2,
         "expired_answer_receipts_deleted": 5,
         "revoked_shares_deleted": 3,
-        "source_checks_deleted": 4,
         "files_deleted": 0,
         "documents_deleted": 0,
         "google_records_deleted": 0,
@@ -235,17 +229,6 @@ def test_scheduler_task_runs_locally_only_on_explicit_opt_in(monkeypatch, produc
         assert background_tasks.task_health_snapshot()["topic-scheduler"]["state"] == "disabled"
 
 
-def test_local_tasks_run_on_a_local_server_but_never_under_mock_llm(monkeypatch):
-    """The source-check workers serve the local queue of a non-mock dev server."""
-    monkeypatch.setattr(main, "_is_production", lambda: False)
-    monkeypatch.delenv("LOCAL_BACKGROUND_JOBS", raising=False)
-    monkeypatch.setattr(main, "mock_llm_enabled", lambda: False)
-    assert main._background_writers_off_reason(local=True) == ""
-    assert main._background_writers_off_reason() != ""
-    monkeypatch.setattr(main, "mock_llm_enabled", lambda: True)
-    assert main._background_writers_off_reason(local=True) == "MOCK_LLM=1"
-
-
 def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
     """A local MOCK_LLM server shares the production Firestore: every task that
     claims schedule slots or queued jobs, deletes data, writes the live model
@@ -284,7 +267,6 @@ def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
         "seo-pulse-scheduler",
         "consensus-api-maintenance",
         "retention-maintenance",
-        "source-check-workers",
         "consensus-api-account-cleanup",
         "full-account-deletion-cleanup",
         "model-configuration-backfill",

@@ -1895,6 +1895,8 @@ function isDirectComparisonBookmark(bookmark) {
 
 function bookmarkMeta(bookmark) {
   const responses = bookmark?.responses && typeof bookmark.responses === "object" ? bookmark.responses : {};
+  // Older bookmarks may still carry a "source_verification" snapshot of the
+  // removed contradiction source check; it is no model answer and stays unread.
   const modelCount = Object.entries(responses).filter(([key, value]) =>
     !["consensus", "differences", "differences_data", "source_verification"].includes(key) && String(value || "").trim()
   ).length;
@@ -2504,7 +2506,6 @@ function bookmarkFallbackTurn(bookmark) {
     consensus,
     differences: String(responses.differences || ""),
     differences_data: responses.differences_data || null,
-    source_verification: responses.source_verification || null,
     sources,
     model_answers: modelAnswers
   };
@@ -2528,7 +2529,6 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
     consensus: currentTurn.consensus || "",
     differences: currentTurn.differences || "",
     differences_data: currentTurn.differences_data || null,
-    source_verification: currentTurn.source_verification || null,
   };
   const modelLabels = {};
   Object.entries(currentTurn.model_answers || {}).forEach(([provider, item]) => {
@@ -2625,33 +2625,6 @@ async function loadBookmarkConversation(bookmark) {
     if (!error?.retryable) throw error;
     return await loadBookmarkConversationOnce(bookmark);
   }
-}
-
-function observeBookmarkSourceCheck({bookmark, sourceBookmark, continuationTurn, body, differencesData}) {
-  const sourceSnapshot = bookmark.responses?.source_verification;
-  if (!sourceSnapshot?.job_id) return;
-  const sourceViewEpoch = bookmarkViewEpoch;
-  const sourceUser = auth.currentUser;
-  const sourceBookmarkPayload = window.lastConsensusBookmarkPayload?.conversation?.bookmarkId === sourceBookmark.id
-    ? window.lastConsensusBookmarkPayload : null;
-  return window.App.sourceVerification?.observe({snapshot: sourceSnapshot,
-    auth: {user: sourceUser, uid: sourceUser?.uid, generation: authState.generation},
-    getOwnKey: () => window.localStorage.getItem('openrouterKey'),
-    isActive: () => bookmarkViewEpoch === sourceViewEpoch && body?.isConnected
-      && bookmark.responses.source_verification?.job_id === sourceSnapshot.job_id,
-    onUpdate(value) {
-      bookmark.responses.source_verification = value;
-      if (sourceBookmark.responses) sourceBookmark.responses.source_verification = value;
-      if (continuationTurn) continuationTurn.source_verification = value;
-      if (sourceBookmarkPayload) sourceBookmarkPayload.sourceVerification = value;
-      const basis = window.App.runRegistry?.getSelectedConversationBasis?.();
-      if (basis?.bookmarkId === sourceBookmark.id && basis.currentTurn) {
-        basis.currentTurn.source_verification = value;
-        window.App.runRegistry.selectConversationBasis(basis);
-      }
-      window.App.sourceVerification?.renderCurrent(value, {differencesData});
-    }
-  });
 }
 
 function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = {}) {
@@ -2766,8 +2739,10 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // WICHTIG: Die Konsens-Antwort zuerst rendern – die Claim-Badges
         // (Modell-Zustimmung) verankern sich am Text der Hauptantwort.
         const conMain = window.App.consensusBodyEl(consensusDiv);
-        const sourceReferences = bookmark.responses.source_verification?.check_type !== 'contradiction_evidence';
-        conMain.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
+        // Consensus prose has carried no source references since 2026-09-11,
+        // so a numeric [1] in it never picks up a citation (as in the live
+        // run). Older answers with [S1] tags keep their citations.
+        conMain.dataset.sourceReferences = /\[S\d/i.test(consensusText || '') ? 'legacy' : 'none';
         renderContent(conMain, consensusText);
 
         // --- Differences Box ---
@@ -2782,8 +2757,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
 
         let structuredRendered = false;
         if (window.renderConsensusInsights && differencesData && typeof differencesData === "object") {
-            structuredRendered = window.renderConsensusInsights(differencesData, includedCount,
-              sourceReferences ? {} : {sources: []});
+            structuredRendered = window.renderConsensusInsights(differencesData, includedCount, {sources: []});
         }
 
         // Resolve-Persistenz: Payload setzen, damit eine Resolve-Runde aus dem
@@ -2822,9 +2796,6 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             }
             renderContent(conDiff, diffText);
         }
-
-        window.App.sourceVerification?.renderCurrent(bookmark.responses.source_verification, {differencesData});
-        observeBookmarkSourceCheck({bookmark, sourceBookmark, continuationTurn, body: conMain, differencesData});
 
         // Konsens-Bereich genau wie nach einer echten Anfrage einblenden – aber nur,
         // wenn das Bookmark tatsächlich einen Konsens enthält. So erscheint der

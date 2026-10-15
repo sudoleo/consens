@@ -335,7 +335,7 @@ def receipts(store, uid, chat_id, turn_id):
         index += 1
 
 
-def run_turn(case, question, *, model, families, config, key, check_sources):
+def run_turn(case, question, *, model, families, config, key):
     from app.services.agent_comparison import comparison_selection
     from app.services.agent_delegation import DelegationLoop
     from app.services.agent_policy import AgentPolicy
@@ -355,8 +355,7 @@ def run_turn(case, question, *, model, families, config, key, check_sources):
                           api_key=key, cancellation=ProviderCancellation(),
                           policy=AgentPolicy.for_chat(delegation_config), delegation_config=delegation_config,
                           completion_factory=timing.completion(AgentCompletion),
-                          comparison_models=comparison_selection(families),
-                          check_sources=check_sources)
+                          comparison_models=comparison_selection(families))
     timing.started = time.perf_counter()
     events, error = [], None
     try:
@@ -482,7 +481,6 @@ def main():
     parser.add_argument("--only", type=int, action="append", help="Case index (repeatable)")
     parser.add_argument("--baseline", help="JSON lines of an earlier run to compare against (with --pairwise)")
     parser.add_argument("--baseline-mode", default="separate", help="Rows of --baseline with this mode")
-    parser.add_argument("--check-sources", action="store_true", help="Also run the source check of contradictions")
     parser.add_argument("--pairwise", help="Model id of a blind judge that picks the better answer per question")
     parser.add_argument("--out", help="Write every line to this JSON lines file as well")
     parser.add_argument("--tier", default="pro", choices=("free", "plus", "pro"),
@@ -536,8 +534,7 @@ def main():
     for index, (kind, question) in enumerate(CASES):
         if args.only and index not in args.only:
             continue
-        row = run_turn(index, question, model=model, families=families, config=config, key=key,
-                       check_sources=args.check_sources)
+        row = run_turn(index, question, model=model, families=families, config=config, key=key)
         row["kind"] = kind
         rows.append(row)
         emit(row)

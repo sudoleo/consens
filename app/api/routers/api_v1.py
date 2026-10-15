@@ -360,31 +360,6 @@ def create_consensus_run(
     return _public_run(run)
 
 
-@router.get('/consensus/runs/{run_id}/source-check', tags=['Consensus API'])
-@limiter.limit('240/minute')
-def get_run_source_check(request: Request, run_id: str,
-        cursor: int = Query(0, ge=0), revision: Optional[int] = Query(None, ge=0),
-        after_revision: Optional[int] = Query(None, ge=0),
-        api_key: Optional[str] = Security(api_key_header)):
-    identity = authenticate_api_identity(api_key)
-    enforce_uid_rate_limit(identity.uid, 'get', 120)
-    try:
-        run = api_run_repository.get_for_uid(run_id, identity.uid)
-    except ApiRunNotFound:
-        raise HTTPException(404, 'Run not found') from None
-    snapshot = (run.get('result') or {}).get('source_verification') or {}
-    if not snapshot.get('job_id'):
-        raise HTTPException(404, 'Source check not found')
-    if snapshot.get('check_type') == 'contradiction_evidence':
-        from app.services.source_verification import answer_version
-        if (snapshot.get('run_id') != 'api:' + run_id
-                or snapshot.get('answer_version') != answer_version((run.get('result') or {}).get('consensus_response', ''))):
-            raise HTTPException(404, 'Source check not found')
-    from app.api.routers.source_checks import check_page
-    return check_page(snapshot['job_id'], uid=identity.uid, cursor=cursor, revision=revision,
-                      after_revision=after_revision, expected_snapshot=snapshot)
-
-
 @router.get(
     "/consensus/runs/{run_id}",
     response_model=ConsensusRunResponse,
@@ -701,9 +676,6 @@ def _raise_run_deleted():
 def _public_run(run: dict) -> dict:
     request = run.get("request") or {}
     result = run.get('result') if run.get('status') == 'succeeded' else None
-    if result and (result.get('source_verification') or {}).get('job_id'):
-        result = {**result, 'source_verification': {**result['source_verification'],
-            'status_url': f"/api/v1/consensus/runs/{run['run_id']}/source-check"}}
     return {
         "run_id": run["run_id"],
         "status": run["status"],

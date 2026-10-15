@@ -85,9 +85,7 @@ ersetzt. Dadurch sind die Konto-/Request-/Modal-Races auch ohne Java separat
 ausführbar:
 
 Der lokale Server nutzt Port 8033. Fuer parallele isolierte Worktrees kann
-`$env:E2E_PHASE4_PORT = "8043"` einen eigenen Port setzen. Screenshots der
-Source-Pruefungen gehen nach `test-results/source-verification-ui/`, nicht in
-die versionierten historischen Auditbilder.
+`$env:E2E_PHASE4_PORT = "8043"` einen eigenen Port setzen.
 
 ```powershell
 $env:RUN_E2E = "1"

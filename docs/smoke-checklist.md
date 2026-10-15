@@ -235,8 +235,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;
       Touch-Ziele bleiben 44 px hoch, abgeschlossener Resolve blendet den Button
-      aus. Source Checks stehen mobil mittig unter den Tabs; nach dem letzten
-      Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
+      aus. Nach dem letzten Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
       `tests/e2e/test_inspector_polish.py`.
 - [ ] Differences-Panel (Agent- und Consensus-Chat, Light/Dark, Desktop-Dock
       und 390 px): kein Untertitel, Frage als eine abgeschnittene Zeile ohne
@@ -245,8 +244,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       `Minor`/`Emphasis`, kritische zuerst, Titel in normalem Gewicht, keine
       Positionszahl; nur eine Karte gleichzeitig offen. Pro Position eine Zeile
       Icon + Modellname (Klick öffnet die Originalantwort), Zitat leiser.
-      Inline-Marker und Source-check-Status öffnen weiterhin die richtige
-      Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
+      Inline-Marker öffnen weiterhin die richtige Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
       Notizen, Modell-Icons 0→6, Writing/Checking, Marken, 45/100) ohne
@@ -347,7 +345,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       einer und zwei Spalten. Light/Dark, Tastaturnavigation und mobile
       Eingabefokussierung prüfen; Schalter, API-Key-Feld und System Prompt
       funktionieren weiterhin. Account-Löschung nur im isolierten Testprofil.
-- [ ] Settings → Display → Answer & source highlights: All / Contradictions /
+- [ ] Settings → Display → Answer highlights: All / Contradictions /
       Disagreements & issues / Critical contradictions / None bei 320/390 px und Desktop prüfen. Graue Detail-
       widersprüche bleiben unter Contradictions sichtbar, graue Emphasis nicht.
       Wechsel gilt sofort und nach Reload auch für archivierte Antworten;
@@ -367,14 +365,6 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Share/Watch/Cite stehen auf Desktop neben der Hauptnavigation; mobil
       im Header als Icons mit zugänglichen Namen. Run again bleibt erreichbar, ohne sich mit
       Laufzeit oder Kosten zu überlagern; Cite-Menü sitzt am neuen Host.
-- [ ] Source-check-Status anklicken: Bei v4 direkt zur Prüfbegründung in
-      Differences, inklusive Gründen für ausgelassene/unverfügbare Prüfungen.
-      Bei mehreren Karten wird zuerst eine nicht abgeschlossene Prüfung geöffnet;
-      nur ihr Prüfbereich bekommt Fokus und eine nach 2,8 Sekunden ausblendende
-      Markierung. Wiederholter Klick startet den Hinweis neu. Polling erhält die
-      Restdauer, Run-Wechsel/Clear entfernt ihn. Legacy/ohne Einzelbefund führt
-      zum markierten Sources-Bericht. Reduced Motion ohne Bewegung;
-      Forced Colors mit sichtbarem Systemrahmen.
 - [ ] Mobile Navigation bei 320–1099 px: Menü als runde Insel (44 px), rechts
       die Aktionen als Pille (New chat, Watch, „…“ mit Share/Copy/Cite); unter
       den Inseln löst sich gescrollter Text in den Grund auf, ohne Blur, und ist
@@ -979,59 +969,6 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Quellen-Favicons geladen und fehlgeschlagen: Titel, Domain und Referenznummer bleiben in beiden Faellen lesbar; Fehler zeigen einen Buchstaben statt kaputtem Bild.
 - [ ] Ein einzelner Unterschied direkt offen; erweiterte Desktopansicht mit Positionen nebeneinander, Handy untereinander.
 
-### Check Sources: dauerhafte Belegprüfung
-- [ ] Check Sources vor dem Start ausschalten und während des Laufs einschalten:
-      Der gestartete Lauf behält seine ursprüngliche Einstellung; erst der nächste
-      Consensus übernimmt die Änderung.
-- [ ] Mehr Quellen und Satz-Quellen-Zuordnungen als ein Prüfpaket verwenden:
-      Alle zitierten Quellen erhalten einen Status. Quellenanzahl, geprüfte
-      Zuordnungen, noch ausstehende Prüfungen und nicht prüfbare Einträge bleiben
-      getrennt sichtbar; kein später Quellenverweis verschwindet wegen seiner Position.
-- [ ] Quellen-GET absichtlich verzögern: Consensus, Differences und Laufabschluss
-      sind bereits benutzbar. Die Quellenprüfung aktualisiert sich anschließend
-      schrittweise, ohne Antwort, Agreement-Score, Claim-Knoten oder offene
-      Quellenpassagen und Tastaturfokus zu ersetzen.
-- [ ] Quellen mit widersprechender Zahl, fehlender Bedingung, unklarem Beleg,
-      falschem Zeitraum und Abruf-Timeout prüfen: „Statement contradicted“,
-      „Partly supported“, „Support unclear“ und „Not checked“ bleiben unterscheidbar.
-      Originalpassage, Prüfzeit und konkrete technische Fehlerursache sind lesbar;
-      ein Prüfabschluss allein erzeugt keinen positiven Gesamt-Haken.
-- [ ] Einen identischen Quellenbeleg mehrerer Modelle öffnen: Herkunft nennt die
-      beteiligten Modelle und erklärt die gemeinsame Quelle. Modell-Zustimmung
-      und -Dissens gehören zum selben Satz und bleiben von Quellenbelegen getrennt.
-- [ ] Während der Quellenprüfung zu einem anderen Lauf oder Bookmark wechseln:
-      Ergebnisse landen nur im ursprünglichen Lauf. Ein geschlossenes oder neu
-      geöffnetes Bookmark sowie historische Turns laden auch aus kompakten,
-      bereits abgeschlossenen Job-Snapshots die vollständigen Details nach.
-- [ ] Ausloggen oder einen Lauf entfernen, während ein Quellen-GET offen ist:
-      Der Request wird abgebrochen; seine verspätete Antwort verändert weder
-      fremde Inhalte noch die neue Sitzung. Tab ausblenden stoppt regelmäßige
-      Abfragen; Rückkehr setzt die Aktualisierung fort.
-- [ ] Unveränderte Job-Revision mehrmals abfragen: nur kompakter Header-Check
-      mit `after_revision`, keine erneuten Detailseiten und keine DOM-Neuzeichnung.
-      Bei Änderungen werden alle Cursor-Seiten derselben Revision geladen;
-      ein Revisionswechsel währenddessen startet die Seitensammlung neu.
-- [ ] Quellen-GET mit 403/404 beantworten: „Updates unavailable“ und eine
-      verständliche Erklärung erscheinen; der letzte Befund bleibt erhalten.
-      Drei vorübergehende Abruffehler zeigen einen Wiederholungs-Hinweis;
-      erfolgreiche Aktualisierung entfernt ihn, ohne den Belegstatus umzudeuten.
-- [ ] Eigenkey-Lauf nach verlorenem Worker-Credential öffnen: höchstens eine
-      automatische Wiederaufnahme mit dem vorhandenen eigenen Schlüssel;
-      ein Serverkey-Lauf darf diesen Schlüssel nicht verwenden. Ohne Schlüssel
-      bleibt die notwendige Eingabe sichtbar, ohne einen neuen Consensus zu starten.
-- [ ] Öffentliche Share-/Topic-Ansichten zeigen nur ihren gebundenen Snapshot und
-      laden dessen Quellenstatus nach. Bei historischen Versionen wandern weder
-      Befunde noch Quellen aus einer neueren Version hinein.
-- [ ] Desktop sowie 390/320px, Hell/Dunkel und reduzierte Bewegung prüfen:
-      Quellenstatus bleibt sichtbar, Badges und Originalpassagen umbrechen ohne
-      horizontales Scrollen; reduzierte Bewegung deaktiviert Ladeanimationen.
-
-- [ ] Frische Sitzung in Consensus: gespeicherten Direktvergleich oeffnen.
-      Alle gespeicherten Modelle sind sichtbar, auch aktuell ausgeschlossene.
-      „Direct comparison“ erklaert das Ergebnis; die Wahl fuer die naechste
-      Frage bleibt Consensus. Wechsel zu einem
-      Consensus-Bookmark und zurueck zeigt keine leeren oder fremden Antworten.
-
 ## Agent · Beta: Vergleiche und Prüfungen
 
 - [ ] Mobil bei 320/369/390 px Folgefrage fokussieren, auch mit kurzer
@@ -1076,25 +1013,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Bottom-Bar vor und nach dem Senden bei 1440/390/320 px: vor dem Senden
       zeigt das (+)-Menü „Agent“ mit Haken, im offenen Agent-Chat tritt die
       Modusgruppe zurück und das Eingabefeld behält seine Breite.
-      „Check contradictions against sources“ gibt es nur noch unter Settings →
-      Runs; ein laufender Run und Recovery behalten den eingefrorenen Wert.
-      Unter einer Agent-Antwort mit geprüften Widersprüchen sagt der
-      Contradictions-Link, was die Quellen ergaben („· 1 settled by sources“,
-      „· checking sources“).
+      Kein Schalter „Check contradictions“ mehr (Settings, (+)-Menü, Leiste).
       „Reasoning“ öffnet per Klick/Enter die vorhandene Reasoning-Auswahl,
       „Attach“ öffnet wie das (+)-Menü die Dateiauswahl (Upload in den privaten
       Chatspeicher). Kein horizontaler Overflow.
-- [ ] Bei aktivierter Quellenprüfung erscheinen Ergebnis und aufklappbare
-      Originalbelege direkt in den Widerspruchskarten, auch nach Öffnen des
-      gespeicherten Chats. Off lässt Modellvergleich/Coverage aktiv. Fehlende
-      oder abgelehnte Belege werden nicht als Bestätigung dargestellt.
-- [ ] Mit Quellenprüfung endet der Agent-Lauf direkt nach dem Antwort-Check
-      (kein Warten auf Abrufe); der Contradictions-Link zeigt „checking sources“,
-      bis der Hintergrundjob fertig ist, dann z. B. „1 settled by sources“, und
-      ein offener Reader zeigt die Urteile an den Karten. Neu laden während der
-      Prüfung: der gespeicherte Turn verfolgt denselben Job weiter. Der
-      Kontostand sinkt um die gemessenen Tokens der Prüfung.
-
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer (Rest unter 1 % als „<1%“). Panel: absolute
   Tokens, Rücksetzzeit in Ortszeit und UTC, keine Watches-Zeile.
@@ -1121,8 +1043,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   erkennbare Absatz- und Listenabstände, auch bei verschachtelten Listen.
   Markdown-Überschriften bleiben linksbündig mit normaler Groß-/Kleinschreibung;
   Tabellen, Code und Formeln erzeugen keinen horizontalen Seiten-Overflow.
-- [ ] Agent-Antwort nach der Synthese weiterlesen, während Judge und optionale
-  Quellenprüfung laufen: kein Leeren/Neuschreiben der Antwort und nur ein
+- [ ] Agent-Antwort nach der Synthese weiterlesen, während die Judges
+  laufen: kein Leeren/Neuschreiben der Antwort und nur ein
   Prüfzyklus, auch bei unvollständigen Modellantworten. Überarbeitung erst nach
   neuer Nutzernachricht. Beim Lesen unten oder mitten in einer langen Antwort
   bleibt dieselbe Zeile stehen, wenn der Status darüber wechselt oder bei

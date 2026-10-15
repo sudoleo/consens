@@ -24,7 +24,7 @@ Agent selbst: Klartext in einem Schritt ohne Toolcalls ist die Antwort und beend
 die Nachricht; nach Vergleichen prüft die App sie (siehe „Die Antwort schreibt der
 Agent selbst“). Bis 2026-10-14 beendete das Tool `answer` die Steuerung, und ein
 eigener Antwortschritt ohne Tools schrieb die Antwort.
-`judge_answer` und `check_contradictions` führt die App selbst aus
+`judge_answer` führt die App selbst aus
 (`ComparisonTools.app_tools`, `DelegationLoop.app_registry`); das Modell sieht sie
 nicht. Nach einem Vergleich bekommt der Orchestrator immer die Antworten zu sehen
 und entscheidet dann: Reichen sie, schreibt er im nächsten Schritt die Antwort,
@@ -115,9 +115,7 @@ eine Zeile, auf dem Handy eingeklappt (+), Feld und Senden. Ein neuer Chat zeigt
 die Startleiste wieder.
 Der Moduswähler (Compare / Consensus / Agent, `run-mode.js`) tritt in einem
 offenen Agent-Chat zurück: Compare und Consensus brauchen einen neuen Chat,
-weil die Chat-Familien serverseitig getrennt sind. „Check contradictions“ schaltet das
-Quellenprüfungs-Tool für die nächste Nachricht frei. Der gemeinsame On/Off-Wert
-wird beim Senden eingefroren und bei Recovery wiederverwendet. „Reasoning“
+weil die Chat-Familien serverseitig getrennt sind. „Reasoning“
 (`#composerReasoningToggle`, im (+)-Menü `#agentReasoningMenuOption`) öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
 aktuelle Stufe. Modelle ohne wählbares Reasoning und laufende Nachrichten sperren
 dieses Menü. „Attach“ lädt PDF, Word, Text und Bilder in den privaten Chat-Dateispeicher.
@@ -152,8 +150,7 @@ weil eine späte Antwort weder in den Text noch in die Prüfung kommt;
 `balanced` wie unten beschrieben, Label „Every model on thorough questions“;
 `fast` ab der Hälfte der Antworten mit 1,1-facher
 Nachfrist und mindestens einer Sekunde) und
-**Agent freedom** (`autonomy`, siehe unten). „Check contradictions“ bleibt im
-Reiter Runs und im Composer.
+**Agent freedom** (`autonomy`, siehe unten).
 
 ### Agent freedom: geführt oder frei
 
@@ -322,13 +319,9 @@ Gemini als Chatmodell. Ist Gemini bereits der primäre Judge, übernimmt der
 OpenAI-Standard-Judge. Beide Prüfungen behalten die niedrige Judge-Denkstufe;
 die Pro-Tabelle und weitere Modellfamilien werden nicht als Ausweichstufen genutzt.
 
-Bei eingeschaltetem „Check contradictions“ folgt `check_contradictions`; der
-Server ruft es nach der Antwortprüfung selbst auf (`_finish_review`).
-
 **Nach der Antwort.** Ein Schritt ohne Toolcalls beendet die Steuerung.
 `DelegationLoop._finish_merged` zeigt den Text vollständig, fixiert ihn
-(`capture`) und prüft ihn nach Vergleichen mit `judge_answer` (und
-gegebenenfalls `check_contradictions`) über `app_registry` (`_finish_review`);
+(`capture`) und prüft ihn nach Vergleichen mit `judge_answer` über `app_registry` (`_finish_review`);
 die Prüfung bleibt eine eigene sichtbare Zeile („Checked the answer“). Danach
 lehnen `compare_models` und `read_source` ab. Bis 2026-10-14 beendete das Tool
 `answer` die Steuerung, lief nach allen anderen Aufrufen seines Schritts, und
@@ -353,27 +346,12 @@ oder weniger als zwei Antworten bekam (`compare_failed`): Der Orchestrator hätt
 das Ergebnis sonst nie gesehen. Heute ist die Antwort ein eigener Schritt ohne
 Toolcalls, also liegt jedes Toolergebnis vor, bevor er schreibt.
 
-`check_contradictions` verwendet den bestehenden Contradiction Judge für große,
-faktisch prüfbare Widersprüche und bereits vorhandene Originalquellen. Seit 2026-10-03 läuft die
-Prüfung als Hintergrundjob in derselben Queue wie in Consensus
-(`source_check_jobs.py`): das Tool reiht je Vergleich einen Job ein, der Turn
-endet sofort danach mit dem Jobverweis, und die Seite verfolgt den Job, bis er
-fertig ist. Abruf, validierte Zitate, Ausschlussgründe, konfigurierte
-Judge-Modelle und Verfügbarkeits-Fallbacks sind dieselben wie in Consensus.
-Die Kosten bleiben auf dem Tokenkonto: der Job reserviert seine Obergrenze bei
-der Aufnahme und bucht die gemessenen Tokens mit seinem Ergebnis; reicht das
-Konto nicht, wird nicht geprüft (`token_budget_exhausted`).
-Ohne passende Widersprüche wird die Quellenprüfung ohne Job, Abrufe oder
-bezahlten Quellen-Judge übersprungen. Ausgeschaltet ist das Tool nicht verfügbar;
-Differences und Coverage bleiben Bestandteil jedes Modellvergleichs.
-Bei eingeschalteter Quellenprüfung endet der Turn erst nach dem Einreihen. Seit
-2026-10-07 bekommt das Modell nach der fixierten Antwort keinen weiteren
-Steuerschritt dafür; es sieht selbst keine Quellenurteile. Fehlerhafte oder fehlende
-Belege bleiben ausdrücklich ungeprüft. Ergebnisse und Originalbelege stehen
-direkt an den Widerspruchskarten und als kurze Notiz am Contradictions-Link
-(„checking sources“ → „1 settled by sources“), auch im gespeicherten Verlauf.
-Eine neue Antwort oder Vergleichsgrundlage braucht eine neue Prüfung;
-wiederholte Tool-Aufrufe derselben Prüfung reihen keinen weiteren Job ein.
+Bis 2026-10-15 prüfte `check_contradictions` danach große faktische
+Widersprüche als Hintergrundjob gegen die von den Modellen zitierten Quellen.
+Die Prüfung ist entfernt: Sie lief erst nach der fertigen Antwort, änderte sie
+nie, der Agent sah ihr Ergebnis nicht, und sie kam meist ohne Urteil zurück.
+Einen Faktenstreit klärt der Agent vor dem Schreiben selbst mit `read_source`
+(siehe „Quellen nachlesen“).
 
 Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend und
 abgebrochen. Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen
@@ -412,8 +390,8 @@ Schimmer.
 Während Differences und Coverage die feste Antwort prüfen, läuft ein leichter
 Lichtschimmer im Takt der Thinking-Überschrift über die Antwort (Overlay in
 Seitenfarbe, kein Textverlauf, damit Tabellen, Code und Links lesbar bleiben);
-er blendet aus, sobald die Prüfung endet. Die Markierungen erscheinen dann sofort,
-auch wenn eine Quellenprüfung noch läuft, und streichen sich beim ersten Mal in
+er blendet aus, sobald die Prüfung endet. Die Markierungen erscheinen dann sofort
+und streichen sich beim ersten Mal in
 Lesereihenfolge an wie ein Textmarker (höchstens etwa 0,9 s Versatz, Badges
 folgen). Erneutes Rendern derselben Antwort und gespeicherte Chats zeigen sie ohne
 Animation; Reduced Motion und Forced Colors verzichten auf beides.
@@ -436,8 +414,8 @@ Coverage-Judge).
 Der Review bleibt technisch `partial`; fehlende Stimmen werden nicht als
 Zustimmung gezählt. `Answers` zählt nur vollständige Antworten, der Leser zeigt
 auch die ausgefallenen Modelle und bei neuen Runs deren sicheren Fehlergrund
-(z. B. Provider-Rate-Limit). Fehlende Prüfer, ungeprüfte Sätze und unvollständige
-Quellenprüfungen werden separat erklärt. Alte gespeicherte Runs nutzen dafür
+(z. B. Provider-Rate-Limit). Fehlende Prüfer und ungeprüfte Sätze werden separat
+erklärt. Alte gespeicherte Runs nutzen dafür
 ihre vorhandenen Judge-Metadaten; sie werden nicht erneut kostenpflichtig geprüft.
 Grüne Markierungen zeigen die Zustimmung per Mausvorschau oder Tastaturfokus.
 Ein nachlaufendes Scroll-/Resize-Ereignis positioniert die Vorschau neu, wenn der
@@ -1311,8 +1289,8 @@ umgerechnet. Zeigen zwei Quellen danach auf dieselbe Seite, bleibt die erste.
 In Unit-, E2E- und Mock-Läufen geht keine Anfrage hinaus. Eine Zitation ohne Spanne (0/0) markiert die
 Ankunft der Suchergebnisse, nicht die gestützte Aussage, und bindet keine; ihr
 Text bleibt Auszug. Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
-Server deshalb die Seite selbst, mit demselben begrenzten, gecachten Abruf wie
-die Quellenprüfung (`source_documents.fetch_document`: nur öffentliche
+Server deshalb die Seite selbst, mit einem begrenzten, gecachten Abruf
+(`source_documents.fetch_document` mit `FetchLimits`: nur öffentliche
 Adressen, 5 s, 400 kB; einsame Surrogate wie `&#55357;` werden zu U+FFFD, sonst
 scheitert der UTF-8-Request von Judge oder Agent; `dns_busy` ist eigene
 Kapazität und wird nicht als Fehler der URL gecacht). Die Abrufe starten, sobald eine Vergleichsantwort

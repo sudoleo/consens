@@ -566,8 +566,6 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
             if field in source:
                 result[field] = source[field]
     if "consensus" in source:
-        from app.services.source_verification import stored_verification
-        result["source_verification"] = stored_verification(source.get("source_verification"), source.get("consensus"))
         if source.get("execution_mode") != "agent":
             result["consensus"] = _bounded_text(
                 source.get("consensus"), CONSENSUS_MAX_LENGTH, field_name="consensus"
@@ -961,7 +959,6 @@ class ChatStore:
         differences_data: object,
         sources: object,
         result_id: object = None,
-        source_verification: object = None,
     ) -> dict:
         question = normalize_question(question)
         normalized_answers = normalize_model_answers(model_answers)
@@ -981,8 +978,6 @@ class ChatStore:
         )
         differences_data = normalize_turn_differences_data(differences_data)
         sources = normalize_turn_sources(sources)
-        from app.services.source_verification import stored_verification
-        source_verification = stored_verification(source_verification, consensus)
         result_id = normalize_result_id(result_id)
         included_models = list(normalized_answers)
         agreement_score = _agreement_score(differences_data)
@@ -999,7 +994,6 @@ class ChatStore:
             differences_data=differences_data,
             sources=sources,
             result_id=result_id,
-            source_verification=source_verification,
         )
 
         def operation(transaction):
@@ -1032,7 +1026,6 @@ class ChatStore:
             turn_updates = {
                 "status": TURN_STATUS_COMPLETED,
                 "consensus": consensus,
-                "source_verification": source_verification,
                 "differences": differences,
                 "differences_data": differences_data,
                 "sources": sources,
@@ -1665,7 +1658,6 @@ def _completion_fingerprint(
     differences_data: dict | None,
     sources: list[dict],
     result_id: str | None,
-    source_verification: dict | None = None,
 ) -> str:
     payload = {
         "schema_version": TURN_SCHEMA_VERSION,
@@ -1678,7 +1670,6 @@ def _completion_fingerprint(
             if provider in model_answers
         },
         "consensus": consensus,
-        "source_verification": source_verification,
         "differences": differences,
         "differences_data": differences_data,
         "sources": sources,

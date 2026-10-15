@@ -1930,14 +1930,13 @@ body:not(.is-hero) #verifyBanner {
 }
 
 /* ---- Result footer -------------------------------------------------------
-   Stable reading order: verdict, navigation, source-check summary, actions
-   and run details. Hidden sections collapse without leaving empty grid rows.
+   Stable reading order: verdict, navigation, actions and run details. Hidden sections collapse without leaving empty grid rows.
    -------------------------------------------------------------------------- */
 .run-provenance {
   --footer-ink: #000;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "verdict verdict" "tabs actions" "status facts";
+  grid-template-areas: "verdict verdict" "tabs actions" ". facts";
   align-items: center;
   gap: 4px 20px;
   margin-top: 16px;
@@ -1967,12 +1966,11 @@ body:not(.is-hero) #verifyBanner {
 .run-provenance > .consensus-verdict { grid-area: verdict; }
 .run-provenance > .consensus-footer-tabs { grid-area: tabs; }
 .run-provenance > .consensus-footer-actions { grid-area: actions; justify-self: end; }
-.run-provenance > .consensus-footer-source-status { grid-area: status; }
 .run-provenance > .consensus-footer-facts { grid-area: facts; }
 
 .run-provenance:has(.consensus-verdict[hidden]),
 body.agreement-verdict-hidden .run-provenance {
-  grid-template-areas: "tabs actions" "status facts";
+  grid-template-areas: "tabs actions" ". facts";
 }
 
 .consensus-footer-facts {
@@ -2083,43 +2081,6 @@ body.agreement-verdict-hidden .run-provenance::before {
   display: none;
 }
 
-/* Desktop keeps the detailed status as another entry point to Sources.
-   Mobile folds it into a small status icon on the existing Sources button. */
-.consensus-footer-source-status {
-  appearance: none;
-  border: 0;
-  border-radius: var(--radius-2xs);
-  background: transparent;
-  box-shadow: none;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  min-height: 32px;
-  justify-self: start;
-  padding: 0 0 4px;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.consensus-footer-source-label {
-  font-weight: var(--font-weight-medium);
-}
-
-.consensus-footer-source-status .source-check-status {
-  display: inline;
-  white-space: normal;
-  font-size: inherit;
-  font-weight: var(--font-weight-regular);
-  line-height: inherit;
-}
-
-.consensus-footer-source-status:not(:has(.source-check-status-copy:not(:empty))),
-.run-provenance:has(#consensusSourcesTab[hidden]) .consensus-footer-source-status {
-  display: none;
-}
-
 /* The headline is a headline: one line. It used to chain two truncated
    claim fragments plus "+2 more" into a two-line run-on that was the
    loudest thing in the footer and the hardest to read. One topic, cut with
@@ -2146,8 +2107,8 @@ body.agreement-verdict-hidden .run-provenance::before {
 }
 
 /* ---- The three drawers ---------------------------------------------------
-   Quiet icon actions, matching Agent evidence. The existing footer grid,
-   reader targets and mobile source-check status retain their own contracts.
+   Quiet icon actions, matching Agent evidence. The existing footer grid
+   and reader targets retain their own contracts.
    -------------------------------------------------------------------------- */
 .consensus-footer-tabs {
   display: flex;
@@ -2173,30 +2134,13 @@ body:not(.is-hero) .consensus-output {
   padding-bottom: 24px;
 }
 
-.consensus-footer-source-status:hover { color: var(--ink); text-decoration: underline; }
-.consensus-footer-source-status:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
-.consensus-source-check-icon { display: none; }
+#consensusSourcesTab { column-gap: .4rem; flex-wrap: wrap; }
+#consensusSourcesTab .consensus-tab-count { margin-inline-start: .15rem; }
 
 @media (max-width: 640px) {
-  .run-provenance > .consensus-footer-source-status,
   .run-provenance #runProvenanceFacts { display: none; }
   #consensusSourcesTab { flex-wrap: nowrap; column-gap: 4px; }
   #consensusSourcesTab .consensus-tab-count { margin-inline-start: 0; }
-  .consensus-source-check-icon:not(:empty) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 12px;
-    width: 12px;
-    height: 12px;
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    line-height: 1;
-    color: var(--ink-2);
-  }
-  #consensusSourcesTab[data-check-state="issue"] .consensus-source-check-icon {
-    color: var(--cx-warn-ink, #a66a14);
-  }
 }
 
 .consensus-tab {
@@ -2317,7 +2261,7 @@ body:not(.is-hero) .consensus-output {
   gap: 4px;
 }
 
-.consensus-tab-meta:not(:has(.consensus-tab-count:not(:empty), .consensus-source-check-icon:not(:empty))) {
+.consensus-tab-meta:not(:has(.consensus-tab-count:not(:empty))) {
   display: none;
 }
 
@@ -2546,8 +2490,7 @@ body.dark-mode .run-provenance {
     margin-left: 0;
   }
 
-  /* Icon and count share the first line, so even 320px fits three labels.
-     The source-check hint stays beside its count without shifting labels. */
+  /* Icon and count share the first line, so even 320px fits three labels. */
   .consensus-footer-tabs .consensus-tab.consensus-evidence-action {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2560,7 +2503,7 @@ body.dark-mode .run-provenance {
   .consensus-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }
   .consensus-tab-meta { grid-row: 1; grid-column: 2; justify-self: start; line-height: 16px; }
   .consensus-evidence-action .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
-  .consensus-evidence-action:not(:has(.consensus-tab-count:not(:empty), .consensus-source-check-icon:not(:empty))) .consensus-evidence-icon {
+  .consensus-evidence-action:not(:has(.consensus-tab-count:not(:empty))) .consensus-evidence-icon {
     grid-column: 1 / -1;
     justify-self: center;
   }
@@ -3654,13 +3597,6 @@ body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
   display: none;
 }
 
-/* Verdict colours from source-verification.css tint the pill; its dotted
-   underline was made for bare numbers and is dropped on the pill. */
-.src-ref[data-source-check] {
-  border-radius: var(--radius-pill);
-  text-decoration: none;
-}
-
 /* Hover teaser: enough of the source to decide whether to leave the page. */
 .source-teaser {
   position: absolute;
@@ -3732,26 +3668,6 @@ body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
   overflow: hidden;
 }
 
-.source-teaser-check {
-  margin-top: 7px;
-  padding-top: 7px;
-  border-top: 1px solid var(--line);
-  font-size: var(--font-size-micro);
-  color: var(--ink-2);
-  font-weight: var(--font-weight-medium);
-}
-
-.source-teaser-check-detail {
-  margin-top: 3px;
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
-}
-
 /* Grouped pill: one row per source behind the "+N". */
 .source-teaser-list {
   display: grid;
@@ -3768,12 +3684,6 @@ body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
   min-width: 0;
   color: var(--ink-3);
   font-size: var(--font-size-micro);
-}
-
-.source-teaser-item .source-teaser-check {
-  margin-top: 2px;
-  padding-top: 0;
-  border-top: 0;
 }
 
 .source-teaser-title.is-single-line {
@@ -4279,7 +4189,6 @@ body .theme-toggle:is(:hover, :focus-visible) {
 }
 .composer-agent-toggle:hover { background: var(--app-surface-selected); }
 .composer-agent-toggle:disabled { opacity: .45; cursor: default; background: transparent; }
-:is(.attach-menu-toggle, .settings-switch-row):has(input[id^="sourceCheck"]:disabled) { opacity: .5; cursor: default; }
 .composer-agent-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .composer-tool { margin-left: 0; font-weight: 500; }
 .composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
@@ -4359,34 +4268,6 @@ body .theme-toggle:is(:hover, :focus-visible) {
 @container composer-options (max-width: 700px) {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
-}
-
-/* Source references stay navigable; the preference only filters verdict accents. */
-body[data-consensus-highlight-mode="concerns"] :is(.src-ref, .source-link)[data-source-check]:not([data-source-check="contradicted"]):not([data-source-check="issue"]):not([data-source-check="unknown"]),
-body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highlight-mode="critical"]) :is(.src-ref, .source-link)[data-source-check]:not([data-source-check="contradicted"]) {
-  color: var(--ink-3, #697386);
-  background: transparent;
-  text-decoration: none;
-}
-
-body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-check]:is(:hover, :focus-visible) {
-  text-decoration: underline;
-}
-
-/* A source pill whose verdict is filtered or hidden falls back to its
-   neutral look — still a pill, never bare text. Same selectors as above and
-   in source-verification.css, so this later layer wins. */
-body[data-consensus-highlight-mode="concerns"] .src-ref[data-source-check]:not([data-source-check="contradicted"]):not([data-source-check="issue"]):not([data-source-check="unknown"]),
-body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highlight-mode="critical"]) .src-ref[data-source-check]:not([data-source-check="contradicted"]),
-body.consensus-markers-hidden .src-ref[data-source-check] {
-  color: var(--ink-2);
-  background: var(--src-ref-bg);
-}
-
-body[data-consensus-highlight-mode] .src-ref[data-source-check]:is(:hover, :focus-visible),
-body.consensus-markers-hidden .src-ref[data-source-check]:hover,
-body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
-  text-decoration: none;
 }
 
 /* Mobile navigation: no bar, two islands. The menu is a round button on the

@@ -112,7 +112,7 @@ class Merged(Script):
         return Completion()
 
 
-def merged_loop(store, script, *, messages=None, memory=None, check_sources=False):
+def merged_loop(store, script, *, messages=None, memory=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -120,7 +120,7 @@ def merged_loop(store, script, *, messages=None, memory=None, check_sources=Fals
         messages=messages or [{"role": "system", "content": "Answer."},
                               {"role": "user", "content": "Which option is cheaper?"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=script.factory, check_sources=check_sources,
+        delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         memory=memory)
     script.loop = loop
@@ -705,7 +705,7 @@ def test_the_live_script_measures_a_turn(store, monkeypatch):
     monkeypatch.setattr(agent_client, "AgentCompletion", type(script.factory()))
     row = module.run_turn(0, "Which option is cheaper?", model=resolve_agent_model("claude-haiku-4-5"),
                           families={"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"},
-                          config=prompt_config.get_config(), key="test", check_sources=False)
+                          config=prompt_config.get_config(), key="test")
     assert row["mode"] == "agent" and row["status"] == "completed" and not row["error"]
     # Steering and the answer in one step after the comparison.
     assert row["steps"] == 2 and 0 < row["after_comparison_cost_usd"] < row["chat_cost_usd"]
@@ -761,7 +761,7 @@ def test_the_live_script_shows_429s_and_stalls(store, monkeypatch):
     row = module.run_turn(0, "Which option is cheaper?", model=resolve_agent_model("claude-haiku-4-5"),
                           families={"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini",
                                     "gemini": "gemini-3.5-flash-lite"},
-                          config=prompt_config.get_config(), key="test", check_sources=False)
+                          config=prompt_config.get_config(), key="test")
     assert row["status"] == "completed" and row["answer"] == ANSWER
     assert (row["rate_limits"], row["stalls"], row["retries"]) == (1, 1, 1)
     calls = {c["call"]: c for c in row["timeline"]}
@@ -840,7 +840,7 @@ def test_the_live_script_judges_each_answer_against_its_saved_baseline(monkeypat
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
     turns = []
 
-    def run_turn(case, question, *, model, families, config, key, check_sources):
+    def run_turn(case, question, *, model, families, config, key):
         turns.append(case)
         return {"case": case, "mode": "agent", "model": model.selection_id, "status": "completed",
                 "answer": f"Agent answer {case}.", "steps": 2, "agreement": [80], "retractions": 0, "leaks": [],

@@ -669,19 +669,13 @@
                     </button>
                   </div>
                   <button type="button" id="consensusSourcesTab" class="consensus-tab consensus-evidence-action"
-                    aria-expanded="false" aria-controls="consensusSourcesPanel"
-                    aria-describedby="consensusSourceCheckStatus" hidden>
+                    aria-expanded="false" aria-controls="consensusSourcesPanel" hidden>
                     <svg class="consensus-evidence-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6"/></svg>
                     <span class="consensus-tab-label" data-short="Sources">Sources</span>
-                    <span class="consensus-tab-meta"><span class="consensus-tab-count" id="consensusSourcesTabCount"></span><span class="consensus-source-check-icon" aria-hidden="true"></span></span>
+                    <span class="consensus-tab-meta"><span class="consensus-tab-count" id="consensusSourcesTabCount"></span></span>
                   </button>
                 </div>
                 <span class="consensus-footer-actions" id="consensusFooterActions"></span>
-                <button type="button" id="consensusSourceCheckButton" class="consensus-footer-source-status"
-                  aria-controls="consensusSourcesPanel">
-                  <span class="consensus-footer-source-label">Source check</span>
-                  <span id="consensusSourceCheckStatus" class="source-check-status" role="status"></span>
-                </button>
                   <div class="consensus-footer-facts">
                     <span class="run-provenance-facts" id="runProvenanceFacts"></span>
                     <!-- "Run again" ist ein vollstaendiger neuer Lauf und kostet
@@ -697,7 +691,6 @@
                    Quellen-Chip im Fuss. Gefuellt von app-init.js
                    (renderEvidenceSources). -->
               <div id="consensusSourcesPanel" class="consensus-sources-panel" hidden>
-                <div id="sourceVerificationReport" class="source-verification-report"></div>
                 <ol id="consensusSourcesList" class="consensus-sources-list"></ol>
               </div>
             </div>
@@ -1153,16 +1146,6 @@
                   </span>
                 </label>
               </div>
-
-              <div class="settings-section">
-                <label for="sourceCheckSwitch" class="custom-checkbox-label settings-switch-row">
-                  <span>
-                    <strong>Check contradictions against sources</strong>
-                    <small>When the models contradict each other on a fact, a separate judge reads the sources they cited. The result appears with the contradiction under the answer.</small>
-                  </span>
-                  <input type="checkbox" id="sourceCheckSwitch" checked>
-                </label>
-              </div>
             </div>
           </section>
 
@@ -1251,8 +1234,8 @@
               <div class="settings-section">
                 <label for="consensusHighlightsSelect" class="settings-switch-row settings-choice-row">
                   <span>
-                    <strong>Answer &amp; source highlights</strong>
-                    <small id="consensusHighlightsHelp">Highlight disagreements and source concerns in current and saved answers.</small>
+                    <strong>Answer highlights</strong>
+                    <small id="consensusHighlightsHelp">Highlight disagreements in current and saved answers.</small>
                   </span>
                   <span class="settings-select">
                     <select id="consensusHighlightsSelect" aria-describedby="consensusHighlightsHelp">
@@ -1520,19 +1503,6 @@
                 are available only to selected accounts. Paid plans are coming. There is no subscription to buy yet.
                 For more runs, you can connect your own OpenRouter API key in Settings and pay OpenRouter directly.
                 Feedback is welcome at <a href="mailto:contact@consens.io">contact@consens.io</a>.
-              </p>
-            </div>
-            <div class="faq-item">
-              <h3>
-                <span class="faq-number">12.</span>
-                What does Check contradictions do?
-                <span class="faq-toggle-icon">＋</span>
-              </h3>
-              <p>
-                When the models contradict each other on a checkable fact, a separate judge reads the sources they cited for each position.
-                Under the answer, the Contradictions link says how many of them the sources settled; open it to see each verdict with the original passages and links.
-                Checks run with limits; unavailable evidence and omitted checks are shown explicitly. This is not a complete fact-check of the answer, and model agreement is separate from source evidence.
-                The check is on by default and can be switched off in Settings → Runs; switching it off keeps the answer, its marks and the contradictions.
               </p>
             </div>
           </div>
