@@ -17,6 +17,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core import config as cfg
+from app.core.observability import safe_exception
 from app.services.agent_costs import aggregate_usage, fetch_bounds
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
@@ -91,6 +92,16 @@ TURN_REPEAT_LIMIT = ("The model repeated the same tool request without progress.
                      "The available results have been saved; send a follow-up message to continue.")
 TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress. "
                       "The available results have been saved.")
+# Pause before the one retry of a worker's end record (_terminal).
+TERMINAL_RETRY_SECONDS = .5
+
+
+def _transient_store_error(error):
+    """A short Firestore outage, not a closed chat, run or account."""
+    from google.api_core.exceptions import Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable
+    transient = (Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable)
+    # Firestore wraps exhausted transaction conflicts in ValueError.
+    return isinstance(error, transient) or isinstance(error.__cause__, transient)
 
 
 def smaller_search(searches):
@@ -194,6 +205,8 @@ class DelegationLoop(AgentLoop):
         from app.services.agent_runs import strip_app_context
         self.answer_conversation = [{"role": message["role"], "content": strip_app_context(message["content"])}
                                     for message in self.messages if message["role"] in {"user", "assistant"}]
+        # Everything up to this message's question; later steps only append.
+        self.turn_start = len(self.messages)
         from app.services.agent_memory import MemorySnapshot, MemoryTools
         self.memory = MemoryTools(self, memory if memory is not None else MemorySnapshot())
         self.file_context = file_context
@@ -877,7 +890,13 @@ class DelegationLoop(AgentLoop):
                 self.search_remaining -= searches
         if self.file_context:
             ids = getattr(worker, "file_ids", []) if worker else self.file_context.selection()
-            messages = self.file_context.messages(messages, model, file_ids=ids, query=str(messages[-1].get("content", ""))[-500:])
+            # The main model's file block follows this message's question, not
+            # the newest tool result: the same bytes at the same place in every
+            # step, so the provider caches the image/PDF instead of charging it
+            # in full again per step. Workers keep their own prompt last.
+            anchor = None if worker else min(self.turn_start, len(messages))
+            question = messages[(len(messages) if anchor is None else anchor) - 1].get("content", "")
+            messages = self.file_context.messages(messages, model, file_ids=ids, query=str(question)[-500:], anchor=anchor)
         tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
         reservation = None
         try:
@@ -1079,8 +1098,6 @@ class DelegationLoop(AgentLoop):
 
     def _settle_step(self, step, value, status):
         """Retry only the idempotent receipt write, including ambiguous commits."""
-        from google.api_core.exceptions import Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable
-        transient = (Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable)
         for attempt in range(3):
             try:
                 self.store.settle(self.uid, self.chat_id, self.turn_id, completion=value,
@@ -1090,8 +1107,7 @@ class DelegationLoop(AgentLoop):
                     self.condition.notify_all()
                 return
             except Exception as exc:
-                # Firestore wraps exhausted transaction conflicts in ValueError.
-                if not isinstance(exc, transient) and not isinstance(exc.__cause__, transient):
+                if not _transient_store_error(exc):
                     raise
                 if attempt == 2:
                     raise
@@ -1161,14 +1177,31 @@ class DelegationLoop(AgentLoop):
                 self._terminal(worker, "stopped", "Run ended.")
 
     def _terminal(self, worker, state, text, failure=None):
-        try:
-            with self.condition:
-                self._state(worker, state, ended_at=datetime.now(timezone.utc).isoformat(), failure=failure)
-                self._publish(worker, text=text[:self.policy.message_chars], kind="failure", sender=worker.id, recipient="orchestrator")
-        except Exception:
-            # Deletion/tombstones prohibit recreating a session. Cancellation still completes.
-            worker.state = state
-            self.cancellation.cancel()
+        """Save how a worker (a comparison answer, a page read) ended.
+
+        A short database outage retries once and otherwise leaves only this
+        record unsaved: one model's failure used to stop the whole turn when
+        writing it hit a transient error (audit A12)."""
+        for attempt in range(2):
+            try:
+                with self.condition:
+                    self._state(worker, state, ended_at=datetime.now(timezone.utc).isoformat(), failure=failure)
+                    self._publish(worker, text=text[:self.policy.message_chars], kind="failure", sender=worker.id, recipient="orchestrator")
+                return
+            except Exception as exc:
+                transient = _transient_store_error(exc)
+                if transient and not attempt:
+                    time.sleep(TERMINAL_RETRY_SECONDS)
+                    continue
+                with self.condition:
+                    worker.state = state
+                    self.condition.notify_all()
+                if transient:
+                    logging.warning("Agent worker end not saved category=%s state=%s", safe_exception(exc), state)
+                    return
+                # Deletion/tombstones prohibit recreating a session. Cancellation still completes.
+                self.cancellation.cancel()
+                return
 
     def _events(self):
         with self.condition:

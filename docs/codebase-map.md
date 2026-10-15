@@ -3317,6 +3317,18 @@ Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
 enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
 zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
 Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
+Seit 2026-10-15 (Audit A15) haben Ablehnungen, die sich unverändert wiederholen
+würden, eigene Codes statt `provider_error` („Trying again … usually works“):
+`provider_rejected` (HTTP 400/413/422), `conversation_too_long`
+(`agent_runs.ConversationTooLong`), `file_unavailable` und `google_error`
+(die eigenen, nutzerlesbaren Texte von `FileUnavailable`/`GoogleError`).
+`agent-chat.js::failureNotice` bietet bei diesen drei ersten kein „Retry“ an.
+Scheitert beim Speichern des Endes einer Vergleichsantwort oder eines
+Seitenlesens (`DelegationLoop._terminal`) Firestore nur kurz
+(`_transient_store_error`, wie bei `_settle_step`), folgt ein Versuch nach
+`TERMINAL_RETRY_SECONDS`; danach fehlt nur dieser Eintrag. Bis dahin brach jeder
+solche Fehler den ganzen Turn als „stopped“ ab (Audit A12). Geschlossener Chat,
+Lauf oder Konto brechen weiter ab.
 Scheitert ein Lauf erst nach abgeschlossenem Review, behält
 `AgentRunStore.finish` den Review-Status `succeeded`/`partial`; nur laufende
 bzw. ausstehende Reviews werden zu `failed`/`missing`/`cancelled`.
@@ -3711,8 +3723,16 @@ Im Chat entfallen pauschale Reserven für hypothetische Synthese-/Judge-Aufrufe;
 alle tatsächlich anstehenden Aufrufe reservieren weiterhin atomar im Tagesledger.
 Die alten Review-Holds bleiben für Legacy-Läufe korrekt abrechenbar. Modellfenster,
 Output-, Speicher- und Parallelitätsgrenzen bleiben technische Anforderungen:
-standardmäßig zwei parallele Unteraufrufe, initial 120.000 Zeichen Chatverlauf,
-bis zu 600 kB Review-Snapshot. Kein LLM-Kompressor. Der Admin-Prompteditor zeigt
+standardmäßig zwei parallele Unteraufrufe, 120.000 Zeichen Chatverlauf
+(`agent_runs.CONTEXT_CHAR_LIMIT`), bis zu 600 kB Review-Snapshot. Kein
+LLM-Kompressor. Ein längerer Chat behält seit 2026-10-15 seine neuesten
+Nachrichten (`history_start`): die ältesten fallen in Schritten von
+`HISTORY_STEP_TURNS` (4) weg, damit der Verlauf ein paar Nachrichten lang am
+selben Punkt beginnt und im Prompt-Cache bleibt; der App-Kontext der neuen
+Nachricht sagt dem Modell das (`HISTORY_OMITTED_NOTE`). Vorher brach jede
+weitere Nachricht ab, gespeichert als `provider_error`, und der Chat war tot
+(Audit A9). Passt nur die neue Nachricht nicht ins Modellfenster, kommt
+`ConversationTooLong` (422, `conversation_too_long`). Der Admin-Prompteditor zeigt
 nur wirksame Worker-Parallelitäts-/Nachrichtengrößen und verweist auf Limits für
 das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
@@ -7710,7 +7730,16 @@ gesendet, wenn ihre seitenbasierte Tokenreservierung ins Kontextfenster passt.
 Vergleiche erhalten die Auswahl, Worker nur explizite `file_ids`; Judges
 erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
 werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
-Tokenreservierung und tatsächlicher Usage-Abrechnung. Tool-Daten sind keine
+Tokenreservierung und tatsächlicher Usage-Abrechnung. Seit 2026-10-15 (Audit
+A6) steht der Dateiblock des Hauptmodells direkt hinter der Frage der Nachricht
+(`DelegationLoop.turn_start` als `anchor`, Auszugssuche mit der Frage), nicht
+hinter dem neuesten Tool-Ergebnis: In jedem Schritt derselbe Block an derselben
+Stelle, also aus dem Prompt-Cache statt jedes Mal voll bezahlt. Vergleichs- und
+andere Worker-Aufrufe hängen ihn weiter ans Ende ihres eigenen Prompts.
+`FileContext` (eine Instanz pro Turn) lädt Bild-/PDF-Bytes einmal pro Turn
+(`_raw`, gebunden an den SHA-256 des Datensatzes); die Metadaten liest jeder
+Aufruf weiter einmal, damit eine gelöschte oder abgelaufene Datei sofort
+scheitert. Tool-Daten sind keine
 Berechtigungen. Anleitung, Grenzen und PR-Matrix: `docs/agent-integrations.md`.
 
 ## Agent-Laufoberfläche: Rendering, Aktivität, Composer (2026-09-30)

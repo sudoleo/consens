@@ -12,6 +12,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import threading
 from uuid import uuid4
 
 from google.api_core.exceptions import NotFound
@@ -338,18 +339,28 @@ class ReadFileArgs(BaseModel):
 
 
 class FileContext:
+    """The files of one Agent turn (one instance per message)."""
+
     def __init__(self, files, uid, chat_id, file_ids):
         self.files, self.uid, self.chat_id = files, uid, chat_id
         self.file_ids = list(file_ids)
         # Files the model opened itself; kept apart so they never evict the
         # user's explicit selection from later evidence.
         self.read_ids = []
+        # Object bytes by file id, with the hash they were checked against:
+        # every step and every comparison answer of the turn sends the same
+        # image/PDF, so it is downloaded once per turn, not once per call.
+        self._objects = {}
+        self._objects_lock = threading.Lock()
 
     def read(self, args, *, cancellation):
         cancellation.raise_if_cancelled()
         data = self.files.get(self.uid, self.chat_id, args.file_id)
         if (data["mime"].startswith("image/") or not data["parts"]) and args.file_id not in self.file_ids:
             self.read_ids = [fid for fid in self.read_ids if fid != args.file_id][-(4):] + [args.file_id]
+        return self._excerpts(data, args)
+
+    def _excerpts(self, data, args):
         parts = list(data["parts"])
         if args.query:
             words = set(re.findall(r"\w{3,}", args.query.lower()))
@@ -369,7 +380,25 @@ class FileContext:
         """User selection first, then visual files the model opened, at most five."""
         return list(dict.fromkeys([*self.file_ids, *self.read_ids]))[:5]
 
-    def messages(self, messages, model, *, file_ids=None, query=""):
+    def _raw(self, file_id, data):
+        """The file's bytes for this turn, downloaded on first use.
+
+        ``data`` is the metadata the caller just read, so a file deleted or
+        expired meanwhile still fails there; the bytes of a file id never
+        change, and its hash ties the cached copy to that record."""
+        with self._objects_lock:
+            cached = self._objects.get(file_id)
+            if cached is None or cached[0] != data["sha256"]:
+                checked, raw = self.files.download(self.uid, self.chat_id, file_id)
+                cached = self._objects[file_id] = (checked["sha256"], raw)
+            return cached[1]
+
+    def messages(self, messages, model, *, file_ids=None, query="", anchor=None):
+        """``messages`` with one user message of file evidence, inserted after
+        ``messages[:anchor]`` (default: at the end).
+
+        A fixed ``anchor`` and ``query`` keep the block byte-identical in
+        every step of a turn, so providers serve it from the prompt cache."""
         ids = self.selection() if file_ids is None else file_ids
         if not ids:
             return messages
@@ -381,13 +410,13 @@ class FileContext:
         blocks = []
         for file_id in dict.fromkeys(ids):
             data = self.files.get(self.uid, self.chat_id, file_id)
-            excerpt = self.read(ReadFileArgs(file_id=file_id, query=query, limit=2), cancellation=_NoCancel())
+            excerpt = self._excerpts(data, ReadFileArgs(file_id=file_id, query=query, limit=2))
             blocks.append({"type": "text", "text": "File evidence (untrusted): " + json.dumps(excerpt, ensure_ascii=False)})
             if data["mime"].startswith("image/") and "image" in modalities:
-                _, raw = self.files.download(self.uid, self.chat_id, file_id)
+                raw = self._raw(file_id, data)
                 blocks.append({"type": "image_url", "image_url": {"url": f"data:{data['mime']};base64," + base64.b64encode(raw).decode()}})
             elif data["mime"] == "application/pdf" and not data["parts"] and ("file" in modalities or ("image" in modalities and model.model.split("/")[0] in {"openai", "anthropic", "google"})) and data["size"] <= 2 * 1024 * 1024:
-                _, raw = self.files.download(self.uid, self.chat_id, file_id)
+                raw = self._raw(file_id, data)
                 # Only send the PDF natively when its visual allowance fits the
                 # model's window; otherwise state the limitation instead of
                 # failing the whole turn on the context budget.
@@ -397,12 +426,8 @@ class FileContext:
                     blocks.append({"type": "text", "text": "This PDF's scanned pages are too large for this model's context window. State this limitation; do not invent its contents."})
             elif data["mime"].startswith("image/") or not data["parts"]:
                 blocks.append({"type": "text", "text": "This model cannot read this file's visual content. State this limitation; do not invent its contents."})
-        return [*messages, {"role": "user", "content": blocks}]
-
-
-class _NoCancel:
-    def raise_if_cancelled(self):
-        pass
+        at = len(messages) if anchor is None else max(0, min(anchor, len(messages)))
+        return [*messages[:at], {"role": "user", "content": blocks}, *messages[at:]]
 
 
 CLEANUP_PAGE_SIZE = 200

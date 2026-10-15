@@ -1306,6 +1306,30 @@ def test_text_next_to_a_failed_comparison_is_never_an_unchecked_answer(store):
     assert deltas(events[:clear]) == LONG_REPLY and deltas(events[clear:]) == ANSWER
 
 
+@pytest.mark.parametrize("outage", [1, 2])
+def test_a_database_outage_while_saving_a_failed_answer_does_not_stop_the_turn(store, monkeypatch, outage):
+    """Audit A12: a transient error while recording one model's failure
+    cancelled the whole turn ("This response was stopped")."""
+    from google.api_core.exceptions import ServiceUnavailable
+    from app.services import agent_delegation
+    monkeypatch.setattr(agent_delegation, "TERMINAL_RETRY_SECONDS", 0)
+    script = Plan([{"tools": [compare()]}, {"text": ANSWER}], fail_model=True)
+    loop = make_loop(store, script)
+    publish, failures = store.publish_agent, []
+    def flaky(*args, **kwargs):
+        if (kwargs.get("message") or {}).get("kind") == "failure" and len(failures) < outage:
+            failures.append(kwargs["agent_id"])
+            raise ServiceUnavailable("Firestore unavailable")
+        return publish(*args, **kwargs)
+    monkeypatch.setattr(store, "publish_agent", flaky)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert len(failures) == outage
+    assert saved["status"] == "completed" and saved["consensus"] == ANSWER
+    [missing] = tool_results(loop)["call_0_0"]["missing_answers"]
+    assert missing["family"] == "anthropic"
+
+
 def test_a_comparison_with_one_answer_names_the_missing_one_and_is_never_certified(store):
     """Review 2026-10-12, then [compare_models, answer] in one batch: one model
     failed and the answer rested on the single other answer, unseen. Now the
