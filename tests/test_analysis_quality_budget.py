@@ -199,13 +199,55 @@ def test_coverage_worker_inherits_budget_and_disconnect_signal():
         cancellation = runtime.current_provider_cancellation()
         def judge(*args, **kwargs):
             assert runtime.current_analysis_budget() is budget
-            assert runtime.current_provider_cancellation() is cancellation
+            # Its own stop, linked: a disconnect of the caller still reaches it.
+            own = runtime.current_provider_cancellation()
+            assert own is not cancellation and not own.cancelled
+            cancellation.cancel()
+            assert own.cancelled
+            return {}, {}
+        with mock.patch.object(engine, "_run_coverage_judge", side_effect=judge):
+            pool, future, stop = engine._coverage_in_background(context, {}, "OpenAI")
+            assert engine._collect_coverage(pool, future, stop) == ({}, {})
+
+
+def test_coverage_worker_counts_against_the_shared_budget():
+    context = engine._build_judge_context({"openai": "one", "gemini": "two"}, "A claim with enough words.")
+    with runtime.analysis_budget_scope() as budget:
+        def judge(*args, **kwargs):
             runtime.claim_analysis_call()
             return {}, {}
         with mock.patch.object(engine, "_run_coverage_judge", side_effect=judge):
-            pool, future = engine._coverage_in_background(context, {}, "OpenAI")
-            assert engine._collect_coverage(pool, future) == ({}, {})
+            pool, future, stop = engine._coverage_in_background(context, {}, "OpenAI")
+            assert engine._collect_coverage(pool, future, stop) == ({}, {})
         assert budget.calls == 1
+
+
+def test_a_coverage_result_past_the_deadline_is_stopped_not_awaited():
+    """Agent judges run through a task transport, whose calls are not bound
+    by the analysis deadline, and the collector waits for the thread. A
+    result the run no longer uses must be stopped, not awaited (prod
+    2026-10-15: 64 s of waiting for a Coverage result that was then dropped)."""
+    from app.services.llm.task_transport import bind_task_transport
+    context = engine._build_judge_context({"openai": "one", "gemini": "two"}, "A claim with enough words.")
+    stopped = threading.Event()
+
+    def judge(*args, **kwargs):
+        own = runtime.current_provider_cancellation()
+        # A stall: only its stop ends it (the test fails after 5 s otherwise).
+        for _ in range(500):
+            if own.cancelled:
+                stopped.set()
+                raise runtime.ProviderCancelled("stopped")
+            threading.Event().wait(0.01)
+        return {"s1": {}}, {"provider": "OpenAI"}
+
+    with runtime.bind_analysis_budget(runtime.AnalysisBudget(seconds=0.05)), bind_task_transport(lambda: None):
+        with mock.patch.object(engine, "_run_coverage_judge", side_effect=judge):
+            pool, future, stop = engine._coverage_in_background(context, {}, "OpenAI")
+            started = engine.time.monotonic()
+            assert engine._collect_coverage(pool, future, stop) == (None, None)
+            assert engine.time.monotonic() - started < 2
+    assert stopped.is_set()
 
 
 def test_unlimited_agent_budget_waits_for_pending_coverage_without_overflow():

@@ -7,6 +7,7 @@ dass eine duenn belegte Aussage sichtbar bleibt, statt zu verschwinden.
 """
 
 import json
+import threading
 import unittest
 from unittest import mock
 
@@ -340,6 +341,53 @@ class CoverageRunTests(unittest.TestCase):
             side_effect=RuntimeError("503"),
         ):
             result, meta = _run_coverage_judge(self.context, ALL_KEYS, "OpenAI")
+        self.assertIsNone(result)
+        self.assertIsNone(meta)
+
+    def stalled_primary(self, providers, *, parent=None):
+        """An engine whose OpenAI call hangs until its stop; others answer."""
+        from app.services.llm import provider_runtime as runtime
+        payload = coverage_payload(self.context, {})
+
+        def engine(provider, api_model, model_ref, api_keys, **kwargs):
+            providers.append(provider)
+            if provider != "openai":
+                return payload
+            stop = runtime.current_provider_cancellation()
+            if parent is not None:
+                parent.cancel()
+            for _ in range(500):
+                if stop.cancelled:
+                    raise runtime.ProviderCancelled("stopped")
+                threading.Event().wait(0.01)
+            raise AssertionError("the stalled attempt was never stopped")
+        return engine
+
+    def test_a_stalled_attempt_hands_the_window_to_the_next_family(self):
+        """Prod 2026-10-15: a Luna Coverage call took 243 s, past the analysis
+        deadline; the answer lost every green mark. A stalled attempt now
+        stops after its own limit and the fallback family covers the answer;
+        the stalled engine's retry is skipped."""
+        providers = []
+        with mock.patch("app.services.llm.consensus_engine.COVERAGE_ATTEMPT_SECONDS", 0.05), \
+                mock.patch("app.services.llm.consensus_engine._call_engine_text",
+                           side_effect=self.stalled_primary(providers)):
+            result, meta = _run_coverage_judge(self.context, ALL_KEYS, "OpenAI")
+        self.assertEqual(providers, ["openai", "gemini"])
+        self.assertEqual(sorted(result), self.ids)
+        self.assertEqual(meta["provider"], "Gemini")
+        self.assertEqual(meta["missing"], 0)
+
+    def test_a_user_stop_during_an_attempt_ends_coverage_without_a_fallback(self):
+        from app.services.llm import provider_runtime as runtime
+        providers = []
+        parent = runtime.ProviderCancellation()
+        with runtime.bind_provider_cancellation(parent), \
+                mock.patch("app.services.llm.consensus_engine.COVERAGE_ATTEMPT_SECONDS", 30), \
+                mock.patch("app.services.llm.consensus_engine._call_engine_text",
+                           side_effect=self.stalled_primary(providers, parent=parent)):
+            result, meta = _run_coverage_judge(self.context, ALL_KEYS, "OpenAI")
+        self.assertEqual(providers, ["openai"])
         self.assertIsNone(result)
         self.assertIsNone(meta)
 

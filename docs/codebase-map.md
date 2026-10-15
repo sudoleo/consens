@@ -3050,9 +3050,14 @@ llm/task_transport.py injiziert nur den gemessenen Providertransport via
 ContextVar; der Coverage-Thread übernimmt den Kontext. Außerhalb dieser Bindung
 bleibt der Consensus-Transport unverändert. Jeder Judge-/Retry-/Repair-Aufruf
 hat einen eigenen Agent-Schrittbeleg; der Producer wartet auch beim Abbruch
-auf die Settlement-Abschlüsse. `_collect_coverage` wartet bei unbegrenztem
-Agent-Budget ohne Timeout statt mit `float('inf')`, das Thread-Wartefunktionen
-überlaufen lässt; endliche Consensus-Deadlines bleiben begrenzt.
+auf die Settlement-Abschlüsse. `_collect_coverage` wartet bei einem gebundenen
+unbegrenzten Budget ohne Timeout statt mit `float('inf')`, das Thread-Wartefunktionen
+überlaufen lässt; endliche Consensus-Deadlines bleiben begrenzt. Der
+Werkzeug-Thread von `judge_answer` (`_execute_stream`) bindet das Turn-Budget
+nicht (Thread-lokal): `query_differences` öffnet dort seine eigene
+180-s-Analysefrist, die Judge-Calls selbst laufen über `call` mit dem
+Turn-Budget. Nach Ablauf dieser Frist wird Coverage beendet statt abgewartet
+(siehe `COVERAGE_ATTEMPT_SECONDS` unter „Consensus & Differences“).
 Ein konfiguriertes Chatmodell ohne Engine-Alias
 verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
 
@@ -4413,6 +4418,19 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   Judge-`duration_ms` umfasst Wiederholungen und beim Coverage-Judge Repair.
   Providerseitig bereits verbrauchte Tokens können durch Abbruch nicht
   rückwirkend erstattet werden.
+- Jeder Coverage-Versuch (auch das Repair) hat seit 2026-10-15 eine eigene
+  Zeitgrenze `COVERAGE_ATTEMPT_SECONDS` (90 s; normal 13 s Median, 21 s p90):
+  `_attempt_time_limit` gibt ihm eine eigene, mit dem Aufrufer verknüpfte
+  Cancellation. Läuft sie ab, wird der Versuch beendet, sein Retry übersprungen
+  und die nächste Familie des Plans (`_coverage_attempts`, Chat: Gemini)
+  übernimmt; ein Nutzer-Stopp beendet Coverage weiterhin ohne Ausweichen.
+  Der Coverage-Thread hat eine eigene, verknüpfte Cancellation
+  (`_coverage_in_background` → `(pool, future, stop)`); läuft die Frist von
+  `_collect_coverage` ab, wird er beendet statt abgewartet. Anlass: Agent-
+  Judges laufen über den Task-Transport mit dem Turn-Budget statt der
+  180-s-Analysefrist; ein Luna-Coverage-Call mit 243 s überlebte die Frist,
+  der Agent wartete beim Aufräumen 64 s darauf und verwarf ihn dann — die
+  Antwort hatte keine einzige grüne Marke (`coverage_unavailable`).
 
 - Im App-Layout steht `#consensusOutput` oberhalb der Modellantworten: Das
   synthetisierte Ergebnis ist die Primäransicht, die einzelnen Antworten sind

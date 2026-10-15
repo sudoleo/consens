@@ -7,7 +7,9 @@ import difflib
 import logging
 import math
 import random
+import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -2144,6 +2146,46 @@ COVERAGE_TEMPERATURE = 0.0
 MAX_COVERAGE_CLAIMS = MAX_CONSENSUS_SENTENCES
 # Longer answers are covered in parallel windows of this many sentences.
 COVERAGE_WINDOW = MAX_CONSENSUS_SENTENCES
+# One Coverage attempt may take this long; then it stops and the plan moves to
+# the next family. Agent receipts 2026-10-01..15: median 13 s, p90 21 s, one
+# Luna call at 243 s that outlived the 180 s analysis deadline - the answer
+# then lost every green mark although the fallback judge was never asked.
+COVERAGE_ATTEMPT_SECONDS = 90.0
+
+
+class _AttemptTimedOut(Exception):
+    """A judge attempt ran past its own time limit (not a user stop)."""
+
+
+@contextmanager
+def _attempt_time_limit(seconds: float):
+    """Stops one stalled judge attempt; a stop of the caller still reaches it.
+
+    The attempt gets its own cancellation, linked to the caller's. Only when
+    the timer ended it does its failure become _AttemptTimedOut, so the caller
+    can try another family instead of ending the run."""
+    parent = current_provider_cancellation()
+    limit = ProviderCancellation()
+    unlink = parent.register(limit) if parent is not None else (lambda: None)
+    fired = threading.Event()
+
+    def stop():
+        fired.set()
+        limit.cancel()
+
+    timer = threading.Timer(seconds, stop)
+    timer.daemon = True
+    timer.start()
+    try:
+        with bind_provider_cancellation(limit):
+            yield
+    except Exception as exc:
+        if fired.is_set() and not (parent is not None and parent.cancelled):
+            raise _AttemptTimedOut(f"judge attempt exceeded {seconds:.0f} s") from exc
+        raise
+    finally:
+        timer.cancel()
+        unlink()
 
 
 def _coverage_attempts(differences_model: str, api_keys: dict, *, chat_mode: bool = False):
@@ -2202,11 +2244,12 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
         sources_text=context.sources_text,
     )
     try:
-        raw = _call_coverage_engine(
-            engine, api_keys, prompt,
-            coverage.build_coverage_schema(labels, ids),
-            is_retry=False,
-        )
+        with _attempt_time_limit(COVERAGE_ATTEMPT_SECONDS):
+            raw = _call_coverage_engine(
+                engine, api_keys, prompt,
+                coverage.build_coverage_schema(labels, ids),
+                is_retry=False,
+            )
     except (ProviderCancelled, AnalysisBudgetExceeded):
         raise
     except Exception as exc:
@@ -2310,9 +2353,19 @@ def _run_coverage_window(context, api_keys, attempts, ids):
         executed += 1
         started = time.monotonic()
         try:
-            raw = _call_coverage_engine(engine, api_keys, prompt, schema, is_retry)
+            with _attempt_time_limit(COVERAGE_ATTEMPT_SECONDS):
+                raw = _call_coverage_engine(engine, api_keys, prompt, schema, is_retry)
         except (ProviderCancelled, AnalysisBudgetExceeded):
             break
+        except _AttemptTimedOut:
+            # A stalled provider rarely answers its own retry in time: the
+            # next family gets the window instead.
+            skip_retries_for.add(attempt_key)
+            logging.warning(
+                "Coverage attempt timed out attempt=%d provider=%s model=%s duration_ms=%d",
+                executed, provider, api_model, int((time.monotonic() - started) * 1000),
+            )
+            continue
         except Exception as exc:
             if not _provider_error_is_retryable(exc):
                 skip_retries_for.add(attempt_key)
@@ -2551,30 +2604,31 @@ def _in_background(work, name: str, *, cancellation=None):
 
 
 def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: bool = False):
-    """Startet den Coverage-Judge im Nebenläufer und gibt (pool, future).
+    """Startet den Coverage-Judge im Nebenläufer und gibt (pool, future, stop).
 
-    Der Aufrufer muss ``pool.shutdown()`` sicherstellen. Die
-    Cancellation-Bindung ist thread-lokal und wird deshalb ausdruecklich in den
-    Worker uebertragen: sonst telefoniert der Coverage-Call noch munter weiter,
-    nachdem der Nutzer den Lauf abgebrochen hat."""
-    cancellation = current_provider_cancellation()
+    Der Aufrufer muss ``pool.shutdown()`` sicherstellen. Der Worker bekommt
+    eine eigene Cancellation (``stop``), verknuepft mit der des Aufrufers: ein
+    Abbruch des Nutzers erreicht den Coverage-Call weiterhin, und ein Ergebnis,
+    das nicht mehr gebraucht wird, laesst sich allein beenden
+    (_collect_coverage), statt darauf zu warten."""
+    stop = ProviderCancellation()
+    parent = current_provider_cancellation()
+    unlink = parent.register(stop) if parent is not None else (lambda: None)
     budget = current_analysis_budget()
 
     def _work():
-        with bind_analysis_budget(budget):
-            return _bound_work()
-
-    def _bound_work():
-        if cancellation is None:
-            return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode)
-        with bind_provider_cancellation(cancellation):
-            return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode)
+        try:
+            with bind_analysis_budget(budget), bind_provider_cancellation(stop):
+                return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode)
+        finally:
+            unlink()
 
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="coverage-judge")
     try:
         from contextvars import copy_context
-        return pool, pool.submit(copy_context().run, _work)
+        return pool, pool.submit(copy_context().run, _work), stop
     except Exception:
+        unlink()
         pool.shutdown(wait=False)
         raise
 
@@ -2591,14 +2645,17 @@ def _collect_background(future, what: str):
         return None
 
 
-def _collect_coverage(pool, future):
+def _collect_coverage(pool, future, stop=None):
     """Ergebnis des Nebenläufers einsammeln; ein Fehler dort darf den Lauf
-    niemals kippen."""
+    niemals kippen. Nach der Frist wird der Coverage-Call beendet (``stop``):
+    der Agent wartet sonst beim Aufraeumen auf ein Ergebnis, das er verwirft."""
     try:
         budget = current_analysis_budget()
         timeout = max(0.05, budget.deadline - time.monotonic()) + 0.2 if budget and math.isfinite(budget.deadline) else None
         return future.result(timeout=timeout)
     except Exception as exc:
+        if stop is not None and not future.done():
+            stop.cancel()
         logging.warning(
             "Coverage judge thread failed category=%s at=%s",
             safe_exception(exc), safe_traceback(exc),
@@ -2676,7 +2733,7 @@ def query_differences(
     if attempts is None:
         return "Invalid model selected for difference comparison.", None
 
-    coverage_pool, coverage_future = _coverage_in_background(
+    coverage_pool, coverage_future, coverage_stop = _coverage_in_background(
         context, api_keys, differences_model, chat_mode=chat_mode
     )
     second_pool = second_future = None
@@ -2787,7 +2844,7 @@ def query_differences(
                 data["judges"]["differences"].update(passes=1, second_pass_failed=True)
         if data is not None:
             coverage_result, coverage_meta = _collect_coverage(
-                coverage_pool, coverage_future
+                coverage_pool, coverage_future, coverage_stop
             )
             covered_text = _apply_coverage(
                 data, coverage_result, coverage_meta, context, consensus_answer
@@ -2796,7 +2853,7 @@ def query_differences(
 
         # Der Differences-Judge ist durchgefallen; der Coverage-Lauf wird trotzdem
         # eingesammelt, damit sein Thread nicht verwaist weiterlaeuft.
-        _collect_coverage(coverage_pool, coverage_future)
+        _collect_coverage(coverage_pool, coverage_future, coverage_stop)
         if prose_fallback:
             return prose_fallback, None
         return f"Error in comparison: {last_error}", None
@@ -2809,6 +2866,8 @@ def query_differences(
             # The run ended without its result (error or cancellation): stop
             # it before waiting for the thread, so nothing outlives the check.
             second_cancellation.cancel()
+        if not coverage_future.done():
+            coverage_stop.cancel()
         coverage_pool.shutdown(wait=wait)
         if second_pool is not None:
             second_pool.shutdown(wait=wait)
@@ -3391,7 +3450,7 @@ def stream_differences(
     # Beide Judges brauchen nur die fertige, nummerierte Konsensantwort. Der
     # Coverage-Call laeuft deshalb neben dem gestreamten Differences-Call und
     # kostet den Nutzer fast keine zusaetzliche Wartezeit.
-    coverage_pool, coverage_future = _coverage_in_background(
+    coverage_pool, coverage_future, coverage_stop = _coverage_in_background(
         context, api_keys, differences_model
     )
     try:
@@ -3466,7 +3525,7 @@ def stream_differences(
                     attempts=attempt_no, duration_ms=int((time.monotonic() - judge_started) * 1000),
                 )}
                 coverage_result, coverage_meta = _collect_coverage(
-                    coverage_pool, coverage_future
+                    coverage_pool, coverage_future, coverage_stop
                 )
                 covered_text = _apply_coverage(
                     data, coverage_result, coverage_meta, context, consensus_answer
@@ -3483,7 +3542,7 @@ def stream_differences(
 
         # Der Differences-Judge ist durchgefallen; der Coverage-Lauf wird trotzdem
         # eingesammelt, damit sein Thread nicht verwaist weiterlaeuft.
-        _collect_coverage(coverage_pool, coverage_future)
+        _collect_coverage(coverage_pool, coverage_future, coverage_stop)
         if prose_fallback:
             yield {"type": "final", "text": prose_fallback, "data": None}
             return
