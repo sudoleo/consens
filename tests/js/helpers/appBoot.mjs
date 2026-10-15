@@ -61,6 +61,9 @@ export async function bootApp({ body, before, media = {} } = {}) {
         addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
       });
       window.fetch = () => new Promise(() => {});
+      // jsdom does not draw; without a context letter-clouds.js stays quiet
+      // instead of writing "Not implemented" to stderr on every call.
+      window.HTMLCanvasElement.prototype.getContext = () => null;
       // Defined by static/demo.js (an ES module, not loaded here).
       window.createStartDemoChip = () => {};
       before?.(window);
