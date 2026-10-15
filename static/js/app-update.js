@@ -139,6 +139,16 @@
       if (state.uid === record.uid && untouchedStart) window.openBookmark?.(record.bookmarkId);
     }
     window.addEventListener("consensio:auth-state", onAuth);
+    // The Firebase module may publish a restored sign-in before this deferred
+    // bundle has even run (the module was ready, the app bundle still
+    // loading); that event has gone by unheard. Pick up the known state once
+    // the page has loaded and the app is initialised.
+    const catchUp = () => {
+      const state = window.__consensioAuthState;
+      if (pending && state?.known) onAuth({ detail: state });
+    };
+    if (document.readyState === "complete") setTimeout(catchUp, 0);
+    else window.addEventListener("load", () => setTimeout(catchUp, 0), { once: true });
     setTimeout(() => { if (pending) finish(); }, 30000);
   }
 

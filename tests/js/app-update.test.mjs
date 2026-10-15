@@ -7,7 +7,7 @@ const NEW = "bbbbbbb";
 const RESTORE_KEY = "consens.appUpdate.restore";
 const ATTEMPT_KEY = "consens.appUpdate.attempt";
 
-function boot({ own = OWN, live = NEW, hidden = false, session = {}, deferFetch = false } = {}) {
+function boot({ own = OWN, live = NEW, hidden = false, session = {}, deferFetch = false, before } = {}) {
   const state = {
     hidden, live, active: 0, run: null, identity: null, uid: "u1",
     reloads: 0, fetches: 0, opened: [], tracked: [], release: null,
@@ -43,6 +43,7 @@ function boot({ own = OWN, live = NEW, hidden = false, session = {}, deferFetch 
         authState: { get uid() { return state.uid; } },
         trackAppEvent: (name, data) => state.tracked.push([name, data]),
       };
+      before?.(window);
     },
   });
   const flip = next => {
@@ -158,6 +159,22 @@ describe("app update", () => {
     app.window.dispatchEvent(new app.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u1" } }));
     expect(app.state.opened).toEqual(["b1"]);
     await vi.waitFor(() => expect(app.state.tracked).toEqual([["app_updated", { reopened: true }]]));
+  });
+
+  it("reopens the chat when the sign-in was published before this module ran", async () => {
+    // firebase.js (a module) can finish restoring the session while the app
+    // bundle is still loading: its consensio:auth-state event has gone by.
+    const record = { from: "0000000", at: Date.now(), uid: "u1", bookmarkId: "b1" };
+    const app = boot({
+      session: { [RESTORE_KEY]: record },
+      before(window) { window.__consensioAuthState = Object.freeze({ known: true, uid: "u1", generation: 1 }); },
+    });
+    expect(app.state.opened).toEqual([]);
+    await vi.waitFor(() => expect(app.state.opened).toEqual(["b1"]));
+    // A late event for the same sign-in does not open it twice.
+    app.window.dispatchEvent(new app.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u1" } }));
+    await settle();
+    expect(app.state.opened).toEqual(["b1"]);
   });
 
   it("does not reopen a chat for another account or after the user moved on", () => {

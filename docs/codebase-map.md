@@ -2307,7 +2307,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `sessionStorage` (`consens.appUpdate.restore`) uid + `bookmarkId`; nach dem
   Neuladen öffnet es beim ersten `consensio:auth-state` desselben Kontos
   `window.openBookmark(id)`, solange der Nutzer noch auf dem leeren Start ist
-  (max. 5 min alt). `consens.appUpdate.attempt` verhindert eine Schleife, wenn
+  (max. 5 min alt). War der Anmeldestand schon bekannt, bevor das deferred
+  App-Bundle lief (das Firebase-Modul war fertig, das Bundle lud noch), ist das
+  Ereignis vorbei: dann liest es nach `load` `window.__consensioAuthState`. `consens.appUpdate.attempt` verhindert eine Schleife, wenn
   während eines Deploys noch die alte Instanz antwortet (gleicher Ziel-Build
   frühestens nach 10 min erneut). Verborgene Seiten fragen nie periodisch
   und laden nicht wiederholt — jeder Reload kostet die Start-Reads des Kontos.
