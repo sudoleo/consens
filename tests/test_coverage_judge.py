@@ -369,7 +369,7 @@ class CoverageRunTests(unittest.TestCase):
         stops after its own limit and the fallback family covers the answer;
         the stalled engine's retry is skipped."""
         providers = []
-        with mock.patch("app.services.llm.consensus_engine.COVERAGE_ATTEMPT_SECONDS", 0.05), \
+        with mock.patch("app.services.llm.consensus_engine.JUDGE_ATTEMPT_SECONDS", 0.05), \
                 mock.patch("app.services.llm.consensus_engine._call_engine_text",
                            side_effect=self.stalled_primary(providers)):
             result, meta = _run_coverage_judge(self.context, ALL_KEYS, "OpenAI")
@@ -383,7 +383,7 @@ class CoverageRunTests(unittest.TestCase):
         providers = []
         parent = runtime.ProviderCancellation()
         with runtime.bind_provider_cancellation(parent), \
-                mock.patch("app.services.llm.consensus_engine.COVERAGE_ATTEMPT_SECONDS", 30), \
+                mock.patch("app.services.llm.consensus_engine.JUDGE_ATTEMPT_SECONDS", 30), \
                 mock.patch("app.services.llm.consensus_engine._call_engine_text",
                            side_effect=self.stalled_primary(providers, parent=parent)):
             result, meta = _run_coverage_judge(self.context, ALL_KEYS, "OpenAI")

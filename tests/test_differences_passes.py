@@ -116,6 +116,95 @@ class PrimaryOutageTests(unittest.TestCase):
         self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
 
 
+def wait_for_stop():
+    """A stalled provider: only the attempt's own stop ends it (max 5 s)."""
+    stop = engine.current_provider_cancellation()
+    for _ in range(500):
+        if stop is not None and stop.cancelled:
+            raise engine.ProviderCancelled("stopped")
+        time.sleep(0.01)
+    raise AssertionError("the stalled attempt was never stopped")
+
+
+class StalledJudgeTests(unittest.TestCase):
+    """A stalled Differences attempt stops after JUDGE_ATTEMPT_SECONDS and the
+    next family answers, like Coverage (prod 2026-10-15: a 243 s judge call)."""
+    CAPITAL = difference("Capital", "Paris is the capital", "the capital is Lyon")
+
+    def setUp(self):
+        patcher = mock.patch.object(engine, "JUDGE_ATTEMPT_SECONDS", 0.05)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_stalled_primary_hands_both_passes_over_without_a_double_fallback(self):
+        calls, lock = [], threading.Lock()
+
+        def fake(provider, api_model, model_ref, api_keys, **kwargs):
+            if kwargs.get("json_schema") is not engine.DIFFERENCES_JSON_SCHEMA:
+                return "{}"
+            with lock:
+                calls.append(provider)
+            if provider == "openai":
+                wait_for_stop()
+            return json.dumps(ParallelPassTests.payload(self.CAPITAL))
+
+        answer = ParallelPassTests.ANSWER
+        started = time.monotonic()
+        with mock.patch.object(engine, "_call_engine_text", side_effect=fake):
+            _, data = query_differences({"openai": answer, "gemini": answer, "grok": answer},
+                                        "Paris is the capital.", {"OpenRouter": "sk-or"},
+                                        differences_model="OpenAI", chat_mode=True, passes=2)
+        self.assertLess(time.monotonic() - started, 3.0)
+        # Each pass asks Luna once (its retry is skipped); only one falls back.
+        self.assertEqual((calls.count("openai"), calls.count("gemini")), (2, 1))
+        self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
+        self.assertEqual([item["claim"] for item in data["differences"]], ["Capital"])
+
+    def test_the_streamed_judge_falls_back_too(self):
+        calls = []
+        payload = json.dumps(ParallelPassTests.payload(self.CAPITAL))
+
+        def fake_stream(provider, *args, **kwargs):
+            calls.append(provider)
+            if provider == "openai":
+                yield {"type": "reasoning"}
+                wait_for_stop()
+            yield {"type": "delta", "text": payload}
+
+        answer = ParallelPassTests.ANSWER
+        with mock.patch.object(engine, "_stream_engine_text", side_effect=fake_stream), \
+                mock.patch.object(engine, "_call_engine_text", return_value="{}"):
+            events = list(engine.stream_differences({"openai": answer, "gemini": answer}, "Paris is the capital.",
+                                                    {"OpenRouter": "sk-or"}, differences_model="OpenAI"))
+        final = events[-1]
+        self.assertEqual(final["type"], "final")
+        # Luna once (its retry is skipped), then the next family of the plan.
+        self.assertEqual(calls.count("openai"), 1)
+        self.assertEqual(len(calls), 2)
+        self.assertNotEqual(final["data"]["judges"]["differences"]["provider"], "OpenAI")
+
+    def test_a_user_stop_is_no_timeout(self):
+        calls = []
+        parent = engine.ProviderCancellation()
+
+        def fake(provider, api_model, model_ref, api_keys, **kwargs):
+            if kwargs.get("json_schema") is not engine.DIFFERENCES_JSON_SCHEMA:
+                return "{}"
+            calls.append(provider)
+            parent.cancel()
+            wait_for_stop()
+
+        answer = ParallelPassTests.ANSWER
+        with mock.patch.object(engine, "JUDGE_ATTEMPT_SECONDS", 30), \
+                mock.patch.object(engine, "_call_engine_text", side_effect=fake), \
+                engine.bind_provider_cancellation(parent):
+            _, data = query_differences({"openai": answer, "gemini": answer, "grok": answer},
+                                        "Paris is the capital.", {"OpenRouter": "sk-or"},
+                                        differences_model="OpenAI", chat_mode=True, passes=1)
+        self.assertEqual(calls, ["openai"])
+        self.assertIsNone(data)
+
+
 class LanguageRuleTests(unittest.TestCase):
     def test_judge_writes_in_the_language_of_the_consensus_answer(self):
         context = engine._build_judge_context({"openai": "Uno.", "gemini": "Eins."}, "One.")

@@ -3057,7 +3057,7 @@ Werkzeug-Thread von `judge_answer` (`_execute_stream`) bindet das Turn-Budget
 nicht (Thread-lokal): `query_differences` öffnet dort seine eigene
 180-s-Analysefrist, die Judge-Calls selbst laufen über `call` mit dem
 Turn-Budget. Nach Ablauf dieser Frist wird Coverage beendet statt abgewartet
-(siehe `COVERAGE_ATTEMPT_SECONDS` unter „Consensus & Differences“).
+(siehe `JUDGE_ATTEMPT_SECONDS` unter „Consensus & Differences“).
 Ein konfiguriertes Chatmodell ohne Engine-Alias
 verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
 
@@ -4418,12 +4418,18 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   Judge-`duration_ms` umfasst Wiederholungen und beim Coverage-Judge Repair.
   Providerseitig bereits verbrauchte Tokens können durch Abbruch nicht
   rückwirkend erstattet werden.
-- Jeder Coverage-Versuch (auch das Repair) hat seit 2026-10-15 eine eigene
-  Zeitgrenze `COVERAGE_ATTEMPT_SECONDS` (90 s; normal 13 s Median, 21 s p90):
-  `_attempt_time_limit` gibt ihm eine eigene, mit dem Aufrufer verknüpfte
-  Cancellation. Läuft sie ab, wird der Versuch beendet, sein Retry übersprungen
-  und die nächste Familie des Plans (`_coverage_attempts`, Chat: Gemini)
-  übernimmt; ein Nutzer-Stopp beendet Coverage weiterhin ohne Ausweichen.
+- Jeder Judge-Versuch hat seit 2026-10-15 eine eigene Zeitgrenze
+  `JUDGE_ATTEMPT_SECONDS` (90 s): Coverage samt Repair, Differences in
+  `query_differences.run_pass` (beide Pässe) und in `stream_differences`.
+  Gemessen: Coverage (Agent-Belege) Median 13 s, p90 21 s; Differences
+  (`differences_stats` seit 2026-08, 500+ Läufe) Median 2–6 s, p99 ≤ 21 s,
+  Maximum 59 s, Pro-Stufe höchstens 27 s.
+  `_attempt_time_limit` gibt dem Versuch eine eigene, mit dem Aufrufer
+  verknüpfte Cancellation. Läuft sie ab (`_AttemptTimedOut`), wird der Versuch
+  beendet, sein Retry übersprungen und der nächste Eintrag des Plans
+  (`_coverage_attempts`/`_differences_attempts`, Chat: Gemini) übernimmt. Der
+  zweite Differences-Pass kennt nur den primären Judge und endet dann ohne Ausweichen, nie
+  doppelt; ein Nutzer-Stopp beendet beide Judges weiterhin ohne Ausweichen.
   Der Coverage-Thread hat eine eigene, verknüpfte Cancellation
   (`_coverage_in_background` → `(pool, future, stop)`); läuft die Frist von
   `_collect_coverage` ab, wird er beendet statt abgewartet. Anlass: Agent-

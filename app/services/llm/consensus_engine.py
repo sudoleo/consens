@@ -2146,11 +2146,14 @@ COVERAGE_TEMPERATURE = 0.0
 MAX_COVERAGE_CLAIMS = MAX_CONSENSUS_SENTENCES
 # Longer answers are covered in parallel windows of this many sentences.
 COVERAGE_WINDOW = MAX_CONSENSUS_SENTENCES
-# One Coverage attempt may take this long; then it stops and the plan moves to
-# the next family. Agent receipts 2026-10-01..15: median 13 s, p90 21 s, one
-# Luna call at 243 s that outlived the 180 s analysis deadline - the answer
-# then lost every green mark although the fallback judge was never asked.
-COVERAGE_ATTEMPT_SECONDS = 90.0
+# One attempt of either judge (Differences, Coverage, Coverage repair) may take
+# this long; then it stops and the plan moves to the next family. Measured
+# 2026-10-15: Coverage in Agent receipts median 13 s, p90 21 s; Differences in
+# differences_stats since 2026-08 (500+ runs) median 2-6 s, p99 <= 21 s, max
+# 59 s (pro tier max 27 s). One Luna Coverage call took 243 s, outlived the
+# 180 s analysis deadline, and the answer lost every green mark although the
+# fallback judge was never asked.
+JUDGE_ATTEMPT_SECONDS = 90.0
 
 
 class _AttemptTimedOut(Exception):
@@ -2244,7 +2247,7 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
         sources_text=context.sources_text,
     )
     try:
-        with _attempt_time_limit(COVERAGE_ATTEMPT_SECONDS):
+        with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
             raw = _call_coverage_engine(
                 engine, api_keys, prompt,
                 coverage.build_coverage_schema(labels, ids),
@@ -2353,7 +2356,7 @@ def _run_coverage_window(context, api_keys, attempts, ids):
         executed += 1
         started = time.monotonic()
         try:
-            with _attempt_time_limit(COVERAGE_ATTEMPT_SECONDS):
+            with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
                 raw = _call_coverage_engine(engine, api_keys, prompt, schema, is_retry)
         except (ProviderCancelled, AnalysisBudgetExceeded):
             break
@@ -2757,18 +2760,29 @@ def query_differences(
             attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
             attempt_started = time.monotonic()
             try:
-                raw = _call_engine_text(
-                    provider, api_model, model_ref, api_keys,
-                    system=_differences_system_prompt(output_language),
-                    prompt=attempt_prompt,
-                    max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                    temperature=DIFFERENCES_TEMPERATURE,
-                    json_mode=True,
-                    effort=_judge_effort(provider, api_model, judge_tier),
-                    json_schema=DIFFERENCES_JSON_SCHEMA,
-                )
+                with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
+                    raw = _call_engine_text(
+                        provider, api_model, model_ref, api_keys,
+                        system=_differences_system_prompt(output_language),
+                        prompt=attempt_prompt,
+                        max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
+                        temperature=DIFFERENCES_TEMPERATURE,
+                        json_mode=True,
+                        effort=_judge_effort(provider, api_model, judge_tier),
+                        json_schema=DIFFERENCES_JSON_SCHEMA,
+                    )
             except (ProviderCancelled, AnalysisBudgetExceeded):
                 break
+            except _AttemptTimedOut:
+                # Same rule as Coverage: the stalled engine's retry is
+                # skipped, the next family or tier of the plan answers.
+                last_error = "provider request timed out."
+                skip_retries_for.add(attempt_key)
+                logging.warning(
+                    "Differences attempt timed out attempt=%d provider=%s model=%s duration_ms=%d",
+                    attempt_no, provider, api_model, int((time.monotonic() - attempt_started) * 1000),
+                )
+                continue
             except Exception as e:
                 last_error = "provider request failed."
                 if not _provider_error_is_retryable(e):
@@ -3469,32 +3483,41 @@ def stream_differences(
             attempt_started = time.monotonic()
             parts = []
             try:
-                for event in _stream_engine_text(
-                    provider, api_model, model_ref, api_keys,
-                    system=_differences_system_prompt(output_language),
-                    prompt=attempt_prompt,
-                    max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                    temperature=DIFFERENCES_TEMPERATURE,
-                    json_mode=True,
-                    effort=_judge_effort(provider, api_model, judge_tier),
-                    json_schema=DIFFERENCES_JSON_SCHEMA,
-                ):
-                    if event.get("type") == "reasoning":
-                        # Marker, solange der Judge noch denkt: hält die
-                        # SSE-Verbindung aktiv und speist den Frontend-Indikator.
-                        yield {"type": "reasoning"}
-                        continue
-                    if event.get("type") == "completion":
-                        # Truncated judge JSON is handled by the conservative
-                        # repair in parse_differences_payload.
-                        continue
-                    text = event.get("text") or ""
-                    parts.append(text)
-                    # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
-                    # nur die SSE-Verbindung aktiv (auch während der Retries).
-                    yield {"type": "delta", "text": text}
+                with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
+                    for event in _stream_engine_text(
+                        provider, api_model, model_ref, api_keys,
+                        system=_differences_system_prompt(output_language),
+                        prompt=attempt_prompt,
+                        max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
+                        temperature=DIFFERENCES_TEMPERATURE,
+                        json_mode=True,
+                        effort=_judge_effort(provider, api_model, judge_tier),
+                        json_schema=DIFFERENCES_JSON_SCHEMA,
+                    ):
+                        if event.get("type") == "reasoning":
+                            # Marker, solange der Judge noch denkt: hält die
+                            # SSE-Verbindung aktiv und speist den Frontend-Indikator.
+                            yield {"type": "reasoning"}
+                            continue
+                        if event.get("type") == "completion":
+                            # Truncated judge JSON is handled by the conservative
+                            # repair in parse_differences_payload.
+                            continue
+                        text = event.get("text") or ""
+                        parts.append(text)
+                        # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
+                        # nur die SSE-Verbindung aktiv (auch während der Retries).
+                        yield {"type": "delta", "text": text}
             except (ProviderCancelled, AnalysisBudgetExceeded):
                 break
+            except _AttemptTimedOut:
+                last_error = "provider request timed out."
+                skip_retries_for.add(attempt_key)
+                logging.warning(
+                    "Differences stream attempt timed out attempt=%d provider=%s model=%s duration_ms=%d",
+                    attempt_no, provider, api_model, int((time.monotonic() - attempt_started) * 1000),
+                )
+                continue
             except Exception as e:
                 last_error = "provider request failed."
                 if not _provider_error_is_retryable(e):
