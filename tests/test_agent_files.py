@@ -200,6 +200,63 @@ def test_real_comparison_loop_receives_same_saved_file_evidence(setup):
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)['status'] == 'completed'
 
 
+class _SeesImages(dict):
+    def get(self, key, default=None):
+        return {'architecture': {'input_modalities': ['image']}}
+
+
+def test_turn_sends_a_file_at_one_place_and_downloads_it_once(setup, monkeypatch):
+    """Audit A6: the image used to follow the newest tool result (a new
+    place, so no prompt cache) and was downloaded again for every call."""
+    from app.services.agent_runs import AgentRunStore
+    from test_agent_comparison import Script, make_loop
+    from test_agent_runs import UID
+    files, _ = setup
+    store = AgentRunStore(files.db)
+    script = Script(compares=2)
+    steps = []
+    factory = script.factory
+    def recording():
+        value = factory()
+        stream = value.stream
+        def record(*, model, messages, **kwargs):
+            if value.step_id.startswith('completion:'):
+                steps.append(messages)
+            return stream(model=model, messages=messages, **kwargs)
+        value.stream = record
+        return value
+    script.factory = recording
+    loop = make_loop(store, script)
+    out = io.BytesIO(); Image.new('RGB', (10, 10)).save(out, 'PNG')
+    meta = files.upload(UID, loop.chat_id, {'name': 'p.png', 'data': base64.b64encode(out.getvalue()).decode()})
+    monkeypatch.setattr('app.services.llm.agent_model_metadata.snapshot', lambda: _SeesImages())
+    downloads = []
+    original = files.objects.get
+    files.objects.get = lambda key: downloads.append(key) or original(key)
+    loop.file_context = FileContext(files, UID, loop.chat_id, [meta['id']])
+    list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)['status'] == 'completed'
+    assert len(steps) == 3 and len(script.prompts) >= 4
+    for messages in steps:
+        block = messages[loop.turn_start]
+        assert block['role'] == 'user' and block['content'][-1]['type'] == 'image_url'
+        assert messages[:loop.turn_start + 1] == steps[0][:loop.turn_start + 1]
+    assert all(messages[-1]['content'][-1]['type'] == 'image_url' for messages in script.prompts)
+    assert len(downloads) == 1
+
+
+def test_a_deleted_file_is_not_served_from_the_turn_cache(setup, monkeypatch):
+    files, chat = setup
+    out = io.BytesIO(); Image.new('RGB', (10, 10)).save(out, 'PNG')
+    meta = files.upload('owner', chat, {'name': 'p.png', 'data': base64.b64encode(out.getvalue()).decode()})
+    monkeypatch.setattr('app.services.llm.agent_model_metadata.snapshot', lambda: _SeesImages())
+    ctx = FileContext(files, 'owner', chat, [meta['id']])
+    assert ctx.messages([], AgentModel())[-1]['content'][-1]['type'] == 'image_url'
+    files.delete('owner', chat, meta['id'])
+    with pytest.raises(FileUnavailable):
+        ctx.messages([], AgentModel())
+
+
 def test_account_tombstone_prevents_recreation_during_upload(setup):
     from app.services.persistence_guard import AccountDeletionInProgress
     files, chat = setup

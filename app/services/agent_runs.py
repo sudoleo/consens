@@ -26,8 +26,33 @@ from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
 
 
 CONTEXT_CHAR_LIMIT = 120_000
+# A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages. The oldest
+# leave in steps of this many messages, so the replayed history starts at the
+# same message for a while and providers keep serving it from the prompt cache.
+HISTORY_STEP_TURNS = 4
+HISTORY_OMITTED_NOTE = ("Earlier messages of this chat are not included: the chat is longer than what is sent to the model. "
+                        "If the user refers to something you cannot see, say so.")
 OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
+
+
+class ConversationTooLong(ValueError):
+    """The newest message alone does not fit the selected model's window."""
+
+
+def history_start(sizes, budget):
+    """Index of the oldest earlier message the context keeps.
+
+    The smallest cut that fits, rounded up to a multiple of
+    HISTORY_STEP_TURNS while that still keeps a message."""
+    rest, cut = sum(sizes), 0
+    while cut < len(sizes) and rest > budget:
+        rest -= sizes[cut]
+        cut += 1
+    if not cut:
+        return 0
+    stepped = -(-cut // HISTORY_STEP_TURNS) * HISTORY_STEP_TURNS
+    return stepped if stepped < len(sizes) else cut
 
 
 def agent_sources(completion, review=None):
@@ -120,12 +145,16 @@ class AgentRunStore(AgentSessionStore, ChatStore):
     def messages(self, uid, chat_id, target, model=None, config=None, sources=None):
         """The conversation for the target turn. ``sources``, a list, receives
         the saved sources of the earlier turns it includes (read_source may
-        open them; agent_read_source, "Sources from the chat itself")."""
+        open them; agent_read_source, "Sources from the chat itself").
+
+        A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages
+        (history_start) and tells the model so in this message's app context;
+        it used to stop every further message with an error instead."""
         config = config or prompt_config.get_config()
         system_prompt = config["prompts"]["agent"]
         messages = [{"role": "system", "content": system_prompt}]
+        earlier = []
         cursor = ""
-        chars = len(system_prompt) + len(target["question"])
         while True:
             # Agent answers live on the turn itself. Do not issue an empty
             # model_answers subcollection query for every message in history.
@@ -140,21 +169,26 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # an interrupted answer or its review completed successfully.
                     answer = ("[This previous turn did not finish successfully. The saved response below may be incomplete or unreviewed.]\n\n" + answer
                               if answer else "[This previous turn did not finish successfully. No assistant answer was saved.]")
-                chars += len(question) + len(answer)
-                if chars > CONTEXT_CHAR_LIMIT:
-                    raise ValueError("This conversation is too long. Start a new chat.")
-                messages.extend([{"role": "user", "content": question},
-                                 {"role": "assistant", "content": answer}])
-                if sources is not None:
-                    sources.extend(source for source in turn.get("sources") or [] if isinstance(source, dict))
+                earlier.append((question, answer, turn.get("sources") or []))
             cursor = page.get("next_cursor") or ""
             if not cursor:
                 break
-        messages.append({"role": "user", "content": with_app_context(
-            target["question"], get_agent_turn_context(model, config))})
+        start = history_start([len(question) + len(answer) for question, answer, _ in earlier],
+                              CONTEXT_CHAR_LIMIT - len(system_prompt) - len(target["question"]))
+        for question, answer, saved in earlier[start:]:
+            messages.extend([{"role": "user", "content": question},
+                             {"role": "assistant", "content": answer}])
+            if sources is not None:
+                sources.extend(source for source in saved if isinstance(source, dict))
+        context = get_agent_turn_context(model, config)
+        if start:
+            # The newest message's context changes every message anyway, so
+            # the note costs no cached prefix.
+            context += "\n" + HISTORY_OMITTED_NOTE
+        messages.append({"role": "user", "content": with_app_context(target["question"], context)})
         from app.services.agent_tokens import input_estimate, minimum_output
         if model and input_estimate(messages, request_config=model.request_config) + minimum_output(model) > model.context_length:
-            raise ValueError("This conversation is too long for the selected model. Choose a model with a larger context or start a new chat.")
+            raise ConversationTooLong("This conversation is too long for the selected model. Choose a model with a larger context or start a new chat.")
         return messages
 
     def claim(self, uid, chat_id, turn_id, model: AgentModel, *, step="completion:0", run_token="", policy=None, reservation=None,

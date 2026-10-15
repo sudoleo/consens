@@ -26,7 +26,8 @@
         data-consensus-presets="{{ consensus_presets | tojson | forceescape }}"
         data-default-consensus-preset="{{ default_consensus_preset | tojson | forceescape }}"
         data-model-families="{{ model_families | tojson | forceescape }}"
-        data-max-run-families="{{ max_run_families }}">
+        data-max-run-families="{{ max_run_families }}"
+        data-app-build="{{ app_commit | e }}">
   {#
     Scripts and stylesheet come from static/js/bundles.json via
     app/core/assets.py. Every URL carries a content hash, so no ?v= mark is

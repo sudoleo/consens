@@ -216,6 +216,7 @@ COMPARISON_FAILURES = {
     "provider_rate_limited": "The provider was busy.",
     "provider_unavailable": "The model is unavailable at its provider right now.",
     "provider_access": "The provider declined the request.",
+    "provider_rejected": "The provider rejected the request.",
     "provider_error": "The provider did not finish this answer.",
     "late_cutoff": "It was still writing when the answer was checked.",
     "stopped": "The run was stopped.",

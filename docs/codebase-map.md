@@ -605,6 +605,9 @@ unveränderte Dateien bleiben unangetastet. `previous_assets` hält pro JS-/CSS-
 Gruppe zwei Vorgängerversionen auch über identische Rebuilds vor. Erst nach dem
 Manifestwechsel werden ältere gehashte Bundle-Dateien entfernt. Das App-HTML
 für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
+Das hilft nur bei einem echten Seitenaufruf: Ein offenes Fenster (installierte
+App, Homescreen-App, tagelang offener Tab) behielt seinen Build über viele
+Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
 
@@ -2279,6 +2282,26 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   stopped“. Hört auf `consensio:run-registry-change` und `visibilitychange`;
   sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
   schon vor dem Verlassen fertig war, wird nicht gemeldet.
+- **`app-update.js`** (seit 2026-10-15, nach `tab-status.js`, `App.appUpdate`) —
+  ein offenes App-Fenster holt neue Deploys selbst. Es vergleicht seinen Build
+  (`data-app-build`) mit `GET /api/build`: beim Verlassen (`visibilitychange`
+  → hidden), beim Zurückkommen, bei `pageshow` aus dem bfcache und alle 15 min,
+  solange die Seite vorne ist (frühestens alle 60 s). Neu geladen wird nur
+  ungesehen — im Hintergrund oder direkt beim Zurückkommen vor dem ersten
+  Klick/Tastendruck (10-s-Fenster) — und nur im Leerlauf: kein Lauf/keine
+  Aktion (`runRegistry.activeCount()`), leerer Composer, kein Anhang/Import,
+  kein Zitat, kein befülltes fokussiertes Textfeld, kein offenes `.modal` oder
+  `dialog` (angedockter Leser zählt nicht) und nichts Ungespeichertes im Bild
+  (Start, Watch-Seite oder gespeicherter Chat; ein Gast-Ergebnis oder ein
+  fehlgeschlagener Lauf blockiert). Vor `location.reload()` merkt es sich in
+  `sessionStorage` (`consens.appUpdate.restore`) uid + `bookmarkId`; nach dem
+  Neuladen öffnet es beim ersten `consensio:auth-state` desselben Kontos
+  `window.openBookmark(id)`, solange der Nutzer noch auf dem leeren Start ist
+  (max. 5 min alt). `consens.appUpdate.attempt` verhindert eine Schleife, wenn
+  während eines Deploys noch die alte Instanz antwortet (gleicher Ziel-Build
+  frühestens nach 10 min erneut). Verborgene Seiten fragen nie periodisch
+  und laden nicht wiederholt — jeder Reload kostet die Start-Reads des Kontos.
+  Umami: `app_updated` (`reopened`).
 - **Der Lichtweg (Agent, seit 2026-10-02)** — das Hauslicht aus
   `send-glow.css` sitzt am Senden-Knopf und an der Agreement-Zahl: beim ersten
   Markieren einer geprüften Antwort (`#agentAnswerBody.is-marks-revealing`)
@@ -3364,6 +3387,18 @@ Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
 enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
 zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
 Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
+Seit 2026-10-15 (Audit A15) haben Ablehnungen, die sich unverändert wiederholen
+würden, eigene Codes statt `provider_error` („Trying again … usually works“):
+`provider_rejected` (HTTP 400/413/422), `conversation_too_long`
+(`agent_runs.ConversationTooLong`), `file_unavailable` und `google_error`
+(die eigenen, nutzerlesbaren Texte von `FileUnavailable`/`GoogleError`).
+`agent-chat.js::failureNotice` bietet bei diesen drei ersten kein „Retry“ an.
+Scheitert beim Speichern des Endes einer Vergleichsantwort oder eines
+Seitenlesens (`DelegationLoop._terminal`) Firestore nur kurz
+(`_transient_store_error`, wie bei `_settle_step`), folgt ein Versuch nach
+`TERMINAL_RETRY_SECONDS`; danach fehlt nur dieser Eintrag. Bis dahin brach jeder
+solche Fehler den ganzen Turn als „stopped“ ab (Audit A12). Geschlossener Chat,
+Lauf oder Konto brechen weiter ab.
 Scheitert ein Lauf erst nach abgeschlossenem Review, behält
 `AgentRunStore.finish` den Review-Status `succeeded`/`partial`; nur laufende
 bzw. ausstehende Reviews werden zu `failed`/`missing`/`cancelled`.
@@ -3758,8 +3793,16 @@ Im Chat entfallen pauschale Reserven für hypothetische Synthese-/Judge-Aufrufe;
 alle tatsächlich anstehenden Aufrufe reservieren weiterhin atomar im Tagesledger.
 Die alten Review-Holds bleiben für Legacy-Läufe korrekt abrechenbar. Modellfenster,
 Output-, Speicher- und Parallelitätsgrenzen bleiben technische Anforderungen:
-standardmäßig zwei parallele Unteraufrufe, initial 120.000 Zeichen Chatverlauf,
-bis zu 600 kB Review-Snapshot. Kein LLM-Kompressor. Der Admin-Prompteditor zeigt
+standardmäßig zwei parallele Unteraufrufe, 120.000 Zeichen Chatverlauf
+(`agent_runs.CONTEXT_CHAR_LIMIT`), bis zu 600 kB Review-Snapshot. Kein
+LLM-Kompressor. Ein längerer Chat behält seit 2026-10-15 seine neuesten
+Nachrichten (`history_start`): die ältesten fallen in Schritten von
+`HISTORY_STEP_TURNS` (4) weg, damit der Verlauf ein paar Nachrichten lang am
+selben Punkt beginnt und im Prompt-Cache bleibt; der App-Kontext der neuen
+Nachricht sagt dem Modell das (`HISTORY_OMITTED_NOTE`). Vorher brach jede
+weitere Nachricht ab, gespeichert als `provider_error`, und der Chat war tot
+(Audit A9). Passt nur die neue Nachricht nicht ins Modellfenster, kommt
+`ConversationTooLong` (422, `conversation_too_long`). Der Admin-Prompteditor zeigt
 nur wirksame Worker-Parallelitäts-/Nachrichtengrößen und verweist auf Limits für
 das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
@@ -6502,7 +6545,10 @@ alte Gemini-ADC-JSON ist entfernt.
   `SOURCE_VERSION`, `COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`), sonst durch Lesen von
   `.git/HEAD` (kein `git`-Subprozess). `/app` reicht ihn als `app_commit` plus
   `repo_url` ins Template; ist er leer, blendet das Template die Zeile aus. Die
-  früher handgepflegte Versionsnummer (`v1.11.1`) ist damit ersetzt.
+  früher handgepflegte Versionsnummer (`v1.11.1`) ist damit ersetzt. Derselbe
+  Wert steht als `data-app-build` in `#appBootstrapConfig`, und
+  `GET /api/build` (`pages.py`, `{"build": …}`, `no-store`, 60/min, kein
+  Firestore) nennt den gerade laufenden — beides für `app-update.js`.
 - Ausschließlich für Tests: `UNIT_TEST_MODE=1` initialisiert Firebase Admin im
   regulären pytest-Lauf ohne Service-Account gegen das nicht produktive
   `demo-consensio-unit` und einen geschlossenen Loopback-Port; ein ungemockter
@@ -7769,7 +7815,16 @@ gesendet, wenn ihre seitenbasierte Tokenreservierung ins Kontextfenster passt.
 Vergleiche erhalten die Auswahl, Worker nur explizite `file_ids`; Judges
 erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
 werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
-Tokenreservierung und tatsächlicher Usage-Abrechnung. Tool-Daten sind keine
+Tokenreservierung und tatsächlicher Usage-Abrechnung. Seit 2026-10-15 (Audit
+A6) steht der Dateiblock des Hauptmodells direkt hinter der Frage der Nachricht
+(`DelegationLoop.turn_start` als `anchor`, Auszugssuche mit der Frage), nicht
+hinter dem neuesten Tool-Ergebnis: In jedem Schritt derselbe Block an derselben
+Stelle, also aus dem Prompt-Cache statt jedes Mal voll bezahlt. Vergleichs- und
+andere Worker-Aufrufe hängen ihn weiter ans Ende ihres eigenen Prompts.
+`FileContext` (eine Instanz pro Turn) lädt Bild-/PDF-Bytes einmal pro Turn
+(`_raw`, gebunden an den SHA-256 des Datensatzes); die Metadaten liest jeder
+Aufruf weiter einmal, damit eine gelöschte oder abgelaufene Datei sofort
+scheitert. Tool-Daten sind keine
 Berechtigungen. Anleitung, Grenzen und PR-Matrix: `docs/agent-integrations.md`.
 
 ## Agent-Laufoberfläche: Rendering, Aktivität, Composer (2026-09-30)

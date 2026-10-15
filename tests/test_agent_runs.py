@@ -557,6 +557,76 @@ def test_context_check_precedes_paid_claim_for_small_model(api, monkeypatch):
     assert not calls
 
 
+def test_history_start_keeps_the_newest_messages_and_moves_in_steps():
+    from app.services.agent_runs import history_start
+    assert history_start([10] * 5, 100) == 0
+    # The smallest cut is rounded up to a multiple of HISTORY_STEP_TURNS (4),
+    # so the replayed history starts at the same message for a while.
+    assert [history_start([10] * n, 105) for n in range(20, 24)] == [12, 12, 12, 16]
+    # Rounding never drops the last messages that still fit.
+    assert history_start([50, 50, 50], 100) == 1
+    # The newest earlier message alone is too long: only the new question.
+    assert history_start([10, 200], 100) == 2
+
+
+def _answered(store, chat_id, request_id, answer):
+    _, turn = pending(store, chat_id=chat_id, request_id=request_id, question=f"Question {request_id}")
+    value = receipt()
+    value.text = answer
+    store.claim(UID, chat_id, turn["id"], AgentModel())
+    store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
+
+
+def test_a_long_chat_keeps_its_newest_messages_instead_of_failing(store, monkeypatch):
+    """Audit A9: past CONTEXT_CHAR_LIMIT every further message failed, and
+    the failed turn was saved as "provider_error, trying again usually works"."""
+    from app.services import agent_runs
+    system = "Answer."
+    monkeypatch.setattr(agent_runs.prompt_config, "get_config", lambda: {
+        "prompts": {"agent": system}, "reference_timezone": "Europe/Berlin"})
+    monkeypatch.setattr(agent_runs, "CONTEXT_CHAR_LIMIT", 40_000)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    for index in range(10):
+        _answered(store, chat_id, f"r{index}", "x" * 9_000)
+    _, target = pending(store, chat_id=chat_id, request_id="new", question="Continue")
+    messages = store.messages(UID, chat_id, target)
+    kept = [m["content"] for m in messages[1:-1] if m["role"] == "user"]
+    # Four messages fit; the cut (6) is rounded up to the next step (8).
+    assert kept == ["Question r8", "Question r9"]
+    assert agent_runs.HISTORY_OMITTED_NOTE in messages[-1]["content"]
+    assert agent_runs.strip_app_context(messages[-1]["content"]) == "Continue"
+    assert sum(len(m["content"]) for m in messages[:-1]) <= 40_000
+    # A short chat says nothing about omitted messages.
+    short = store.create_chat(UID, execution_mode="agent")["id"]
+    _answered(store, short, "s0", "Short answer")
+    _, target = pending(store, chat_id=short, request_id="s1", question="Continue")
+    assert agent_runs.HISTORY_OMITTED_NOTE not in store.messages(UID, short, target)[-1]["content"]
+
+
+def test_refusals_that_would_repeat_never_say_try_again():
+    from app.services.agent_files import FileUnavailable
+    from app.services.agent_provider_limits import agent_failure
+    from app.services.agent_runs import ConversationTooLong
+    from app.services.google_connections import GoogleError
+
+    class Rejected(Exception):
+        status_code = 400
+
+    class Busy(Exception):
+        status_code = 502
+
+    cases = {"provider_rejected": Rejected("raw provider body"),
+             "conversation_too_long": ConversationTooLong("This conversation is too long for the selected model."),
+             "file_unavailable": FileUnavailable("The file has expired or is no longer available."),
+             "google_error": GoogleError("Google authorization expired or was revoked. Reconnect the account.", 401)}
+    for code, error in cases.items():
+        failure = agent_failure(error)
+        assert failure["code"] == code
+        assert "try again" not in failure["error"].lower() and "raw provider body" not in failure["error"]
+    assert agent_failure(cases["file_unavailable"])["error"] == "The file has expired or is no longer available."
+    assert agent_failure(Busy())["code"] == "provider_error"
+
+
 def test_agent_history_never_queries_empty_model_answers(store, monkeypatch):
     chat_id, turn = pending(store)
     monkeypatch.setattr(store, "_model_answers", lambda *args: pytest.fail("Agent turns have no model_answers subcollection"))

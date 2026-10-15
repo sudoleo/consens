@@ -32,6 +32,11 @@
   kombinierte Ergebnis prüfen und erforderliche CI-/Branch-Regeln einhalten.
   Bei zwischenzeitlichen Zielbranch-Änderungen betroffene Prüfungen wiederholen.
   Keine Schutzregeln umgehen und keine unbeteiligten PRs pauschal mergen.
+- **Deploys nur auf Ansage:** Nach Commit, Push oder Merge nicht von selbst
+  nach Prod (Render) deployen. Nur deployen, wenn der Nutzer es in der
+  laufenden Session ausdrücklich verlangt; eine Freigabe aus einer früheren
+  Session oder Aufgabe gilt nicht. Im Abschluss stattdessen sagen, dass die
+  Änderung auf `main` liegt, aber noch nicht live ist.
 - Nur bei fehlenden Zugängen, einem nicht eigenständig lösbaren Blocker oder
   einer wesentlichen ungeklärten Produktentscheidung den Nutzer einbeziehen.
   Abschluss mit tatsächlicher Validierung und gegebenenfalls PR-/Merge-Status berichten;

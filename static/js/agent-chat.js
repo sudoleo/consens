@@ -560,8 +560,10 @@
     if (code === 'agent_tokens_exhausted') return { text: `You've used today's Agent tokens. They reset at ${resetTime()}.` };
     const note = App.agentReview?.failureNote?.(failure, review, text);
     // Any other stop (provider busy, timeout, lost connection) can be sent
-    // again as it was; a busy model can also be swapped first.
-    const actions = retry ? [['retry', 'Retry']] : [];
+    // again as it was; a busy model can also be swapped first. A refusal of
+    // the request itself (agent_provider_limits) would fail again unchanged.
+    const repeats = ['conversation_too_long', 'file_unavailable', 'provider_rejected'].includes(code);
+    const actions = retry && !repeats ? [['retry', 'Retry']] : [];
     if (code === 'provider_rate_limited' || code === 'provider_unavailable') actions.push(['choose-model', 'Choose another model']);
     return { text: note ?? (failure?.error || failure?.message || ''), actions };
   }

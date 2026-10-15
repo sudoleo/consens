@@ -81,11 +81,22 @@ class AgentRunInterrupted(RuntimeError):
 
 def agent_failure(error):
     """The same safe failure is saved in history and sent over the live stream."""
+    from app.services.agent_files import FileUnavailable
     from app.services.agent_quota import AgentTokenBudgetExceeded
+    from app.services.agent_runs import ConversationTooLong
     from app.services.agent_runtime import AgentCapacityExceeded
     from app.services.chat_store import TurnStatusConflict
+    from app.services.google_connections import GoogleError
     from app.services.llm.provider_runtime import AnalysisBudgetExceeded
     import httpx
+    # Our own messages, written for the user: sending the same message again
+    # would fail the same way, so none of them says "try again".
+    if isinstance(error, ConversationTooLong):
+        return {"code": "conversation_too_long", "error": str(error)}
+    if isinstance(error, FileUnavailable):
+        return {"code": "file_unavailable", "error": str(error)}
+    if isinstance(error, GoogleError):
+        return {"code": "google_error", "error": str(error)}
     if isinstance(error, AgentTokenBudgetExceeded):
         return {"code": error.code, "error": str(error),
                 "required_tokens": error.required, "available_tokens": error.remaining}
@@ -117,4 +128,8 @@ def provider_failure(error):
         return {"code": "provider_unavailable", "error": "This model is currently unavailable at its provider. Choose another model or try again later."}
     if status in {401, 402, 403}:
         return {"code": "provider_access", "error": "The model provider declined the request. This needs a check of the provider settings on our side."}
+    if status in {400, 413, 422}:
+        # The request itself was refused (too large, an unsupported file or
+        # parameter): the same request again fails the same way.
+        return {"code": "provider_rejected", "error": "The model provider rejected this request. Try another chat model, or start a new chat if this one is long or has large files."}
     return {"code": "provider_error", "error": "The model provider could not finish this request. Trying again in a moment usually works."}
