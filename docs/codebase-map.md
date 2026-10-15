@@ -5608,7 +5608,13 @@ keinen Abgleich.
   `watch_symbols.SYMBOL_PATHS` = `SYMBOL_ICONS` in watch-dashboard.js, ein Test
   hält beide gleich; seit 2026-10-15 auch `sigma` für Mathematik).
   `image.status = dismissed` beendet die Suche, wenn das gefundene Bild nicht
-  taugt (Mathe-Topic: nur eine reißerische Thumbnail-Grafik).
+  taugt (Mathe-Topic: nur eine reißerische Thumbnail-Grafik). Ein **redaktionell
+  gewähltes Bild** setzt `scripts/set_topic_image.py` (Trockenlauf Standard,
+  `--crop`, `--apply` = Prod-Write; `topic_images.set_editorial_image`,
+  `picked_by: editor`): ein echtes Bild aus einer der Quellen, nie KI-Bild
+  oder Stockfoto; es ersetzt Suche, Symbol und `dismissed`. Seit 2026-10-15:
+  Mathe = IMO-Goldmedaille aus dem Nature-Artikel, AGI = Prognose-Grafik der
+  AI-Impacts-Umfrage (LessWrong-Spiegel).
 - **Abbildungen aus der Antwort** (`app/services/topic_figures.py`, seit
   2026-10-15): Nach jedem Check füllt ein Judge-Call
   (`consensus_engine.query_answer_figures`, Differences-Judge-Kette,

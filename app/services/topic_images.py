@@ -25,6 +25,7 @@ import re
 import threading
 from collections import OrderedDict
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from app.core.observability import safe_exception
 from app.services import topics, watch_images, watch_symbols
@@ -205,6 +206,70 @@ def image_view(topic_id: str, topic: dict) -> dict | None:
         "source_url": source_url,
         "source_host": str(state.get("source_host") or "")[:120],
     }
+
+
+def editorial_thumbnail(content: bytes, crop=None):
+    """(WebP bytes, (w, h)) of a picture chosen by hand, optionally cropped
+    to ``(x0, y0, x1, y1)`` in source pixels. Unlike the automatic search it
+    keeps charts and flat graphics: a person decided that they fit."""
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(content), formats=("JPEG", "PNG", "WEBP", "GIF")) as source:
+        if source.size[0] * source.size[1] > watch_images.MAX_PIXELS:
+            raise ValueError("picture too large")
+        image = source.convert("RGBA" if "A" in source.mode else "RGB")
+    if crop:
+        image = image.crop(tuple(int(value) for value in crop))
+    if min(image.size) < 120:
+        raise ValueError("picture too small")
+    image.thumbnail((watch_images.THUMB_SIDE, watch_images.THUMB_SIDE), Image.Resampling.LANCZOS)
+    for quality in (85, 72, 60):
+        buffer = io.BytesIO()
+        image.save(buffer, "WEBP", quality=quality, method=4)
+        if len(buffer.getvalue()) <= watch_images.STORED_MAX_BYTES:
+            return buffer.getvalue(), image.size
+    raise ValueError("picture does not fit the size budget")
+
+
+def set_editorial_image(topic_id: str, content: bytes, *, source_url: str, crop=None,
+                        kind: str = "article", db=None) -> dict:
+    """Store a picture chosen by hand (scripts/set_topic_image.py).
+
+    It replaces whatever the search found or gave up on: an editor looked at
+    the sources and picked a real picture from one of them. It is served and
+    linked like a found one; ``picked_by: editor`` records who chose it.
+    """
+    if not TOPIC_ID_RE.match(str(topic_id or "")):
+        raise ValueError("invalid topic id")
+    if not str(source_url or "").startswith(("https://", "http://")):
+        raise ValueError("the picture needs the page it comes from")
+    data, (width, height) = editorial_thumbnail(content, crop)
+    if db is None:
+        from app.core.security import db_firestore as db
+    token = hashlib.sha256(data).hexdigest()[:20]
+    now = datetime.now(timezone.utc)
+    host = (urlsplit(source_url).hostname or "").lower().removeprefix("www.")
+    state = {
+        "status": STATUS_READY,
+        "kind": kind if kind in ("item", "article", "logo") else "article",
+        "token": token,
+        "width": width,
+        "height": height,
+        "source_url": source_url[:2000],
+        "source_host": host[:120],
+        "picked_by": "editor",
+        "picked_at": now,
+    }
+    db.collection(TOPIC_IMAGES_COLLECTION).document(topic_id).set({
+        "token": token, "content": data, "content_type": "image/webp",
+        "width": width, "height": height, "created_at": now,
+    })
+    db.collection(topics.TOPICS_COLLECTION).document(topic_id).update({"image": state})
+    with _CACHE_LOCK:
+        _CACHE.pop(topic_id, None)
+    return state
 
 
 def symbol_view(topic: dict) -> dict | None:

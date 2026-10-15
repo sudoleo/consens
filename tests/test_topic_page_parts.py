@@ -206,3 +206,36 @@ def test_without_a_good_picture_a_topic_shows_its_symbol(monkeypatch):
     # A topic whose found picture is not fit for the page is closed for good.
     db.documents[("topics", topic["id"])]["image"]["status"] = "dismissed"
     assert not topic_images.needs_image(topics.get_topic(topic["id"], db=db))
+
+
+def test_an_editor_can_set_a_real_picture_over_a_dismissed_search(monkeypatch):
+    import io
+
+    from PIL import Image
+
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    db.documents[("topics", topic["id"])].update({
+        "symbol": "sigma", "image": {"status": "dismissed", "attempts": 2, "tries": 2},
+    })
+    picture = io.BytesIO()
+    Image.new("RGB", (1066, 600), (60, 80, 160)).save(picture, "JPEG")
+
+    state = topic_images.set_editorial_image(
+        topic["id"], picture.getvalue(),
+        source_url="https://www.nature.com/articles/d41586-025-02343-x",
+        crop=(83, 0, 983, 600), db=db,
+    )
+
+    assert state["picked_by"] == "editor" and state["source_host"] == "nature.com"
+    assert (state["width"], state["height"]) == (320, 213)
+    stored = topics.get_topic(topic["id"], db=db)
+    # The picture wins over the symbol, and the search stays closed.
+    assert topic_images.visual_view(topic["id"], stored)["kind"] == "article"
+    assert not topic_images.needs_image(stored)
+    assert topic_images.load_image(topic["id"], state["token"], db=db)[1] == "image/webp"
+    page = client().get("/topics/gpt-6")
+    assert f'/api/topics/{topic["id"]}/image/{state["token"]}' in page.text
+    assert 'href="https://www.nature.com/articles/d41586-025-02343-x"' in page.text
