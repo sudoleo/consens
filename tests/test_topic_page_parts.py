@@ -108,7 +108,7 @@ def test_the_topic_page_and_hub_show_the_picture_and_the_standing_answer(monkeyp
     hub = client().get("/topics")
     assert hub.status_code == 200
     assert "GPT-6 Astra is out. It shipped on Sep 4, 2026." in hub.text
-    assert "Changed on Jul 24" in hub.text
+    assert "Model releases · Changed Jul 24" in hub.text
     assert 'class="topics-row-image is-logo"' in hub.text
     assert "/100" not in hub.text
 

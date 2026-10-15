@@ -220,9 +220,11 @@ async def topics_hub(request: Request):
         except (TypeError, ValueError):
             day = ""
         if entry["standing_moved"]:
-            entry["state_line"] = f"Changed on {day}" if day else "Changed in the latest check"
+            entry["state_line"] = f"Changed {day}" if day else "Changed in the latest check"
         else:
-            entry["state_line"] = f"No change in the check of {day}" if day else "No change in the latest check"
+            entry["state_line"] = f"Checked {day}" if day else "No change in the latest check"
+        # One short whole sentence reads better on a card than three cut ones.
+        entry["lead"] = lead_sentences(entry["lead"], limit=150, min_sentence=30) if entry["lead"] else ""
     jsonld = {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
@@ -356,6 +358,23 @@ async def topic_page(
         requested=bool(version) and not current,
     )
 
+    # The head keeps the state to one line; "What changed" leads to the
+    # history entry that says it.
+    interval = public_topic.get("update_interval") or ""
+    state_detail = (
+        "" if page_state.get("back")
+        else "paused" if public_topic["status"] == "paused"
+        else f"checked {interval}" if interval and interval != "manual" else ""
+    )
+    shown_point = next(
+        (point for point in (history or {}).get("points") or [] if point["run_id"] == selected_raw["id"]),
+        None,
+    )
+    state_more_href = (
+        f"#watch-run-{shown_point['anchor_id']}"
+        if page_state.get("tone") == "moved" and shown_point else ""
+    )
+
     preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
     answer_md = strip_chat_framing(selected["consensus_md"])
     sources, source_list, hidden = _sources_view(selected["evidence"], preferred_domains)
@@ -431,6 +450,8 @@ async def topic_page(
         "topic": public_topic,
         "topic_image": topic_images.image_view(topic["id"], topic),
         "page_state": page_state,
+        "state_detail": state_detail,
+        "state_more_href": state_more_href,
         "key_links": source_links.key_links(source_list, answer_md),
         "answer_html": answer_html,
         "sources": source_list,

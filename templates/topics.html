@@ -47,10 +47,9 @@
           <img class="topics-row-image is-{{ entry.image.kind }}" src="{{ entry.image.url }}" alt="" width="{{ entry.image.width }}" height="{{ entry.image.height }}" loading="lazy" decoding="async">
           {% endif %}
           <span class="topics-row-body">
-            <span class="topics-row-kicker">{{ entry.category }}{% if entry.status == "paused" %} · paused{% endif %}</span>
             <span class="topics-row-title">{{ entry.title }}</span>
             <span class="topics-row-lead">{{ entry.lead or entry.lead_question }}</span>
-            <span class="topics-row-state{% if entry.standing_moved %} is-moved{% endif %}"><i aria-hidden="true"></i>{{ entry.state_line }}</span>
+            <span class="topics-row-state{% if entry.standing_moved %} is-moved{% endif %}"><i aria-hidden="true"></i>{% if entry.category %}{{ entry.category }} · {% endif %}{{ entry.state_line }}{% if entry.status == "paused" %} · paused{% endif %}</span>
           </span>
         </a>
       </li>

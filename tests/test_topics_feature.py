@@ -1116,15 +1116,23 @@ def test_topic_page_leads_with_the_state_line_and_the_answer(monkeypatch):
 
     assert current.status_code == 200
     text = current.text
-    assert '<section class="wp-state is-moved"' in text
-    assert "Changed on Jul 24" in text
-    assert "Anthropic moved to a 2027 window." in text
+    # The head keeps the state to one line; the headline leads to the
+    # history entry that says what changed.
+    assert '<section class="wp-state is-compact is-moved"' in text
+    assert '<a class="wp-state-more" href="#watch-run-check-2" title="What changed"><strong>Changed on Jul 24</strong></a>' in text
+    assert "checked weekly" in text
+    head = text.split('id="wpAnswerHeading"', 1)[0]
+    assert "Anthropic moved to a 2027 window." not in head
+    assert "Anthropic moved to a 2027 window." in text.split('id="wpHistoryHeading"', 1)[1]
     # The answer is on the page, without the chat around it.
     assert "A 2027 launch is now expected." in text
     assert "Short answer" not in text
     assert "Here&#39;s the current picture" not in text and "Here's the current picture" not in text
     assert "If you want, I can" not in text
-    assert text.index("wp-state") < text.index("Current answer") < text.index("wp-history")
+    # The lead question heads the answer instead of repeating the title.
+    assert '<h2 id="wpAnswerHeading" class="wp-answer-question">What is the current evidence about GPT-6?</h2>' in text
+    assert "wp-subheading" not in text
+    assert text.index("wp-state") < text.index("wpAnswerHeading") < text.index("wp-history")
     assert "Topic started" in text
     assert "How the 3 models compared &middot; 1 contradiction" in text
     assert "<h1 id=\"shareQuestion\" class=\"wp-question share-question\">GPT-6</h1>" in text

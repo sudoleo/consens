@@ -30,8 +30,19 @@
 {% endmacro %}
 
 {# The one line the page leads with: did the answer move, and since when
-   (app/services/check_page.state_view). #}
-{% macro state(page_state, current_url, label, goal="") %}
+   (app/services/check_page.state_view). ``compact`` (Topic pages) keeps it to
+   one quiet line; what changed and the counts stand in the history. #}
+{% macro state(page_state, current_url, label, goal="", compact=false, detail="", more_href="") %}
+{% if compact %}
+<section class="wp-state is-compact is-{{ page_state.tone }}" aria-label="{{ label }}">
+  {#- The headline itself leads to what changed, so the line stays one line. -#}
+  <p class="wp-state-line"><span class="wp-state-mark" aria-hidden="true"></span>
+    {%- if more_href %}<a class="wp-state-more" href="{{ more_href }}" title="What changed"><strong>{{ page_state.headline }}</strong></a>
+    {%- else %}<strong>{{ page_state.headline }}</strong>{% endif %}
+    {%- if detail %}<span class="wp-state-sep" aria-hidden="true">·</span><span>{{ detail }}</span>{% endif %}
+    {%- if page_state.back %}<span class="wp-state-sep" aria-hidden="true">·</span><a class="wp-state-more" href="{{ current_url }}">See the current answer</a>{% endif %}</p>
+</section>
+{% else %}
 <section class="wp-state is-{{ page_state.tone }}" aria-label="{{ label }}">
   {% if page_state.headline %}<p class="wp-state-headline"><span class="wp-state-mark" aria-hidden="true"></span>{{ page_state.headline }}</p>{% endif %}
   {% if page_state.text %}<p class="wp-state-text">{{ page_state.text }}</p>{% endif %}
@@ -45,6 +56,7 @@
   {% if page_state.note %}<p class="wp-note">{{ page_state.note }}</p>{% endif %}
   {% if page_state.facts %}<p class="wp-facts">{{ page_state.facts | join(" · ") }}</p>{% endif %}
 </section>
+{% endif %}
 {% endmacro %}
 
 {# Direkt zu den Seiten, um die es geht (source_links.key_links): wer ein
@@ -73,9 +85,9 @@
 {% endmacro %}
 
 {# The answer and the sources behind it. #}
-{% macro answer(label, answer_html, sources) %}
+{% macro answer(label, answer_html, sources, heading_class="wp-label") %}
 <section class="wp-answer" aria-labelledby="wpAnswerHeading">
-  <h2 id="wpAnswerHeading" class="wp-label">{{ label }}</h2>
+  <h2 id="wpAnswerHeading" class="{{ heading_class }}">{{ label }}</h2>
   <div class="share-md">{{ answer_html | safe }}</div>
   {% if sources %}
   <h3 class="wp-label wp-sources-label">Sources</h3>
@@ -133,10 +145,11 @@
 
 {# History: only the checks that moved the answer stand on their own, plus
    the newest and the first one; quiet checks fold into one entry. #}
-{% macro history(page_history, selected, start_title, start_text) %}
+{% macro history(page_history, selected, start_title, start_text, notes=[]) %}
 {% if page_history and page_history.timeline %}
 <section class="wp-history" aria-labelledby="wpHistoryHeading">
   <h2 id="wpHistoryHeading" class="wp-label">History</h2>
+  {% for note in notes if note %}<p class="wp-history-note">{{ note }}</p>{% endfor %}
   {% if page_history.points | length > 1 and page_history.path %}
   <figure class="wp-chart">
     {{ agreement_chart(page_history) }}

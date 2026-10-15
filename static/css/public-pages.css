@@ -1627,6 +1627,36 @@ canvas {
 .wp-kicker a { color: inherit; text-decoration: none; }
 .wp-kicker a:hover { color: var(--heading); }
 
+/* Kompakte Zustandszeile (Topic-Seiten): eine ruhige Zeile ohne Fläche statt
+   eines Kastens mit dem Satz des Judges; der steht im Verlauf. */
+.wp-state.is-compact { margin: 14px 0 0; padding: 0; border-radius: 0; background: none; }
+.wp-state-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+.wp-state-line .wp-state-mark { width: 8px; height: 8px; margin-right: 8px; }
+.wp-state-line strong { color: var(--heading); font-weight: var(--font-weight-semibold); }
+.wp-state-sep { margin: 0 8px; }
+.wp-state-more { color: var(--heading); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.wp-state-more:hover { text-decoration-color: currentColor; }
+
+/* Die Leitfrage führt die Antwort an, statt den Titel im Kopf zu wiederholen. */
+.wp-answer-question {
+  max-width: 34em;
+  margin: 0 0 12px;
+  color: var(--heading);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  text-wrap: balance;
+}
+.wp-history-note { margin: -4px 0 14px; color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+
 /* Das Bild des Gegenstands oder Themas (services/watch_images.py), rechts
    neben der Frage, als 3:2-Kachel wie im Dashboard: ein Produktfoto ganz auf
    Weiß, ein Artikelfoto füllend, Logos als eigene abgerundete Kacheln ohne
@@ -1865,6 +1895,25 @@ canvas {
   .wp-head.has-image .wp-subheading { grid-column: 1 / -1; justify-self: start; }
   .wp-chart { display: none; }
   .wp-state { margin-top: 18px; padding: 16px; }
+  .wp-state.is-compact { margin-top: 12px; padding: 0; }
+  /* Topic-Seiten: die Direktlinks als wischbare Reihe statt vier
+     gestapelter Kacheln vor der Antwort. */
+  .topic-shell .wp-links { margin-top: 24px; }
+  .topic-shell .wp-links-list {
+    display: flex;
+    gap: 8px;
+    margin: 0 -16px;
+    padding: 0 16px 2px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 16px;
+    scrollbar-width: none;
+  }
+  .topic-shell .wp-links-list::-webkit-scrollbar { display: none; }
+  .topic-shell .wp-links-list li { flex: 0 0 74%; scroll-snap-align: start; }
+  .topic-shell .wp-link { padding: 10px 12px; }
+  .topic-shell .wp-answer { margin-top: 28px; }
   .wp-follow { padding: 16px; }
 }
 

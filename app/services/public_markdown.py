@@ -377,16 +377,23 @@ def strip_chat_framing(md_text) -> str:
     return "\n\n".join(blocks)
 
 
-def lead_sentences(md_text, limit=160) -> str:
+_SENTENCE_END_RE = re.compile(r"([.!?][”\"’')]?)\s")
+
+
+def lead_sentences(md_text, limit=160, min_sentence=None) -> str:
     """The opening of an answer as plain text, cut at a sentence end if one
-    fits: what a search snippet or a hub card shows of it."""
+    fits: what a search snippet or a hub card shows of it. A sentence end
+    counts from ``min_sentence`` characters on (default a third of the limit);
+    a card prefers one short whole sentence to a longer cut one."""
     # Headings label a section; the snippet wants its first sentences.
     body = re.sub(r"^\s{0,3}#{1,6}\s.*$", "", strip_chat_framing(md_text), flags=re.MULTILINE)
     text = markdown_to_plaintext(body)
     if len(text) <= limit:
         return text
     cut = text[:limit]
-    end = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! "))
-    if end >= limit // 3:
-        return cut[: end + 1]
+    # A sentence ends at . ? or ! -- also inside a closing quote: “solved.”
+    ends = [match.end(1) for match in _SENTENCE_END_RE.finditer(cut + " ")]
+    end = ends[-1] if ends else -1
+    if end >= (limit // 3 if min_sentence is None else min_sentence):
+        return cut[:end]
     return cut[: limit - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"

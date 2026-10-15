@@ -5550,14 +5550,15 @@ keinen Abgleich.
   denselben Claim. Paused/archived Topics werden nicht ausgeführt.
 - **Seitenaufbau seit 2026-10-15: wie die Watch-Seite.** `/topics/{slug}`
   rendert SSR aus `templates/partials/check_page.html` (geteilt mit
-  `watch_share.html`): Kicker („Topic · Kategorie · checked weekly“, „Topic“
-  führt zum Hub), redaktioneller Titel als H1 mit der Leitfrage darunter, das
-  Topic-Bild rechts; dann **eine Zustandszeile**
-  (`check_page.state_view`/`drift_view`, dieselbe Regel wie bei Watches:
-  „Changed on …“ mit Satz und Belegen, „Unchanged since …“, „Answer from …“
-  mit Rücklink für `?version=`, Hinweis auf einen nicht geltenden neuesten
-  Check); bis zu vier **Direktlinks** (`source_links.key_links`); die
-  **Antwort offen** mit Quellen (direkte Quellen nach Rolle zuerst, ab 6
+  `watch_share.html`): Kicker nur mit der Kategorie (führt zum Hub),
+  redaktioneller Titel als H1, das Topic-Bild rechts; dann **eine kompakte
+  Zustandszeile** (`check_page.state_view`/`drift_view`, dieselbe Regel wie bei
+  Watches, aber `compact=True`: eine Zeile ohne Fläche, „Changed on …“ als
+  Link auf den Verlaufseintrag mit Satz und Belegen, dazu „checked weekly“ bzw.
+  „paused“; Zähler und „Latest check: …“ stehen als Notiz über dem Verlauf);
+  bis zu vier **Direktlinks** (`source_links.key_links`, auf dem Handy eine
+  wischbare Reihe); die Leitfrage als H2 über der **offenen Antwort** mit
+  Quellen (direkte Quellen nach Rolle zuerst, ab 6
   gefaltet) und Quellennamen im Text als Links (`site_mentions`); Follow;
   **Verlauf** nur mit Bewegungen, ruhige Checks gefaltet, Agreement-Kurve nur
   Desktop; der Modellvergleich zugeklappt. Die Punkte baut
@@ -5617,10 +5618,11 @@ keinen Abgleich.
   auf den drei Live-Antworten: 6–39 s, 17 von 19 Einträgen bestanden.
   Nachtrag für bestehende Runs: `scripts/backfill_topic_visuals.py`
   (`--figures` übernimmt schon erzeugte Abbildungen, `--apply` = Prod-Write).
-- **Hub `/topics`**: eine flache Zeile pro Topic mit Bild, Kategorie, Titel,
-  `accepted_lead` (sonst Leitfrage) und einer Zustandszeile („Changed on …“ /
-  „No change in the check of …“). Kein Score, keine Snapshot-Zahl, kein
-  Filter.
+- **Hub `/topics`**: eine flache Zeile pro Topic mit Titel, dem ersten ganzen
+  Satz von `accepted_lead` (`lead_sentences(limit=150, min_sentence=30)`,
+  höchstens drei Zeilen; sonst Leitfrage), einer leisen Meta-Zeile
+  „Kategorie · Changed …/Checked …“ und dem Bild rechts. Kein Score, keine
+  Snapshot-Zahl, kein Filter, keine Versalien-Kicker.
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
   teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs legen bei
   konfiguriertem SMTP je Follower ein Outbox-Item im selben Commit wie den Run an

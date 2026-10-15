@@ -808,9 +808,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       je eine Zeile mit Bild (falls vorhanden), Titel, Antwortanfang und
       „Changed on …“/„No change …“. Navigation, Footer, Light/Dark, Focus States
       und Mobile-Layout bleiben ohne horizontalen Overflow.
-- [ ] `/topics/{slug}` sieht aus wie eine Watch-Seite: Kicker „Topic · …“,
-      Titel mit Leitfrage, Bild rechts (Handy: neben dem Kicker), eine
-      Zustandszeile mit Belegen, bis zu vier Direktlinks, die Antwort offen (ohne
+- [ ] `/topics/{slug}` sieht aus wie eine Watch-Seite, mit ruhigerem Kopf:
+      Kicker nur Kategorie (eine Zeile), Titel, Bild rechts (Handy: neben dem
+      Kicker), eine einzeilige Zustandszeile („Changed on …“ springt in den
+      Verlauf), Direktlinks (Handy: wischbare Reihe), die Leitfrage als
+      Überschrift über der offenen Antwort (ohne
       „Here's …:“-Einleitung, „Short answer“ und „If you want, I can …“), Quellen
       ab 6 gefaltet, keine `vertexaisearch`-Links. Alle Links öffnen in einem
       neuen Tab.

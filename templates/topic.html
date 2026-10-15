@@ -44,13 +44,16 @@
   {% import "partials/check_page.html" as check with context %}
 
   <main class="page-shell wp-shell topic-shell" data-math-render>
-    {% call check.head(topic.status, topic.title, topic_image, topic.lead_question, clamp=false) %}<span><a href="/topics">Topic</a>{% if topic.category %} · {{ topic.category }}{% endif %}{% if topic.update_interval and topic.update_interval != "manual" %} · checked {{ topic.update_interval }}{% endif %}</span>{% endcall %}
+    {#- The head says three things on one screen, even on a phone: what this
+        is about, the title, and whether the answer moved. The question
+        heads the answer; what changed and the counts stand in the history. -#}
+    {% call check.head(topic.status, topic.title, topic_image, clamp=false) %}<span><a href="/topics">{{ topic.category or "Topics" }}</a></span>{% endcall %}
 
-    {{ check.state(page_state, selected_version.current_url, "What this Topic found") }}
+    {{ check.state(page_state, selected_version.current_url, "What this Topic found", compact=true, detail=state_detail, more_href=state_more_href) }}
 
     {{ check.direct_links(key_links) }}
 
-    {{ check.answer("The answer then" if page_state.back else "Current answer", answer_html, sources) }}
+    {{ check.answer(topic.lead_question or ("The answer then" if page_state.back else "Current answer"), answer_html, sources, heading_class="wp-answer-question") }}
 
     {% if topic.status == "active" %}
     <section class="wp-follow" aria-labelledby="topicFollowHeading">
@@ -67,7 +70,7 @@
     </section>
     {% endif %}
 
-    {{ check.history(page_history, selected_version, "Topic started", "The first answer. Every later check is compared with it.") }}
+    {{ check.history(page_history, selected_version, "Topic started", "The first answer. Every later check is compared with it.", notes=[page_state.facts | join(" · "), page_state.note]) }}
 
     {% if differences or consulted_models %}
     {{ check.models_compared(model_count, contradiction_count, consulted_models, differences, "") }}
