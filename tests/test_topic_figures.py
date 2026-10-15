@@ -235,3 +235,35 @@ def test_figure_lists_do_not_inherit_the_answer_list_indent():
     css = open("static/css/public-pages.css", encoding="utf-8").read()
     for selector in (".af .af-events {", ".af .af-column ul {", ".af .af-rows {"):
         assert selector in css
+
+
+def test_years_are_drawn_on_a_timeline_not_as_bars():
+    """when-will-agi-arrive, 2026-10-15: the Judge filled the numbers template
+    with forecast years; 2026, 2031 and 2047 as bars are three bars of almost
+    the same length."""
+    answer = ("Lab leaders say roughly 2026–2030. Metaculus: weakly general AI around 2027, "
+              "general AI around 2031. Surveys put the 50% date at 2047.")
+    raw = {"figures": [figure("numbers", [
+        item("Some AI lab leaders", value="2026–2030", unit="year"),
+        item("Weakly general AI", value="2027", unit="year"),
+        item("Surveys, 50% date", value="2047", unit="year"),
+    ], title="AGI forecast timing")]}
+
+    cleaned = topic_figures.clean_figures(raw, answer)
+
+    assert [f["kind"] for f in cleaned] == ["timeline"]
+    assert [entry["date"] for entry in cleaned[0]["items"]] == ["2026–2030", "2027", "2047"]
+    html = str(topic_figures.figure_html(cleaned[0]))
+    assert "2026–2030" in html and "af-bar" not in html
+    # A figure stored before the fix is drawn as a timeline too.
+    stored = {"kind": "numbers", "title": "", "after_heading": "", "items": [
+        {"label": "A", "note": "", "disputed": False, "value": "2027", "number": 2027.0, "unit": ""},
+        {"label": "B", "note": "", "disputed": False, "value": "2047", "number": 2047.0, "unit": ""},
+    ]}
+    assert 'class="af af-timeline"' in str(topic_figures.figure_html(stored))
+    # Real quantities stay bars.
+    prices = {"kind": "numbers", "title": "", "after_heading": "", "items": [
+        {"label": "Input", "note": "", "disputed": False, "value": "$2", "number": 2.0, "unit": "per 1M"},
+        {"label": "Output", "note": "", "disputed": False, "value": "$10", "number": 10.0, "unit": "per 1M"},
+    ]}
+    assert "af-bar" in str(topic_figures.figure_html(prices))

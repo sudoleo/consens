@@ -69,7 +69,15 @@ _DATE_PATTERNS = (
     (re.compile(_MONTH_RE + r"\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b", re.I), ("M", "d", "y"), "day"),
     (re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+" + _MONTH_RE + r",?\s+(\d{4})\b", re.I), ("d", "M", "y"), "day"),
     (re.compile(_MONTH_RE + r",?\s+(\d{4})\b", re.I), ("M", "y"), "month"),
+    # "2026–2030": a span of years, placed at its first year.
+    (re.compile(r"\b(19\d{2}|20\d{2})" + _RANGE_RE + r"(19\d{2}|20\d{2})\b"), ("y", "y2"), "years"),
     (re.compile(r"\b(19\d{2}|20\d{2})\b"), ("y",), "year"),
+)
+# A value that is only a year or a span of years ("2031", "around 2027",
+# "2026–2030"): a point in time, never a quantity to draw as a bar.
+_YEAR_VALUE_RE = re.compile(
+    r"(?:~|around |about |circa |c\. |by )?(?:19|20)\d{2}(?:\s*(?:[-–—]|to)\s*(?:19|20)\d{2})?s?",
+    re.IGNORECASE,
 )
 _ANY_MONTH_RE = re.compile(r"\b" + _MONTH_RE + r"(?![a-z])", re.I)
 _NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
@@ -108,7 +116,7 @@ def _date_parts(text):
             year = int(parts["y"])
             month = _MONTHS[parts["M"].lower().rstrip(".")] if "M" in parts else int(parts.get("m") or 1)
             day = int(parts.get("d") or 1)
-            last = int(parts["d2"]) if parts.get("d2") else None
+            last = int(parts["d2"]) if parts.get("d2") else int(parts["y2"]) if parts.get("y2") else None
             return date(year, month, day), precision, last
         except (KeyError, ValueError):
             continue
@@ -145,6 +153,19 @@ def _short(text, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
+def years_as_timeline(figure: dict) -> dict:
+    """A numbers figure whose values are all years is a timeline: 2026, 2031
+    and 2047 drawn as bars are three bars of almost the same length
+    (when-will-agi-arrive, 2026-10-15)."""
+    items = figure.get("items") or []
+    if (figure.get("kind") != "numbers" or not items
+            or not all(_YEAR_VALUE_RE.fullmatch(str(item.get("value") or "").strip()) for item in items)):
+        return figure
+    return {**figure, "kind": "timeline", "items": [
+        {**item, "date": str(item.get("value") or "").strip()} for item in items
+    ]}
+
+
 def clean_figures(raw, answer_md: str) -> list[dict]:
     """Keep only what the answer states. Never raises."""
     if not isinstance(raw, dict):
@@ -155,6 +176,7 @@ def clean_figures(raw, answer_md: str) -> list[dict]:
     for figure in raw.get("figures") or []:
         if not isinstance(figure, dict) or figure.get("kind") not in KINDS:
             continue
+        figure = years_as_timeline(figure)
         kind = figure["kind"]
         items = []
         for item in (figure.get("items") or [])[:MAX_ITEMS]:
@@ -289,6 +311,8 @@ def _date_label(entry: dict) -> str:
     day, precision, last = parts
     if precision == "year":
         return str(day.year)
+    if precision == "years" and last:
+        return f"{day.year}–{last}"
     if precision == "month":
         return f"{day:%b} {day.year}"
     if precision == "days" and last:
@@ -416,6 +440,7 @@ def figure_html(figure: dict, *, answered_on: str = "") -> Markup:
     """One figure as safe HTML; every text from the answer is escaped.
 
     A small head (symbol + kind) marks it as a figure, not more text."""
+    figure = years_as_timeline(figure)
     body = {"timeline": _timeline, "status": _status, "numbers": _numbers}[figure["kind"]](figure)
     disputed = any(entry.get("disputed") for entry in figure["items"])
     caption = "Drawn by consens.io from this answer"

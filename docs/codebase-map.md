@@ -5614,7 +5614,9 @@ keinen Abgleich.
   liegen im Code, nicht im Prompt (`clean_figures`): jedes Datum, jede Zahl und
   jeder Status-Name muss wörtlich in der Antwort stehen, sonst fällt der
   Eintrag; unter zwei Einträgen fällt die Abbildung; je Vorlage nur eine
-  (die vollere); Status-Namen ohne `%`/Währung; Notizen in Ich-Form, doppelte
+  (die vollere); Status-Namen ohne `%`/Währung; eine Zahlen-Abbildung, deren Werte nur Jahre
+  oder Jahresspannen sind, wird als Zeitleiste gezeichnet (`years_as_timeline`,
+  auch für schon gespeicherte); Notizen in Ich-Form, doppelte
   oder den Namen wiederholende Notizen fallen weg; „disputed“ wird gestrichelt
   in Bernstein gezeichnet. Gespeichert als `figures` am Run (ältere Versionen
   behalten ihre eigene), gezeichnet als HTML/CSS (`figure_html`, `.af-*` in
