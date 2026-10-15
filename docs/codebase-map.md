@@ -2322,6 +2322,18 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Compare-Start) sind bewusst ausgenommen. Ein
   stehendes Zitat (`#composerQuote`) zählt wie ein Anhang als „Angefangenes“
   und verhindert das automatische Zuklappen.
+- **`composer-invite.js`** (seit 2026-10-15, vor `app-init.js`, nur zur Laufzeit
+  gerufen) — lädt zur ersten Frage ein. `window.App.composerInvite`:
+  `sendAsGuest()` (erste Prüfung in `window.sendQuestion`, `query-send.js`):
+  für einen Gast Entwurf speichern (`App.saveQuestionDraft`), den Sendewunsch
+  `localStorage["consensio.sendAfterLogin.v1"] = {at, source}` merken und den
+  Registrierungsdialog mit Begründungszeile öffnen; `afterAccessUpdate(canStartRun)`
+  (Ende von `updateQuestionInputAccess`): sobald die neue Sitzung laufen darf,
+  einmal `window.sendQuestion()` (höchstens 1 h alt, nur in einen neuen Chat,
+  nie während `App.reloadingAfterSignIn` aus `firebase.js::continueSignedIn`,
+  der Wunsch wird beim ersten Versuch gelöscht); `takeAskContext()` für
+  `App.trackAsk` (`source` typed/example/pasted, `after_login`). Dazu die
+  Klicks auf die Beispielfragen `#composerStarters` (füllen nur das Feld).
 - **`composer-keyboard.js`** (seit 2026-10-04, nach `composer-collapse.js`) —
   hält den fixierten Thread-Composer auf dem Handy (≤1099 px) an der
   Tastaturkante. Safari auf iOS ignoriert `interactive-widget=resizes-content`
@@ -4764,7 +4776,13 @@ das Menü vollständig. Reasoning trägt überall
 denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Leiste stehen
 Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
 ruhen einfarbig (Filter auf dem Badge, damit invertierte Mono-Logos im Dark
-Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Rechtliches steht
+Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Unter einem leeren
+neuen Chat (Hero) stehen seit 2026-10-15 vier Beispielfragen
+(`#composerStarters`, Pillen ohne Rahmen; auf dem Handy eine seitlich
+scrollende Zeile): ein Klick füllt nur das Feld (`composer-invite.js`). Sobald
+Text im Feld steht, werden sie per `#questionInput:not(:placeholder-shown)`
+unsichtbar, behalten aber ihren Platz, damit der zentrierte Composer nicht
+springt. Rechtliches steht
 in der Sidebar-Fußzeile, seit der Todo-Runde 3 in EINER Zeile
 (`.sidebar-footer-meta`): links Imprint · Privacy · Terms als leise Wörter
 (Impressum direkt erreichbar), rechts `.sidebar-footer-icons` mit zwei gleich
@@ -5201,6 +5219,19 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   (Senden) sind zwei getrennte Rechte, und der Entwurf liegt bis zum ersten
   echten Lauf unter `consensio.questionDraft.v1` — die Frage überlebt den
   Umweg über das Postfach.
+- **Gäste tippen (seit 2026-10-15).** `window.App.isGuestComposer()` (app-init.js:
+  keine Firebase-Sitzung, Login erreichbar, keine noch wiederhergestellte
+  Sitzung) zählt zu `userCanTypeQuestions()`; nur `data-auth-unavailable`
+  sperrt das Feld noch („Sign in to start…“). Gäste bekommen den Platzhalter
+  eines neuen Chats (`App.askPlaceholder()`, app-bootstrap.js, auch für Agent),
+  `body.is-guest` (ab dem ersten Paint) blendet den Modell-Chip aus und zeigt die
+  Begrüßung auch auf dem Handy. Senden ist aktiv, sobald Text im Feld steht, und
+  öffnet über `composer-invite.js` den Registrierungsdialog
+  (`openAuthModal(mode, trigger, source, {lead})`: die Begründungszeile gilt
+  für beide Tabs bis zum Schließen). Nach dem Login lädt die Seite neu, der
+  Entwurf kommt zurück ins Feld (auch im Gast-Zweig von `onIdTokenChanged`)
+  und geht einmal von selbst raus. Ohne Konto läuft weiterhin nichts, was
+  Modellkosten erzeugt.
 - Eigene API-Keys sind ein eingeloggtes Feature: `/check_keys`, `/ask_*` mit
   User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
 - **Unvertrauenswürdige Request-Größen sind vor teurer Arbeit begrenzt:** Das
@@ -7891,7 +7922,8 @@ Sidebar-Zustand (`sidebar_collapsed`, Overlay < 1100 px), `#authTopActions`
 nur für Gäste ohne `id_token` und bei `html.agent-shell-expected` die
 Agent-Texte (Begrüßung, „New chat“, Composer-Platzhalter), die `renderShellNow`
 bzw. `syncComposer` bis zur bekannten Berechtigung hält; Gäste ohne `id_token`
-bekommen sofort den Sign-in-Platzhalter. Solange eine gespeicherte Sitzung
+bekommen sofort denselben Platzhalter eines neuen Chats (`App.askPlaceholder()`)
+und `body.is-guest` (seit 2026-10-15, Gäste tippen). Solange eine gespeicherte Sitzung
 noch wiederhergestellt wird (Auth unbekannt, `id_token` vorhanden), lässt
 `updateQuestionInputAccess` den Platzhalter stehen — vorher wechselte er beim
 Reload Vorlage → „Sign in…“ → „Enter your question“ → Agent-Text.

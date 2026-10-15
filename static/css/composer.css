@@ -397,3 +397,54 @@
     display: none;
   }
 }
+
+/* ---- Guests ----------------------------------------------------------------
+   A guest types first and signs in on Send (composer-invite.js). The models
+   chip would only offer what a guest cannot choose yet; the provider marks in
+   the bar below already say who answers. body.is-guest: app-bootstrap.js
+   from the first paint, then app-init.js. */
+body.is-guest .composer-models .consensus-model { display: none; }
+
+/* ---- Example questions (#composerStarters, composer-invite.js) ------------
+   Only under an empty new chat, and gone with the hero. While the field holds
+   text they keep their room (visibility, not display), so the centred
+   composer does not move; :placeholder-shown also covers text set by code
+   (a draft, a quote, Run again). Phones get one row that scrolls sideways
+   instead of three wrapped ones. */
+.composer-starters { display: none; }
+body.is-hero:not(.direct-comparison-active) .composer-starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0 12px;
+}
+.input-section:has(#questionInput:not(:placeholder-shown)) > .composer-starters { visibility: hidden; }
+.composer-starter {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard);
+}
+.composer-starter:hover { background: var(--app-surface-selected); color: var(--ink); }
+.composer-starter:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (max-width: 640px) {
+  body.is-hero:not(.direct-comparison-active) .composer-starters {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Room for the focus ring inside the scroller's clip. */
+    padding-block: 3px;
+  }
+  .composer-starters::-webkit-scrollbar { display: none; }
+  .composer-starter { flex: 0 0 auto; }
+}

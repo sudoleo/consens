@@ -769,6 +769,9 @@
       return;
     }
     if (!registry.claimStartAction()) return;
+    // A guest's question is kept and the sign-in opens; it is sent once the
+    // session can run it (composer-invite.js).
+    if (window.App.composerInvite?.sendAsGuest?.()) return;
 
     if (window.App.agentChat?.isSelected?.()) {
       if (window.updateQuestionInputAccess && !window.updateQuestionInputAccess()) return;

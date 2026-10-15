@@ -613,6 +613,21 @@
         </div>
         <button type="button" id="postDemoLoginButton" class="post-demo-login-action">Log in or sign up</button>
       </div>
+      <!-- Beispielfragen unter einem leeren neuen Chat (composer-invite.js):
+           ein Klick fuellt das Feld, abgeschickt wird bewusst. Dieselbe Sorte
+           wie im Landing-Feld: Fragen, bei denen eine einzelne selbstsichere
+           Antwort nicht reicht. Sichtbar nur im Hero und bei leerem Feld
+           (composer.css). -->
+      <div id="composerStarters" class="composer-starters" role="group" aria-label="Example questions">
+        <button type="button" class="composer-starter" data-starter="heat_pump"
+          data-question="Can a heat pump heat our 1978 house with the original radiators?">Heat pump in a 1978 house?</button>
+        <button type="button" class="composer-starter" data-starter="ibuprofen"
+          data-question="Is it safe to take ibuprofen with blood pressure medication?">Ibuprofen with blood pressure meds?</button>
+        <button type="button" class="composer-starter" data-starter="vat"
+          data-question="Do I charge VAT to US clients as a German freelancer?">VAT for US clients?</button>
+        <button type="button" class="composer-starter" data-starter="check"
+          data-question="Check this AI answer:&#10;&#10;">Check an AI answer</button>
+      </div>
       <!-- Disclaimer + Legal-Links gehören zum Eingabebereich. Dadurch folgen
            sie dessen Hero-/Agent-Mode-Bewegung und bleiben immer darunter. -->
       <footer class="app-footer">

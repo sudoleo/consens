@@ -207,13 +207,25 @@
         }
         window.hasUnverifiedSession = hasUnverifiedSession;
 
+        // Gaeste tippen auch (seit 2026-10-15): erst die Frage, die Anmeldung
+        // kommt beim Absenden (composer-invite.js). Nur ein unerreichbarer
+        // Login sperrt das Feld, dann koennte kein Konto sie abschicken. Eine
+        // gespeicherte Sitzung, die noch wiederhergestellt wird, ist kein Gast.
+        function isGuestComposer() {
+          if (window.auth?.currentUser) return false;
+          if (document.documentElement.dataset.authUnavailable === "true") return false;
+          const authState = window.__consensioAuthState;
+          return authState?.known ? !authState.uid : !readStored("id_token");
+        }
+        window.App.isGuestComposer = isGuestComposer;
+
         window.userCanAskQuestions = function () {
           return hasVerifiedSession();
         };
 
         // Wer tippen darf, ist nicht dasselbe wie wer starten darf.
         window.userCanTypeQuestions = function () {
-          return hasVerifiedSession() || hasUnverifiedSession();
+          return hasVerifiedSession() || hasUnverifiedSession() || isGuestComposer();
         };
 
         const unverifiedQuestionPlaceholder =
@@ -222,8 +234,8 @@
         // Landing field -> /app?focus=1: arrive with the caret in the composer.
         // The parameter goes again at once, so a reload or bookmark is plain.
         // The field only takes the caret once the account may type into it
-        // (updateQuestionInputAccess below); a guest sees the locked field and
-        // its sign-in line instead, which is the honest arrival.
+        // (updateQuestionInputAccess below); a guest may, and signs in when
+        // the question is sent.
         let pendingComposerFocus = false;
         try {
           const url = new URL(window.location.href);
@@ -237,6 +249,9 @@
         window.updateQuestionInputAccess = function () {
           const canAsk = window.userCanAskQuestions();
           const canType = window.userCanTypeQuestions();
+          const guest = isGuestComposer();
+          const unverified = hasUnverifiedSession();
+          document.body.classList.toggle("is-guest", guest);
           const selectedModelCount = window.App.getSelectedModelCount?.() || 0;
           const agent = window.App.agentChat?.isSelected?.();
           const agentBlocker = agent ? window.App.agentChat.sendBlocker() : null;
@@ -262,9 +277,11 @@
             if (!restoring) {
               questionInput.placeholder = canAsk
                 ? defaultQuestionPlaceholder
-                : canType
+                : unverified
                   ? unverifiedQuestionPlaceholder
-                  : lockedQuestionPlaceholder;
+                  : guest
+                    ? window.App.askPlaceholder()
+                    : lockedQuestionPlaceholder;
             }
             questionInput.setAttribute("aria-disabled", String(!canType));
             if (pendingComposerFocus && canType) {
@@ -275,19 +292,24 @@
             }
           }
 
+          // A guest's Send asks for the sign-in (composer-invite.js), so it
+          // works as soon as there is something to send.
+          const guestCanSend = guest && Boolean(questionInput?.value.trim());
           if (sendButton && !sendButton.classList.contains("is-cancel-action")) {
-            sendButton.disabled = !canStartRun;
+            sendButton.disabled = !canStartRun && !guestCanSend;
             sendButton.title = !canAsk
-              ? canType
+              ? unverified
                 ? "Confirm your e-mail address to start this run"
-                : "Sign in to ask questions or use your own API keys"
+                : guest
+                  ? "Sign in to send your question. It's free."
+                  : "Sign in to ask questions or use your own API keys"
               : agent
                 ? agentBlocker?.message || (hasMessage ? "Send message" : "Write a message to send")
               : hasMinimumModels
                 ? "Send question"
                 : "Select at least two models to run consensus";
             sendButton.setAttribute("aria-label", sendButton.title);
-            sendButton.setAttribute("aria-disabled", String(!canStartRun));
+            sendButton.setAttribute("aria-disabled", String(sendButton.disabled));
           }
 
           if (canAsk && postDemoLoginPrompt) {
@@ -300,6 +322,8 @@
           // wieder mit dem Standardtext ueberschreiben.
           window.App?.followup?.syncInputLock?.();
           window.App.agentChat?.syncComposer?.();
+          // A question sent as a guest goes out once the new session can run it.
+          window.App.composerInvite?.afterAccessUpdate?.(canStartRun);
 
           return canStartRun;
         };
@@ -325,6 +349,11 @@
         window.App.clearQuestionDraft = function () {
           storeQuestionDraft("");
         };
+        // A guest's Send keeps the question for the way through the sign-in,
+        // also one an example filled in (no keystroke, so no input below).
+        window.App.saveQuestionDraft = function (value) {
+          storeQuestionDraft(String(value || "").trim().slice(0, 4000));
+        };
 
         // Nur ECHTE Tastenanschlaege sind ein Entwurf. Programmatische
         // input-Events (clearResponseBoxes beim Auth-Wechsel, Demo-Tippen)
@@ -347,6 +376,8 @@
           questionInput.value = draft;
           requestAnimationFrame(resizeQuestionInput);
           window.syncDemoChipState?.();
+          // A guest's Send follows the text it now has.
+          window.updateQuestionInputAccess?.();
         };
 
         window.App.restoreQuestionDraft();

@@ -1,6 +1,6 @@
 # Analytics (Umami): welches Event was bedeutet
 
-Stand 2026-10-08. Tracking-Code: `templates/partials/analytics.html` (Snippet,
+Stand 2026-10-15. Tracking-Code: `templates/partials/analytics.html` (Snippet,
 Website-ID) und `static/js/analytics-opt-out.js` (Selbst-Ausschluss,
 Bot-Filter, Kampagnen-Parameter, `open_app`). App-Events laufen über
 `window.trackUmamiEvent` (`static/js/app-bootstrap.js`), das Schlüssel wie
@@ -17,12 +17,18 @@ Diese sechs reichen für fast jede Frage. Sie haben in jedem Modus dieselbe Form
 | `open_app` | Klick von einer öffentlichen Seite in die App | `from` (landing, share, benchmark, model-pulse, …), `place` (welcher Knopf), `demo` |
 | `signup` | neues Konto | `method` (google, email) |
 | `login` | Anmeldung mit bestehendem Konto | `method` |
-| `ask` | eine Frage wurde abgeschickt | `mode` (agent, consensus, compare), `follow_up`, `files`, `reasoning` |
+| `ask` | eine Frage wurde abgeschickt | `mode` (agent, consensus, compare), `follow_up`, `files`, `reasoning`, `source` (typed, example, pasted), `after_login` (nur `true`: die Frage, die ein Gast vor dem Anmelden abgeschickt hat) |
 | `answer` | dieser Lauf ist fertig (einmal pro Lauf) | `mode`, `status` (ok, partial, failed) |
 | `landing_hero_demo_start` | Demo gestartet | – |
 
 Der Weg zur ersten Frage als Umami-Funnel:
 `/` (Seite) → `open_app` → `signup` → `ask`.
+Seit 2026-10-15 tippen Gäste und melden sich beim Senden an
+(`static/js/composer-invite.js`), deshalb genauer:
+`open_app` → `app_guest_send` → `signup`/`login` → `ask` mit `after_login`.
+`source` sagt, woher der Text kam: `example` = eine Beispielfrage unter dem
+leeren Feld, `pasted` = ein eingefügter Text ab 200 Zeichen (meist eine fremde
+KI-Antwort zum Prüfen), sonst `typed`.
 Erfolgsquote eines Modus: `answer` mit `status=ok` ÷ `ask` mit demselben `mode`.
 Ein vom Nutzer abgebrochener Lauf sendet `ask`, aber kein `answer`; ein vom
 Server abgelehnter (Kontingent, belegter Dienst) endet in beiden Modi mit
@@ -49,6 +55,12 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   (wie viele Claims im Text verankert wurden). Feuert bei jedem Anzeigen,
   auch beim Öffnen eines Bookmarks — keine Nutzungszahl.
 - `app_new_comparison`: Klick auf „New comparison“.
+- `app_guest_send` (seit 2026-10-15, `source`): ein Gast drückt Senden; die
+  Frage bleibt gespeichert, der Registrierungsdialog öffnet
+  (`auth_modal_open` mit `source: composer`).
+- `app_starter_used` (seit 2026-10-15, `starter`: heat_pump, ibuprofen, vat,
+  check; `guest`): Klick auf eine Beispielfrage. Sie füllt nur das Feld; ob
+  daraus eine Frage wurde, zeigt `ask` mit `source: example`.
 - `app_memory_hint` (`action`: shown, dismissed) und `app_auto_memory_on`
   (`source: hint` beim Einschalten aus dem Hinweis unter einer Agent-Antwort,
   ohne `source` aus Settings): wie viele den Gedächtnis-Hinweis sehen und annehmen.

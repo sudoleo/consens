@@ -38,6 +38,15 @@
     window.umami.track(eventName, safeData);
   };
 
+  // The words of an empty new chat, for every account and for guests: they
+  // name the one thing nobody would guess, that a pasted AI answer gets
+  // checked. One length per width (agent-chat.js follows a rotated phone).
+  window.App = window.App || {};
+  window.App.askPlaceholder = function (width = window.innerWidth || 1024) {
+    return width <= 360 ? "Ask or check an AI answer"
+      : width <= 640 ? "Ask, or paste an AI answer to check" : "Ask anything, or paste an AI answer to check it";
+  };
+
   // Agent hides the sidebar's Models row, but only knows it may after
   // /user_status. A signed-in reload that ended in Agent hides it from the
   // first paint (agent-chat.js keeps the hint and drops the class), so the
@@ -77,6 +86,10 @@
       if (window.App?.runMode?.preference() !== "compare") {
         document.body.classList.add("agent-mode-enabled");
       }
+      // A guest's composer (greeting on phones, no model chip) from the first
+      // paint; app-init.js keeps the class in step with the session.
+      const authState = window.__consensioAuthState;
+      if (authState?.known ? !authState.uid : !token) document.body.classList.add("is-guest");
     }
     const sidebar = !seeded.has("sidebar") && document.getElementById("appSidebar");
     if (sidebar) {
@@ -119,19 +132,17 @@
       seeded.add("newChat");
     }
     // The composer starts with the words it will keep: Agent's new-chat line
-    // (same words as agent-chat.js syncComposer), or the sign-in line for a
-    // guest (app-init.js). A restored session showed the template's, then
-    // "Sign in", then Consensus's, then Agent's.
+    // (same words as agent-chat.js syncComposer), which a guest gets too
+    // (app-init.js: guests type, and sign in when they send). A restored
+    // session showed the template's, then "Sign in", then Consensus's, then
+    // Agent's.
     const input = !seeded.has("input") && document.getElementById("questionInput");
     if (input) {
       seeded.add("input");
       const authState = window.__consensioAuthState;
-      if (document.documentElement.classList.contains("agent-shell-expected")) {
-        const width = window.innerWidth || 1024;
-        input.placeholder = width <= 360 ? "Ask or check an AI answer"
-          : width <= 640 ? "Ask, or paste an AI answer to check" : "Ask anything, or paste an AI answer to check it";
-      } else if (authState?.known ? !authState.uid : !token) {
-        input.placeholder = "Sign in to start asking questions for free.";
+      if (document.documentElement.classList.contains("agent-shell-expected")
+        || (authState?.known ? !authState.uid : !token)) {
+        input.placeholder = window.App.askPlaceholder();
       }
     }
     return seeded.size === 6;
