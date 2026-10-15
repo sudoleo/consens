@@ -142,7 +142,13 @@ GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_36_FLASH_MODEL = "gemini-3.6-flash"
 GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
-DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
+# Seit 2026-10-15 V4.1 Flash. Prod-Receipts 2026-09-30 bis 10-14: V4 Flash
+# brauchte als Vergleichsantwort im Median 63 s (bis 299 s) und war in 10 von
+# 16 Laeufen das langsamste Modell; V4.1 Flash 18 s (hoechstens 39 s), pro
+# Antwort gleich teuer (~1,4 Cent, die Suche dominiert). Alte Auswahlen,
+# Presets und Admin-Listen migrieren hierher (DEEPSEEK_MODEL_MIGRATIONS).
+DEEPSEEK_FLASH_MODEL = "deepseek-v4.1-flash"
+DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash"  # alte ID, migriert
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
 # Basis-Default wie bei jeder anderen Familie das guenstige Modell. Stand hier
 # als einzige Familie auf dem Pro-Modell, was drei Stellen still verteuert hat:
@@ -711,13 +717,16 @@ def canonical_model_ids(models, provider: str) -> list[str]:
         if canonical_model_id(model, provider)
     ))
 
-DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
+# V4 Flash -> V4.1 Flash (2026-10-15, Begruendung bei DEEPSEEK_FLASH_MODEL).
+DEEPSEEK_MODEL_MIGRATIONS = {DEEPSEEK_V4_FLASH_MODEL: DEEPSEEK_FLASH_MODEL}
+DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner", *DEEPSEEK_MODEL_MIGRATIONS}
 
 # Familienspezifische Hygiene. Jede Familie ohne Eintrag braucht keine: der
 # generische Lade-/Initialisierungspfad fragt hier nach, statt pro Familie
 # einen eigenen Block zu fuehren.
 PROVIDER_MODEL_MIGRATIONS: dict[str, dict[str, str]] = {
     "grok": GROK_MODEL_MIGRATIONS,
+    "deepseek": DEEPSEEK_MODEL_MIGRATIONS,
 }
 PROVIDER_DEPRECATED_MODELS: dict[str, set[str]] = {
     "mistral": DEPRECATED_MISTRAL_MODELS,
@@ -774,7 +783,7 @@ MODEL_LABEL_OVERRIDES = {
     GEMINI_36_FLASH_MODEL: "Gemini 3.6 Flash",
     GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
     GEMINI_PRO_MODEL: "Gemini 3.1",
-    DEEPSEEK_FLASH_MODEL: "DeepSeek V4 Flash",
+    DEEPSEEK_FLASH_MODEL: "DeepSeek V4.1 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
     KIMI_BASE_MODEL: "Kimi K2.6",
     KIMI_PRO_MODEL: "Kimi K3",
@@ -824,6 +833,8 @@ OPENROUTER_MODEL_ALIASES = {
     # Alte Grok-Varianten (migriert): falls eine ID ungeprueft durchkommt.
     ("grok", GROK_NO_REASONING_MODEL): "grok-4.3",
     ("grok", "grok-4.20-non-reasoning"): "grok-4.3",
+    # DeepSeek V4 Flash (migriert) ebenso.
+    ("deepseek", DEEPSEEK_V4_FLASH_MODEL): DEEPSEEK_FLASH_MODEL,
 }
 
 

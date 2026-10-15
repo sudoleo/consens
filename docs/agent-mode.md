@@ -226,6 +226,17 @@ Liegen mindestens zwei Antworten vor und ist bis zum harten Stopp des Turns nur
 noch die Reserve der Denkstufe übrig (`ANSWER_RESERVE_SECONDS`, bei „max“ 10 min),
 beginnt die Synthese, und Nachzügler gelten wie unten als spät (Prod: DeepSeek V4
 Flash brauchte bis zu 299 s).
+
+Prod-Zeiten (llm_calls-Receipts, 2026-10-09 bis 10-14, 34 Läufe mit Vergleich,
+alle erfolgreich): gesamt Median 100 s, p90 181 s; davon Steuer-Schritt bis zum
+Vergleich ≈ 9 s (keine messbare Vorab-Suche), Vergleich Median 40 s/p90 121 s,
+Antwortschritt ≈ 7–10 s, Judges ≈ 12 s. Die Spitze bestimmt der Nachzügler:
+Auswahlen mit DeepSeek V4 Flash (über den Free-Default der Familie oder
+gespeicherte Auswahlen; die Presets hatten schon V4.1) brauchten im Median 124 s
+statt 62 s mit V4.1 Flash, deshalb migriert V4 Flash seit 2026-10-15 auf V4.1
+Flash (`cfg.DEEPSEEK_MODEL_MIGRATIONS`). Die Zeiten des Messskripts (unten, Median
+231 s, Lücken um 300 s) lagen deutlich darüber; in Prod trat keine Lücke über
+60 s nach dem Vergleich auf.
 Mit `balanced` wartet sie seit 2026-10-06 bei `full` auf
 jedes Modell: Das sorgfältigste Modell recherchiert oft am längsten und darf
 nicht wegfallen; wer schneller will, wählt `fast`. Bei `quick` gilt das Quorum

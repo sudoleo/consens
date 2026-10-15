@@ -6749,7 +6749,16 @@ und den Judge-/Chat-Memory-Zuordnungen; der Grok-Pro-Alias ist `grok-4.7`. Ein
 Dokument von vor der Zusammenlegung (`predates_grok_merge`: führt noch eine der
 alten Varianten) meint mit `grok-4.3` unter `premium` die frühere Pro-Variante;
 Loader und `admin.normalize_models_document` nehmen es dann aus der Pro-Liste.
-Danach entscheidet der Admin wieder frei. Eine gespeicherte Reasoning-Ausnahme
+Danach entscheidet der Admin wieder frei. Ebenso migriert seit 2026-10-15
+`deepseek-v4-flash` auf `deepseek-v4.1-flash` (`DEEPSEEK_MODEL_MIGRATIONS`,
+`DEEPSEEK_FLASH_MODEL` ist jetzt V4.1 Flash): In den Prod-Receipts vom
+30.09.–14.10. brauchte V4 Flash als Vergleichsantwort im Median 63 s statt
+18 s und war in 10 von 16 Läufen mit ihm das langsamste Modell; pro Antwort
+kosten beide etwa gleich viel. Die Prod-Presets führten schon V4.1 Flash, der
+Free-Default (`defaults.deepseek`), Judge-, Chat-Memory- und Watch-Zuordnungen
+und gespeicherte Auswahlen noch V4 Flash. Der Loader migriert alle beim Laden;
+Free-Default, Judges und Chat-Memory schreibt er zurück (`schema_backfill`),
+Watch-Zuordnungen und Providerliste erst ein Admin-Save. Eine gespeicherte Reasoning-Ausnahme
 für ein Modell, das kein Sparmodell mehr ist, verwirft das Laden
 (`validate_reasoning_policy(drop_retired=True)`) statt die ganze Konfiguration
 abzulehnen; Admin-Saves bleiben strikt.

@@ -322,7 +322,7 @@ def test_every_model_searches_with_one_configuration_and_judges_never_search(sto
     from app.services.llm.provider_runtime import AnalysisBudget
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
     # One family with its own search, one without.
-    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4-flash"})
+    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"})
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
     loop.budget = AnalysisBudget(unlimited=True)
@@ -330,12 +330,12 @@ def test_every_model_searches_with_one_configuration_and_judges_never_search(sto
     expected = lambda family, rounds: web_search_tool(family, max_uses=rounds, max_results=5,
                                                        max_total_results=5 * rounds, max_characters=2000)["parameters"]
     comparisons = {model: (rounds, tool, prompt) for kind, model, rounds, tool, prompt in seen if kind == "comparison"}
-    assert set(comparisons) == {"anthropic/claude-haiku-4.5", "deepseek/deepseek-v4-flash"}
+    assert set(comparisons) == {"anthropic/claude-haiku-4.5", "deepseek/deepseek-v4.1-flash"}
     # The same configuration as Consensus whatever the depth: OpenRouter picks
     # the publisher's own search or Exa (engine "auto"). Every answer of one
     # comparison searches equally deep.
     assert comparisons["anthropic/claude-haiku-4.5"][:2] == (rounds, expected("anthropic", rounds))
-    assert comparisons["deepseek/deepseek-v4-flash"][:2] == (rounds, expected("deepseek", rounds))
+    assert comparisons["deepseek/deepseek-v4.1-flash"][:2] == (rounds, expected("deepseek", rounds))
     assert all(tool["engine"] == "auto" for _, tool, _ in comparisons.values())
     told = "use web search once" if rounds == 1 else f"up to {rounds} search rounds"
     assert all("Current date:" in prompt and told in prompt for *_, prompt in comparisons.values())
@@ -378,7 +378,7 @@ def test_a_comparison_that_overdraws_the_day_still_reaches_its_checked_answer(st
     script.factory = factory
     limit = 60_000
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
-    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4-flash"})
+    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"})
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
     loop.budget = AnalysisBudget(unlimited=True)
@@ -425,7 +425,7 @@ def test_search_steps_down_by_rounds_and_reserves_one_bound_per_round():
     costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
     messages = [{"role": "user", "content": "Q"}]
     estimate = lambda model, n: costs.estimate(model, messages, native_searches=n)[0]
-    native, exa = resolve_agent_model("claude-haiku-4-5"), metered_model("deepseek-v4-flash")
+    native, exa = resolve_agent_model("claude-haiku-4-5"), metered_model("deepseek-v4.1-flash")
     for model in (native, exa):
         none, one, three = estimate(model, 0), estimate(model, 1), estimate(model, 3)
         assert none < one < three

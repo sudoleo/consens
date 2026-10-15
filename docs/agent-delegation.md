@@ -145,8 +145,11 @@ Reproduzierbare Live-Prüfungen (kostenpflichtig, lokale `.env`; keine DB-Writes
 
 ```powershell
 .\venv\Scripts\python.exe scripts/probe_agent_delegation.py --live
-.\venv\Scripts\python.exe scripts/evaluate_agent_delegation.py --live --worker deepseek-v4-flash --repeats 3
+.\venv\Scripts\python.exe scripts/evaluate_agent_delegation.py --live --worker deepseek-v4.1-flash --repeats 3
 ```
+
+(Der Worker-Kandidat des Ergebnisses unten, DeepSeek V4 Flash, migriert seit
+2026-10-15 auf V4.1 Flash; siehe codebase-map, Modellkonfiguration.)
 
 Der Vergleich verwendet denselben Orchestrator ohne und mit Delegation, sechs feste
 synthetische Aufgaben (Arithmetik, Extraktion, zwei unabhängige Tabellen, Planung,

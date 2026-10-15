@@ -128,6 +128,35 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(cfg.PROVIDERS["grok"].pro_model, "grok-4.7")
         self.assertIn("grok-4.7", cfg.PREMIUM_MODELS)
 
+    def test_deepseek_v4_flash_migrates_to_v41_flash(self):
+        """Seit 2026-10-15: V4 Flash war als Vergleichsantwort in Prod dreimal
+        so langsam wie V4.1 Flash. Gespeicherte Auswahlen, Presets und
+        Admin-Listen mit der alten ID laufen auf V4.1 Flash."""
+        legacy, current = "deepseek-v4-flash", "deepseek-v4.1-flash"
+        self.assertEqual(cfg.DEEPSEEK_FLASH_MODEL, current)
+        self.assertEqual(cfg.canonical_model_id(legacy, "deepseek"), current)
+        self.assertEqual(cfg.canonical_model_id(legacy), current)
+        self.assertNotIn(legacy, cfg.ALLOWED_DEEPSEEK_MODELS)
+        self.assertIn(current, cfg.ALLOWED_DEEPSEEK_MODELS)
+        self.assertNotIn(current, cfg.PREMIUM_MODELS)
+        self.assertEqual(cfg.DEFAULT_MODEL_BY_PROVIDER["deepseek"], current)
+        self.assertEqual(cfg.get_model_label(current), "DeepSeek V4.1 Flash")
+        for preset in ("fast", "balanced"):
+            self.assertEqual(cfg._BASE_CONSENSUS_PRESET_MODELS[preset]["answers"]["deepseek"], current)
+        request = build_provider_payload(
+            "deepseek", question="payload dry run", system_prompt="system",
+            model_override=legacy, max_output_tokens=123,
+        )
+        self.assertEqual(request["internal_model"], current)
+        self.assertEqual(request["api_model"], "deepseek/deepseek-v4.1-flash")
+        normalized = normalize_models_document({
+            "deepseek": [legacy, current, cfg.DEEPSEEK_PRO_MODEL],
+            "premium": [cfg.DEEPSEEK_PRO_MODEL],
+            "defaults": {"deepseek": legacy},
+        })
+        self.assertEqual(normalized["deepseek"], [current, cfg.DEEPSEEK_PRO_MODEL])
+        self.assertEqual(normalized["defaults"]["deepseek"], current)
+
     def test_mistral_defaults_use_supported_reasoning_models(self):
         default_request = build_provider_payload(
             "mistral",
