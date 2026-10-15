@@ -4207,7 +4207,11 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   rückwirkend erstattet werden.
 - Jeder Judge-Versuch hat seit 2026-10-15 eine eigene Zeitgrenze
   `JUDGE_ATTEMPT_SECONDS` (90 s): Coverage samt Repair, Differences in
-  `query_differences.run_pass` (beide Pässe) und in `stream_differences`.
+  `query_differences.run_pass` (beide Pässe) und in `stream_differences`,
+  außerdem der Visual-Judge der Watch-/Topic-Bilder (`pick_watch_visual`; Prod
+  2026-10-15: zwei hängende Luna-Versuche à 120 s Lese-Timeout hielten die
+  Bildsuche eines Topics vier Minuten auf, bevor die nächste Familie in rund
+  2 s antwortete).
   Gemessen: Coverage (Agent-Belege) Median 13 s, p90 21 s; Differences
   (`differences_stats` seit 2026-08, 500+ Läufe) Median 2–6 s, p99 ≤ 21 s,
   Maximum 59 s, Pro-Stufe höchstens 27 s.

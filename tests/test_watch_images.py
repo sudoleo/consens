@@ -1019,6 +1019,34 @@ class JudgeTests(unittest.TestCase):
                 consensus_engine.pick_watch_visual("q", "", [], watch_symbols.SYMBOLS, self.KEYS, "OpenAI")
         self.assertGreaterEqual(call.call_count, 2)
 
+    def test_a_stalled_judge_hands_over_without_its_retry(self):
+        """Prod 2026-10-15: Luna hung twice for 120 s each before the next
+        family answered; the picture of a Topic waited four minutes."""
+        calls = []
+
+        def fake(provider, *args, **kwargs):
+            calls.append(provider)
+            if provider == "openai":
+                stop = consensus_engine.current_provider_cancellation()
+                for _ in range(500):
+                    if stop is not None and stop.cancelled:
+                        raise consensus_engine.ProviderCancelled("stopped")
+                    time.sleep(0.01)
+                raise AssertionError("the stalled attempt was never stopped")
+            return json.dumps({"symbol": "sparkle", "sites": ["epoch.ai"]})
+
+        started = time.monotonic()
+        with patch.object(consensus_engine, "JUDGE_ATTEMPT_SECONDS", 0.05), \
+                patch.object(consensus_engine, "_call_engine_text", side_effect=fake):
+            result = consensus_engine.pick_watch_visual(
+                "When will AGI arrive?", "", ["epoch.ai", "metaculus.com"], watch_symbols.SYMBOLS,
+                self.KEYS, "OpenAI",
+            )
+        self.assertLess(time.monotonic() - started, 3.0)
+        self.assertEqual(result, {"symbol": "sparkle", "sites": ["epoch.ai"]})
+        self.assertEqual(calls.count("openai"), 1)
+        self.assertEqual(len(calls), 2)
+
 
 class SymbolTests(unittest.TestCase):
     def test_every_symbol_has_a_drawing_and_every_drawing_a_symbol(self):

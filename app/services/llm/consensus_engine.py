@@ -3176,17 +3176,27 @@ def pick_watch_visual(question: str, condition: str, domains, symbols: dict,
     if not attempts:
         raise RuntimeError("No Judge is available for the watch visual.")
     last_error = "empty result"
-    for (provider, api_model, model_ref), _is_retry, judge_tier in attempts:
+    skip_retries_for = set()
+    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+        attempt_key = (provider, api_model, judge_tier)
+        if is_retry and attempt_key in skip_retries_for:
+            continue
+        attempt_started = time.monotonic()
         try:
-            raw = _call_engine_text(
-                provider, api_model, model_ref, api_keys,
-                # Die Antwort ist kurz, aber das Denken des Judges zählt mit;
-                # Spielraum, damit es die Antwort nie verdrängt.
-                system="Return valid JSON only.", prompt=prompt, max_tokens=800,
-                temperature=0.0, json_mode=True,
-                effort=_judge_effort(provider, api_model, judge_tier),
-                json_schema=schema,
-            )
+            # Dieselbe Regel wie bei Coverage/Differences: ein hängender
+            # Versuch endet nach JUDGE_ATTEMPT_SECONDS, sein Retry entfällt.
+            # Prod 2026-10-15: zwei Luna-Versuche à 120 s hielten die
+            # Bildsuche eines Topics vier Minuten auf.
+            with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
+                raw = _call_engine_text(
+                    provider, api_model, model_ref, api_keys,
+                    # Die Antwort ist kurz, aber das Denken des Judges zählt mit;
+                    # Spielraum, damit es die Antwort nie verdrängt.
+                    system="Return valid JSON only.", prompt=prompt, max_tokens=800,
+                    temperature=0.0, json_mode=True,
+                    effort=_judge_effort(provider, api_model, judge_tier),
+                    json_schema=schema,
+                )
             data = _extract_json_object(raw)
             if not isinstance(data, dict) or data.get("symbol") not in symbols:
                 raise ValueError("invalid watch visual")
@@ -3197,6 +3207,13 @@ def pick_watch_visual(question: str, condition: str, domains, symbols: dict,
                 if site in domains and site not in picked:
                     picked.append(site)
             return {"symbol": data["symbol"], "sites": picked[:MAX_VISUAL_SITES]}
+        except _AttemptTimedOut:
+            last_error = "provider request timed out."
+            skip_retries_for.add(attempt_key)
+            logging.warning(
+                "Watch visual attempt timed out provider=%s model=%s duration_ms=%d",
+                provider, api_model, int((time.monotonic() - attempt_started) * 1000),
+            )
         except Exception as exc:
             last_error = safe_exception(exc)
             logging.warning("Watch visual attempt failed category=%s", last_error)
