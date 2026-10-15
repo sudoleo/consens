@@ -35,10 +35,6 @@ charset-normalizer==3.4.1
     #   requests
 click==8.1.8
     # via uvicorn
-colorama==0.4.6
-    # via
-    #   click
-    #   tqdm
 cryptography==50.0.0
     # via
     #   -r requirements.in
@@ -192,7 +188,7 @@ python-dotenv==1.2.4
     # via -r requirements.in
 regex==2026.1.15
     # via tiktoken
-reportlab==4.4.9
+reportlab==5.0.1
     # via -r requirements.in
 requests==2.34.2
     # via
