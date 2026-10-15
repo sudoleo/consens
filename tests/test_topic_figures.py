@@ -107,6 +107,25 @@ def test_dates_are_read_the_way_answers_write_them():
     assert topic_figures.parse_date("October 2026") == (date(2026, 10, 1), "month")
     assert topic_figures.parse_date("in 2027") == (date(2027, 1, 1), "year")
     assert topic_figures.parse_date("soon") is None
+    # A span of days sits at its first day (gpt-6-release-date, 2026-10-15:
+    # "October 7–8, 2026" was read as the bare year and led the timeline).
+    assert topic_figures.parse_date("October 7–8, 2026") == (date(2026, 10, 7), "days")
+    assert topic_figures.parse_date("7-8 October 2026") == (date(2026, 10, 7), "days")
+    assert topic_figures._date_label({"date": "October 7–8, 2026"}) == "Oct 7–8, 2026"
+    # A named month no pattern reads is no date, never January 1st.
+    assert topic_figures.parse_date("Q4 of October-ish") is None
+
+
+def test_a_stored_timeline_is_ordered_by_its_written_dates_when_drawn():
+    stored = {"kind": "timeline", "title": "", "after_heading": "", "items": [
+        # Stored by the first version, which read the span as "2026".
+        {"label": "Most users", "note": "", "disputed": False, "date": "October 7–8, 2026",
+         "sort": "2026-01-01", "precision": "year"},
+        {"label": "First introduction", "note": "", "disputed": False, "date": "early September 2026",
+         "sort": "2026-09-01", "precision": "month"},
+    ]}
+    html = str(topic_figures.figure_html(stored))
+    assert html.index("Sep 2026") < html.index("Oct 7–8, 2026")
 
 
 def test_figures_are_drawn_as_escaped_html_with_disagreement_marked():

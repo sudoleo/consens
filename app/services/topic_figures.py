@@ -58,13 +58,20 @@ _MONTHS = {
     for name in names
 }
 _MONTH_RE = "(" + "|".join(sorted(_MONTHS, key=len, reverse=True)) + r")\.?"
+_RANGE_RE = r"\s*(?:[-–—]|to)\s*"
 _DATE_PATTERNS = (
     (re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b"), ("y", "m", "d"), "day"),
+    # "October 7–8, 2026": a span of days, placed at its first day.
+    (re.compile(_MONTH_RE + r"\s+(\d{1,2})" + _RANGE_RE + r"(\d{1,2}),?\s+(\d{4})\b", re.I),
+     ("M", "d", "d2", "y"), "days"),
+    (re.compile(r"\b(\d{1,2})" + _RANGE_RE + r"(\d{1,2})\s+" + _MONTH_RE + r",?\s+(\d{4})\b", re.I),
+     ("d", "d2", "M", "y"), "days"),
     (re.compile(_MONTH_RE + r"\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b", re.I), ("M", "d", "y"), "day"),
     (re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+" + _MONTH_RE + r",?\s+(\d{4})\b", re.I), ("d", "M", "y"), "day"),
     (re.compile(_MONTH_RE + r",?\s+(\d{4})\b", re.I), ("M", "y"), "month"),
     (re.compile(r"\b(19\d{2}|20\d{2})\b"), ("y",), "year"),
 )
+_ANY_MONTH_RE = re.compile(r"\b" + _MONTH_RE + r"(?![a-z])", re.I)
 _NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
@@ -85,10 +92,15 @@ def _numbers_known(text, haystack: str) -> bool:
     return all(_in(number, haystack) for number in _NUMBER_RE.findall(str(text or "")))
 
 
-def parse_date(text):
-    """(date, precision) for a date as answers write it, else None."""
+def _date_parts(text):
+    """(date, precision, last day of a span or None) for a written date."""
+    text = str(text or "")
     for pattern, order, precision in _DATE_PATTERNS:
-        match = pattern.search(str(text or ""))
+        if precision == "year" and _ANY_MONTH_RE.search(text):
+            # A month is named but no pattern read it: reading only the year
+            # would put the event at January 1st.
+            return None
+        match = pattern.search(text)
         if not match:
             continue
         parts = dict(zip(order, match.groups()))
@@ -96,10 +108,17 @@ def parse_date(text):
             year = int(parts["y"])
             month = _MONTHS[parts["M"].lower().rstrip(".")] if "M" in parts else int(parts.get("m") or 1)
             day = int(parts.get("d") or 1)
-            return date(year, month, day), precision
+            last = int(parts["d2"]) if parts.get("d2") else None
+            return date(year, month, day), precision, last
         except (KeyError, ValueError):
             continue
     return None
+
+
+def parse_date(text):
+    """(date, precision) for a date as answers write it, else None."""
+    parts = _date_parts(text)
+    return (parts[0], parts[1]) if parts else None
 
 
 def _number(value):
@@ -264,20 +283,32 @@ _GLYPHS = {
 def _date_label(entry: dict) -> str:
     """The date the way the page writes dates ("Sep 30, 2026"), as precise as
     the answer was; the answer's own spelling was what got checked."""
-    try:
-        day = date.fromisoformat(entry["sort"])
-    except (KeyError, TypeError, ValueError):
+    parts = _date_parts(entry.get("date"))
+    if not parts:
         return entry.get("date") or ""
-    precision = entry.get("precision")
+    day, precision, last = parts
     if precision == "year":
         return str(day.year)
     if precision == "month":
         return f"{day:%b} {day.year}"
+    if precision == "days" and last:
+        return f"{day:%b} {day.day}–{last}, {day.year}"
     return f"{day:%b} {day.day}, {day.year}"
 
 
 def _timeline(figure: dict) -> str:
-    items = figure["items"]
+    # Order and place from the written dates, not from what an older version
+    # of this module stored: a reading fixed later fixes old figures too.
+    items = []
+    for entry in figure["items"]:
+        parts = _date_parts(entry.get("date"))
+        if parts:
+            entry = {**entry, "sort": parts[0].isoformat(), "precision": parts[1]}
+        if entry.get("sort"):
+            items.append(entry)
+    items.sort(key=lambda entry: entry["sort"])
+    if not items:
+        return ""
     days = [date.fromisoformat(entry["sort"]).toordinal() for entry in items]
     first, last = days[0], days[-1]
     span = max(1, last - first)
@@ -291,7 +322,7 @@ def _timeline(figure: dict) -> str:
         if index:
             left, right = at(days[index - 1]), at(day)
             gap = day - days[index - 1]
-            precise = entry["precision"] == "day" and items[index - 1]["precision"] == "day"
+            precise = entry["precision"] in ("day", "days") and items[index - 1]["precision"] in ("day", "days")
             label = ""
             if precise and gap and right - left >= 18:
                 label = f'<span class="af-gap">{gap} day{"s" if gap != 1 else ""}</span>'
