@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, noarchive">
+  <title>Page not found | consens.io</title>
+  <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
+  <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
+  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
+  {#- No inline script: this page also answers under /topics/, which is served
+      with a script-src without 'unsafe-inline' (app/core/security.py). -#}
+  <script src="{{ asset_url('/static/js/public-theme.js') }}"></script>
+</head>
+<body>
+  {% set public_nav_cta_href = "/app" %}
+  {% set public_nav_cta_label = "Ask your own question" %}
+  {% include "partials/public_nav.html" %}
+
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="eyebrow">404</p>
+      <h1>Page not found</h1>
+      <p class="lead">This page does not exist or was moved.</p>
+    </header>
+    <div class="page-content">
+      <section class="legal-panel">
+        <p>
+          consens.io asks several AI models the same question and shows where they agree
+          and where they don't. You can ask your own question for free.
+        </p>
+        <div class="links">
+          <a href="/app" class="button-primary">Ask your own question</a>
+          <a href="/questions" class="button-secondary">Browse questions</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+</body>
+</html>

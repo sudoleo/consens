@@ -55,6 +55,10 @@ BOOKMARK_UID_RATE_LIMITS = {
     "model_save": 120,
     "consensus_save": 60,
 }
+# Titel laufen auf dem Projekt-Key ohne Tokenbuchung. Der Browser fragt einmal
+# pro Bookmark und Sitzung; ein leeres Modellergebnis lässt erneutes Fragen zu,
+# darum die Grenze pro Konto und Stunde.
+BOOKMARK_TITLES_PER_HOUR = 30
 
 
 class BookmarkModelRequest(BaseModel):
@@ -505,6 +509,12 @@ def name_bookmark(request: Request, bookmark_id: str):
     if data.get("title_source") == "generated":
         return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, data)}
 
+    try:
+        api_uid_limiter.check(
+            uid, "bookmark:title", BOOKMARK_TITLES_PER_HOUR, window_seconds=3600
+        )
+    except ApiUidRateLimitExceeded:
+        return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
     title = generate_title(_bookmark_title(data))
     if not title:
         return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}

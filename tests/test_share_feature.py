@@ -1484,7 +1484,8 @@ class SharePageRouteTests(unittest.TestCase):
         body = response.text
         self.assertIn(r"\(F:\mathbb C^3\to\mathbb C^3\)", body)
         self.assertIn(r"\(\det(DF)=-2\)", body)
-        self.assertIn("katex@0.17.0/dist/katex.min.js", body)
+        self.assertRegex(body, r"/static/vendor/katex/0\.17\.0/dist/katex\.min\.js\?v=[\w.-]+")
+        self.assertNotIn("cdn.jsdelivr.net", body)
         self.assertRegex(body, r"/static/js/math-render\.js\?v=[\w.-]+")
         self.assertRegex(body, r'class="page-shell[^"]*" data-math-render')
 

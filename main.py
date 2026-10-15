@@ -8,9 +8,12 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 # Init Environment (a unit-test process, also one a test spawns, never reads the local .env)
@@ -40,6 +43,7 @@ from app.core.concurrency import apply_worker_thread_budget
 from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.static_delivery import StaticDeliveryMiddleware
 from app.core.e2e_profile import e2e_test_mode_enabled
+from app.core.not_found import not_found_page, wants_html_page
 from app.core.rate_limit import limiter
 from app.services.agent_background import agent_background
 
@@ -306,6 +310,17 @@ async def handle_http_exception(request, exc: HTTPException):
     )
 
 
+@app.exception_handler(StarletteHTTPException)
+async def handle_routing_exception(request, exc: StarletteHTTPException):
+    # Raised by routing and StaticFiles, not by our routes (those raise
+    # FastAPI's subclass, handled above). An unknown path answered browsers
+    # and crawlers with raw JSON; a navigation gets the HTML 404 page, a
+    # script keeps FastAPI's {"detail": ...}.
+    if exc.status_code == 404 and wants_html_page(request):
+        return not_found_page(request)
+    return await http_exception_handler(request, exc)
+
+
 # A 422 names this many problems; the rest are only counted.
 MAX_VALIDATION_DETAILS = 20
 
@@ -399,3 +414,23 @@ for internal_router in (
     app.include_router(internal_router, include_in_schema=False)
 
 app.include_router(api_v1.router)
+
+
+def allow_head_on_get_routes(application: FastAPI) -> None:
+    """Answer HEAD wherever GET works, as Starlette's plain routes do.
+
+    FastAPI routes list only the methods they were declared with, so HEAD on
+    /, /benchmark, /sitemap.xml or a share page was a 405; uptime monitors and
+    link checkers use HEAD. uvicorn sends the headers without the body. Left
+    out: the documented /api/v1 schema (it would grow HEAD operations) and the
+    Firebase auth proxy, which forwards the method it receives.
+    """
+    for route in application.routes:
+        if not isinstance(route, APIRoute) or "GET" not in route.methods:
+            continue
+        if route.include_in_schema or route.path.startswith("/__/"):
+            continue
+        route.methods.add("HEAD")
+
+
+allow_head_on_get_routes(app)

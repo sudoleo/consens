@@ -170,3 +170,15 @@ def test_app_vendor_assets_are_local_versioned_and_include_fonts_and_licenses():
     css_path = assets.STATIC_DIR / 'vendor' / 'katex' / pins['katex'] / 'dist/katex.min.css'
     for relative in re.findall(r'url\(([^)]+)\)', css_path.read_text()):
         assert (css_path.parent / relative.strip('\"\'')).is_file(), relative
+
+
+def test_public_pages_load_math_from_the_same_vendor_copy_as_the_app():
+    """No page loads from jsDelivr any more (CSP no longer allows it), and the
+    public pages pin the same KaTeX folder package.json vendors."""
+    pins = json.loads((assets.ROOT / 'package.json').read_text())['devDependencies']
+    for template_path in sorted((assets.ROOT / "templates").rglob("*.html")):
+        template = template_path.read_text(encoding="utf-8")
+        assert "cdn.jsdelivr.net/npm" not in template, template_path.name
+        for url in re.findall(r"asset_url\('(/static/vendor/katex/[^']+)'\)", template):
+            assert url.startswith(f"/static/vendor/katex/{pins['katex']}/"), (template_path.name, url)
+            assert (assets.ROOT / url.lstrip('/')).is_file(), url

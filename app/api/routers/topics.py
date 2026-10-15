@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.core.assets import register_asset_globals
+from app.core import not_found
 from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
@@ -283,6 +284,14 @@ async def sitemap_topics():
     return Response(content=xml, media_type="application/xml")
 
 
+def _topic_not_found(request: Request):
+    # A visitor following an old link sees the site's 404 page, a script
+    # still gets the JSON error it always got.
+    if not_found.wants_html_page(request):
+        return not_found.not_found_page(request)
+    raise HTTPException(status_code=404, detail="Topic not found")
+
+
 @router.get("/topics/{slug}", response_class=HTMLResponse)
 async def topic_page(
     request: Request, slug: str, version: str = Query(default="", max_length=40)
@@ -292,7 +301,7 @@ async def topic_page(
             topics.resolve_topic_by_slug, slug
         )
     except topics.TopicError:
-        raise HTTPException(status_code=404, detail="Topic not found")
+        return _topic_not_found(request)
     except Exception as exc:
         logging.error(
             "topic_page lookup failed category=%s", safe_exception(exc)
@@ -303,7 +312,7 @@ async def topic_page(
         or topic.get("status") not in {"active", "paused"}
         or not topic.get("latest_run_id")
     ):
-        raise HTTPException(status_code=404, detail="Topic not found")
+        return _topic_not_found(request)
     if retired_slug:
         # The topic was renamed. Everything the old URL earned moves to the new
         # one instead of dying in a 404.

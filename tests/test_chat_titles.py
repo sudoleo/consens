@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routers import bookmarks as bookmarks_router
-from app.core.rate_limit import limiter
+from app.core.rate_limit import api_uid_limiter, limiter
 from app.services import chat_titles
 from tests.test_bookmarks import FakeBookmarkRef, FakeFirestore
 
@@ -93,6 +93,7 @@ def _client():
     app = FastAPI()
     app.state.limiter = limiter
     limiter.reset()
+    api_uid_limiter.reset()
     app.include_router(bookmarks_router.router)
     return TestClient(app)
 
@@ -145,6 +146,34 @@ def test_a_failed_title_keeps_the_question_and_never_errors():
     assert response.json()["status"] == "skipped"
     assert response.json()["bookmark"]["title"] == QUESTION
     assert "title_source" not in bookmark_ref.data
+
+
+def test_title_retries_after_empty_results_are_capped_per_account():
+    bookmark_ref = FakeBookmarkRef("plain_bookmark", {"query": QUESTION, "title": QUESTION, "responses": {}})
+    cap = bookmarks_router.BOOKMARK_TITLES_PER_HOUR
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+        patch.object(bookmarks_router, "generate_title", return_value="") as generate,
+    ):
+        client = _client()
+        responses = [
+            client.post(
+                "/bookmarks/plain_bookmark/title",
+                headers={
+                    "Authorization": "Bearer token",
+                    # Andere IP je Anfrage: nur die Kontogrenze greift.
+                    "CF-Connecting-IP": f"198.51.100.{index + 1}",
+                },
+            )
+            for index in range(cap + 1)
+        ]
+    api_uid_limiter.reset()
+
+    assert [r.status_code for r in responses] == [200] * (cap + 1)
+    assert {r.json()["status"] for r in responses} == {"skipped"}
+    assert generate.call_count == cap
+    assert responses[-1].json()["bookmark"]["title"] == QUESTION
 
 
 def test_a_missing_bookmark_is_not_created_by_a_title_request():

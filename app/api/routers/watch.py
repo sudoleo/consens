@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.entitlements import entitlements_for
 from app.core.security import extract_id_token, get_user_tier, verify_user_token
 from app.core.site import SITE_URL
@@ -82,6 +82,10 @@ def create_watch(request: Request, data: dict = Body(...)):
     return {"status": "success", "watch": watch}
 
 
+# Normal ist ein Aufruf pro angelegter Watch (watch.js cacht pro Frage).
+GOAL_SUGGESTIONS_PER_HOUR = 20
+
+
 @router.post("/api/watch/goal-suggestions")
 @limiter.limit("6/minute")
 def goal_suggestions(request: Request, data: dict = Body(...)):
@@ -90,6 +94,14 @@ def goal_suggestions(request: Request, data: dict = Body(...)):
     question = " ".join(str(data.get("question") or "").split())
     if len(question) < watch_service.WATCH_QUESTION_MIN_CHARS:
         raise HTTPException(status_code=400, detail="Enter a complete question first.")
+    try:
+        # Läuft auf dem Projekt-Key ohne Tokenbuchung; die Kontogrenze hält
+        # die Kosten pro Konto fest, egal von wie vielen IPs es kommt.
+        api_uid_limiter.check(
+            uid, "watch:goal-suggestions", GOAL_SUGGESTIONS_PER_HOUR, window_seconds=3600
+        )
+    except ApiUidRateLimitExceeded:
+        return {"status": "limited", "goals": []}
     try:
         goals = watch_scheduler.suggest_goals(question[:1_000], get_user_tier(uid))
     except Exception as exc:

@@ -183,6 +183,17 @@ def landing(request: Request):
     response.headers["Vary"] = "Cookie, Sec-Fetch-Site"
     return response
 
+# German addresses people type from habit (and the legal-page convention).
+@router.get("/impressum", include_in_schema=False)
+def impressum_redirect():
+    return RedirectResponse("/imprint", status_code=301)
+
+
+@router.get("/datenschutz", include_in_schema=False)
+def datenschutz_redirect():
+    return RedirectResponse("/privacy", status_code=301)
+
+
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy(req: Request):
     response = templates.TemplateResponse(request=req, name="privacy.html")

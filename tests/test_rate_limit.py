@@ -32,14 +32,12 @@ class ClientIpKeyTests(unittest.TestCase):
         request = make_request(client=("203.0.113.7", 1234))
         self.assertEqual(client_ip_key(request), "203.0.113.7")
 
-    def test_render_proxy_header_yields_client_ip(self):
-        # request.client wäre hier die Proxy-IP; der Header gewinnt.
+    def test_forwarded_for_without_cloudflare_yields_client_ip(self):
+        # Ohne Cloudflare (lokal, E2E-Proxy) bleibt XFF der Rückfall.
         request = make_request(headers={"X-Forwarded-For": "198.51.100.23"})
         self.assertEqual(client_ip_key(request), "198.51.100.23")
 
-    def test_render_proxy_chain_uses_first_client_ip(self):
-        # Render setzt die echte Client-IP an den Anfang; weitere Proxy-Hops
-        # (z. B. Cloudflare) folgen dahinter.
+    def test_forwarded_for_chain_uses_first_entry(self):
         request = make_request(
             headers={"X-Forwarded-For": "198.51.100.23, 5.6.7.8, 1.2.3.4"}
         )
@@ -58,6 +56,38 @@ class ClientIpKeyTests(unittest.TestCase):
         request = make_request(headers={"X-Forwarded-For": "  "},
                                client=("203.0.113.7", 1234))
         self.assertEqual(client_ip_key(request), "203.0.113.7")
+
+    def test_cloudflare_connecting_ip_beats_spoofed_forwarded_for(self):
+        # Render hängt an XFF nur an; ein vom Client gesetzter Eintrag steht
+        # vorn. CF-Connecting-IP setzt Cloudflare selbst.
+        request = make_request(
+            headers={
+                "X-Forwarded-For": "10.9.1.7, 198.51.100.23",
+                "CF-Connecting-IP": "198.51.100.23",
+            }
+        )
+        self.assertEqual(client_ip_key(request), "198.51.100.23")
+
+    def test_spoofed_forwarded_for_shares_the_cloudflare_bucket(self):
+        first = make_request(
+            headers={
+                "X-Forwarded-For": "10.9.1.7, 198.51.100.23",
+                "CF-Connecting-IP": "198.51.100.23",
+            }
+        )
+        second = make_request(
+            headers={
+                "X-Forwarded-For": "10.9.2.7, 198.51.100.23",
+                "CF-Connecting-IP": "198.51.100.23",
+            }
+        )
+        self.assertEqual(client_ip_key(first), client_ip_key(second))
+
+    def test_blank_cloudflare_header_falls_back_to_forwarded_for(self):
+        request = make_request(
+            headers={"CF-Connecting-IP": " ", "X-Forwarded-For": "198.51.100.23"}
+        )
+        self.assertEqual(client_ip_key(request), "198.51.100.23")
 
     def test_api_key_bucket_hashes_secret(self):
         request = make_request(headers={"X-API-Key": "cns_live_super-secret"})

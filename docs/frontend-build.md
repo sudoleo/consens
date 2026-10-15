@@ -81,7 +81,9 @@ nach. Zwischen zwei Dateien steht ein `;` als ASI-Schutz.
 (Firebase-SDK bleibt externer CDN-Import).
 
 Die vorherigen jsDelivr-Abhängigkeiten von `/app` (Marked, DOMPurify, KaTeX)
-werden aus `static/vendor/<paket>/<version>/` lokal ausgeliefert. Der Build
+werden aus `static/vendor/<paket>/<version>/` lokal ausgeliefert; seit
+2026-10-15 laden auch `share.html`, `topic.html` und `watch_share.html` KaTeX
+von dort, und die CSP erlaubt jsDelivr nicht mehr. Der Build
 kopiert über `scripts/vendor_frontend.mjs` die exakt in `package.json` gepinnten
 npm-Dateien samt Lizenzen und KaTeX-Fonts; `build:check` vergleicht deren Bytes.
 Unveränderte Vendor-Dateien werden nicht erneut geöffnet/überschrieben; geänderte
@@ -89,8 +91,9 @@ Dateien werden über eine temporäre Datei im selben Verzeichnis atomar ersetzt.
 Die Dateien sind mitcommittet und im Manifest-Fingerprint enthalten, sodass
 Produktion weiterhin kein Node benötigt. Bei Versionsupdates auch die Pfade
 in `templates/index.html`, die Asset-Allowlists in `static/js/error-reporter.js`
-und `app/api/routers/client_errors.py` sowie die jsDelivr-Verweise der
-öffentlichen Seiten (`share.html`, `topic.html`) anpassen und das alte
+und `app/api/routers/client_errors.py` sowie die KaTeX-Pfade der
+öffentlichen Seiten (`share.html`, `topic.html`, `watch_share.html`;
+`tests/test_frontend_build.py` prüft sie gegen `package.json`) anpassen und das alte
 Vendor-Verzeichnis entfernen. `tests/js/dompurify-vendor.test.mjs` liest die
 DOMPurify-Version aus `package.json` und prüft den ausgelieferten Pfad.
 `asset_url` ergänzt Inhalts-Hashes.

@@ -122,14 +122,16 @@ class CustomSecurityMiddleware:
                 script_src = (
                     "script-src 'self' "
                     + ("" if strict_script_page else "'unsafe-inline' ")
-                    + "https://cdn.jsdelivr.net https://www.gstatic.com "
+                    + "https://www.gstatic.com "
                     "https://apis.google.com https://accounts.google.com https://cloud.umami.is; "
                 )
                 csp = (
-                    "default-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com; "
+                    # No jsDelivr since 2026-10-15: marked, DOMPurify and KaTeX
+                    # come from static/vendor on every page.
+                    "default-src 'self' https://www.gstatic.com; "
                     + script_src
                     +
-                    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                    "style-src 'self' 'unsafe-inline'; "
                     "img-src 'self' data: https://lh3.googleusercontent.com https:; "
                     "connect-src 'self' "
                     "https://cloud.umami.is "
@@ -146,8 +148,9 @@ class CustomSecurityMiddleware:
                     "https://accounts.google.com "
                     "https://www.googleapis.com "
                     "https://*.googleapis.com "
-                    "https://firebasestorage.googleapis.com "
-                    "https://cdn.jsdelivr.net; "
+                    "https://firebasestorage.googleapis.com; "
+                    "object-src 'none'; "
+                    "base-uri 'self'; "
                     "frame-src 'self' blob: https://accounts.google.com https://*.google.com https://*.gstatic.com https://*.firebaseapp.com https://*.web.app;"
                 )
                 headers[b"Content-Security-Policy"] = csp.encode("utf-8")

@@ -9,19 +9,23 @@ from slowapi.util import get_remote_address
 
 
 def client_ip_key(request):
-    """Client-IP hinter dem Render-Proxy für IP-basierte Rate-Limits.
+    """Client-IP hinter Render/Cloudflare für IP-basierte Rate-Limits.
 
-    uvicorn läuft ohne --proxy-headers (Start-Kommando liegt im Render-
-    Dashboard, nicht im Repo), daher wäre request.client.host immer die
-    Proxy-IP und alle IP-Limits würden global statt pro Besucher greifen.
+    www.consens.io ist ein CNAME auf typeonai.onrender.com; davor sitzt
+    Renders Cloudflare. Cloudflare setzt ``CF-Connecting-IP`` selbst auf die
+    Adresse, die die Verbindung geöffnet hat, und überschreibt einen vom
+    Client mitgeschickten Wert. Das ist der einzige Header, dem wir trauen.
 
-    Render setzt die tatsächliche Client-IP als ERSTEN Eintrag von
-    X-Forwarded-For. Hinter vorgeschalteten Hops (z. B. Cloudflare) stehen
-    deren Adressen dahinter. Der letzte Eintrag wäre deshalb eine geteilte
-    Proxy-/Edge-IP und würde fremde Besucher in denselben Limiter-Bucket
-    stecken. Lokal (kein Proxy, kein Header) fällt es auf
-    request.client.host zurück.
+    ``X-Forwarded-For`` dagegen hängt Render nur an: ein vom Client gesetzter
+    Eintrag bleibt vorn stehen. Live belegt am 2026-10-15: 36 Abrufe mit
+    wechselnder gefälschter XFF-Adresse liefen alle durch ein 30/min-Limit,
+    ohne Fälschung kam ab dem 31. ein 429. Deshalb gilt XFF nur noch als
+    Rückfall ohne Cloudflare (lokale Server, E2E-Proxys); lokal ohne Header
+    zählt ``request.client.host``.
     """
+    connecting = request.headers.get("cf-connecting-ip", "").strip()
+    if connecting:
+        return connecting
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
         client_ip = forwarded.split(",", 1)[0].strip()

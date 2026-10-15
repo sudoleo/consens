@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -10,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.observability import safe_exception
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import verify_user_token
 from app.services.registration import (
     deliver_password_setup_email,
@@ -23,6 +24,10 @@ from app.services.telegram_notifier import send_new_user_registration_notificati
 router = APIRouter()
 _NEW_USER_WINDOW_MS = 10 * 60 * 1000
 _REGISTER_RESPONSE_FLOOR_SECONDS = 0.35
+# Setup-Mails pro Adresse und Stunde. Das IP-Limit allein hält niemanden mit
+# vielen Adressen (Proxys, Botnetz) davon ab, ein fremdes Postfach zu fluten.
+_SETUP_MAILS_PER_ADDRESS = 5
+_SETUP_MAIL_WINDOW_SECONDS = 3600
 
 
 class RegisterRequest(BaseModel):
@@ -87,6 +92,20 @@ async def register_user(
     try:
         if not is_password_setup_configured():
             raise RuntimeError("Password setup is not configured")
+        try:
+            # Gehasht, damit der Prozess-Zähler keine Adressen im Klartext hält.
+            address_key = hashlib.sha256(email.encode("utf-8")).hexdigest()
+            api_uid_limiter.check(
+                address_key,
+                "register:setup-mail",
+                _SETUP_MAILS_PER_ADDRESS,
+                window_seconds=_SETUP_MAIL_WINDOW_SECONDS,
+            )
+        except ApiUidRateLimitExceeded:
+            # Gleiche Antwort wie immer: ein 429 würde verraten, dass für
+            # diese Adresse gerade Mails rausgehen.
+            logging.warning("/register: setup mail cap reached for one address")
+            return await _neutral_registration_response(started_at)
         # New users receive an unguessable temporary credential. Existing and
         # new addresses then take the exact same mailbox-only setup path, so an
         # anonymous caller cannot distinguish them with a follow-up login.

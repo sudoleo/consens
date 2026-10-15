@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routers import auth as auth_router
-from app.core.rate_limit import limiter
+from app.core.rate_limit import api_uid_limiter, limiter
 
 
 class AuthSessionTests(unittest.TestCase):
@@ -19,6 +19,7 @@ class AuthSessionTests(unittest.TestCase):
 
     def setUp(self):
         limiter.reset()
+        api_uid_limiter.reset()
 
     def test_confirm_registration_sets_httponly_session_cookie(self):
         with (
@@ -131,6 +132,45 @@ class AuthSessionTests(unittest.TestCase):
             self.client.post("/register", json={"email": "pending@example.test"})
 
         deliver.assert_called_once_with("pending@example.test", setup=True)
+
+    def test_setup_mails_per_address_are_capped_with_a_neutral_answer(self):
+        pending = SimpleNamespace(
+            uid="pending-owner",
+            user_metadata=SimpleNamespace(last_sign_in_timestamp=None),
+        )
+        responses = []
+        with (
+            patch.object(auth_router, "is_password_setup_configured", return_value=True),
+            patch.object(
+                auth_router, "find_or_provision_user", return_value=(pending, False)
+            ) as provision,
+            patch.object(auth_router, "deliver_password_setup_email") as deliver,
+            patch.object(auth_router, "send_new_user_registration_notification"),
+        ):
+            for index in range(auth_router._SETUP_MAILS_PER_ADDRESS + 1):
+                # Jede Anfrage kommt von einer anderen IP: das IP-Limit greift
+                # nicht, die Bremse pro Adresse schon.
+                responses.append(
+                    self.client.post(
+                        "/register",
+                        json={"email": "Victim@Example.test"},
+                        headers={"CF-Connecting-IP": f"198.51.100.{index + 1}"},
+                    )
+                )
+            other = self.client.post(
+                "/register",
+                json={"email": "someone-else@example.test"},
+                headers={"CF-Connecting-IP": "198.51.100.200"},
+            )
+
+        self.assertEqual([r.status_code for r in responses], [200] * len(responses))
+        self.assertEqual(
+            [r.json() for r in responses], [{"status": "check_inbox"}] * len(responses)
+        )
+        self.assertEqual(other.status_code, 200)
+        # Nur die erlaubten Mails an die Opferadresse plus die an die andere.
+        self.assertEqual(deliver.call_count, auth_router._SETUP_MAILS_PER_ADDRESS + 1)
+        self.assertEqual(provision.call_count, auth_router._SETUP_MAILS_PER_ADDRESS + 1)
 
     def test_new_and_existing_registration_responses_are_identical(self):
         new_user = SimpleNamespace(uid="new-owner", email="same@example.test")

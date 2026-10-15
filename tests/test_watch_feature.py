@@ -16,7 +16,7 @@ from app.api.routers import share as share_router
 from app.api.routers import admin as admin_router
 from app.api.routers import pages as pages_router
 from app.api.routers import watch as watch_router
-from app.core.rate_limit import limiter
+from app.core.rate_limit import api_uid_limiter, limiter
 from app.services import persistence_guard, share_snapshots, telegram_watch, watch_service
 from app.services import mailer, opinion_map, watch_brief, watch_followers, watch_scheduler
 from app.services import drift_signal
@@ -2760,6 +2760,32 @@ class WatchRouteTests(unittest.TestCase):
         with auth[0], auth[1], auth[2]:
             short = self.client.post("/api/watch/goal-suggestions", json={"question": "GPT"})
         self.assertEqual(short.status_code, 400)
+
+    def test_goal_suggestions_are_capped_per_account_across_ips(self):
+        limiter.reset()
+        api_uid_limiter.reset()
+        cap = watch_router.GOAL_SUGGESTIONS_PER_HOUR
+        with (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u-cap"),
+            patch.object(watch_router, "get_user_tier", return_value="free"),
+            patch.object(
+                watch_router.watch_scheduler, "suggest_goals", return_value=["A firm date"],
+            ) as suggest,
+        ):
+            responses = [
+                self.client.post(
+                    "/api/watch/goal-suggestions",
+                    json={"question": "When will GPT-6 ship?"},
+                    # Jede Anfrage von einer anderen IP: nur die Kontogrenze greift.
+                    headers={"CF-Connecting-IP": f"198.51.100.{index + 1}"},
+                )
+                for index in range(cap + 1)
+            ]
+        api_uid_limiter.reset()
+        self.assertEqual([r.status_code for r in responses], [200] * (cap + 1))
+        self.assertEqual(suggest.call_count, cap)
+        self.assertEqual(responses[-1].json(), {"status": "limited", "goals": []})
 
     def test_telegram_must_be_connected_before_enabling_watch_channel(self):
         with (
