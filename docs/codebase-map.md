@@ -5611,7 +5611,9 @@ keinen Abgleich.
   oder den Namen wiederholende Notizen fallen weg; „disputed“ wird gestrichelt
   in Bernstein gezeichnet. Gespeichert als `figures` am Run (ältere Versionen
   behalten ihre eigene), gezeichnet als HTML/CSS (`figure_html`, `.af-*` in
-  `public-pages.css`, alle Texte escaped) unter der Überschrift, zu der sie
+  `public-pages.css`, alle Texte escaped; eigene Fläche mit Kopfzeile
+  „Timeline“/„Overview“/„In numbers“ samt Symbol, damit sie nicht als Fließtext
+  gelesen wird) unter der Überschrift, zu der sie
   gehört (`place`/`fill`; liegt die im letzten Drittel, rückt sie nach dem
   ersten Absatz nach oben). Ein Fehlschlag kostet nur die Abbildung, nie den
   Check; in Unit-/E2E-/Mock-Läufen wird kein Modell gefragt. Probe 2026-10-15

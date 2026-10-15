@@ -1919,18 +1919,37 @@ canvas {
 
 /* ==========================================================================
    Abbildungen aus der Antwort (app/services/topic_figures.py, seit
-   2026-10-15): Zeitleiste, Status-Tafel, Zahlen. Gezeichnet von consens.io,
-   ohne Kasten: Linien, Punkte, Schrift; Semantikfarbe nur auf dem Zeichen,
-   Streit gestrichelt in Bernstein.
+   2026-10-15): Zeitleiste, Status-Tafel, Zahlen. Gezeichnet von consens.io
+   auf eigener Fläche mit Kopfzeile, damit sie als Abbildung erkennbar ist;
+   Semantikfarbe nur auf dem Zeichen, Streit gestrichelt in Bernstein.
    ========================================================================== */
+/* Eine Abbildung ist ein eigenes Objekt im Text (Max 2026-10-15: „als
+   solche nicht zu erkennen“): eigene Fläche, Kopfzeile mit Symbol und Art.
+   Die Fläche ist die einzige im Antworttext. */
 .af {
-  --af-on-glyph: var(--page-bg);
-  margin: 22px 0 26px;
-  padding: 0;
+  --af-surface: var(--raise);
+  --af-on-glyph: var(--af-surface);
+  margin: 26px 0 30px;
+  padding: 16px 20px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--af-surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft, var(--border));
   font-size: var(--font-size-sm);
   line-height: var(--line-height-ui);
 }
-.af-title { margin: 0 0 14px; color: var(--heading); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.af-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.af-kind svg { flex: none; width: 14px; height: 14px; }
+.af-title { margin: 0 0 16px; color: var(--heading); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); line-height: var(--line-height-heading); }
 .af-cap { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line-soft, var(--border)); color: var(--muted); font-size: var(--font-size-xs); }
 .af-label { color: var(--text); }
 .af-note { display: block; margin-top: 2px; color: var(--muted); font-size: var(--font-size-xs); }
@@ -1945,7 +1964,7 @@ canvas {
 .af-span { position: absolute; top: 13px; height: 7px; border-radius: 4px; background: color-mix(in srgb, var(--heading) 22%, transparent); }
 .af-span.is-disputed { background: none; border: 1.5px dashed var(--partial); }
 .af-gap { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); color: var(--muted); font-size: var(--font-size-xs); white-space: nowrap; }
-.af-dot { position: absolute; top: 10px; width: 13px; height: 13px; border-radius: 50%; background: var(--heading); border: 3px solid var(--page-bg); transform: translateX(-50%); }
+.af-dot { position: absolute; top: 10px; width: 13px; height: 13px; border-radius: 50%; background: var(--heading); border: 3px solid var(--af-surface); transform: translateX(-50%); }
 .af-dot.is-disputed { background: var(--partial); }
 .af .af-events { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px 22px; }
 .af-event { min-width: 0; }
@@ -1975,6 +1994,7 @@ canvas {
 .af-value { color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 
 @media (max-width: 700px) {
+  .af { padding: 14px 16px 12px; }
   .af .af-events.is-ends { grid-template-columns: minmax(0, 1fr); }
   .af .af-events.is-ends .af-event:last-child:not(:first-child) { text-align: left; }
   .af-rows.has-bars .af-row { grid-template-columns: minmax(0, 1fr) auto; }

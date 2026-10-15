@@ -150,6 +150,8 @@ def test_figures_are_drawn_as_escaped_html_with_disagreement_marked():
     assert 'class="af-row is-disputed"' in html
     assert "width:50.0%" in html and "width:100.0%" in html
     assert "Dashed: the sources or models disagree." in html
+    # A head with symbol and kind marks it as a figure, not more answer text.
+    assert '<p class="af-kind"><svg' in html and "In numbers</p>" in html
     assert "this answer of Oct 14, 2026" in html
 
 

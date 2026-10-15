@@ -393,8 +393,29 @@ def _numbers(figure: dict) -> str:
     return f'{unit_line}<ul class="af-rows{" has-bars" if bars else ""}">{"".join(rows)}</ul>'
 
 
+_KIND_HEADS = {
+    "timeline": ("Timeline", (
+        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" '
+        'stroke-linecap="round" aria-hidden="true"><path d="M1.5 8h13"/>'
+        '<circle cx="4" cy="8" r="1.8" fill="currentColor"/><circle cx="12" cy="8" r="1.8" fill="currentColor"/></svg>'
+    )),
+    "status": ("Overview", (
+        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" '
+        'stroke-linecap="round" aria-hidden="true"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/>'
+        '<circle cx="3" cy="4" r="1.2" fill="currentColor"/><circle cx="3" cy="8" r="1.2" fill="currentColor"/>'
+        '<circle cx="3" cy="12" r="1.2" fill="currentColor"/></svg>'
+    )),
+    "numbers": ("In numbers", (
+        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" '
+        'stroke-linecap="round" aria-hidden="true"><path d="M2 4h8M2 8h12M2 12h5"/></svg>'
+    )),
+}
+
+
 def figure_html(figure: dict, *, answered_on: str = "") -> Markup:
-    """One figure as safe HTML; every text from the answer is escaped."""
+    """One figure as safe HTML; every text from the answer is escaped.
+
+    A small head (symbol + kind) marks it as a figure, not more text."""
     body = {"timeline": _timeline, "status": _status, "numbers": _numbers}[figure["kind"]](figure)
     disputed = any(entry.get("disputed") for entry in figure["items"])
     caption = "Drawn by consens.io from this answer"
@@ -402,9 +423,11 @@ def figure_html(figure: dict, *, answered_on: str = "") -> Markup:
     caption += ". Every date, number and name is taken from it."
     if disputed:
         caption += " Dashed: the sources or models disagree."
+    kind_label, kind_icon = _KIND_HEADS[figure["kind"]]
+    head = f'<p class="af-kind">{kind_icon}{escape(kind_label)}</p>'
     title = f'<p class="af-title">{escape(figure["title"])}</p>' if figure.get("title") else ""
     return Markup(
-        f'<figure class="af af-{figure["kind"]}">{title}{body}'
+        f'<figure class="af af-{figure["kind"]}">{head}{title}{body}'
         f'<figcaption class="af-cap">{escape(caption)}</figcaption></figure>'
     )
 
