@@ -6562,7 +6562,16 @@ Firestore `preset_models` speichert pro Daily/Balanced/High Quality (ID:
 `thorough`) unter `answers` genau sechs unterschiedliche Familienmodelle plus
 `consensus`; das alte Top-Level-Provider-Schema wird beim Laden migriert.
 Daily/Balanced bleiben Free-faehig und
-High Quality bleibt unabhaengig von der Konfiguration Pro-only. Grok 4.3 ist
+High Quality bleibt unabhaengig von der Konfiguration Pro-only.
+`scripts/model_release_check.py` (lokaler geplanter Task
+`consens-model-release-check`, alle 3 Tage) prüft das Dokument nur lesend
+(`.get()`): neue OpenRouter-Modelle, verschwundene konfigurierte IDs,
+Preset-Befunde (Modell nicht in der Familienliste, Premium in Daily/Balanced,
+neueres Modell derselben Reihe, identische Presets) und je eine ZDR-Probe der
+genutzten Modelle. Zustand liegt neben dem Task
+(`~/.claude/scheduled-tasks/consens-model-release-check/last-seen.json`), damit
+nur Neues gemeldet wird; der Aufruf ist in `.claude/settings.local.json`
+freigegeben, weil ein unbeaufsichtigter Lauf sonst an der Rückfrage hängt. Grok 4.3 ist
 seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
 (OpenRouter-Standard „low“; Reasoning-Schalter und Agent-Menü setzen die Stufe).
 Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten

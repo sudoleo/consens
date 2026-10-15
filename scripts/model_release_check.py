@@ -13,6 +13,7 @@ The scheduled task runs unattended, so every step is one fixed command that
     venv/Scripts/python.exe scripts/model_release_check.py save
 
 collect   config, catalog diff, preset findings, one ZDR probe per model in use
+          (a 429 is retried twice; still throttled shows as GEDROSSELT, not FAIL)
 probe     three ZDR probes per given OpenRouter ID (``--times`` to change)
 save      stores what collect saw, so the next run only reports what is new
 """
@@ -289,7 +290,10 @@ def probe_once(openrouter_id: str, key: str) -> str:
     return f"ok via {data.get('provider') or '?'}"
 
 
-def probe_many(ids: list[str], times: int) -> dict[str, list[str]]:
+def probe_many(ids: list[str], times: int, retries_on_429: int = 0) -> dict[str, list[str]]:
+    """``times`` counted attempts per model. ``retries_on_429`` repeats a
+    throttled attempt after a pause, so one busy moment at a provider does not
+    read as a broken model."""
     key = os.environ.get("OPENROUTER_API_KEY", "")
     if not key:
         raise SystemExit("OPENROUTER_API_KEY fehlt in .env")
@@ -299,7 +303,13 @@ def probe_many(ids: list[str], times: int) -> dict[str, list[str]]:
         for attempt in range(times):
             if attempt:
                 time.sleep(1.5)
-            results.append(probe_once(openrouter_id, key))
+            result = probe_once(openrouter_id, key)
+            for retry in range(retries_on_429):
+                if not result.startswith("HTTP 429"):
+                    break
+                time.sleep(5 * (retry + 1))
+                result = probe_once(openrouter_id, key)
+            results.append(result)
         return openrouter_id, results
 
     with ThreadPoolExecutor(max_workers=6) as pool:
@@ -357,11 +367,16 @@ def cmd_collect(args) -> int:
     in_use = sorted(model for model, uses in configured.items()
                     if model in catalog and any(use.startswith(("Default ", "Preset ", "Engine "))
                                                 or use == "judge_models openai" for use in uses))
-    results = {} if args.no_probe else probe_many(in_use, 1)
+    results = {} if args.no_probe else probe_many(in_use, 1, retries_on_429=2)
     print(f"\nZDR-PROBE DER GENUTZTEN MODELLE (1x, {len(in_use)}):")
     for model in in_use:
         status = results[model][0] if results else "nicht geprobt"
-        flag = "ok  " if status.startswith("ok") else ("FAIL" if results else "-   ")
+        if not results:
+            flag = "-   "
+        elif status.startswith("ok"):
+            flag = "ok  "
+        else:
+            flag = "GEDROSSELT" if status.startswith("HTTP 429") else "FAIL"
         uses = ", ".join(sorted(use for use in configured[model] if not use.startswith("Liste ")))
         print(f"  {flag} {model}  {status}  [{uses}]")
 
