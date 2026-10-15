@@ -49,10 +49,12 @@
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
-  <!-- Marked (Markdown -> HTML) -->
-  <script src="{{ asset_url('/static/vendor/marked/12.0.2/marked.min.js') }}"></script>
-  <!-- DOMPurify (HTML Sanitizer) -->
-  <script src="{{ asset_url('/static/vendor/dompurify/3.4.16/dist/purify.min.js') }}"></script>
+  <!-- Marked (Markdown -> HTML) and DOMPurify (HTML sanitizer). Deferred: no
+       head script calls them, and deferred scripts and modules run in
+       document order, so both are in place before firebase.js and the app
+       group below. -->
+  <script defer src="{{ asset_url('/static/vendor/marked/12.0.2/marked.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/dompurify/3.4.16/dist/purify.min.js') }}"></script>
   <!-- KaTeX: mathematische Ausdruecke aus Modellantworten lesbar setzen. -->
   <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.js') }}"></script>
   <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js') }}"></script>
@@ -856,18 +858,26 @@
     <p></p>
   </div>
 
-  <!-- Feedback Modal -->
-  <div id="feedbackModal" class="modal">
+  <!-- Feedback dialog (native <dialog>, App.modalDialog; logic: app-init.js).
+       Sending needs an account, so guests get the login hint and the address
+       instead of a form that can only fail. -->
+  <dialog id="feedbackModal" class="modal" aria-labelledby="feedbackTitle">
     <div class="modal-content feedback-modal">
-      <span class="close" id="closeFeedbackModal">&times;</span>
-      <h2>Send Feedback</h2>
+      <button type="button" class="close" id="closeFeedbackModal" aria-label="Close feedback">&times;</button>
+      <h2 id="feedbackTitle">Send Feedback</h2>
+      <div id="feedbackGuestNote" class="feedback-guest-note" hidden>
+        <p>Log in to send feedback from here, or write to
+          <a href="mailto:contact@consens.io">contact@consens.io</a>.</p>
+        <button type="button" id="feedbackLoginButton" class="feedback-login-button">Log in</button>
+      </div>
       <form id="feedbackForm">
-        <textarea name="message" placeholder="Your Feedback"></textarea>
-        <input type="email" name="email" placeholder="Your email (optional)">
+        <textarea name="message" placeholder="Your Feedback" aria-label="Your feedback" maxlength="4000" required autofocus></textarea>
+        <input type="email" name="email" placeholder="Your email (optional)" aria-label="Your email (optional)" autocomplete="email">
         <button type="submit">Submit</button>
+        <p id="feedbackStatus" class="feedback-status" role="status" aria-live="polite" hidden></p>
       </form>
     </div>
-  </div>
+  </dialog>
 
   <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
   <div id="shareModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
@@ -955,12 +965,12 @@
   </div>
 
   <div id="popupContainer">
-    <!-- Modal zum Editieren des Systemprompts -->
-    <div id="systemPromptModal" class="modal u-display-none">
+    <!-- Settings (native <dialog>, App.modalDialog; logic: static/app-ui.js) -->
+    <dialog id="systemPromptModal" class="modal" aria-labelledby="settingsTitle">
       <div class="modal-content settings-modal-content">
 
         <div class="settings-header">
-          <h2>Settings</h2>
+          <h2 id="settingsTitle">Settings</h2>
           <div class="settings-header-actions">
             <button id="helpButton" class="help-button" type="button" title="Help &amp; explanation"
               aria-label="Help and explanation">
@@ -1344,13 +1354,16 @@
           <span class="settings-version">{% if app_commit %}build {{ app_commit }}{% endif %}</span>
         </div>
       </div>
+    </dialog>
 
-      <!-- FAQ Modal -->
-      <div id="helpModal" class="modal">
+      <!-- Help (native <dialog>). Opened from Settings and stacked over it by
+           showModal(); a sibling, not a child, so closing one never takes
+           the other along. -->
+      <dialog id="helpModal" class="modal" aria-labelledby="helpTitle">
         <div class="modal-content faq-modal">
-          <span class="close" id="closeHelpModal">&times;</span>
+          <button type="button" class="close" id="closeHelpModal" aria-label="Close help">&times;</button>
           <div class="faq-header">
-            <h2>FAQ & Quick Start</h2>
+            <h2 id="helpTitle">FAQ & Quick Start</h2>
           </div>
           <div class="faq-body">
             <div class="faq-intro">
@@ -1507,8 +1520,8 @@
             </div>
           </div>
         </div>
-      </div>
-
+      </dialog>
+  </div>
 
 </body>
 

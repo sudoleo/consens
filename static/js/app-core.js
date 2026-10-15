@@ -14,6 +14,15 @@
 (function () {
   window.App = window.App || {};
 
+  // Smooth scrolling is decoration. Whoever asked the system for less
+  // motion gets the jump instead (audit F15); every scrollTo/scrollIntoView
+  // in /app takes its `behavior` from here. Read per call, so a changed
+  // system setting applies without a reload.
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  function scrollBehavior() {
+    return reducedMotion?.matches ? "auto" : "smooth";
+  }
+
   // Telemetrie-Wrapper (Guard um window.trackUmamiEvent).
   function trackAppEvent(eventName, eventData = {}) {
     if (typeof window.trackUmamiEvent === "function") {
@@ -435,11 +444,10 @@
   // before the next paint, after the rest of the task has built the thread
   // around it, so no frame shows the field at its end before it moves.
   let composerGlide = null;
-  const quietComposerMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   function glideComposer(change) {
     const composer = document.querySelector(".input-section");
     const wasHero = document.body.classList.contains("is-hero");
-    const before = composer?.animate && !quietComposerMotion?.matches ? composer.getBoundingClientRect() : null;
+    const before = composer?.animate && !reducedMotion?.matches ? composer.getBoundingClientRect() : null;
     change();
     if (!before || wasHero === document.body.classList.contains("is-hero")) return;
     requestAnimationFrame(() => {
@@ -527,6 +535,7 @@
     revealSentMessage,
     getThreadAttachments,
     consensusBodyEl,
+    scrollBehavior,
     trackAppEvent,
     trackAsk,
     trackAnswer,

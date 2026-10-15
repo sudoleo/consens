@@ -565,7 +565,7 @@
         const firstAnswer = document.querySelector(
           ".response-section > .response-box:not(.excluded)"
         );
-        firstAnswer?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        firstAnswer?.scrollIntoView({ block: "nearest", behavior: window.App.scrollBehavior?.() || "auto" });
       });
     }
     return changed;

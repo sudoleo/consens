@@ -3230,35 +3230,6 @@ async function deleteBookmark(bookmarkId) {
 }
 window.deleteBookmark = deleteBookmark;
 
-function sendFeedback(message, email) {
-  // Prüfe, ob der Nutzer eingeloggt ist
-  if (!auth.currentUser) {
-    console.error("sendFeedback: Kein aktueller Nutzer vorhanden.");
-    return Promise.reject(new Error("Bitte logge dich ein, um Feedback zu senden."));
-  }
-  
-  // Hole den aktuellen, gültigen ID-Token ohne forceRefresh
-  return auth.currentUser.getIdToken()
-    .then(idToken => {
-      // Sende das Feedback an deinen Backend-Endpoint
-      return fetch("/feedback", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ message, email, id_token: idToken })
-      });
-    })
-    .then(response => response.json())
-    .catch(error => {
-      console.error("sendFeedback: Fehler beim Senden des Feedbacks:", error);
-      throw error;
-    });
-}
-
-// Exponiere die Funktion, damit sie von index.html aus aufgerufen werden kann
-window.sendFeedback = sendFeedback;
-
 function updateBookmarkDOM(bookmark) {
   const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmark.id}"]`);
   const label = row?.querySelector("p");

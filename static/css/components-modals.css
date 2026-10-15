@@ -16,6 +16,28 @@
   transition: background-color var(--dur-state) var(--ease-standard), backdrop-filter var(--dur-state) var(--ease-standard);
 }
 
+/* Settings, Help and Feedback are native <dialog>s (App.modalDialog). The
+   element stays the full-screen dimmed layer the div modals draw, so the
+   UA dialog box (border, padding, centred margin, max size, Canvas colours)
+   is reset and the ::backdrop stays clear. showModal() puts it in the top
+   layer, which also makes the z-index above irrelevant for it. */
+dialog.modal {
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+}
+
+dialog.modal[open] {
+  display: block;
+}
+
+dialog.modal::backdrop {
+  background: transparent;
+}
+
 .modal-content {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.58) 38%, rgba(255, 255, 255, 0.72)),
@@ -84,6 +106,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
   border-radius: var(--radius-sm);
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-xl);
@@ -166,6 +191,66 @@
   transform: translateY(-1px);
   box-shadow: var(--shadow-hover);
   outline: none;
+}
+
+/* One send at a time: the button stays locked until the answer is in. */
+#feedbackForm button[type="submit"]:disabled {
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
+  cursor: progress;
+}
+
+#feedbackForm[hidden] {
+  display: none;
+}
+
+.feedback-status {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+
+.feedback-status[data-tone="error"] {
+  color: var(--text-color);
+  font-weight: var(--font-weight-semibold);
+}
+
+.feedback-guest-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 20px;
+}
+
+.feedback-guest-note[hidden] {
+  display: none;
+}
+
+.feedback-guest-note p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-reading);
+}
+
+.feedback-guest-note a {
+  color: var(--text-color);
+  font-weight: var(--font-weight-semibold);
+}
+
+.feedback-login-button {
+  min-height: 38px;
+  padding: 9px 16px;
+  border: 1px solid var(--button-bg);
+  border-radius: var(--radius-xs);
+  background: var(--button-bg);
+  color: var(--button-text);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .popup {
@@ -1118,6 +1203,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
   border-radius: var(--radius-sm);
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-xl);
@@ -1184,22 +1272,32 @@
 }
 
 .faq-item h3 {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+}
+
+/* The question is a real button inside its heading (APG accordion), so
+   the keyboard reaches and toggles it; app-init.js wraps the markup. */
+.faq-question {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
+  width: 100%;
   margin: 0;
   padding: 10px 12px;
+  border: 0;
+  background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
+  font: inherit;
   text-align: left;
   transition: background-color var(--dur-press) var(--ease-standard);
 }
 
-.faq-item h3:hover {
+.faq-question:hover {
   background: var(--sidebar-hover);
 }
 
@@ -1236,7 +1334,8 @@
 }
 
 .close {
-  color: #aaa;
+  /* #aaa read 2.1-2.3:1 on the light surfaces; --ink-3 reaches 5.2:1 (audit F10). */
+  color: var(--ink-3);
   float: right;
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);

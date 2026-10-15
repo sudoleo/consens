@@ -252,7 +252,7 @@
     const box = [...document.querySelectorAll('.agent-files-confirm')].find(item => item.dataset.confirmKey === key);
     box?.querySelector('.agent-files-ghost')?.focus({ preventScroll: true });
     // The sticky composer can cover the bottom of the page; keep the choice visible.
-    box?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    box?.scrollIntoView?.({ block: 'center', behavior: App.scrollBehavior?.() || 'auto' });
   }
   function focusKey(key) {
     const owner = [...document.querySelectorAll('[data-files-key]')].find(item => item.dataset.filesKey === key);

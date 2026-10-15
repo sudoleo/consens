@@ -153,7 +153,7 @@
     requestAnimationFrame(function () {
       requestAnimationFrame(function () { card.classList.add("is-visible"); });
     });
-    card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    card.scrollIntoView({ block: "nearest", behavior: window.App.scrollBehavior?.() || "auto" });
   }
 
   // --- Die eigentliche Absage ------------------------------------------

@@ -657,7 +657,7 @@
     if (!field) return;
     const collapsedSection = field.closest("details:not([open])");
     if (collapsedSection) collapsedSection.open = true;
-    field.scrollIntoView({ behavior: "smooth", block: "center" });
+    field.scrollIntoView({ behavior: window.App.scrollBehavior?.() || "auto", block: "center" });
     try {
       field.focus({ preventScroll: true });
     } catch (_) {

@@ -345,6 +345,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       einer und zwei Spalten. Light/Dark, Tastaturnavigation und mobile
       Eingabefokussierung prüfen; Schalter, API-Key-Feld und System Prompt
       funktionieren weiterhin. Account-Löschung nur im isolierten Testprofil.
+- [ ] Settings, Help und Feedback (native `<dialog>`, seit 2026-10-15): Öffnen
+      per Tastatur setzt den Fokus hinein (Settings: aktiver Reiter; Feedback:
+      Textfeld, für Gäste „Log in“), Tab bleibt im Dialog, Escape schließt (Help
+      über Settings zuerst Help) und gibt den Fokus an den Auslöser zurück. Text
+      im System Prompt markieren und über dem Hintergrund loslassen lässt
+      Settings offen; ein Klick auf den Hintergrund schließt. Feedback: Gäste
+      sehen den Login-Hinweis statt des Formulars; eingeloggt sendet ein
+      Doppelklick auf Submit einmal, Erfolg und Fehler stehen englisch im
+      Dialog. FAQ-Fragen klappen per Enter/Leertaste auf. Light/Dark, 390 px.
 - [ ] Settings → Display → Answer highlights: All / Contradictions /
       Disagreements & issues / Critical contradictions / None bei 320/390 px und Desktop prüfen. Graue Detail-
       widersprüche bleiben unter Contradictions sichtbar, graue Emphasis nicht.

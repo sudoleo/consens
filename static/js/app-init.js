@@ -509,6 +509,11 @@
         document.addEventListener("click", function (event) {
           const sidebar = document.querySelector(".sidebar");
           if (!sidebar || !usesOverlaySidebar() || !sidebar.classList.contains("active")) return;
+          // A click in a dialog (Settings opened from the sidebar, its
+          // backdrop) belongs to the dialog, not to the page behind it. The
+          // sidebar stays, so closing the dialog can hand focus back to the
+          // gear inside it.
+          if (event.target.closest("dialog")) return;
 
           if (!sidebar.contains(event.target) && !event.target.closest(".sidebar-toggle")) {
             closeOverlaySidebar();
@@ -525,34 +530,27 @@
         }
 
         // Settings- und Help-Controls werden ausschliesslich von app-ui.js
-        // gebunden. Zwei Binder fuehrten jeden Klick und globale Backdrop-
-        // Listener doppelt aus.
+        // gebunden, Feedback von feedback-dialog.js. Zwei Binder fuehrten
+        // jeden Klick und globale Backdrop-Listener doppelt aus.
 
-        // Öffnen des Feedback-Modals beim Klick auf den Feedback-Button
-        document.getElementById("feedbackButton").addEventListener("click", function () {
-          document.getElementById("feedbackModal").style.display = "block";
-          trackAppEvent("app_feedback_open");
-        });
-
-        // Schließen des Feedback-Modals beim Klick auf das Schließen-Symbol
-        document.getElementById("closeFeedbackModal").addEventListener("click", function () {
-          document.getElementById("feedbackModal").style.display = "none";
-        });
-
-        // Optional: Modal schließen, wenn außerhalb des Modal-Inhalts geklickt wird
-        window.addEventListener("click", function (event) {
-          if (event.target === document.getElementById("feedbackModal")) {
-            document.getElementById("feedbackModal").style.display = "none";
-          }
-        });
-
-        // Toggle FAQ items with icons. Most answers are a single paragraph;
-        // richer answers (such as model insights) use the same direct-child
-        // contract via .faq-answer.
-        document.querySelectorAll('.faq-item h3').forEach((question) => {
+        // Toggle FAQ items with icons. The question becomes a real button
+        // inside its heading (APG accordion), so the keyboard reaches it.
+        // Most answers are a single paragraph; richer answers (such as model
+        // insights) use the same direct-child contract via .faq-answer.
+        document.querySelectorAll('.faq-item h3').forEach((heading, index) => {
+          const answer = heading.nextElementSibling;
+          const question = document.createElement('button');
+          question.type = 'button';
+          question.className = 'faq-question';
           question.setAttribute('aria-expanded', 'false');
+          if (answer) {
+            if (!answer.id) answer.id = `faqAnswer${index + 1}`;
+            question.setAttribute('aria-controls', answer.id);
+          }
+          question.append(...heading.childNodes);
+          heading.append(question);
+          question.querySelector('.faq-toggle-icon')?.setAttribute('aria-hidden', 'true');
           question.addEventListener('click', () => {
-            const answer = question.nextElementSibling;
             const icon = question.querySelector('.faq-toggle-icon');
             if (!answer || !icon) return;
             const shouldOpen = !answer.style.display || answer.style.display === 'none';
@@ -1119,10 +1117,11 @@
 
         // Search operates on compact metadata only. When needed, remaining
         // metadata pages are fetched without loading full bookmark answers.
+        // The filter reads the field after the await: typing on while the
+        // pages load must not leave the list filtered by an older term.
         bookmarkSearchInput?.addEventListener("input", async function () {
-          const query = this.value;
-          if (query.trim()) await window.loadAllBookmarkMetadata?.();
-          window.filterBookmarks(query);
+          if (this.value.trim()) await window.loadAllBookmarkMetadata?.();
+          window.filterBookmarks(this.value);
         });
 
         bookmarkSearchInput?.addEventListener("keydown", function (event) {
@@ -1371,33 +1370,6 @@
           }
         };
 
-        const feedbackForm = document.getElementById("feedbackForm");
-        if (feedbackForm) {
-          feedbackForm.addEventListener("submit", function (e) {
-            e.preventDefault();
-            const message = this.elements["message"].value;
-            const email = this.elements["email"].value;
-            trackAppEvent("app_feedback_submit", { logged_in: !!window.auth?.currentUser });
-            // Hier rufen wir die neue sendFeedback-Funktion auf, die den Backend-Endpoint nutzt.
-            window.sendFeedback(message, email)
-              .then(data => {
-                if (data.status === "success") {
-                  this.reset();
-                  trackAppEvent("app_feedback_result", { status: "success" });
-                  alert("Feedback sent!");
-                } else {
-                  trackAppEvent("app_feedback_result", { status: "error" });
-                  alert("Error: " + data.detail);
-                }
-              })
-              .catch(error => {
-                console.error("Error while saving feedback:", error);
-                trackAppEvent("app_feedback_result", { status: "error" });
-                alert("Could not save your feedback: " + error.message);
-              });
-          });
-        }
-
         window.clearResponseBoxes = function (options = {}) {
           window.App.answerReader?.reset?.();
           if (!options.silent) trackAppEvent("app_responses_cleared");
@@ -1538,9 +1510,21 @@
           }
         }
 
-        // Countdown sofort starten und jede Sekunde aktualisieren
-        updateCountdown();
-        setInterval(updateCountdown, 1000);
+        // Countdown sofort starten und jede Sekunde aktualisieren - nur bei
+        // sichtbarem Tab. Ein versteckter Tab tickt nicht; beim Zurueckkehren
+        // rechnet der erste Tick sofort nach (auch einen UTC-Tageswechsel).
+        let countdownTimer = null;
+        function syncCountdownTimer() {
+          if (document.hidden) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+            return;
+          }
+          updateCountdown();
+          if (countdownTimer === null) countdownTimer = setInterval(updateCountdown, 1000);
+        }
+        document.addEventListener("visibilitychange", syncCountdownTimer);
+        syncCountdownTimer();
 
         document.getElementById("logoLink").addEventListener("click", () => {
           trackAppEvent("app_logo_home_click");

@@ -77,10 +77,18 @@
       "defer": true,
       "note": "Everything deferred. app-init.js and app-dom-events.js used to sit at the end of <body>; deferred scripts only run after parsing, so their position in the document does not change execution order.",
       "files": [
+        {
+          "file": "static/js/modal-dialog.js",
+          "note": "App.modalDialog: native <dialog> helper (focus in and back, Escape, deliberate backdrop clicks). Before app-ui.js (Settings, Help) and feedback-dialog.js, which bind their dialogs with it at load time."
+        },
         "static/app-ui.js",
         {
           "file": "static/js/app-core.js",
           "note": "Shared base (window.App): central config + helpers. MUST load first."
+        },
+        {
+          "file": "static/js/feedback-dialog.js",
+          "note": "App.feedback: the Send feedback dialog (guest hint, inline status, POST /feedback). Uses App.modalDialog, window.auth and App.openAuthModal at call time."
         },
         "static/js/chat-scroll.js",
         "static/js/feature-access.js",

@@ -119,24 +119,27 @@ const settingsTabs = (function () {
 window.App = window.App || {};
 window.App.settingsTabs = settingsTabs;
 
-function openSettingsModal() {
+// Settings and Help are native <dialog>s opened through App.modalDialog
+// (focus in and back, Escape, deliberate backdrop clicks only).
+function openSettingsModal(event) {
   const modal = document.getElementById("systemPromptModal");
   const textarea = document.getElementById("systemPromptInput");
-  if (!modal || !textarea) return;
+  if (!modal || !textarea || window.App.modalDialog.isOpen(modal)) return;
 
   textarea.value = getStoredSystemPrompt();
   // Immer auf dem ersten Reiter oeffnen. Der zuletzt benutzte waere clever,
   // aber unvorhersehbar — man findet Einstellungen ueber einen festen Ort.
-  modal.style.display = "block";
+  // Reset before showing: focus lands on the tab that is then selected.
   settingsTabs.reset();
+  window.App.modalDialog.open(modal, {
+    opener: event?.currentTarget || document.getElementById("editSystemPromptBtn"),
+    focus: () => modal.querySelector(".settings-nav-item.is-active")
+  });
   window.App?.trackAppEvent?.("app_settings_open");
 }
 
 function closeSettingsModal() {
-  const modal = document.getElementById("systemPromptModal");
-  if (modal) {
-    modal.style.display = "none";
-  }
+  window.App.modalDialog.close(document.getElementById("systemPromptModal"));
 }
 
 function saveSystemPrompt() {
@@ -156,19 +159,17 @@ function saveSystemPrompt() {
   window.App?.trackAppEvent?.("app_settings_saved");
 }
 
-function openHelpModal() {
-  const helpModal = document.getElementById("helpModal");
-  if (helpModal) {
-    helpModal.style.display = "block";
-    window.App?.trackAppEvent?.("app_help_open");
-  }
+// Help stacks over the open Settings dialog; closing it hands focus back to
+// the "?" button inside Settings.
+function openHelpModal(event) {
+  const opened = window.App.modalDialog.open(document.getElementById("helpModal"), {
+    opener: event?.currentTarget || document.getElementById("helpButton")
+  });
+  if (opened) window.App?.trackAppEvent?.("app_help_open");
 }
 
 function closeHelpModal() {
-  const helpModal = document.getElementById("helpModal");
-  if (helpModal) {
-    helpModal.style.display = "none";
-  }
+  window.App.modalDialog.close(document.getElementById("helpModal"));
 }
 
 function bindSettingsModalControls() {
@@ -176,6 +177,11 @@ function bindSettingsModalControls() {
   window.__settingsModalControlsBound = true;
 
   settingsTabs.bind();
+  // The backdrop closes only a click that also started on it: selecting
+  // text in a field and releasing over the backdrop used to close Settings
+  // and drop the unsaved edit (audit F5).
+  window.App.modalDialog.bind(document.getElementById("systemPromptModal"));
+  window.App.modalDialog.bind(document.getElementById("helpModal"));
 
   document.getElementById("editSystemPromptBtn")?.addEventListener("click", openSettingsModal);
   document.getElementById("closeSystemPromptModal")?.addEventListener("click", closeSettingsModal);
@@ -188,15 +194,6 @@ function bindSettingsModalControls() {
     const textarea = document.getElementById("systemPromptInput");
     if (detail.source === "local" || !textarea) return;
     if (textarea.value.trim() === (detail.previous.system_prompt || "")) textarea.value = getStoredSystemPrompt();
-  });
-
-  window.addEventListener("click", (event) => {
-    if (event.target === document.getElementById("systemPromptModal")) {
-      closeSettingsModal();
-    }
-    if (event.target === document.getElementById("helpModal")) {
-      closeHelpModal();
-    }
   });
 }
 

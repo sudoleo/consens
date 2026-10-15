@@ -62,8 +62,6 @@
   --sidebar-hover: var(--raise);
 
   --code-bg: #f7f7f7;
-  --feedback-text-color: #b3b3b3;
-  --feedback-text-hover-color: #666;
   --clear-button-bg: #fce4e4;
   --clear-button-border: #ffcdd2;
   --clear-button-text: #b71c1c;
@@ -175,8 +173,6 @@
   --sidebar-hover: var(--raise);
 
   --code-bg: #161616;
-  --feedback-text-color: #949494;
-  --feedback-text-hover-color: #bbb;
   --clear-button-bg: #3d1f1f;
   --clear-button-border: #633131;
   --clear-button-text: #f8bdbd;

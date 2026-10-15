@@ -578,10 +578,12 @@ siehe §8): zuerst die synchronen `app-bootstrap.js`, `app-state.js`,
 `auth-session-state.js`, `run-registry.js`, `watch-state.js` und
 `error-reporter.js` (Gruppe
 `head`, render-blockierend, weil sie den First Paint seeden), dann lokale Vendor-Libs
-(`marked`, `DOMPurify`, KaTeX + Auto-Render), der same-origin
+(`marked`, `DOMPurify`, KaTeX + Auto-Render; alle `defer`, seit 2026-10-15 auch
+marked und DOMPurify: kein Head-Skript ruft sie, und deferred Skripte und Module
+laufen in Dokumentreihenfolge, also vor `firebase.js` und der `app`-Gruppe), der same-origin
 `email-verify.js` als inhaltsadressierte `window.App.emailVerification`-Brücke,
 den `auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module), dann
-deferred `app-ui.js` und die Feature-Module unter `static/js/` in fester
+deferred `modal-dialog.js`, `app-ui.js` und die Feature-Module unter `static/js/` in fester
 Reihenfolge, zuletzt `app-init.js` und `app-dom-events.js`.
 
 In Produktion liefert `npm run build` daraus fünf inhaltsgehashte Bundles
@@ -683,7 +685,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   (zentrales Mapping Provider→DOM-IDs), `modelAcceptsAttachments(pref, modelId)`
   (immer das gewaehlte Modell; der Reasoning-Schalter tauscht keins), gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
-  `trackAppEvent`, `exitHeroMode`) sowie den zentralen
+  `trackAppEvent`, `exitHeroMode`, `scrollBehavior`) sowie den zentralen
   `window.App.renderUsageDisplay(data, owner)`-Eingang: reicht das
   `token_budget` einer API-Antwort (auch aus Fehler-Details) an
   `App.tokenBudget` weiter; Antworten ohne das Feld (eigene Keys) ändern nichts.
@@ -693,6 +695,34 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `setAppTitle` setzt den Standardtitel oder
   einen gekürzten, fragebezogenen Browser-Tab-Titel; `exitHeroMode` schaltet
   Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
+  `scrollBehavior()` liefert `"smooth"` oder bei `prefers-reduced-motion:
+  reduce` `"auto"` (pro Aufruf gelesen); jedes `scrollTo`/`scrollIntoView` mit
+  `behavior` in `/app` nimmt den Wert von hier (Audit F15,
+  `tests/js/reduced-motion-and-head.test.mjs` verbietet ein hartes `"smooth"`).
+- **`modal-dialog.js`** (`window.App.modalDialog`, seit 2026-10-15, erste Datei
+  der `app`-Gruppe) — Helfer für native `<dialog>`-Fenster: `bind(dialog,
+  {keepOpen?, onClose?})`, `open(dialog, {opener?, focus?})`, `close(dialog)`,
+  `isOpen(dialog)`. `open` nutzt `showModal()` (Top-Layer, Hintergrund inert,
+  Stapeln ohne z-index), merkt den Auslöser (aktives Element, sonst `opener`,
+  weil Safari geklickte Buttons nicht fokussiert) und setzt den Fokus auf
+  `focus` bzw. `[autofocus]`; jedes Schließen (Button, Escape, `close()`)
+  gibt den Fokus an den Auslöser zurück. Der Hintergrund schließt nur einen
+  Klick, der auch dort begann (Text markieren und über dem Hintergrund
+  loslassen kommt als Klick auf den Dialog an; Audit F5, gleiches Muster wie
+  der Login-Dialog in `firebase.js`), `keepOpen()` kann auch den verhindern.
+  Escape im Dialog stoppt die Weitergabe an Escape-Handler dahinter; ohne
+  `showModal()` (jsdom) schließt der Helfer selbst. Nutzer: Settings, Help
+  (`app-ui.js`) und Feedback (`feedback-dialog.js`).
+- **`feedback-dialog.js`** (`window.App.feedback`, seit 2026-10-15) — der
+  Feedback-Dialog `#feedbackModal`; vorher teils in `app-init.js`, teils als
+  `window.sendFeedback` in `firebase.js`. Gäste sehen statt des Formulars einen
+  Login-Hinweis mit `contact@consens.io` (`#feedbackGuestNote`; „Log in“ schließt
+  den Dialog und ruft `App.openAuthModal("login", #feedbackButton, "feedback")`).
+  Eingeloggt: `POST /feedback` mit ID-Token, Prüfung von `response.ok`, Antwort
+  in der Statuszeile `#feedbackStatus` (englisch, kein `alert()`), Submit-Button
+  bis zur Antwort gesperrt (ein Doppelklick ist eine Nachricht). FastAPI-
+  Validierungslisten werden zu einem Satz. Ein getippter Text hält den Dialog
+  bei Hintergrund-Klick offen.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle,
   Persistenz als Kontoeinstellungen `compare_models`, `consensus_model` und
   `consensus_preset` über `App.userSettings` (lokale Kopie unter den bisherigen
@@ -1647,6 +1677,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Icon+Name, Skip und Status ueber einem durchgehenden Balken (Touch: 44 px
   Zeilen- und Skip-Hoehe). Reduced Motion stoppt Puls, Spinner, Sweeps,
   Lichtstreifen und Uebergaenge; Forced Colors blendet den Balkenschimmer aus.
+  Der 200-ms-Ticker bewegt seit 2026-10-15 nur Uhr und Modellzeilen
+  (`renderDetail`: Fuellung aus dem Stream, Skip-Angebot); Schritte, Zaehler und
+  `#runNote` rendert der MutationObserver bei `data-response-state`,
+  `data-response-error`, `data-response-skipped` und `class`. In einem
+  versteckten Tab (`document.hidden`) laeuft kein Ticker; `visibilitychange`
+  zeichnet beim Zurueckkommen sofort nach (die Uhr zaehlt ab `startedAt`).
   Die Landingpage (Szene 02, `landing-scenes.js` + `.lp-run*` in
   `landing.css`) spiegelt diesen Aufbau mit denselben Schritten, Wörtern und
   Zustaenden.
@@ -2332,8 +2368,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   nur über Consensus-/Modellantworten (die eigene Frage zu zitieren wäre ein
   Kreis) — anders als Remember/Correct memory **ohne Konto**.
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
-  Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
-  API-Key-Test. Bis 768 px erzeugt Enter im Composer immer einen Absatz; nur
+  Response-Box-Toggles, Sidebar/Layout, FAQ-Aufklapper, Tooltips, Evidence-Rendering,
+  API-Key-Test. Die FAQ-Fragen im Help-Dialog werden beim Start zu echten
+  `button.faq-question` in ihrer `h3` (APG-Accordion, `aria-expanded`/
+  `aria-controls`), damit die Tastatur sie erreicht. Die Bookmark-Suche filtert
+  nach dem `await` auf `loadAllBookmarkMetadata` mit dem aktuellen Feldwert
+  (Audit F6). Bis 768 px erzeugt Enter im Composer immer einen Absatz; nur
   Desktop-Enter sendet. Der Sidebar-Eintrag „Models“ zeigt Gästen einen kurzen
   Login-Hinweis und öffnet für eingeloggte Nutzer den Modell-Picker; eine
   Follow-up-/Neuvergleich-Wahl ist dafür nicht nötig.
@@ -2343,7 +2383,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `window.refreshUsageData()` einen neuen autoritativen Serverstand an, statt
   lokal zu früh zu laufen oder die Seite neu zu laden. Der neue UTC-Tag wird
   erst nach einem bestätigten Refresh markiert; Fehler werden begrenzt erneut
-  versucht, damit ein veraltetes `0 / Limit` den neuen Tag nicht blockiert. Läuft als letztes
+  versucht, damit ein veraltetes `0 / Limit` den neuen Tag nicht blockiert. Der
+  Sekundentakt ruht in einem versteckten Tab; `visibilitychange` rechnet beim
+  Zurückkommen sofort nach (auch einen inzwischen erreichten UTC-Tageswechsel). Läuft als letztes
   Script, ruft `initApp()` direkt auf. `localStorage` nur über
   `readStored`/`writeStored` (try/catch plus Seiten-Ablage wie in
   `user-settings.js`): bei gesperrtem Speicher wirft schon der Zugriff, und ein
@@ -2364,7 +2406,7 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
 
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
-  `window.auth`, Bookmarks-CRUD-Calls, Feedback, Voting, Tier-Sync sowie das
+  `window.auth`, Bookmarks-CRUD-Calls, Voting, Tier-Sync sowie das
   Nutzericon-Menü im Sidebar-Footer (Avatar, Name/Plan, „Shared links“ und
   direkt darunter „Watched“). Ein geöffnetes Bookmark beendet den Hero-
   Leerzustand sofort. Bookmark-
@@ -2464,8 +2506,13 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen, und
   beendet beim Start denselben Hero-Leerzustand wie eine echte Anfrage.
-- **`static/app-ui.js`** — alleiniger Binder für System-Prompt-/Help-Modal
-  (keine zweite Bindung mehr in `app-init.js`) + App-Width-Resizer. Der eigene
+- **`static/app-ui.js`** — alleiniger Binder für Settings (`#systemPromptModal`)
+  und Help (`#helpModal`), keine zweite Bindung mehr in `app-init.js`. Beide
+  sind seit 2026-10-15 native `<dialog>` mit `aria-labelledby` und echtem
+  Schließen-Button, geöffnet über `App.modalDialog`: Settings setzt die Reiter
+  vor dem Öffnen zurück und fokussiert den aktiven Reiter; Help ist ein
+  Geschwister (nicht mehr Kind) von Settings und stapelt sich per `showModal()`
+  darüber, Escape schließt zuerst Help, der Fokus geht an `#helpButton`. Der eigene
   System-Prompt ist die Kontoeinstellung `system_prompt` (`query-send.js` liest
   sie für jeden Lauf; leer = zentrale Admin-Konfiguration). Bekannte historische
   App-Defaults, die ältere Versionen selbst unter `localStorage.systemPrompt`
@@ -4697,7 +4744,9 @@ Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Rechtliches steht
 in der Sidebar-Fußzeile, seit der Todo-Runde 3 in EINER Zeile
 (`.sidebar-footer-meta`): links Imprint · Privacy · Terms als leise Wörter
 (Impressum direkt erreichbar), rechts `.sidebar-footer-icons` mit zwei gleich
-großen Zeichen, Feedback (`#feedbackButton`, Sprechblase) und GitHub (Build-Commit
+großen Zeichen, Feedback (`#feedbackButton`, Sprechblase; öffnet
+`#feedbackModal`, für Gäste mit Login-Hinweis statt Formular, siehe
+`feedback-dialog.js`) und GitHub (Build-Commit
 im Tooltip); About steht im Public-Footer. Das Kontingent-Glyph über ihr ist
 ein Kuchen (Tagesrest) in einem feinen Ring statt eines offenen Bogens, der wie
 ein Ladekreisel aussah (`#quotaRingArc` r=3.5, stroke-width 7, gleiche
@@ -7426,6 +7475,16 @@ ersten Check statt eines leeren Consensus-Panels.
   mit Quellen, weil eine Watch die nackte Frage neu stellt). Zähler (ab 3.
   Lauf) und „dismissed“ sind modusübergreifend;
   `.resetAfterLogout()` leert und schließt die geladene Watch-Ansicht.
+- **Settings, Help und Feedback sind native `<dialog>`s im Top-Layer.** Sie
+  werden nur über `window.App.modalDialog.open/close` geschaltet, nie über
+  `style.display` (`dialog.modal[open]` zeigt sie, `user-memory.js` prüft die
+  berechnete `display`). `showModal()` macht alles außerhalb inert und legt den
+  Dialog über jedes `z-index`: Ein Overlay, das aus einem dieser Dialoge heraus
+  geöffnet wird und selbst kein modaler `<dialog>` ist (Login-Modal,
+  `#shareModal`, `.popup`, Tooltips), läge darunter und wäre nicht bedienbar.
+  Vorher den Dialog schließen (so macht es „Log in“ im Feedback-Dialog) oder das
+  Overlay ebenfalls als `<dialog>` mit `showModal()` öffnen. Der Hintergrund-
+  Klick braucht ein `pointerdown` auf dem Dialog selbst (Audit F5).
 - **`window.App.sharedModal.open(mode)` / `.close()`** koordinieren den gemeinsam
   genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,
   Background-Scroll-Lock und Rückgabe des Fokus an den Auslöser.

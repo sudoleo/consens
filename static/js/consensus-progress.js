@@ -423,21 +423,51 @@
     renderDetail();
   }
 
+  // The ticker only moves what time and the live stream move: the clock and
+  // the per-model rows (fill, skip offer). Steps, counts and the note change
+  // with a box's state, and the observer below re-renders on exactly that.
   function tick() {
     const time = $("runTime");
-    if (time && startedAt) time.textContent = clockText(Date.now() - startedAt);
-    if (stage === "answers") render();
+    if (time && startedAt) {
+      const text = clockText(Date.now() - startedAt);
+      if (time.textContent !== text) time.textContent = text;
+    }
+    if (stage === "answers") renderDetail();
   }
 
-  function startTicker() {
-    stopTicker();
+  // A hidden tab draws nothing, so it does not tick either. Coming back
+  // catches up at once: the clock counts from startedAt, not from ticks.
+  let tickerWanted = false;
+
+  function runTicker() {
+    if (ticker || !tickerWanted || document.hidden) return;
     ticker = window.setInterval(tick, 200);
   }
 
-  function stopTicker() {
+  function pauseTicker() {
     if (ticker) window.clearInterval(ticker);
     ticker = null;
   }
+
+  function startTicker() {
+    pauseTicker();
+    tickerWanted = true;
+    runTicker();
+  }
+
+  function stopTicker() {
+    tickerWanted = false;
+    pauseTicker();
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      pauseTicker();
+    } else if (tickerWanted) {
+      tick();
+      runTicker();
+    }
+  });
 
   // ---- Visibility ----------------------------------------------------
 
@@ -582,7 +612,7 @@
         const target = panel.id === "consensusSourcesPanel"
           ? panel.querySelector(".consensus-sources-list > li") || panel
           : panel;
-        target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        target.scrollIntoView({ block: "nearest", behavior: window.App.scrollBehavior?.() || "auto" });
       });
     }
   }
@@ -933,7 +963,11 @@
     observer.observe(responseSection, {
       subtree: true,
       attributes: true,
-      attributeFilter: ["data-response-state", "class"]
+      // Everything rowState() reads; the ticker no longer re-renders the
+      // whole block, so a state change must arrive here.
+      attributeFilter: [
+        "data-response-state", "data-response-error", "data-response-skipped", "class"
+      ]
     });
   }
 

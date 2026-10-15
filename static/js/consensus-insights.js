@@ -736,13 +736,13 @@
               const quoteY = highlight.getBoundingClientRect().top + window.scrollY;
               if (quoteY - headerY < window.innerHeight * 0.7) {
                 // Zitat liegt nah am Boxanfang: Header und Zitat zusammen zeigen
-                window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
+                window.scrollTo({ top: Math.max(0, headerY), behavior: window.App.scrollBehavior?.() || "auto" });
               } else {
                 // Zitat liegt tief in der Antwort: Zitat mittig anfahren
-                window.scrollTo({ top: Math.max(0, quoteY - window.innerHeight / 2), behavior: "smooth" });
+                window.scrollTo({ top: Math.max(0, quoteY - window.innerHeight / 2), behavior: window.App.scrollBehavior?.() || "auto" });
               }
             } else {
-              window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
+              window.scrollTo({ top: Math.max(0, headerY), behavior: window.App.scrollBehavior?.() || "auto" });
               box.classList.add("jump-flash");
               setTimeout(function () { box.classList.remove("jump-flash"); }, 2000);
             }
@@ -787,9 +787,9 @@
                   const targetY = quoteY - headerY < window.innerHeight * 0.7
                     ? headerY
                     : quoteY - window.innerHeight / 2;
-                  window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+                  window.scrollTo({ top: Math.max(0, targetY), behavior: window.App.scrollBehavior?.() || "auto" });
                 } else {
-                  window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
+                  window.scrollTo({ top: Math.max(0, headerY), behavior: window.App.scrollBehavior?.() || "auto" });
                   section.classList.add("jump-flash");
                   setTimeout(function () { section.classList.remove("jump-flash"); }, 2000);
                 }
@@ -822,7 +822,7 @@
               if (panel) panel.hidden = false;
               if (tab) tab.setAttribute("aria-expanded", "true");
               card.open = true;
-              card.scrollIntoView({ behavior: "smooth", block: "center" });
+              card.scrollIntoView({ behavior: window.App.scrollBehavior?.() || "auto", block: "center" });
               card.classList.add("is-focused");
               setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
               window.trackUmamiEvent?.("app_consensus_marker_opened", {
@@ -1144,7 +1144,7 @@
             const panel = card.closest("details.consensus-differences-panel");
             if (panel) panel.open = true;
             card.open = true;
-            card.scrollIntoView({ behavior: "smooth", block: "center" });
+            card.scrollIntoView({ behavior: window.App.scrollBehavior?.() || "auto", block: "center" });
             card.classList.add("is-focused");
             setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
             window.trackUmamiEvent?.("app_consensus_marker_opened", { kind: "difference" });
