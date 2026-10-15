@@ -306,7 +306,8 @@ def _timeline(figure: dict) -> str:
             entry = {**entry, "sort": parts[0].isoformat(), "precision": parts[1]}
         if entry.get("sort"):
             items.append(entry)
-    items.sort(key=lambda entry: entry["sort"])
+    # On the same day a single date comes before a span that starts there.
+    items.sort(key=lambda entry: (entry["sort"], entry.get("precision") == "days"))
     if not items:
         return ""
     days = [date.fromisoformat(entry["sort"]).toordinal() for entry in items]
@@ -341,9 +342,10 @@ def _timeline(figure: dict) -> str:
             + (f'<span class="af-note">{escape(entry["note"])}</span>' if entry["note"] else "")
             + "</li>"
         )
-    # Two or three events sit under their ends of the track: first left, last
-    # right. More fold into a grid.
-    ends = " is-ends" if len(items) <= 3 else ""
+    # Two events sit under the two ends of the track: first left, last right.
+    # A third lies wherever its date puts it, so more fold into a grid
+    # instead of pretending to sit under their dots.
+    ends = " is-ends" if len(items) == 2 else ""
     return "".join(track) + f'<ol class="af-events{ends}" style="--af-count:{len(items)}">{"".join(rows)}</ol>'
 
 

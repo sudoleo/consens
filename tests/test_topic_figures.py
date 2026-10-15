@@ -126,6 +126,15 @@ def test_a_stored_timeline_is_ordered_by_its_written_dates_when_drawn():
     ]}
     html = str(topic_figures.figure_html(stored))
     assert html.index("Sep 2026") < html.index("Oct 7–8, 2026")
+    assert "is-ends" in html  # two events: under the two ends of the track
+
+    stored["items"].append({"label": "Rollout starts", "note": "", "disputed": False,
+                            "date": "October 7, 2026"})
+    html = str(topic_figures.figure_html(stored))
+    # A single day comes before the span that starts on it, and three events
+    # no longer claim to sit under their dots.
+    assert html.index("Sep 2026") < html.index("Oct 7, 2026") < html.index("Oct 7–8, 2026")
+    assert "is-ends" not in html
 
 
 def test_figures_are_drawn_as_escaped_html_with_disagreement_marked():
