@@ -20,6 +20,9 @@ API_IDEMPOTENCY_COLLECTION = "api_consensus_idempotency"
 MAX_IDEMPOTENCY_KEY_BYTES = 256
 RUN_LEASE_SECONDS = 60 * 60
 API_RUN_RETENTION_DAYS = 30
+# Done marker of the expiry backfill (audit C12): a finished scan writes it,
+# later restarts read it instead of the whole collection again.
+RETENTION_MARKER_COLLECTION = "app_config"
 RUN_STATUSES = {"accepted", "reserved", "running", "succeeded", "failed"}
 # A deleted terminal run keeps only this content-free tombstone until its
 # original retention expiry. It fences the Idempotency-Key: the same logical
@@ -304,12 +307,25 @@ class FirestoreApiRunRepository:
         )
         return [self._with_id(snap) for snap in query.stream()]
 
+    def _retention_marker_ref(self):
+        # Named after the runs collection, so a renamed collection migrates again.
+        return self._db.collection(RETENTION_MARKER_COLLECTION).document(
+            f"{API_RUNS_COLLECTION}_retention_backfill"
+        )
+
     def backfill_retention(self) -> int:
         """Give legacy documents expiry without changing another run's fence.
 
         Re-read inside the transaction: cleanup or a concurrent migration can
-        change a scanned document before this worker reaches it.
+        change a scanned document before this worker reaches it. Runs once:
+        every run since has its expiry from creation, and a finished scan
+        leaves a marker, so a restart reads one document instead of scanning
+        the collection. A document the scan cannot date keeps no expiry; a
+        rescan would not date it either.
         """
+        marker = self._retention_marker_ref()
+        if marker.get().exists:
+            return 0
         updated = 0
         for scanned in self._db.collection(API_RUNS_COLLECTION).stream():
             if isinstance((scanned.to_dict() or {}).get("expires_at"), datetime):
@@ -339,6 +355,7 @@ class FirestoreApiRunRepository:
                 return True
 
             updated += int(self._transaction(backfill))
+        marker.set({"completed_at": datetime.now(timezone.utc), "updated": updated})
         return updated
 
     def _delete(

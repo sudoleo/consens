@@ -464,6 +464,14 @@ def _build_consensus_prompt(
 # erkennen: Differences und Share-Persistenz werden dann übersprungen.
 CONSENSUS_ERROR_PREFIXES = ("Consensus error:", "Invalid consensus model selected:")
 CONSENSUS_MAX_ATTEMPTS = 2
+# Synthesis and judges are separate phases of a run, each with its own budget
+# (provider_runtime.analysis_run_scope, audit C3). Each phase's call limit is
+# its longest attempt plan: the synthesis tries the chosen engine twice and
+# one fallback; the judges need at most the pro-tier Differences plan (4,
+# _differences_attempts) plus Coverage's three attempts and its one repair.
+# A test holds both against the plans.
+SYNTHESIS_MAX_CALLS = CONSENSUS_MAX_ATTEMPTS + 1
+JUDGE_PHASE_MAX_CALLS = 8
 # Niedrige Temperatur für die Synthese (wie DIFFERENCES_TEMPERATURE eine
 # bewusste Engine-Einstellung); _effective_temperature filtert sie für
 # Reasoning-Modelle, die keine Temperatur akzeptieren, wieder heraus.
@@ -481,6 +489,13 @@ CONSENSUS_INCOMPLETE_TEXT = (
     "Consensus error: the synthesis stopped before it finished and is incomplete."
 )
 
+# The synthesis phase used up its time. Its own text and turn error code: it
+# used to read as "empty response from consensus engine" (audit C3).
+SYNTHESIS_TIME_LIMIT_CODE = "synthesis_time_limit"
+CONSENSUS_TIME_LIMIT_TEXT = (
+    "Consensus error: the synthesis took too long and was stopped."
+)
+
 
 def is_consensus_error_text(text) -> bool:
     """True, wenn der Konsens-Text ein Fehler (oder leer) ist."""
@@ -488,7 +503,28 @@ def is_consensus_error_text(text) -> bool:
     return not stripped or stripped.startswith(CONSENSUS_ERROR_PREFIXES)
 
 
-@analysis_budgeted
+def consensus_failure_code(text) -> str:
+    """Error code of a failed synthesis for the chat turn."""
+    if str(text or "").strip() == CONSENSUS_TIME_LIMIT_TEXT:
+        return SYNTHESIS_TIME_LIMIT_CODE
+    return "consensus_failed"
+
+
+def _analysis_time_spent() -> bool:
+    """The current phase's deadline has passed (a provider timeout raced it)."""
+    budget = current_analysis_budget()
+    return budget is not None and time.monotonic() >= budget.deadline
+
+
+def _provider_error_ends_run(error: Exception) -> bool:
+    """401/402: the OpenRouter key is invalid or out of credit. Every attempt,
+    the fallback included, uses the same key, so none of them can succeed."""
+    if getattr(error, "status_code", None) in {401, 402}:
+        return True
+    return bool(re.search(r"(?:^|[\s:])(?:401|402)(?:[\s:\-]|$)", str(error or "")))
+
+
+@analysis_budgeted(max_calls=SYNTHESIS_MAX_CALLS)
 def query_consensus(
     question: str,
     answers: Mapping[str, str],
@@ -519,13 +555,19 @@ def query_consensus(
     # gesamten Lauf wertlos. Scheitern beide, folgt ein dritter Versuch auf
     # einem anderen Provider mit verfügbarem Key (wie der Fallback-Judge der
     # Differences-Engine); "Consensus error:" bleibt die letzte Stufe.
+    # Nur wiederholbare Fehler (429, 5xx, Transport) bekommen den zweiten
+    # Versuch; 400/403/404 gehen direkt zum Fallback, 401/402 beenden den
+    # Lauf, weil jeder Versuch denselben Key nutzt (Audit C10).
     attempts = [resolved] * CONSENSUS_MAX_ATTEMPTS
     fallback = _fallback_judge_engine(resolved[0], api_keys)
     if fallback:
         attempts.append(fallback)
 
     last_error = "empty response from consensus engine."
+    skip_retries_for = set()
     for provider, api_model, model_ref in attempts:
+        if (provider, api_model) in skip_retries_for:
+            continue
         try:
             result = _call_engine_text(
                 provider, api_model, model_ref, api_keys,
@@ -535,7 +577,9 @@ def query_consensus(
                 temperature=CONSENSUS_TEMPERATURE,
                 require_complete=True,
             )
-        except (ProviderCancelled, AnalysisBudgetExceeded):
+        except AnalysisBudgetExceeded:
+            return CONSENSUS_TIME_LIMIT_TEXT
+        except ProviderCancelled:
             break
         except _IncompleteEngineOutput as e:
             if e.state == completion.TOKEN_LIMIT:
@@ -550,12 +594,18 @@ def query_consensus(
                 "Consensus attempt failed provider=%s model=%s category=%s",
                 provider, api_model, safe_exception(e),
             )
+            if _provider_error_ends_run(e):
+                break
+            if not _provider_error_is_retryable(e):
+                skip_retries_for.add((provider, api_model))
             continue
         if result:
             result = strip_consensus_source_markers(result)
             if result.strip():
                 return result
         last_error = "empty response from consensus engine."
+    if _analysis_time_spent():
+        return CONSENSUS_TIME_LIMIT_TEXT
     return f"Consensus error: {last_error}"
 
 
@@ -2635,7 +2685,7 @@ def _collect_coverage(pool, future, stop=None):
         pool.shutdown(wait=task_transport.get() is not None)
 
 
-@analysis_budgeted
+@analysis_budgeted(max_calls=JUDGE_PHASE_MAX_CALLS)
 def query_differences(
     answers: Mapping[str, str],
     consensus_answer: str,
@@ -3345,7 +3395,7 @@ def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_pro
     )
 
 
-@analysis_budgeted
+@analysis_budgeted(max_calls=SYNTHESIS_MAX_CALLS)
 def stream_consensus(
     question: str,
     answers: Mapping[str, str],
@@ -3372,6 +3422,8 @@ def stream_consensus(
     # danach einmal ein Fallback-Provider mit verfügbarem Key. Deltas eines
     # gescheiterten Versuchs sind unkritisch: das final-Event ersetzt den
     # gerenderten Konsens-Inhalt im Frontend vollständig (injectMarkdown).
+    # Fehlerregeln wie dort: nur wiederholbare Fehler bekommen den zweiten
+    # Versuch, 401/402 beenden den Lauf (Audit C10).
     engine_models = [consensus_model] * CONSENSUS_MAX_ATTEMPTS
     fallback = _fallback_judge_engine(resolved[0], api_keys)
     if fallback:
@@ -3379,9 +3431,14 @@ def stream_consensus(
         # gültiger Engine-Wert für _stream_consensus_engine.
         engine_models.append(fallback[2])
 
+    time_limit = {"type": "final", "text": CONSENSUS_TIME_LIMIT_TEXT, "error": True,
+                  "code": SYNTHESIS_TIME_LIMIT_CODE}
     last_error = "empty response from consensus engine."
     shown = False
+    skip_retries_for = set()
     for engine_model in engine_models:
+        if engine_model in skip_retries_for:
+            continue
         parts = []
         citation_filter = ConsensusCitationFilter()
         state = None
@@ -3406,7 +3463,10 @@ def stream_consensus(
         except _InvalidEngineError as e:
             yield {"type": "final", "text": str(e), "error": True}
             return
-        except (ProviderCancelled, AnalysisBudgetExceeded):
+        except AnalysisBudgetExceeded:
+            yield time_limit
+            return
+        except ProviderCancelled:
             break
         except Exception as e:
             last_error = "provider request failed."
@@ -3414,6 +3474,10 @@ def stream_consensus(
                 "Consensus stream attempt failed engine=%s category=%s",
                 engine_model, safe_exception(e),
             )
+            if _provider_error_ends_run(e):
+                break
+            if not _provider_error_is_retryable(e):
+                skip_retries_for.add(engine_model)
             continue
 
         tail = citation_filter.feed("", final=True)
@@ -3435,10 +3499,13 @@ def stream_consensus(
             return
         last_error = "empty response from consensus engine."
 
+    if _analysis_time_spent():
+        yield time_limit
+        return
     yield {"type": "final", "text": f"Consensus error: {last_error}", "error": True}
 
 
-@analysis_budgeted
+@analysis_budgeted(max_calls=JUDGE_PHASE_MAX_CALLS)
 def stream_differences(
     answers: Mapping[str, str],
     consensus_answer: str,

@@ -4248,14 +4248,22 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   sowie `scored_claims`/`thin_claims`/`total_claims` und den Null-Score.
   Watch/Topic-Verläufe akzeptieren fehlende Scores; daraus entstehen weder
   künstliche Nullpunkte noch numerische Drift-Alarme.
-- `llm/provider_runtime.py::analysis_budgeted` bindet ein gemeinsames,
-  threadsicheres Budget von Synthesestart bis zum Abschluss beider Judges.
-  Default: 180 Sekunden und höchstens acht externe Analyse-Aufrufe insgesamt
-  (einschließlich Fallbacks und Coverage-Repair), konfigurierbar über
-  `ANALYSIS_TIMEOUT_SECONDS` (10–600) und `ANALYSIS_MAX_CALLS` (3–12).
-  Der Browser-SSE-Producer und `consensus_pipeline.analyze_provider_answers`
-  bilden die äußere Grenze; einzelne Engine-Einstiege erhalten denselben
-  Schutz bei direkter Nutzung. Der davor liegende Antwort-Fan-out bleibt
+- Analyse-Budget pro Phase (Audit C3): Der Browser-SSE-Producer und
+  `consensus_pipeline.analyze_provider_answers` laufen in
+  `llm/provider_runtime.py::analysis_run_scope` (`@analysis_run`). Der Lauf
+  trägt die gemeinsame Cancellation; Synthese (`query/stream_consensus`) und
+  Judges (`query/stream_differences`, beide Judges samt Coverage-Thread) sind
+  Phasen mit je eigenem threadsicherem `AnalysisBudget` (`@analysis_budgeted`
+  mit `max_calls`): je `ANALYSIS_TIMEOUT_SECONDS` (Default 180 s, 10–600) und
+  so viele Calls, wie der längste Versuchsplan braucht —
+  `SYNTHESIS_MAX_CALLS` = 3 (zweimal die gewählte Engine, ein Fallback),
+  `JUDGE_PHASE_MAX_CALLS` = 8 (Pro-Differences-Plan 4 + Coverage 3 + Repair 1;
+  ein Test hält beide gegen die Pläne). Eine langsame Synthese kostet die
+  Judges also keine Zeit mehr. `AnalysisBudget.snapshot()` einer Phase meldet
+  die Summe aller Phasen des Laufs (`analysis_runtime`). Ein schon gebundenes
+  Budget (Agent) regiert dagegen jede Phase weiter; ein Engine-Einstieg ohne
+  Lauf öffnet sein eigenes Budget (Agent-Judges je Prüfung im Tool-Thread).
+  `ANALYSIS_MAX_CALLS` (3–12) gilt für alle übrigen Budgets. Der davor liegende Antwort-Fan-out bleibt
   durch seine bestehenden Provider-Limits geschützt.
 - Nicht streamende Engine-Aufrufe und Analyse-SSE verwenden HTTPX-Tasks auf
   dem vorhandenen synchronen Provider-Worker. Disconnect und Deadline brechen
@@ -4630,9 +4638,17 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Coverage-Judge sichtbar, aber eine einzelne Stimme belegt nichts. Dieselbe
   Schwelle filtert sie aus der Opinion-Map.
   alte Bookmarks/Snapshots ohne die Felder degradieren aufs bisherige Rendering.
-- Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei Provider-
-  Fehlern (503, Timeout, ...) ein zweites Mal (`CONSENSUS_MAX_ATTEMPTS`);
-  gescheiterte Finals tragen `error: true`. `chat.py` erkennt Fehlertexte über
+- Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei
+  wiederholbaren Provider-Fehlern (429, 5xx, Timeout, ...) ein zweites Mal
+  (`CONSENSUS_MAX_ATTEMPTS`), danach einmal auf einer Fallback-Familie.
+  400/403/404 überspringen den zweiten Versuch und gehen direkt zum Fallback
+  (`_provider_error_is_retryable`); 401/402 beenden die Synthese sofort, weil
+  jeder Versuch denselben OpenRouter-Key nutzt (`_provider_error_ends_run`,
+  Audit C10). Läuft die Zeit der Synthese-Phase ab, lautet der Text
+  `CONSENSUS_TIME_LIMIT_TEXT` statt „empty response“; das Stream-Final trägt
+  `code: "synthesis_time_limit"`, und der Chat-Turn scheitert mit diesem
+  `error_code` (`consensus_failure_code`, Audit C3).
+  Gescheiterte Finals tragen `error: true`. `chat.py` erkennt Fehlertexte über
   `is_consensus_error_text` und überspringt dann Differences (Judge darf nie
   den Fehlertext "analysieren") sowie die Share-Persistenz; die Differences-
   Spalte zeigt `DIFFERENCES_SKIPPED_TEXT`.
@@ -5467,7 +5483,10 @@ keinen Abgleich.
   Restarbeit wieder auf und reconciled pre-provider Usage-Reservierungen.
 - Run-Inhalt und Idempotenz-Mapping tragen `expires_at` (30 Tage ab Annahme);
   periodischer Cleanup löscht beide, bestehende v1-Dokumente werden beim
-  ersten Maintenance-Lauf nachmigriert. `DELETE /api/v1/consensus/runs/{run_id}`
+  ersten Maintenance-Lauf nachmigriert. Ein vollständiger Scan hinterlässt den
+  Erledigt-Marker `app_config/api_consensus_runs_retention_backfill`
+  (`completed_at`, `updated`); jeder spätere Prozessstart liest nur diesen
+  Marker statt der ganzen Collection (Audit C12). `DELETE /api/v1/consensus/runs/{run_id}`
   löscht Inhalt eigener terminaler Runs früher: Das Run-Dokument wird durch
   einen inhaltsfreien Tombstone (`status=deleted`, UID, Key-Hash, Zeitstempel,
   ursprüngliches `expires_at`) ersetzt, das Idempotenz-Mapping bleibt. Derselbe
@@ -5758,7 +5777,11 @@ keinen Abgleich.
   15 Minuten; fällig ist der Lauf montags 09:00 Europe/Berlin. Der erste Tick
   nach einem Deploy setzt nur `next_run_at` und feuert nie sofort. Ein
   transaktionaler 15-Minuten-Lease (`lease_until`/`lease_run_id`, `_acquire`)
-  verhindert prozessübergreifende Doppelläufe.
+  verhindert prozessübergreifende Doppelläufe. Der geplante Lauf prüft
+  `enabled`/`next_run_at` in derselben Lease-Transaktion noch einmal
+  (`_acquire(..., due_only=True)`, Audit C14): ein zweiter Prozess, der vor dem
+  Ende des ersten „fällig“ gelesen hat, sweept und meldet nicht ein zweites
+  Mal; nur der erzwungene Admin-Lauf überspringt diese Prüfung.
 - **Daten.** Fenster: die letzten 7 Tage bis heute−2 (GSC-Verzug) gegen die
   7 Tage davor. Genau fünf Search-Console-Abfragen über
   `GoogleSearchConsoleClient.search(start_date, end_date, dimensions, *,
@@ -6242,12 +6265,26 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Reload muss dabei vollständig sein: `apply_model_order`/`apply_default_models`
   laufen vor Preset-/Judge-/Watch-Normalisierung, die auf sie zurückfällt, und
   `rebuild_model_configs` baut `MODEL_CONFIGS` daneben auf und tauscht dann ein
-  (nie leer für Leser). Grenze: ein
+  (nie leer für Leser). Dasselbe gilt für alle geteilten Mengen, Listen und
+  Dicts, die Requests ohne Lock lesen (Provider-Modelle, `PREMIUM_MODELS`,
+  `ALLOWED_CONSENSUS_MODELS`, `LIMITS`, Presets, Watch-Modelle, Judge-Familien,
+  `MEMORY_EDIT_CONFIG`; Audit C8): neue Werte werden vorher berechnet und in
+  place ohne leeren Moment getauscht (`_replace_set`: erst ergänzen, dann
+  kürzen; `_replace_dict`; Listen per `lst[:] = neu`). `PREMIUM_MODELS` wächst
+  vor dem Tausch der Modellmengen und schrumpft danach, damit ein neues
+  Pro-Modell nie kurz Free ist; der Rollback (`_restore_runtime_config`) folgt
+  derselben Reihenfolge. Grenze: ein
   einzelner Lauf liest weiter die prozessweiten Maps; eine Aktivierung während
   eines laufenden Requests ist nicht als Snapshot pro Lauf eingefroren.
   `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
+  `normalize_limits_config` erzwingt Mindestwerte (`_LIMIT_MINIMUMS`, Audit
+  C16): `*_max_tokens` ≥ 1024, `*_max_words` ≥ 50,
+  `consensus_max_answer_chars` ≥ 1000, `consensus_max_question_chars` ≥ 200;
+  ein kleinerer Wert (z. B. ein Tippfehler 0) fällt auf den Default zurück,
+  auch beim Admin-Speichern. Zähler wie die Watch-Limits behalten 0 als echte
+  Einstellung, die Follow-up-Kontext-Caps kürzen nur den Kontext.
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
   den Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
   Checkbox in diese Liste aufgenommen werden. Das frühere Feld
@@ -6270,6 +6307,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   nächsten geplanten fremden Familie nicht. In Serverpfaden verwenden
   alle Familien denselben OpenRouter-Key; im Own-Key-Modus gibt es keinen
   Fallback auf das Server-Credential.
+- `app_config/api_consensus_runs_retention_backfill` — Erledigt-Marker des
+  einmaligen `expires_at`-Backfills der v1-API-Runs (`completed_at`, Zahl der
+  ergänzten Runs); fehlt er, scannt der nächste Maintenance-Lauf einmal.
 - `app_config/seo_pulse` — einziger Zustand des SEO-Pulses (§4 „SEO-Puls“):
   `enabled` (Default true), `next_run_at`, `last_run_at`, Lease
   `lease_until`/`lease_run_id` (15 min), `report` (Fenster, Woche/Vorwoche mit
@@ -6580,8 +6620,9 @@ pflegen: `DEFAULT_MODEL_BY_PROVIDER`, `FREE_DEFAULT_MODEL_BY_PROVIDER`,
 Basiswerte, `MODEL_ORDER_BY_PROVIDER`, der Firestore-Load samt Backfill sowie
 `provider_transport.PROVIDER_ORDER/PROVIDER_LABELS`, `engines`, `topics`,
 `opinion_map`, `share_snapshots`, `chat_store`, `watch_scheduler`, Admin und
-Picker. Die `ALLOWED_*_MODELS`-Namen bleiben Aliasse auf DASSELBE Set-Objekt der
-Registry (der Firestore-Load mutiert in place). Familienspezifische Hygiene
+Picker. Die Modellmenge einer Familie heißt nur noch `PROVIDERS[key].models`
+(die früheren `ALLOWED_*_MODELS`-Aliasse sind seit Audit C16 entfernt; der
+Firestore-Load mutiert die Menge in place). Familienspezifische Hygiene
 steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
 Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6 sendet
 `reasoning.enabled=false`, K3 zwingend `reasoning.enabled=true` (auch mit Reasoning-Schalter;

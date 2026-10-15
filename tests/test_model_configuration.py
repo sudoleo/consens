@@ -131,7 +131,7 @@ class ModelConfigurationTests(unittest.TestCase):
         database = mock.Mock()
         database.collection.return_value.document.return_value = document
         before_limits = cfg.get_limits_config()
-        before_openai = set(cfg.ALLOWED_OPENAI_MODELS)
+        before_openai = set(cfg.PROVIDERS["openai"].models)
 
         with (
             mock.patch("app.core.security.db_firestore", database),
@@ -141,7 +141,7 @@ class ModelConfigurationTests(unittest.TestCase):
             cfg.load_models_from_db(strict=True)
 
         self.assertEqual(cfg.get_limits_config(), before_limits)
-        self.assertEqual(set(cfg.ALLOWED_OPENAI_MODELS), before_openai)
+        self.assertEqual(set(cfg.PROVIDERS["openai"].models), before_openai)
 
     def test_admin_update_restores_persisted_document_on_activation_error(self):
         payload = self._valid_admin_payload()
@@ -480,11 +480,119 @@ class ModelConfigurationTests(unittest.TestCase):
             cfg.normalize_limits_config({})["reasoning_max_tokens"], 8192
         )
 
+    def test_limits_below_their_minimum_fall_back_to_the_default(self):
+        """Audit C16: an admin typo of 0 (or 8 for 8192) no longer silences
+        every synthesis; counters keep 0 as a real setting."""
+        normalized = cfg.normalize_limits_config({
+            "consensus_max_tokens": 0,
+            "differences_max_tokens": 8,
+            "free_max_words": 0,
+            "consensus_max_answer_chars": 5,
+            "watch_probe_max_per_day": 0,
+            "share_min_sources": 0,
+        })
+        defaults = cfg.DEFAULT_LIMITS
+        self.assertEqual(normalized["consensus_max_tokens"], defaults["consensus_max_tokens"])
+        self.assertEqual(normalized["differences_max_tokens"], defaults["differences_max_tokens"])
+        self.assertEqual(normalized["free_max_words"], defaults["free_max_words"])
+        self.assertEqual(normalized["consensus_max_answer_chars"], defaults["consensus_max_answer_chars"])
+        self.assertEqual(normalized["watch_probe_max_per_day"], 0)
+        self.assertEqual(normalized["share_min_sources"], 0)
+        # A real, smaller setting above the floor is kept.
+        self.assertEqual(cfg.normalize_limits_config({"consensus_max_tokens": 2048})["consensus_max_tokens"], 2048)
+
+    def test_admin_save_never_stores_a_zero_token_limit(self):
+        payload = {**self._valid_admin_payload(), "revision": 4}
+        payload["limits"] = {**payload["limits"], "consensus_max_tokens": 0}
+        doc_ref = _MemoryModelsDocument({"openai": ["x"], "revision": 4})
+        with (
+            mock.patch.object(admin_router, "_require_admin"),
+            mock.patch.object(admin_router, "db_firestore", doc_ref.database()),
+            mock.patch.object(admin_router, "load_models_from_db", return_value=True),
+        ):
+            admin_router.update_models(mock.Mock(), payload)
+        self.assertEqual(
+            doc_ref.data["limits"]["consensus_max_tokens"],
+            cfg.DEFAULT_LIMITS["consensus_max_tokens"],
+        )
+
+    def test_reload_never_shows_lock_free_readers_an_empty_or_free_premium_state(self):
+        """Audit C8: requests read the model sets, LIMITS and the Consensus
+        list without the config lock while a reload runs. Every state a reader
+        can see in between keeps what stays, and a new Pro model is never
+        allowed while still Free."""
+        views = []
+        recorded = {}
+
+        def reader(base, methods):
+            def wrap(name):
+                def method(self, *args):
+                    result = getattr(base, name)(self, *args)
+                    views.append({key: type(obj).__mro__[1](obj) for key, obj in recorded.items()})
+                    return result
+                return method
+            return type(f"Reader{base.__name__}", (base,), {name: wrap(name) for name in methods})
+
+        ReaderSet = reader(set, ("add", "discard", "remove", "clear", "update", "difference_update",
+                                 "intersection_update", "__ior__", "__iand__", "__isub__"))
+        ReaderDict = reader(dict, ("clear", "update", "pop", "setdefault", "__setitem__", "__delitem__"))
+        ReaderList = reader(list, ("clear", "extend", "append", "insert", "remove", "__setitem__", "__delitem__"))
+
+        openai = cfg.PROVIDERS["openai"]
+        leaving = next(model for model in sorted(cfg.PREMIUM_MODELS & openai.models)
+                       if model != openai.pro_model)
+        arriving = "gpt-reader-probe"
+        payload = self._valid_admin_payload()
+        payload["openai"] = [*payload["openai"], arriving]
+        payload["premium"] = [model for model in payload["premium"] if model != leaving] + [arriving]
+        before = {"premium": set(cfg.PREMIUM_MODELS), "openai": set(openai.models),
+                  "consensus": set(cfg.ALLOWED_CONSENSUS_MODELS)}
+
+        class Snapshot:
+            exists = True
+
+            def to_dict(self):
+                return payload
+
+        database = mock.Mock()
+        database.collection.return_value.document.return_value.get.return_value = Snapshot()
+        state = cfg._capture_runtime_config()
+        revision = cfg.ACTIVE_MODEL_CONFIG_REVISION
+        original_models = openai.models
+        recorded.update(premium=ReaderSet(cfg.PREMIUM_MODELS), openai=ReaderSet(openai.models),
+                        limits=ReaderDict(cfg.LIMITS), consensus=ReaderList(cfg.ALLOWED_CONSENSUS_MODELS))
+        try:
+            object.__setattr__(openai, "models", recorded["openai"])
+            with (
+                mock.patch("app.core.security.db_firestore", database),
+                mock.patch.object(cfg, "PREMIUM_MODELS", recorded["premium"]),
+                mock.patch.object(cfg, "LIMITS", recorded["limits"]),
+                mock.patch.object(cfg, "ALLOWED_CONSENSUS_MODELS", recorded["consensus"]),
+            ):
+                self.assertTrue(cfg.load_models_from_db(strict=True, persist_backfill=False))
+                after = {"premium": set(cfg.PREMIUM_MODELS), "openai": set(openai.models),
+                         "consensus": set(cfg.ALLOWED_CONSENSUS_MODELS)}
+        finally:
+            object.__setattr__(openai, "models", original_models)
+            cfg._restore_runtime_config(state)
+            cfg.ACTIVE_MODEL_CONFIG_REVISION = revision
+
+        self.assertIn(arriving, after["premium"])
+        self.assertNotIn(leaving, after["premium"])
+        self.assertTrue(views)
+        for view in views:
+            for key in ("premium", "openai", "consensus"):
+                self.assertLessEqual(before[key] & after[key], set(view[key]), key)
+            self.assertLessEqual(set(cfg.DEFAULT_LIMITS), set(view["limits"]))
+            # Allowed means runnable: a new Pro model is Pro from its first moment.
+            if arriving in view["openai"]:
+                self.assertIn(arriving, view["premium"])
+
     def test_gemini_models_are_available_to_admin(self):
         enforced = _server_enforced_models()["gemini"]
         self.assertEqual(enforced, [])
-        self.assertIn(cfg.DEFAULT_GEMINI_MODEL, cfg.ALLOWED_GEMINI_MODELS)
-        self.assertIn(cfg.GEMINI_36_FLASH_MODEL, cfg.ALLOWED_GEMINI_MODELS)
+        self.assertIn(cfg.DEFAULT_GEMINI_MODEL, cfg.PROVIDERS["gemini"].models)
+        self.assertIn(cfg.GEMINI_36_FLASH_MODEL, cfg.PROVIDERS["gemini"].models)
 
     def test_admin_premium_is_limited_to_configured_provider_models(self):
         normalized = normalize_models_document({
@@ -645,19 +753,19 @@ class ModelConfigurationTests(unittest.TestCase):
 
     def test_access_control_only_has_free_and_pro_models(self):
         validate_model(
-            cfg.DEFAULT_OPENAI_MODEL, cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False
+            cfg.DEFAULT_OPENAI_MODEL, cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=False
         )
         with self.assertRaises(HTTPException) as denied:
-            validate_model("gpt-5.5", cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False)
+            validate_model("gpt-5.5", cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=False)
         self.assertEqual(denied.exception.status_code, 403)
-        validate_model("gpt-5.5", cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=True)
+        validate_model("gpt-5.5", cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=True)
 
         # Nach Entfernen des Early-Gates darf DeepSeek Pro nicht ueber das
         # fruehere is_free-Override am Backend-Gate vorbeikommen.
         with self.assertRaises(HTTPException) as deepseek_denied:
             validate_model(
                 cfg.DEEPSEEK_PRO_MODEL,
-                cfg.ALLOWED_DEEPSEEK_MODELS,
+                cfg.PROVIDERS["deepseek"].models,
                 "DeepSeek",
                 is_pro=False,
             )
