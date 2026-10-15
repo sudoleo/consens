@@ -2034,6 +2034,10 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
           const consensus = document.getElementById("consensusModelDropdown");
           consensus._customModelPicker.displayButton.click();
           const fast = consensus._customModelPicker.menu.querySelector('[data-preset="fast"]');
+          // Who answers: one provider mark per model, decorative for screen readers.
+          const marks = fast.querySelector('.model-picker-preset-marks');
+          const markCount = marks ? marks.querySelectorAll('.model-picker-preset-mark img').length : 0;
+          const marksHidden = marks?.getAttribute('aria-hidden') === 'true';
           fast.click();
           const configured = window.CONSENSUS_PRESETS.find(preset => preset.id === "fast");
           const actual = Object.fromEntries(window.App.modelPrefs
@@ -2053,6 +2057,8 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
             storedPreset: localStorage.getItem("pref_consensus_preset"),
             understandableLabel,
             hasProBadge,
+            markCount,
+            marksHidden,
             proModalDisplay: document.getElementById("proFeatureModal").style.display,
             featureNoticeHidden: document.getElementById("featureAccessNotice").hidden,
           };
@@ -2063,6 +2069,8 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     assert result["storedPreset"] == "fast"
     assert result["understandableLabel"]
     assert result["hasProBadge"]
+    assert result["markCount"] == len(result["expected"])
+    assert result["marksHidden"]
     assert result["proModalDisplay"] != "block"
     assert result["featureNoticeHidden"] is False
 

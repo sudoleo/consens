@@ -265,6 +265,85 @@
   color: inherit;
 }
 
+/* Name line: the label spans the row so the provider marks sit at its right
+   end, level with the name. Every preset row keeps the column of the
+   selected check free, so the stacks line up under each other. */
+.model-picker-preset-option .model-picker-preset-label {
+  flex: 1 1 auto;
+}
+
+.model-picker-preset-option:not(.model-picker-custom-option) {
+  padding-right: 30px;
+}
+
+.model-picker-preset-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.model-picker-preset-head .model-picker-preset-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Who answers: overlapping provider marks, monochrome at rest like the
+   composer stack, in their own colours while the row is pointed at. The grey
+   sits on the mark, not the image, so dark mode keeps inverting the black
+   logos underneath. The ring takes the row's tone to keep the marks apart. */
+.model-picker-preset-marks {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 5px;
+}
+
+.model-picker-preset-mark {
+  --mark-ring: var(--app-surface, var(--raise));
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: -4px;
+  border-radius: 50%;
+  /* One step off the menu, so each mark reads as its own disc. */
+  background: var(--ground);
+  box-shadow: 0 0 0 1.5px var(--mark-ring);
+  filter: grayscale(1);
+  opacity: .72;
+  transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
+}
+
+/* Dark mode: the ground is far darker than the menu; step up instead. */
+.dark-mode .model-picker-preset-mark {
+  background: color-mix(in srgb, var(--app-surface, var(--raise)) 86%, var(--ink));
+}
+
+.model-picker-preset-mark img {
+  width: 11px;
+  height: 11px;
+  object-fit: contain;
+}
+
+.model-picker-preset-mark .model-mark-fallback {
+  width: auto;
+  height: auto;
+  font-size: 9px;
+}
+
+.model-picker-preset-option:is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]):not(.is-selected) .model-picker-preset-mark {
+  --mark-ring: var(--app-surface-hover, var(--raise));
+}
+
+.model-picker-preset-option:is(:hover, :focus-visible):not(:disabled) .model-picker-preset-mark {
+  filter: none;
+  opacity: 1;
+}
+
 .model-picker-preset-option.is-locked {
   cursor: pointer;
   opacity: 0.7;

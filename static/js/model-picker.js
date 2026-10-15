@@ -588,6 +588,30 @@
     });
   }
 
+  // Who answers in a preset: one provider mark per answer model, stacked in
+  // the registry order. Decorative for screen readers (name and hint carry
+  // the meaning); the tooltip names the models.
+  function createPresetMarks(preset) {
+    const models = preset.models || {};
+    const prefs = (window.App.modelPrefs || []).filter(pref => models[pref.provider]);
+    if (!prefs.length || typeof window.App.createModelMark !== "function") return null;
+    const stack = document.createElement("span");
+    stack.className = "model-picker-preset-marks";
+    stack.setAttribute("aria-hidden", "true");
+    stack.title = prefs.map(pref => {
+      const option = Array.from(document.getElementById(pref.selectId)?.options || [])
+        .find(candidate => candidate.value === models[pref.provider]);
+      return window.App.getModelOptionLabel?.(option) || pref.label;
+    }).join(" · ");
+    prefs.forEach(pref => {
+      const mark = document.createElement("span");
+      mark.className = "model-picker-preset-mark";
+      mark.appendChild(window.App.createModelMark(pref.provider));
+      stack.appendChild(mark);
+    });
+    return stack;
+  }
+
   function renderConsensusPresetMenu(select, state) {
     const activePresetId = getActiveConsensusPresetId();
     // Inside a linked menu the presets are one level below the overview.
@@ -613,10 +637,22 @@
 
       const label = document.createElement("span");
       label.className = "model-picker-option-label model-picker-preset-label";
+      // Name line: name, Pro badge, and on the right who answers.
+      const head = document.createElement("span");
+      head.className = "model-picker-preset-head";
       const name = document.createElement("span");
       name.className = "model-picker-preset-name";
       name.textContent = preset.label;
-      label.appendChild(name);
+      head.appendChild(name);
+      if (preset.pro_only) {
+        const badge = document.createElement("span");
+        badge.className = "pro-badge model-picker-pro-badge";
+        badge.textContent = "Pro";
+        head.appendChild(badge);
+      }
+      const marks = createPresetMarks(preset);
+      if (marks) head.appendChild(marks);
+      label.appendChild(head);
       if (preset.hint) {
         const hint = document.createElement("span");
         hint.className = "model-picker-preset-hint";
@@ -624,13 +660,6 @@
         label.appendChild(hint);
       }
       item.appendChild(label);
-
-      if (preset.pro_only) {
-        const badge = document.createElement("span");
-        badge.className = "pro-badge model-picker-pro-badge";
-        badge.textContent = "Pro";
-        item.appendChild(badge);
-      }
 
       item.addEventListener("click", event => {
         event.preventDefault();

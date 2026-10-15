@@ -700,7 +700,11 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set genau
   sechs aus den Registry-Familien gewählte Antwortmodelle plus Consensus-Engine. High Quality (interne ID
   `thorough`) ist Pro-only und zeigt
-  ein Pro-Badge; eine manuelle Antwort- oder Consensus-Modellwahl wechselt zu
+  ein Pro-Badge neben dem Namen. Rechts in der Namenszeile jeder Preset-Zeile
+  stehen die Anbieterzeichen seiner Antwortmodelle als Stapel
+  (`createPresetMarks`, über `App.createModelMark`; einfarbig, Farbe bei Hover,
+  Tooltip mit den Modellnamen, `aria-hidden`); alle Preset-Zeilen halten die
+  Haken-Spalte frei, damit die Stapel bündig stehen. Eine manuelle Antwort- oder Consensus-Modellwahl wechselt zu
   Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt. Die High-Quality-Basis nutzt OpenAI GPT-5.6 Sol; gespeicherte
   Legacy-Werte mit GPT-5.5 werden bei der Normalisierung migriert. Zustand in
   `consensus_preset` ("custom" = explizite Modellwahl, ausgeloest durch
