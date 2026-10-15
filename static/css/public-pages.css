@@ -1888,6 +1888,8 @@ canvas {
 .af .is-disputed > .af-label::after,
 .af-row.is-disputed .af-value::after { content: " · disputed"; color: var(--partial); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 
+/* Die Listen sitzen im Antworttext (.share-md ol/ul) und brauchen deshalb
+   eine Stufe mehr Spezifität, sonst erben sie dessen Einzug. */
 /* Zeitleiste: Punkte maßstabsgetreu auf einer Achse, darunter die Ereignisse. */
 .af-track { position: relative; height: 34px; margin: 0 0 8px; }
 .af-axis { position: absolute; left: 0; right: 0; top: 16px; height: 1px; background: var(--border); }
@@ -1896,17 +1898,17 @@ canvas {
 .af-gap { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); color: var(--muted); font-size: var(--font-size-xs); white-space: nowrap; }
 .af-dot { position: absolute; top: 10px; width: 13px; height: 13px; border-radius: 50%; background: var(--heading); border: 3px solid var(--page-bg); transform: translateX(-50%); }
 .af-dot.is-disputed { background: var(--partial); }
-.af-events { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px 22px; }
+.af .af-events { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px 22px; }
 .af-event { min-width: 0; }
-.af-events.is-ends { grid-template-columns: repeat(var(--af-count), minmax(0, 1fr)); }
-.af-events.is-ends .af-event:last-child:not(:first-child) { text-align: right; }
+.af .af-events.is-ends { grid-template-columns: repeat(var(--af-count), minmax(0, 1fr)); }
+.af .af-events.is-ends .af-event:last-child:not(:first-child) { text-align: right; }
 .af-event time { display: block; color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
 
 /* Status-Tafel: eine Spalte je Stand, Form + Farbe im Kopf. */
 .af-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px 26px; }
 .af-column { min-width: 0; }
 .af-column-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--heading); font-weight: var(--font-weight-semibold); }
-.af-column ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.af .af-column ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .af-column li { padding-top: 8px; border-top: 1px solid var(--line-soft, var(--border)); }
 .af-glyph { flex: none; width: 16px; height: 16px; }
 .af-glyph.is-confirmed { color: var(--agree); }
@@ -1915,7 +1917,7 @@ canvas {
 
 /* Zahlen: Balken nur, wenn alle dieselbe Einheit haben. */
 .af-unit { margin: -8px 0 12px; color: var(--muted); font-size: var(--font-size-xs); }
-.af-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.af .af-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .af-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; }
 .af-rows.has-bars .af-row { grid-template-columns: minmax(0, 14em) minmax(0, 1fr) auto; }
 .af-bar { position: relative; height: 12px; }
@@ -1924,8 +1926,8 @@ canvas {
 .af-value { color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 
 @media (max-width: 700px) {
-  .af-events.is-ends { grid-template-columns: minmax(0, 1fr); }
-  .af-events.is-ends .af-event:last-child:not(:first-child) { text-align: left; }
+  .af .af-events.is-ends { grid-template-columns: minmax(0, 1fr); }
+  .af .af-events.is-ends .af-event:last-child:not(:first-child) { text-align: left; }
   .af-rows.has-bars .af-row { grid-template-columns: minmax(0, 1fr) auto; }
   .af-rows.has-bars .af-bar { grid-column: 1 / -1; grid-row: 2; }
 }

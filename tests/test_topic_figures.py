@@ -197,3 +197,11 @@ def test_a_topic_check_stores_its_figures_and_the_page_draws_them(monkeypatch):
     assert answer.index("Release date</h2>") < answer.index("af-timeline") < answer.index("broader availability")
     assert "Sep 30, 2026" in text and "13 days" in text
     assert "TOPICFIGURESLOT" not in text
+
+
+def test_figure_lists_do_not_inherit_the_answer_list_indent():
+    """The figures sit inside the answer (.share-md), whose ol/ul rules are
+    one step more specific than a bare class: the figure lists need two."""
+    css = open("static/css/public-pages.css", encoding="utf-8").read()
+    for selector in (".af .af-events {", ".af .af-column ul {", ".af .af-rows {"):
+        assert selector in css
