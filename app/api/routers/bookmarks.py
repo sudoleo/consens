@@ -24,6 +24,7 @@ from app.core.security import verify_user_token, extract_id_token, db_firestore
 from app.services.llm.attachments import normalize_attachment_meta
 from app.services import persistence_guard, share_snapshots
 from app.services.chat_store import (
+    CONSENSUS_MAX_LENGTH,
     TURN_PAGE_SIZE,
     TURN_PAGE_SIZE_MAX,
     ChatCursorUnavailable,
@@ -246,6 +247,50 @@ def _model_provenance(included_models) -> tuple[list[str], dict[str, str]]:
     return providers, labels
 
 
+def _completed_turn_payload(uid: str, chat_binding: dict | None) -> dict | None:
+    """Consensus fields of the owner's completed chat turn, or None."""
+    if not chat_binding:
+        return None
+    try:
+        turn = _chat_store().get_turn(
+            uid, chat_binding["chat_id"], chat_binding["turn_id"]
+        )
+    except ChatNotFound:
+        return None
+    if not turn or turn.get("status") != "completed":
+        return None
+    if turn.get("execution_mode") == "agent":
+        raise HTTPException(status_code=409, detail="Agent answers are not consensus results.")
+    answers = turn.get("model_answers")
+    clean_answers = {}
+    model_labels = {}
+    if isinstance(answers, dict):
+        clean_answers = {
+            provider: (
+                str(value.get("answer") or "")
+                if isinstance(value, dict) else str(value or "")
+            )
+            for provider, value in answers.items()
+        }
+        model_labels = {
+            provider: str(value.get("model_label") or "")
+            for provider, value in answers.items()
+            if isinstance(value, dict) and value.get("model_label")
+        }
+    return {
+        "question": str(turn.get("question") or ""),
+        "consensus": str(turn.get("consensus") or ""),
+        "differences": str(turn.get("differences") or ""),
+        "differences_data": turn.get("differences_data"),
+        "sources": turn.get("sources"),
+        "model_responses": clean_answers,
+        "included_models": turn.get("included_models"),
+        "model_labels": model_labels,
+        "consensus_model": str(turn.get("consensus_model") or ""),
+        "result_id": str(turn.get("result_id") or ""),
+    }
+
+
 def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dict | None):
     """Materialize consensus fields from an owner-bound completed server run."""
     if result_id:
@@ -263,48 +308,36 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
                 "vote_subject_id": str(pending.get("vote_subject_id") or result_id),
                 "result_id": result_id,
             }
-    if chat_binding:
-        try:
-            turn = _chat_store().get_turn(
-                uid, chat_binding["chat_id"], chat_binding["turn_id"]
-            )
-        except ChatNotFound:
-            turn = None
-        if turn and turn.get("status") == "completed":
-            if turn.get("execution_mode") == "agent":
-                raise HTTPException(status_code=409, detail="Agent answers are not consensus results.")
-            answers = turn.get("model_answers")
-            clean_answers = {}
-            model_labels = {}
-            if isinstance(answers, dict):
-                clean_answers = {
-                    provider: (
-                        str(value.get("answer") or "")
-                        if isinstance(value, dict) else str(value or "")
-                    )
-                    for provider, value in answers.items()
-                }
-                model_labels = {
-                    provider: str(value.get("model_label") or "")
-                    for provider, value in answers.items()
-                    if isinstance(value, dict) and value.get("model_label")
-                }
-            return {
-                "question": str(turn.get("question") or ""),
-                "consensus": str(turn.get("consensus") or ""),
-                "differences": str(turn.get("differences") or ""),
-                "differences_data": turn.get("differences_data"),
-                "sources": turn.get("sources"),
-                "model_responses": clean_answers,
-                "included_models": turn.get("included_models"),
-                "model_labels": model_labels,
-                "consensus_model": str(turn.get("consensus_model") or ""),
-                "result_id": str(turn.get("result_id") or ""),
-            }
+    turn = _completed_turn_payload(uid, chat_binding)
+    if turn is not None:
+        return turn
     raise HTTPException(
         status_code=409,
         detail="Consensus bookmarks require an owned completed run.",
     )
+
+
+def _stored_chat_binding(bookmark: dict) -> dict | None:
+    """The chat turn a saved bookmark points at; None for a legacy bookmark."""
+    chat_id = str(bookmark.get("chat_id") or "")
+    turn_id = str(bookmark.get("turn_id") or "")
+    if CHAT_ID_RE.fullmatch(chat_id) and CHAT_ID_RE.fullmatch(turn_id):
+        return {"chat_id": chat_id, "turn_id": turn_id}
+    return None
+
+
+def _same_consensus(turn_text, bookmark_text) -> bool:
+    """Whether the bookmark's consensus snapshot is the one of this turn.
+
+    The turn stores the text NFKC-normalized, stripped and bounded
+    (``chat_store``); the bookmark keeps the engine's text as it came.
+    """
+    def normalized(value):
+        text = unicodedata.normalize("NFKC", str(value or "")).strip()
+        return text[:CONSENSUS_MAX_LENGTH].rstrip()
+
+    turn_text = normalized(turn_text)
+    return bool(turn_text) and turn_text == normalized(bookmark_text)
 
 
 def _chat_store():
@@ -896,39 +929,45 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     responses = bookmark.get("responses")
     responses = responses if isinstance(responses, dict) else {}
     consensus_text = str(responses.get("consensus") or "").strip()
-    question = _bookmark_display_question(bookmark)
-    if not question or not consensus_text:
+    if not consensus_text:
         raise HTTPException(status_code=400, detail="This bookmark has no consensus result.")
 
+    # A pending result is written only by the server (consensus engine or the
+    # turn-based rebuild below), so a live one can be shared as it is.
     existing_id = str(bookmark.get("share_result_id") or "").strip()
     if share_snapshots.pending_result_is_available(uid, existing_id, db=db_firestore):
         return {"status": "success", "result_id": existing_id, "created": False}
 
-    compared = responses.get("differences_data")
-    compared = compared.get("models_compared") if isinstance(compared, dict) else []
-    compared = set(compared) if isinstance(compared, list) else set()
-    stored_providers = bookmark.get("included_providers")
-    included_providers = (
-        [
-            provider for provider in share_snapshots.PROVIDER_ORDER
-            if isinstance(stored_providers, list) and provider in stored_providers
-        ]
-        if isinstance(stored_providers, list)
-        else [
-            provider for provider in share_snapshots.PROVIDER_ORDER
-            if str(responses.get(provider) or "").strip() or provider in compared
-        ]
-    )
+    # A public share must never show what a browser claimed (audit S3). The
+    # model save (POST /bookmark) still writes `query`, `sources` and model
+    # labels of this document, so a new share is built from the completed
+    # chat turn the consensus was saved from instead. A legacy bookmark
+    # without a turn can only reuse its live pending result above.
+    turn = _completed_turn_payload(uid, _stored_chat_binding(bookmark))
+    if turn is None or not _same_consensus(turn["consensus"], consensus_text):
+        raise HTTPException(
+            status_code=409,
+            detail="This saved consensus can no longer be shared. Ask the question again to share it.",
+        )
+    included_providers, model_labels = _model_provenance(turn["included_models"])
+    model_labels.update(turn["model_labels"])
+    # The bookmark's structured differences are server-written (consensus
+    # save, Resolve round) and may carry a Resolve result the turn lacks; the
+    # consensus check above binds them to this turn.
+    differences_data = responses.get("differences_data")
+    if not isinstance(differences_data, dict):
+        differences_data = turn["differences_data"]
     payload = share_snapshots.build_pending_result(
         uid=uid,
-        question=question,
-        consensus_md=consensus_text,
-        differences_data=responses.get("differences_data"),
-        differences_text=responses.get("differences") or "",
-        model_sources=bookmark.get("sources") or [],
+        question=turn["question"],
+        consensus_md=turn["consensus"],
+        differences_data=differences_data,
+        differences_text=turn["differences"],
+        model_sources=turn["sources"] or [],
         included_providers=included_providers,
-        model_labels=bookmark.get("model_labels"),
-        consensus_model=bookmark.get("consensus_model") or "",
+        model_labels=model_labels,
+        # Written only by the consensus save; the turn keeps the requested engine.
+        consensus_model=bookmark.get("consensus_model") or turn["consensus_model"],
     )
     if payload is None:
         raise HTTPException(status_code=400, detail="This bookmark cannot be shared.")

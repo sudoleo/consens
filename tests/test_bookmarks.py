@@ -15,7 +15,7 @@ from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
 from app.services import share_snapshots
 from app.services.chat_store import ChatCursorUnavailable, InvalidChatCursor
-from test_chat_history import FakeChatDatabase
+from test_chat_history import FakeChatDatabase, FakeTransaction as ChatFakeTransaction
 
 
 class FakeSnapshot:
@@ -913,30 +913,15 @@ def test_chat_bookmark_conversation_falls_back_without_losing_middle_turns():
     ]
 
 
-def test_legacy_consensus_bookmark_gets_new_share_result():
-    bookmark_id = "V2h5Pw__"
-    bookmark_ref = FakeBookmarkRef(
-        bookmark_id,
-        {
-            "query": "Why?",
-            "responses": {
-                "OpenAI": "Existing model answer",
-                "Gemini": "Another model answer",
-                "consensus": "Stored consensus",
-                "differences": "Stored differences",
-            },
-            "sources": [{"id": "S1", "url": "https://example.test/source"}],
-        },
-    )
-    fake_db = FakeFirestore(bookmark_ref)
+def _prepare_share_result(bookmark_ref, chat_store, *, new_result_id="R" * 16):
     app = FastAPI()
     app.state.limiter = limiter
+    limiter.reset()
     app.include_router(bookmarks_router.router)
-    new_result_id = "R" * 16
-
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+        patch.object(bookmarks_router, "_chat_store", return_value=chat_store),
         patch.object(
             bookmarks_router.share_snapshots,
             "pending_result_is_available",
@@ -950,19 +935,257 @@ def test_legacy_consensus_bookmark_gets_new_share_result():
     ):
         response = TestClient(app).post(
             "/bookmark/consensus/share-result",
-            json={"id_token": "token", "bookmarkId": bookmark_id},
+            json={"id_token": "token", "bookmarkId": bookmark_ref.id},
         )
+    payload = save_pending.call_args.args[0] if save_pending.called else None
+    return response, payload
 
-    assert response.status_code == 200
-    assert response.json() == {
-        "status": "success", "result_id": new_result_id, "created": True,
+
+class OneTurnChatStore:
+    def __init__(self, turn):
+        self.turn = turn
+
+    def get_turn(self, uid, chat_id, turn_id):
+        assert uid == "uid-1"
+        if (chat_id, turn_id) != ("c" * 32, "2" * 32):
+            raise bookmarks_router.ChatNotFound("Chat not found")
+        return self.turn
+
+
+def _completed_turn(**overrides):
+    return {
+        "status": "completed",
+        "question": "Why is the sky blue?",
+        "consensus": "Rayleigh scattering. [S1]",
+        "differences": "No material differences.",
+        "differences_data": {"claims": [], "differences": [], "models_compared": ["OpenAI"]},
+        "sources": [{"id": "S1", "title": "NASA", "url": "https://science.nasa.gov/sky"}],
+        "included_models": ["OpenAI", "Gemini"],
+        "consensus_model": "Gemini",
+        "model_answers": {
+            "OpenAI": {"answer": "Scattering.", "model_label": "GPT-6 Luna"},
+            "Gemini": {"answer": "Scattering too.", "model_label": "Gemini 3 Flash"},
+        },
+        "result_id": "",
+        **overrides,
     }
-    assert bookmark_ref.data["share_result_id"] == new_result_id
-    payload = save_pending.call_args.args[0]
-    assert payload["owner_uid"] == "uid-1"
-    assert payload["question"] == "Why?"
-    assert payload["consensus_md"] == "Stored consensus"
-    assert payload["included_models"] == ["OpenAI", "Google Gemini"]
+
+
+def test_legacy_bookmark_without_a_turn_gets_no_new_share_result():
+    """Without a chat turn nothing proves where `query`/`sources` came from."""
+    bookmark_ref = FakeBookmarkRef(
+        "V2h5Pw__",
+        {
+            "query": "Why?",
+            "responses": {
+                "OpenAI": "Existing model answer",
+                "consensus": "Stored consensus",
+                "differences": "Stored differences",
+            },
+            "sources": [{"id": "S1", "url": "https://example.test/source"}],
+        },
+    )
+
+    response, payload = _prepare_share_result(bookmark_ref, OneTurnChatStore(None))
+
+    assert response.status_code == 409
+    assert "Ask the question again" in response.json()["detail"]
+    assert payload is None
+    assert "share_result_id" not in bookmark_ref.data
+
+
+def test_bookmark_share_is_rebuilt_from_its_completed_turn():
+    bookmark_ref = FakeBookmarkRef(
+        "sky_bookmark",
+        {
+            # The model save (POST /bookmark) may have written these three;
+            # none of them may reach the share.
+            "query": "Client claimed question",
+            "sources": [{"id": "S1", "url": "https://phish.example/login"}],
+            "model_labels": {"OpenAI": "Visit phish example"},
+            "chat_id": "c" * 32,
+            "turn_id": "2" * 32,
+            "consensus_model": "Anthropic",
+            "responses": {
+                "consensus": "Rayleigh scattering. [S1]",
+                "differences": "Stale bookmark differences",
+                # The Resolve round writes its server result only here.
+                "differences_data": {
+                    "claims": [],
+                    "differences": [{
+                        "claim": "Main cause",
+                        "type": "contradiction",
+                        "severity": "major",
+                        "positions": [
+                            {"stance": "Rayleigh scattering.", "models": ["OpenAI"]},
+                            {"stance": "Mie scattering.", "models": ["Gemini"]},
+                        ],
+                        "resolution": {
+                            "outcome": "resolved",
+                            "results": [{"model": "Gemini", "decision": "revise",
+                                         "position": "Rayleigh", "reason": "Wavelength"}],
+                        },
+                    }],
+                    "models_compared": ["OpenAI", "Gemini"],
+                },
+            },
+        },
+    )
+
+    response, payload = _prepare_share_result(
+        bookmark_ref, OneTurnChatStore(_completed_turn())
+    )
+
+    assert response.status_code == 200, response.text
+    assert payload["question"] == "Why is the sky blue?"
+    assert payload["consensus_md"] == "Rayleigh scattering. [S1]"
+    assert payload["differences_text"] == "No material differences."
+    assert [source["url"] for source in payload["sources"]] == ["https://science.nasa.gov/sky"]
+    assert payload["included_models"] == [
+        "OpenAI: GPT-6 Luna", "Google Gemini: Gemini 3 Flash",
+    ]
+    assert payload["consensus_model"] == "Anthropic"
+    [difference] = payload["differences_data"]["differences"]
+    assert difference["resolution"]["outcome"] == "resolved"
+    assert bookmark_ref.data["share_result_id"] == "R" * 16
+
+
+@pytest.mark.parametrize("turn", [
+    None,
+    _completed_turn(status="pending"),
+    # The bookmark points at a turn whose answer is not its consensus.
+    _completed_turn(consensus="A different answer."),
+])
+def test_bookmark_share_needs_the_completed_turn_of_its_consensus(turn):
+    bookmark_ref = FakeBookmarkRef(
+        "sky_bookmark",
+        {
+            "query": "Why is the sky blue?",
+            "chat_id": "c" * 32,
+            "turn_id": "2" * 32,
+            "responses": {"consensus": "Rayleigh scattering. [S1]"},
+        },
+    )
+
+    response, payload = _prepare_share_result(bookmark_ref, OneTurnChatStore(turn))
+
+    assert response.status_code == 409
+    assert payload is None
+
+
+def _deep_merged(current, incoming):
+    merged = dict(current)
+    for key, value in incoming.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merged(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+class _MergingTransaction(ChatFakeTransaction):
+    def set(self, ref, data, merge=False):
+        current = self.database.documents.get(ref.path)
+        super().set(ref, _deep_merged(current, data) if merge and current is not None else data)
+
+
+class FirestoreMergeDatabase(FakeChatDatabase):
+    """Merges nested maps on set(merge=True) like Firestore does.
+
+    The plain fake replaces the document instead. The share attack depends on
+    the real behaviour: a model save merges its answer into `responses` and
+    leaves the stored consensus where it is.
+    """
+
+    def run_transaction(self, operation):
+        transaction = _MergingTransaction(self)
+        result = operation(transaction)
+        transaction.commit()
+        return result
+
+    def apply_set(self, ref, data, merge=False):
+        current = self.documents.get(ref.path)
+        if merge and current is not None:
+            data, merge = _deep_merged(current, data), False
+        super().apply_set(ref, data, merge=merge)
+
+
+def test_a_model_save_cannot_put_a_forged_question_or_sources_on_a_share():
+    """Audit S3: real consensus, forged question and sources, then share."""
+    from app.api.routers import share as share_router
+    from app.services.chat_store import ChatStore
+
+    database = FirestoreMergeDatabase()
+    store = ChatStore(database)
+    chat = store.create_chat("uid-1")
+    question = "Why is the sky blue?"
+    turn = store.create_turn(
+        "uid-1", chat["id"], question=question, mode="Standard",
+        deep_search=False, selected_models=["OpenAI", "Gemini"],
+        consensus_model="Gemini",
+    )
+    store.complete_turn(
+        "uid-1", chat["id"], turn["id"],
+        question=question,
+        model_answers={
+            "OpenAI": {"answer": "Scattering.", "model_label": "GPT-6 Luna"},
+            "Gemini": {"answer": "Scattering too.", "model_label": "Gemini 3 Flash"},
+        },
+        consensus="Short wavelengths scatter most. [S1]",
+        differences="No material differences.",
+        differences_data=None,
+        sources=[{"id": "S1", "title": "NASA", "url": "https://science.nasa.gov/sky"}],
+    )
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    bookmarks_router.api_uid_limiter.reset()
+    app.include_router(bookmarks_router.router)
+    app.include_router(share_router.router)
+    client = TestClient(app)
+    bookmark_id = "sky_bookmark"
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(share_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", database),
+        patch.object(share_snapshots, "db_firestore", database),
+        patch.object(share_snapshots, "schedule_share_cleanup"),
+    ):
+        saved = client.post("/bookmark/consensus", json={
+            "id_token": "token", "bookmarkId": bookmark_id, "question": question,
+            "chatId": chat["id"], "turnId": turn["id"],
+        })
+        assert saved.status_code == 200, saved.text
+        forged = client.post("/bookmark", json={
+            "id_token": "token", "bookmarkId": bookmark_id,
+            "question": "Which bank login do I need to verify my account?",
+            "response": "Any text", "modelName": "OpenAI", "mode": "Standard",
+            "sources": [{"id": "S1", "title": "Verify now",
+                         "url": "https://phish.example/login"}],
+        })
+        assert forged.status_code == 200, forged.text
+        # The forgery landed next to the real consensus on the private bookmark.
+        bookmark = forged.json()["bookmark"]
+        assert bookmark["query"].startswith("Which bank login")
+        assert bookmark["sources"][0]["url"] == "https://phish.example/login"
+        assert bookmark["responses"]["consensus"] == "Short wavelengths scatter most. [S1]"
+
+        prepared = client.post("/bookmark/consensus/share-result", json={
+            "id_token": "token", "bookmarkId": bookmark_id,
+        })
+        assert prepared.status_code == 200, prepared.text
+        shared = client.post("/api/share", json={
+            "id_token": "token", "result_id": prepared.json()["result_id"],
+        })
+        assert shared.status_code == 200, shared.text
+
+    share = database.documents[(share_snapshots.SHARES_COLLECTION, shared.json()["share_id"])]
+    assert share["question"] == question
+    assert share["consensus_md"] == "Short wavelengths scatter most. [S1]"
+    assert [source["url"] for source in share["sources"]] == ["https://science.nasa.gov/sky"]
+    assert "phish.example" not in json.dumps(share, default=str)
+    assert "bank login" not in json.dumps(share, default=str)
 
 
 def test_consensus_bookmark_reuses_live_share_result():
