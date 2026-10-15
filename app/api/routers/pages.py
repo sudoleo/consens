@@ -569,6 +569,15 @@ def read_root(request: Request):
     response.headers["Cache-Control"] = "private, no-store"
     return response
 
+
+@router.get("/api/build", include_in_schema=False)
+@limiter.limit("60/minute")
+def live_build(request: Request):
+    """The build this server runs. An open app window (an installed app, a tab
+    left open for days) compares it with its own and reloads itself while
+    idle (static/js/app-update.js). Reads no database."""
+    return JSONResponse({"build": get_commit_short()}, headers={"Cache-Control": "no-store"})
+
 @router.get("/admin", response_class=HTMLResponse)
 def admin_page(request: Request):
     firebase_config = {

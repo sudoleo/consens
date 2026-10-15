@@ -160,6 +160,10 @@
         },
         "static/js/query-send.js",
         "static/js/tab-status.js",
+        {
+          "file": "static/js/app-update.js",
+          "note": "App.appUpdate: loads a newer deploy while the page is idle and unseen, then reopens the saved chat (window.openBookmark, consensio:auth-state)."
+        },
         "static/js/composer-collapse.js",
         {
           "file": "static/js/composer-keyboard.js",

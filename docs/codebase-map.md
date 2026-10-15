@@ -603,6 +603,9 @@ unveränderte Dateien bleiben unangetastet. `previous_assets` hält pro JS-/CSS-
 Gruppe zwei Vorgängerversionen auch über identische Rebuilds vor. Erst nach dem
 Manifestwechsel werden ältere gehashte Bundle-Dateien entfernt. Das App-HTML
 für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
+Das hilft nur bei einem echten Seitenaufruf: Ein offenes Fenster (installierte
+App, Homescreen-App, tagelang offener Tab) behielt seinen Build über viele
+Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
 
@@ -2243,6 +2246,26 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   stopped“. Hört auf `consensio:run-registry-change` und `visibilitychange`;
   sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
   schon vor dem Verlassen fertig war, wird nicht gemeldet.
+- **`app-update.js`** (seit 2026-10-15, nach `tab-status.js`, `App.appUpdate`) —
+  ein offenes App-Fenster holt neue Deploys selbst. Es vergleicht seinen Build
+  (`data-app-build`) mit `GET /api/build`: beim Verlassen (`visibilitychange`
+  → hidden), beim Zurückkommen, bei `pageshow` aus dem bfcache und alle 15 min,
+  solange die Seite vorne ist (frühestens alle 60 s). Neu geladen wird nur
+  ungesehen — im Hintergrund oder direkt beim Zurückkommen vor dem ersten
+  Klick/Tastendruck (10-s-Fenster) — und nur im Leerlauf: kein Lauf/keine
+  Aktion (`runRegistry.activeCount()`), leerer Composer, kein Anhang/Import,
+  kein Zitat, kein befülltes fokussiertes Textfeld, kein offenes `.modal` oder
+  `dialog` (angedockter Leser zählt nicht) und nichts Ungespeichertes im Bild
+  (Start, Watch-Seite oder gespeicherter Chat; ein Gast-Ergebnis oder ein
+  fehlgeschlagener Lauf blockiert). Vor `location.reload()` merkt es sich in
+  `sessionStorage` (`consens.appUpdate.restore`) uid + `bookmarkId`; nach dem
+  Neuladen öffnet es beim ersten `consensio:auth-state` desselben Kontos
+  `window.openBookmark(id)`, solange der Nutzer noch auf dem leeren Start ist
+  (max. 5 min alt). `consens.appUpdate.attempt` verhindert eine Schleife, wenn
+  während eines Deploys noch die alte Instanz antwortet (gleicher Ziel-Build
+  frühestens nach 10 min erneut). Verborgene Seiten fragen nie periodisch
+  und laden nicht wiederholt — jeder Reload kostet die Start-Reads des Kontos.
+  Umami: `app_updated` (`reopened`).
 - **Der Lichtweg (Agent, seit 2026-10-02)** — das Hauslicht aus
   `send-glow.css` sitzt am Senden-Knopf und an der Agreement-Zahl: beim ersten
   Markieren einer geprüften Antwort (`#agentAnswerBody.is-marks-revealing`)
@@ -6473,7 +6496,10 @@ alte Gemini-ADC-JSON ist entfernt.
   `SOURCE_VERSION`, `COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`), sonst durch Lesen von
   `.git/HEAD` (kein `git`-Subprozess). `/app` reicht ihn als `app_commit` plus
   `repo_url` ins Template; ist er leer, blendet das Template die Zeile aus. Die
-  früher handgepflegte Versionsnummer (`v1.11.1`) ist damit ersetzt.
+  früher handgepflegte Versionsnummer (`v1.11.1`) ist damit ersetzt. Derselbe
+  Wert steht als `data-app-build` in `#appBootstrapConfig`, und
+  `GET /api/build` (`pages.py`, `{"build": …}`, `no-store`, 60/min, kein
+  Firestore) nennt den gerade laufenden — beides für `app-update.js`.
 - Ausschließlich für Tests: `UNIT_TEST_MODE=1` initialisiert Firebase Admin im
   regulären pytest-Lauf ohne Service-Account gegen das nicht produktive
   `demo-consensio-unit` und einen geschlossenen Loopback-Port; ein ungemockter

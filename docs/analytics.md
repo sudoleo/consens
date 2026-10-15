@@ -63,6 +63,10 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   ihm per Polling folgt.
 - `app_run_resumed` (seit 2026-10-08, ohne Daten): eine nach einem Neuladen
   wieder aufgenommene, noch laufende Agent-Nachricht.
+- `app_updated` (seit 2026-10-15, `reopened`: ob ein gespeicherter Chat wieder
+  geöffnet wurde): ein offenes App-Fenster hat einen neuen Deploy selbst
+  geladen (`app-update.js`). Zeigt, wie oft Nutzer sonst auf einem alten Build
+  sitzen geblieben wären.
 - `auth_*`: jeder einzelne Anmeldeversuch mit Ergebnis und Fehlercode.
 - `landing_*`, `benchmark_*`, `pulse_*`, `consensus_engine_*`, `hub_*`,
   `share_*`, `topic_open`: die einzelnen Knöpfe der öffentlichen Seiten.

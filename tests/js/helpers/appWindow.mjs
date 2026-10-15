@@ -28,9 +28,11 @@ const BLANK = "<!doctype html><html><head></head><body></body></html>";
  * @param {object}   [options]
  * @param {string}   [options.body]    markup the scripts expect to find
  * @param {Function} [options.before]  runs against window before the scripts
+ * @param {VirtualConsole} [options.virtualConsole]  e.g. to see navigations
+ *        jsdom does not perform ("Not implemented: navigation")
  * @returns {{ window: Window, document: Document, dom: JSDOM }}
  */
-export function loadScripts(files, { body, before } = {}) {
+export function loadScripts(files, { body, before, virtualConsole } = {}) {
   const html = body
     ? `<!doctype html><html><head></head><body>${body}</body></html>`
     : BLANK;
@@ -39,6 +41,7 @@ export function loadScripts(files, { body, before } = {}) {
     runScripts: "dangerously",
     url: "https://consens.io/app",
     pretendToBeVisual: true,
+    ...(virtualConsole ? { virtualConsole } : {}),
   });
 
   const { window } = dom;
