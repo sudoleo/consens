@@ -187,12 +187,17 @@ class AnalysisBudgetExceeded(TimeoutError):
 
 
 class AnalysisBudget:
-    def __init__(self, seconds=None, max_calls=None, *, unlimited=False):
+    def __init__(self, seconds=None, max_calls=None, *, unlimited=False, run=None):
         self.started = time.monotonic()
         self.deadline = float("inf") if unlimited else self.started + (ANALYSIS_TIMEOUT_SECONDS if seconds is None else seconds)
         self.max_calls = float("inf") if unlimited else ANALYSIS_MAX_CALLS if max_calls is None else max_calls
         self.calls = 0
         self.lock = threading.Lock()
+        # A run of phases (analysis_run_scope) gives each phase its own budget;
+        # ``run`` is the run a phase belongs to, ``phased`` marks the run itself.
+        self.run = run
+        self.phased = False
+        self.phase_calls = 0
 
     def check(self):
         if time.monotonic() >= self.deadline:
@@ -204,9 +209,16 @@ class AnalysisBudget:
             if self.calls >= self.max_calls:
                 raise AnalysisBudgetExceeded("analysis call budget exhausted")
             self.calls += 1
+        if self.run is not None:
+            with self.run.lock:
+                self.run.phase_calls += 1
 
     def snapshot(self):
-        return {"attempts": self.calls, "duration_ms": int((time.monotonic() - self.started) * 1000)}
+        """Paid attempts and duration of the whole analysis, all phases included."""
+        if self.run is not None:
+            return self.run.snapshot()
+        return {"attempts": self.calls + self.phase_calls,
+                "duration_ms": int((time.monotonic() - self.started) * 1000)}
 
 
 def current_analysis_budget():
@@ -224,13 +236,7 @@ def bind_analysis_budget(budget):
 
 
 @contextmanager
-def analysis_budget_scope():
-    """One budget from synthesis through both judges, shared across threads."""
-    existing = current_analysis_budget()
-    if existing is not None:
-        yield existing
-        return
-    budget = AnalysisBudget()
+def _bound_analysis_scope(budget):
     cancellation = ProviderCancellation()
     # Parent disconnect propagates to both roles. Async socket guards enforce
     # the deadline without allocating a timer thread per analysis.
@@ -242,22 +248,70 @@ def analysis_budget_scope():
     finally:
         unregister()
         cancellation.cancel()
-        logging.info("Analysis completed attempts=%d duration_ms=%d", budget.calls, budget.snapshot()["duration_ms"])
+        if budget.run is None:
+            snapshot = budget.snapshot()
+            logging.info("Analysis completed attempts=%d duration_ms=%d", snapshot["attempts"], snapshot["duration_ms"])
 
 
-def analysis_budgeted(function):
+@contextmanager
+def analysis_budget_scope(seconds=None, max_calls=None):
+    """One budget for an analysis step, shared across its threads.
+
+    An existing budget is reused (an Agent's, or the step's caller's). Inside
+    analysis_run_scope the step is a phase and opens its own budget instead."""
+    existing = current_analysis_budget()
+    if existing is not None and not existing.phased:
+        yield existing
+        return
+    with _bound_analysis_scope(AnalysisBudget(seconds, max_calls, run=existing)) as budget:
+        yield budget
+
+
+@contextmanager
+def analysis_run_scope():
+    """A Consensus run of phases: synthesis, then both judges (audit C3).
+
+    Each budgeted phase gets its own deadline and call count, so a slow
+    synthesis never uses up the judges' time. The run carries the shared
+    cancellation, totals every phase for ``analysis_runtime``, and bounds
+    unbudgeted work inside it like a single default budget. An existing budget
+    (an Agent's) keeps governing every phase instead."""
+    existing = current_analysis_budget()
+    if existing is not None:
+        yield existing
+        return
+    run = AnalysisBudget()
+    run.phased = True
+    with _bound_analysis_scope(run):
+        yield run
+
+
+def _scoped(function, scope):
     # Generator scope must live across next() calls, not only their creation.
     if inspect.isgeneratorfunction(function):
         @functools.wraps(function)
         def stream(*args, **kwargs):
-            with analysis_budget_scope():
+            with scope():
                 yield from function(*args, **kwargs)
         return stream
     @functools.wraps(function)
     def call(*args, **kwargs):
-        with analysis_budget_scope():
+        with scope():
             return function(*args, **kwargs)
     return call
+
+
+def analysis_budgeted(function=None, *, seconds=None, max_calls=None):
+    """Runs an analysis step in analysis_budget_scope; ``seconds``/``max_calls``
+    size a budget it opens (default: ANALYSIS_TIMEOUT_SECONDS/ANALYSIS_MAX_CALLS)."""
+    if function is None:
+        return lambda inner: analysis_budgeted(inner, seconds=seconds, max_calls=max_calls)
+    return _scoped(function, lambda: analysis_budget_scope(seconds, max_calls))
+
+
+def analysis_run(function):
+    """Runs a whole Consensus analysis in analysis_run_scope."""
+    return _scoped(function, analysis_run_scope)
 
 
 def analysis_http_timeout():

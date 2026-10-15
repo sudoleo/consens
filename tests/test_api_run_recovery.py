@@ -195,6 +195,23 @@ def test_backfill_preserves_existing_expiry_and_rebound_mapping(recovery):
     assert h.runs.backfill_retention() == 0
 
 
+def test_restart_after_a_finished_backfill_reads_its_marker_not_the_collection(
+    recovery, monkeypatch
+):
+    """Audit C12: the backfill once scanned every API run after each daily
+    restart; a finished scan now leaves a marker the next process reads."""
+    h = recovery
+    assert runner.recover_persisted_runs() == 0 and runner._retention_backfilled
+    monkeypatch.setattr(
+        RecoveryCollection, "stream",
+        lambda self: pytest.fail("full api_runs scan after the backfill finished"),
+    )
+    monkeypatch.setattr(runner, "_retention_backfilled", False)  # the next process
+    assert runner.recover_persisted_runs() == 0 and runner._retention_backfilled
+    restarted = FirestoreApiRunRepository(h.db, transaction_runner=h.db.run_transaction)
+    assert restarted.backfill_retention() == 0
+
+
 def test_recovery_backfill_failure_is_retryable_and_queue_submission_unwinds(
     recovery, monkeypatch
 ):

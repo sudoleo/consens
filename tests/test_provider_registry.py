@@ -8,6 +8,7 @@ Consensus-/Differences-Pipeline haengt an keiner festen Anzahl von Familien.
 """
 
 import unittest
+from pathlib import Path
 
 import app.core.config as cfg
 from app.services import chat_store, opinion_map, share_snapshots, topics, watch_scheduler
@@ -38,22 +39,18 @@ class RegistryCoverageTests(unittest.TestCase):
             with self.subTest(mapping=name):
                 self.assertEqual(set(mapping), families)
 
-    def test_allowed_model_aliases_are_the_registry_sets(self):
-        """Die ALLOWED_*-Namen sind Aliasse auf DASSELBE Set-Objekt: der
-        Firestore-Load mutiert in place, sonst laufen Importe auf alten Daten."""
-        for provider, alias in (
-            ("openai", cfg.ALLOWED_OPENAI_MODELS),
-            ("mistral", cfg.ALLOWED_MISTRAL_MODELS),
-            ("anthropic", cfg.ALLOWED_ANTHROPIC_MODELS),
-            ("gemini", cfg.ALLOWED_GEMINI_MODELS),
-            ("deepseek", cfg.ALLOWED_DEEPSEEK_MODELS),
-            ("grok", cfg.ALLOWED_GROK_MODELS),
-            ("kimi", cfg.ALLOWED_KIMI_MODELS),
-            ("glm", cfg.ALLOWED_GLM_MODELS),
-            ("meta", cfg.ALLOWED_META_MODELS),
+    def test_dead_config_aliases_stay_gone(self):
+        """Audit C16: the registry set (PROVIDERS[key].models) is the one name
+        for a family's models, LIMITS the one source for limits, and a model
+        ID literal stands in config.py once."""
+        for name in (
+            "MAX_WORDS", "REASONING_MAX_TOKENS", "GEMINI_MAX_TOKENS",
+            *(f"ALLOWED_{key.upper()}_MODELS" for key in cfg.PROVIDERS),
         ):
-            with self.subTest(provider=provider):
-                self.assertIs(alias, cfg.PROVIDERS[provider].models)
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(cfg, name))
+        source = Path(cfg.__file__).read_text(encoding="utf-8")
+        self.assertEqual(source.count('"gpt-5.6-luna"'), 1)
 
     def test_every_family_has_both_consensus_aliases(self):
         for provider in cfg.PROVIDERS.values():

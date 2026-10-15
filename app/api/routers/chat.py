@@ -48,6 +48,7 @@ from app.services.llm.streaming import (
 from app.services.llm.consensus_engine import (
     CONSENSUS_INCOMPLETE_TEXT,
     DIFFERENCES_SKIPPED_TEXT,
+    consensus_failure_code,
     is_consensus_error_text,
     normalize_model_name,
     query_consensus,
@@ -105,7 +106,7 @@ from app.services.usage_repository import (
 )
 from app.services.consensus_pipeline import analyze_provider_answers
 from app.services import user_settings
-from app.services.llm.provider_runtime import analysis_budgeted
+from app.services.llm.provider_runtime import analysis_run
 
 router = APIRouter()
 
@@ -1854,7 +1855,7 @@ def consensus(request: Request, data: dict = Body(...)):
         elif use_own_keys:
             extra_fields = own_key_usage_fields(tier)
 
-        @analysis_budgeted
+        @analysis_run
         def consensus_event_source():
             consensus_text = ""
             consensus_failed = False
@@ -2055,7 +2056,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 failed = _fail_chat_turn_best_effort(
                     uid,
                     validated_chat_turn_ids,
-                    error_code="consensus_incomplete" if incomplete else "consensus_failed",
+                    error_code="consensus_incomplete" if incomplete else consensus_failure_code(consensus_text),
                 )
                 add_chat_result_fields(
                     payload,
@@ -2135,7 +2136,7 @@ def consensus(request: Request, data: dict = Body(...)):
         failed = _fail_chat_turn_best_effort(
             uid,
             validated_chat_turn_ids,
-            error_code="consensus_incomplete" if incomplete else "consensus_failed",
+            error_code="consensus_incomplete" if incomplete else consensus_failure_code(consensus_answer),
         )
         add_chat_result_fields(
             response,

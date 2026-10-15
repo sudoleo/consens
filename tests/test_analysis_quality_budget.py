@@ -112,6 +112,71 @@ def test_nested_synthesis_and_judges_do_not_reset_budget():
     assert runtime.current_analysis_budget() is None
 
 
+def test_a_run_gives_each_phase_its_own_budget_and_totals_them():
+    """Audit C3: synthesis and judges no longer share one deadline and count."""
+    @runtime.analysis_budgeted(seconds=30, max_calls=1)
+    def phase():
+        runtime.claim_analysis_call()
+        return runtime.current_analysis_budget()
+
+    with runtime.analysis_run_scope() as run:
+        synthesis, judges = phase(), phase()
+        assert synthesis is not judges and synthesis.run is run and judges.run is run
+        assert synthesis.max_calls == 1 and judges.calls == 1
+        assert judges.snapshot()["attempts"] == 2
+    assert runtime.current_analysis_budget() is None
+    # An Agent's budget still governs every phase it calls.
+    agent = runtime.AnalysisBudget(seconds=10, max_calls=5)
+    with runtime.bind_analysis_budget(agent), runtime.analysis_run_scope():
+        assert phase() is agent and phase() is agent
+
+
+def test_a_pro_runs_judges_keep_their_whole_plan_after_a_synthesis_fallback():
+    """Audit C3: synthesis (2 failures + fallback) plus the pro judge plan need
+    more than the former shared 8 calls; the judges lost their fallbacks."""
+    from app.services.consensus_pipeline import analyze_provider_answers
+    keys = {"OpenRouter": "sk-or"}
+    seen, lock = [], threading.Lock()
+
+    def fake_engine(provider, api_model, model_ref, api_keys, *, system, **kwargs):
+        runtime.claim_analysis_call()
+        role = "judge" if system else "synthesis"
+        with lock:
+            seen.append((role, runtime.current_analysis_budget()))
+            synthesis_calls = sum(1 for name, _ in seen if name == "synthesis")
+        if role == "synthesis" and synthesis_calls == 3:
+            return "The fallback engine wrote this synthesis sentence."
+        raise RuntimeError("503 - UNAVAILABLE")
+
+    with mock.patch.object(engine, "_call_engine_text", side_effect=fake_engine):
+        analysis = analyze_provider_answers(
+            question="Q?", answers={"openai": "One answer here.", "gemini": "Another answer here."},
+            consensus_model="Gemini-Pro", keys=keys, require_differences_data=False,
+        )
+    assert analysis.consensus == "The fallback engine wrote this synthesis sentence."
+    synthesis = [budget for role, budget in seen if role == "synthesis"]
+    judges = [budget for role, budget in seen if role == "judge"]
+    plan = len(engine._differences_attempts("Gemini-Pro", keys)) + len(engine._coverage_attempts("Gemini-Pro", keys))
+    assert len(synthesis) == 3 and len(judges) == plan
+    assert {id(budget) for budget in synthesis} != {id(budget) for budget in judges}
+
+
+def test_phase_call_limits_cover_the_longest_attempt_plans():
+    """The phase limits follow the retry plans (audit C3); a longer plan must
+    raise its limit instead of losing its last attempts."""
+    import app.core.config as cfg
+    keys = {"OpenRouter": "sk-or"}
+    for model in cfg.ALLOWED_CONSENSUS_MODELS:
+        resolved = engine._resolve_engine(model)
+        if resolved is None:
+            continue
+        synthesis = engine.CONSENSUS_MAX_ATTEMPTS + bool(engine._fallback_judge_engine(resolved[0], keys))
+        # Coverage's worst case: its last attempt succeeds and needs the repair.
+        judges = len(engine._differences_attempts(model, keys)) + len(engine._coverage_attempts(model, keys)) + 1
+        assert synthesis <= engine.SYNTHESIS_MAX_CALLS, model
+        assert judges <= engine.JUDGE_PHASE_MAX_CALLS, model
+
+
 @pytest.mark.parametrize("stop", ["disconnect", "deadline"])
 def test_nonstream_request_is_cancelled_while_waiting_for_headers(stop):
     started = threading.Event()

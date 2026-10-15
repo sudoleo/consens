@@ -284,7 +284,9 @@ class SeoPulseService:
         }, merge=True)
         return self.status()
 
-    def _acquire(self, run_id: str, now: datetime) -> bool:
+    def _acquire(self, run_id: str, now: datetime, *, due_only: bool = False) -> bool | None:
+        """True: this worker holds the lease. False: another one does.
+        None (only with ``due_only``): the sweep is off or no longer due."""
         lease_until = now + timedelta(minutes=LEASE_MINUTES)
 
         def claim(transaction=None):
@@ -294,9 +296,17 @@ class SeoPulseService:
             in_transaction = transaction is not None
             snapshot = (self.config_ref.get(transaction=transaction) if in_transaction
                         else self.config_ref.get())
-            current = _as_utc(((snapshot.to_dict() if snapshot.exists else None) or {}).get("lease_until"))
+            data = (snapshot.to_dict() if snapshot.exists else None) or {}
+            current = _as_utc(data.get("lease_until"))
             if current and current > now:
                 return False
+            if due_only:
+                # Due-ness is read again here, under the lease (audit C14): a
+                # second process that saw the old next_run_at before the first
+                # finished must not sweep and notify a second time.
+                due = _as_utc(data.get("next_run_at"))
+                if not data.get("enabled", True) or due is None or due > now:
+                    return None
             values = {"lease_until": lease_until, "lease_run_id": run_id}
             if in_transaction:
                 transaction.set(self.config_ref, values, merge=True)
@@ -305,7 +315,7 @@ class SeoPulseService:
             return True
 
         if hasattr(self.db, "transaction"):
-            return bool(firestore.transactional(claim)(self.db.transaction()))
+            return firestore.transactional(claim)(self.db.transaction())
         return claim()
 
     def _indexed_shares(self) -> list[dict]:
@@ -365,8 +375,14 @@ class SeoPulseService:
             if due > now:
                 return {"status": "not_due"}
         run_id = uuid.uuid4().hex
-        if not self._acquire(run_id, now):
+        claimed = self._acquire(run_id, now, due_only=not force)
+        if claimed is None:
+            return {"status": "not_due"}
+        if not claimed:
             raise PulseAlreadyRunning()
+        # The lease holder works from the document as it is now (history,
+        # noindex log, kept pages), not from the read before the lease.
+        config = self._config()
         keep_ids = set(config.get("keep_share_ids") or [])
         try:
             report = self._build(now, keep_ids)

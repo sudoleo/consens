@@ -100,7 +100,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             with self.subTest(model=legacy):
                 self.assertEqual(cfg.canonical_model_id(legacy, "grok"), "grok-4.3")
                 self.assertEqual(cfg.canonical_model_id(legacy), "grok-4.3")
-                self.assertNotIn(legacy, cfg.ALLOWED_GROK_MODELS)
+                self.assertNotIn(legacy, cfg.PROVIDERS["grok"].models)
         request = build_provider_payload(
             "grok",
             question="payload dry run",
@@ -136,8 +136,8 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(cfg.DEEPSEEK_FLASH_MODEL, current)
         self.assertEqual(cfg.canonical_model_id(legacy, "deepseek"), current)
         self.assertEqual(cfg.canonical_model_id(legacy), current)
-        self.assertNotIn(legacy, cfg.ALLOWED_DEEPSEEK_MODELS)
-        self.assertIn(current, cfg.ALLOWED_DEEPSEEK_MODELS)
+        self.assertNotIn(legacy, cfg.PROVIDERS["deepseek"].models)
+        self.assertIn(current, cfg.PROVIDERS["deepseek"].models)
         self.assertNotIn(current, cfg.PREMIUM_MODELS)
         self.assertEqual(cfg.DEFAULT_MODEL_BY_PROVIDER["deepseek"], current)
         self.assertEqual(cfg.get_model_label(current), "DeepSeek V4.1 Flash")
@@ -182,7 +182,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(
             reasoning_request["payload"]["reasoning"], {"effort": "high"},
         )
-        self.assertNotIn("pixtral-large-latest", cfg.ALLOWED_MISTRAL_MODELS)
+        self.assertNotIn("pixtral-large-latest", cfg.PROVIDERS["mistral"].models)
 
     def test_no_engine_is_forced_into_the_consensus_list_for_deep_think(self):
         # Deep Think (removed 2026-10-02) used to force its own engine into
@@ -338,7 +338,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             # Unbekanntes Modell / unbekannter Provider -> gueltiger Fallback.
             cfg.apply_chat_memory_models({"grok": "grok-does-not-exist"})
             self.assertIn(
-                cfg.get_chat_memory_model("grok"), cfg.ALLOWED_GROK_MODELS
+                cfg.get_chat_memory_model("grok"), cfg.PROVIDERS["grok"].models
             )
             self.assertEqual(cfg.get_chat_memory_model("nope"), "")
 
