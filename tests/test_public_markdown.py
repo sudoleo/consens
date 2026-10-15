@@ -42,6 +42,12 @@ def test_chat_framing_around_a_published_answer_is_dropped_but_the_answer_stays(
     # A lone framing paragraph is never turned into an empty answer.
     assert strip_chat_framing("If you want, I can help.") == "If you want, I can help."
     assert strip_chat_framing("## Short answer\n\nYes.") == "Yes."
+    # Right after a one-paragraph lead-in it is framing too.
+    assert strip_chat_framing("Views split three ways:\n\n## Short answer\n\n- Labs: 2027") == (
+        "Views split three ways:\n\n- Labs: 2027"
+    )
+    # Further down it is the answer's own structure and stays.
+    assert "## Short answer" in strip_chat_framing("A.\n\nB.\n\n## Short answer\n\nC.")
 
 
 def test_lead_sentences_cut_at_a_sentence_end_and_skip_headings():

@@ -364,14 +364,18 @@ def strip_chat_framing(md_text) -> str:
     blocks = re.split(r"\n\s*\n", str(md_text or "").strip())
     if len(blocks) > 1 and _FRAMING_OPENER_RE.match(blocks[0].strip()):
         blocks = blocks[1:]
-    if blocks:
-        # The heading is its own paragraph or the first line of the answer's.
-        first, _, rest = blocks[0].strip().partition("\n")
-        if _FRAMING_HEADING_RE.match(first.strip()):
-            if rest.strip():
-                blocks[0] = rest.strip()
-            elif len(blocks) > 1:
-                blocks = blocks[1:]
+    # The heading is its own paragraph or the first line of the answer's --
+    # at the start, or right after a one-paragraph lead-in ("...: ## Short
+    # answer", when-will-agi-arrive).
+    for index in range(min(2, len(blocks))):
+        first, _, rest = blocks[index].strip().partition("\n")
+        if not _FRAMING_HEADING_RE.match(first.strip()):
+            continue
+        if rest.strip():
+            blocks[index] = rest.strip()
+        elif len(blocks) > 1:
+            blocks = blocks[:index] + blocks[index + 1:]
+        break
     while len(blocks) > 1 and _FRAMING_OFFER_RE.match(blocks[-1].strip()):
         blocks = blocks[:-1]
     return "\n\n".join(blocks)
