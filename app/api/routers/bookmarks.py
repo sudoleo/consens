@@ -392,8 +392,17 @@ def _bookmark_uid(request: Request):
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
 
 
-def _bookmark_meta(bookmark_id, data):
-    responses = data.get("responses") if isinstance(data.get("responses"), dict) else {}
+# What the sidebar list projects; see persistence_guard.BOOKMARK_LIST_SUMMARY_FIELD.
+_BOOKMARK_LIST_FIELDS = [
+    "query", "title", "title_source", "mode", "timestamp",
+    persistence_guard.BOOKMARK_LIST_SUMMARY_FIELD,
+]
+
+
+def _bookmark_meta(bookmark_id, data, summary=None):
+    """Sidebar row; ``summary`` comes from the stored list_summary, else ``data`` is the full document."""
+    if summary is None:
+        summary = persistence_guard.bookmark_list_summary(data)
     return {
         "id": str(bookmark_id),
         "query": _bookmark_display_question(data),
@@ -403,16 +412,30 @@ def _bookmark_meta(bookmark_id, data):
         "title_source": "generated" if data.get("title_source") == "generated" else "",
         "mode": str(data.get("mode") or ""),
         "timestamp": data.get("timestamp"),
-        "has_consensus": bool(str(responses.get("consensus") or "").strip()),
-        "model_count": sum(
-            # Older bookmarks still carry a source_verification report.
-            1 for key, value in responses.items()
-            if key not in {"consensus", "differences", "differences_data", "source_verification"}
-            and str(value or "").strip()
-        ),
-        "source_count": len(data.get("sources") or []) if isinstance(data.get("sources"), list) else 0,
-        "attachment_count": len(data.get("attachments") or []) if isinstance(data.get("attachments"), list) else 0,
+        **summary,
     }
+
+
+def _bookmark_list_rows(bookmarks_ref, page):
+    """Meta rows for projected snapshots; only pre-summary bookmarks are read in full."""
+    rows = [(doc.id, doc.to_dict() or {}) for doc in page]
+    summaries = {
+        bookmark_id: persistence_guard.stored_bookmark_list_summary(data)
+        for bookmark_id, data in rows
+    }
+    missing = [bookmark_id for bookmark_id, summary in summaries.items() if summary is None]
+    if missing:
+        refs = [bookmarks_ref.document(bookmark_id) for bookmark_id in missing]
+        get_all = getattr(db_firestore, "get_all", None)
+        snapshots = get_all(refs) if callable(get_all) else (ref.get() for ref in refs)
+        for snapshot in snapshots:
+            if snapshot.exists:
+                summaries[snapshot.id] = persistence_guard.bookmark_list_summary(snapshot.to_dict() or {})
+    # A row deleted between both reads shows empty counts until the next load.
+    return [
+        _bookmark_meta(bookmark_id, data, summaries.get(bookmark_id) or persistence_guard.bookmark_list_summary({}))
+        for bookmark_id, data in rows
+    ]
 
 
 def _encode_bookmark_cursor(boundary):
@@ -465,7 +488,7 @@ def load_bookmarks(
         bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
         # The document ID breaks timestamp ties, so the cursor values name
         # exactly one position. Same order as the implicit one: no extra index.
-        query_ref = bookmarks_ref.order_by(
+        query_ref = bookmarks_ref.select(_BOOKMARK_LIST_FIELDS).order_by(
             "timestamp", direction=firestore.Query.DESCENDING
         ).order_by(FieldPath.document_id(), direction=firestore.Query.DESCENDING)
         if cursor:
@@ -477,7 +500,7 @@ def load_bookmarks(
         docs = list(query_ref.limit(limit + 1).stream())
         has_more = len(docs) > limit
         page = docs[:limit]
-        bookmarks = [_bookmark_meta(doc.id, doc.to_dict() or {}) for doc in page]
+        bookmarks = _bookmark_list_rows(bookmarks_ref, page)
         next_cursor = _encode_bookmark_cursor(page[-1]) if has_more and page else None
         return {
             "status": "success",

@@ -61,6 +61,7 @@ class FakeDocumentRef:
         if transaction is not None:
             return transaction.get(self)
         self.database.read_log.append(self.path)
+        self.database.full_document_log.append(self.path)
         return FakeSnapshot(self, self.database.documents.get(self.path))
 
     def set(self, data, merge=False):
@@ -101,9 +102,10 @@ class FakeCollectionRef:
     def where(self, filter=None):
         return FakeQuery(self, [], filters=[filter])
 
-    def select(self, _field_paths):
-        # Projection only trims the payload; the fake returns whole documents.
-        return FakeQuery(self, [])
+    def select(self, field_paths):
+        # Like Firestore: only the named top-level fields come back, so code
+        # that forgets a field it needs fails here as it would in prod.
+        return FakeQuery(self, []).select(field_paths)
 
     def limit(self, value):
         # Echte CollectionReference kann das auch ohne vorheriges order_by.
@@ -142,6 +144,11 @@ class FakeQuery:
         self.after_id = None
         self.after_values = None
         self.page_limit = None
+        self.projection = None
+
+    def select(self, field_paths):
+        self.projection = [str(field) for field in field_paths]
+        return self
 
     def order_by(self, field, direction=None):
         self.orders.append((field, direction))
@@ -208,6 +215,16 @@ class FakeQuery:
             items = [snapshot for snapshot in items if self._is_after(snapshot)]
         if self.page_limit is not None:
             items = items[:self.page_limit]
+        if self.projection is None:
+            self.collection.database.full_document_log.extend(item.reference.path for item in items)
+        else:
+            items = [
+                FakeSnapshot(item.reference, {
+                    field: value for field, value in item.to_dict().items()
+                    if field in self.projection
+                })
+                for item in items
+            ]
         return items
 
     def _is_after(self, snapshot):
@@ -242,8 +259,8 @@ class FakeTransaction:
         if fail_after is not None and len(self.operations) >= fail_after:
             raise RuntimeError("injected transaction failure")
 
-    def set(self, ref, data):
-        self._stage("set", ref, data)
+    def set(self, ref, data, merge=False):
+        self._stage("set_merge" if merge else "set", ref, data)
 
     def update(self, ref, data):
         self._stage("update", ref, data)
@@ -260,8 +277,8 @@ class FakeTransaction:
             for operation, ref, data in self.operations:
                 if operation == "delete":
                     ref.delete()
-                elif operation == "set":
-                    self.database.apply_set(ref, data)
+                elif operation in {"set", "set_merge"}:
+                    self.database.apply_set(ref, data, merge=operation == "set_merge")
                 else:
                     self.database.apply_update(ref, data)
         except Exception:
@@ -272,6 +289,16 @@ class FakeTransaction:
         self.database.transaction_commits.append(paths)
 
 
+def _merge_maps(current, incoming):
+    merged = dict(current)
+    for key, value in incoming.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_maps(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 class FakeChatDatabase:
     def __init__(self):
         self.documents = {}
@@ -280,12 +307,18 @@ class FakeChatDatabase:
         # logic (e.g. the abandoned-turn sweep).
         self.clock = datetime.now(timezone.utc).replace(microsecond=0)
         self.read_log = []
+        # Paths whose WHOLE document left the database (get or unprojected
+        # query); a select() projection is not logged here.
+        self.full_document_log = []
         self.write_log = []
         self.transaction_commits = []
         self.fail_transaction_after_staged_writes = None
 
     def collection(self, name):
         return FakeCollectionRef(self, (name,))
+
+    def get_all(self, refs):
+        return [ref.get() for ref in refs]
 
     def run_transaction(self, operation):
         transaction = FakeTransaction(self)
@@ -296,7 +329,8 @@ class FakeChatDatabase:
     def apply_set(self, ref, data, merge=False):
         incoming = self.resolve_timestamps(data)
         if merge and ref.path in self.documents:
-            self.documents[ref.path].update(incoming)
+            # merge=True merges nested maps too, as Firestore does.
+            self.documents[ref.path] = _merge_maps(self.documents[ref.path], incoming)
         else:
             self.documents[ref.path] = dict(incoming)
         self.write_log.append(("set", ref.path))

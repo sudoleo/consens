@@ -181,6 +181,48 @@ def _keep_generated_title(current: dict, patch: dict) -> dict:
     return patch
 
 
+# The sidebar list reads only these fields (bookmarks.py), never the up to
+# 750 kB of answers. ``list_summary`` carries the counts it would otherwise
+# derive from them and is rebuilt from the merged document on every write.
+BOOKMARK_LIST_SUMMARY_FIELD = "list_summary"
+_LIST_SUMMARY_IGNORED_RESPONSES = frozenset(
+    # Older bookmarks still carry a source_verification report.
+    {"consensus", "differences", "differences_data", "source_verification"}
+)
+
+
+def bookmark_list_summary(data: dict) -> dict:
+    """Sidebar counts of one full bookmark document."""
+    responses = data.get("responses") if isinstance(data.get("responses"), dict) else {}
+    sources = data.get("sources")
+    attachments = data.get("attachments")
+    return {
+        "has_consensus": bool(str(responses.get("consensus") or "").strip()),
+        "model_count": sum(
+            1 for key, value in responses.items()
+            if key not in _LIST_SUMMARY_IGNORED_RESPONSES and str(value or "").strip()
+        ),
+        "source_count": len(sources) if isinstance(sources, list) else 0,
+        "attachment_count": len(attachments) if isinstance(attachments, list) else 0,
+    }
+
+
+def stored_bookmark_list_summary(data: dict) -> dict | None:
+    """The stored summary, or None for bookmarks written before it existed."""
+    summary = data.get(BOOKMARK_LIST_SUMMARY_FIELD)
+    if not isinstance(summary, dict) or not isinstance(summary.get("has_consensus"), bool):
+        return None
+    counts = ("model_count", "source_count", "attachment_count")
+    if not all(isinstance(summary.get(key), int) and summary[key] >= 0 for key in counts):
+        return None
+    return {"has_consensus": summary["has_consensus"], **{key: summary[key] for key in counts}}
+
+
+def _with_list_summary(current: dict, patch: dict) -> dict:
+    merged = _deep_merge(current, patch)
+    return {**patch, BOOKMARK_LIST_SUMMARY_FIELD: bookmark_list_summary(merged)}
+
+
 def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, transaction_guard=None) -> dict:
     """Merge one bookmark while enforcing persistent count/byte quotas."""
     if not hasattr(db, "transaction") and not hasattr(db, "run_transaction"):
@@ -191,7 +233,7 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         if current_guard is not None and not current_guard(current):
             raise PersistenceConflictError("Bookmark changed during the operation.")
-        doc_ref.set(_keep_generated_title(current, patch), merge=True)
+        doc_ref.set(_with_list_summary(current, _keep_generated_title(current, patch)), merge=True)
         return _get(doc_ref).to_dict() or {}
     bookmarks = db.collection("users").document(uid).collection("bookmarks")
     usage_ref = db.collection(USAGE_COLLECTION).document(_owner_key("bookmarks", uid))
@@ -206,7 +248,7 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         if current_guard is not None and not current_guard(current):
             raise PersistenceConflictError("Bookmark changed during the operation.")
-        effective = _keep_generated_title(current, patch)
+        effective = _with_list_summary(current, _keep_generated_title(current, patch))
         usage_snapshot = _get(usage_ref, tx)
         usage = usage_snapshot.to_dict() or {} if usage_snapshot.exists else {}
         count = int(usage.get("bookmark_count") or bootstrap[0])

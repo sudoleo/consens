@@ -13,7 +13,7 @@ from app.api.routers import bookmarks as bookmarks_router
 from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
-from app.services import share_snapshots
+from app.services import persistence_guard, share_snapshots
 from app.services.chat_store import ChatCursorUnavailable, InvalidChatCursor
 from test_chat_history import FakeChatDatabase, FakeTransaction as ChatFakeTransaction
 
@@ -1437,6 +1437,90 @@ def test_bookmark_list_is_compact_and_cursor_paginated():
         "source_count": 0, "attachment_count": 0,
     }
     assert second.json()["has_more"] is False
+
+
+def _write_bookmark(database, bookmark_id, patch_data, *, uid="uid-1"):
+    ref = database.collection("users").document(uid).collection("bookmarks").document(bookmark_id)
+    return persistence_guard.write_bookmark(uid=uid, doc_ref=ref, patch=patch_data, db=database)
+
+
+def test_bookmark_list_reads_only_the_sidebar_fields_of_summarized_bookmarks():
+    """Audit C4: the sidebar read every full bookmark (up to 750 kB with all
+    answers) for a title and four counts. Written bookmarks carry those counts
+    in list_summary, so listing them reads no full document anymore."""
+    database = FakeChatDatabase()
+    _write_bookmark(database, "big_id", {
+        "query": "Big", "timestamp": LIST_START,
+        "responses": {"OpenAI": "x" * 50_000, "Gemini": "y", "consensus": "z"},
+        "sources": [{"url": "https://a.example"}], "attachments": [{"name": "a.pdf"}],
+    })
+    database.full_document_log.clear()
+
+    response = _list_bookmarks(database, "/bookmarks")
+
+    [row] = response.json()["bookmarks"]
+    assert {key: row[key] for key in ("has_consensus", "model_count", "source_count", "attachment_count")} == {
+        "has_consensus": True, "model_count": 2, "source_count": 1, "attachment_count": 1,
+    }
+    assert ("users", "uid-1", "bookmarks", "big_id") not in database.full_document_log
+
+
+def test_bookmark_list_summary_follows_partial_merges():
+    database = FakeChatDatabase()
+    _write_bookmark(database, "b1", {
+        "query": "Q", "timestamp": LIST_START, "responses": {"OpenAI": "a", "Grok": "b"},
+    })
+    # Later saves merge only part of the document; the counts still describe all of it.
+    _write_bookmark(database, "b1", {"responses": {"consensus": "c"}, "title": "Named"})
+    stored = database.documents[("users", "uid-1", "bookmarks", "b1")]
+
+    assert persistence_guard.stored_bookmark_list_summary(stored) == {
+        "has_consensus": True, "model_count": 2, "source_count": 0, "attachment_count": 0,
+    }
+    assert persistence_guard.bookmark_list_summary(stored) == persistence_guard.stored_bookmark_list_summary(stored)
+
+
+def test_legacy_bookmarks_without_summary_are_read_in_full_once_per_list():
+    database = FakeChatDatabase()
+    _write_bookmark(database, "new_id", {"query": "New", "timestamp": LIST_START})
+    database.documents[("users", "uid-1", "bookmarks", "old_id")] = {
+        "query": "Old", "timestamp": LIST_START - timedelta(minutes=1),
+        "responses": {"OpenAI": "a", "consensus": "c"},
+        # A damaged summary counts as missing instead of showing wrong numbers.
+        "list_summary": {"has_consensus": "yes"},
+    }
+    database.full_document_log.clear()
+
+    response = _list_bookmarks(database, "/bookmarks")
+
+    rows = {row["id"]: row for row in response.json()["bookmarks"]}
+    assert rows["old_id"]["model_count"] == 1 and rows["old_id"]["has_consensus"] is True
+    assert rows["new_id"]["model_count"] == 0
+    assert database.full_document_log.count(("users", "uid-1", "bookmarks", "old_id")) == 1
+    assert ("users", "uid-1", "bookmarks", "new_id") not in database.full_document_log
+
+
+def test_backfill_gives_legacy_bookmarks_their_summary_only_with_apply():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "backfill_bookmark_list_summary",
+        Path(__file__).resolve().parents[1] / "scripts" / "backfill_bookmark_list_summary.py",
+    )
+    backfill = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(backfill)
+    database = FakeChatDatabase()
+    database.documents[("users", "uid-1")] = {}
+    _write_bookmark(database, "new_id", {"query": "New", "timestamp": LIST_START})
+    path = ("users", "uid-1", "bookmarks", "old_id")
+    database.documents[path] = {"query": "Old", "timestamp": LIST_START, "responses": {"OpenAI": "a"}}
+
+    backfill.main([], db=database)
+    assert "list_summary" not in database.documents[path]
+
+    backfill.main(["--apply"], db=database)
+    assert persistence_guard.stored_bookmark_list_summary(database.documents[path])["model_count"] == 1
+    assert database.documents[path]["query"] == "Old"
+    assert list(backfill.missing_summaries(database)) == []
 
 
 def test_next_bookmark_page_survives_its_boundary_row_being_deleted():
