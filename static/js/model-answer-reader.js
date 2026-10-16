@@ -339,7 +339,8 @@
       // Cards are ordered by severity; markers address them by data index.
       const card = get('Inspector').querySelector(`.diff-card[data-difference-index="${Number(index)}"]`)
         || get('Inspector').querySelectorAll('.diff-card')[index];
-      if (card) { card.open = true; card.scrollIntoView({ block: 'nearest' }); }
+      // Smaller differences wait in a group; a marker opens it too.
+      if (card) { card.open = true; card.closest('details.diff-more')?.setAttribute('open', ''); card.scrollIntoView({ block: 'nearest' }); }
     }
     return true;
   }
@@ -948,6 +949,7 @@
         for (const card of get('Inspector').querySelectorAll('.diff-card')) {
           const key = card.querySelector('.diff-card-claim')?.textContent;
           if (seen.has(key)) card.open = expanded.has(key);
+          if (card.open) card.closest('details.diff-more')?.setAttribute('open', '');
         }
         get('Scroll').scrollTop = scroll;
       } else { selected = snapshot; render(); }

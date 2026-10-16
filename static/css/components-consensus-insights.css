@@ -357,14 +357,11 @@
 
 .diff-card-body {
   padding: 0 0 13px;
-  /* Die Kartenbreite entscheidet, ob zwei Seiten nebeneinander passen. */
-  container-type: inline-size;
 }
 
-/* Ein Widerspruch: Behauptungen stehen sich gegenueber. Schmal untereinander,
-   das "vs" auf einer Haarlinie dazwischen; ab 440px Kartenbreite stehen zwei
-   Seiten nebeneinander und das "vs" sitzt auf einer senkrechten Linie. Die
-   Ampelfarbe traegt das "vs", keine Flaeche. */
+/* Ein Widerspruch: Behauptungen stehen sich gegenueber, immer untereinander
+   (zwei und drei Seiten sehen gleich aus), das "vs" auf einer Haarlinie
+   dazwischen. Die Ampelfarbe traegt das "vs", keine Flaeche. */
 .diff-sides {
   display: flex;
   flex-direction: column;
@@ -416,6 +413,56 @@
   display: none;
 }
 
+/* Zugeklappt ist eine Karte eine Zeile zum Ueberfliegen: hoechstens zwei
+   Zeilen Ueberschrift. */
+.diff-card:not([open]) > .diff-card-summary .diff-card-claim {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Die kleineren Unterschiede hinter den kritischen: eine leise Zeile, die
+   aufklappt. */
+.diff-more {
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
+}
+
+.diff-more-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 0;
+  font-size: var(--font-size-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.diff-more-summary::-webkit-details-marker {
+  display: none;
+}
+
+.diff-more-summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.diff-more[open] > .diff-more-summary::after {
+  transform: translateY(1px) rotate(225deg);
+}
+
+.diff-more-summary:hover,
+.diff-more-summary:focus-visible {
+  color: var(--ink);
+}
+
 .diff-position {
   display: flex;
   flex-direction: column;
@@ -429,48 +476,10 @@
   color: var(--ink-2);
 }
 
-.diff-position-answer.is-placeholder {
-  display: none;
-}
-
 .diff-sides.is-versus .diff-position-stance {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   line-height: 1.45;
-}
-
-@container (min-width: 440px) {
-  .diff-sides.is-pair {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    column-gap: 16px;
-  }
-
-  .diff-sides.is-pair > .diff-versus-mark {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .diff-sides.is-pair > .diff-versus-mark::before,
-  .diff-sides.is-pair > .diff-versus-mark::after {
-    border-top: 0;
-    border-left: 1px solid currentColor;
-  }
-
-  .diff-sides.is-pair > .diff-versus-mark::before {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 75%);
-    mask-image: linear-gradient(to bottom, transparent, #000 75%);
-  }
-
-  .diff-sides.is-pair > .diff-versus-mark::after {
-    -webkit-mask-image: linear-gradient(to top, transparent, #000 75%);
-    mask-image: linear-gradient(to top, transparent, #000 75%);
-  }
-
-  .diff-sides.is-pair .diff-position-answer.is-placeholder {
-    display: block;
-    visibility: hidden;
-  }
 }
 
 .diff-position-label {

@@ -194,6 +194,12 @@ describe("difference cards in the detail panel", () => {
     expect(all.map(card => card.querySelector(".diff-type-tag").textContent)).toEqual(["Critical", "Minor", "Emphasis"]);
     expect(all.map(card => card.dataset.differenceIndex)).toEqual(["2", "0", "1"]);
     expect(all.map(card => card.querySelector(".sev-dot").className)).toEqual(["sev-dot is-crit", "sev-dot is-warn", "sev-dot is-info"]);
+    // Behind a critical contradiction the smaller ones wait in one closed group.
+    const group = cards.querySelector("details.diff-more");
+    expect(group.open).toBe(false);
+    expect(group.querySelector(".diff-more-summary").textContent).toBe("2 smaller differences");
+    expect([...group.querySelectorAll(".diff-card")]).toEqual(all.slice(1));
+    expect(cards.lastElementChild).toBe(group);
     expect(cards.textContent).not.toContain("Contradiction ·");
     // The full meaning stays available to screen readers and as a tooltip.
     expect(all[0].querySelector(".diff-card-tags").textContent).toBe("Critical contradiction:");
@@ -232,16 +238,15 @@ describe("difference cards in the detail panel", () => {
     data.differences[0].positions[1].in_answer = true;
     ctx.window.renderStoredDifferenceCards(cards, data);
     const sides = cards.querySelector(".diff-sides");
-    expect(sides.className).toBe("diff-sides is-versus is-pair");
+    // Always one above the other, so two and three sides look alike.
+    expect(sides.className).toBe("diff-sides is-versus");
     expect([...sides.children].map(el => el.className))
       .toEqual(["diff-position is-answer", "diff-versus-mark", "diff-position"]);
     expect(sides.querySelector(".diff-versus-mark").textContent).toBe("vs");
     const [answer, other] = sides.querySelectorAll(".diff-position");
     expect(answer.querySelector(".diff-position-answer").textContent).toBe("In the answer");
     expect(answer.querySelector(".diff-position-stance").textContent).toBe("more than 29 euros");
-    // The opposite side keeps the tag's line free (aligned side by side), hidden from screen readers.
-    expect(other.querySelector(".diff-position-answer").className).toBe("diff-position-answer is-placeholder");
-    expect(other.querySelector(".diff-position-answer").getAttribute("aria-hidden")).toBe("true");
+    expect(other.querySelector(".diff-position-answer")).toBe(null);
     // Several models: icons and a count; one model: its name.
     expect(answer.querySelector(".diff-position-label").classList.contains("is-group")).toBe(true);
     expect(answer.querySelector(".diff-position-count").textContent).toBe("2 models");
@@ -275,11 +280,36 @@ describe("difference cards in the detail panel", () => {
     // The label gets its real name; the narrative heading only shows while closed.
     expect(claim.textContent).toBe("Grok 4.3 beschreibt sinkende Frontier-Preise, während die Synthese steigende Frontier-Tokenpreise meldet.");
     expect(claim.classList.contains("is-narrative")).toBe(true);
-    // "The synthesis" is the answer itself: its side comes first, without the attribution.
+    // "The synthesis" is the answer itself: its side comes first. After "dass" the
+    // rest is no sentence on its own, so the sentence stays and names its speaker.
     const [answer, other] = cards.querySelectorAll(".diff-position");
     expect(answer.classList.contains("is-answer")).toBe(true);
-    expect(answer.querySelector(".diff-position-stance").textContent).toBe("Die Frontier-Tokenpreise stiegen.");
+    expect(answer.querySelector(".diff-position-stance").textContent).toBe("Die Antwort sagt, dass die Frontier-Tokenpreise stiegen.");
     expect(other.querySelector(".diff-position-stance").textContent).toBe("Die Frontier-Preise seien 2026 stark gesunken.");
+  });
+
+  it("names a judge label everywhere once one side gives it away", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, {
+      models_compared: ["Kimi", "Muse", "GLM"],
+      differences: [
+        { claim: "Mistral Medium 3.5 darf nicht pauschal als offen eingestuft werden.", type: "contradiction", severity: "major",
+          positions: [{ models: ["Kimi"], stance: "Model A stuft Mistral insgesamt als Open-Weight ein." },
+            { models: ["Muse", "GLM"], stance: "Nur ältere Mistral-Modelle sind offen." }] },
+        { claim: "Model A behauptet, DeepSeek V4 Pro sei offen, während der Konsens das nicht belegt sieht.", type: "contradiction",
+          severity: "minor", positions: [{ models: ["Muse", "Kimi"], stance: "Model A hält DeepSeek V4 Pro für offen." },
+            { models: ["GLM"], stance: "Unklar, sagt auch Model Q." }] }
+      ]
+    }, { modelLabel: name => name === "Kimi" ? "Kimi K2.6" : name });
+    const [first, second] = cards.querySelectorAll(".diff-card");
+    expect(first.querySelector(".diff-position-stance").textContent).toBe("Kimi K2.6 stuft Mistral insgesamt als Open-Weight ein.");
+    // The mapping holds across the list: the same judge run used the same labels.
+    expect(second.querySelector(".diff-card-claim").textContent)
+      .toBe("Kimi K2.6 behauptet, DeepSeek V4 Pro sei offen, während der Konsens das nicht belegt sieht.");
+    expect(second.querySelector(".diff-card-claim").classList.contains("is-narrative")).toBe(true);
+    expect([...second.querySelectorAll(".diff-position-stance")].map(el => el.textContent))
+      .toEqual(["Kimi K2.6 hält DeepSeek V4 Pro für offen.", "Unklar, sagt auch Model Q."]);
   });
 
   it("keeps a short topic heading that merely names a model", () => {

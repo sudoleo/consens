@@ -2248,13 +2248,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`claim`), der Körper ist `.diff-sides`: jede Position als Satz
   (`.diff-position-stance`, beim Widerspruch 16px/500), darunter wer das sagt,
   zwischen den Seiten ein `.diff-versus-mark` „vs“ in der Ampelfarbe der
-  Schwere (`--dispute`/`--partial`, keine Fläche). Zwei Seiten (`.is-pair`)
-  stehen ab 440px Kartenbreite nebeneinander (Container-Query auf
-  `.diff-card-body`, das „vs“ auf einer senkrechten Haarlinie), schmaler und
-  bei drei oder mehr Seiten untereinander mit „vs“ auf einer waagrechten
-  Linie. Die Seite mit `in_answer` steht vorn und trägt „In the answer“; die
-  Gegenseite hält die Zeile nebeneinander unsichtbar frei. Eine andere
-  Gewichtung (`emphasis`) bekommt kein „vs“. Mehrere Modelle einer Seite
+  Schwere (`--dispute`/`--partial`, keine Fläche). Die Seiten stehen **immer
+  untereinander** (seit dem Nachschliff am selben Tag: nebeneinander bei zwei,
+  untereinander bei drei Seiten wirkte in derselben Frage willkürlich). Die
+  Seite mit `in_answer` steht vorn und trägt „In the answer“. Eine andere
+  Gewichtung (`emphasis`) bekommt kein „vs“. Gibt es einen kritischen
+  Widerspruch, stehen die kleineren Unterschiede (ab zwei) gebündelt in
+  `details.diff-more` („N smaller differences“, zu) hinter den kritischen;
+  wer eine Karte darin gezielt öffnet (Marker, Leser-`index`,
+  `refreshContext`), öffnet die Gruppe mit (`openDifferenceCard`).
+  Zugeklappte Überschriften sind auf zwei Zeilen begrenzt. Mehrere Modelle einer Seite
   zeigen nur Icons + Anzahl („4 models“, Namen bleiben Linktext/Tooltip),
   ein Modell Icon + Name; ist die Originalantwort erreichbar, ist genau das
   Icon/Name-Paar der `.diff-jump-link`. Das Zitat steht hinter
@@ -2267,8 +2270,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Hover-Vorschau auf, ohne die Daten zu ändern: die Zuschreibung am
   Satzanfang („Model F sagt, …“, „Die Synthese sagt, dass …“) fällt weg,
   „die Synthese“ markiert die Antwortseite (wenn keine `in_answer` trägt),
-  ein „Model X“ mit genau einem Modell wird in der Überschrift zum echten
-  Namen. Eine Überschrift, die beide Seiten erzählt (über 60 Zeichen mit
+  ein „Model X“ am Satzanfang einer Position mit genau einem Modell nennt
+  dessen Namen, und diese Zuordnung gilt für die ganze Liste (ein Prüflauf,
+  dieselben Labels). Nach „dass“ bleibt der Satz stehen (sonst stünde das
+  Verb ohne Hauptsatz am Ende), nur der Sprecher wird benannt („Die Antwort
+  sagt, dass …“). Eine Überschrift, die beide Seiten erzählt (über 60 Zeichen mit
   Label/„Synthese“), bekommt `.is-narrative` und steht nur im zugeklappten
   Zustand.
   `.diff-card.is-focused` markiert die geöffnete Karte mit einem verblassenden
@@ -5080,9 +5086,9 @@ Seit 2026-10-01 ist die Liste ein Akkordeon: der `toggle`-Listener im Inspector
 schliesst beim Oeffnen einer Karte die zuvor offene (auch bei Marker-Spruengen
 und `refreshContext`). Typografie im Inspector: 14px Inhalt, 12px Meta, 13px
 Zitate, durchgehend regulaeres Gewicht.
-Ob Positionen nebeneinander stehen, entscheidet die Kartenbreite
-(Gegenüberstellung in `components-consensus-insights.css`), nicht mehr eine
-eigene Zwei-Spalten-Regel der erweiterten Desktopansicht.
+Positionen stehen immer untereinander (Gegenüberstellung in
+`components-consensus-insights.css`); eine eigene Zwei-Spalten-Regel der
+erweiterten Desktopansicht gibt es nicht mehr.
 Quellenkarten zeigen Favicon, Domain, Titel und unveraenderte Referenznummer;
 Auszuege werden separat aufgeklappt. Archivdaten bleiben turn-lokal.
 

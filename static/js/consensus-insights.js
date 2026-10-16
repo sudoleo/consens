@@ -821,7 +821,7 @@
                 : null;
               if (panel) panel.hidden = false;
               if (tab) tab.setAttribute("aria-expanded", "true");
-              card.open = true;
+              openDifferenceCard(card);
               card.scrollIntoView({ behavior: window.App.scrollBehavior?.() || "auto", block: "center" });
               card.classList.add("is-focused");
               setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
@@ -1143,7 +1143,7 @@
             if (!card) return;
             const panel = card.closest("details.consensus-differences-panel");
             if (panel) panel.open = true;
-            card.open = true;
+            openDifferenceCard(card);
             card.scrollIntoView({ behavior: window.App.scrollBehavior?.() || "auto", block: "center" });
             card.classList.add("is-focused");
             setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
@@ -2379,6 +2379,14 @@
           }
           window.App.differenceCardAt = differenceCardAt;
 
+          // Eine Karte unter den gebuendelten kleineren Unterschieden braucht
+          // auch ihre Gruppe offen, sonst bleibt sie unsichtbar.
+          function openDifferenceCard(card) {
+            card.open = true;
+            const group = card.closest("details.diff-more");
+            if (group) group.open = true;
+          }
+
           // Differenzen von vor 2026-10-16 erzaehlen beide Seiten mit den
           // Anonym-Labels des Judges ("Model F sagt, ...", "Die Synthese sagt,
           // dass ..."), und die Ueberschrift erzaehlt dasselbe noch einmal. In
@@ -2390,31 +2398,66 @@
             "^\\s*(?:(?:Models?|Modell)\\s+([A-Z])|(?:die|the)\\s+(?:Synthese|synthesis|Konsensantwort|consensus(?:\\s+answer)?))"
             + "\\s+(?:sagt|says|meldet|reports|beschreibt|describes|behauptet|claims|states|nennt|names|schreibt|writes|"
             + "argumentiert|argues|erklärt|explains|betont|stresses)\\s*,?\\s*(?:dass\\s+|that\\s+)?", "i");
-          const LEGACY_NARRATIVE = /\b(?:Models?|Modelle?)\s+[A-Z]\b|\b(?:Synthese|synthesis|Konsensantwort|consensus answer)\b/;
+          const LEGACY_NARRATIVE = /\b(?:Models?|Modelle?)\s+[A-Z]\b|\b(?:Synthese|synthesis|Konsensantwort|Konsens|consensus answer)\b/;
+          // Steht "Model X" am Anfang einer Position mit genau einem Modell,
+          // ist X dieses Modell. Alle Differenzen eines Prueflaufs teilen
+          // dieselben Labels, die Zuordnung gilt also fuer die ganze Liste.
+          const LEGACY_LABEL = /\b(?:Model|Modell)\s+([A-Z])\b/g;
 
-          function readableDifference(diff, labelFor) {
+          const SYNTHESIS_SUBJECT = /^\s*die\s+(?:Synthese|Konsensantwort)/i;
+
+          function legacyModelNames(differences, labelFor) {
             const names = {};
+            differences.forEach(function (diff) {
+              (diff.positions || []).forEach(function (pos) {
+                const match = /^\s*(?:Model|Modell)\s+([A-Z])\b/.exec(pos.stance || "");
+                if (match && pos.models.length === 1) names[match[1]] = labelFor(pos.models[0]);
+              });
+            });
+            return names;
+          }
+
+          function withModelNames(text, names) {
+            return String(text || "").replace(LEGACY_LABEL, function (label, letter) {
+              return names[letter] || label;
+            });
+          }
+
+          function readableDifference(diff, labelFor, names) {
+            names = names || legacyModelNames([diff], labelFor);
             const hasAnswer = diff.positions.some(function (pos) { return pos.in_answer === true; });
             let legacyAnswer = false;
             const positions = diff.positions.map(function (pos) {
               const match = LEGACY_ATTRIBUTION.exec(pos.stance || "");
+              // Nach "dass" steht das Verb am Ende: ohne den Hauptsatz waere
+              // der Rest kein Satz. Dann bleibt der Satz, nur der Sprecher
+              // bekommt seinen Namen ("Die Antwort", das echte Modell).
+              if (match && /dass\s+$/i.test(match[0])) {
+                const speaker = withModelNames(pos.stance, names).replace(SYNTHESIS_SUBJECT, "Die Antwort");
+                const kept = Object.assign({}, pos, { stance: speaker });
+                if (!match[1] && !hasAnswer && !legacyAnswer) {
+                  kept.in_answer = true;
+                  legacyAnswer = true;
+                }
+                return kept;
+              }
               const rest = match ? pos.stance.slice(match[0].length).trim() : "";
-              if (!rest) return pos;
-              const readable = Object.assign({}, pos, { stance: rest.charAt(0).toUpperCase() + rest.slice(1) });
-              if (match[1]) {
-                if (pos.models.length === 1) names[match[1].toUpperCase()] = labelFor(pos.models[0]);
-              } else if (!hasAnswer && !legacyAnswer) {
+              if (!rest) {
+                const named = withModelNames(pos.stance, names);
+                return pos.stance && named !== pos.stance ? Object.assign({}, pos, { stance: named }) : pos;
+              }
+              const readable = Object.assign({}, pos, {
+                stance: withModelNames(rest.charAt(0).toUpperCase() + rest.slice(1), names)
+              });
+              if (!match[1] && !hasAnswer && !legacyAnswer) {
                 readable.in_answer = true;
                 legacyAnswer = true;
               }
               return readable;
             });
-            const claim = String(diff.claim || "").replace(/\b(?:Model|Modell)\s+([A-Z])\b/g, function (label, letter) {
-              return names[letter] || label;
-            });
             // Eine kurze Themenzeile ("Tesla Model S") ist keine Erzaehlung.
             const narrative = String(diff.claim || "").length > 60 && LEGACY_NARRATIVE.test(diff.claim);
-            return { claim: claim, narrative: narrative, positions: positions };
+            return { claim: withModelNames(diff.claim, names), narrative: narrative, positions: positions };
           }
 
           function buildDifferenceCards(cards, differences, modelCount, options) {
@@ -2449,14 +2492,30 @@
               // Gewichtungen; innerhalb einer Stufe bleibt die Judge-Reihenfolge.
               // Inline-Marker verlinken weiter per Datenindex
               // (data-difference-index), nicht per Kartenposition.
-              differences
+              const sorted = differences
                 .map(function (diff, index) { return { diff: diff, index: index }; })
                 .sort(function (a, b) {
                   return differenceRank(a.diff) - differenceRank(b.diff) || a.index - b.index;
-                })
-                .forEach(function (entry) {
+                });
+              const names = legacyModelNames(differences, labelFor);
+              // Gibt es kritische Widersprueche, stehen die kleineren (ab zwei)
+              // gebuendelt dahinter: sonst wird aus wenigen wichtigen Punkten
+              // eine lange, gleichfoermige Liste.
+              const smaller = sorted.filter(function (entry) { return differenceRank(entry.diff) > 0; });
+              let smallerBody = null;
+              if (smaller.length >= 2 && smaller.length < sorted.length) {
+                const group = document.createElement("details");
+                group.className = "diff-more";
+                const groupSummary = document.createElement("summary");
+                groupSummary.className = "diff-more-summary";
+                groupSummary.textContent = smaller.length + " smaller differences";
+                smallerBody = document.createElement("div");
+                smallerBody.className = "diff-more-body";
+                group.append(groupSummary, smallerBody);
+              }
+              sorted.forEach(function (entry) {
                 const diff = entry.diff;
-                const readable = readableDifference(diff, labelFor);
+                const readable = readableDifference(diff, labelFor, names);
                 const isVersus = diff.type === "contradiction" && readable.positions.length > 1;
                 const card = document.createElement("details");
                 card.dataset.differenceIndex = String(entry.index);
@@ -2503,17 +2562,15 @@
                 const body = document.createElement("div");
                 body.className = "diff-card-body";
                 // Ein Widerspruch sind Behauptungen, die sich gegenueberstehen:
-                // jede Seite ist ein Satz, dazwischen steht "vs" (zwei Seiten
-                // nebeneinander, sonst untereinander). Die Seite, die die
-                // Antwort vertritt, steht vorn. Eine andere Gewichtung ist
-                // kein Widerspruch und bekommt kein "vs".
+                // jede Seite ist ein Satz, dazwischen steht "vs". Immer
+                // untereinander, damit zwei und drei Seiten gleich aussehen.
+                // Die Seite, die die Antwort vertritt, steht vorn. Eine andere
+                // Gewichtung ist kein Widerspruch und bekommt kein "vs".
                 const ordered = readable.positions.slice().sort(function (a, b) {
                   return (b.in_answer === true) - (a.in_answer === true);
                 });
-                const answerSide = ordered.some(function (pos) { return pos.in_answer === true; });
                 const sides = document.createElement("div");
-                sides.className = "diff-sides" + (isVersus ? " is-versus" : "")
-                  + (isVersus && ordered.length === 2 ? " is-pair" : "");
+                sides.className = "diff-sides" + (isVersus ? " is-versus" : "");
                 ordered.forEach(function (pos, sideIndex) {
                   if (isVersus && sideIndex > 0) {
                     const mark = document.createElement("span");
@@ -2523,13 +2580,10 @@
                   }
                   const posEl = document.createElement("div");
                   posEl.className = "diff-position" + (pos.in_answer === true ? " is-answer" : "");
-                  // Nebeneinander haelt die Gegenseite die Zeile frei, damit
-                  // beide Behauptungen auf derselben Hoehe beginnen.
-                  if (pos.in_answer === true || (answerSide && isVersus)) {
+                  if (pos.in_answer === true) {
                     const answerTag = document.createElement("span");
-                    answerTag.className = "diff-position-answer" + (pos.in_answer === true ? "" : " is-placeholder");
+                    answerTag.className = "diff-position-answer";
                     answerTag.textContent = "In the answer";
-                    if (pos.in_answer !== true) answerTag.setAttribute("aria-hidden", "true");
                     posEl.appendChild(answerTag);
                   }
                   const claimText = pos.stance || pos.quote;
@@ -2628,11 +2682,13 @@
                   body.appendChild(resolveSection);
                 }
                 card.appendChild(body);
-                cards.appendChild(card);
+                (smallerBody && differenceRank(diff) > 0 ? smallerBody : cards).appendChild(card);
                 // Persistierte Resolve-Runde (z. B. aus einem Bookmark): Karte
                 // direkt als gelöst/bestätigt kennzeichnen.
                 if (diff.resolution) markCardResolved(card, diff.resolution.outcome);
               });
+              // Die Gruppe steht hinter den kritischen Karten.
+              if (smallerBody) cards.appendChild(smallerBody.parentNode);
             }
             return cards;
           }

@@ -630,6 +630,19 @@ body.comparison-layout-changing .input-section { transition: none; }
 }
 .answer-reader-inspector .diff-card[open] > .diff-card-summary::after { transform: rotate(225deg); top: 21px; }
 .answer-reader-inspector .diff-card-summary:hover::after { border-color: var(--ink-2); }
+/* The smaller differences: one quiet row with the same chevron as a card. */
+.answer-reader-inspector .diff-more { border-top: 0; border-bottom: 1px solid var(--line-soft); }
+.answer-reader-inspector .diff-more-summary { position: relative; padding: 14px 28px 14px 0; font-size: var(--font-size-sm); }
+.answer-reader-inspector .diff-more-summary::after {
+  position: absolute;
+  right: 6px;
+  top: 20px;
+  margin: 0;
+  border-color: var(--ink-3);
+  transform: rotate(45deg);
+}
+.answer-reader-inspector .diff-more[open] > .diff-more-summary::after { transform: rotate(225deg); top: 23px; }
+.answer-reader-inspector .diff-more-body > .diff-card:last-child { border-bottom: 0; }
 .answer-reader-inspector .diff-card-tags { gap: 6px; font-size: var(--font-size-xs); line-height: 1.4; }
 .answer-reader-inspector .sev-dot { width: 6px; height: 6px; }
 .answer-reader-inspector .diff-card .diff-card-tags .diff-type-tag {

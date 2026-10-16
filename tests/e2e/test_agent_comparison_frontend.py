@@ -554,16 +554,13 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         expect(detail).to_contain_text('DeepSeek V4 Flash: no answer, no complete answer arrived.')
         status.locator('summary').click()
         expect(cards.first).to_have_attribute('open', '')
-        # Two claims facing each other: the sides with "vs" between them.
-        expect(cards.first.locator('.diff-sides.is-versus.is-pair')).to_have_count(1)
+        # Two claims facing each other, always one above the other, "vs" between them.
+        expect(cards.first.locator('.diff-sides.is-versus')).to_have_count(1)
         expect(cards.first.locator('.diff-versus-mark')).to_have_text('vs')
         expect(cards.first.locator('.diff-position-stance')).to_have_text(
             ['Five seats are included.', 'The seat limit needs confirmation.'])
         side_boxes = [cards.first.locator('.diff-position').nth(i).bounding_box() for i in range(2)]
-        if width >= 760:
-            assert abs(side_boxes[0]['y'] - side_boxes[1]['y']) < 2  # side by side
-        else:
-            assert side_boxes[1]['y'] > side_boxes[0]['y'] + side_boxes[0]['height'] - 1  # one above the other
+        assert side_boxes[1]['y'] > side_boxes[0]['y'] + side_boxes[0]['height'] - 1  # one above the other
         heads = cards.first.locator('.diff-position-label')
         expect(heads).to_have_count(2)
         expect(heads.first.locator('.diff-position-name')).to_have_text(['GPT-5.4 Mini', 'Gemini 3.5 Flash-Lite', 'Kimi K2.6'])
@@ -577,6 +574,11 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         cards.first.locator('.diff-quote-toggle').first.click()
         expect(quote).to_be_visible()
         _snapshot(page, f'differences-calm-detail-{width}-{theme}')
+        # The smaller differences wait in one closed group behind the critical one.
+        more = page.locator('#answerReaderInspector details.diff-more')
+        expect(more.locator('.diff-more-summary')).to_have_text('2 smaller differences')
+        expect(cards.nth(1)).to_be_hidden()
+        more.locator('.diff-more-summary').click()
         cards.nth(1).locator('summary').click()
         expect(cards.nth(1)).to_have_attribute('open', '')
         expect(cards.first).not_to_have_attribute('open', '')
