@@ -1345,6 +1345,72 @@ def test_list_turn_details_checks_the_chat_once_for_the_whole_page(chat_api):
     assert len(chat_reads) == 1
 
 
+def test_list_turn_details_batches_model_answers_instead_of_one_query_per_turn(chat_api, monkeypatch):
+    # Audit C6: a chat page used to run one model_answers query per turn.
+    client, database = chat_api
+    chat = create_chat(client)
+    store = chat_store.ChatStore(database)
+    for index in range(4):
+        turn = create_turn(
+            client, chat["id"], {**TURN_PAYLOAD, "question": f"Question {index}"}
+        )
+        if index != 2:
+            store.complete_turn(
+                "owner-uid",
+                chat["id"],
+                turn["id"],
+                **completion_payload(
+                    question=f"Question {index}", providers=("OpenAI", "Gemini")
+                ),
+            )
+    batches = []
+    original_get_all = database.get_all
+    monkeypatch.setattr(
+        database, "get_all", lambda refs: batches.append(list(refs)) or original_get_all(refs)
+    )
+    queried = []
+    original_stream = FakeCollectionRef.stream
+
+    def recording_stream(self):
+        queried.append(self.path)
+        return original_stream(self)
+
+    monkeypatch.setattr(FakeCollectionRef, "stream", recording_stream)
+
+    page = store.list_turn_details("owner-uid", chat["id"])
+
+    assert len(batches) == 1
+    assert len(batches[0]) == 6  # 3 completed turns x 2 answers, the pending one costs nothing
+    assert not [path for path in queried if path[-1] == "model_answers"]
+    answers = {turn["question"]: set(turn["model_answers"]) for turn in page["turns"]}
+    assert answers == {
+        "Question 0": {"OpenAI", "Gemini"},
+        "Question 1": {"OpenAI", "Gemini"},
+        "Question 2": set(),
+        "Question 3": {"OpenAI", "Gemini"},
+    }
+
+
+def test_list_turn_details_keeps_the_query_for_turns_without_included_models(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    store = chat_store.ChatStore(database)
+    store.complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload(providers=("OpenAI",))
+    )
+    turn_path = ("users", "owner-uid", "chats", chat["id"], "turns", turn["id"])
+    database.documents[turn_path].pop("included_models")
+    smuggled = (*turn_path, "model_answers", "gemini")
+    database.documents[smuggled] = {
+        **database.model_answers("owner-uid", chat["id"], turn["id"])["openai"],
+    }
+
+    page = store.list_turn_details("owner-uid", chat["id"])
+
+    assert set(page["turns"][0]["model_answers"]) == {"OpenAI"}
+
+
 def test_list_turn_details_keeps_pagination_identical_to_list_turns(chat_api):
     client, database = chat_api
     chat = create_chat(client)

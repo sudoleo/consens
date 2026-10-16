@@ -104,6 +104,8 @@ CHAT_PAGE_SIZE = 30
 CHAT_PAGE_SIZE_MAX = 50
 TURN_PAGE_SIZE = 50
 TURN_PAGE_SIZE_MAX = 100
+# Documents per batched get when a turn page loads its model answers.
+MODEL_ANSWER_BATCH_SIZE = 100
 
 # Harte Obergrenzen pro Eigentuemer. Chats und Turns kosten KEINEN Usage-Slot:
 # beide Endpoints schreiben nach Firestore, ohne dass je ein Modell laeuft. Ohne
@@ -751,6 +753,55 @@ class ChatStore:
             answers[answer["provider"]] = answer
         return answers
 
+    def _page_model_answers(self, turns_ref, turns: list[tuple[str, dict]]) -> dict[str, dict]:
+        """Model answers for a whole page in a few batched gets (audit C6).
+
+        Answers are only ever written by ``complete_turn``, in the same
+        transaction that records ``included_models``. So the document IDs are
+        known up front: one ``get_all`` per chunk replaces one query per turn,
+        and pending or failed turns (which never hold answers) cost nothing.
+        A completed turn without ``included_models`` keeps the old query.
+        """
+        answers_by_turn: dict[str, dict] = {}
+        ref_turns: dict[object, str] = {}
+        refs = []
+        for turn_id, data in turns:
+            if data.get("execution_mode") == "agent":
+                continue
+            if data.get("status") != TURN_STATUS_COMPLETED:
+                continue
+            included = data.get("included_models")
+            if not isinstance(included, list):
+                answers_by_turn[turn_id] = self._model_answers(turns_ref.document(turn_id))
+                continue
+            answers_by_turn[turn_id] = {}
+            answers_ref = turns_ref.document(turn_id).collection("model_answers")
+            for document_id in dict.fromkeys(
+                PROVIDER_DOCUMENT_IDS[provider]
+                for provider in included
+                if isinstance(provider, str) and provider in PROVIDER_DOCUMENT_IDS
+            ):
+                ref = answers_ref.document(document_id)
+                ref_turns[ref.path] = turn_id
+                refs.append(ref)
+        get_all = getattr(self.db, "get_all", None)
+        for start in range(0, len(refs), MODEL_ANSWER_BATCH_SIZE):
+            chunk = refs[start:start + MODEL_ANSWER_BATCH_SIZE]
+            snapshots = get_all(chunk) if callable(get_all) else (ref.get() for ref in chunk)
+            for snapshot in snapshots:
+                if not snapshot.exists:
+                    continue
+                turn_id = ref_turns.get(snapshot.reference.path)
+                if turn_id is None:
+                    continue
+                answer = model_answer_metadata(snapshot.to_dict() or {})
+                if answer is None:
+                    continue
+                if PROVIDER_DOCUMENT_IDS.get(answer["provider"]) != snapshot.id:
+                    continue
+                answers_by_turn[turn_id][answer["provider"]] = answer
+        return answers_by_turn
+
     def validate_turn_for_completion(
         self,
         uid: str,
@@ -1144,18 +1195,17 @@ class ChatStore:
         """
         page = self._list_turn_snapshots(uid, chat_id, limit=limit, cursor=cursor)
         turns_ref = self._chat_ref(uid, chat_id).collection("turns")
-        turns = []
+        visible = []
         for snapshot in page["snapshots"]:
             data = snapshot.to_dict() or {}
             if status is not None and data.get("status") != status:
                 continue
-            turns.append(
-                turn_detail(
-                    snapshot.id,
-                    data,
-                    {} if data.get("execution_mode") == "agent" else self._model_answers(turns_ref.document(snapshot.id)),
-                )
-            )
+            visible.append((snapshot.id, data))
+        answers_by_turn = self._page_model_answers(turns_ref, visible)
+        turns = [
+            turn_detail(turn_id, data, answers_by_turn.get(turn_id, {}))
+            for turn_id, data in visible
+        ]
         return {
             "turns": turns,
             "next_cursor": page["next_cursor"],
