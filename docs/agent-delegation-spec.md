@@ -60,8 +60,9 @@ Workern bedarfsgesteuert. Delegation ist verfügbar, nicht verpflichtend.
 
 ## Frontend
 
-- Beim ersten Agentenstart öffnet sich rechts eine **Agenten-Seitenleiste**.
-  Sie bleibt schließbar; manuelles Schließen wird im laufenden Turn respektiert.
+- Rechts gibt es eine **Agenten-Seitenleiste**. Sie öffnet sich nie von selbst
+  (seit 2026-10-17 auch nicht auf dem Desktop), sondern über das Panel-Symbol
+  oder ein Modell-Icon; Öffnen und Schließen werden pro Turn gemerkt.
   Mobil erscheint eine passende ausklappbare Detailansicht.
 - Direkt neben dem bestehenden Reasoning-/Aktivitätspfad stehen die Modell-Icons
   der aktuell arbeitenden Agenten. Klick öffnet deren Details. Gleiche Modelle

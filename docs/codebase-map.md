@@ -8174,16 +8174,14 @@ Spalte, keine Karte, kein Schatten; Zeilen ohne Trennlinien mit Ton beim
 Hover, Segmente nur in Tinte, laufender Aufruf als wandernder Abschnitt ohne
 Schiene, Faltzeichen nur bei Hover/Fokus/offen); `.auth-top-actions` rückt
 für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet.
-Unter 1200 px öffnet `agent-delegation.js` die Leiste nie
-selbst; das Panel-Symbol neben den Modell-Icons (`.agent-sidebar-toggle`,
-`aria-label` „Activity · n“, `aria-controls="agentSidebar"`) öffnet ein
-Sheet mit Scrim, Fokusfalle und Escape. Ab 1200 px öffnet sie automatisch nur
-für einen LAUFENDEN Turn (`get(chat, turn, live)`: `project({running})` bzw.
-Live-SSE) und nur, wenn die Lesespalte daneben mindestens 600 px behält; ein
-geöffnetes Bookmark oder ein fertiger Turn bleibt seit 2026-10-02 zu, bis man
-sie über Chip/Toggle öffnet; offen rückt die Spalte
-nach links (`body.agent-sidebar-open`), statt unter der Leiste zu liegen. Nur
-explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
+`agent-delegation.js` öffnet die Leiste seit 2026-10-17 auf keiner Breite
+selbst, auch nicht für einen laufenden Turn (vorher ab 1200 px automatisch
+bei Platz neben der Spalte). Das Panel-Symbol neben den Modell-Icons
+(`.agent-sidebar-toggle`, `aria-label` „Activity · n“,
+`aria-controls="agentSidebar"`) oder ein Modell-Icon öffnet sie: unter 1200 px
+als Sheet mit Scrim, Fokusfalle und Escape, ab 1200 px daneben; offen rückt
+die Spalte nach links (`body.agent-sidebar-open`), statt unter der Leiste zu
+liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
 während eines laufenden bzw. abschließenden Laufs und endet danach.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
 Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:

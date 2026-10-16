@@ -316,8 +316,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert any('meta.svg' in src for src in icons)
         # A model's row in the agent panel opens its answer in the reader;
         # the answer check opens the differences.
-        if not page.locator('#agentSidebar').is_visible():
-            page.locator('#agentAnswer .agent-sidebar-toggle').click()
+        expect(page.locator('#agentSidebar')).not_to_be_visible()
+        page.locator('#agentAnswer .agent-sidebar-toggle').click()
         page.locator('.agent-session', has_text='Kimi K2.6').locator('summary').click()
         expect(page.locator('#modelAnswerReader')).to_be_visible()
         expect(page.locator('#agentSidebar')).not_to_be_visible()

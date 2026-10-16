@@ -63,19 +63,12 @@
   let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null, scrim = null;
   let ownerUser = null, ownerGeneration;
   const uid = () => window.auth?.currentUser?.uid || "";
-  // Beside the column only on wide screens. Narrower viewports keep the inline
-  // "Activity · n" chip and open the sheet on request, never on their own.
+  // Beside the column on wide screens (the column moves aside, agent-chat.css),
+  // a sheet on narrower ones. On every width it opens only on request: the
+  // panel glyph or a model icon (2026-10-17, before that it opened by itself
+  // for a running turn on a wide screen).
   const wideQuery = window.matchMedia?.('(min-width: 1200px)');
   const wide = () => !wideQuery || wideQuery.matches;
-  // On a wide screen the reading column moves aside for the panel
-  // (agent-chat.css). It opens by itself only while that column keeps a
-  // comfortable measure; otherwise the chip opens it on request.
-  const PANEL_SPACE = 346 + 48, MIN_COLUMN = 600;
-  function roomBeside() {
-    if (!wide()) return false;
-    const offset = parseFloat(getComputedStyle(document.body).getPropertyValue('--app-sidebar-offset')) || 0;
-    return window.innerWidth - offset - PANEL_SPACE >= MIN_COLUMN;
-  }
   function setText(el, value) { if (el.textContent !== value) el.textContent = value; }
   function setTitle(el, value) { if (el.title !== value) el.title = value; }
   const keyFor = (chat, turn) => `${uid()}:${chat}:${turn}`;
@@ -129,10 +122,7 @@
     inline = null;
     document.body.classList.remove("agent-sidebar-open", "agent-sidebar-sheet");
   }
-  // `live`: the turn is running as it is first shown. Only then may the
-  // panel open by itself; an opened bookmark or a finished turn keeps it
-  // closed until asked (the chip and the toggle still open it).
-  function get(chatId, turnId, live = false) {
+  function get(chatId, turnId) {
     resetOwner();
     const key = keyFor(chatId, turnId);
     if (!views.has(key)) {
@@ -140,7 +130,7 @@
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
       views.set(key, { key, uid: owner, user: ownerUser, authGeneration: ownerGeneration, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
         controller: new AbortController(), expanded: new Set(saved.expanded || []),
-        closed: typeof saved.closed === 'boolean' ? saved.closed : !(live && roomBeside()), manual: typeof saved.closed === 'boolean',
+        closed: typeof saved.closed === 'boolean' ? saved.closed : true, manual: typeof saved.closed === 'boolean',
         scroll: saved.scroll || 0, loaded: false, loading: false, running: false, ended: false, settling: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
         const old = [...views.values()].find(v => v.key !== current?.key && !v.running);
@@ -189,7 +179,7 @@
     if (context.metadata.agentTurnId && context.metadata.agentTurnId !== event.turn_id) return;
     context.metadata.agentTurnId = event.turn_id;
     context.metadata.delegation = true;
-    const view = get(event.chat_id, event.turn_id, true);
+    const view = get(event.chat_id, event.turn_id);
     view.lastSync = Date.now();
     merge(view, event.agent);
     if (current === view) render();
@@ -530,8 +520,6 @@
     ensure();
     if (!current || (!current.local && current.uid !== uid())) { hide(); return; }
     const view = current;
-    // Crossing into the sheet width closes a panel that opened by itself.
-    if (!view.manual && !view.closed && !roomBeside()) view.closed = true;
     const activity = document.getElementById("agentAnswerActivity");
     const inlineHost = activity?.querySelector("summary") || activity;
     if (inlineHost && (!inline || inline.parentElement !== inlineHost)) {
@@ -678,7 +666,7 @@
   function project(spec) {
     resetOwner();
     if (!spec?.chatId || !spec?.turnId || !owner) { current = null; inline?.remove(); inline = null; hide(); syncTimer(); return; }
-    const view = get(spec.chatId, spec.turnId, !!spec.running);
+    const view = get(spec.chatId, spec.turnId);
     const changed = current !== view;
     const wasRunning = view.running;
     if (changed) {
@@ -724,7 +712,7 @@
     let view = views.get("demo");
     if (!view || view.turnId !== spec.turnId) {
       view = { key: "demo", local: true, uid: owner, chatId: "demo", turnId: spec.turnId, agents: new Map(), details: new Map(),
-        progress: new Map(), controller: new AbortController(), expanded: new Set(), closed: !roomBeside(), manual: false,
+        progress: new Map(), controller: new AbortController(), expanded: new Set(), closed: true, manual: false,
         scroll: 0, loaded: true, loading: false, running: true, ended: false, settling: false, usage: null, lastSync: Date.now() };
       views.set("demo", view);
     }

@@ -292,10 +292,15 @@ describe("Agent sidebar", () => {
     await vi.waitFor(() => expect(w.App.agentChat.receiveBudget).toHaveBeenCalledWith(budget, 'owner'));
     dom.window.close();
   });
-  it("opens on first start, shares state with inline icons and respects manual close and duplicate events", async () => {
+  it("stays closed on first start on a wide screen, shares state with inline icons and respects manual close and duplicate events", async () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); w.App.agentDelegation.project({ chatId, turnId, running: true });
+    // A running turn no longer opens the panel by itself, on any width.
+    expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    expect(d.body.classList.contains("agent-sidebar-open")).toBe(false);
+    d.querySelector(".agent-sidebar-toggle").click();
     expect(d.getElementById("agentSidebar").hidden).toBe(false);
+    expect(d.getElementById("agentSidebar").getAttribute("role")).toBe("complementary");
     expect(d.querySelectorAll(".agent-session")).toHaveLength(1);
     await settle();
     d.querySelector(".agent-session summary").click();
