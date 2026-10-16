@@ -9,8 +9,9 @@
  * Sparsam gebaut: unten ein Raster aus Zeichen, das fast nie neu gemalt wird,
  * darüber ein winziger Nebel-Canvas in Seitenfarbe (ein Punkt je 10 px), den
  * der Browser weich hochskaliert. Pro Bild ändert sich nur der Nebel. Ruhig
- * 15 Bilder/s, nur während einer Welle im vollen Bildtakt; ein verdeckter
- * Tab rechnet gar nicht. Reduzierte Bewegung zeigt ruhende Wolken ohne Welle.
+ * 10 Bilder/s, zwischen denen der Tab schläft; nur während einer Welle im
+ * vollen Bildtakt; ein verdeckter Tab rechnet gar nicht. Reduzierte Bewegung
+ * zeigt ruhende Wolken ohne Welle.
  *
  * Öffentlich: window.App.letterClouds { state(), splash(x, y) }.
  */
@@ -24,7 +25,10 @@
   const GLYPH_A = 0.26;   // Deckkraft eines voll freigelegten Zeichens
   const PEAK = 0.62;      // dichteste Wolke legt so viel davon frei
   const FOG = 10;         // CSS-Pixel je Nebelpunkt
-  const IDLE_MS = 1000 / 15;
+  // Die Wolken ziehen nur ein paar Pixel pro Sekunde: 10 Bilder/s sehen wie
+  // fließend aus und kosten ein Drittel weniger als 15.
+  const IDLE_MS = 1000 / 10;
+  const FLICKER = 0.018;  // Anteil der Zeichen, die pro Sekunde wechseln
   const FADE_IN = 7;      // Sekunden, bis die Wolken ganz da sind
   const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
   // Klicks auf Bedienelemente und Flächen mit eigener Aufgabe lösen keine Welle aus.
@@ -70,12 +74,13 @@
   let dpr = 1, cw = 7, rh = 13, W = 0, H = 0, cols = 0, rows = 0;
   let chars = null, fw = 0, fh = 0, img = null, cvis = null, atlas = null;
   let noise = null, theme = "", calm = null, calmAt = -1e9;
-  let active = false, raf = 0, lastCloud = -1e9, born = now();
+  let active = false, raf = 0, timer = 0, lastCloud = -1e9, born = now();
   const rip = [];
 
   // Kachelbares Wertrauschen, beim ersten Start einmal berechnet und auf
   // Mittelwert 0 / Streuung 1 gebracht, damit jeder Aufruf ähnlich viel bedeckt.
   const NS = 128;
+  const OFF = NS * 64;    // hält Abtastkoordinaten positiv, siehe sample()
   function buildNoise() {
     noise = new Float32Array(NS * NS);
     for (const [p, w] of [[32, 0.5], [16, 0.3], [8, 0.2]]) {
@@ -96,12 +101,13 @@
     const sd = Math.sqrt(v / noise.length) || 1;
     for (let i = 0; i < noise.length; i++) noise[i] = (noise[i] - m) / sd;
   }
+  // u, v sind positiv (Aufrufer verschieben um OFF): dann kacheln Bitmasken,
+  // statt pro Abtastung zweimal die langsame Gleitkomma-Division % zu rechnen.
   function sample(u, v) {
-    u %= NS; if (u < 0) u += NS;
-    v %= NS; if (v < 0) v += NS;
-    const x0 = u | 0, y0 = v | 0, fx = u - x0, fy = v - y0;
-    const x1 = (x0 + 1) & (NS - 1), y1 = (y0 + 1) & (NS - 1);
-    const a = noise[y0 * NS + x0], b = noise[y0 * NS + x1], c = noise[y1 * NS + x0], d = noise[y1 * NS + x1];
+    const ui = u | 0, vi = v | 0, fx = u - ui, fy = v - vi;
+    const x0 = ui & (NS - 1), x1 = (ui + 1) & (NS - 1);
+    const y0 = (vi & (NS - 1)) * NS, y1 = ((vi + 1) & (NS - 1)) * NS;
+    const a = noise[y0 + x0], b = noise[y0 + x1], c = noise[y1 + x0], d = noise[y1 + x1];
     const top = a + (b - a) * fx;
     return top + ((c + (d - c) * fx) - top) * fy;
   }
@@ -189,7 +195,8 @@
     const still = reduced();
     const tt = still ? born : t;
     const fade = still ? 1 : ss((t - born) / FADE_IN);
-    const ax = tt * 0.55, ay = tt * 0.1, bx = 37.3 - tt * 0.27, by = 11.9 + tt * 0.32;
+    const wrap = x => OFF + x % NS;
+    const ax = wrap(tt * 0.55), ay = wrap(tt * 0.1), bx = wrap(37.3 - tt * 0.27), by = wrap(11.9 + tt * 0.32);
     // Gedrehte Abtastung, sonst zeichnet das Gitter des Rauschens gerade Kanten.
     const c1 = 0.866 / 12, s1 = 0.5 / 12, c2 = 0.643 / 8, s2 = -0.766 / 8;
     measureCalm(t);
@@ -209,7 +216,7 @@
       }
     }
     if (!still) {
-      const n = Math.max(1, (chars.length * 0.0012) | 0);
+      const n = Math.max(1, (chars.length * FLICKER * IDLE_MS / 1000) | 0);
       for (let s = 0; s < n; s++) {
         const k = (Math.random() * chars.length) | 0;
         chars[k] = (Math.random() * NCH) | 0;
@@ -248,10 +255,15 @@
     for (const r of rip) {
       const age = t - r.t;
       if (age <= 0) continue;
-      const R0 = r.speed * Math.pow(age, 0.78), lo = Math.max(0, R0 * 0.6 - 60), hi = R0 * 1.35 + 60;
+      // Radius 0.76–1.24 R0, Breite höchstens 36, |z| <= 3: außerhalb dieses
+      // Rings trägt kein Punkt bei, die engere Grenze spart nur Rechnung.
+      const R0 = r.speed * Math.pow(age, 0.78);
+      const lo = Math.max(0, R0 * 0.6 - 60, R0 * 0.76 - 109), hi = Math.min(R0 * 1.35 + 60, R0 * 1.24 + 109);
+      const p1 = r.p[1] + age * 1.7, p2 = r.p[2] + age;
       act.push({
         x: r.x, y: r.y, R0, lo2: lo * lo, hi, hi2: hi * hi, fade: Math.pow(1 - age / r.life, 1.5) * r.a,
-        h0: r.h[0], h1: r.h[1], p0: r.p[0], p1: r.p[1] + age * 1.7, p2: r.p[2] + age, sf: r.sf
+        h0: r.h[0], h1: r.h[1], sf: r.sf,
+        c0: Math.cos(r.p[0]), s0: Math.sin(r.p[0]), c1: Math.cos(p1), s1: Math.sin(p1), c2: Math.cos(p2), s2: Math.sin(p2)
       });
     }
     const d = img.data, rowAct = [];
@@ -273,9 +285,18 @@
           if (dx > r.hi || dx < -r.hi) continue;
           const dy = py - r.y, d2 = dx * dx + dy * dy;
           if (d2 < r.lo2 || d2 > r.hi2) continue;
-          const dd = Math.sqrt(d2), th = Math.atan2(dy, dx);
-          const R = r.R0 * (1 + 0.16 * Math.sin(r.h0 * th + r.p0) + 0.08 * Math.sin(r.h1 * th + r.p1));
-          const z = (dd - R) / (24 * (1 + 0.5 * Math.sin(2 * th + r.p2)));
+          // sin(k·θ + p) ohne atan2 und Math.sin: cos/sin von θ aus dx, dy,
+          // Vielfache per Tschebyschow-Rekursion, die Phase per Additionstheorem.
+          const dd = Math.sqrt(d2), c = dd > 0 ? dx / dd : 1, sn = dd > 0 ? dy / dd : 0;
+          let ck = c * c - sn * sn, sk = 2 * c * sn, cp = c, sp = sn, ca = ck, sa = sk;
+          const cos2 = ck, sin2 = sk;
+          for (let k = 3; k <= r.h1; k++) {
+            const cn = 2 * c * ck - cp, snk = 2 * c * sk - sp;
+            cp = ck; sp = sk; ck = cn; sk = snk;
+            if (k === r.h0) { ca = ck; sa = sk; }
+          }
+          const R = r.R0 * (1 + 0.16 * (sa * r.c0 + ca * r.s0) + 0.08 * (sk * r.c1 + ck * r.s1));
+          const z = (dd - R) / (24 * (1 + 0.5 * (sin2 * r.c2 + cos2 * r.s2)));
           if (z > 3 || z < -3) continue;
           let gq = Math.exp(-z * z) * r.fade, h = q * 0.6180339 + r.sf;
           h -= Math.floor(h);
@@ -298,18 +319,23 @@
     f.putImageData(img, 0, 0);
   }
 
+  // Während einer Welle läuft jedes Bild. Ruhig weckt ein Timer erst das
+  // nächste fällige Bild: der Tab schläft dazwischen, statt bei jedem
+  // Bildschirmtakt aufzuwachen und gleich wieder aufzugeben. Fällig misst die
+  // Uhr, nicht ts: ts ist der Beginn des Bildtakts und kann vor dem Timer liegen.
   function loop(ts) {
     raf = 0;
     if (!active || document.hidden) return;
-    const busy = rip.length > 0, due = ts - lastCloud >= IDLE_MS - 1;
-    if (busy || due) {
-      if (due) lastCloud = ts;
+    const at = performance.now(), due = at - lastCloud >= IDLE_MS - 12;
+    if (rip.length || due) {
+      if (due) lastCloud = at;
       frame(ts / 1000, due);
     }
-    if (reduced() && !busy) return;
-    raf = window.requestAnimationFrame(loop);
+    if (rip.length) raf = window.requestAnimationFrame(loop);
+    else if (!reduced()) timer = setTimeout(wake, lastCloud + IDLE_MS - 8 - performance.now());
   }
   function wake() {
+    if (timer) { clearTimeout(timer); timer = 0; }
     if (!raf && active && supported && !document.hidden) raf = window.requestAnimationFrame(loop);
   }
 
@@ -338,6 +364,7 @@
       rip.length = 0;
       layer.classList.add("is-off");
       if (raf) { window.cancelAnimationFrame(raf); raf = 0; }
+      if (timer) { clearTimeout(timer); timer = 0; }
     } else if (want) {
       themeCheck();
     }
@@ -367,7 +394,7 @@
   }
 
   window.App.letterClouds = {
-    state: () => ({ supported, active, running: !!raf, ripples: rip.length }),
+    state: () => ({ supported, active, running: !!(raf || timer), ripples: rip.length }),
     splash
   };
 })();

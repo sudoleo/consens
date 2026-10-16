@@ -15,6 +15,8 @@ function fakeContext() {
 
 function boot({ hero = true, reduce = false, hidden = false, canvas = true, watchHidden = true, media = true } = {}) {
   const queue = [];
+  const timers = new Map();
+  let lastTimer = 0;
   const { window, document } = loadScripts(["static/js/letter-clouds.js"], {
     body: `<div class="container"><div class="input-section"><p class="hero-greeting">Hi</p>
       <textarea id="questionInput"></textarea><button id="send">Send</button></div>
@@ -24,6 +26,8 @@ function boot({ hero = true, reduce = false, hidden = false, canvas = true, watc
       if (hero) window.document.body.classList.add("is-hero");
       window.requestAnimationFrame = fn => { queue.push(fn); return queue.length; };
       window.cancelAnimationFrame = () => { queue.length = 0; };
+      window.setTimeout = (fn, ms) => { timers.set(++lastTimer, { fn, ms }); return lastTimer; };
+      window.clearTimeout = id => { timers.delete(id); };
       if (media) {
         window.matchMedia = query => ({
           matches: reduce && query.includes("reduced-motion"),
@@ -42,9 +46,11 @@ function boot({ hero = true, reduce = false, hidden = false, canvas = true, watc
     window,
     document,
     queue,
+    timers,
     fog,
     state: () => window.App.letterClouds.state(),
     frame(ts = 1000) { queue.splice(0).forEach(fn => fn(ts)); },
+    tick() { const due = [...timers.values()]; timers.clear(); due.forEach(t => t.fn()); },
     settle: () => new Promise(resolve => setTimeout(resolve, 0)),
     press(target) {
       target.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 120, clientY: 90 }));
@@ -85,6 +91,26 @@ describe("letter clouds", () => {
     expect(app.state().ripples).toBe(0);
     app.press(app.document.getElementById("empty"));
     expect(app.state().ripples).toBeGreaterThan(0);
+  });
+
+  it("sleeps between calm frames and draws every display frame only during a wave", async () => {
+    const app = boot();
+    app.frame();
+    expect(app.queue).toHaveLength(0);
+    expect(app.timers.size).toBe(1);
+    expect(app.state().running).toBe(true);
+    app.tick();
+    expect(app.queue).toHaveLength(1);
+
+    app.press(app.document.getElementById("empty"));
+    app.frame();
+    expect(app.queue).toHaveLength(1);
+    expect(app.timers.size).toBe(0);
+
+    app.document.body.classList.remove("is-hero");
+    await app.settle();
+    expect(app.state().running).toBe(false);
+    expect(app.timers.size).toBe(0);
   });
 
   it("pauses behind the watch page", async () => {

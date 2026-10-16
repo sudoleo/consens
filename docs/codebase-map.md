@@ -1811,16 +1811,26 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `body.is-hero` gesetzt und keine `.watch-page` sichtbar ist (MutationObserver
   auf `body.class` und `.watch-page[hidden]`). Verlässt der Nutzer den Hero
   (erste Frage, Bookmark, Demo, Watches), bekommt die Ebene `.is-off`
-  (ausblenden, dann `visibility: hidden`) und die rAF-Schleife endet; im Chat
+  (ausblenden, dann `visibility: hidden`) und die Schleife (rAF und Timer) endet; im Chat
   kostet sie nichts. Bauweise: ein Glyphen-Canvas (Atlas, fast nie neu
   gemalt, Deckkraft 0.26) unter einem winzigen Nebel-Canvas in der
   berechneten Seitenfarbe (1 Punkt je 10 px, vom Browser weich hochskaliert);
   pro Bild ändert sich nur der Nebel. Wolken = zwei gedrehte Abtastungen
   eines normierten, kachelbaren Wertrauschens (ungedreht zeichnet das Gitter
   gerade Kanten, ohne Normierung schwankte die Bedeckung 0–50 %), blenden
-  über 7 s ein und lichten sich um `.input-section`. Ruhe 15 Bilder/s,
-  Welle im vollen Bildtakt; die Wolken werden auch dann nur im Ruhetakt neu
-  gerechnet. `pointerdown` auf einer freien Stelle (nicht Steuerelemente,
+  über 7 s ein und lichten sich um `.input-section`. Ruhe 10 Bilder/s, die
+  ein `setTimeout` weckt (dazwischen schläft der Tab, kein rAF pro
+  Bildschirmtakt; `state().running` zählt rAF oder Timer), Welle im vollen
+  Bildtakt per rAF; die Wolken werden auch dann nur im Ruhetakt neu
+  gerechnet. Das Rauschen wird ohne Gleitkomma-`%` abgetastet (Koordinaten um
+  `OFF` positiv verschoben, Bitmasken kacheln), die Welle ohne `atan2`/`sin`
+  pro Punkt (Vielfache des Winkels per Tschebyschow-Rekursion, Ring auf
+  0.76–1.24 R0 ± 3 Breiten begrenzt); beides malt bitgenau dasselbe wie die
+  Fassung vom 2026-10-16 vor der Optimierung. Messung 2026-10-16 (i5-7500,
+  60 Hz, 1440x900): Ruhe Haupt-Thread 2,7 → 1,2 %, Renderer+GPU 7,2 → 4,2 %
+  eines Kerns; Welle bei 6x Drosselung p95 17 → 8 ms. Achtung beim Nachmessen:
+  DevTools-CPU-Drosselung dehnt `setTimeout` etwa 5x, rAF nicht.
+  `pointerdown` auf einer freien Stelle (nicht Steuerelemente,
   `.input-section`, Sidebar, Navigation, Dialoge) startet die Welle: Radius
   und Breite schwanken je Richtung, sie bremst ab, zerfällt in Flecken und
   hat 1–2 Nachläufer. Theme-Wechsel (`body.dark-mode`, System) malt neu,
