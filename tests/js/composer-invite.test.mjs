@@ -56,6 +56,7 @@ describe("a guest's Send", () => {
     expect(calls.drafts).toEqual(["Is creatine safe for teenagers?"]);
     const pending = JSON.parse(window.localStorage.getItem(PENDING));
     expect(pending.source).toBe("typed");
+    expect(pending.text).toBe("Is creatine safe for teenagers?");
     expect(Date.now() - pending.at).toBeLessThan(5000);
     const [mode, trigger, source, options] = calls.modals[0];
     expect([mode, trigger.id, source]).toEqual(["register", "sendButton", "composer"]);
@@ -112,6 +113,35 @@ describe("the send after sign-in", () => {
     expect(calls.sends).toBe(0);
     expect(input.value).toBe("Kept in the field");
     expect(window.localStorage.getItem(PENDING)).toBeNull();
+  });
+
+  it("sends only the text that was sent, never one typed or cut short after it", async () => {
+    const { App, input, window, calls } = boot({ guest: false,
+      pending: { at: Date.now(), source: "pasted", text: "A long pasted answer" } });
+    input.value = "A long pasted";
+    App.composerInvite.afterAccessUpdate(true);
+    await tick(window);
+    expect(calls.sends).toBe(0);
+    expect(input.value).toBe("A long pasted");
+    expect(window.localStorage.getItem(PENDING)).toBeNull();
+    expect(App.composerInvite.takeAskContext()).toEqual({ source: "typed" });
+  });
+
+  it("leaves the send to the tab in front", async () => {
+    const pending = { at: Date.now(), source: "typed", text: "Question" };
+    const { App, input, window, document, calls } = boot({ guest: false, pending });
+    input.value = "Question";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    App.composerInvite.afterAccessUpdate(true);
+    await tick(window);
+    expect(calls.sends).toBe(0);
+    expect(JSON.parse(window.localStorage.getItem(PENDING))).toEqual(pending);
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    App.composerInvite.afterAccessUpdate(true);
+    await tick(window);
+    expect(calls.sends).toBe(1);
+    expect(calls.sentText).toBe("Question");
   });
 
   it("waits for the fresh page while the sign-in reloads this one", async () => {

@@ -349,10 +349,25 @@ _FRAMING_HEADING_RE = re.compile(
     re.IGNORECASE,
 )
 _FRAMING_OFFER_RE = re.compile(
-    r"^\W*(?:if you(?:'|’)?d like|if you would like|if you want|would you like|want me to"
-    r"|let me know|i can also|i could also)\b",
+    r"^\W*(?:would you like|want me to|let me know|i can also|i could also)\b",
     re.IGNORECASE,
 )
+# "If you want ..." opens an offer ("If you want, I can also ...") as often as
+# advice ("If you want the cheapest option, use X."): it only counts as
+# framing with the offer itself in the same paragraph.
+_FRAMING_CONDITIONAL_RE = re.compile(
+    r"^\W*(?:if you(?:'|’)?d like|if you would like|if you want)\b", re.IGNORECASE
+)
+_OFFER_MARKER_RE = re.compile(
+    r"\b(?:i can|i could|i(?:'|’)ll|i will|i(?:'|’)d be happy|let me|want me to)\b|\?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _is_offer(block: str) -> bool:
+    if _FRAMING_OFFER_RE.match(block):
+        return True
+    return bool(_FRAMING_CONDITIONAL_RE.match(block) and _OFFER_MARKER_RE.search(block))
 
 
 def strip_chat_framing(md_text) -> str:
@@ -376,7 +391,7 @@ def strip_chat_framing(md_text) -> str:
         elif len(blocks) > 1:
             blocks = blocks[:index] + blocks[index + 1:]
         break
-    while len(blocks) > 1 and _FRAMING_OFFER_RE.match(blocks[-1].strip()):
+    while len(blocks) > 1 and _is_offer(blocks[-1].strip()):
         blocks = blocks[:-1]
     return "\n\n".join(blocks)
 

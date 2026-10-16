@@ -50,11 +50,13 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         expect(page.locator("#authLead")).to_have_text("Pick up where you left off.")
 
         stored = page.evaluate("""() => ({
-          draft: localStorage.getItem('consensio.questionDraft.v1'),
+          draft: JSON.parse(localStorage.getItem('consensio.questionDraft.v1')),
           pending: JSON.parse(localStorage.getItem('consensio.sendAfterLogin.v1')),
         })""")
-        assert stored["draft"] == VAT
+        assert stored["draft"]["text"] == VAT
         assert stored["pending"]["source"] == "example"
+        # Only exactly this text goes out by itself after the sign-in.
+        assert stored["pending"]["text"] == VAT
     finally:
         context.close()
 

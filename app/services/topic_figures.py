@@ -79,6 +79,7 @@ _YEAR_VALUE_RE = re.compile(
     r"(?:~|around |about |circa |c\. |by )?(?:19|20)\d{2}(?:\s*(?:[-–—]|to)\s*(?:19|20)\d{2})?s?",
     re.IGNORECASE,
 )
+_TIME_UNIT_RE = re.compile(r"\b(?:years?|yr|dates?|when)\b")
 _ANY_MONTH_RE = re.compile(r"\b" + _MONTH_RE + r"(?![a-z])", re.I)
 _NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
@@ -153,13 +154,23 @@ def _short(text, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
+def _unit_is_time(unit) -> bool:
+    """No unit, or one that says the value is a year ("year", "release
+    date"); "Elo", "tokens" or "per year" make 2048 a quantity."""
+    unit = _normalize(unit)
+    return not unit or (bool(_TIME_UNIT_RE.search(unit)) and "per " not in unit)
+
+
 def years_as_timeline(figure: dict) -> dict:
     """A numbers figure whose values are all years is a timeline: 2026, 2031
     and 2047 drawn as bars are three bars of almost the same length
-    (when-will-agi-arrive, 2026-10-15)."""
-    items = figure.get("items") or []
-    if (figure.get("kind") != "numbers" or not items
-            or not all(_YEAR_VALUE_RE.fullmatch(str(item.get("value") or "").strip()) for item in items)):
+    (when-will-agi-arrive, 2026-10-15). Only when the unit allows it: a
+    rating of 2048 stays a number."""
+    items = figure.get("items")
+    if (figure.get("kind") != "numbers" or not isinstance(items, list) or not items
+            or not all(isinstance(item, dict) for item in items)
+            or not all(_YEAR_VALUE_RE.fullmatch(str(item.get("value") or "").strip())
+                       and _unit_is_time(item.get("unit")) for item in items)):
         return figure
     return {**figure, "kind": "timeline", "items": [
         {**item, "date": str(item.get("value") or "").strip()} for item in items
@@ -167,19 +178,23 @@ def years_as_timeline(figure: dict) -> dict:
 
 
 def clean_figures(raw, answer_md: str) -> list[dict]:
-    """Keep only what the answer states. Never raises."""
+    """Keep only what the answer states; anything malformed is dropped."""
     if not isinstance(raw, dict):
         return []
     haystack = _normalize(markdown_to_plaintext(answer_md))
     headings = _headings(answer_md)
+    raw_figures = raw.get("figures")
+    if not isinstance(raw_figures, list):
+        return []
     figures = []
-    for figure in raw.get("figures") or []:
-        if not isinstance(figure, dict) or figure.get("kind") not in KINDS:
+    for figure in raw_figures:
+        if (not isinstance(figure, dict) or figure.get("kind") not in KINDS
+                or not isinstance(figure.get("items"), list)):
             continue
         figure = years_as_timeline(figure)
         kind = figure["kind"]
         items = []
-        for item in (figure.get("items") or [])[:MAX_ITEMS]:
+        for item in figure["items"][:MAX_ITEMS]:
             if not isinstance(item, dict):
                 continue
             label = _short(item.get("label"), 80)
@@ -196,7 +211,8 @@ def clean_figures(raw, answer_md: str) -> list[dict]:
             elif kind == "status":
                 # A status board lists names; "68% on CWE-Bench" or a price is
                 # a number and belongs in a numbers figure, if anywhere.
-                if (item.get("status") not in STATUSES or not _in(label, haystack)
+                if (not isinstance(item.get("status"), str) or item["status"] not in STATUSES
+                        or not _in(label, haystack)
                         or re.search(r"[%$€£]", label)):
                     continue
                 entry["status"] = item["status"]
@@ -261,21 +277,53 @@ def build(question: str, answer_md: str, *, query=None, keys=None, engine: str =
         keys = keys if keys is not None else provider_transport.developer_keys()
     try:
         raw = query(question, answer_md, keys or {}, engine)
+        return clean_figures(raw, answer_md)
     except Exception as exc:
         logging.warning("Topic figures skipped category=%s", safe_exception(exc))
         return []
-    return clean_figures(raw, answer_md)
+
+
+# Fields the drawing reads from every stored item, per kind (clean_figures
+# writes them; a run imported by hand may not have them).
+_ITEM_FIELDS = {
+    "timeline": {"date": str},
+    "status": {"status": str},
+    "numbers": {"value": str, "number": (int, float), "unit": str},
+}
+
+
+def _stored_item(kind: str, item):
+    if not isinstance(item, dict) or not isinstance(item.get("label"), str) or not item["label"]:
+        return None
+    if any(not isinstance(item.get(name), types) for name, types in _ITEM_FIELDS[kind].items()):
+        return None
+    if kind == "status" and item["status"] not in STATUSES:
+        return None
+    if kind == "numbers" and isinstance(item["number"], bool):
+        return None
+    note = item.get("note")
+    return {**item, "note": note if isinstance(note, str) else "", "disputed": item.get("disputed") is True}
 
 
 def stored_figures(value) -> list[dict]:
-    """Figures as stored on a run, structurally checked (older runs have none)."""
+    """Figures as stored on a run, structurally checked (older runs have none).
+
+    Items the drawing could not read are dropped, so a bad stored run costs
+    its figure, never the public page."""
     if not isinstance(value, list):
         return []
-    return [
-        figure for figure in value[:MAX_FIGURES]
-        if isinstance(figure, dict) and figure.get("kind") in KINDS
-        and isinstance(figure.get("items"), list) and len(figure["items"]) >= MIN_ITEMS
-    ]
+    figures = []
+    for figure in value[:MAX_FIGURES]:
+        if not isinstance(figure, dict) or figure.get("kind") not in KINDS or not isinstance(figure.get("items"), list):
+            continue
+        items = [entry for entry in (_stored_item(figure["kind"], item) for item in figure["items"]) if entry]
+        if len(items) < MIN_ITEMS:
+            continue
+        title, heading = figure.get("title"), figure.get("after_heading")
+        figures.append({**figure, "items": items,
+                        "title": title if isinstance(title, str) else "",
+                        "after_heading": heading if isinstance(heading, str) else ""})
+    return figures
 
 
 # ----------------------------------------------------------------------------

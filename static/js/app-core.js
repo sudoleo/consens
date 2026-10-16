@@ -347,12 +347,16 @@
     attachmentModels: Array.isArray(family.attachmentModels)
       ? family.attachmentModels.slice()
       : (family.attachmentModels === null ? null : undefined),
+    // Models of a family that reads files and still read none (gpt-oss-120b in
+    // Open Models): without this list the panel ran into the server's 400.
+    textOnlyModels: Array.isArray(family.textOnlyModels) ? family.textOnlyModels.slice() : [],
     handlesAttachments: family.handlesAttachments !== false
   }));
 
   // Der Reasoning-Schalter tauscht kein Modell: es zaehlt immer das gewaehlte.
   function modelAcceptsAttachments(pref, modelId) {
     if (!pref) return false;
+    if (pref.textOnlyModels?.includes(String(modelId || ""))) return false;
     const allowed = pref.attachmentModels;
     if (Array.isArray(allowed)) {
       return allowed.includes(String(modelId || ""));

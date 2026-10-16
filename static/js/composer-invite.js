@@ -46,14 +46,26 @@
     const text = input?.value.trim() || "";
     if (!text) { input?.focus(); return true; }
     App.saveQuestionDraft?.(text);
-    writePending({ at: Date.now(), source });
+    // The text itself: only exactly this question goes out by itself later,
+    // never one typed (or cut short) after this Send.
+    writePending({ at: Date.now(), source, text });
     track("app_guest_send", { source });
     App.openAuthModal?.("register", document.getElementById("sendButton"), "composer", { lead: GUEST_SEND_LEAD });
     return true;
   }
 
+  // What the guest sent is in the field (records from before 2026-10-16 carry
+  // no text and only need one).
+  function holdsSentText(pending) {
+    const text = field()?.value.trim() || "";
+    return Boolean(text) && (typeof pending.text !== "string" || text === pending.text.trim());
+  }
+
   function afterAccessUpdate(canStartRun) {
     if (!canStartRun || autoSendScheduled || App.reloadingAfterSignIn) return;
+    // A tab in the background only shares the sign-in (an email link opens a
+    // new tab that signs in and reloads): the tab in front sends it, once.
+    if (document.visibilityState === "hidden") return;
     const pending = readPending();
     if (!pending) return;
     // One try, whatever happens next.
@@ -62,17 +74,21 @@
     // Only into a new chat: a chat on screen keeps the question in the field.
     const registry = App.runRegistry;
     if (registry?.visible?.() || registry?.getSelectedConversationBasis?.()) return;
-    if (!field()?.value.trim()) return;
+    if (!holdsSentText(pending)) return;
     autoSendScheduled = true;
     // Not from inside updateQuestionInputAccess, which sending calls again.
     setTimeout(() => {
       autoSendScheduled = false;
-      if (App.reloadingAfterSignIn || !field()?.value.trim() || !window.userCanAskQuestions?.()) return;
+      if (App.reloadingAfterSignIn || !holdsSentText(pending) || !window.userCanAskQuestions?.()) return;
       source = pending.source || "typed";
       afterLogin = true;
       // A send that stopped before its "ask" (a limit, a refusal) must not
-      // pass the mark on to the next question.
-      Promise.resolve(window.sendQuestion?.()).finally(() => { afterLogin = false; });
+      // pass its marks on to the next question.
+      Promise.resolve(window.sendQuestion?.()).finally(() => {
+        if (!afterLogin) return;
+        afterLogin = false;
+        source = "typed";
+      });
     }, 0);
   }
 

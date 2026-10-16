@@ -276,7 +276,9 @@ class SecondPassEdgeCaseTests(unittest.TestCase):
                 mock.patch.object(engine, "_call_engine_text", side_effect=self.fake()):
             with self.assertRaises(RuntimeError):
                 self.query()
-        self.assertTrue(self.second_saw_cancel.wait(2.0))
+            # Wait inside the patch: the error path does not join the second
+            # pass, which may only now reach its (still faked) provider call.
+            self.assertTrue(self.second_saw_cancel.wait(2.0))
 
     def test_first_pass_failure_is_recorded_when_the_second_answers(self):
         def call(provider, api_model, model_ref, api_keys, **kwargs):

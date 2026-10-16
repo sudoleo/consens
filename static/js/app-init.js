@@ -340,10 +340,30 @@
         // nicht starten kann — ein verifizierter Nutzer braucht keinen
         // Zwischenspeicher, und alte Fragen sollen nicht wieder auftauchen.
         const QUESTION_DRAFT_KEY = "consensio.questionDraft.v1";
+        // Whole, never cut: a pasted answer to check runs to the Agent limit
+        // (8,000 characters), and a guest's question goes out by itself after
+        // the sign-in only when the field holds exactly what was sent.
+        const QUESTION_DRAFT_MAX_CHARS = 20000;
+        // A detour through the mailbox takes minutes, not days; on a shared
+        // device the next visitor should not find someone's unsent question.
+        const QUESTION_DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
         function storeQuestionDraft(value) {
           // Private/gehaertete Browser: dann haelt nur die Seiten-Ablage.
-          writeStored(QUESTION_DRAFT_KEY, value || null);
+          const text = String(value || "").trim().slice(0, QUESTION_DRAFT_MAX_CHARS);
+          writeStored(QUESTION_DRAFT_KEY, text ? JSON.stringify({ text, at: Date.now() }) : null);
+        }
+
+        function readQuestionDraft() {
+          const stored = readStored(QUESTION_DRAFT_KEY) || "";
+          let draft = null;
+          try { draft = JSON.parse(stored); } catch (_) { /* a plain string from before 2026-10-16 */ }
+          if (!draft || typeof draft.text !== "string") return stored;
+          if (!(Date.now() - Number(draft.at) <= QUESTION_DRAFT_MAX_AGE_MS)) {
+            storeQuestionDraft("");
+            return "";
+          }
+          return draft.text;
         }
 
         window.App.clearQuestionDraft = function () {
@@ -352,7 +372,7 @@
         // A guest's Send keeps the question for the way through the sign-in,
         // also one an example filled in (no keystroke, so no input below).
         window.App.saveQuestionDraft = function (value) {
-          storeQuestionDraft(String(value || "").trim().slice(0, 4000));
+          storeQuestionDraft(value);
         };
 
         // Nur ECHTE Tastenanschlaege sind ein Entwurf. Programmatische
@@ -360,8 +380,14 @@
         // haetten den Entwurf sonst geloescht, bevor er gebraucht wurde.
         questionInput?.addEventListener("input", event => {
           if (!event.isTrusted) return;
-          if (window.userCanAskQuestions()) return;
-          storeQuestionDraft(questionInput.value.trim().slice(0, 4000));
+          // Signed in, the field needs no stand-in: a draft left from before
+          // the sign-in goes with the first keystroke instead of coming back
+          // on every start after it was deleted by hand.
+          if (window.userCanAskQuestions()) {
+            if (readStored(QUESTION_DRAFT_KEY)) storeQuestionDraft("");
+            return;
+          }
+          storeQuestionDraft(questionInput.value);
         });
 
         // Idempotent: fuellt nur ein leeres Feld. Wird beim Start UND nach
@@ -371,7 +397,7 @@
         // zurueckkommt.
         window.App.restoreQuestionDraft = function () {
           if (!questionInput || questionInput.value.trim()) return;
-          const draft = readStored(QUESTION_DRAFT_KEY) || "";
+          const draft = readQuestionDraft();
           if (!draft) return;
           questionInput.value = draft;
           requestAnimationFrame(resizeQuestionInput);

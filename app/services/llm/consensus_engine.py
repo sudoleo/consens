@@ -3358,19 +3358,35 @@ def query_answer_figures(question: str, answer: str, api_keys: dict,
     if not attempts:
         raise RuntimeError("No Judge is available for answer figures.")
     last_error = "empty result"
-    for (provider, api_model, model_ref), _is_retry, judge_tier in attempts:
+    skip_retries_for = set()
+    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+        attempt_key = (provider, api_model, judge_tier)
+        if is_retry and attempt_key in skip_retries_for:
+            continue
+        attempt_started = time.monotonic()
         try:
-            raw = _call_engine_text(
-                provider, api_model, model_ref, api_keys,
-                system="Return valid JSON only.", prompt=prompt, max_tokens=3000,
-                temperature=0.0, json_mode=True,
-                effort=_judge_effort(provider, api_model, judge_tier),
-                json_schema=ANSWER_FIGURES_SCHEMA,
-            )
+            # Same rule as the visual judge: the Topic check waits for this
+            # call before it is stored, so a stalled attempt ends after
+            # JUDGE_ATTEMPT_SECONDS and its retry is skipped.
+            with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
+                raw = _call_engine_text(
+                    provider, api_model, model_ref, api_keys,
+                    system="Return valid JSON only.", prompt=prompt, max_tokens=3000,
+                    temperature=0.0, json_mode=True,
+                    effort=_judge_effort(provider, api_model, judge_tier),
+                    json_schema=ANSWER_FIGURES_SCHEMA,
+                )
             data = _extract_json_object(raw)
             if not isinstance(data, dict) or not isinstance(data.get("figures"), list):
                 raise ValueError("invalid answer figures")
             return data
+        except _AttemptTimedOut:
+            last_error = "provider request timed out."
+            skip_retries_for.add(attempt_key)
+            logging.warning(
+                "Answer figures attempt timed out provider=%s model=%s duration_ms=%d",
+                provider, api_model, int((time.monotonic() - attempt_started) * 1000),
+            )
         except Exception as exc:
             last_error = safe_exception(exc)
             logging.warning("Answer figures attempt failed category=%s", last_error)

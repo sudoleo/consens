@@ -179,6 +179,20 @@ describe("app-init.js mit funktionierendem localStorage", () => {
     window.App.clearQuestionDraft();
     expect(storedValue(window, "consensio.questionDraft.v1")).toBeNull();
 
+    // A guest's draft is kept whole (a pasted answer to check is long) and
+    // only for a day.
+    const long = "x".repeat(6000);
+    window.App.saveQuestionDraft(long);
+    document.getElementById("questionInput").value = "";
+    window.App.restoreQuestionDraft();
+    expect(document.getElementById("questionInput").value).toBe(long);
+    window.localStorage.setItem("consensio.questionDraft.v1",
+      JSON.stringify({ text: "Old", at: Date.now() - 25 * 60 * 60 * 1000 }));
+    document.getElementById("questionInput").value = "";
+    window.App.restoreQuestionDraft();
+    expect(document.getElementById("questionInput").value).toBe("");
+    expect(storedValue(window, "consensio.questionDraft.v1")).toBeNull();
+
     await settle(window);
     expect(errors).toEqual([]);
     window.close();

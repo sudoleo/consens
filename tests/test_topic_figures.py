@@ -267,3 +267,70 @@ def test_years_are_drawn_on_a_timeline_not_as_bars():
         {"label": "Output", "note": "", "disputed": False, "value": "$10", "number": 10.0, "unit": "per 1M"},
     ]}
     assert "af-bar" in str(topic_figures.figure_html(prices))
+
+
+def test_a_stalled_figures_judge_hands_over_without_its_retry(monkeypatch):
+    """The Topic check waits for this call before it is stored: like the
+    visual judge, a stalled attempt ends and the next family answers."""
+    import json
+    import time
+
+    from app.services.llm import consensus_engine
+
+    calls = []
+
+    def fake(provider, *args, **kwargs):
+        calls.append(provider)
+        if provider == "openai":
+            stop = consensus_engine.current_provider_cancellation()
+            for _ in range(500):
+                if stop is not None and stop.cancelled:
+                    raise consensus_engine.ProviderCancelled("stopped")
+                time.sleep(0.01)
+            raise AssertionError("the stalled attempt was never stopped")
+        return json.dumps({"figures": []})
+
+    monkeypatch.setattr(consensus_engine, "JUDGE_ATTEMPT_SECONDS", 0.05)
+    monkeypatch.setattr(consensus_engine, "_call_engine_text", fake)
+    started = time.monotonic()
+    result = consensus_engine.query_answer_figures("Q?", ANSWER, {"OpenRouter": "dummy"}, "OpenAI")
+    assert time.monotonic() - started < 3.0
+    assert result == {"figures": []}
+    assert calls.count("openai") == 1 and len(calls) == 2
+
+
+def test_a_rating_that_looks_like_a_year_stays_a_number():
+    answer = "Model A scores 2048 Elo, model B 1999 Elo."
+    raw = {"figures": [figure("numbers", [
+        item("Model A", value="2048", unit="Elo"),
+        item("Model B", value="1999", unit="Elo"),
+    ])]}
+    assert [f["kind"] for f in topic_figures.clean_figures(raw, answer)] == ["numbers"]
+
+
+def test_malformed_judge_output_costs_the_figure_not_the_check():
+    """A fallback judge that ignores the schema must not raise out of build()
+    and end the paid Topic check (fail_topic_run)."""
+    for raw in (
+        {"figures": 5},
+        {"figures": [{"kind": "numbers", "items": ["$2", "$5"]}]},
+        {"figures": [{"kind": "timeline", "items": {"a": 1}}]},
+        {"figures": [{"kind": "status", "items": [item("Gemini 4 Argon", status=["confirmed"])] * 2}]},
+    ):
+        assert topic_figures.clean_figures(raw, ANSWER) == []
+        assert topic_figures.build("Q?", ANSWER, query=lambda *args, raw=raw: raw) == []
+
+
+def test_a_stored_run_with_unreadable_items_never_breaks_the_page():
+    """An imported run (admin) may lack fields the drawing reads."""
+    stored = topic_figures.stored_figures([
+        {"kind": "timeline", "items": [{"label": "A"}, {"label": "B", "date": "2027"}]},
+        {"kind": "numbers", "items": [
+            {"label": "Input", "value": "$2", "number": 2.0, "unit": "per 1M"},
+            {"label": "Output", "value": "$10", "number": 10.0, "unit": "per 1M", "note": None},
+        ]},
+    ])
+    assert [f["kind"] for f in stored] == ["numbers"]
+    assert stored[0]["title"] == "" and stored[0]["after_heading"] == ""
+    assert [entry["note"] for entry in stored[0]["items"]] == ["", ""]
+    assert "af-bar" in str(topic_figures.figure_html(stored[0]))

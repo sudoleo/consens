@@ -41,6 +41,10 @@ def test_chat_framing_around_a_published_answer_is_dropped_but_the_answer_stays(
     assert strip_chat_framing("Yes.\n\nThat is all.") == "Yes.\n\nThat is all."
     # A lone framing paragraph is never turned into an empty answer.
     assert strip_chat_framing("If you want, I can help.") == "If you want, I can help."
+    # "If you want ..." as advice is the answer, not an offer.
+    advice = "Both work.\n\nIf you want the cheapest option, use X.\n\nIf you want the strongest, use Y."
+    assert strip_chat_framing(advice) == advice
+    assert strip_chat_framing("Both work.\n\nIf you'd like, want me to compare prices?") == "Both work."
     assert strip_chat_framing("## Short answer\n\nYes.") == "Yes."
     # Right after a one-paragraph lead-in it is framing too.
     assert strip_chat_framing("Views split three ways:\n\n## Short answer\n\n- Labs: 2027") == (
