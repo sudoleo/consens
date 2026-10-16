@@ -37,6 +37,7 @@ from app.services.chat_store import (
 )
 from app.services.share_snapshots import sanitize_differences_data
 from app.services.chat_titles import generate_title
+from app.services import starter_questions
 
 router = APIRouter()
 BOOKMARK_PAGE_SIZE = 35
@@ -60,6 +61,9 @@ BOOKMARK_UID_RATE_LIMITS = {
 # pro Bookmark und Sitzung; ein leeres Modellergebnis lässt erneutes Fragen zu,
 # darum die Grenze pro Konto und Stunde.
 BOOKMARK_TITLES_PER_HOUR = 30
+# Predicted example questions run the same way. The browser asks only when
+# its newest chats changed (composer-starters.js); the cap stops a loop.
+STARTER_PREDICTIONS_PER_HOUR = 12
 
 
 class BookmarkModelRequest(BaseModel):
@@ -570,6 +574,46 @@ def name_bookmark(request: Request, bookmark_id: str):
         logging.warning("Bookmark title write skipped category=%s", safe_exception(exc))
         return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
     return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
+
+
+@router.post("/api/my/starter-questions")
+@limiter.limit("10/minute")
+# POST like the title route: each call may cost a model call. Sync: the
+# Firestore read and the LLM call block, FastAPI runs it in the threadpool.
+def predict_starter_questions(request: Request):
+    """Three questions this account may ask next, read from its newest chats.
+
+    For the example questions under an empty new chat. Never an error for
+    a missing prediction: "skipped" keeps the curated questions in place.
+    """
+    uid = _bookmark_uid(request)
+    skipped = {"status": "skipped", "questions": []}
+    try:
+        api_uid_limiter.check(
+            uid, "starter:predict", STARTER_PREDICTIONS_PER_HOUR, window_seconds=3600
+        )
+    except ApiUidRateLimitExceeded:
+        return skipped
+    try:
+        docs = list(
+            db_firestore.collection("users").document(uid).collection("bookmarks")
+            # Names only: a bookmark document carries every model answer.
+            .select(["title", "query"])
+            .order_by("timestamp", direction=firestore.Query.DESCENDING)
+            .limit(starter_questions.HISTORY_SIZE)
+            .stream()
+        )
+    except Exception as exc:
+        logging.warning("Starter question history unavailable category=%s", safe_exception(exc))
+        return skipped
+    history = [
+        {"title": _bookmark_title(data), "question": _bookmark_display_question(data)}
+        for data in (doc.to_dict() or {} for doc in docs)
+    ]
+    if len(history) < starter_questions.MIN_HISTORY:
+        return skipped
+    questions = starter_questions.predict_questions(history)
+    return {"status": "success", "questions": questions} if questions else skipped
 
 
 @router.get("/bookmarks/{bookmark_id}/conversation")

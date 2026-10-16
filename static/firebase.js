@@ -324,6 +324,7 @@ function clearAuthenticatedUiState() {
   openedBookmarkId = null;
   bookmarkDetailCache.clear();
   window.bookmarksData = [];
+  window.App?.composerStarters?.clear?.();
   setBookmarksAccess(false);
 }
 
@@ -1964,6 +1965,8 @@ function upsertBookmarkMeta(bookmark, {
   // A save confirmed by the server names its conversation once; the list
   // load never does (older chats keep their question as the name).
   if (nameIt && meta.title_source !== "generated") requestBookmarkTitle(meta.id, requestUid);
+  // A saved chat may change what the next new chat suggests.
+  if (nameIt) window.App.composerStarters?.refresh?.();
 }
 
 // Asks the server for a short topic title (chat_titles.py) and swaps it in
@@ -2989,6 +2992,8 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
     } while (loadAll && cursor);
     renderBookmarksLoadMore();
     window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
+    // The example questions predicted from the newest chats (composer-starters.js).
+    if (!append) window.App.composerStarters?.refresh?.();
     return true;
   } catch (error) {
     if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
@@ -3200,6 +3205,8 @@ async function deleteBookmark(bookmarkId) {
 
       // Lokales Array und DOM aktualisieren.
       window.bookmarksData = window.bookmarksData.filter(b => b.id !== bookmarkId);
+      // A deleted chat's topic must not stay among the predicted examples.
+      window.App.composerStarters?.refresh?.();
       bookmarkDetailCache.delete(bookmarkId);
       if (openedBookmarkId === bookmarkId) openedBookmarkId = null;
       (window.App.runRegistry?.list?.() || [])

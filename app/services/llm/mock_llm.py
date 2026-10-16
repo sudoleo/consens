@@ -217,6 +217,19 @@ def _mock_engine_output(prompt: str, json_mode: bool) -> str:
             question = prompt.split("<CHAT_TITLE_QUESTION>", 1)[1].split("</CHAT_TITLE_QUESTION>", 1)[0]
             words = question.split()[:4]
             return json.dumps({"title": "Topic: " + " ".join(words).rstrip("?.!,")})
+        if "<RECENT_CONVERSATIONS>" in prompt:
+            # Vorhergesagte Beispielfragen (starter_questions.py): eine pro
+            # Thema der neuesten Gespräche.
+            block = prompt.split("<RECENT_CONVERSATIONS>", 1)[1].split("</RECENT_CONVERSATIONS>", 1)[0]
+            topics = [
+                line.split(". ", 1)[1].split(" (latest question:", 1)[0].strip()
+                for line in block.strip().splitlines() if ". " in line
+            ][:3]
+            return json.dumps({"questions": [
+                {"label": "More on " + " ".join(topic.split()[:2]) + "?",
+                 "question": f"What should I know next about {topic}?"}
+                for topic in topics
+            ]})
         if '"goal_suggestions"' in prompt:
             return json.dumps({"goal_suggestions": [
                 "It is officially announced", "A firm date is published",

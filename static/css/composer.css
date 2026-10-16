@@ -406,7 +406,8 @@
 body.is-guest .composer-models .consensus-model { display: none; }
 
 /* ---- Example questions (#composerStarters, composer-invite.js) ------------
-   Only under an empty new chat, and gone with the hero. While the field holds
+   Curated, or predicted from the newest chats (composer-starters.js); both
+   look the same. Only under an empty new chat, and gone with the hero. While the field holds
    text they keep their room (visibility, not display), so the centred
    composer does not move; :placeholder-shown also covers text set by code
    (a draft, a quote, Run again). Phones get one row that scrolls sideways
@@ -434,6 +435,9 @@ body.is-hero:not(.direct-comparison-active) .composer-starters {
   cursor: pointer;
   transition: background-color var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard);
 }
+/* Curated questions wait here while predicted ones (composer-starters.js)
+   stand in for them. */
+.composer-starter[hidden] { display: none; }
 .composer-starter:hover { background: var(--app-surface-selected); color: var(--ink); }
 .composer-starter:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 640px) {

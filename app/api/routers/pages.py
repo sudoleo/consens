@@ -20,7 +20,7 @@ from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
 from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1.base_query import FieldFilter
-from app.services import model_pulse, persistence_guard
+from app.services import model_pulse, persistence_guard, starter_questions
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from app.services.llm.provider_runtime import (
     PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
@@ -556,6 +556,8 @@ def read_root(request: Request):
         "default_consensus_preset": cfg.APP_DEFAULT_CONSENSUS_PRESET,
         "model_labels": model_labels,
         "model_badges": model_badges,
+        # Drei Beispielfragen pro Seitenaufruf (die Seite wird nie gecacht).
+        "starters": starter_questions.pick_curated(),
         # Statt einer handgepflegten Versionsnummer steht in der Fusszeile
         # der Commit, der gerade laeuft. Leer = unbekannt: dann zeigt das
         # Template gar nichts an.

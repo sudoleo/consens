@@ -910,6 +910,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       als neuer Chat. Ein weiteres Neuladen sendet nichts mehr. Über die
       E-Mail-Registrierung kommt die Frage nach dem Passwort-Setzen ebenfalls
       zurück (innerhalb einer Stunde läuft sie von selbst).
+- [ ] Vorhergesagte Beispielfragen (seit 2026-10-16): Ein Konto mit mindestens
+      drei Chats sieht unter dem leeren Feld nach wenigen Sekunden drei Fragen
+      zu den eigenen Themen statt der kuratierten (die wechseln als Gast bei
+      jedem Neuladen); passen sie inhaltlich und sind sie keine Wiederholung?
+      Neuladen zeigt sie sofort ohne Umspringen. Ein neuer Chat ändert sie
+      beim nächsten leeren Chat; nach dem Logout stehen wieder die kuratierten.
 - [ ] Login-Dialog auf echtem iPhone (Safari) und Android (Chrome): Öffnen
       fokussiert kein Feld (Google bleibt sichtbar), Tabs Log in/Sign up,
       „Los“ auf der Tastatur loggt ein, falsches Passwort zeigt „E-mail or

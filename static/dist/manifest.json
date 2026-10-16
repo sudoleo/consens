@@ -1,5 +1,5 @@
 {
-  "sources": "5684ccfa3868",
+  "sources": "b732c8815176",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -82,6 +82,7 @@
     "static/js/composer-invite.js",
     "static/js/composer-keyboard.js",
     "static/js/composer-quote.js",
+    "static/js/composer-starters.js",
     "static/js/consensus-actions.js",
     "static/js/consensus-anchor.js",
     "static/js/consensus-insights.js",
@@ -192,7 +193,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.6b7b8b51b1b7.js",
+      "src": "/static/dist/head.8cf62bea15a3.js",
       "module": false,
       "defer": false
     },
@@ -204,7 +205,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.f6c93229bdd7.js",
+      "src": "/static/dist/firebase.18a32034292d.js",
       "module": true,
       "defer": false
     },
@@ -222,19 +223,19 @@
     }
   ],
   "styles": {
-    "app": "/static/dist/app.8a5acecea8f7.css"
+    "app": "/static/dist/app.ce2cd06a5476.css"
   },
   "previous_assets": [
+    "app.8a5acecea8f7.css",
     "app.22af20fc13b2.css",
-    "app.dfbb73a40bc7.css",
     "app.abfd716c8ffb.js",
     "app.606116af6eaa.js",
     "auth.5e487d1e2570.js",
     "demo.f96893d39783.js",
     "demo.cc796fe01278.js",
+    "firebase.f6c93229bdd7.js",
     "firebase.74c633fb5cfd.js",
-    "firebase.b33b107bb2a1.js",
-    "head.d9aa010e3a5b.js",
-    "head.7c3f4a473869.js"
+    "head.6b7b8b51b1b7.js",
+    "head.d9aa010e3a5b.js"
   ]
 }

@@ -4,7 +4,8 @@
 //    opens the sign-in; once the new session can run it, the question goes
 //    out by itself (afterAccessUpdate, called by updateQuestionInputAccess).
 //    Most visitors used to leave in front of a locked field.
-// 2. Example questions under an empty new chat (#composerStarters). A click
+// 2. Example questions under an empty new chat (#composerStarters), curated
+//    or predicted from the newest chats (composer-starters.js). A click
 //    fills the field and never sends: the reader adapts it or sends it.
 // 3. Where a sent question came from (typed, example, pasted), for the "ask"
 //    event (app-core.js trackAsk). Never the text itself.

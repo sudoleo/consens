@@ -11,7 +11,6 @@ from playwright.sync_api import expect
 from tests.e2e.test_auth_dialog import _guest_page
 from tests.e2e.test_phase4_frontend import _json, _real_firebase_page, phase4_server  # noqa: F401 (fixture)
 
-VAT = "Do I charge VAT to US clients as a German freelancer?"
 CAPTURE_EVENTS = (
     "window.__events = [];"
     "window.umami = { track: (name, data) => window.__events.push([name, data]) };"
@@ -29,14 +28,21 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         expect(page.locator(".consensus-model")).to_be_hidden()
         expect(starters).to_be_visible()
         expect(page.locator("#sendButton")).to_be_disabled()
-        top = field.bounding_box()["y"]
+        room = starters.bounding_box()["height"]
 
-        page.click('[data-starter="vat"]')
-        expect(field).to_have_value(VAT)
+        # Three curated questions per page load (starter_questions.py), then
+        # "Check an AI answer".
+        expect(starters.locator(".composer-starter")).to_have_count(4)
+        expect(starters.locator(".composer-starter").last).to_have_attribute("data-starter", "check")
+        first = starters.locator(".composer-starter").first
+        question = first.get_attribute("data-question")
+        first.click()
+        expect(field).to_have_value(question)
         expect(field).to_be_focused()
-        # The examples step back but keep their room: the field does not move.
+        # The examples step back but keep their room, so the centred composer
+        # does not jump (a two-line question only grows the field itself).
         expect(starters).to_be_hidden()
-        assert field.bounding_box()["y"] == top
+        assert starters.bounding_box()["height"] == room
 
         page.click("#sendButton")
         expect(page.locator("#loginModal")).to_be_visible()
@@ -53,10 +59,10 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
           draft: JSON.parse(localStorage.getItem('consensio.questionDraft.v1')),
           pending: JSON.parse(localStorage.getItem('consensio.sendAfterLogin.v1')),
         })""")
-        assert stored["draft"]["text"] == VAT
+        assert stored["draft"]["text"] == question
         assert stored["pending"]["source"] == "example"
         # Only exactly this text goes out by itself after the sign-in.
-        assert stored["pending"]["text"] == VAT
+        assert stored["pending"]["text"] == question
     finally:
         context.close()
 
@@ -73,6 +79,44 @@ def test_a_guest_on_a_phone_gets_the_sentence_and_one_row_of_examples(browser, p
           return { rows: tops.size, pageScroll: document.documentElement.scrollWidth > window.innerWidth };
         }""")
         assert layout == {"rows": 1, "pageScroll": False}
+    finally:
+        context.close()
+
+
+PREDICTED = [
+    {"label": "Heat pump running costs?", "question": "What will a heat pump cost to run in our 1978 house per year?"},
+    {"label": "AI Act deadlines?", "question": "Which EU AI Act deadlines apply to our support chatbot?"},
+    {"label": "Creatine timing?", "question": "Does the time of day I take creatine change how I sleep?"},
+]
+
+
+def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    asked = []
+    try:
+        chats = [{"id": f"chat_{index}", "query": f"Question {index}?", "title": f"Topic {index}"} for index in range(4)]
+        page.route("**/bookmarks?*", lambda route: _json(route, {"bookmarks": chats, "next_cursor": None}))
+        page.route("**/api/my/starter-questions", lambda route: (
+            asked.append(route.request.method), _json(route, {"status": "success", "questions": PREDICTED})))
+        page.reload(wait_until="domcontentloaded")
+
+        visible = page.locator("#composerStarters .composer-starter:visible")
+        expect(visible).to_have_text([item["label"] for item in PREDICTED] + ["Check an AI answer"])
+        assert asked == ["POST"]
+        page.locator('[data-starter="predicted"]').first.click()
+        expect(page.locator("#questionInput")).to_have_value(PREDICTED[0]["question"])
+        page.fill("#questionInput", "")
+
+        # The next visit paints them before the session is restored and asks
+        # nothing while the newest chats are the same. The e2e auth stub's
+        # token is no JWT; a real one names its account.
+        page.evaluate("""() => localStorage.setItem('id_token',
+          'header.' + btoa(JSON.stringify({ user_id: 'account-a' })) + '.signature')""")
+        page.reload(wait_until="domcontentloaded")
+        assert page.evaluate("document.querySelectorAll('[data-starter=\"predicted\"]').length") == 3
+        page.wait_for_function("() => window.bookmarksData?.length === 4")
+        page.wait_for_timeout(2500)
+        assert asked == ["POST"]
     finally:
         context.close()
 

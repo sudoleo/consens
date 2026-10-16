@@ -58,9 +58,14 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
 - `app_guest_send` (seit 2026-10-15, `source`): ein Gast drückt Senden; die
   Frage bleibt gespeichert, der Registrierungsdialog öffnet
   (`auth_modal_open` mit `source: composer`).
-- `app_starter_used` (seit 2026-10-15, `starter`: heat_pump, ibuprofen, vat,
-  check; `guest`): Klick auf eine Beispielfrage. Sie füllt nur das Feld; ob
-  daraus eine Frage wurde, zeigt `ask` mit `source: example`.
+- `app_starter_used` (seit 2026-10-15, `starter`, `guest`): Klick auf eine
+  Beispielfrage. Sie füllt nur das Feld; ob daraus eine Frage wurde, zeigt
+  `ask` mit `source: example`. `starter` ist der Schlüssel der kuratierten
+  Frage (seit 2026-10-16 drei pro Seitenaufruf aus
+  `app/services/starter_questions.py::CURATED_STARTERS`, bis dahin heat_pump,
+  ibuprofen, vat), `check` oder `predicted` (aus den neuesten Chats des Kontos
+  vorhergesagt, seit 2026-10-16). Vergleich: Anteil `predicted` an den Klicks
+  angemeldeter Konten.
 - `app_memory_hint` (`action`: shown, dismissed) und `app_auto_memory_on`
   (`source: hint` beim Einschalten aus dem Hinweis unter einer Agent-Antwort,
   ohne `source` aus Settings): wie viele den Gedächtnis-Hinweis sehen und annehmen.

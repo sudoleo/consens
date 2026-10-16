@@ -145,7 +145,15 @@
         input.placeholder = window.App.askPlaceholder();
       }
     }
-    return seeded.size === 6;
+    // An account's predicted example questions from the first frame
+    // (composer-starters.js): the curated ones swapped out in front of the
+    // reader otherwise. Once the row's last button is parsed.
+    const check = !seeded.has("starters") && document.querySelector('#composerStarters [data-starter="check"]');
+    if (check) {
+      seeded.add("starters");
+      window.App.composerStarters?.seed(check.parentElement);
+    }
+    return seeded.size === 7;
   }
   if (!seed() && typeof MutationObserver === "function") {
     const observer = new MutationObserver(() => { if (seed()) observer.disconnect(); });
