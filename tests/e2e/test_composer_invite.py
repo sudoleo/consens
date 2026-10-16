@@ -6,6 +6,7 @@ stubbed Firebase SDK; model requests are routed, nothing is paid for.
 """
 import json
 
+import pytest
 from playwright.sync_api import expect
 
 from tests.e2e.test_auth_dialog import _guest_page
@@ -121,7 +122,41 @@ def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(bro
         context.close()
 
 
-def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in(browser, phase4_server):
+def _hold_back(page, first):
+    """After the sign-in's reload the app starts (the deferred bundle runs
+    initApp) while firebase.js asks for the account's status. Either may come
+    first; this holds the other back. Call the result once the page loads."""
+    held = []
+    if first == "status":
+        # firebase.js asks for the chats once the status is applied.
+        def chats(route):
+            while held:
+                held.pop().continue_()
+            route.fallback()
+        page.route("**/static/dist/app.*.js", lambda route: held.append(route), times=1)
+        page.route("**/bookmarks?*", chats, times=1)
+        return lambda: None
+    started = []
+
+    def status(route):
+        if started:
+            route.fallback()
+        else:
+            held.append(route)
+
+    def release():
+        page.wait_for_function("() => typeof window.updateQuestionInputAccess === 'function'")
+        started.append(True)
+        while held:
+            held.pop().fallback()
+    page.route("**/user_status", status, times=1)
+    return release
+
+
+# The status first once lost the question: the field was still empty when the
+# session could run it, and that used up its one try.
+@pytest.mark.parametrize("first", ["app", "status"])
+def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in(browser, phase4_server, first):
     context, page = _real_firebase_page(browser, phase4_server, init_script=CAPTURE_EVENTS)
     prepared = []
     try:
@@ -129,12 +164,14 @@ def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in(browser, phase4
             prepared.append(route.request.post_data_json), _json(route, {"system_prompt": "Prepared prompt"})))
         page.route("**/ask_*", lambda route: _json(route, {"response": "An answer", "sources": []}))
         page.route("**/consensus", lambda route: _json(route, {}))
+        release = _hold_back(page, first)
         # What a guest's Send left behind, then the page the sign-in reloads.
         page.evaluate("""pending => {
           localStorage.setItem('consensio.questionDraft.v1', 'Is creatine safe for teenagers?');
           localStorage.setItem('consensio.sendAfterLogin.v1', JSON.stringify({ ...pending, at: Date.now() }));
         }""", {"source": "example"})
         page.reload(wait_until="domcontentloaded")
+        release()
 
         page.wait_for_function("() => window.App.runRegistry.visible()?.question === 'Is creatine safe for teenagers?'")
         page.wait_for_function("() => window.__events.some(([name]) => name === 'ask')")

@@ -328,7 +328,7 @@
           return canStartRun;
         };
 
-        window.updateQuestionInputAccess();
+        // The first call follows the draft's restore below.
         // Login unreachable (auth-bootstrap.js): no session is coming, so the
         // field stops waiting for one and says why it is locked.
         window.addEventListener("consensio:auth-unavailable", () => window.updateQuestionInputAccess());
@@ -407,6 +407,12 @@
         };
 
         window.App.restoreQuestionDraft();
+        // Only now, with the draft back in the field: after the sign-in's
+        // reload the account's status can be in before this start, and a
+        // question sent as a guest goes out only when the field holds it
+        // again (composer-invite.js). Before, the empty field used up its
+        // one try.
+        window.updateQuestionInputAccess();
 
         let mobileInfoPopupTimer = null;
 

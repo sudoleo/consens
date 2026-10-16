@@ -2389,12 +2389,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   gerufen) — lädt zur ersten Frage ein. `window.App.composerInvite`:
   `sendAsGuest()` (erste Prüfung in `window.sendQuestion`, `query-send.js`):
   für einen Gast Entwurf speichern (`App.saveQuestionDraft`), den Sendewunsch
-  `localStorage["consensio.sendAfterLogin.v1"] = {at, source}` merken und den
+  `localStorage["consensio.sendAfterLogin.v1"] = {at, source, text}` merken und den
   Registrierungsdialog mit Begründungszeile öffnen; `afterAccessUpdate(canStartRun)`
   (Ende von `updateQuestionInputAccess`): sobald die neue Sitzung laufen darf,
   einmal `window.sendQuestion()` (höchstens 1 h alt, nur in einen neuen Chat,
-  nie während `App.reloadingAfterSignIn` aus `firebase.js::continueSignedIn`,
-  der Wunsch wird beim ersten Versuch gelöscht); `takeAskContext()` für
+  nur wenn das Feld genau `text` hält, nie während `App.reloadingAfterSignIn`
+  aus `firebase.js::continueSignedIn`, der Wunsch wird beim ersten Versuch
+  gelöscht). Vertrag in `app-init.js`: der erste Aufruf von
+  `updateQuestionInputAccess` kommt erst nach `App.restoreQuestionDraft()` —
+  `/user_status` kann nach dem Login-Reload schon vor dem App-Start da sein,
+  und ein leeres Feld verbrauchte sonst den einen Versuch
+  (`tests/e2e/test_composer_invite.py`, beide Reihenfolgen); `takeAskContext()` für
   `App.trackAsk` (`source` typed/example/pasted, `after_login`). Dazu die
   Klicks auf die Beispielfragen `#composerStarters` (füllen nur das Feld;
   kuratierte wie vorhergesagte, `data-starter="predicted"`).
