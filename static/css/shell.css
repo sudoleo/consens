@@ -898,6 +898,11 @@ body:not(.dark-mode) .chat-input-container {
 .chat-input-container .input-field {
   min-height: 52px;
 }
+/* The start screen invites a longer question: the field there starts a
+   little taller. In a thread it stays compact (a phone's keyboard). */
+body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field {
+  min-height: 72px;
+}
 
 /* Chips inside the well lift by one step, so they stay legible against it. */
 .attach-trigger,
