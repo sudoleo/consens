@@ -258,6 +258,41 @@ describe("difference cards in the detail panel", () => {
     expect(quote.hidden).toBe(true);
   });
 
+  it("says each claim once in differences saved before the versus format", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, {
+      models_compared: ["Grok", "Gemini", "DeepSeek"],
+      differences: [{
+        claim: "Model F beschreibt sinkende Frontier-Preise, während die Synthese steigende Frontier-Tokenpreise meldet.",
+        type: "contradiction", severity: "major",
+        positions: [
+          { models: ["Grok"], stance: "Model F sagt, die Frontier-Preise seien 2026 stark gesunken.", quote: "−67 bis −75 %" },
+          { models: ["Gemini", "DeepSeek"], stance: "Die Synthese sagt, dass die Frontier-Tokenpreise stiegen.", quote: "+66,7 % YoY" }
+        ] }]
+    }, { modelLabel: name => name === "Grok" ? "Grok 4.3" : name });
+    const claim = cards.querySelector(".diff-card-claim");
+    // The label gets its real name; the narrative heading only shows while closed.
+    expect(claim.textContent).toBe("Grok 4.3 beschreibt sinkende Frontier-Preise, während die Synthese steigende Frontier-Tokenpreise meldet.");
+    expect(claim.classList.contains("is-narrative")).toBe(true);
+    // "The synthesis" is the answer itself: its side comes first, without the attribution.
+    const [answer, other] = cards.querySelectorAll(".diff-position");
+    expect(answer.classList.contains("is-answer")).toBe(true);
+    expect(answer.querySelector(".diff-position-stance").textContent).toBe("Die Frontier-Tokenpreise stiegen.");
+    expect(other.querySelector(".diff-position-stance").textContent).toBe("Die Frontier-Preise seien 2026 stark gesunken.");
+  });
+
+  it("keeps a short topic heading that merely names a model", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, {
+      models_compared: ["OpenAI", "Gemini"],
+      differences: [{ claim: "Reichweite des Tesla Model S", type: "contradiction", severity: "minor",
+        positions: [{ models: ["OpenAI"], stance: "Rund 600 km." }, { models: ["Gemini"], stance: "Rund 700 km." }] }]
+    });
+    expect(cards.querySelector(".diff-card-claim").classList.contains("is-narrative")).toBe(false);
+  });
+
   it("gives a different emphasis no versus and no answer placeholder", () => {
     const ctx = boot();
     const cards = ctx.document.createElement("div");

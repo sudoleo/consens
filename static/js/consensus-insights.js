@@ -1450,12 +1450,15 @@
             }
             frag.appendChild(previewHead(label, isMajor ? "is-crit" : "is-warn"));
 
+            const readable = readableDifference(diff, modelDisplayName);
             const claimEl = document.createElement("div");
             claimEl.className = "insight-preview-claim";
-            claimEl.textContent = diff.claim;
+            claimEl.textContent = readable.claim;
             frag.appendChild(claimEl);
 
-            (diff.positions || []).slice(0, 2).forEach(function (pos) {
+            readable.positions.slice().sort(function (a, b) {
+              return (b.in_answer === true) - (a.in_answer === true);
+            }).slice(0, 2).forEach(function (pos) {
               const row = previewRow(
                 pos.models.map(modelDisplayName).join(", "),
                 "");
@@ -2376,6 +2379,44 @@
           }
           window.App.differenceCardAt = differenceCardAt;
 
+          // Differenzen von vor 2026-10-16 erzaehlen beide Seiten mit den
+          // Anonym-Labels des Judges ("Model F sagt, ...", "Die Synthese sagt,
+          // dass ..."), und die Ueberschrift erzaehlt dasselbe noch einmal. In
+          // der Gegenueberstellung steht jede Behauptung nur einmal: die
+          // Zuschreibung faellt weg (wer es sagt, steht darunter), "die
+          // Synthese" ist die Antwort selbst und damit deren Seite, und ein
+          // "Model X" mit genau einem Modell bekommt dessen echten Namen.
+          const LEGACY_ATTRIBUTION = new RegExp(
+            "^\\s*(?:(?:Models?|Modell)\\s+([A-Z])|(?:die|the)\\s+(?:Synthese|synthesis|Konsensantwort|consensus(?:\\s+answer)?))"
+            + "\\s+(?:sagt|says|meldet|reports|beschreibt|describes|behauptet|claims|states|nennt|names|schreibt|writes|"
+            + "argumentiert|argues|erklärt|explains|betont|stresses)\\s*,?\\s*(?:dass\\s+|that\\s+)?", "i");
+          const LEGACY_NARRATIVE = /\b(?:Models?|Modelle?)\s+[A-Z]\b|\b(?:Synthese|synthesis|Konsensantwort|consensus answer)\b/;
+
+          function readableDifference(diff, labelFor) {
+            const names = {};
+            const hasAnswer = diff.positions.some(function (pos) { return pos.in_answer === true; });
+            let legacyAnswer = false;
+            const positions = diff.positions.map(function (pos) {
+              const match = LEGACY_ATTRIBUTION.exec(pos.stance || "");
+              const rest = match ? pos.stance.slice(match[0].length).trim() : "";
+              if (!rest) return pos;
+              const readable = Object.assign({}, pos, { stance: rest.charAt(0).toUpperCase() + rest.slice(1) });
+              if (match[1]) {
+                if (pos.models.length === 1) names[match[1].toUpperCase()] = labelFor(pos.models[0]);
+              } else if (!hasAnswer && !legacyAnswer) {
+                readable.in_answer = true;
+                legacyAnswer = true;
+              }
+              return readable;
+            });
+            const claim = String(diff.claim || "").replace(/\b(?:Model|Modell)\s+([A-Z])\b/g, function (label, letter) {
+              return names[letter] || label;
+            });
+            // Eine kurze Themenzeile ("Tesla Model S") ist keine Erzaehlung.
+            const narrative = String(diff.claim || "").length > 60 && LEGACY_NARRATIVE.test(diff.claim);
+            return { claim: claim, narrative: narrative, positions: positions };
+          }
+
           function buildDifferenceCards(cards, differences, modelCount, options) {
             const opts = options || {};
             const isStatic = !!opts.static;
@@ -2415,6 +2456,8 @@
                 })
                 .forEach(function (entry) {
                 const diff = entry.diff;
+                const readable = readableDifference(diff, labelFor);
+                const isVersus = diff.type === "contradiction" && readable.positions.length > 1;
                 const card = document.createElement("details");
                 card.dataset.differenceIndex = String(entry.index);
                 let cardClass = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
@@ -2450,8 +2493,10 @@
                 tagRow.className = "diff-card-tags";
                 tagRow.append(sevDot, typeTag, tagMeaning);
                 const claimEl = document.createElement("span");
-                claimEl.className = "diff-card-claim";
-                claimEl.textContent = diff.claim;
+                // Erzaehlt die Ueberschrift beide Seiten (alte Daten), steht sie
+                // nur im zugeklappten Zustand: offen sagen es die Seiten selbst.
+                claimEl.className = "diff-card-claim" + (readable.narrative && isVersus ? " is-narrative" : "");
+                claimEl.textContent = readable.claim;
                 summary.append(tagRow, claimEl);
                 card.appendChild(summary);
 
@@ -2462,8 +2507,7 @@
                 // nebeneinander, sonst untereinander). Die Seite, die die
                 // Antwort vertritt, steht vorn. Eine andere Gewichtung ist
                 // kein Widerspruch und bekommt kein "vs".
-                const isVersus = diff.type === "contradiction" && diff.positions.length > 1;
-                const ordered = diff.positions.slice().sort(function (a, b) {
+                const ordered = readable.positions.slice().sort(function (a, b) {
                   return (b.in_answer === true) - (a.in_answer === true);
                 });
                 const answerSide = ordered.some(function (pos) { return pos.in_answer === true; });

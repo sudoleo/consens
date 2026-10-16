@@ -373,33 +373,53 @@
 }
 
 .diff-sides.is-versus {
-  gap: 10px;
+  gap: 16px;
 }
 
+/* Das "vs" ist das Zeichen des Widerspruchs: halbfett, in der Ampelfarbe der
+   Schwere, auf einer Haarlinie derselben Farbe, die nach aussen auslaeuft. */
 .diff-versus-mark {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  gap: 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
   line-height: 1;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .diff-versus-mark::before,
 .diff-versus-mark::after {
   content: "";
   flex: 1;
-  border-top: 1px solid var(--line-soft);
+  border-top: 1px solid currentColor;
+  opacity: 0.45;
+}
+
+.diff-versus-mark::before {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 75%);
+  mask-image: linear-gradient(to right, transparent, #000 75%);
+}
+
+.diff-versus-mark::after {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 75%);
+  mask-image: linear-gradient(to left, transparent, #000 75%);
 }
 
 .diff-card.is-major .diff-versus-mark { color: var(--dispute); }
 .diff-card.is-contradiction:not(.is-major) .diff-versus-mark { color: var(--partial); }
 
+/* Alte Daten: die Ueberschrift erzaehlt beide Seiten. Offen sagen es die
+   Seiten selbst, also steht sie nur im zugeklappten Zustand. */
+.diff-card[open] > .diff-card-summary .diff-card-claim.is-narrative {
+  display: none;
+}
+
 .diff-position {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -434,7 +454,17 @@
   .diff-sides.is-pair > .diff-versus-mark::before,
   .diff-sides.is-pair > .diff-versus-mark::after {
     border-top: 0;
-    border-left: 1px solid var(--line-soft);
+    border-left: 1px solid currentColor;
+  }
+
+  .diff-sides.is-pair > .diff-versus-mark::before {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 75%);
+    mask-image: linear-gradient(to bottom, transparent, #000 75%);
+  }
+
+  .diff-sides.is-pair > .diff-versus-mark::after {
+    -webkit-mask-image: linear-gradient(to top, transparent, #000 75%);
+    mask-image: linear-gradient(to top, transparent, #000 75%);
   }
 
   .diff-sides.is-pair .diff-position-answer.is-placeholder {

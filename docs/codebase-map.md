@@ -2260,7 +2260,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Icon/Name-Paar der `.diff-jump-link`. Das Zitat steht hinter
   `.diff-quote-toggle` („Show quote“, per Dokument-Delegation, damit es auch
   in den in den Leser verschobenen Karten greift); ohne `stance` ist das
-  Zitat selbst die Behauptung und erscheint nur einmal.
+  Zitat selbst die Behauptung und erscheint nur einmal. Das „vs“ ist
+  halbfett in der Ampelfarbe auf einer gleichfarbigen, nach außen
+  auslaufenden Haarlinie.
+  **Alte Daten (vor 2026-10-16)** bereitet `readableDifference` für Karte und
+  Hover-Vorschau auf, ohne die Daten zu ändern: die Zuschreibung am
+  Satzanfang („Model F sagt, …“, „Die Synthese sagt, dass …“) fällt weg,
+  „die Synthese“ markiert die Antwortseite (wenn keine `in_answer` trägt),
+  ein „Model X“ mit genau einem Modell wird in der Überschrift zum echten
+  Namen. Eine Überschrift, die beide Seiten erzählt (über 60 Zeichen mit
+  Label/„Synthese“), bekommt `.is-narrative` und steht nur im zugeklappten
+  Zustand.
   `.diff-card.is-focused` markiert die geöffnete Karte mit einem verblassenden
   Bernstein-Wash (`diffCardFlash`), nicht mehr mit einem 2px-Ring: der Ring
   las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen
