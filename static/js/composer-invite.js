@@ -117,6 +117,24 @@
     track("app_starter_used", { starter: button.dataset.starter || "", guest: Boolean(App.isGuestComposer?.()) });
   }
 
+  // While the field holds text the note below the examples glides up into
+  // their room (composer.css moves .app-footer by --starters-room). The row
+  // wraps differently per width and per set (predicted labels are longer),
+  // so its height is measured, not assumed; display: none outside the hero
+  // measures 0.
+  function trackStartersRoom() {
+    const row = document.getElementById("composerStarters");
+    const section = row?.closest(".input-section");
+    if (!row || !section) return;
+    const measure = () => {
+      const room = row.offsetHeight ? row.offsetHeight + (parseFloat(getComputedStyle(row).marginTop) || 0) : 0;
+      section.style.setProperty("--starters-room", room + "px");
+    };
+    if (typeof ResizeObserver === "function") new ResizeObserver(measure).observe(row);
+    else window.addEventListener("resize", measure, { passive: true });
+    measure();
+  }
+
   function init() {
     const input = field();
     input?.addEventListener("paste", event => {
@@ -135,6 +153,7 @@
       const button = event.target.closest?.(".composer-starter");
       if (button) useStarter(button);
     });
+    trackStartersRoom();
     // The placeholder has a length per width (App.askPlaceholder); a rotated
     // phone gets the right one. Accounts: agent-chat.js syncComposer.
     for (const query of ["(max-width: 360px)", "(max-width: 640px)"]) {

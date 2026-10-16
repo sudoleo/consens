@@ -910,6 +910,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       als neuer Chat. Ein weiteres Neuladen sendet nichts mehr. Über die
       E-Mail-Registrierung kommt die Frage nach dem Passwort-Setzen ebenfalls
       zurück (innerhalb einer Stunde läuft sie von selbst).
+- [ ] Beispielfragen beim Tippen (seit 2026-10-16): Der erste Buchstabe blendet
+      sie weich nacheinander aus, danach gleitet „Please avoid personal…“ direkt
+      unter die Leiste mit Reasoning/Attach statt allein unter einer Lücke zu
+      stehen; Feld leeren kehrt es um. Das Eingabefeld springt dabei nicht
+      (Desktop und Handy, hell und dunkel).
 - [ ] Vorhergesagte Beispielfragen (seit 2026-10-16): Ein Konto mit mindestens
       drei Chats sieht unter dem leeren Feld nach wenigen Sekunden drei Fragen
       zu den eigenen Themen statt der kuratierten (die wechseln als Gast bei

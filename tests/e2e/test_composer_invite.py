@@ -18,6 +18,12 @@ CAPTURE_EVENTS = (
 )
 
 
+NOTE_BELOW_FIELD = (
+    "() => document.querySelector('.feedback-note').getBoundingClientRect().top"
+    " - document.getElementById('questionInput').getBoundingClientRect().bottom"
+)
+
+
 def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_server):
     context, page = _guest_page(browser, phase4_server)
     try:
@@ -30,6 +36,7 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         expect(starters).to_be_visible()
         expect(page.locator("#sendButton")).to_be_disabled()
         room = starters.bounding_box()["height"]
+        gap_below_field = page.evaluate(NOTE_BELOW_FIELD)
 
         # Three curated questions per page load (starter_questions.py), then
         # "Check an AI answer".
@@ -44,6 +51,13 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         # does not jump (a two-line question only grows the field itself).
         expect(starters).to_be_hidden()
         assert starters.bounding_box()["height"] == room
+        # The note below glides up into their room instead of standing alone
+        # under an empty gap. Measured from the field's bottom: a two-line
+        # example grows the field.
+        shift = page.evaluate(
+            "() => parseFloat(getComputedStyle(document.querySelector('.input-section')).getPropertyValue('--starters-room'))")
+        assert shift > room
+        page.wait_for_function(f"() => Math.abs(({NOTE_BELOW_FIELD})() - {gap_below_field - shift}) < 1")
 
         page.click("#sendButton")
         expect(page.locator("#loginModal")).to_be_visible()

@@ -2412,7 +2412,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`tests/e2e/test_composer_invite.py`, beide Reihenfolgen); `takeAskContext()` für
   `App.trackAsk` (`source` typed/example/pasted, `after_login`). Dazu die
   Klicks auf die Beispielfragen `#composerStarters` (füllen nur das Feld;
-  kuratierte wie vorhergesagte, `data-starter="predicted"`).
+  kuratierte wie vorhergesagte, `data-starter="predicted"`) und
+  `--starters-room` auf `.input-section` (Höhe der Beispielzeile samt Rand),
+  um das der Hinweis beim Tippen in ihren Platz gleitet (composer.css).
 - **`composer-starters.js`** (seit 2026-10-16, Head-Bundle vor
   `app-bootstrap.js`) — vorhergesagte Beispielfragen. `window.App.composerStarters`:
   `seed(row)` (aus dem First-Paint-Seed von `app-bootstrap.js`, sobald der
@@ -4898,7 +4900,13 @@ mit ≥ 3 Chats sieht stattdessen drei aus seinen neuesten Chats vorhergesagte
 (`composer-starters.js`, `POST /api/my/starter-questions`). Sobald
 Text im Feld steht, werden sie per `#questionInput:not(:placeholder-shown)`
 unsichtbar, behalten aber ihren Platz, damit der zentrierte Composer nicht
-springt. Rechtliches steht
+springt. Seit 2026-10-16 blenden sie dabei nacheinander aus (140 ms, je
+20 ms versetzt), danach gleitet der Hinweis `.app-footer` per `transform` um
+`--starters-room` in ihren Platz (340 ms, `--ease-standard`); geleert läuft es
+umgekehrt (erst der Hinweis, dann die Fragen). `--starters-room` = Zeilenhöhe +
+Rand, gemessen per ResizeObserver in `composer-invite.js`
+(`trackStartersRoom`); reduzierte Bewegung blendet nur und lässt den Hinweis
+springen. Rechtliches steht
 in der Sidebar-Fußzeile, seit der Todo-Runde 3 in EINER Zeile
 (`.sidebar-footer-meta`): links Imprint · Privacy · Terms als leise Wörter
 (Impressum direkt erreichbar), rechts `.sidebar-footer-icons` mit zwei gleich
