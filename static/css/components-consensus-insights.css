@@ -357,10 +357,90 @@
 
 .diff-card-body {
   padding: 0 0 13px;
+  /* Die Kartenbreite entscheidet, ob zwei Seiten nebeneinander passen. */
+  container-type: inline-size;
 }
 
+/* Ein Widerspruch: Behauptungen stehen sich gegenueber. Schmal untereinander,
+   das "vs" auf einer Haarlinie dazwischen; ab 440px Kartenbreite stehen zwei
+   Seiten nebeneinander und das "vs" sitzt auf einer senkrechten Linie. Die
+   Ampelfarbe traegt das "vs", keine Flaeche. */
+.diff-sides {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.diff-sides.is-versus {
+  gap: 10px;
+}
+
+.diff-versus-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  color: var(--ink-3);
+}
+
+.diff-versus-mark::before,
+.diff-versus-mark::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--line-soft);
+}
+
+.diff-card.is-major .diff-versus-mark { color: var(--dispute); }
+.diff-card.is-contradiction:not(.is-major) .diff-versus-mark { color: var(--partial); }
+
 .diff-position {
-  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.diff-position-answer {
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.diff-position-answer.is-placeholder {
+  display: none;
+}
+
+.diff-sides.is-versus .diff-position-stance {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+}
+
+@container (min-width: 440px) {
+  .diff-sides.is-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    column-gap: 16px;
+  }
+
+  .diff-sides.is-pair > .diff-versus-mark {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .diff-sides.is-pair > .diff-versus-mark::before,
+  .diff-sides.is-pair > .diff-versus-mark::after {
+    border-top: 0;
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .diff-sides.is-pair .diff-position-answer.is-placeholder {
+    display: block;
+    visibility: hidden;
+  }
 }
 
 .diff-position-label {
@@ -371,7 +451,49 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular, 400);
   color: var(--ink-2);
-  margin-bottom: 4px;
+}
+
+/* Mehrere Modelle: Icons und Anzahl; die Namen bleiben Linktext. */
+.diff-position-label.is-group {
+  gap: 2px 6px;
+}
+
+.diff-position-label.is-group .diff-position-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.diff-position-count {
+  margin-left: 2px;
+}
+
+.diff-quote-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.diff-quote-toggle:hover,
+.diff-quote-toggle:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
+.diff-quote-toggle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 /* Eine Kopfzeile pro Position: Icon + Modellname. Erreichbare Antworten
@@ -415,7 +537,7 @@
 }
 
 .diff-position-quote {
-  margin: 6px 0 0;
+  margin: 0;
   padding: 0 0 0 10px;
   border-left: 1px solid var(--line);
   color: var(--ink-2);

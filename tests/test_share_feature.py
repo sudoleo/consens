@@ -267,7 +267,7 @@ class SanitizerTests(unittest.TestCase):
         data = {
             "claims": [{"anchor": "x" * 800, "agree": ["OpenAI", 42], "dissent": [{"model": "Grok", "quote": "q", "secret": "drop"}], "sentence_id": 7, "anchor_occurrence": 1}],
             "differences": [
-                {"claim": "c", "consensus_anchor": "the stored sentence", "type": "contradiction", "severity": "major", "positions": [{"stance": "s", "models": ["Grok"], "quote": "q"}], "verify": "v", "sentence_id": 7, "anchor_occurrence": 1},
+                {"claim": "c", "consensus_anchor": "the stored sentence", "type": "contradiction", "severity": "major", "positions": [{"stance": "s", "models": ["Grok"], "quote": "q", "in_answer": True}, {"stance": "t", "models": ["OpenAI"], "quote": "r", "in_answer": "yes"}], "verify": "v", "sentence_id": 7, "anchor_occurrence": 1},
                 {"claim": "no positions", "positions": []},
             ],
             "best_model": "OpenAI",
@@ -289,6 +289,8 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(result["differences"][0]["consensus_anchor"], "the stored sentence")
         self.assertEqual(result["differences"][0]["sentence_id"], 7)
         self.assertEqual(result["differences"][0]["anchor_occurrence"], 1)
+        # The side the answer takes survives; anything but True does not.
+        self.assertEqual([p.get("in_answer") for p in result["differences"][0]["positions"]], [True, None])
         self.assertEqual(result["agreement"], {
             "score": 64, "level": "partially", "model_count": 2,
             "major_contradictions": 1, "minor_contradictions": 0, "emphases": 0,

@@ -472,6 +472,7 @@ def sanitize_differences_data(data):
                 "stance": _clip(position.get("stance"), 500),
                 "models": _sanitize_str_list(position.get("models"), 40, 12),
                 "quote": _clip(position.get("quote"), 500),
+                **({"in_answer": True} if position.get("in_answer") is True else {}),
             })
         if not claim_text or not positions:
             continue

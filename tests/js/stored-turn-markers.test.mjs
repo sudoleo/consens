@@ -208,7 +208,7 @@ describe("difference cards in the detail panel", () => {
     expect(cards.querySelector(".diff-position-links")).toBe(null);
     expect([...positions[1].querySelectorAll(".diff-position-label .diff-position-name")].map(n => n.textContent))
       .toEqual(["Gemini", "Anthropic"]);
-    expect(cards.querySelector("button")).toBe(null);
+    expect(cards.querySelector(".diff-jump-link")).toBe(null);
 
     const opened = [];
     const navigation = { canOpen: model => model !== "Anthropic", open: (model, quote) => opened.push([model, quote]) };
@@ -222,6 +222,57 @@ describe("difference cards in the detail panel", () => {
     expect(anthropic.tagName).toBe("SPAN");
     gemini.click();
     expect(opened).toEqual([["Gemini", "35 euros"]]);
+  });
+
+  it("sets a contradiction's claims against each other, the answer's side first", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.document.body.appendChild(cards);
+    const data = structuredClone(DIFFERENCES_DATA);
+    data.differences[0].positions[1].in_answer = true;
+    ctx.window.renderStoredDifferenceCards(cards, data);
+    const sides = cards.querySelector(".diff-sides");
+    expect(sides.className).toBe("diff-sides is-versus is-pair");
+    expect([...sides.children].map(el => el.className))
+      .toEqual(["diff-position is-answer", "diff-versus-mark", "diff-position"]);
+    expect(sides.querySelector(".diff-versus-mark").textContent).toBe("vs");
+    const [answer, other] = sides.querySelectorAll(".diff-position");
+    expect(answer.querySelector(".diff-position-answer").textContent).toBe("In the answer");
+    expect(answer.querySelector(".diff-position-stance").textContent).toBe("more than 29 euros");
+    // The opposite side keeps the tag's line free (aligned side by side), hidden from screen readers.
+    expect(other.querySelector(".diff-position-answer").className).toBe("diff-position-answer is-placeholder");
+    expect(other.querySelector(".diff-position-answer").getAttribute("aria-hidden")).toBe("true");
+    // Several models: icons and a count; one model: its name.
+    expect(answer.querySelector(".diff-position-label").classList.contains("is-group")).toBe(true);
+    expect(answer.querySelector(".diff-position-count").textContent).toBe("2 models");
+    expect(other.querySelector(".diff-position-count")).toBe(null);
+    // The quote waits behind a toggle.
+    const toggle = answer.querySelector(".diff-quote-toggle");
+    const quote = answer.querySelector(".diff-position-quote");
+    expect(quote.hidden).toBe(true);
+    toggle.click();
+    expect(quote.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.textContent).toBe("Hide quote");
+    toggle.click();
+    expect(quote.hidden).toBe(true);
+  });
+
+  it("gives a different emphasis no versus and no answer placeholder", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, {
+      models_compared: ["OpenAI", "Gemini"],
+      differences: [{ claim: "focus", type: "emphasis",
+        positions: [{ models: ["OpenAI"], stance: "The view" }, { models: ["Gemini"], stance: "", quote: "The history" }] }]
+    });
+    const sides = cards.querySelector(".diff-sides");
+    expect(sides.className).toBe("diff-sides");
+    expect(sides.querySelector(".diff-versus-mark")).toBe(null);
+    expect(sides.querySelector(".diff-position-answer")).toBe(null);
+    // Without a stance the quote itself is the claim, shown once.
+    expect([...sides.querySelectorAll(".diff-position-stance")].map(el => el.textContent)).toEqual(["The view", "The history"]);
+    expect(sides.querySelector(".diff-quote-toggle")).toBe(null);
   });
 
   it("opens the card of the clicked marker by data index, not by card position", () => {

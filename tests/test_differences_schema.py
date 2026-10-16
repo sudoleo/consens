@@ -86,6 +86,47 @@ class ParseDifferencesPayloadTests(unittest.TestCase):
         self.assertIn("partially", legacy)
         self.assertIn("BestModel: OpenAI", legacy)
 
+    def test_judge_labels_in_free_text_become_real_names(self):
+        payload = valid_payload()
+        diff = payload["differences"][0]
+        diff["claim"] = "Model C beschreibt Lyon, während Modell A Paris nennt."
+        diff["positions"][1]["stance"] = "Models A and B say Paris; Model Q is unknown."
+        diff["verify"] = "Prüfe die Quelle von Modelle A und C."
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        diff = data["differences"][0]
+        self.assertEqual(diff["claim"], "Grok beschreibt Lyon, während OpenAI Paris nennt.")
+        # A label that maps to no model stays as written.
+        self.assertEqual(diff["positions"][1]["stance"], "OpenAI and Gemini say Paris; Model Q is unknown.")
+        self.assertEqual(diff["verify"], "Prüfe die Quelle von OpenAI und Grok.")
+
+    def test_the_answer_takes_at_most_one_side(self):
+        payload = valid_payload()
+        positions = payload["differences"][0]["positions"]
+        positions[0]["in_answer"] = True
+        positions[1]["in_answer"] = True
+        positions.append({"stance": "Marseille", "models": ["Model C"], "quote": "", "in_answer": "true"})
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        flags = [p.get("in_answer") for p in data["differences"][0]["positions"]]
+        self.assertEqual(flags, [True, None, None])
+
+    def test_prompt_asks_for_two_facing_claims_and_the_answer_side(self):
+        prompt = _build_differences_prompt({"OpenAI": "Paris.", "Gemini": "Lyon."}, "Paris is the capital.")[0]
+        self.assertIn('"in_answer": true', prompt)
+        self.assertIn("short neutral heading", prompt)
+        self.assertIn("stated directly", prompt)
+        self.assertIn('Never write model labels such as "Model A" into claim, stance, or verify', prompt)
+        position = DIFFERENCES_JSON_SCHEMA["properties"]["differences"]["items"]["properties"]["positions"]["items"]
+        self.assertEqual(position["properties"]["in_answer"], {"type": "boolean"})
+        self.assertIn("in_answer", position["required"])
+
+    def test_topic_claims_stay_statements(self):
+        from app.services.llm.consensus_engine import _build_differences_prompt_from, _build_judge_context
+        context = _build_judge_context({"OpenAI": "Paris.", "Gemini": "Lyon."}, "Paris is the capital.")
+        prompt = _build_differences_prompt_from(context, output_language="English", statement_claims=True)
+        self.assertIn('"claim": "the disputed point in one short sentence"', prompt)
+        self.assertNotIn("short neutral heading", prompt)
+        self.assertIn("plain declarative statement", prompt)
+
     def test_json_inside_markdown_fences(self):
         raw = "Here is my analysis:\n```json\n" + json.dumps(valid_payload()) + "\n```\n"
         data, _ = parse_differences_payload(raw, ANON_MAP)

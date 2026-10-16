@@ -254,10 +254,12 @@
     inspector = null; get('Inspector').replaceChildren();
   }
   function polishInspector() {
-    const allCards = get('Inspector').querySelectorAll('.diff-card');
+    // The first card is the weightiest (cards are ordered by severity): it
+    // opens the first time, the others wait as one line each.
+    const first = get('Inspector').querySelector('.diff-card');
     get('Inspector').querySelectorAll('.diff-card:not([data-reader-ready])').forEach(card => {
       const key = card.querySelector('.diff-card-claim')?.textContent;
-      if (!inspector.seenClaims.has(key) && allCards.length === 1) inspector.expanded.add(key);
+      if (!inspector.seenClaims.has(key) && card === first && !inspector.targeted && !inspector.expanded.size) inspector.expanded.add(key);
       inspector.seenClaims.add(key);
       card.dataset.readerReady = 'true'; card.open = inspector.expanded.has(key);
     });
@@ -318,7 +320,8 @@
     const nodes = snapshot.renderPanel ? [snapshot.renderPanel(kind)] : panelNodes(kind, turn);
     selected = snapshot; if (!turn && !snapshot.renderPanel) live = snapshot;
     open = true; direct = false; pair = false;
-    inspector = { kind, turn, trigger, items: [], expanded: new Set(), seenClaims: new Set() };
+    // A marker opens its own card (index), so the first one stays closed.
+    inspector = { kind, turn, trigger, items: [], expanded: new Set(), seenClaims: new Set(), targeted: index !== null };
     for (const node of nodes) {
       const placeholder = document.createComment('answer-reader-panel');
       if (node.parentNode) node.before(placeholder);

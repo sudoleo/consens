@@ -330,11 +330,6 @@ body.answer-reader-modal { overflow: hidden; }
   .model-answer-reader li.answer-reader-source-card .consensus-source-index { right: 13px; top: 14px; }
   .answer-reader-source-out { right: 12px; top: 33px; }
 }
-@media (min-width: 1100px) {
-  .answer-reader-dialog:not(.is-docked) .answer-reader-inspector .diff-card-body { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); column-gap: 28px; }
-  .answer-reader-dialog:not(.is-docked) .answer-reader-inspector .diff-card-body > :not(.diff-position) { grid-column: 1 / -1; }
-  .answer-reader-dialog:not(.is-docked) .answer-reader-inspector .diff-position { min-width: 0; }
-}
 
 /* Detail panel proportions. Keep these scoped to the dialog: the inline
    answer reader belongs to the main app canvas and has its own measure. */
@@ -652,12 +647,12 @@ body.comparison-layout-changing .input-section { transition: none; }
   color: var(--ink);
 }
 .answer-reader-inspector .diff-card-body { padding: 0 0 16px; border: 0; background: transparent; }
-.answer-reader-inspector .diff-position { margin: 0; padding: 8px 0 0; border: 0; }
-.answer-reader-inspector .diff-position + .diff-position { padding-top: 12px; }
-.answer-reader-inspector .diff-position-label { gap: 0 14px; margin-bottom: 4px; font-size: var(--font-size-xs); font-weight: 400; color: var(--ink-2); }
+.answer-reader-inspector .diff-position { margin: 0; padding: 0; border: 0; }
+.answer-reader-inspector .diff-position-label { margin: 0; font-size: var(--font-size-xs); font-weight: 400; color: var(--ink-2); }
+.answer-reader-inspector .diff-position-label:not(.is-group) { gap: 0 14px; }
 .answer-reader-inspector .diff-position-stance { font-size: var(--font-size-sm); line-height: 1.6; color: var(--ink); }
 .answer-reader-inspector .diff-position-quote {
-  margin: 6px 0 0;
+  margin: 0;
   padding: 0 0 0 10px;
   border-left: 1px solid var(--line);
   background: transparent;
@@ -680,6 +675,17 @@ body.comparison-layout-changing .input-section { transition: none; }
   color: var(--ink-2);
 }
 .model-answer-reader .answer-reader-inspector .diff-jump-link:is(:hover, :focus-visible) { background: transparent; color: var(--ink); }
+/* "Show quote" is a quiet text link, not a reader button. */
+.model-answer-reader .answer-reader-inspector .diff-quote-toggle {
+  justify-content: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.model-answer-reader .answer-reader-inspector .diff-quote-toggle:is(:hover, :focus-visible) { background: transparent; color: var(--ink); }
 .answer-reader-inspector .diff-card-body > .diff-resolve { margin-top: 12px; }
 
 /* Agent comparisons: one status line, the findings, then a quiet footer. */
@@ -743,4 +749,8 @@ body.comparison-layout-changing .input-section { transition: none; }
   .answer-reader-inspector details.agent-evidence-status > summary,
   .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary { min-height: 44px; }
   .model-answer-reader .answer-reader-inspector .diff-jump-link { min-height: 44px; }
+  /* Full touch height, but the side keeps its text rhythm: the hit area
+     reaches into the gaps instead of pushing the "vs" away. */
+  .model-answer-reader .answer-reader-inspector .diff-quote-toggle { margin-block: -12px; }
+  .model-answer-reader .answer-reader-inspector .diff-position-label .diff-jump-link { margin-block: -10px; }
 }

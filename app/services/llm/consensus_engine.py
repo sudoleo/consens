@@ -1152,6 +1152,17 @@ def _build_differences_prompt_from(context: _JudgeContext, *, output_language: s
     else:
         allowed_list = labels[0]
 
+    # The app shows a contradiction as two claims facing each other: "claim"
+    # is only the small heading above them, the sides speak for themselves.
+    # Topic pages turn "claim" into the page's statement (statement_claims).
+    claim_example = ("the disputed point in one short sentence" if statement_claims
+                     else "what is disputed, as a short neutral heading")
+    claim_rule = "" if statement_claims else (
+        "- \"claim\" names what is disputed in a few words, like a heading (for example "
+        "\"Frontier token prices in 2026\"). It names the subject only, not the sides and not "
+        "who holds them.\n"
+    )
+
     # Nur bei Folgefragen belegt. Der Judge sah die Frage bisher gar nicht und
     # bewertete deshalb Antworten auf verschiedene Lesarten derselben Frage als
     # inhaltlichen Widerspruch -- ein niedriger Agreement-Score, der nichts ueber
@@ -1183,12 +1194,13 @@ def _build_differences_prompt_from(context: _JudgeContext, *, output_language: s
         "{\n"
         '  "differences": [\n'
         "    {\n"
-        '      "claim": "the disputed point in one short sentence",\n'
+        f'      "claim": "{claim_example}",\n'
         '      "s": 7,\n'
         '      "type": "contradiction",\n'
         '      "severity": "major",\n'
         '      "positions": [\n'
-        '        {"stance": "one short sentence", "models": ["Model A"], "quote": "verbatim short quote"}\n'
+        '        {"stance": "this side\'s claim, stated directly in one short sentence", "models": ["Model A"], '
+        '"quote": "verbatim short quote", "in_answer": true}\n'
         "      ],\n"
         '      "verify": "one short sentence saying what exactly the user should double-check"\n'
         "    }\n"
@@ -1213,6 +1225,14 @@ def _build_differences_prompt_from(context: _JudgeContext, *, output_language: s
         "reader can see it marked in place. Use 0 if the consensus answer does not state it at all.\n"
         "- Report every distinct disagreement you find, not just the most obvious one, and give each its own "
         "entry with one position per side.\n"
+        + claim_rule +
+        "- \"stance\" is the claim this side makes, stated directly the way its models would put it (for "
+        "example \"Frontier token prices rose 67% year on year\"), so that the stances of the sides stand "
+        "against each other. Never write who holds it (\"Model A says ...\", \"the consensus answer states ...\").\n"
+        "- \"in_answer\" is true for the one position the consensus answer itself takes and false for every "
+        "other position; false everywhere when the consensus answer takes no side.\n"
+        "- Never write model labels such as \"Model A\" into claim, stance, or verify: the reader sees the real "
+        "model names next to each position.\n"
         "- Quotes must be copied verbatim from the model responses. You may shorten them at the start or end, "
         "but never paraphrase. Keep each quote under 200 characters.\n"
         "For each position, copy one contiguous passage from ONE of its listed models. Do not combine "
@@ -1283,6 +1303,26 @@ def _real_model_names(labels, anon_map: dict) -> list:
         if real not in names:
             names.append(real)
     return names
+
+
+# The judge's own labels inside free text ("Model F says ...", "Modell F",
+# "Models A and C"). The reader sees real names next to each position and
+# cannot map a label to anything on the page (seen live on 2026-10-16).
+_ANON_LABEL_RE = re.compile(
+    r"\b(?:Models?|Modell(?:e|en|s)?|Mod[eè]les?|Modelos?|Modell[io])\s+"
+    r"([A-Z](?:\s*(?:,|/|&|\band\b|\bund\b|\bor\b|\boder\b|\bet\b|\bou\b|\by\b|\bo\b|\be\b|\ben\b)\s*[A-Z])*)\b"
+)
+
+
+def _named_models(text: str, anon_map: dict) -> str:
+    """Replaces anonymous labels in a judge text with the real model names;
+    a label that maps to no model stays as written."""
+    def name(match):
+        letters = re.findall(r"[A-Z]", match.group(1))
+        if not all(f"Model {letter}" in anon_map for letter in letters):
+            return match.group(0)
+        return re.sub(r"[A-Z]", lambda m: anon_map[f"Model {m.group(0)}"], match.group(1))
+    return _ANON_LABEL_RE.sub(name, str(text or ""))
 
 
 def _normalize_claims(raw_claims, anon_map: dict, sentences: list = None) -> list:
@@ -1360,7 +1400,7 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
     for entry in raw_differences if isinstance(raw_differences, list) else []:
         if not isinstance(entry, dict):
             continue
-        claim = _clip(entry.get("claim"), MAX_DIFF_TEXT_CHARS)
+        claim = _clip(_named_models(entry.get("claim"), anon_map), MAX_DIFF_TEXT_CHARS)
         if not claim:
             continue
 
@@ -1371,11 +1411,15 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
             models = _real_model_names(item.get("models"), anon_map)
             if not models:
                 continue
-            positions.append({
-                "stance": _clip(item.get("stance"), MAX_DIFF_TEXT_CHARS),
+            position = {
+                "stance": _clip(_named_models(item.get("stance"), anon_map), MAX_DIFF_TEXT_CHARS),
                 "models": models,
                 "quote": _clip(item.get("quote"), MAX_DIFF_QUOTE_CHARS),
-            })
+            }
+            # The side the answer itself takes; it takes at most one.
+            if item.get("in_answer") is True and not any(p.get("in_answer") for p in positions):
+                position["in_answer"] = True
+            positions.append(position)
             if len(positions) >= MAX_DIFF_POSITIONS:
                 break
         if not positions:
@@ -1410,7 +1454,7 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
             "type": diff_type,
             "severity": severity,
             "positions": positions,
-            "verify": _clip(entry.get("verify"), MAX_DIFF_TEXT_CHARS),
+            "verify": _clip(_named_models(entry.get("verify"), anon_map), MAX_DIFF_TEXT_CHARS),
         }
         if sentence_id is not None:
             difference["sentence_id"] = sentence_id
@@ -1920,8 +1964,10 @@ DIFFERENCES_JSON_SCHEMA = {
                                 "stance": {"type": "string"},
                                 "models": {"type": "array", "items": {"type": "string"}},
                                 "quote": {"type": "string"},
+                                # Die Seite, die die Konsensantwort selbst vertritt.
+                                "in_answer": {"type": "boolean"},
                             },
-                            "required": ["stance", "models", "quote"],
+                            "required": ["stance", "models", "quote", "in_answer"],
                             "additionalProperties": False,
                         },
                     },

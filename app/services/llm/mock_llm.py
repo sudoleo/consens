@@ -185,8 +185,10 @@ def _build_mock_differences_json(prompt: str) -> str:
             "type": "contradiction",
             "severity": "major",
             "positions": [
-                {"stance": "Completed in 1889", "models": agree[:2], "quote": "was completed in 1889"},
-                {"stance": "Completed in 1887", "models": [dissent_label], "quote": "was completed in 1887"},
+                {"stance": "Completed in 1889", "models": agree[:2], "quote": "was completed in 1889",
+                 "in_answer": True},
+                {"stance": "Completed in 1887", "models": [dissent_label], "quote": "was completed in 1887",
+                 "in_answer": False},
             ],
             "verify": "Check the completion year of the Eiffel Tower.",
         })

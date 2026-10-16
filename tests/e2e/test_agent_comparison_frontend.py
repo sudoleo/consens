@@ -537,7 +537,9 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         expect(cards).to_have_count(3)
         expect(cards.locator('.diff-type-tag')).to_have_text(['Critical', 'Minor', 'Emphasis'])
         expect(page.locator('#answerReaderInspector')).not_to_contain_text('positions')
-        for index in range(3):
+        # The weightiest finding is open on entry; the others wait as one line.
+        expect(cards.first).to_have_attribute('open', '')
+        for index in (1, 2):
             expect(cards.nth(index)).not_to_have_attribute('open', '')
         claim_weight = cards.first.locator('.diff-card-claim').evaluate('el => getComputedStyle(el).fontWeight')
         assert claim_weight == '400'
@@ -551,8 +553,17 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         expect(detail).to_contain_text('GPT-5.6 Luna: no answer, it was still writing when the answer was checked.')
         expect(detail).to_contain_text('DeepSeek V4 Flash: no answer, no complete answer arrived.')
         status.locator('summary').click()
-        cards.first.locator('summary').click()
         expect(cards.first).to_have_attribute('open', '')
+        # Two claims facing each other: the sides with "vs" between them.
+        expect(cards.first.locator('.diff-sides.is-versus.is-pair')).to_have_count(1)
+        expect(cards.first.locator('.diff-versus-mark')).to_have_text('vs')
+        expect(cards.first.locator('.diff-position-stance')).to_have_text(
+            ['Five seats are included.', 'The seat limit needs confirmation.'])
+        side_boxes = [cards.first.locator('.diff-position').nth(i).bounding_box() for i in range(2)]
+        if width >= 760:
+            assert abs(side_boxes[0]['y'] - side_boxes[1]['y']) < 2  # side by side
+        else:
+            assert side_boxes[1]['y'] > side_boxes[0]['y'] + side_boxes[0]['height'] - 1  # one above the other
         heads = cards.first.locator('.diff-position-label')
         expect(heads).to_have_count(2)
         expect(heads.first.locator('.diff-position-name')).to_have_text(['GPT-5.4 Mini', 'Gemini 3.5 Flash-Lite', 'Kimi K2.6'])
@@ -561,7 +572,10 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         if width >= 760:
             # Icons and names share a single line per position.
             assert heads.first.bounding_box()['height'] <= 30
-        expect(cards.first.locator('.diff-position-quote').first).to_be_visible()
+        quote = cards.first.locator('.diff-position-quote').first
+        expect(quote).to_be_hidden()
+        cards.first.locator('.diff-quote-toggle').first.click()
+        expect(quote).to_be_visible()
         _snapshot(page, f'differences-calm-detail-{width}-{theme}')
         cards.nth(1).locator('summary').click()
         expect(cards.nth(1)).to_have_attribute('open', '')

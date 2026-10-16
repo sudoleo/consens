@@ -2457,16 +2457,52 @@
 
                 const body = document.createElement("div");
                 body.className = "diff-card-body";
-                diff.positions.forEach(function (pos) {
+                // Ein Widerspruch sind Behauptungen, die sich gegenueberstehen:
+                // jede Seite ist ein Satz, dazwischen steht "vs" (zwei Seiten
+                // nebeneinander, sonst untereinander). Die Seite, die die
+                // Antwort vertritt, steht vorn. Eine andere Gewichtung ist
+                // kein Widerspruch und bekommt kein "vs".
+                const isVersus = diff.type === "contradiction" && diff.positions.length > 1;
+                const ordered = diff.positions.slice().sort(function (a, b) {
+                  return (b.in_answer === true) - (a.in_answer === true);
+                });
+                const answerSide = ordered.some(function (pos) { return pos.in_answer === true; });
+                const sides = document.createElement("div");
+                sides.className = "diff-sides" + (isVersus ? " is-versus" : "")
+                  + (isVersus && ordered.length === 2 ? " is-pair" : "");
+                ordered.forEach(function (pos, sideIndex) {
+                  if (isVersus && sideIndex > 0) {
+                    const mark = document.createElement("span");
+                    mark.className = "diff-versus-mark";
+                    mark.textContent = "vs";
+                    sides.appendChild(mark);
+                  }
                   const posEl = document.createElement("div");
-                  posEl.className = "diff-position";
+                  posEl.className = "diff-position" + (pos.in_answer === true ? " is-answer" : "");
+                  // Nebeneinander haelt die Gegenseite die Zeile frei, damit
+                  // beide Behauptungen auf derselben Hoehe beginnen.
+                  if (pos.in_answer === true || (answerSide && isVersus)) {
+                    const answerTag = document.createElement("span");
+                    answerTag.className = "diff-position-answer" + (pos.in_answer === true ? "" : " is-placeholder");
+                    answerTag.textContent = "In the answer";
+                    if (pos.in_answer !== true) answerTag.setAttribute("aria-hidden", "true");
+                    posEl.appendChild(answerTag);
+                  }
+                  const claimText = pos.stance || pos.quote;
+                  if (claimText) {
+                    const stance = document.createElement("div");
+                    stance.className = "diff-position-stance";
+                    renderInlineMarkdown(stance, claimText);
+                    posEl.appendChild(stance);
+                  }
 
-                  // Eine Kopfzeile pro Position: Icon + Name je Modell. Ist die
-                  // Originalantwort erreichbar, ist genau dieses Paar der
-                  // Sprunglink — keine zweite Zeile mit Namen und Pfeilen.
-                  // Gleiche Modell-Icons und Theme-Behandlung wie im Antwort-Leser.
+                  // Wer das sagt: Icon + Name; bei mehreren Modellen nur die
+                  // Icons und die Anzahl (die Namen bleiben Linktext und
+                  // Tooltip). Ist die Originalantwort erreichbar, ist genau
+                  // dieses Paar der Sprunglink. Gleiche Modell-Icons und
+                  // Theme-Behandlung wie im Antwort-Leser.
                   const label = document.createElement("div");
-                  label.className = "diff-position-label";
+                  label.className = "diff-position-label" + (pos.models.length > 1 ? " is-group" : "");
                   const canJump = function (model) {
                     if (isStatic && !opts.answerNavigation) return false;
                     return opts.answerNavigation ? opts.answerNavigation.canOpen(model) : !!MODEL_BOX_IDS[model];
@@ -2495,6 +2531,7 @@
                     nameEl.className = "diff-position-name";
                     nameEl.textContent = name;
                     entry.append(mark, nameEl);
+                    entry.title = name;
                     if (jumps) {
                       entry.type = "button";
                       entry.title = "Open the full answer from " + name;
@@ -2506,22 +2543,32 @@
                     }
                     label.appendChild(entry);
                   });
+                  if (pos.models.length > 1) {
+                    const count = document.createElement("span");
+                    count.className = "diff-position-count";
+                    count.setAttribute("aria-hidden", "true");
+                    count.textContent = pos.models.length + " models";
+                    label.appendChild(count);
+                  }
                   posEl.appendChild(label);
 
-                  if (pos.stance) {
-                    const stance = document.createElement("div");
-                    stance.className = "diff-position-stance";
-                    renderInlineMarkdown(stance, pos.stance);
-                    posEl.appendChild(stance);
-                  }
-                  if (pos.quote) {
+                  // Das Zitat belegt die Behauptung, es wiederholt sie: erst
+                  // auf Wunsch (Klick-Delegation unten, auch fuer Kopien).
+                  if (pos.stance && pos.quote) {
+                    const toggle = document.createElement("button");
+                    toggle.type = "button";
+                    toggle.className = "diff-quote-toggle";
+                    toggle.setAttribute("aria-expanded", "false");
+                    toggle.textContent = "Show quote";
                     const quote = document.createElement("blockquote");
                     quote.className = "diff-position-quote";
+                    quote.hidden = true;
                     renderInlineMarkdown(quote, pos.quote);
-                    posEl.appendChild(quote);
+                    posEl.append(toggle, quote);
                   }
-                  body.appendChild(posEl);
+                  sides.appendChild(posEl);
                 });
+                body.appendChild(sides);
 
                 // Im Archiv nur das PERSISTIERTE Ergebnis, nie der Auslöser:
                 // eine Resolve-Runde laeuft gegen die Modelle des aktiven Laufs.
@@ -2687,6 +2734,17 @@
           });
           settings.onChange("claim_counts", function (detail) {
             if (detail.source !== "local") restoreClaimCounts();
+          });
+
+          // Zitat einer Differenz-Seite ein-/ausklappen: delegiert, weil der
+          // Antwort-Leser die Karten verschiebt und Kopien davon zeigt.
+          document.addEventListener("click", function (event) {
+            const toggle = event.target.closest?.(".diff-quote-toggle");
+            const quote = toggle?.nextElementSibling;
+            if (!quote?.matches(".diff-position-quote")) return;
+            quote.hidden = !quote.hidden;
+            toggle.setAttribute("aria-expanded", String(!quote.hidden));
+            toggle.textContent = quote.hidden ? "Show quote" : "Hide quote";
           });
 
           window.renderConsensusInsights = renderConsensusInsights;

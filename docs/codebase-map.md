@@ -2242,10 +2242,25 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`App.differenceCardAt`), nie über die Kartenposition. Der Kartenkopf nennt
   die Schwere in einem Wort (`Critical`/`Minor`/`Emphasis`, alte Daten ohne
   Severity `Contradiction`; volle Bedeutung im Tooltip und als
-  `.visually-hidden`-Text), farbig ist nur der `.sev-dot`. Jede Position hat
-  eine Kopfzeile mit Icon + Modellname je Modell; ist die Originalantwort
-  erreichbar, ist genau dieses Paar der `.diff-jump-link` (keine separate
-  `.diff-position-links`-Zeile, kein Pfeil, keine Pille).
+  `.visually-hidden`-Text), farbig ist nur der `.sev-dot`.
+  **Gegenüberstellung (seit 2026-10-16):** Ein Widerspruch sind Behauptungen,
+  die sich gegenüberstehen. Der Kartenkopf trägt nur noch das Thema
+  (`claim`), der Körper ist `.diff-sides`: jede Position als Satz
+  (`.diff-position-stance`, beim Widerspruch 16px/500), darunter wer das sagt,
+  zwischen den Seiten ein `.diff-versus-mark` „vs“ in der Ampelfarbe der
+  Schwere (`--dispute`/`--partial`, keine Fläche). Zwei Seiten (`.is-pair`)
+  stehen ab 440px Kartenbreite nebeneinander (Container-Query auf
+  `.diff-card-body`, das „vs“ auf einer senkrechten Haarlinie), schmaler und
+  bei drei oder mehr Seiten untereinander mit „vs“ auf einer waagrechten
+  Linie. Die Seite mit `in_answer` steht vorn und trägt „In the answer“; die
+  Gegenseite hält die Zeile nebeneinander unsichtbar frei. Eine andere
+  Gewichtung (`emphasis`) bekommt kein „vs“. Mehrere Modelle einer Seite
+  zeigen nur Icons + Anzahl („4 models“, Namen bleiben Linktext/Tooltip),
+  ein Modell Icon + Name; ist die Originalantwort erreichbar, ist genau das
+  Icon/Name-Paar der `.diff-jump-link`. Das Zitat steht hinter
+  `.diff-quote-toggle` („Show quote“, per Dokument-Delegation, damit es auch
+  in den in den Leser verschobenen Karten greift); ohne `stance` ist das
+  Zitat selbst die Behauptung und erscheint nur einmal.
   `.diff-card.is-focused` markiert die geöffnete Karte mit einem verblassenden
   Bernstein-Wash (`diffCardFlash`), nicht mehr mit einem 2px-Ring: der Ring
   las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen
@@ -4657,6 +4672,20 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   `positions[].quote` bleibt unverändert ein Zitat aus der jeweiligen
   Modellantwort. Alte Bookmarks/Snapshots ohne das Feld degradieren auf „nur
   Karte".
+  **Datenformat für die Gegenüberstellung (seit 2026-10-16):** `claim` ist in
+  der App eine kurze neutrale Themenzeile („Frontier token prices in 2026“),
+  nicht mehr ein Satz über beide Seiten; Topics (`statement_claims`) behalten
+  „the disputed point in one short sentence“ als Aussage. `positions[].stance`
+  ist die Behauptung der Seite, direkt formuliert („Frontier token prices rose
+  67% year on year“), nie „Model A says …“. `positions[].in_answer`
+  (Schema-Pflichtfeld, boolean) markiert die Seite, die die Konsensantwort
+  selbst vertritt; `_normalize_differences` speichert es nur als `true` und
+  höchstens einmal je Differenz, der Share-Sanitizer reicht es durch.
+  `_named_models` ersetzt übrig gebliebene Judge-Labels in `claim`/`stance`/
+  `verify` („Model F“, „Modell F“, „Models A and C“) durch die echten
+  Modellnamen; unbekannte Labels bleiben stehen. Auslöser war ein Live-Befund
+  vom 2026-10-16: „Model F beschreibt …, während die Synthese …“ war für
+  Nutzer nicht zuzuordnen.
   **Satz-Index (seit 2026-08-07):** Der Judge schreibt Anker nicht mehr ab.
   `_enumerate_consensus_sentences` nummeriert die prüfbaren Sätze der
   Konsensantwort sowie einzelne Datenzellen von Markdown-Tabellen (auch kurze
@@ -5034,12 +5063,16 @@ Differences starten als aufklappbarer Ueberblick: Schwere-Punkt + ein Wort,
 darunter die Kernaussage in normalem Gewicht, Haarlinien statt Kartenrahmen,
 keine Positionszahl. Kritische Funde stehen oben. Ihre Positionen, Zitate,
 Pruefhinweise und Resolve-Aktionen bleiben erhalten.
-Ein einzelner Unterschied wird direkt geoeffnet; mehrere starten als Ueberblick.
+Die erste (gewichtigste) Karte oeffnet beim Betreten, die uebrigen warten als
+je eine Zeile (seit 2026-10-16; vorher nur bei genau einer Karte). Springt ein
+Marker auf eine bestimmte Karte (`index`), bleibt die erste zu.
 Seit 2026-10-01 ist die Liste ein Akkordeon: der `toggle`-Listener im Inspector
 schliesst beim Oeffnen einer Karte die zuvor offene (auch bei Marker-Spruengen
 und `refreshContext`). Typografie im Inspector: 14px Inhalt, 12px Meta, 13px
 Zitate, durchgehend regulaeres Gewicht.
-In der erweiterten Desktopansicht stehen Modellpositionen zweispaltig.
+Ob Positionen nebeneinander stehen, entscheidet die Kartenbreite
+(Gegenüberstellung in `components-consensus-insights.css`), nicht mehr eine
+eigene Zwei-Spalten-Regel der erweiterten Desktopansicht.
 Quellenkarten zeigen Favicon, Domain, Titel und unveraenderte Referenznummer;
 Auszuege werden separat aufgeklappt. Archivdaten bleiben turn-lokal.
 

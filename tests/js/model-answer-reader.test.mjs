@@ -115,6 +115,19 @@ describe("model answer reader", () => {
     expect([...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')].map(card => card.open))
       .toEqual([false, false, true]);
   });
+  it("opens the weightiest finding first when no marker picks one", () => {
+    const ctx = boot(); ctx.project(run());
+    const snapshot = { key: 'tool:first', question: 'Which plan?', answers: [], contextGroup: () => [snapshot],
+      renderPanel() {
+        const panel = ctx.document.createElement('div');
+        panel.innerHTML = [2, 0, 1].map(i => `<details class="diff-card" data-difference-index="${i}"><summary>`
+          + `<span class="diff-card-claim">Finding ${i}</span></summary><p>Evidence ${i}</p></details>`).join('');
+        return panel;
+      } };
+    ctx.reader.openContext(snapshot, { section: 'differences' });
+    expect([...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')].map(card => card.open))
+      .toEqual([true, false, false]);
+  });
   it("previews selected models without creating an answer or a loading state", () => {
     const ctx = boot();
     ctx.document.body.classList.add('is-hero');
