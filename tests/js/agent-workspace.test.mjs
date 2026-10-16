@@ -29,7 +29,7 @@ const MAIL = { id: 'c'.repeat(32), name: 'invoice.pdf', mime: 'application/pdf',
   turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z',
   origin: { message_id: '18c2f0a1b2c3d4e5', part_id: '1.2' }, origin_subject: 'Offer 2026', origin_from: 'Jens <jens@vendor.example>' };
 const UPLOAD = { id: 'a'.repeat(32), name: 'offer.pdf', mime: 'application/pdf', size: 182000, status: 'partial', created_at: '2026-09-20T09:00:00Z',
-  expires_at: '2099-10-29T10:00:00Z', warnings: ['No extractable text on pages 4. Scans require visual reading; OCR is not available.'] };
+  expires_at: '2099-10-29T10:00:00Z', warnings: ['Page 4 is a scanned image and was not read.'] };
 
 describe('private Agent workspace', () => {
   it('renders one document card per document after the answer, grouped by version and without raw IDs', async () => {
@@ -107,7 +107,7 @@ describe('private Agent workspace', () => {
     expect(document.querySelector('img')).toBeNull();
     const notice = document.querySelector('#agentAnswerResources .agent-resource-notice');
     expect(notice.textContent).toContain("couldn't be read");
-    expect(notice.textContent).toContain('OCR is not available');
+    expect(notice.textContent).toContain('Page 4 is a scanned image and was not read.');
     expect(notice.textContent).toContain('<img src=x onerror=alert(1)>.txt');
     dom.window.close();
   });

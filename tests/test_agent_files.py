@@ -83,7 +83,11 @@ def test_malformed_and_scanned_pdf_limits(setup):
     out = io.BytesIO(); writer.write(out)
     result = extract_isolated(out.getvalue(), 'application/pdf')
     assert result['status'] == 'partial' and not result['parts']
-    assert 'OCR' in result['warnings'][0]
+    assert result['warnings'] == ['Page 1 is a scanned image and was not read.']
+    # The model reads such a PDF from the file itself, so the person sees no
+    # "couldn't be read" (2026-10-16: a correctly described scan carried one).
+    meta = files.upload('owner', chat, {'name': 'plan.pdf', 'data': base64.b64encode(out.getvalue()).decode()})
+    assert meta['status'] == 'ready' and meta['warnings'] == []
 
 
 def test_images_are_capability_aware_and_private(setup, monkeypatch):
@@ -109,6 +113,28 @@ def test_legacy_image_note_is_not_shown_as_a_partial_read():
     assert public_file(old)['warnings'] == [] and public_file(old)['status'] == 'ready'
     pdf = {'id': 'g', 'name': 'a.pdf', 'mime': 'application/pdf', 'status': 'partial', 'warnings': ['Only the first 80 PDF pages were processed.']}
     assert public_file(pdf)['status'] == 'partial' and public_file(pdf)['warnings']
+
+
+def test_scanned_page_warnings_only_name_pages_nobody_reads():
+    from app.services.agent_files import public_file
+    legacy = 'No extractable text on pages 2, 5. Scans require visual reading; OCR is not available.'
+    mixed = {'id': 'm', 'name': 'a.pdf', 'mime': 'application/pdf', 'size': 1000, 'status': 'partial',
+             'parts': [{'locator': 'page 1', 'text': 'x'}], 'warnings': [legacy]}
+    # Text pages go to the model as text only; its scanned pages stay unread.
+    assert public_file(mixed)['warnings'] == ['Pages 2 and 5 are scanned images and were not read.']
+    scan = {**mixed, 'parts': [], 'warnings': ['No extractable text on pages 1. Scans require visual reading; OCR is not available.']}
+    assert public_file(scan) == {**public_file(scan), 'status': 'ready', 'warnings': []}
+    too_big = {**scan, 'size': 3 * 1024 * 1024}
+    assert public_file(too_big)['warnings'] == ['Page 1 is a scanned image and was not read.']
+
+
+def test_word_extraction_note_reaches_the_model_but_is_no_warning():
+    from app.services.agent_file_extract import WORD_LIMITS_NOTE
+    from app.services.agent_files import public_file
+    docx = {'id': 'd', 'name': 'a.docx', 'mime': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'status': 'partial', 'warnings': [WORD_LIMITS_NOTE]}
+    assert public_file(docx)['status'] == 'ready' and public_file(docx)['warnings'] == []
+    assert public_file(docx, for_model=True)['warnings'] == [WORD_LIMITS_NOTE]
 
 
 def test_cancelled_upload_and_concurrent_delete_do_not_leave_bytes(setup):

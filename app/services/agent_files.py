@@ -154,12 +154,38 @@ def extract_isolated(raw, mime):
 LEGACY_IMAGE_NOTE = "Visual content is sent only to models with declared image support"
 
 
-def public_file(data):
+# Larger PDFs never go to a model as a file (FileContext.messages).
+NATIVE_PDF_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _reads_visually(data):
+    """A PDF without any text layer goes to the model as the PDF itself."""
+    return data.get("mime") == "application/pdf" and not data.get("parts") and data.get("size", 0) <= NATIVE_PDF_MAX_BYTES
+
+
+def _warning(data, warning, *, for_model):
+    """``warning`` as shown, or None when it is no reading limitation."""
+    text = str(warning)
+    if text.startswith(LEGACY_IMAGE_NOTE):
+        return None
+    if text == agent_file_extract.WORD_LIMITS_NOTE and not for_model:
+        return None
+    pages = agent_file_extract.scanned_pages(text)
+    if pages is not None:
+        # The model reads a fully scanned PDF from the file itself (2026-10-16:
+        # a one-page scan was described correctly under "couldn't be read").
+        return None if _reads_visually(data) else agent_file_extract.scanned_pages_warning(pages)
+    return text
+
+
+def public_file(data, *, for_model=False):
+    """File metadata for the browser, or with ``for_model`` for a model's tool result."""
     file = {key: data[key] for key in ("id", "name", "title", "mime", "size", "sha256", "status", "warnings",
         "created_at", "expires_at", "kind", "document_id", "version", "parent_version", "turn_id", "source_file_ids",
         "origin", "origin_subject", "origin_from") if key in data}
-    if str(file.get("mime", "")).startswith("image/") and file.get("warnings"):
-        file["warnings"] = [w for w in file["warnings"] if not str(w).startswith(LEGACY_IMAGE_NOTE)]
+    if file.get("warnings"):
+        warnings = [_warning(data, w, for_model=for_model) for w in file["warnings"]]
+        file["warnings"] = [w for w in warnings if w]
         if not file["warnings"] and file.get("status") == "partial":
             file["status"] = "ready"
     return file
@@ -366,7 +392,7 @@ class FileContext:
             words = set(re.findall(r"\w{3,}", args.query.lower()))
             parts.sort(key=lambda p: sum(w in p["text"].lower() for w in words), reverse=True)
         selected = parts[args.offset:args.offset + args.limit]
-        return {"file": public_file(data), "excerpts": selected, "total_parts": len(parts),
+        return {"file": public_file(data, for_model=True), "excerpts": selected, "total_parts": len(parts),
                 "next_offset": args.offset + args.limit if args.offset + args.limit < len(parts) else None,
                 "trust": "untrusted", "citation": f"{data['name']} · locator in excerpt"}
 
@@ -415,7 +441,7 @@ class FileContext:
             if data["mime"].startswith("image/") and "image" in modalities:
                 raw = self._raw(file_id, data)
                 blocks.append({"type": "image_url", "image_url": {"url": f"data:{data['mime']};base64," + base64.b64encode(raw).decode()}})
-            elif data["mime"] == "application/pdf" and not data["parts"] and ("file" in modalities or ("image" in modalities and model.model.split("/")[0] in {"openai", "anthropic", "google"})) and data["size"] <= 2 * 1024 * 1024:
+            elif data["mime"] == "application/pdf" and not data["parts"] and ("file" in modalities or ("image" in modalities and model.model.split("/")[0] in {"openai", "anthropic", "google"})) and data["size"] <= NATIVE_PDF_MAX_BYTES:
                 raw = self._raw(file_id, data)
                 # Only send the PDF natively when its visual allowance fits the
                 # model's window; otherwise state the limitation instead of

@@ -83,7 +83,7 @@ def _version(char, number, turn, ext):
 
 SAVED = [
     {'id': '7' * 32, 'name': 'Supplier offer 2026 (final).pdf', 'mime': 'application/pdf', 'size': 182000, 'status': 'partial',
-     'warnings': ['No extractable text on pages 4. Scans require visual reading; OCR is not available.'],
+     'warnings': ['Page 4 is a scanned image and was not read.'],
      'created_at': '2026-09-20T10:00:00Z', 'expires_at': '2099-10-29T10:00:00Z'},
     _version('3', 1, TURN_ONE, 'docx'), _version('4', 1, TURN_ONE, 'pdf'), _version('5', 2, TURN_TWO, 'docx'), _version('6', 2, TURN_TWO, 'pdf'),
     {'id': '8' * 32, 'name': 'invoice-attachment.pdf', 'mime': 'application/pdf', 'size': 51000, 'status': 'ready', 'kind': 'mail_attachment', 'turn_id': TURN_TWO,

@@ -1,6 +1,7 @@
 """Isolated, bounded extraction. Invoked in a disposable subprocess, never a model."""
 import io
 import json
+import re
 import subprocess
 import sys
 import zipfile
@@ -17,6 +18,31 @@ PDF_TEXT_MODE = "pdf-text"
 PROCESS_TIMEOUT_SECONDS = 15
 MAX_RESPONSE_BYTES = 800_000
 SAFETY_LIMIT_WARNING = "Processing exceeded its safety limits. Provide a smaller file or extracted text."
+# Always true for Word files, so a note for the model, never a warning shown
+# to the person (agent_files.public_file).
+WORD_LIMITS_NOTE = "Word headers, footnotes, drawings and embedded images are not extracted; tables retain cell order."
+# Before 2026-10-16: "No extractable text on pages 1, 3. Scans require visual
+# reading; OCR is not available." Stored records still carry that wording.
+_SCANNED_PAGES = re.compile(
+    r"^(?:No extractable text on pages (?P<old>[\d, ]+)\. Scans require visual reading; OCR is not available\."
+    r"|Pages? (?P<new>[\d, and]+) (?:is a scanned image|are scanned images) and (?:was|were) not read\.)$"
+)
+
+
+def scanned_pages_warning(pages):
+    """Readable note for PDF pages without a text layer, e.g. "Pages 3 and 4 ..."."""
+    pages = [str(page) for page in pages]
+    if len(pages) == 1:
+        return f"Page {pages[0]} is a scanned image and was not read."
+    return f"Pages {', '.join(pages[:-1])} and {pages[-1]} are scanned images and were not read."
+
+
+def scanned_pages(warning):
+    """Page numbers a scanned-pages warning (old or new wording) names, else None."""
+    match = _SCANNED_PAGES.match(str(warning))
+    if not match:
+        return None
+    return [int(page) for page in re.findall(r"\d+", match.group("old") or match.group("new"))]
 
 
 def run_isolated(raw, mode, *args, timeout=PROCESS_TIMEOUT_SECONDS):
@@ -102,7 +128,7 @@ def extract(raw, mime):
                 empty.append(index + 1)
             add(f"page {index + 1}", text)
         if empty:
-            warnings.append("No extractable text on pages " + ", ".join(map(str, empty)) + ". Scans require visual reading; OCR is not available.")
+            warnings.append(scanned_pages_warning(empty))
     elif mime.endswith("wordprocessingml.document"):
         from app.services.llm.attachments import _validate_docx_archive
         _validate_docx_archive(raw)
@@ -121,7 +147,7 @@ def extract(raw, mime):
                 add(f"table at block {number}", "\n".join(rows))
             else:
                 add(f"paragraph {number}", "".join(t.text or "" for t in node.iter(ns + "t")))
-        warnings.append("Word headers, footnotes, drawings and embedded images are not extracted; tables retain cell order.")
+        warnings.append(WORD_LIMITS_NOTE)
     elif mime.startswith("image/"):
         from PIL import Image
         with Image.open(io.BytesIO(raw)) as picture:

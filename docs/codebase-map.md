@@ -7962,7 +7962,12 @@ Dateiliste unter der Antwort mehr:
 - `#agentAnswerResources` (nach `#agentAnswerBody`, vor `#agentAnswerError`; wird
   angelegt, falls das Template es nicht enthält): Upload-Fortschritt pro Datei,
   Hinweis „Parts of <Name> couldn't be read“ (mehrere: „Parts of n files …“) für die mit dieser Nachricht
-  gesendeten Dateien (`agent_settings.file_ids`) und je `document_id` eine
+  gesendeten Dateien, nur bei echten Leselücken: `agent_files.public_file` filtert seit 2026-10-16
+  den immer gleichen Word-Hinweis (`WORD_LIMITS_NOTE`, nur noch im Tool-Ergebnis für das Modell,
+  `for_model=True`) und Scan-Seiten-Hinweise eines PDFs ganz ohne Textebene bis 2 MB
+  (`NATIVE_PDF_MAX_BYTES`), weil das Modell solche PDFs selbst als Datei liest; übrige Scan-Seiten
+  heißen „Pages 2 and 5 are scanned images and were not read.“ (alte OCR-Formulierung wird umgeschrieben),
+  Dateiauswahl über `agent_settings.file_ids`; dazu je `document_id` eine
   Dokumentkarte der angezeigten Turn (`turn_id`): Titel, aktuelle Version,
   DOCX/PDF-Download, Badge „New/Updated in this answer“, frühere Versionen
   eingeklappt, ein Revisionshinweis. Dazu die in dieser Turn geholten

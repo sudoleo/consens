@@ -117,10 +117,10 @@ describe("composer attachment tray", () => {
   it("marks sent Agent files that were only partly readable", () => {
     const { window, document } = boot();
     const row = document.getElementById("threadAskAttachments");
-    window.App.attachments.renderMessageAttachments(row, [{ ...FILE, warnings: ["No extractable text on pages 4."] }, FILE]);
+    window.App.attachments.renderMessageAttachments(row, [{ ...FILE, warnings: ["Page 4 is a scanned image and was not read."] }, FILE]);
     const chips = row.querySelectorAll(".attachment-chip");
     expect(chips[0].querySelector(".attachment-chip-warning").textContent).toBe("Partly read");
-    expect(chips[0].getAttribute("aria-label")).toContain("only partly readable: No extractable text on pages 4.");
+    expect(chips[0].getAttribute("aria-label")).toContain("only partly readable: Page 4 is a scanned image and was not read.");
     expect(chips[1].querySelector(".attachment-chip-warning")).toBeNull();
   });
 
