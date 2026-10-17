@@ -110,12 +110,17 @@ def test_chat_admission_waits_across_runs_then_uses_released_allowance():
             second = pool.submit(run, loops[1])
             try:
                 assert waiting.wait(10)
-                assert calls == [2048]
+                # A step that may write the answer asks for the answer
+                # allowance; near the daily limit it gets what remains, more
+                # than the routing allowance, so the second run has to wait.
+                assert len(calls) == 1 and calls[0] > 2048
             finally:
                 finish.set()
             first.result(timeout=10)
             second.result(timeout=10)
-        assert calls == [2048, 2048]
+        # Same messages, so the second gets exactly what the first released:
+        # everything except its 150 measured tokens.
+        assert calls == [calls[0], calls[0] - 150]
         assert quota.get().to_dict()['used'] == 246800
         assert quota.get().to_dict()['reserved'] == 0
         assert all(store.get_turn(uid, loop.chat_id, loop.turn_id)['status'] == 'completed' for loop in loops)

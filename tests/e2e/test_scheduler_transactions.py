@@ -105,8 +105,9 @@ def test_native_topic_loop_commits_due_tick_and_stops_on_cancel(native_db, monke
     future.set({**initial, "next_run_at": now + timedelta(days=1)})
     dispatched = []
     def pipeline(question, *args, **kwargs):
-        dispatched.append(kwargs["claim_key_prefix"])
-        assert due.get().to_dict()["current_run_id"] == dispatched[-1]
+        # The pipeline runs inside the claim; the stored run takes its ID.
+        dispatched.append(due.get().to_dict()["current_run_id"])
+        assert dispatched[-1]
         if pipeline_fails:
             raise RuntimeError("synthetic provider failure")
         return {"consensus": "Synthetic scheduler answer", "agreement_score": 80,

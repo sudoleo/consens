@@ -224,9 +224,10 @@
   .chat-input-container .demo-chip.demo-action { width: 36px; min-width: 36px; padding: 0; justify-content: center; }
   /* The default model's name ("DeepSeek V4.1 Flash") and its comparison
      count stay whole at 320px: the row and the chip give up a little air,
-     (+) and Send keep their size. */
+     (+) and Send keep their size. Inter sets the name 3px wider in Linux
+     Chromium than on Windows; 4px gaps leave room for both. */
   .chat-input-container { column-gap: 4px; }
-  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { gap: 6px; padding-inline: 6px; }
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { gap: 4px; padding-inline: 4px; }
 }
 
 /* ---- Phones in a thread: collapsed to (+), the field and Send ------------

@@ -211,8 +211,10 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
   `markdown-it-py` + `nh3` für Share-Seiten; KaTeX setzt in beiden Ansichten
   LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
 - **CI**: `.github/workflows/tests.yml` (Backend/Frontend bei jedem Push,
-  `dependency-audit` mit pip-audit, nachts zusätzlich Browser/Emulator/Rules),
-  `.github/dependabot.yml` (wöchentlich pip, npm, Actions). Details in
+  `dependency-audit` mit pip-audit, nachts zusätzlich Browser/Emulator/Rules;
+  fehlgeschlagene Tests als Annotationen über `scripts/ci_annotate_failures.py`),
+  `.github/dependabot.yml` (monatlich je ein gesammelter PR für pip, npm,
+  Actions; keine pip-/npm-Majors). Details in
   `docs/testing.md`.
 - **Hosting**: Render. Der tägliche Render-Restart setzt weiterhin flüchtigen
   Prozess-State zurück; Retention/Cleanup läuft davon unabhängig periodisch

@@ -216,10 +216,14 @@ einmal, nur bewusst. FastAPI und Starlette immer gemeinsam hochziehen. Unter
 Windows erzeugt, steht `colorama` mit in der Datei (braucht `click` nur dort);
 fehlt es nach einem Dependabot-Lauf unter Linux, ist das harmlos.
 
-Dependabot (`.github/dependabot.yml`) öffnet montags je Ökosystem (pip, npm,
-GitHub Actions) einen gesammelten PR für Minor-/Patch-Updates; Major-Updates
-kommen einzeln, etwa `openai` 2.x und `firebase-admin` 7.x, die bewusst noch
-nicht mitgezogen sind. Ein npm-PR für esbuild oder eine Vendor-Bibliothek
+Dependabot (`.github/dependabot.yml`) öffnet einmal im Monat je Ökosystem (pip,
+npm, GitHub Actions) höchstens einen gesammelten PR für Minor-/Patch-Updates.
+Major-Updates von pip und npm schlägt er gar nicht mehr vor (seit 2026-10-17;
+vorher kam jeder einzeln und flutete das Postfach), etwa `openai` 2.x und
+`firebase-admin` 7.x: die zieht man bewusst von Hand hoch. Actions-Majors
+bleiben im gesammelten Actions-PR, weil Runner-Abkündigungen (Node 20) als Major
+kommen. Neue Schwachstellen in Python-Paketen meldet trotzdem der nächtliche
+`dependency-audit`. Ein npm-PR für esbuild oder eine Vendor-Bibliothek
 (marked, DOMPurify, KaTeX) bleibt bei `build:check` rot, bis jemand auf dem
 PR-Branch `npm run build` ausführt und committet.
 
@@ -509,6 +513,13 @@ verdecken, ob die Tests grün sind. Der nächtliche Lauf hat eine eigene
 Concurrency-Gruppe; ein Push auf `main` bricht ihn nicht ab. GitHub startet
 geplante Läufe oft verspätet. Die Windows-Suite läuft weiterhin nur auf Anfrage
 oder bei „Ready for review“.
+
+Fehlgeschlagene Backend- und Browser-Tests stehen als Annotationen am Lauf
+(`scripts/ci_annotate_failures.py`): Jobs-Logs brauchen einen GitHub-Login,
+Annotationen nicht, also ist ein roter Lauf aus der Fehler-Mail heraus lesbar.
+Die Linux-Jobs laufen fest auf `ubuntu-24.04`, nicht auf `ubuntu-latest`: der
+Browser-Job installiert Chromiums Systempakete je Ubuntu-Release. Den Pin nur
+bewusst und mit einem `full`-Lauf verschieben.
 
 Auch weitere Pushes auf einen bereits reviewbereiten PR starten nur die schnellen
 Prüfungen. Vor der Integration nach relevanten Folgeänderungen den vollständigen

@@ -62,7 +62,7 @@ def test_configuration_tab_shows_prompts_read_only_and_saves_settings(browser, p
         expect(page.locator('[data-reset-prompt]')).to_have_count(0)
         agent = page.locator('#prompt-agent')
         expect(agent).to_be_hidden()
-        page.locator('#promptCatalog summary', has_text='Agent: steering instructions').click()
+        page.locator('#promptCatalog summary', has_text='Agent: instructions').click()
         expect(agent).to_be_visible()
         assert agent.evaluate('(element) => element.tagName') == 'PRE'
         assert agent.text_content() == catalog[0]["text"]

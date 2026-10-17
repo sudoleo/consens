@@ -51,7 +51,10 @@ def test_six_answers_leave_room_to_read_and_keep_touch_targets(browser, phase4_s
             reader_screenshot(page, f'lean-six-{width}-{theme}')
             # CSS transforms can return 519.999938/720.000122 for integer widths.
             assert 520 <= round(metrics['width']) <= 720
-            assert metrics['chatWidth'] >= 550
+            # Narrowest case 1400px: open 260px sidebar and 520px reader leave
+            # the chat 546px since the column is measured from the body's real
+            # content box instead of 100vw (sidebar resize, 2026-10-08).
+            assert metrics['chatWidth'] >= 540
             assert metrics['chatRight'] < metrics['readerLeft']
             assert metrics['headerHeight'] <= 36
             assert metrics['bodyTop'] < 340

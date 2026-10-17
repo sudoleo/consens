@@ -13,7 +13,8 @@ from native_support import native_db, race_with_worker_retry, tree
 @pytest.mark.parametrize("kind,capability", [("gmail_send", "gmail_send"), ("calendar_event", "calendar_write")])
 def test_native_google_confirmation_one_attempt_and_unknown_never_retries(native_db, monkeypatch, kind, capability):
     db, uid = native_db, native_db.owner()
-    for key, value in {"GOOGLE_INTEGRATIONS_ENABLED": "1", "GOOGLE_CLIENT_ID": "fixture-client",
+    # Writes stay behind their own switch since Google became read-only by default.
+    for key, value in {"GOOGLE_INTEGRATIONS_ENABLED": "1", "GOOGLE_WRITES_ENABLED": "1", "GOOGLE_CLIENT_ID": "fixture-client",
         "GOOGLE_CLIENT_SECRET": "fixture-secret", "GOOGLE_REDIRECT_URI": "https://fixture.invalid/agent/google/callback",
         "GOOGLE_TOKEN_KEYS": Fernet.generate_key().decode()}.items():
         monkeypatch.setenv(key, value)
@@ -76,6 +77,9 @@ def test_native_google_confirmation_one_attempt_and_unknown_never_retries(native
 @pytest.mark.parametrize("change", ["revision", "approval", "hash", "superseded"])
 def test_native_google_changed_authority_or_content_performs_no_write(native_db, monkeypatch, change):
     db, uid = native_db, native_db.owner()
+    # Writes enabled, so each rejection below comes from the changed authority
+    # or content and not from the read-only default.
+    monkeypatch.setenv("GOOGLE_WRITES_ENABLED", "1")
     actions = AgentActions(db)
     cid = uuid.uuid4().hex
     ref = actions.connections.ref(uid, cid)

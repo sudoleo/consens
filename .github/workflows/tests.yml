@@ -41,20 +41,23 @@ concurrency:
   group: regression-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.suite || github.event_name == 'schedule' && 'nightly' || github.event.action == 'ready_for_review' && 'full' || 'quick' }}
   cancel-in-progress: true
 
+# Linux jobs are pinned to ubuntu-24.04: ubuntu-latest moves to 26.04 from
+# 2026-10-19, and the browser job installs Chromium's system packages, which
+# Playwright supports per Ubuntu release. Move the pin on purpose, with a full run.
 jobs:
   backend:
     if: github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'backend' || inputs.suite == 'full')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       UNIT_TEST_MODE: "1"
       PYTHONUTF8: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Cache-key contracts compare each asset with its actual change date.
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
           cache: pip
@@ -68,16 +71,8 @@ jobs:
       # there, so a failure can be read (and fixed) without signing in.
       - name: Failed tests as annotations
         if: failure()
-        run: |
-          python - <<'EOF'
-          import xml.etree.ElementTree as ET
-          for case in ET.parse("test-results/backend.xml").iter("testcase"):
-              for problem in [*case.iter("failure"), *case.iter("error")]:
-                  text = (problem.get("message") or "") + "\n" + (problem.text or "")[-1500:]
-                  text = text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-                  print(f"::error title={case.get('classname')}::{case.get('name')}%0A{text}")
-          EOF
-      - uses: actions/upload-artifact@v4
+        run: python scripts/ci_annotate_failures.py test-results/backend.xml
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-results
@@ -86,18 +81,18 @@ jobs:
 
   frontend:
     if: github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'frontend' || inputs.suite == 'full')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
       - run: npm ci
       - run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/frontend.xml
       - run: npm run build:check
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: frontend-results
@@ -106,7 +101,7 @@ jobs:
 
   browser-and-rules:
     if: github.event_name == 'schedule' || github.event.action == 'ready_for_review' || (github.event_name == 'workflow_dispatch' && (inputs.suite == 'browser-and-rules' || inputs.suite == 'full'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
       RUN_E2E: "1"
@@ -118,8 +113,8 @@ jobs:
       FIREBASE_PROJECT_ID: demo-consensio-e2e
       FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
           cache: pip
@@ -127,11 +122,11 @@ jobs:
             requirements.txt
             requirements-test.txt
             requirements-e2e.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -144,7 +139,10 @@ jobs:
         run: >-
           firebase emulators:exec --only firestore --project demo-consensio-e2e --config firebase.json --non-interactive
           "npm run test:rules && python -m pytest tests/e2e -q --junitxml=test-results/browser.xml"
-      - uses: actions/upload-artifact@v4
+      - name: Failed tests as annotations
+        if: failure()
+        run: python scripts/ci_annotate_failures.py test-results/browser.xml
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: browser-emulator-results
@@ -158,11 +156,11 @@ jobs:
     # Own job: a newly published advisory turns this red without hiding whether
     # the tests pass. Also nightly, so advisories surface without a push.
     if: github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'dependency-audit' || inputs.suite == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
       - run: python -m pip install "pip-audit>=2.10,<3"
@@ -179,8 +177,8 @@ jobs:
       PYTHONUTF8: "1"
       OPENROUTER_API_KEY: ci-dummy-key
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
           cache: pip
@@ -188,11 +186,11 @@ jobs:
             requirements.txt
             requirements-test.txt
             requirements-e2e.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -207,7 +205,7 @@ jobs:
       - run: .\dev.ps1 check frontend -TestPath tests/js/stored-turn-markers.test.mjs
       - run: .\dev.ps1 check rules
       - run: .\dev.ps1 check browser -TestPath tests/e2e/test_phase2_transactions.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: windows-results
