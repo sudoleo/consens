@@ -305,14 +305,26 @@
   // order, like a marker pen going over the text (the landing page's gesture).
   // Later re-renders of the same answer show them at once.
   const MARKS = '.cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major)';
+  // A mark as the reader sees it: its colour and its words.
+  const markKey = el => `${el.className.match(/\bis-(?:thin|unanimous|minor|split|major)\b/)?.[0] || ''}|${el.textContent}`;
   // A re-render during the reveal (a fresh DOM when the run ends) continues
   // the stroke where it was, through negative delays, instead of restarting.
   function revealMarks(body, hash) {
     // Marks hidden by the highlight setting (all markers off, or e.g. green
     // ones filtered out) neither animate nor take a place in the sequence.
     const visible = el => !el.classList.contains('is-marker-filtered');
-    const marks = document.body.classList.contains('consensus-markers-hidden') ? []
-      : [...body.querySelectorAll(MARKS)].filter(visible);
+    // Marks the reader already saw as provisional marks of this answer, in
+    // the same colour, stay still with their badges: only new or changed
+    // marks (a contradiction, a sentence checked last) stroke on (preview()).
+    const shown = body._shownMarks?.hash === hash ? body._shownMarks.keys : null;
+    let still = false;
+    const moving = (document.body.classList.contains('consensus-markers-hidden') ? []
+      : [...body.querySelectorAll(`${MARKS}, .claim-badge`)].filter(visible)).filter(el => {
+      if (el.matches(MARKS)) still = Boolean(shown?.has(markKey(el)));
+      el.classList.toggle('is-mark-shown', still);
+      return !still;
+    });
+    const marks = moving.filter(el => el.matches(MARKS));
     if (!marks.length) return;
     const now = performance.now();
     if (body._revealedMarks !== hash) {
@@ -325,7 +337,7 @@
     const elapsed = now - body._revealStart;
     const step = Math.min(38, 900 / marks.length);
     let delay = 0, index = 0;
-    for (const el of [...body.querySelectorAll(`${MARKS}, .claim-badge`)].filter(visible)) {
+    for (const el of moving) {
       const mark = el.matches(MARKS);
       if (mark) delay = Math.round(index++ * step);
       el.style.setProperty('--cx-reveal-delay', `${Math.round((mark ? delay : delay + 260) - elapsed)}ms`);
@@ -344,16 +356,79 @@
       body.classList.remove('is-marks-settling');
     }, Math.max(0, body._revealTotal - elapsed));
   }
-  function render(body, review, evidence = {}) {
-    if (!body?.parentElement) return;
-    const version = review?.versions?.find(v => v.id === review.answer_version);
-    const raw = body.dataset.markdown ?? version?.text;
+  // Every source of the turn: search, the answer's links, comparison citations.
+  function sourcesOf(body, review, evidence, raw) {
     // A source pill carries a favicon and may stand for several sources.
-    const turnSources = safeSources([evidence, ...(evidence.events || []), {text: raw}, { sources: [...body.querySelectorAll('a[href]')]
+    return safeSources([evidence, ...(evidence.events || []), {text: raw}, { sources: [...body.querySelectorAll('a[href]')]
       .filter(a => !a.closest('code, pre') && (a.matches('.src-ref') || !a.querySelector('img, svg')))
       .flatMap(a => a.sourceGroup?.length ? a.sourceGroup.map(entry => entry.src).filter(Boolean)
         : [a.sourceData || {url: a.getAttribute('href'), title: a.textContent}]) },
       ...(review?.comparisons || []).flatMap(c => c.answers || []), ...(review?.versions || [])]);
+  }
+  // Provisional marks (since 2026-10-18): while the judges check the fixed
+  // answer, the Coverage windows that are done send their verdicts
+  // (coverage_preview, never saved). They appear quietly, without the stroke,
+  // and only on the exact answer they were checked on; the final review
+  // replaces them (render), and only marks that are new or changed then
+  // stroke on (revealMarks). Anything else (no preview, another answer, a
+  // check that ended without a result) takes them off again. `previews`
+  // holds the newest preview of each comparison; the marks belong to the
+  // comparison the evidence row will show.
+  function preview(body, review, previews, evidence = {}) {
+    if (!body?.parentElement) return;
+    const applied = body._previewMarks;
+    const intact = Boolean(applied) && body.firstChild === applied.first;
+    const version = review?.versions?.find(v => v.id === review.answer_version);
+    const raw = body.dataset.markdown;
+    const comparisons = review?.comparisons || [];
+    const comparison = comparisons.find(c => `agent-evidence:${c.id}` === body._agentReview?._selectedBasis) || comparisons[0];
+    const data = comparison && previews?.[comparison.id];
+    const claims = (Array.isArray(data?.claims) ? data.claims : [])
+      .filter(c => c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent));
+    const usable = claims.length > 0 && typeof raw === 'string' && Boolean(version) && raw === version.text
+      && version.hash === review.answer_hash && data.answer_hash === review.answer_hash
+      && ['required', 'running'].includes(review.status);
+    if (!usable) {
+      if (intact) {
+        const sources = sourcesOf(body, review, evidence, raw);
+        window.injectMarkdown?.(body, raw, []);
+        window.linkifyAgentSources?.(body, sources);
+      }
+      if (applied) { body._previewMarks = null; body.classList.remove('has-provisional-marks'); }
+      return;
+    }
+    const signature = JSON.stringify([review.answer_hash, comparison.id, claims, data.models_compared]);
+    if (intact && applied.signature === signature) return;
+    const sources = sourcesOf(body, review, evidence, raw);
+    window.injectMarkdown?.(body, raw, []);
+    // Coverage only: no contradictions and no score yet, and no "Key claims"
+    // list for sentences without an anchor while the check is incomplete.
+    window.renderStoredConsensusClaims?.(body, { claims, differences: [],
+      models_compared: Array.isArray(data.models_compared) ? data.models_compared : [] },
+    document.createElement('div'), sources, { answerNavigation: { canOpen: () => false, open() {} }, focusDifference() {} });
+    window.linkifyAgentSources?.(body, sources);
+    // What the reader has seen; a mark not seen before fades in, once.
+    const shown = body._shownMarks?.hash === review.answer_hash ? body._shownMarks.keys : new Set();
+    let arriving = false;
+    for (const el of body.querySelectorAll(`${MARKS}, .claim-badge`)) {
+      if (el.matches(MARKS)) {
+        const key = markKey(el);
+        arriving = !shown.has(key);
+        shown.add(key);
+      }
+      el.classList.toggle('is-mark-arriving', arriving);
+    }
+    body._shownMarks = { hash: review.answer_hash, keys: shown };
+    // The final review draws its marks anew (context.mark).
+    body._markSignature = null;
+    body._previewMarks = { signature, first: body.firstChild };
+    body.classList.add('has-provisional-marks');
+  }
+  function render(body, review, evidence = {}) {
+    if (!body?.parentElement) return;
+    const version = review?.versions?.find(v => v.id === review.answer_version);
+    const raw = body.dataset.markdown ?? version?.text;
+    const turnSources = sourcesOf(body, review, evidence, raw);
     let host = body._agentReview;
     if (!review?.comparisons?.length) {
       if (host?._hasReview && typeof body.dataset.markdown === "string") window.injectMarkdown?.(body, body.dataset.markdown, []);
@@ -494,6 +569,8 @@
         body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
         if (typeof raw === "string") window.injectMarkdown?.(body, raw, []);
+        // Provisional marks went with the old DOM.
+        body._previewMarks = null; body.classList.remove('has-provisional-marks');
         if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
           answerNavigation: navigation,
           focusDifference: differenceIndex => open("differences", { index: differenceIndex, trigger: document.activeElement })
@@ -571,5 +648,5 @@
     // review object; the last built context of the comparison still opens.
     return (review && activityContexts.get(review) || []).find(c => c.key === key) || contextsByKey.get(key) || null;
   }
-  App.agentReview = { render, renderActivity, failureNote, failureReason, contextFor };
+  App.agentReview = { render, preview, renderActivity, failureNote, failureReason, contextFor };
 })();

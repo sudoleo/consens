@@ -305,6 +305,18 @@ bisher erst am fertigen Text. Grund: Für echte Nutzer kam die Prüfung im Media
 25 s, in jedem zehnten Lauf über 99 s nach dem letzten Wort. Wird der gezeigte
 Text zurückgezogen (Toolcall danach), stoppen seine Fenster. Ein Fenster mehr
 kostet etwa 0,25 Cent.
+Seit 2026-10-18 sieht der Nutzer die Fenster auch früher: Sobald die Antwort
+fest steht, gehen die schon fertigen Fenster und danach jedes weitere, sobald
+es fertig ist, als vorläufige Satzmarken an die offene Seite (Event
+`coverage_preview`), während Differences noch läuft. Es sind nur
+Coverage-Stimmen für Sätze, die ein Fenster schon beantwortet hat (ein noch
+laufender Satz bleibt unmarkiert statt grau), gebunden an den Hash genau
+dieses Antworttexts; kein Score, keine Widersprüche, nichts davon wird
+gespeichert. Die fertige Prüfung ersetzt sie. Gespeicherte Chats und der
+Review-Snapshot bleiben unverändert. Ein zurückgezogener Text bekommt nie
+welche: Vorschauen gibt es erst nach dem Festschreiben, und der Browser
+verwirft sie bei einem Rückzug, einem anderen Text oder einer Prüfung, die
+ohne Ergebnis endet.
 Die Schreibregeln stehen im Agent-Prompt (`AGENT_ANSWER_SECTION`, „WRITING THE
 ANSWER“) mit der eigenen beratenden Stimme des Chatmodells. Es schreibt aus seinem
 eigenen Kontext: Gesprächsverlauf, Toolergebnisse mit den vollständigen
@@ -433,10 +445,16 @@ Schimmer.
 Während Differences und Coverage die feste Antwort prüfen, läuft ein leichter
 Lichtschimmer im Takt der Thinking-Überschrift über die Antwort (Overlay in
 Seitenfarbe, kein Textverlauf, damit Tabellen, Code und Links lesbar bleiben);
-er blendet aus, sobald die Prüfung endet. Die Markierungen erscheinen dann sofort
-und streichen sich beim ersten Mal in
+er blendet aus, sobald die Prüfung endet. Schon unter dem Schimmer erscheinen
+die vorläufigen Marken fertiger Coverage-Fenster (seit 2026-10-18): leise, jede
+neue Marke blendet einmal ein, ohne Textmarker-Strich und ohne Score.
+Mit der fertigen Prüfung erscheinen die endgültigen Markierungen sofort und
+streichen sich beim ersten Mal in
 Lesereihenfolge an wie ein Textmarker (höchstens etwa 0,9 s Versatz, Badges
-folgen). Erneutes Rendern derselben Antwort und gespeicherte Chats zeigen sie ohne
+folgen). Marken, die der Leser schon vorläufig in derselben Farbe sah, bleiben
+dabei still; nur neue oder umgefärbte (etwa ein roter Widerspruch) streichen
+sich an, damit keine Marke zweimal erscheint. Erneutes Rendern derselben
+Antwort und gespeicherte Chats zeigen sie ohne
 Animation; Reduced Motion und Forced Colors verzichten auf beides.
 Rund um die Antwort gilt ein Farbsystem: Antworttext `--ink`; Thinking samt
 Verlauf und Tools, Aktionen und Evidenzlinks `--ink-2` (Hover `--ink`, Aktionen

@@ -1629,6 +1629,59 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('hands provisional marks to the answer only while its check runs, and forgets them with a taken-back text', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    // Text taken back (a tool call followed) takes any marks with it.
+    handlers.delta.append('Let me check one more source.');
+    handlers.coverage_preview.receive({ answer_hash: 'x', comparison_id: 'c', claims: [] });
+    expect(Object.keys(run.metadata.coveragePreview)).toEqual(['c']);
+    handlers.activity.receive({ version: 1, id: 'step', kind: 'status', status: 'working', clear_response: true });
+    expect(run.metadata.coveragePreview).toBeNull();
+    // A malformed frame changes nothing.
+    handlers.coverage_preview.receive({ answer_hash: 'h', claims: [] });
+    handlers.coverage_preview.receive({ answer_hash: 'h', comparison_id: 'c', claims: 'none' });
+    expect(run.metadata.coveragePreview).toBeNull();
+    // While the answer streams there is nothing to mark.
+    handlers.delta.append('Answer.');
+    w.App.agentChat.project(run);
+    expect(w.App.agentReview.preview).toHaveBeenLastCalledWith(body, null, null, expect.anything());
+    const version = { id: 1, text: 'Answer.', hash: 'h' };
+    const running = { status: 'running', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] };
+    handlers.review.receive({ review: running });
+    const event = { answer_hash: 'h', comparison_id: 'c', claims: [{ anchor: 'Answer.', agree: ['A', 'B'], dissent: [] }] };
+    handlers.coverage_preview.receive(event);
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    const [marked, review, previews, evidence] = w.App.agentReview.preview.mock.lastCall;
+    expect(marked).toBe(body);
+    expect(review).toBe(running);
+    expect(previews.c).toBe(event);
+    expect(evidence.key).toBe(run.runId);
+    // The final review takes over the marks; previews are no longer drawn.
+    w.App.agentReview.preview.mockClear();
+    handlers.review.receive({ review: { ...running, status: 'succeeded' } });
+    w.App.agentChat.project(run);
+    expect(w.App.agentReview.preview).not.toHaveBeenCalled();
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.objectContaining({ status: 'succeeded' }),
+      expect.objectContaining({ reveal: true }));
+    resolve({ ok: true, data: { response: 'Answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    dom.window.close();
+  });
+
   it('restores the draft without a recovery or failed row when the server refuses before starting', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);

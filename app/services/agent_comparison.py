@@ -6,6 +6,7 @@ from functools import partial
 import hashlib
 import json
 import logging
+import queue
 import random
 import re
 import threading
@@ -808,6 +809,28 @@ class ComparisonTools:
         if self.prefetch is not None:
             self.prefetch.discard()
 
+    def preview_coverage(self, comparison_id, digest, preview):
+        """The marks of the Coverage windows that are in, while the check of
+        the fixed answer still waits for Differences (since 2026-10-18).
+
+        Sent to the open page as ``coverage_preview`` and never saved: the
+        review snapshot stays the one source of saved chats, and the final
+        review replaces these marks. Bound to the exact answer (``digest``)
+        and sent only while that answer's review runs, so neither a
+        retracted text nor a finished check ever gets them. Every claim so
+        far each time: a late reader needs only the newest. Never breaks the
+        check."""
+        with self.lock:
+            if self.review is None or self.review.get("status") != "running" or answer_hash(self.text) != digest:
+                return
+            try:
+                self.loop.outgoing.put_nowait({
+                    "type": "coverage_preview", "answer_hash": digest, "comparison_id": comparison_id,
+                    "claims": preview["claims"], "models_compared": preview["models_compared"],
+                    "checked": preview["checked"], "sentences": preview["sentences"]})
+            except queue.Full:
+                logging.warning("Coverage preview dropped: event queue full")
+
     def _close_prefetch(self):
         if self.prefetch is not None:
             self.prefetch.close()
@@ -1435,7 +1458,8 @@ class ComparisonTools:
                         self.text, {"OpenRouter": loop.api_key}, differences_model=self._judge_reference(),
                         resolved_question=comparison["question"], chat_mode=True, passes=DIFFERENCES_PASSES,
                         read_sources=read_sources, coverage_window=AGENT_COVERAGE_WINDOW,
-                        coverage_prefetch=prefetch)
+                        coverage_prefetch=prefetch,
+                        coverage_progress=partial(self.preview_coverage, comparison["id"], check["answer_hash"]))
                 loop._check(cancellation)
                 if isinstance(data, dict):
                     check["differences_data"] = data

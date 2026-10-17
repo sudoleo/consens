@@ -19,8 +19,9 @@ has received a single byte and no other account can ever read it.
 Frames are bounded per run. A reader that fell behind the oldest retained
 frame receives a ``reset`` first: the answer text as it stood just before
 that frame (deltas appended, cleared where a status said so) and the newest
-dropped frame of each kind that sets lasting state (turn id, review, memory,
-allowance, resources), so a late reader still shows the right partial answer.
+dropped frame of each kind that sets lasting state (turn id, review, the
+newest coverage preview, memory, allowance, resources), so a late reader still
+shows the right partial answer.
 """
 from __future__ import annotations
 
@@ -51,7 +52,7 @@ TAIL_INTERVAL_SECONDS = 0.1
 TAIL_KEEPALIVE_SECONDS = 15.0
 # Frames whose newest instance stays meaningful after it scrolled out of the
 # window: a late reader receives them with its reset (agent-chat.js handlers).
-STICKY_TYPES = frozenset({"accepted", "started", "review", "memory", "quota", "resources"})
+STICKY_TYPES = frozenset({"accepted", "started", "review", "coverage_preview", "memory", "quota", "resources"})
 
 
 def _text_effect(event_type, data):

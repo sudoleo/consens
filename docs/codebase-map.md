@@ -3212,6 +3212,20 @@ alles. `_retract` und ein Schnitt in `_show_answer` stoppen laufende Fenster
 (`discard_answer_progress`), `judge()`/`skip_review()` schließen den Pool.
 Coverage-Meta trägt `prefetched` (übernommene Sätze); `duration_ms` misst die
 Zeit nach Antwortende.
+**Vorläufige Marken (seit 2026-10-18):** `judge()` gibt `query_differences`
+`coverage_progress=partial(ComparisonTools.preview_coverage, comparison_id,
+answer_hash)` mit. `_CoverageProgress` sammelt die Voten jedes fertigen
+Fensters (übernommene frühe Fenster in Fertig-Reihenfolge,
+`_ComparisonWindows.results` per `as_completed`, Rest- und Neufrage-Fenster
+über `_run_coverage_windows(progress=…)`, ein einzelnes Fenster in
+`_run_coverage_judge`) und baut daraus Claims nur für beantwortete Sätze
+(`_coverage_claims(only=…)` + `_verify_claims`); ein fehlschlagender Empfänger
+kostet die Prüfung nie (`_report_coverage`). `preview_coverage` legt sie als
+Event `coverage_preview` (`answer_hash`, `comparison_id`, alle Claims bisher,
+`models_compared`, `checked`, `sentences`) in `outgoing`, nur solange die
+Review dieses exakten Texts `running` ist; nie gespeichert, kein Score, keine
+Differences. Der Live-Puffer hält das neueste als Sticky-Frame. Im Browser
+siehe `agent-review.js::preview` (unten).
 Im Toolergebnis eines Vergleichs nennen die Antworten ihre Quellen nur per URL
 (seit 2026-10-10); `sources` führt jede zitierte Quelle einmal mit `cited_by`,
 `supports` (gestützte Antwortsätze) und `excerpt` (Originalauszug), gebaut von
@@ -3374,6 +3388,21 @@ davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
 neu injizierter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
 beim ersten Auftreten je `answer_hash` (`evidence.reveal`). Veraltete
 Antwort-/Grundlagenbindungen werden nicht angezeigt.
+Seit 2026-10-18 legt der Handler `coverage_preview` das neueste Event je
+Vergleich in `context.metadata.coveragePreview` (ein `activity`-Status mit
+`clear_response` leert es). `project` ruft, solange der Lauf läuft und die
+Review noch nicht fertig ist, `agentReview.preview(body, checking ? liveReview :
+null, previews, evidence)`: Sie markiert nur bei exakt gebundenem Text
+(`answer_hash`, Versionstext = `dataset.markdown`, Status `required`/`running`)
+die Claims des Vergleichs, den die Evidenzzeile zeigen wird
+(`_selectedBasis` oder der erste), mit `differences: []`, losgelöster
+Fallback-Box (keine „Key claims“) und ohne Score; neue Marken bekommen
+`.is-mark-arriving` (Einblenden), `body._shownMarks` merkt Farbe+Text je
+`answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand. Ohne
+passende Vorschau nimmt `preview` die Marken einmal wieder ab
+(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark` setzt
+den Zustand zurück; `revealMarks` setzt Marken aus `_shownMarks` auf
+`.is-mark-shown` (samt Badge) und lässt nur neue oder umgefärbte anstreichen.
 
 Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
 Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
@@ -3540,7 +3569,7 @@ Speicher (`FRAME_OVERHEAD_BYTES` = 256 je Frame plus der für Nachzügler
 aufgehobene Text). Frames werden als gültiges JSON gespeichert (NaN → `null`,
 einzelne Surrogates ersetzt). Liest jemand hinter dem behaltenen Fenster,
 bekommt er zuerst die neuesten verworfenen Frames mit bleibendem Zustand
-(`STICKY_TYPES`: accepted, started, review, memory, quota, resources) und dann
+(`STICKY_TYPES`: accepted, started, review, coverage_preview, memory, quota, resources) und dann
 `reset` mit dem Antworttext bis dorthin (Deltas angehängt, bei `activity`
 `status` + `clear_response` geleert), im Tail als eigene Frames bzw.
 `event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert nichts
@@ -6240,7 +6269,7 @@ app/services/
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
-  agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17)
+  agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
@@ -8182,6 +8211,8 @@ Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
 genau dem Text, den die Live-Prüfung schon vollständig samt Claim-Marken
 gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
 dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
+Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18) zeichnet
+`project` schon, während die feste Antwort geprüft wird.
 Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
 (`LOADING_NOTICE_DELAY_MS`); vorher schob ihr kurzes Aufblitzen den zentrierten
 Composer beim Reload hoch und wieder runter. Erstes Zeichnen: Endete die letzte

@@ -12,10 +12,15 @@ finished answer collects these windows and asks only the rest
 The windows run through the same judge transport as the check itself
 (ComparisonTools.judge_transport): metered, stopped with the turn, and in a
 chat with Google data routed like every other call of that chat.
+
+Since 2026-10-18 the page also sees them early: once the answer is fixed,
+every collected or finished window becomes provisional marks
+(ComparisonTools.preview_coverage, event ``coverage_preview``) while the
+Differences judge still runs; the final review replaces them.
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import copy_context
 from functools import partial
 import hashlib
@@ -50,8 +55,9 @@ class _ComparisonWindows:
         return sentences
 
     def results(self):
-        """Each window's result as it finishes; a failed window yields nothing."""
-        for _, future in self._windows:
+        """Each window's result as it finishes (the first done first: its
+        marks reach the page at once); a failed window yields nothing."""
+        for future in as_completed([future for _, future in self._windows]):
             try:
                 result = future.result()
             except Exception as exc:

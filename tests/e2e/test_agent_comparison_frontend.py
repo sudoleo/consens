@@ -757,3 +757,121 @@ def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(brow
         assert not errors
     finally:
         context.close()
+
+
+def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(browser, phase4_server):
+    """Coverage windows that are done mark the fixed answer quietly while the
+    Differences judge still runs (coverage_preview, since 2026-10-18). The
+    final review replaces them and strokes on only what is new or changed;
+    the saved turn shows the saved review alone."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    chat, turn = "a" * 32, "b" * 32
+    seats, billing = "The smaller plan includes five seats.", "Monthly billing is available on both plans."
+    text = f"{seats}\n\n{billing}\n"
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
+                "text": "Choose the smaller plan; it has five seats and monthly billing.", "sources": []}
+               for p, label, model, name in [("openai", "OpenAI", "openai/gpt-5.4-mini", "GPT-5.4 Mini"),
+                                             ("gemini", "Gemini", "google/gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite")]]
+    base = {"answer_version": 1, "answer_hash": digest, "versions": [{"id": 1, "text": text, "hash": digest, "status": "required"}],
+            "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Which plan fits a team of five?",
+                             "status": "succeeded", "answers": answers}]}
+
+    def supported(anchor, number):
+        return {"anchor": anchor, "agree": ["OpenAI", "Gemini"], "dissent": [], "coverage": "supported",
+                "sentence_id": number, "anchor_occurrence": 0}
+
+    review = {**base, "status": "succeeded", "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest,
+        "status": "succeeded", "differences_data": {"models_compared": ["Gemini", "OpenAI"],
+            "claims": [supported(seats, 1), supported(billing, 2)],
+            "agreement": {"score": 72, "coverage_status": "sufficient"},
+            "differences": [{"claim": "Whether both plans bill monthly", "consensus_anchor": billing, "type": "contradiction",
+                             "severity": "major", "positions": [
+                                 {"models": ["OpenAI"], "stance": "Both plans bill monthly.", "quote": "monthly billing"},
+                                 {"models": ["Gemini"], "stance": "Only the smaller plan bills monthly.", "quote": "the smaller plan"}]}]}}]}
+    saved = {"id": turn, "question": "Which plan fits our team?", "status": "completed", "execution_mode": "agent", "mode": "Agent",
+             "consensus": text, "sources": [], "model_answers": {}, "agent_review": review, "agent_activity": [],
+             "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5"}}
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": chat, "execution_mode": "agent"}}))
+        page.route(f"**/agent/chats/{chat}/turns/{turn}/agents", lambda r: _json(r, {"agents": [], "status": "succeeded"}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        # A real open stream: each frame reaches the app's SSE parser on its own.
+        page.evaluate("""data => {
+          const fetch = window.fetch;
+          window.fetch = (url, options) => {
+            if (String(url) !== '/agent') return fetch(url, options);
+            window.__agentRequest = JSON.parse(options.body);
+            return Promise.resolve(new Response(new ReadableStream({start(controller) {
+              window.__agentPush = (type, event) => controller.enqueue(new TextEncoder().encode(`event: ${type}\\ndata: ${JSON.stringify(event)}\\n\\n`));
+              window.__agentClose = () => { try { controller.close(); } catch (_) {} };
+              window.__agentPush('started', {chat_id: data.chat, turn_id: data.turn, delegation: false});
+            }}), {headers: {'Content-Type': 'text/event-stream'}}));
+          };
+        }""", {"chat": chat, "turn": turn})
+        push = lambda name, event: page.evaluate("([name, event]) => window.__agentPush(name, event)", [name, event])
+        page.locator("#questionInput").fill(saved["question"])
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => typeof window.__agentPush === 'function'")
+        body = page.locator("#agentAnswerBody")
+        marks = body.locator(".cx-claim")
+        push("delta", {"text": text})
+        push("review", {"review": {**base, "status": "running", "checks": []}})
+        expect(body).to_have_class(re.compile(r"\bis-answer-checking\b"))
+        expect(marks).to_have_count(0)
+
+        # The first window is done: its sentence is marked quietly, no score yet.
+        preview = {"answer_hash": digest, "comparison_id": "c1", "models_compared": ["Gemini", "OpenAI"], "sentences": 2}
+        push("coverage_preview", {**preview, "claims": [supported(seats, 1)], "checked": 1})
+        expect(marks).to_have_count(1)
+        expect(marks.first).to_have_text(seats)
+        expect(marks.first).to_have_class(re.compile(r"\bis-unanimous\b.*\bis-mark-arriving\b|\bis-mark-arriving\b.*\bis-unanimous\b"))
+        expect(body).to_have_class(re.compile(r"\bhas-provisional-marks\b"))
+        expect(body).to_have_class(re.compile(r"\bis-answer-checking\b"))
+        expect(body).not_to_have_class(re.compile(r"\bis-marks-revealing\b"))
+        expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
+        # The provisional mark already explains itself.
+        marks.first.hover()
+        expect(page.locator(".insight-preview")).to_contain_text("2/2")
+        page.mouse.move(0, 0)
+
+        # The next window: the seen mark stays as it is, the new one fades in.
+        push("coverage_preview", {**preview, "claims": [supported(seats, 1), supported(billing, 2)], "checked": 2})
+        expect(marks).to_have_count(2)
+        expect(marks.first).not_to_have_class(re.compile(r"\bis-mark-arriving\b"))
+        expect(marks.nth(1)).to_have_class(re.compile(r"\bis-mark-arriving\b"))
+
+        # Differences is done: the final review takes over. The confirmed mark
+        # stays still; the contradiction strokes on in red; the score appears.
+        push("review", {"review": review})
+        expect(body).not_to_have_class(re.compile(r"\bhas-provisional-marks\b"))
+        expect(body).not_to_have_class(re.compile(r"\bis-answer-checking\b"))
+        expect(body.locator(".cx-claim.is-major")).to_have_count(1)
+        expect(body.locator(".cx-claim.is-major")).to_have_text(billing)
+        expect(body.locator(".cx-claim.is-major")).not_to_have_class(re.compile(r"\bis-mark-shown\b"))
+        expect(body.locator(".cx-claim.is-unanimous")).to_have_class(re.compile(r"\bis-mark-shown\b"))
+        expect(page.locator("#agentAnswer .agent-agreement-num")).to_have_text("72")
+
+        request = page.evaluate("window.__agentRequest")
+        bookmark = {"id": request["bookmark_id"], "chat_id": chat, "turn_id": turn, "title": saved["question"],
+                    "query": saved["question"], "mode": "Agent", "execution_mode": "agent", "has_consensus": True}
+        push("final", {"chat_id": chat, "turn_id": turn, "response": text, "turn": saved, "bookmark_meta": bookmark})
+        page.evaluate("() => window.__agentClose()")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(body.locator(".cx-claim.is-major")).to_have_count(1)
+
+        # The saved turn knows nothing of the preview: the saved review alone.
+        page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", saved)
+        expect(body.locator(".cx-claim.is-major")).to_have_count(1)
+        expect(body.locator(".cx-claim.is-unanimous")).to_have_count(1)
+        expect(body.locator(".is-mark-arriving")).to_have_count(0)
+        expect(body).not_to_have_class(re.compile(r"\bhas-provisional-marks\b"))
+        assert not errors
+    finally:
+        context.close()

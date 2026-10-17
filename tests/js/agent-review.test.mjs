@@ -439,6 +439,103 @@ it('leaves marks hidden by the highlight setting out of the reveal', () => {
   dom.window.close();
 });
 
+// Provisional marks: Coverage windows that are done while Differences still runs.
+function previewSetup() {
+  const setupResult = setup();
+  const {window: w, document: d} = setupResult;
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'Exact answer.';
+  w.matchMedia = () => ({ matches: false });
+  // The real marker sets one span per anchored claim and a badge behind it.
+  w.renderStoredConsensusClaims = vi.fn((el, data) => {
+    el.innerHTML = data.claims.map(c => `<span class="cx-claim is-${c.major ? 'major' : c.coverage === 'split' ? 'split' : 'unanimous'}">${c.anchor}</span>`
+      + ' <span class="claim-badge">2/2</span>').join(' ');
+  });
+  const running = { ...snapshot(), status: 'running' };
+  delete running.checks;
+  return { ...setupResult, body, running };
+}
+const claim = (anchor, extra = {}) => ({ anchor, agree: ['GPT'], dissent: [], coverage: 'supported', ...extra });
+it('marks the exact answer quietly with the Coverage windows that are done, and takes the marks off without a check', () => {
+  const {window: w, dom, body, running} = previewSetup();
+  const previews = { c1: { answer_hash: 'answer-hash', comparison_id: 'c1', claims: [claim('One.')], models_compared: ['GPT'] } };
+  w.App.agentReview.preview(body, running, previews);
+  // Coverage only: no contradictions, no "Key claims" list, no score row.
+  const [marked, data, fallback, sources] = w.renderStoredConsensusClaims.mock.lastCall;
+  expect(marked).toBe(body);
+  expect(JSON.parse(JSON.stringify(data))).toEqual({ claims: [claim('One.')], differences: [], models_compared: ['GPT'] });
+  expect(fallback.isConnected).toBe(false);
+  expect(Array.isArray(sources)).toBe(true);
+  expect(body._agentReview).toBeUndefined();
+  expect(body.classList.contains('has-provisional-marks')).toBe(true);
+  // No marker stroke: the mark and its badge fade in once.
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  expect([...body.querySelectorAll('.cx-claim, .claim-badge')].every(el => el.classList.contains('is-mark-arriving'))).toBe(true);
+  // An unchanged preview keeps the DOM (the page projects every 100 ms).
+  const first = body.querySelector('.cx-claim');
+  w.App.agentReview.preview(body, structuredClone(running), structuredClone(previews));
+  expect(body.querySelector('.cx-claim')).toBe(first);
+  // The next window: what the reader saw stays still, only the new mark fades in.
+  previews.c1 = { ...previews.c1, claims: [claim('One.'), claim('Two.', { coverage: 'split' })] };
+  w.App.agentReview.preview(body, running, previews);
+  const [one, two] = body.querySelectorAll('.cx-claim');
+  expect(one.classList.contains('is-mark-arriving')).toBe(false);
+  expect(two.classList.contains('is-mark-arriving')).toBe(true);
+  // A preview of another answer, another text on the page, a finished or
+  // stopped review, or no review: the marks come off, and only once.
+  for (const [review, list, raw] of [[running, { c1: { ...previews.c1, answer_hash: 'other-hash' } }, 'Exact answer.'],
+    [running, previews, 'Changed answer.'], [{ ...running, status: 'cancelled' }, previews, 'Exact answer.'],
+    [running, { c2: previews.c1 }, 'Exact answer.'], [null, previews, 'Exact answer.']]) {
+    w.App.agentReview.preview(body, running, previews);
+    expect(body.querySelectorAll('.cx-claim')).toHaveLength(2);
+    body.dataset.markdown = raw;
+    w.injectMarkdown.mockClear();
+    w.App.agentReview.preview(body, review, list);
+    expect(body.querySelectorAll('.cx-claim')).toHaveLength(0);
+    expect(body.classList.contains('has-provisional-marks')).toBe(false);
+    w.App.agentReview.preview(body, review, list);
+    expect(w.injectMarkdown).toHaveBeenCalledTimes(1);
+    body.dataset.markdown = 'Exact answer.';
+  }
+  dom.window.close();
+});
+it('strokes on only new or changed marks when the final review replaces provisional ones', () => {
+  vi.useFakeTimers();
+  const {window: w, dom, body, running} = previewSetup();
+  w.performance.now = () => 1000;
+  w.App.agentReview.preview(body, running, { c1: { answer_hash: 'answer-hash', comparison_id: 'c1',
+    claims: [claim('One.'), claim('Two.')], models_compared: ['GPT'] } });
+  const review = snapshot();
+  // Two. turned out to be contested, Three. was checked last.
+  review.checks[0].differences_data.claims = [claim('One.'), claim('Two.', { major: true }), claim('Three.')];
+  w.App.agentReview.render(body, review, { reveal: true });
+  expect(body.classList.contains('has-provisional-marks')).toBe(false);
+  expect(body.classList.contains('is-marks-revealing')).toBe(true);
+  const [one, two, three] = body.querySelectorAll('.cx-claim');
+  const [oneBadge] = body.querySelectorAll('.claim-badge');
+  const delay = el => el.style.getPropertyValue('--cx-reveal-delay');
+  for (const el of [one, oneBadge]) {
+    expect(el.classList.contains('is-mark-shown')).toBe(true);
+    expect(delay(el)).toBe('');
+  }
+  expect(two.classList.contains('is-mark-shown')).toBe(false);
+  expect(delay(two)).toBe('0ms');
+  expect(parseInt(delay(three))).toBeGreaterThan(0);
+  vi.runAllTimers();
+  // A final review that only confirms what the reader saw strokes nothing.
+  const same = snapshot();
+  same.answer_hash = same.versions[0].hash = 'same-hash';
+  same.checks.forEach(c => { c.answer_hash = 'same-hash'; });
+  same.checks[0].differences_data.claims = [claim('One.')];
+  w.App.agentReview.preview(body, { ...running, answer_hash: 'same-hash', versions: same.versions },
+    { c1: { answer_hash: 'same-hash', comparison_id: 'c1', claims: [claim('One.')], models_compared: ['GPT'] } });
+  w.App.agentReview.render(body, same, { reveal: true });
+  expect(body.querySelector('.cx-claim').classList.contains('is-mark-shown')).toBe(true);
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  vi.useRealTimers();
+  dom.window.close();
+});
+
 it('leads the evidence row with a quiet agreement score of the comparison it shows', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer');

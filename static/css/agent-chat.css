@@ -467,17 +467,28 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
   /* The marks stroke on in reading order; badges settle in behind them. */
-  /* Only marks the reader's highlight setting shows take part. */
+  /* Only marks the reader's highlight setting shows take part, and none the
+     reader already saw as a provisional mark in the same colour. */
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered) {
+    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown) {
     background-color: transparent;
     background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
     background-repeat: no-repeat;
     box-shadow: none;
     animation: agent-mark-stroke .62s cubic-bezier(.25, .75, .3, 1) var(--cx-reveal-delay, 0ms) backwards;
   }
-  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered) {
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered, .is-mark-shown) {
     animation: agent-mark-badge .34s ease-out var(--cx-reveal-delay, 0ms) backwards;
+  }
+  /* Provisional marks (Coverage windows that are done while Differences
+     still runs, agent-review.js preview) arrive quietly: each fades in once,
+     without the stroke. */
+  body:not(.consensus-markers-hidden) #agentAnswerBody
+    .cx-claim.is-mark-arriving:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered) {
+    animation: agent-mark-arrive .45s ease-out backwards;
+  }
+  body:not(.consensus-markers-hidden) #agentAnswerBody .claim-badge.is-mark-arriving:not(.is-marker-filtered) {
+    animation: agent-mark-badge .34s ease-out backwards;
   }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
@@ -491,6 +502,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
+@keyframes agent-mark-arrive { from { background-color: transparent; box-shadow: none; } }
 
 /* ---- Progress at the models ------------------------------------------------
    While the agent works, each comparison model's icon in the summary row

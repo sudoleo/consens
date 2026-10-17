@@ -4,7 +4,9 @@ Coverage windows of settled sentences run during the stream; the check of the
 finished answer collects them and asks only the rest. These tests hold the
 three promises that makes: a sentence is numbered the same before and after
 the answer is finished, an early verdict is used only for the exact same
-sentence, and nothing is asked twice.
+sentence, and nothing is asked twice. Since 2026-10-18 the windows that are
+done also reach the page as provisional marks while Differences still runs:
+only answered sentences, only for the exact fixed answer, never saved.
 """
 import json
 import threading
@@ -14,8 +16,8 @@ import pytest
 
 from app.services.llm import coverage_judge as coverage
 from app.services.llm.consensus_engine import (
-    AGENT_COVERAGE_WINDOW, CHAT_MAX_CONSENSUS_SENTENCES, _build_judge_context, _enumerate_consensus_sentences,
-    _run_coverage_judge, prefetch_coverage_window, settled_sentence_count,
+    AGENT_COVERAGE_WINDOW, CHAT_MAX_CONSENSUS_SENTENCES, _build_judge_context, _CoverageProgress,
+    _enumerate_consensus_sentences, _run_coverage_judge, prefetch_coverage_window, settled_sentence_count,
 )
 from app.services.llm.provider_runtime import ProviderCancelled, current_provider_cancellation
 from app.services.llm.task_transport import bind_task_transport
@@ -119,6 +121,95 @@ def test_early_verdicts_are_used_only_for_the_same_sentence_and_the_rest_runs_on
     assert all(stance == "supports" for label, stance in result["s4"]["models"].items())
 
 
+def test_each_finished_window_reaches_the_page_with_its_sentences_only():
+    answer = "".join(f"Fact number {n} holds true.\n" for n in range(1, 41))
+    early_text = "".join(f"Fact number {n} holds true.\n" for n in range(1, 21))
+    reports, answered, lock = [], set(), threading.Lock()
+    first_report = threading.Event()
+
+    def receiver(preview):
+        with lock:
+            reports.append(({claim["sentence_id"] for claim in preview["claims"]}, set(answered), preview))
+        first_report.set()
+
+    def transport(provider, api_model, model_ref, **kwargs):
+        ids = schema_ids(kwargs)
+        if "s33" in ids:
+            # The last window is still out when the page gets its first marks.
+            assert first_report.wait(5)
+        reply = entries(ids, schema_labels(kwargs))
+        with lock:
+            answered.update(coverage.sentence_id_number(sid) for sid in ids)
+        return reply
+
+    with bind_task_transport(transport):
+        early = prefetch_coverage_window(ANSWERS, early_text, coverage.sentence_ids(range(16)), {"OpenRouter": "k"},
+                                         "OpenAI", resolved_question="Capital?")
+    early["entries"]["s3"]["models"]["Anthropic"] = "contradicts"
+    early["sentences"]["s2"] = "Fact number 2 was something else."
+    answered.clear()
+
+    class Prefetch:
+        def launched(self):
+            return dict(early["sentences"])
+
+        def results(self):
+            yield early
+
+    context = _build_judge_context(ANSWERS, answer, None, "Capital?", sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES)
+    with bind_task_transport(transport):
+        result, _ = _run_coverage_judge(context, {"OpenRouter": "k"}, "OpenAI", chat_mode=True,
+                                        window=AGENT_COVERAGE_WINDOW, prefetch=Prefetch(),
+                                        progress=_CoverageProgress(context, answer, receiver))
+    assert len(result) == 40
+    adopted = {1, *range(3, 17)}
+    seen = set()
+    for claimed, known, _ in reports:
+        # Never a mark for a sentence no window has answered yet: it would
+        # read as checked (grey "thin") while it is still being checked.
+        assert claimed <= known | adopted
+        # Every report holds every mark so far: a late reader needs only the newest.
+        assert claimed >= seen
+        seen = claimed
+    assert seen == set(range(1, 41))
+    assert any(33 not in claimed for claimed, _, _ in reports)
+    last = reports[-1][2]
+    assert last["models_compared"] == sorted(ANSWERS) and last["checked"] == last["sentences"] == 40
+    claims = {claim["sentence_id"]: claim for claim in last["claims"]}
+    assert claims[1]["anchor"] == "Fact number 1 holds true." and claims[1]["coverage"] == "supported"
+    # Real model names, not the labels of either anonymization.
+    assert [item["model"] for item in claims[3]["dissent"]] == ["Anthropic"] and claims[3]["coverage"] == "split"
+
+
+def test_provisional_marks_go_out_only_while_the_exact_answer_is_checked():
+    import queue
+    from types import SimpleNamespace
+    from app.services.agent_comparison import ComparisonTools, answer_hash
+
+    tools = SimpleNamespace(lock=threading.RLock(), review={"status": "running", "checks": []}, text="Fixed answer.",
+                            loop=SimpleNamespace(outgoing=queue.Queue(maxsize=1)))
+    preview = {"claims": [{"anchor": "Fixed answer.", "agree": ["OpenAI"], "dissent": []}],
+               "models_compared": ["OpenAI"], "checked": 1, "sentences": 1}
+    digest = answer_hash("Fixed answer.")
+
+    def send(value):
+        ComparisonTools.preview_coverage(tools, "c1", value, preview)
+
+    send(answer_hash("A text that was taken back."))
+    assert tools.loop.outgoing.empty()
+    send(digest)
+    assert tools.loop.outgoing.get_nowait() == {"type": "coverage_preview", "answer_hash": digest,
+                                                "comparison_id": "c1", **preview}
+    # A full event queue drops the preview, never the check.
+    send(digest)
+    send(digest)
+    tools.loop.outgoing.get_nowait()
+    for review in ({"status": "succeeded", "checks": []}, {"status": "cancelled", "checks": []}, None):
+        tools.review = review
+        send(digest)
+        assert tools.loop.outgoing.empty()
+
+
 class FakeLoop:
     def __init__(self):
         from app.services.llm.provider_runtime import ProviderCancellation
@@ -184,13 +275,12 @@ def test_no_windows_when_the_check_is_off_or_the_answer_is_fixed():
     assert calls == []
 
 
-def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(store):
+def streaming_turn(store, answer, coverage_calls):
+    """An Agent turn whose answer streams line by line."""
     from test_agent_comparison import Script, make_loop
-    from test_agent_runs import UID
     from app.services.llm.agent_client import measured_usage
 
-    answer = "".join(f"Fact number {n} holds true for this option.\n" for n in range(1, 41))
-    coverage_calls, lock = [], threading.Lock()
+    lock = threading.Lock()
 
     class StreamingScript(Script):
         def factory(self):
@@ -217,7 +307,17 @@ def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(
             completion.stream = stream
             return completion
 
-    loop = make_loop(store, StreamingScript())
+    return make_loop(store, StreamingScript())
+
+
+ANSWER = "".join(f"Fact number {n} holds true for this option.\n" for n in range(1, 41))
+
+
+def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(store):
+    from test_agent_runs import UID
+
+    coverage_calls = []
+    loop = streaming_turn(store, ANSWER, coverage_calls)
     list(loop.run())
     review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
     assert review["status"] == "succeeded"
@@ -230,3 +330,31 @@ def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(
     assert len(data["claims"]) == 40
     # Two early windows, the rest, and the differences pass (tests pin one pass).
     assert loop.comparison.judge_calls == 4
+
+
+def test_agent_turn_sends_provisional_marks_before_the_final_review_and_saves_none(store):
+    from test_agent_runs import UID
+
+    loop = streaming_turn(store, ANSWER, [])
+    events = [event for event in loop.run() if event]
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = turn["agent_review"]
+    data = review["checks"][0]["differences_data"]
+    previews = [i for i, event in enumerate(events) if event["type"] == "coverage_preview"]
+    final = max(i for i, event in enumerate(events) if event["type"] == "review" and event["review"]["status"] == "succeeded")
+    # Two windows ran while the answer was written, the third after it: each
+    # reaches the page on its own, all before the final review.
+    assert len(previews) == 3 and max(previews) < final
+    sent = [events[i] for i in previews]
+    assert all(event["answer_hash"] == review["answer_hash"] == review["versions"][-1]["hash"]
+               and event["comparison_id"] == review["checks"][0]["comparison_id"] for event in sent)
+    counts = [len(event["claims"]) for event in sent]
+    assert counts == sorted(counts) and counts[-1] == 40
+    assert [claim["anchor"] for claim in sent[-1]["claims"]] == [claim["anchor"] for claim in data["claims"]]
+    # Coverage only: no score, no differences, and nothing of it is saved.
+    assert all(set(event) == {"type", "answer_hash", "comparison_id", "claims", "models_compared", "checked",
+                              "sentences"} for event in sent)
+    for event in events:
+        if event["type"] == "review" and event["review"]["status"] == "running":
+            assert all(check["differences_data"] is None for check in event["review"]["checks"])
+    assert "coverage_preview" not in json.dumps(turn, default=str)

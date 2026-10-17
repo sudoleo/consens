@@ -514,6 +514,8 @@
     }
     if (body && (body.dataset.markdown !== text || body.dataset.renderMode !== mode)) {
       const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
+      // Provisional marks the reader saw belong to one text (agent-review.js).
+      if (body.dataset.markdown !== text) body._shownMarks = null;
       body.dataset.markdown = text;
       body.dataset.renderMode = mode;
       if (mode === 'stream') window.renderMarkdownStream(body, text, { decorate: streamSourcePills });
@@ -676,6 +678,12 @@
         { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
           key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });
     }
+    // Sentences whose Coverage window is done are marked quietly while the
+    // check still waits for Differences (coverage_preview); the final review
+    // replaces them, and without a check they come off again.
+    if (running && !checked) App.agentReview?.preview?.(answerBody, checking ? liveReview : null,
+      context.metadata.coveragePreview, { sources: state.completedTurn?.sources, events: context.metadata.agentActivity,
+        key: context.runId, question: context.question });
     // A pasted text the Agent checks: "Checking ..." above the answer while
     // the models answer, the result card as soon as the check is in.
     App.passageCheck?.apply(answerBody, state.completedTurn?.agent_review || liveReview, { live: running });
@@ -1235,10 +1243,21 @@
         context.metadata.agentReview = event.review;
         registry.update(context.runId, () => {});
       } },
+      // Provisional marks of the fixed answer: the newest per comparison,
+      // every claim so far (agent-review.js preview). Never saved.
+      coverage_preview: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        if (typeof event.comparison_id !== "string" || !Array.isArray(event.claims)) return;
+        context.metadata.coveragePreview = { ...context.metadata.coveragePreview, [event.comparison_id]: event };
+        registry.update(context.runId, () => {});
+      } },
       activity: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         App.agentActivity?.receive(context.metadata.agentActivity, event);
-        if (event.kind === "status" && event.clear_response) context.consensus.streamText = "";
+        if (event.kind === "status" && event.clear_response) {
+          context.consensus.streamText = "";
+          context.metadata.coveragePreview = null;
+        }
         if (event.settings) context.metadata.agentSettings = event.settings;
         if (event.kind === "usage") context.metadata.agentUsage = event.usage;
         if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
