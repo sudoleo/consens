@@ -632,6 +632,9 @@
 .wd-goal-status { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); white-space: nowrap; }
 .wd-goal-status.is-reached { color: var(--agree); }
 .wd-goal-status.is-reported { color: var(--partial); }
+/* What a match must fit sits right under the goal it belongs to. */
+.wd-goal.wd-details { margin-top: 2px; }
+.wd-details-text { color: var(--ink-2); }
 
 .wd-headline { margin: 10px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.55; }
 .is-moved .wd-headline,
@@ -736,6 +739,7 @@
 .wd-settings[hidden] { display: none; }
 .wd-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px 18px; }
 .wd-goal-editor { display: grid; gap: 7px; }
+.wd-goal-editor[hidden] { display: none; }
 .wd-goal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .wd-channels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 36px; }
 .wd-check { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); font-size: var(--font-size-sm); cursor: pointer; }

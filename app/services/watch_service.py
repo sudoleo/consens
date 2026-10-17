@@ -18,6 +18,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import app.core.config as cfg
 from app.core.entitlements import TIER_PRO
 from app.core.security import db_firestore
+from app.services.source_catalog import canonical_source_url
 from app.services import (
     drift_signal, notification_outbox, opinion_map, persistence_guard, share_snapshots,
     source_links, watch_images, watch_symbols,
@@ -39,6 +40,12 @@ WATCH_WEEKDAYS = (
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 )
 WATCH_CONDITION_MAX_CHARS = 500
+# "Details": what the owner wants or rules out ("new, from a shop, no private
+# sellers"). Every search and the goal check read it; the goal stays the event.
+WATCH_REQUIREMENTS_MAX_CHARS = 500
+# Matches the owner turned down with "Not what I wanted"; they never meet the
+# goal again. The newest are kept.
+WATCH_REJECTED_MAX = 10
 WATCH_QUESTION_MIN_CHARS = 8
 WATCH_RUN_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 UNSUBSCRIBE_MAX_AGE_DAYS = 90
@@ -161,6 +168,52 @@ def condition_hash(condition: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else ""
 
 
+def validate_requirements(value) -> str:
+    requirements = " ".join(str(value or "").split()).strip()
+    if len(requirements) > WATCH_REQUIREMENTS_MAX_CHARS:
+        raise WatchError(
+            "invalid_requirements",
+            f"Details must be at most {WATCH_REQUIREMENTS_MAX_CHARS} characters.",
+        )
+    return requirements
+
+
+def goal_hash(condition: str, requirements: str = "") -> str:
+    """Identity of a goal as it is judged: the event plus the owner's details.
+
+    Without details it is ``condition_hash``, so goals stored before details
+    existed keep their history. New details make it a new goal: earlier "met"
+    verdicts no longer count, and a resolved watch may reopen with them.
+    """
+    goal = condition_hash(condition)
+    details = " ".join(str(requirements or "").split())
+    if not goal or not details:
+        return goal
+    return hashlib.sha256(f"{goal}\0{details}".encode("utf-8")).hexdigest()
+
+
+def _serialize_rejected(value) -> list[dict]:
+    items = []
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "")
+        if not url.startswith(("https://", "http://")):
+            continue
+        items.append({"url": url[:2000], "title": str(item.get("title") or "")[:240]})
+    return items[-WATCH_REJECTED_MAX:]
+
+
+def _with_rejected(existing, sources) -> list[dict]:
+    """Add a resolution's sources to the rejected list, newest last, no repeats."""
+    merged = {}
+    for item in [*_serialize_rejected(existing), *_serialize_rejected(sources)]:
+        key = canonical_source_url(item["url"])
+        merged.pop(key, None)
+        merged[key] = item
+    return list(merged.values())[-WATCH_REJECTED_MAX:]
+
+
 def validate_run_schedule(run_time, timezone_name) -> tuple[str, str]:
     """Validate an optional local HH:MM + IANA timezone pair."""
     run_time = str(run_time or "").strip()
@@ -230,6 +283,7 @@ def _serialize_resolution(value) -> dict | None:
         "run_id": str(value.get("run_id") or ""),
         "at": at.isoformat() if isinstance(at, datetime) else "",
         "condition": str(value.get("condition") or "")[:WATCH_CONDITION_MAX_CHARS],
+        "requirements": str(value.get("requirements") or "")[:WATCH_REQUIREMENTS_MAX_CHARS],
         "reason": str(value.get("reason") or "")[:400],
         "sources": _evidence_list(value.get("sources")),
     }
@@ -280,10 +334,10 @@ def goal_state(data: dict) -> str:
         return "confirming"
     if status == "not_met":
         return "not_met"
-    goal_hash = condition_hash(goal)
+    current_goal = goal_hash(goal, data.get("requirements") or "")
     points = data.get("history_points")
     for point in reversed(points if isinstance(points, list) else []):
-        if isinstance(point, dict) and point.get("condition_hash") == goal_hash:
+        if isinstance(point, dict) and point.get("condition_hash") == current_goal:
             # Ein met/not_met hier, aber leerer Status: das Ziel wurde seitdem
             # neu gesetzt (gleicher Text) und noch nicht wieder geprüft.
             return "unclear" if point.get("condition_status") == "unknown" else "pending"
@@ -320,6 +374,9 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "telegram_enabled": data.get("telegram_enabled") is True,
         "telegram_muted_until": iso(data.get("telegram_muted_until")),
         "condition": str(data.get("condition") or ""),
+        # Owner-only: the public page shows the goal, never these.
+        "requirements": str(data.get("requirements") or ""),
+        "rejected_sources": _serialize_rejected(data.get("rejected_sources")),
         "last_condition_status": data.get("last_condition_status"),
         "goal_state": goal_state(data),
         "visibility": visibility,
@@ -924,12 +981,23 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
     ref, data = _owned_watch(uid, watch_id, db)
     allowed_changes = {
         "interval", "status", "email_mode", "email_enabled", "telegram_enabled",
-        "condition", "run_weekday", "run_time", "timezone",
+        "condition", "requirements", "run_weekday", "run_time", "timezone", "reject_match",
     }
     if not changes or any(key not in allowed_changes for key in changes):
         raise WatchError(
             "invalid_request",
-            "Only interval, status, alert rule, channels, condition, run day, run time, and timezone can be changed.",
+            "Only interval, status, alert rule, channels, condition, details, run day, run time, and timezone can be changed.",
+        )
+    reject_match = changes.get("reject_match", False)
+    if not isinstance(reject_match, bool):
+        raise WatchError("invalid_request", "reject_match must be true or false.")
+    if reject_match and (
+        data.get("status") != WATCH_STATUS_RESOLVED
+        or str(changes.get("status") or "").strip().lower() != "active"
+    ):
+        raise WatchError(
+            "invalid_request",
+            "Only a reached goal can be marked as not what you wanted, and the watch then runs again.",
         )
     updates = {}
     now = utcnow()
@@ -976,6 +1044,12 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
         if updates["condition"] != str(data.get("condition") or ""):
             updates["last_condition_status"] = None
             updates["last_condition_hash"] = None
+    if "requirements" in changes:
+        updates["requirements"] = validate_requirements(changes["requirements"])
+        if updates["requirements"] != str(data.get("requirements") or ""):
+            # A verdict reached under other details is not a verdict on these.
+            updates["last_condition_status"] = None
+            updates["last_condition_hash"] = None
     effective_mode = updates.get("email_mode") or data.get("email_mode") or "changes_only"
     effective_condition = updates.get("condition", str(data.get("condition") or ""))
     if effective_mode == "condition":
@@ -1002,17 +1076,29 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
                 consecutive_failures=0,
             )
         if status == "active" and data.get("status") == WATCH_STATUS_RESOLVED:
-            # Watching on after a goal was reached needs a new goal (or none):
-            # the old one would resolve again on the very next check.
-            reached = condition_hash(
-                (data.get("resolution") or {}).get("condition") or data.get("condition") or ""
-            )
-            next_goal = condition_hash(updates.get("condition", data.get("condition") or ""))
-            if reached and next_goal == reached:
-                raise WatchError(
-                    "goal_reached",
-                    "This goal was already reached. Set a new goal or clear it to keep watching.",
+            resolution = data.get("resolution") if isinstance(data.get("resolution"), dict) else {}
+            if reject_match:
+                # "Not what I wanted": the same goal goes on, and the sources
+                # that closed it can never close it again.
+                updates["rejected_sources"] = _with_rejected(
+                    data.get("rejected_sources"), resolution.get("sources"),
                 )
+            else:
+                # Watching on after a goal was reached needs a new goal, new
+                # details or no goal: the old one would resolve again at once.
+                reached = goal_hash(
+                    resolution.get("condition") or data.get("condition") or "",
+                    resolution.get("requirements") or "",
+                )
+                next_goal = goal_hash(
+                    updates.get("condition", data.get("condition") or ""),
+                    updates.get("requirements", data.get("requirements") or ""),
+                )
+                if reached and next_goal == reached:
+                    raise WatchError(
+                        "goal_reached",
+                        "This goal was already reached. Set a new goal or clear it to keep watching.",
+                    )
             updates.update(resolution=None, last_condition_status=None, last_condition_hash=None)
         # The claim is revoked inside the transaction only when the status
         # really changes; re-sending the current status must not free the
@@ -1288,7 +1374,11 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
         # The goal is part of the page the owner chose to publish; private
         # pages are never rendered for anyone else.
         "condition": str(data.get("condition") or "")[:WATCH_CONDITION_MAX_CHARS],
-        "resolution": data.get("resolution") if isinstance(data.get("resolution"), dict) else None,
+        # The details a goal was judged under stay with the owner.
+        "resolution": (
+            {key: value for key, value in data["resolution"].items() if key != "requirements"}
+            if isinstance(data.get("resolution"), dict) else None
+        ),
         # Nur die Vorschau aus den Quellen; nie Teil von OG-Karte oder JSON-LD.
         "image": watch_images.image_view(watch_id, data),
     }
@@ -1485,6 +1575,7 @@ def release_worker_lease(owner: str = "", *, db=None) -> bool:
 WATCH_CONFIG_FIELDS = (
     "status", "interval", "run_weekday", "run_time", "timezone", "email_mode",
     "email_enabled", "telegram_enabled", "telegram_muted_until", "condition",
+    "requirements", "rejected_sources",
     "last_condition_status", "last_condition_hash", "config_generation",
 )
 WATCH_SCHEDULE_FIELDS = ("interval", "run_weekday", "run_time", "timezone")
@@ -1543,11 +1634,12 @@ def _evidence_list(value) -> list[dict]:
     return items[:4]
 
 
-def run_point(result: dict, *, condition: str = "", run_id: str = "", ts=None) -> dict:
+def run_point(result: dict, *, condition: str = "", requirements: str = "",
+              run_id: str = "", ts=None) -> dict:
     """The fields of one check that the drift rule and the goal rule read."""
     score = result.get("agreement_score")
-    goal_hash = condition_hash(condition or "")
-    status = str(result.get("condition_status") or "") if goal_hash else ""
+    judged_goal = goal_hash(condition or "", requirements or "")
+    status = str(result.get("condition_status") or "") if judged_goal else ""
     status = status if status in {"met", "not_met", "unknown"} else ""
     return {
         "run_id": str(run_id or ""),
@@ -1561,11 +1653,12 @@ def run_point(result: dict, *, condition: str = "", run_id: str = "", ts=None) -
         "evidence_sources": _evidence_list(result.get("evidence_sources")),
         "condition_status": status,
         "condition_verified": bool(result.get("condition_verified")) and status == "met",
-        "condition_hash": goal_hash,
+        "condition_hash": judged_goal,
     }
 
 
-def run_outcome(watch: dict, result: dict, *, condition: str | None = None) -> dict:
+def run_outcome(watch: dict, result: dict, *, condition: str | None = None,
+                requirements: str | None = None) -> dict:
     """What one check means for its watch: drift signal, goal and re-check.
 
     A goal resolves when the check says it was met and either cites a source
@@ -1576,7 +1669,10 @@ def run_outcome(watch: dict, result: dict, *, condition: str | None = None) -> d
     points = watch.get("history_points")
     points = points if isinstance(points, list) else []
     condition = str(watch.get("condition") or "") if condition is None else condition
-    point = run_point(result, condition=condition)
+    requirements = (
+        str(watch.get("requirements") or "") if requirements is None else requirements
+    )
+    point = run_point(result, condition=condition, requirements=requirements)
     latest = drift_signal.classify_latest(points, point)
     met = point["condition_status"] == "met"
     previous = points[-1] if points else {}
@@ -1623,8 +1719,12 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
     now = now or utcnow()
     run_id = str(claimed["current_run_id"])
     evaluated_condition = str(claimed.get("condition") or "")
-    evaluated_condition_hash = condition_hash(evaluated_condition)
-    point = run_point(result, condition=evaluated_condition, run_id=run_id, ts=now)
+    evaluated_requirements = str(claimed.get("requirements") or "")
+    evaluated_condition_hash = goal_hash(evaluated_condition, evaluated_requirements)
+    point = run_point(
+        result, condition=evaluated_condition, requirements=evaluated_requirements,
+        run_id=run_id, ts=now,
+    )
     history = {
         key: value for key, value in point.items() if key != "run_id"
     }
@@ -1698,13 +1798,15 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         effective = effective_watch(claimed, current)
         existing_points = current.get("history_points")
         existing_points = existing_points if isinstance(existing_points, list) else []
-        # A goal edited while this run judged the old one is not judged at all.
-        goal_current = (
-            condition_hash(current.get("condition") or "") == evaluated_condition_hash
-        )
+        # A goal or its details edited while this run judged the old ones is
+        # not judged at all.
+        goal_current = goal_hash(
+            current.get("condition") or "", current.get("requirements") or "",
+        ) == evaluated_condition_hash
         outcome = run_outcome(
             {"history_points": existing_points}, result,
             condition=evaluated_condition if goal_current else "",
+            requirements=evaluated_requirements if goal_current else "",
         )
         trigger = outcome["trigger"]
         if outcome["resolved"]:
@@ -1754,6 +1856,7 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
                     "run_id": run_id,
                     "at": now,
                     "condition": evaluated_condition,
+                    "requirements": evaluated_requirements,
                     "reason": history["condition_reason"],
                     "sources": history["condition_sources"],
                 },

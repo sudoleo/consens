@@ -353,3 +353,88 @@ describe("dashboard render", () => {
     expect(card.querySelector(".wd-side-meta").textContent).toBe("Telegram");
   });
 });
+
+describe("details and wrong matches", () => {
+  function dashboard(watches) {
+    const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
+    const { window } = harness;
+    window.history.replaceState(null, "", "/app/watches");
+    window.auth.currentUser.getIdToken = async () => "token";
+    const calls = [];
+    window.fetch = vi.fn(async (path, options = {}) => {
+      calls.push([options.method || "GET", String(path), options.body ? JSON.parse(options.body) : null]);
+      return {
+        ok: true,
+        json: async () => String(path).includes("/api/my/watches")
+          ? { watches: watches, limits: { plan: "pro", active_count: 0, active_limit: 10 } }
+          : { watch: watches[0] }
+      };
+    });
+    return { window, calls };
+  }
+
+  it("shows the details under the goal and saves them from the settings", async () => {
+    const { window, calls } = dashboard([active({ signal: "stable", trigger: "stable" }, {
+      id: "w1", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",
+      condition: "A new pair is offered for under 140 EUR", goal_state: "pending",
+      requirements: "Only new, from a shop.",
+      rejected_sources: [{ url: "https://www.kleinanzeigen.de/s-adios/k0", title: "" }]
+    })]);
+    await window.App.watchDashboard.render();
+    const card = window.document.querySelector(".wd-item");
+
+    expect(card.querySelector(".wd-details").textContent).toBe("Details Only new, from a shop.");
+    const input = card.querySelector(".wd-goal-input.is-details");
+    expect(input.value).toBe("Only new, from a shop.");
+    expect(card.querySelector(".wd-settings").textContent).toContain("Ruled out: kleinanzeigen.de.");
+    input.value = "Only new, from a shop. No private sellers.";
+    [...card.querySelectorAll(".wd-button")].find(button => button.textContent === "Save details").click();
+
+    await vi.waitFor(() => expect(calls.some(call => call[0] === "PATCH")).toBe(true));
+    const patch = calls.find(call => call[0] === "PATCH");
+    expect(patch[1]).toBe("/api/watch/w1");
+    expect(patch[2]).toMatchObject({ requirements: "Only new, from a shop. No private sellers." });
+  });
+
+  it("reopens a wrong match with the same goal and what was wrong", async () => {
+    const { window, calls } = dashboard([{
+      id: "w1", status: "resolved", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",
+      condition: "A new pair is offered for under 140 EUR", goal_state: "reached",
+      resolution: {
+        at: "2026-10-13T07:30:00+00:00", reason: "A new pair is listed on Kleinanzeigen.",
+        sources: [{ url: "https://www.kleinanzeigen.de/s-adios/k0", title: "Kleinanzeigen" }]
+      },
+      history: []
+    }]);
+    await window.App.watchDashboard.render();
+    const card = window.document.querySelector(".wd-item");
+
+    const reject = card.querySelector(".wd-reject");
+    const goalBox = card.querySelector(".wd-goal-input.is-goal").closest(".wd-goal-editor");
+    // Settings on a resolved card lead to the next goal, as before.
+    card.querySelector(".wd-action-toggle").click();
+    expect(reject.hidden).toBe(true);
+    expect(goalBox.hidden).toBe(false);
+    card.querySelector(".wd-action-toggle").click();
+
+    const wrong = [...card.querySelectorAll(".wd-action")].find(button => button.textContent === "Not what I wanted");
+    wrong.click();
+    const input = card.querySelector(".wd-goal-input.is-reject");
+    expect(card.querySelector(".wd-settings").hidden).toBe(false);
+    // One way on at a time: no second "Keep watching" for a new goal.
+    expect(reject.hidden).toBe(false);
+    expect(goalBox.hidden).toBe(true);
+    expect(window.document.activeElement).toBe(input);
+    // The goal itself is not up for editing here; only what was wrong.
+    expect(input.value).toBe("");
+    input.value = "No private sellers, only shops.";
+    [...card.querySelectorAll(".wd-button")].find(button => button.textContent === "Keep watching").click();
+
+    await vi.waitFor(() => expect(calls.some(call => call[0] === "PATCH")).toBe(true));
+    const patch = calls.find(call => call[0] === "PATCH");
+    expect(patch[2]).toMatchObject({
+      status: "active", reject_match: true, requirements: "No private sellers, only shops."
+    });
+    expect(patch[2]).not.toHaveProperty("condition");
+  });
+});

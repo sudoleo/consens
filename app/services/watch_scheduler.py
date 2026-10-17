@@ -89,15 +89,37 @@ def _configured_consensus_engine(keys: dict, tier) -> str | None:
     return chosen
 
 
+def research_question(question: str, requirements: str = "", rejected_sources=()) -> str:
+    """The question as the models research it: with the owner's details.
+
+    The page keeps the plain question; only the search hears what the owner
+    wants or rules out, and which matches they already turned down.
+    """
+    parts = [str(question or "")]
+    if requirements:
+        parts.append(f"Details that matter to me: {requirements}")
+    ruled_out = [
+        str(item.get("title") or item.get("url") or "")[:120]
+        for item in rejected_sources or [] if isinstance(item, dict)
+    ]
+    ruled_out = [item for item in ruled_out if item][-5:]
+    if ruled_out:
+        parts.append("Already ruled out, do not offer these again: " + "; ".join(ruled_out))
+    return "\n\n".join(parts)
+
+
 def execute_watch(question: str, standing=None, condition: str = "",
                   previous_opinion_map=None, tier=TIER_FREE, baseline=None,
-                  model_overrides=None) -> dict:
+                  model_overrides=None, requirements: str = "",
+                  rejected_sources=()) -> dict:
     """Run the configured tier models; never touches usage counters.
 
     ``standing`` is the version whose answer currently stands (consensus_md,
     sources, included_models) and ``baseline`` the original page. Both are
     compared with sources, so a fact the new search merely missed is not
-    reported as retracted (docs/watch-evidence-model.md).
+    reported as retracted (docs/watch-evidence-model.md). ``requirements``
+    (the owner's details) and ``rejected_sources`` steer the search and the
+    goal verdict, never the comparison with the original page.
     """
     keys = _developer_keys()
     selected_models = _selected_models(
@@ -117,7 +139,7 @@ def execute_watch(question: str, standing=None, condition: str = "",
         return PROVIDER_LABELS[provider]
 
     pipeline = run_consensus_pipeline(
-        question=question,
+        question=research_question(question, requirements, rejected_sources),
         provider_models=provider_models,
         consensus_model=configured_engine or first_successful_engine,
         keys=keys,
@@ -157,6 +179,7 @@ def execute_watch(question: str, standing=None, condition: str = "",
     if standing_text.strip():
         change = evidence_change.assess(
             standing_text, consensus, keys, engine, condition=condition,
+            requirements=requirements, rejected_sources=rejected_sources,
             previous_sources=standing.get("sources") or [], new_sources=sources,
             previous_models=standing.get("included_models") or [],
             new_models=included_models,
@@ -167,6 +190,7 @@ def execute_watch(question: str, standing=None, condition: str = "",
         # reported as a material change merely because the old text was empty.
         change = evidence_change.first_check(
             consensus, keys, engine, condition=condition, new_sources=sources,
+            requirements=requirements, rejected_sources=rejected_sources,
         )
     baseline = baseline or {}
     baseline_text = str(baseline.get("consensus_md") or "")
@@ -471,6 +495,8 @@ async def run_watch_tick() -> int:
                     previous_position_map,
                     tier,
                     baseline=original,
+                    requirements=claimed.get("requirements") or "",
+                    rejected_sources=claimed.get("rejected_sources") or [],
                 )
                 mail_ready = mailer.is_configured()
                 follower_ids = await _follower_ids(claimed, result, mail_ready)

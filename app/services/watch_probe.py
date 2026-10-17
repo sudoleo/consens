@@ -81,13 +81,17 @@ def _probe_model(keys: dict) -> tuple[str, str] | None:
     return None
 
 
-def _prompt(question: str, goal: str, since: datetime) -> str:
+def _prompt(question: str, goal: str, since: datetime, requirements: str = "") -> str:
     focus = (
         f"In particular: has this happened yet? {goal}\n" if goal else ""
     )
+    details = (
+        f"Only what fits these details from the person counts: {requirements}\n"
+        if requirements else ""
+    )
     return (
         f"Search the web for news published since {since.strftime('%Y-%m-%d')} on "
-        f"this question:\n{question}\n{focus}\n"
+        f"this question:\n{question}\n{focus}{details}\n"
         "Begin your reply with exactly one line, NEW: yes or NEW: no. Answer yes "
         "only if a source published in that window reports a concrete development "
         "(an announcement, a release, a figure, a decision). Then, if yes, name it "
@@ -118,14 +122,15 @@ def evaluate(text: str, sources, standing_sources) -> dict:
     }
 
 
-def execute_probe(question: str, goal: str, standing_sources, since: datetime) -> dict:
+def execute_probe(question: str, goal: str, standing_sources, since: datetime,
+                  requirements: str = "") -> dict:
     keys = provider_transport.developer_keys()
     chosen = _probe_model(keys)
     if chosen is None:
         raise RuntimeError("No probe model is available.")
     provider, model = chosen
     reply = provider_transport.query_provider(
-        provider, model, _prompt(question, goal, since), keys, TIER_FREE,
+        provider, model, _prompt(question, goal, since, requirements), keys, TIER_FREE,
     )
     if reply.get("error"):
         raise RuntimeError(str(reply.get("error_code") or "probe_failed"))
@@ -219,7 +224,8 @@ def record_probe(watch_id: str, verdict: dict, *, now=None, db=None, expected_cl
         if data.get("probe_claim_token") or expected_claim is not None:
             if not expected_claim or data.get("probe_claim_token") != expected_claim.get("probe_claim_token"):
                 return False
-            fields = ("config_generation", "status", "share_id", "question_hash", "condition", "interval", "model_tier",
+            fields = ("config_generation", "status", "share_id", "question_hash", "condition", "requirements",
+                      "interval", "model_tier",
                       "run_time", "run_weekday", "timezone", "last_run_at", "last_successful_run_id")
             if any(data.get(field) != expected_claim.get(field) for field in fields):
                 return False
@@ -271,6 +277,7 @@ def run_probe(watch_id: str, *, now=None, db=None) -> str:
             str(claimed.get("condition") or ""),
             (standing or share).get("sources") or [],
             since,
+            str(claimed.get("requirements") or ""),
         )
     except Exception as exc:
         logging.warning("Watch probe failed category=%s", safe_exception(exc))

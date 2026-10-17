@@ -460,6 +460,12 @@
       );
       main.appendChild(line);
     }
+    const details = String(watch.requirements || "").trim();
+    if (details) {
+      const line = el("p", "wd-goal wd-details");
+      line.append(el("span", "wd-goal-label", "Details"), " ", el("span", "wd-details-text", details));
+      main.appendChild(line);
+    }
 
     main.appendChild(el("p", "wd-headline", state.headline));
     if (state.held) main.appendChild(el("p", "wd-held", "Held: " + state.held));
@@ -479,18 +485,32 @@
     actions.appendChild(open);
     const settings = renderSettings(watch, telegram);
     const toggle = ui().makeButton("Settings", "wd-action wd-action-toggle", () => {
+      if (settings.hidden && watch.status === "resolved") {
+        openAt(false);
+        return;
+      }
       settings.hidden = !settings.hidden;
       toggle.setAttribute("aria-expanded", String(!settings.hidden));
       item.classList.toggle("is-open", !settings.hidden);
     });
     toggle.setAttribute("aria-expanded", "false");
+    // A resolved card offers two ways on: a wrong match keeps the goal and
+    // rules the match out, a reached goal asks for the next one. Only the box
+    // for the way chosen is shown.
+    const openAt = rejecting => {
+      const reject = settings.querySelector(".wd-reject");
+      if (reject) reject.hidden = !rejecting;
+      settings.querySelector(".wd-goal-input.is-goal").closest(".wd-goal-editor").hidden = rejecting;
+      settings.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+      item.classList.add("is-open");
+      settings.querySelector(rejecting ? ".wd-goal-input.is-reject" : ".wd-goal-input.is-goal")?.focus();
+    };
     if (watch.status === "resolved") {
-      actions.appendChild(ui().makeButton("Watch for something new", "wd-action is-strong", () => {
-        settings.hidden = false;
-        toggle.setAttribute("aria-expanded", "true");
-        item.classList.add("is-open");
-        settings.querySelector(".wd-goal-input")?.focus();
-      }));
+      if (watch.condition) {
+        actions.appendChild(ui().makeButton("Not what I wanted", "wd-action", () => openAt(true)));
+      }
+      actions.appendChild(ui().makeButton("Watch for something new", "wd-action is-strong", () => openAt(false)));
     }
     actions.appendChild(toggle);
     item.appendChild(actions);
@@ -514,7 +534,7 @@
     const box = el("div", "wd-goal-editor");
     const resolved = watch.status === "resolved";
     box.appendChild(el("span", "wd-field-label", resolved ? "What are you waiting for next?" : "What are you waiting for?"));
-    const input = el("textarea", "wd-goal-input");
+    const input = el("textarea", "wd-goal-input is-goal");
     input.rows = 2;
     input.maxLength = 500;
     input.placeholder = "Example: An official release date is announced";
@@ -561,11 +581,103 @@
     return box;
   }
 
+  const DETAILS_PLACEHOLDER = "Example: Only new, from a shop. No eBay or private sellers. Size 44.5.";
+
+  function ruledOutHint(watch) {
+    const names = (Array.isArray(watch.rejected_sources) ? watch.rejected_sources : [])
+      .map(source => source.title || hostOf(source.url))
+      .filter(Boolean);
+    if (!names.length) return "";
+    const shown = names.slice(-3).join(", ");
+    return "Ruled out: " + shown + (names.length > 3 ? ` and ${names.length - 3} more` : "") + ".";
+  }
+
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch (_) { return ""; }
+  }
+
+  // The goal is the event; details are what a match must fit or must not be.
+  // Every search looks for them and the goal only counts when they hold.
+  function renderDetailsEditor(watch) {
+    const box = el("div", "wd-goal-editor");
+    box.appendChild(el("span", "wd-field-label", "Details that matter"));
+    const input = el("textarea", "wd-goal-input is-details");
+    input.rows = 2;
+    input.maxLength = 500;
+    input.placeholder = DETAILS_PLACEHOLDER;
+    input.value = watch.requirements || "";
+    input.setAttribute("aria-label", "Details that matter");
+    box.appendChild(input);
+    box.appendChild(el("span", "wd-field-hint",
+      "Every check searches with these. The goal only counts when they fit."));
+    const ruledOut = ruledOutHint(watch);
+    if (ruledOut) box.appendChild(el("span", "wd-field-hint", ruledOut));
+    const row = el("div", "wd-goal-actions");
+    const save = ui().makeButton("Save details", "wd-button is-primary", async () => {
+      const details = input.value.replace(/\s+/g, " ").trim();
+      save.disabled = true;
+      try {
+        await patchWatch(watch, { requirements: details });
+        ui().popup(details ? "Details saved. The next check uses them." : "Details cleared.");
+        render();
+      } catch (error) {
+        save.disabled = false;
+        ui().popup("Update failed: " + error.message);
+      }
+    });
+    row.appendChild(save);
+    box.appendChild(row);
+    return box;
+  }
+
+  // "Not what I wanted": the goal stays, the match that closed it never
+  // counts again, and what was wrong goes into the details for every search.
+  function renderRejectBox(watch) {
+    const box = el("div", "wd-goal-editor wd-reject");
+    box.appendChild(el("span", "wd-field-label", "Not what you wanted?"));
+    const input = el("textarea", "wd-goal-input is-reject");
+    input.rows = 2;
+    input.maxLength = 500;
+    input.placeholder = DETAILS_PLACEHOLDER;
+    input.value = watch.requirements || "";
+    input.setAttribute("aria-label", "What was wrong with this match");
+    box.appendChild(input);
+    box.appendChild(el("span", "wd-field-hint",
+      "Say what was wrong, e.g. used or a private seller. The goal stays, and this match never counts again."));
+    const row = el("div", "wd-goal-actions");
+    const keep = ui().makeButton("Keep watching", "wd-button is-primary", async () => {
+      const details = input.value.replace(/\s+/g, " ").trim();
+      keep.disabled = true;
+      try {
+        await patchWatch(watch, { status: "active", reject_match: true, requirements: details });
+        window.App?.trackAppEvent?.("app_watch_match_rejected", { with_details: Boolean(details) });
+        ui().popup("Watching again. That match won't count again.");
+        render();
+      } catch (error) {
+        keep.disabled = false;
+        if (error.status === 429) window.App?.showProFeatureModal?.("More Consensus Watches");
+        ui().popup("Update failed: " + error.message);
+      }
+    });
+    row.appendChild(keep);
+    box.appendChild(row);
+    return box;
+  }
+
   function renderSettings(watch, telegram) {
     const panel = el("div", "wd-settings");
     panel.hidden = true;
+    if (watch.status === "resolved") {
+      if (watch.condition) {
+        const reject = renderRejectBox(watch);
+        reject.hidden = true;
+        panel.appendChild(reject);
+      }
+      panel.appendChild(renderGoalEditor(watch));
+      return panel;
+    }
     panel.appendChild(renderGoalEditor(watch));
-    if (watch.status === "resolved") return panel;
+    panel.appendChild(renderDetailsEditor(watch));
 
     const grid = el("div", "wd-settings-grid");
     const interval = el("select", "wd-select");

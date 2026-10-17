@@ -115,12 +115,41 @@ Fehlt er (Altbestand), gilt der letzte erfolgreiche Lauf.
   verifizierte `condition_evidence` **oder** der vorige Check war mit demselben
   Ziel ebenfalls `met`). Ohne Beleg löst ein erstes `met` einen Nachprüf-Check
   aus.
-* Abschluss setzt `status = "resolved"`, `resolution = {run_id, at, reason,
-  sources}`, gibt den Slot frei (zählt nicht mehr als aktiv) und meldet
-  „Resolved". Weiterbeobachten (`status = active`) braucht ein neues oder
-  leeres Ziel.
+* Abschluss setzt `status = "resolved"`, `resolution = {run_id, at, condition,
+  requirements, reason, sources}`, gibt den Slot frei (zählt nicht mehr als
+  aktiv) und meldet „Resolved". Weiterbeobachten (`status = active`) braucht ein
+  neues oder leeres Ziel, neue Details oder „Not what I wanted“ (unten).
 * Alarmmodi: `changes_only` = bewegt oder abgeschlossen (Standard),
   `condition` = nur abgeschlossen, `every_run` = jeder Check.
+
+### Details und abgelehnte Treffer (seit 2026-10-17)
+
+Das Ziel ist das **Ereignis**; was ein Treffer erfüllen muss oder nicht sein
+darf, steht getrennt davon. Anlass: Eine Schuh-Watch schloss erst auf ein
+gebrauchtes Paar, dann auf eine Privatanzeige; weiter ging es nur, indem der
+Nutzer das Ziel mit Feedback überschrieb („keine eBay-Anzeigen …“). Damit war
+das eigentliche Ereignis samt Preisgrenze weg, und die Suche hatte das Feedback
+nie gesehen (sie bekommt nur die Frage).
+
+* `requirements` (≤ 500 Zeichen, Oberfläche: „Details that matter“, nur für
+  den Besitzer, nie auf der öffentlichen Seite) geht in **jede Suche**
+  (`watch_scheduler.research_question`: Frage + „Details that matter to me: …“;
+  die Seite behält die reine Frage), in die **Vorprüfung** und in die
+  **Zielbewertung**: Der Judge bekommt `<USER_DETAILS_JSON>`; ein Treffer, der
+  sie bricht, ist `not_met`.
+* **Ziel-Identität** = `goal_hash(condition, requirements)`; ohne Details genau
+  `condition_hash`, Altbestand behält also seine Historie. Neue Details sind ein
+  neues Ziel: frühere `met` zählen nicht mehr, eine abgeschlossene Watch darf
+  damit wieder öffnen. Ändern sich die Details während eines Checks, bewertet
+  dieser das Ziel nicht.
+* **„Not what I wanted“** = `PATCH /api/watch/{id}` mit `{status: "active",
+  reject_match: true, requirements?}`, nur auf `resolved`: Das Ziel bleibt, die
+  Quellen der `resolution` landen in `rejected_sources` (kanonische URL,
+  höchstens 10, neueste zuletzt). Die Suche bekommt sie als „Already ruled
+  out“, der Judge sieht sie als `ruled_out` markiert, und `evidence_change.verify`
+  streicht sie deterministisch aus `condition_evidence`; bleibt kein Beleg
+  übrig, wird aus `met` ein `not_met` („The only match found is one you
+  already ruled out.“).
 
 ## Vorprüfung (`watch_probe`)
 
