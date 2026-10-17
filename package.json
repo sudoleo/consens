@@ -12,11 +12,11 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "3.0.4",
-    "dompurify": "3.4.16",
-    "esbuild": "^0.21.5",
+    "dompurify": "3.4.17",
+    "esbuild": "^0.28.2",
     "firebase": "10.14.1",
     "jsdom": "^24.1.0",
-    "katex": "0.17.0",
+    "katex": "0.19.0",
     "marked": "12.0.2",
     "vitest": "^1.6.0"
   }
