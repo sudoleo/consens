@@ -224,7 +224,8 @@ def test_skip_has_a_full_touch_target_without_overflow(progress_page):
     before = page.locator(".run-model-track").last.bounding_box()
     expect(skip).to_be_visible(timeout=12000)
     box = skip.bounding_box()
-    assert box["width"] >= 44 and box["height"] >= 44
+    # Grid layout can return 43.99998 for a 44px target (seen in CI).
+    assert round(box["width"]) >= 44 and round(box["height"]) >= 44
     assert page.locator(".run-model-track").last.bounding_box() == before
     assert page.locator(".run-model").last.bounding_box()["height"] <= 44
     assert box["x"] + box["width"] <= 320
