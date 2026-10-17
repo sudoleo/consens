@@ -258,10 +258,12 @@ class PageFetch(AgentCompletion):
 
     def stream(self, *, model, messages, api_key, tools=None, native_searches=0, allow_tool_calls=False,
                prompt_cache=True):
-        # The registry's provider routing, as in AgentCompletion.stream; ZDR always.
-        provider = dict((model.request_config or {}).get("provider") or {})
+        # The same routing as AgentCompletion.stream: fastest endpoint without
+        # prompt collection, the registry's (or a Google chat's) settings on top.
+        from app.core.openrouter_contract import provider_routing
         payload = {"model": model.model, "input": messages, "tools": list(tools or []), "stream": True,
-                   "max_output_tokens": model.max_output_tokens, "provider": {**provider, "zdr": True}}
+                   "max_output_tokens": model.max_output_tokens,
+                   "provider": provider_routing((model.request_config or {}).get("provider"))}
         reasoning = (model.request_config or {}).get("reasoning")
         if reasoning:
             payload["reasoning"] = reasoning
@@ -316,7 +318,7 @@ class PageFetch(AgentCompletion):
 
 
 def _helper_models():
-    """The standard judges of OpenAI (Luna) and Gemini: cheap, ZDR-proven
+    """The standard judges of OpenAI (Luna) and Gemini: cheap, proven
     and admin-configured; the second only after the first failed."""
     from app.services.llm.consensus_engine import DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
     return [DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[p] for p in ("openai", "gemini") if DIFFERENCES_JUDGE_MODEL_BY_PROVIDER.get(p)]

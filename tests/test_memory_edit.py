@@ -507,7 +507,7 @@ def test_provider_call_is_schema_bound_no_reasoning_and_output_capped(monkeypatc
     assert captured["reasoning_effort"] == "none"
     assert captured["max_tokens"] == 150
     assert captured["response_format"]["json_schema"]["strict"] is True
-    assert captured["extra_body"] == {"provider": {"zdr": True}}
+    assert captured["extra_body"] == {"provider": {"sort": "throughput", "data_collection": "deny"}}
     assert '"intent":"add"' in captured["messages"][1]["content"]
     assert "smallest exact, uniquely occurring substring" in captured["messages"][0]["content"]
     assert "preserve every detail" in captured["messages"][0]["content"]

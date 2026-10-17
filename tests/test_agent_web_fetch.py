@@ -885,7 +885,7 @@ def test_page_fetch_reads_the_page_and_usage_from_the_responses_stream(monkeypat
     completion = PageFetch()
     events = list(completion.stream(model=model, messages=[{"role": "user", "content": "x"}], api_key="k", tools=[tool]))
     assert sent["url"].endswith("/api/v1/responses")
-    assert sent["payload"]["provider"] == {"zdr": True} and sent["payload"]["tools"] == [tool]
+    assert sent["payload"]["provider"] == {"sort": "throughput", "data_collection": "deny"} and sent["payload"]["tools"] == [tool]
     assert sent["payload"]["input"] == [{"role": "user", "content": "x"}] and sent["payload"]["stream"] is True
     assert completion.page["status"] == "completed" and completion.page["text"] == PAGE
     assert completion.page["title"] == "Report" and completion.page["http_status"] == 200

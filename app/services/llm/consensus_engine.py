@@ -16,6 +16,7 @@ from typing import Mapping
 import app.core.config as cfg
 from app.services import prompt_config
 from app.core.observability import safe_exception, safe_traceback
+from app.core.openrouter_contract import provider_routing
 from app.services.error_alerts import report_server_exception
 from app.services.llm.citations import coerce_text
 from app.services.llm import completion
@@ -202,7 +203,7 @@ def _call_engine_text(
             {"role": "user", "content": prompt},
         ],
         "max_tokens": int(max_tokens),
-        "provider": {"zdr": True},
+        "provider": provider_routing(),
     }
     if temperature is not None:
         payload["temperature"] = temperature

@@ -152,6 +152,25 @@ def test_model_routing_requires_zdr_without_collection_and_keeps_optional_allowl
     assert restricted.request_config['provider']=={'zdr':True,'data_collection':'deny','only':['reviewed-host'],'allow_fallbacks':False}
 
 
+def test_google_chat_request_keeps_zdr_on_top_of_the_fastest_route(google,monkeypatch):
+    # Since 2026-10-17 ordinary requests drop zero data retention and take the
+    # fastest endpoint; a chat with Google data must still send it.
+    from app.services.google_connections import restricted_model
+    from app.services.llm.agent_client import AgentCompletion, AgentModel
+    sent=[]
+    def stream(url,**kwargs):
+        sent.append(kwargs['json']['provider'])
+        yield 'data: '+json.dumps({'choices':[{'delta':{'content':'Ok'},'finish_reason':'stop'}]})
+        yield ''
+        yield 'data: [DONE]'
+        yield ''
+    monkeypatch.setattr('app.services.llm.agent_client.cancellable_sse_lines',stream)
+    for model in (AgentModel(),restricted_model(AgentModel())):
+        list(AgentCompletion().stream(model=model,messages=[{'role':'user','content':'x'}],api_key='test'))
+    assert sent==[{'sort':'throughput','data_collection':'deny'},
+                  {'sort':'throughput','data_collection':'deny','zdr':True}]
+
+
 def test_google_routing_reaches_comparison_synthesis_and_judges(google,monkeypatch):
     from test_agent_comparison import Script, make_loop
     from app.services.agent_runs import AgentRunStore

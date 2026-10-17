@@ -366,7 +366,7 @@ class OpenRouterStreamTests(unittest.TestCase):
         with mock.patch("app.services.llm.streaming.requests.post", return_value=fake) as post:
             result = list(_stream_openrouter_chat_completion(
                 api_key="sk-or-test",
-                payload={"model": "openai/gpt-5.4-mini", "provider": {"zdr": True}},
+                payload={"model": "openai/gpt-5.4-mini", "provider": {"sort": "throughput", "data_collection": "deny"}},
                 provider=provider,
             ))
         return result, fake, post
@@ -392,7 +392,7 @@ class OpenRouterStreamTests(unittest.TestCase):
         self.assertTrue(fake.closed)
         payload = post.call_args.kwargs["json"]
         self.assertTrue(payload["stream"])
-        self.assertEqual(payload["provider"], {"zdr": True})
+        self.assertEqual(payload["provider"], {"sort": "throughput", "data_collection": "deny"})
 
     def test_zero_width_citation_uses_its_stream_position(self):
         annotations = [{

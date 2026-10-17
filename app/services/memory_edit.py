@@ -20,6 +20,7 @@ from typing import Callable
 from firebase_admin import firestore
 from app.core.observability import safe_exception
 from app.core.config import get_model_config, REASONING_EFFORT_FOR_MEMORY_EDIT
+from app.core.openrouter_contract import provider_routing
 from app.core.entitlements import normalize_tier
 from app.services import persistence_guard, user_memory
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
@@ -247,7 +248,7 @@ def request_memory_patch(
                     "schema": PATCH_JSON_SCHEMA,
                 },
             },
-            extra_body={"provider": {"zdr": True}},
+            extra_body={"provider": provider_routing()},
         )
     output_text = response.choices[0].message.content or ""
     return parse_and_validate_patch(output_text)

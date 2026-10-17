@@ -486,7 +486,7 @@ class JudgePolicyTests(unittest.TestCase):
             DIFFERENCES_JSON_SCHEMA,
         )
         self.assertIs(response_format["json_schema"]["strict"], True)
-        self.assertEqual(payload["provider"], {"zdr": True})
+        self.assertEqual(payload["provider"], {"sort": "throughput", "data_collection": "deny"})
 
     def test_differences_schema_is_strict_mode_compatible(self):
         def assert_strict_object_schema(schema):

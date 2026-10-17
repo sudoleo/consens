@@ -394,7 +394,7 @@ class ModelConfigurationTests(unittest.TestCase):
                 payload = request["payload"]
                 self.assertEqual(payload["max_tokens"], 123)
                 self.assertNotIn("temperature", payload)
-                self.assertEqual(payload["provider"], {"zdr": True})
+                self.assertEqual(payload["provider"], {"sort": "throughput", "data_collection": "deny"})
                 self.assertEqual(payload["tools"][0]["type"], "openrouter:web_search")
 
     def test_web_search_budget_and_engine_per_family(self):
@@ -670,7 +670,7 @@ class ModelConfigurationTests(unittest.TestCase):
             cfg.MODEL_REQUEST_CONFIG[cfg.MUSE_PRO_MODEL], {"reasoning": {"effort": "low"}},
         )
 
-    def test_kimi_search_keeps_moonshot_zdr_route_and_model_reasoning(self):
+    def test_kimi_search_keeps_moonshot_route_and_model_reasoning(self):
         for model, deep, thinking in (
             (cfg.KIMI_BASE_MODEL, False, False),
             (cfg.KIMI_PRO_MODEL, False, True),
@@ -683,7 +683,8 @@ class ModelConfigurationTests(unittest.TestCase):
                     deep_search=deep, max_output_tokens=4096,
                 )["payload"]
                 self.assertEqual(payload["provider"], {
-                    "zdr": True, "only": ["moonshotai"], "allow_fallbacks": False,
+                    "sort": "throughput", "data_collection": "deny",
+                    "only": ["moonshotai"], "allow_fallbacks": False,
                 })
                 self.assertEqual(payload["reasoning"], {"enabled": thinking})
                 self.assertEqual(payload["max_tokens"], 4096)

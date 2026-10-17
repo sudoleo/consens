@@ -187,18 +187,20 @@ GLM_PRO_MODEL = "glm-5.3"
 # (0,30/1,20 $ je Mio. Token), Pro das multimodale Spark 1.3 (1,25/4,25 $).
 # Der billigere "muse-spark-1.3-contributor"-Tarif ist bewusst NICHT
 # aufgenommen: dort duerfen Prompts und Antworten in Metas Produkte
-# einfliessen, was der ZDR-Zusage in Terms/Privacy widerspricht.
+# einfliessen, was der Zusage in Terms/Privacy widerspricht, dass kein
+# Anbieter Prompts sammelt (Routing data_collection=deny).
 MUSE_BASE_MODEL = "muse-glimmer-30b"
 MUSE_PRO_MODEL = "muse-spark-1.3"
 
-# Modelle, die OpenRouter unter unserer Pflicht-Regel provider.zdr=true nicht
-# bedienen kann: kein Endpunkt steht in GET /api/v1/endpoints/zdr, jeder
-# Aufruf endet mit 404 "No endpoints found matching your data policy" (bzw.
-# bei Muse Spark vorher mit 403 wegen der fehlenden 18+-Bestaetigung; sein
-# einziger Endpunkt "Meta" ist aber ebenfalls kein ZDR-Endpunkt). Live-Probe
-# 2026-10-08. Sie zaehlen als Tombstones (REMOVED_MODEL_IDS): nicht waehlbar,
-# auch wenn die Firestore-Modellliste sie noch fuehrt. Erst wieder aufnehmen,
-# wenn die ZDR-Liste einen Endpunkt zeigt und ein echter Aufruf antwortet.
+# Modelle, die OpenRouter unter der frueheren Pflicht-Regel provider.zdr=true
+# (bis 2026-10-17) nicht bedienen konnte: kein Endpunkt in GET
+# /api/v1/endpoints/zdr, jeder Aufruf endete mit 404 "No endpoints found
+# matching your data policy" (Muse Spark vorher mit 403 wegen der fehlenden
+# 18+-Bestaetigung). Live-Probe 2026-10-08. Sie bleiben Tombstones
+# (REMOVED_MODEL_IDS): nicht waehlbar, auch wenn die Firestore-Modellliste sie
+# noch fuehrt. ZDR gilt heute nur noch in Chats mit Google-Daten; wieder
+# aufnehmen erst nach einem echten Aufruf mit dem heutigen Routing
+# (openrouter_contract.DEFAULT_PROVIDER_ROUTING).
 ZDR_UNAVAILABLE_MODEL_IDS = frozenset({
     "gpt-3.5-turbo",                  # nur OpenAI direkt, kein Azure-Endpunkt
     "chat-latest",                    # nur OpenAI direkt, nicht im Katalog
@@ -581,7 +583,7 @@ CONSENSUS_ENGINE_ALIASES = {
 # "judge_models_pro") umstellbar. Wie DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
 # in-place mutiert (Modul-Aliasse bleiben live).
 _BASE_PRO_JUDGE_BY_PROVIDER = {
-    # Ohne ZDR-faehiges Pro-Modell (Meta) urteilt das Basis-Modell der Familie.
+    # Ohne waehlbares Pro-Modell (Meta) urteilt das Basis-Modell der Familie.
     provider.key: (
         provider.base_model if provider.pro_model in ZDR_UNAVAILABLE_MODEL_IDS
         else provider.pro_model
@@ -690,7 +692,7 @@ REMOVED_MODEL_IDS = {
     "gemini-3-pro-preview",
     "grok-4.3-frontier-low",
     "grok-4.3-low-reasoning",
-    # Unter ZDR nicht bedienbar (siehe ZDR_UNAVAILABLE_MODEL_IDS).
+    # Unter der frueheren ZDR-Regel nicht bedienbar (ZDR_UNAVAILABLE_MODEL_IDS).
     *ZDR_UNAVAILABLE_MODEL_IDS,
 }
 
@@ -1251,7 +1253,7 @@ def _consensus_engine_available(model_id: str | None) -> bool:
     """Waehlbare Consensus-Engine: bekannter Alias oder konfigurierte Modell-ID.
 
     Ein Familien-Alias auf ein stillgelegtes Modell (z. B. "Meta-Pro" auf das
-    unter ZDR nicht bedienbare Muse Spark) ist nicht waehlbar."""
+    stillgelegte Muse Spark) ist nicht waehlbar."""
     alias = CONSENSUS_ENGINE_ALIASES.get(str(model_id or ""))
     if alias and alias[1] in REMOVED_MODEL_IDS:
         return False

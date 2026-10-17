@@ -305,7 +305,7 @@ def test_native_pdf_transport_never_selects_paid_ocr(monkeypatch):
     value = AgentCompletion()
     list(value.stream(model=AgentModel(), messages=[{'role':'user','content':[{'type':'file','file':{'filename':'scan.pdf','file_data':'data:application/pdf;base64,AA=='}}]}], api_key='test'))
     assert captured['plugins'] == [{'id':'file-parser','pdf':{'engine':'native'}}]
-    assert captured['provider']['zdr'] is True
+    assert captured['provider'] == {'sort': 'throughput', 'data_collection': 'deny'}
 
 
 def test_missing_storage_fails_before_metadata_and_chat_deletion_still_works(setup, monkeypatch):

@@ -63,8 +63,8 @@ TURN_WRAP_UP_SECONDS = 300
 # the hard stop (answer_time_left).
 ANSWER_RESERVE_SECONDS = {"none": 120, "minimal": 120, "low": 150, "medium": 240,
                           "high": 360, "xhigh": 480, "max": 600}
-# One retry of a rate-limited step after paid comparisons (HTTP 429, nothing billed; OpenAI
-# under ZDR is 429-prone): after Retry-After, or this pause without one. A
+# One retry of a rate-limited step after paid comparisons (HTTP 429, nothing billed):
+# after Retry-After, or this pause without one. A
 # provider asking for longer than the cap is not retried, nor is a turn with
 # less than RATE_LIMIT_RETRY_MIN_TURN_SECONDS left before its hard stop.
 RATE_LIMIT_RETRY_SECONDS = 3
@@ -1318,7 +1318,7 @@ class DelegationLoop(AgentLoop):
         """One step after paid comparisons; a rate-limited start waits briefly and tries once more.
 
         The comparisons are already paid, a 429 before any output is free
-        (_free_rate_limit), and OpenAI under ZDR is 429-prone. The retry waits
+        (_free_rate_limit), and providers do rate-limit. The retry waits
         for Retry-After (RATE_LIMIT_RETRY_SECONDS without one) and is skipped
         when the provider asks for longer than RATE_LIMIT_RETRY_MAX_SECONDS
         or the turn's hard stop is near. A second 429 ends the turn as before.

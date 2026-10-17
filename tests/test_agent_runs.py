@@ -521,7 +521,7 @@ def test_reasoning_stream_formats_are_bounded_and_never_leak_encrypted_data(monk
     model = agent_client.resolve_agent_model("gpt-5.6-luna", "medium")
     events = list(completion.stream(model=model, messages=[], api_key="test"))
     assert requests[0]["reasoning"]["effort"] == "medium"
-    assert requests[0]["provider"] == {"zdr": True}
+    assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny"}
     assert completion.text == "Answer"
     assert completion.reasoning_truncated
     assert completion.reasoning_chars == 32000

@@ -17,6 +17,7 @@ from starlette.requests import ClientDisconnect
 
 import app.core.config as cfg
 from app.core.observability import record_metric, safe_exception
+from app.core.openrouter_contract import provider_routing
 from app.services.llm.citations import (
     coerce_text,
     is_search_result,
@@ -474,7 +475,7 @@ def stream_chat_completion_text(
         "model": model,
         "messages": messages,
         "max_tokens": int(max_tokens),
-        "provider": {"zdr": True},
+        "provider": provider_routing(),
     }
     if temperature is not None:
         payload["temperature"] = temperature

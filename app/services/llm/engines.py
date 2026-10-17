@@ -18,6 +18,7 @@ from app.core.openrouter_contract import (
     OPENROUTER_REFERER,
     OPENROUTER_TITLE,
     openrouter_headers,
+    provider_routing,
 )
 from app.core.observability import provider_error_diagnostic, safe_exception
 from app.services.llm.attachments import (
@@ -240,8 +241,8 @@ def build_provider_payload(
             },
         ],
         "max_tokens": max_tokens,
-        # Privacy policy, not provider pinning: only zero-retention endpoints may run.
-        "provider": {"zdr": True},
+        # Fastest endpoint that does not collect prompts (openrouter_contract).
+        "provider": provider_routing(),
     }
     if not benchmark_mode:
         max_uses = 1

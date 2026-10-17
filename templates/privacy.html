@@ -144,15 +144,17 @@
           dispute resolution, context preparation and explicit Memory edits can involve additional configured
           models beyond the comparison models. Scheduled Watches and API runs use server-configured models.
           Deselecting a comparison model therefore does not exclude every possible processing endpoint.</p>
-        <p id="zdr">Our inference requests set OpenRouter's Zero Data Retention routing option. According to
-          <a href="https://openrouter.ai/docs/guides/features/zdr">OpenRouter's ZDR documentation</a>, this
-          limits inference routing to endpoints with a non-retention policy. It is not a promise that every
-          service keeps no data: temporary in-memory prompt caching is permitted, operational metadata is
-          separate, and web-search tools are outside this routing guarantee. OpenRouter's own optional content
-          logging also depends on the account's settings.</p>
+        <p id="routing">Our inference requests ask OpenRouter to send each request to the endpoint with the
+          highest measured throughput among endpoints that do not collect prompts, using OpenRouter's
+          <a href="https://openrouter.ai/docs/guides/routing/provider-selection">data-collection setting</a>
+          ("deny"). Endpoints that may use prompts to train models are therefore not used. Outside chats with
+          Google data (see above), zero data retention is not required: the endpoint that answers may keep
+          prompts and answers for a limited period under its own terms, for example for abuse monitoring or
+          legal obligations. Temporary prompt caching can occur, operational metadata is separate, and
+          OpenRouter's own optional content logging depends on the account's settings.</p>
         <p>Model runs can use OpenRouter's web-search tool. Search terms derived from your input may reach
           the selected search service, including <a href="https://exa.ai/privacy-policy">Exa</a> or native
-          search services. Their processing and retention are separate from inference ZDR.</p>
+          search services. Their processing and retention follow those services' own terms.</p>
         <p>There is no EU-only endpoint restriction. Processing can take place outside the EU/EEA, including
           the USA and, depending on the actual endpoint, Singapore or China. Model labels alone do not identify
           the country of processing. Do not submit confidential information or sensitive personal data.
@@ -288,7 +290,7 @@
           basis in section 6. An adequacy decision applies only to covered recipients; the EU–US Data Privacy
           Framework applies only to participating, certified US entities. Other transfers require appropriate
           safeguards, such as applicable Standard Contractual Clauses and an assessment of the transfer risks.</p>
-        <p>Model selection, acceptance of the Terms, using your own API key and ZDR do not themselves provide
+        <p>Model selection, acceptance of the Terms, using your own API key and provider routing do not themselves provide
           those safeguards. We do not rely on a blanket Art. 49(1)(b) exception for routine AI requests.
           Contact us for information about the applicable recipient and a copy of relevant transfer safeguards.</p>
       </section>

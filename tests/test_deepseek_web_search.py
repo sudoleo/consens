@@ -21,7 +21,7 @@ def test_deepseek_payload_uses_openrouter_search_without_provider_pinning():
         "type": "openrouter:web_search",
         "parameters": {"engine": "auto", "max_uses": 1},
     }]
-    assert payload["provider"] == {"zdr": True}
+    assert payload["provider"] == {"sort": "throughput", "data_collection": "deny"}
     assert "order" not in payload["provider"]
     assert "only" not in payload["provider"]
 

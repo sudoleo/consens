@@ -200,7 +200,8 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
   `requirements.txt` (pip-compile, mit `# via`); Ablauf in `docs/testing.md`.
 - **LLM-Modelle**: neun Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
   DeepSeek, Grok, Kimi, GLM, Meta/Muse), alle über einen OpenRouter-Chat-
-  Completions-Transport mit ZDR. Ein Lauf wählt davon höchstens sechs.
+  Completions-Transport mit einem Routing (schnellster Endpunkt ohne
+  Datensammlung, ZDR nur in Google-Chats). Ein Lauf wählt davon höchstens sechs.
   Provider-Label-Konvention: Claude = `Anthropic`, Muse = `Meta`.
 - **Auth & Daten**: Firebase Auth (ID-Token) + Firestore (`firebase-admin`).
 - **Frontend**: kein Framework. Jinja2-Templates + Vanilla-JS-Module unter
@@ -6933,7 +6934,7 @@ Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6 sendet
 `reasoning.enabled=false`, K3 zwingend `reasoning.enabled=true` (auch mit Reasoning-Schalter;
 explizite Modell-Policies gewinnen dort).
 Beide Kimi-Modelle begrenzen OpenRouter auf `provider.only=["moonshotai"]`
-mit `allow_fallbacks=false`; das bestehende `zdr=true` bleibt beim Merge erhalten.
+mit `allow_fallbacks=false`; die Standard-Felder `sort`/`data_collection` bleiben beim Merge erhalten.
 Live-Diagnose: automatische Routen lieferten kaputte Tool-Ausgaben; K3 suchte
 auf der Moonshot-Route erst mit aktiviertem Reasoning. Suche bleibt modellgesteuert
 über `openrouter:web_search`, ohne gemeinsame Quellen oder neue Transport-Retries.
@@ -6988,8 +6989,8 @@ keinen Alias `Meta-Pro`, der Pro-Judge fällt auf Glimmer zurück
 zu kleines `max_tokens` liefert nur Reasoning-Tokens und ein leeres Final
 (siehe `_responses_empty_result`). Der Contributor-Tarif
 `meta/muse-spark-1.3-contributor` ist bewusst nicht aufgenommen: Meta darf
-dort Prompts und Antworten für seine Produkte verwenden, was der ZDR-Zusage in
-Terms/Privacy widerspricht.
+dort Prompts und Antworten für seine Produkte verwenden, was dem Routing
+`data_collection=deny` und der Zusage in Terms/Privacy widerspricht.
 
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
@@ -7015,7 +7016,7 @@ nimmt einzelne Modelle einer sonst anhangfähigen Familie von Anhängen aus.
 `consens-model-release-check`, alle 3 Tage) prüft das Dokument nur lesend
 (`.get()`): neue OpenRouter-Modelle, verschwundene konfigurierte IDs,
 Preset-Befunde (Modell nicht in der Familienliste, Premium in Daily/Open Models,
-neueres Modell derselben Reihe, identische Presets) und je eine ZDR-Probe der
+neueres Modell derselben Reihe, identische Presets) und je eine Live-Probe (App-Routing) der
 genutzten Modelle. Zustand liegt neben dem Task
 (`~/.claude/scheduled-tasks/consens-model-release-check/last-seen.json`), damit
 nur Neues gemeldet wird; der Aufruf ist in `.claude/settings.local.json`
@@ -7066,9 +7067,22 @@ entfernt. Gemini
   optionale `temperature`, damit neue Admin-IDs nicht an geänderten
   Sampling-Schemas scheitern. Bekannte tote Preview-IDs bleiben Tombstones.
 
-**Nur ZDR-fähige Modelle sind wählbar (seit 2026-10-08):** Jeder Modellaufruf
-sendet `provider.zdr=true`; ein Modell ohne ZDR-Endpunkt scheitert bei
-OpenRouter mit `404 No endpoints found matching your data policy`.
+**Provider-Routing (seit 2026-10-17):** Jeder Modellaufruf sendet
+`openrouter_contract.provider_routing()` = `{"sort": "throughput",
+"data_collection": "deny"}`: der Endpunkt mit dem höchsten gemessenen Durchsatz
+unter denen, die Prompts nicht sammeln. Gesetzt in `AgentCompletion.stream`,
+`PageFetch.stream`, `build_provider_payload`, `_call_engine_text`, dem
+Consensus-Stream und `memory_edit`; Registry-Felder des Modells (Kimi
+`only`) kommen obendrauf. Zero Data Retention gilt nur noch in Chats mit
+Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
+`deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
+ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR
+landet es direkt bei OpenAI, DeepSeek bei den schnellsten US-Hostern.
+Datenschutz/AGB/About beschreiben das, die Landing-Zeile zu ZDR ist entfernt.
+
+**Tombstones aus der ZDR-Zeit (2026-10-08 bis 2026-10-17):** Unter
+`provider.zdr=true` scheiterte ein Modell ohne ZDR-Endpunkt mit
+`404 No endpoints found matching your data policy`.
 `cfg.ZDR_UNAVAILABLE_MODEL_IDS` (`gpt-3.5-turbo`, `chat-latest`,
 `gemini-3.1-flash-lite-preview`, `muse-spark-1.3`) fließt in
 `REMOVED_MODEL_IDS`: der Firestore-Load entfernt sie aus Providerlisten und
@@ -7078,9 +7092,9 @@ Familien-Aliasse auf ein stillgelegtes Modell, und `/agent/models` listet sie
 nicht. Eine im Browser gespeicherte Auswahl findet keine Option mehr
 (`setPickerToValue` bzw. `agent-chat.js selection()`) und bleibt beim
 gerenderten Default; `/ask_*` lehnt die alte ID mit 400 ab.
-`tests/test_zdr_unavailable_models.py` hält das fest. Prüfung neuer Modelle:
-`GET https://openrouter.ai/api/v1/endpoints/zdr` (kostenlos) plus ein echter
-Aufruf mit `provider: {"zdr": true}`.
+`tests/test_zdr_unavailable_models.py` hält das fest; wieder aufnehmen erst
+nach einem echten Aufruf mit dem heutigen Routing. Prüfung neuer Modelle: ein
+echter Aufruf mit `provider_routing()` (`scripts/model_release_check.py probe`).
 
 Admin-Modellkonfig (`/admin`, `app_config/models` in Firestore): Provider-Listen sind
 geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`, im Admin

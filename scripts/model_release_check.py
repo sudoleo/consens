@@ -2,7 +2,9 @@
 
 Reads the production model config (a single Firestore .get(), never a write),
 the public OpenRouter catalog and the state of the previous run, checks the
-consensus presets and probes models live under provider.zdr=true. The only
+consensus presets and probes models live with the app's own provider routing
+(openrouter_contract.provider_routing: fastest endpoint, no prompt collection;
+zero data retention only in chats with Google data, not probed here). The only
 file it writes is the task state next to the task's SKILL.md.
 
 The scheduled task runs unattended, so every step is one fixed command that
@@ -12,9 +14,9 @@ The scheduled task runs unattended, so every step is one fixed command that
     venv/Scripts/python.exe scripts/model_release_check.py probe <openrouter-id> [...]
     venv/Scripts/python.exe scripts/model_release_check.py save
 
-collect   config, catalog diff, preset findings, one ZDR probe per model in use
+collect   config, catalog diff, preset findings, one live probe per model in use
           (a 429 is retried twice; still throttled shows as GEDROSSELT, not FAIL)
-probe     three ZDR probes per given OpenRouter ID (``--times`` to change)
+probe     three live probes per given OpenRouter ID (``--times`` to change)
 save      stores what collect saw, so the next run only reports what is new
 """
 from __future__ import annotations
@@ -46,7 +48,7 @@ MAX_PROBE_IDS = 8
 
 # Catalog entries that are never a candidate for an answer model: batch/free
 # duplicates, previews, media and code models, and Meta's "contributor" tier,
-# whose terms let prompts flow into Meta's products (contradicts ZDR).
+# whose terms let prompts flow into Meta's products (contradicts data_collection=deny).
 NOISE = re.compile(
     r":(batch|free|extended|thinking)$|preview|-exp\b|-beta\b|image|audio|lyria|voxtral|tts|"
     r"realtime|embed|guard|codex|codestral|devstral|-code\b|contributor|multi-agent|customtools"
@@ -260,13 +262,14 @@ def _request_config(openrouter_id: str) -> dict:
 
 
 def probe_once(openrouter_id: str, key: str) -> str:
-    """One live call under ZDR, with the provider routing the app itself uses."""
+    """One live call with the provider routing the app itself uses."""
+    from app.core.openrouter_contract import provider_routing
     request_config = _request_config(openrouter_id)
     body = {
         "model": openrouter_id,
         "max_tokens": PROBE_MAX_TOKENS,
         "messages": [{"role": "user", "content": "Reply with OK."}],
-        "provider": {**(request_config.get("provider") or {}), "zdr": True},
+        "provider": provider_routing(request_config.get("provider")),
     }
     if request_config.get("reasoning"):
         body["reasoning"] = request_config["reasoning"]
@@ -285,7 +288,7 @@ def probe_once(openrouter_id: str, key: str) -> str:
         except (OSError, ValueError, AttributeError):
             message = ""
         if exc.code == 404 and "data policy" in message.lower():
-            return "kein ZDR (404)"
+            return "keine Route (404)"
         return f"HTTP {exc.code} {message[:80]}".strip()
     except (URLError, TimeoutError, OSError) as exc:
         return f"Fehler {type(exc).__name__}"
@@ -326,7 +329,7 @@ def probe_many(ids: list[str], times: int, retries_on_429: int = 0) -> dict[str,
 def summary(results: list[str]) -> str:
     ok = sum(result.startswith("ok") for result in results)
     failures = sorted({result for result in results if not result.startswith("ok")})
-    return f"ZDR {ok}/{len(results)}" + (f" ({'; '.join(failures)})" if failures else "")
+    return f"Probe {ok}/{len(results)}" + (f" ({'; '.join(failures)})" if failures else "")
 
 
 def cmd_collect(args) -> int:
@@ -375,7 +378,7 @@ def cmd_collect(args) -> int:
                     if model in catalog and any(use.startswith(("Default ", "Preset ", "Engine "))
                                                 or use == "judge_models openai" for use in uses))
     results = {} if args.no_probe else probe_many(in_use, 1, retries_on_429=2)
-    print(f"\nZDR-PROBE DER GENUTZTEN MODELLE (1x, {len(in_use)}):")
+    print(f"\nLIVE-PROBE DER GENUTZTEN MODELLE (1x, {len(in_use)}):")
     for model in in_use:
         status = results[model][0] if results else "nicht geprobt"
         if not results:

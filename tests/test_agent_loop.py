@@ -88,7 +88,7 @@ def test_native_search_stays_in_selected_model_request_with_real_citations(store
     assert request["tools"] == [{"type": "openrouter:web_search", "parameters": {
         "engine": "auto", "max_uses": 2, "max_results": 5, "max_total_results": 10, "max_characters": 2000}}]
     assert request["max_tool_calls"] == 2
-    assert request["provider"] == {"zdr": True}
+    assert request["provider"] == {"sort": "throughput", "data_collection": "deny"}
     assert "tool_choice" not in request
     assert "plugins" not in request
     assert "parallel_tool_calls" not in request

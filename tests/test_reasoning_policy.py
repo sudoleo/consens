@@ -54,7 +54,7 @@ def test_savings_reaches_answers_and_engine_aliases_without_breaking_protection(
     if model == cfg.PROVIDERS[provider].pro_model:
         assert engine._engine_request_config(provider, model_config.api_model, f"{cfg.PROVIDERS[provider].label}-Pro")["reasoning"] == expected
     if provider == "kimi":
-        assert built["payload"]["provider"]["zdr"] is True
+        assert built["payload"]["provider"]["data_collection"] == "deny"
         assert built["payload"]["provider"]["only"] == ["moonshotai"]
 
 
