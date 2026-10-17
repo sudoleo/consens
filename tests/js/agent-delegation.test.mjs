@@ -506,7 +506,7 @@ describe("Agent sidebar", () => {
 
   it("keeps the text of a comparison model stopped mid-answer, marked as incomplete", async () => {
     const stopped = { ...agent(1, "stopped"), kind: "comparison", title: "Comparison 1 · Haiku", partial: true };
-    const note = "It was still writing when the answer was checked. The answer and its check use the other answers.";
+    const note = "It was still writing when the answer was finished. The answer and its check use the other answers.";
     const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes(agentId)
       ? { agent: { assignment: { goal: "Comparison 1 · Haiku" } }, messages: [
           { id: "m1", seq: 1, sender: agentId, recipient: "orchestrator", kind: "partial", text: "First half of an answer" },

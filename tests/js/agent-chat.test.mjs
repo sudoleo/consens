@@ -1592,6 +1592,40 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('never shimmers an answer whose check is off, also while it passes "required"', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
+    w.App.agentPreferences = { get: () => ({ depth: 'auto', quorum: 'all', autonomy: 'guided', judges: 'off' }), sync() {} };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    expect(w.streamSSERequest.mock.calls[0][1].agent_preferences.judges).toBe('off');
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    handlers.delta.append('Answer.');
+    const version = { id: 1, text: 'Answer.', hash: 'h' };
+    // capture() saves the fixed answer as "required" just before skip_review saves "off".
+    handlers.review.receive({ review: { status: 'required', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    handlers.review.receive({ review: { status: 'off', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(body.classList.contains('is-answer-check-done')).toBe(false);
+    // Final at once: the evidence row shows while the run still finishes.
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.objectContaining({ status: 'off' }), expect.anything());
+    resolve({ ok: true, data: { response: 'Answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    dom.window.close();
+  });
+
   it('lets the fixed answer shimmer while it is checked and shows its marks as soon as the check ends', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { window: w, document: d, dom } = boot();

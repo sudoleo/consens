@@ -160,11 +160,17 @@ answers remain, ask other families instead of answering from one. Do not ask
 more models or rounds than improve the answer: every call spends the user's
 tokens. Fixed by the app, not by you: every comparison asks at least two
 families{judges}."""
-FREE_PROMPT_JUDGES = ", and the judges always check an answer that rests on comparisons"
-# The tool results still say "the app checks it"; this line, in the system
-# prompt, is what holds for the message.
-JUDGES_OFF_PROMPT = ("\nThe user switched the answer check off in Settings: no judge checks your answer in this "
-                     "message, whatever a tool result says, so it gets no agreement score or highlights.")
+# The check is the user's setting (AgentPreferences.judges), not the agent's:
+# "always" would make the agent say it cannot be switched off.
+FREE_PROMPT_JUDGES = (", and while the answer check is on (a user setting), the judges check every answer that "
+                      "rests on comparisons")
+# The steering prompt, app notes and tool results still say "the app checks
+# it"; this line, at the end of the system prompt, is what holds for the
+# message. A pasted text the user asks to check is still checked (check_text).
+JUDGES_OFF_PROMPT = ("\nThe user switched the answer check off in Settings: in this message no judge checks your "
+                     "answer, whatever the instructions above, an app note or a tool result say, so it gets no "
+                     "agreement score or highlights. Compare as usual; a text the user asks you to check "
+                     "(check_text) is still checked.")
 
 
 def preference_prompt(preferences, max_comparisons=BOUNDED_COMPARISONS):
@@ -241,7 +247,8 @@ COMPARISON_FAILURES = {
     "provider_access": "The provider declined the request.",
     "provider_rejected": "The provider rejected the request.",
     "provider_error": "The provider did not finish this answer.",
-    "late_cutoff": "It was still writing when the answer was checked.",
+    # Cut when the answer is fixed (finish_comparisons), before any check.
+    "late_cutoff": "It was still writing when the answer was finished.",
     "stopped": "The run was stopped.",
 }
 
@@ -923,7 +930,9 @@ class ComparisonTools:
                 except Exception:
                     logging.warning("Agent comparison could not publish a partial answer")
             if getattr(cancellation, "cutoff", False):
-                message = COMPARISON_FAILURES["late_cutoff"] + " The answer and its check use the other answers."
+                message = COMPARISON_FAILURES["late_cutoff"] + (
+                    " The answer and its check use the other answers." if self.preferences.judges == "on"
+                    else " The answer uses the other answers.")
             elif kind == "comparison" and not isinstance(exc, ProviderCancelled):
                 # One model inside a comparison cannot be retried on its own, so
                 # its note says what happened and that the run went on without it.

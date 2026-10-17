@@ -667,7 +667,10 @@
     const answerBody = document.getElementById("agentAnswerBody");
     const liveReview = context.metadata.agentReview;
     const fixed = running && Boolean((state.text || state.streamText || '').trim()) && Boolean(liveReview?.versions?.length);
-    const checking = fixed && ['required', 'running'].includes(liveReview.status);
+    // With the answer check off the run's fixed answer passes "required" on
+    // its way to "off" for a moment; nothing is checked, so no sheen.
+    const checking = fixed && context.config.agentPreferences?.judges !== 'off'
+      && ['required', 'running'].includes(liveReview.status);
     // "off": the answer check is switched off, the fixed answer is final.
     const checked = fixed && ['succeeded', 'partial', 'off'].includes(liveReview.status);
     setAnswerChecking(answerBody, checking);

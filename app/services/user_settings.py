@@ -111,6 +111,11 @@ class UserSettings(_Strict):
 
 
 SETTING_NAMES = tuple(UserSettings.model_fields)
+# Settings a change merges into field by field instead of replacing: an open
+# page of an older version does not know a newer field (agent_preferences
+# gained "judges" on 2026-10-17) and must not erase it with its next change.
+# A field is never removed alone; null resets the whole setting.
+FIELDWISE_SETTINGS = frozenset({"agent_preferences"})
 # A PATCH names each setting at most once; more keys are not a settings change.
 MAX_PATCH_FIELDS = len(SETTING_NAMES)
 
@@ -231,6 +236,8 @@ class FirestoreUserSettingsRepository:
                     raise ValueError(f"Unknown setting: {name}")
                 if value is None:
                     values.pop(name, None)
+                elif name in FIELDWISE_SETTINGS and isinstance(values.get(name), dict):
+                    values[name] = {**values[name], **value}
                 else:
                     values[name] = value
                 field_revisions[name] = revision

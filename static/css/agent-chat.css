@@ -305,8 +305,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @media (max-width: 540px) {
   .agent-review > .agent-evidence-grid { flex: 1 0 100%; }
-  .agent-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 4px; margin-left: 0; }
-  /* All three links keep one top and height. */
+  /* One equal column per link: three, or two without a review (answer
+     check off) instead of an empty third column. */
+  .agent-evidence-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch; gap: 4px; margin-left: 0; }
+  /* All links keep one top and height. */
   .agent-evidence-grid .agent-evidence-link { align-content: start; }
   .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 0; min-height: 56px; padding: 6px 0; }
   .agent-evidence-grid .agent-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }

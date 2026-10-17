@@ -351,7 +351,7 @@ it('shows a model stopped mid-answer as a marked, readable incomplete answer, an
   expect(stopped.error).toContain('Not used for the answer or its check');
   expect(context.answers[0]).toMatchObject({status: 'complete', badge: 'Cut off'});
   const panel = context.renderPanel('differences');
-  expect(panel.textContent).toContain('GPT Luna: stopped before it finished, it was still writing when the answer was checked.');
+  expect(panel.textContent).toContain('GPT Luna: stopped before it finished, it was still writing when the answer was finished.');
   dom.window.close();
 });
 it('strokes the marks on once, in reading order, when a live answer is first checked', () => {
@@ -660,6 +660,8 @@ it('says calmly that the answer check is off and offers answers and sources, no 
   review.status = 'off';
   review.versions[0].status = 'off';
   review.checks = review.checks.map(check => ({ ...check, status: 'off', differences_data: null }));
+  // A model without an answer is listed, but no check "uses the remaining answers".
+  review.comparisons[0].failed_models = [{ label: 'Claude', model: 'anthropic/claude', failure: { code: 'provider_timeout' } }];
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
   w.App.agentReview.render(body, review);
@@ -667,6 +669,10 @@ it('says calmly that the answer check is off and offers answers and sources, no 
   expect(status.dataset.state).toBe('off');
   expect(status.textContent).toBe('Answer check off');
   expect(status.hidden).toBe(false);
+  expect(status.title).not.toMatch(/the check uses/);
+  const panel = w.App.agentReview.contextFor(review, 'c1').renderPanel('answers');
+  expect(panel.textContent).toContain('Claude: no answer, the provider stopped responding.');
+  expect(panel.textContent).not.toMatch(/the check uses|could not/);
   // No marks, no score, no review tab: only answers and sources.
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
   expect(body._agentReview.querySelector('.agent-agreement')).toBeNull();

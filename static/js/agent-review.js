@@ -20,7 +20,7 @@
     provider_rejected: 'the provider rejected the request',
     output_limit: 'it used its whole output allowance before finishing',
     empty_answer: 'it stopped twice without writing an answer',
-    late_cutoff: 'it was still writing when the answer was checked', stopped: 'the run was stopped' };
+    late_cutoff: 'it was still writing when the answer was finished', stopped: 'the run was stopped' };
   function failureReason(failure) {
     return reasons[failure?.code] || 'no complete answer arrived';
   }
@@ -74,7 +74,9 @@
       && check?.answer_hash === version.hash && check?.basis_hash === comparison.basis_hash ? check : null;
   }
   function checkIssues(comparison, check) {
-    if (!check) return [];
+    // No check ran (answer check off): no limit of a check to explain. The
+    // reader still lists models without an answer (evidenceStatus).
+    if (!check || check.status === 'off') return [];
     let issues = check.issues;
     if (!Array.isArray(issues)) {
       // Older saved turns already contain judge coverage, but no issue list.

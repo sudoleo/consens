@@ -66,7 +66,7 @@ optional), gespeichert unter `users/{uid}/settings/app`. `GET/PATCH
 | `run_mode` | compare / consensus / agent | keine | – |
 | `agent_model.model_id` | Registry-ID | Premium-Modelle nur Pro; das Standard-Chatmodell (Sonnet 5.5, „Early access“) für alle | Lauf: `require_model_access` (`routers/agent.py:73`) → 403 |
 | `agent_model.reasoning_effort` | default, none … max | high/xhigh/max nur Pro | Lauf: `require_reasoning_access` (`routers/agent.py:86`) → 403; Auto ohne Pro → Medium (`free_default_effort`) |
-| `agent_preferences` | depth auto/quick/full, quorum balanced/fast/all, autonomy guided/free | keine | – |
+| `agent_preferences` | depth auto/quick/full, quorum balanced/fast/all, autonomy guided/free (seit 2026-10-17 auch judges on/off, „Answer check“, als `answer_check` im Werkzeug) | keine | – |
 | `compare_models` | je Familie `{enabled, model}` | Premium-Modelle nur Pro | Lauf: `llm/base.py:63` → 403, Agent-Vergleich über `require_model_access` |
 | `consensus_model` | Modell-ID | Premium nur Pro | Lauf (wie oben) |
 | `consensus_preset` | fast (Daily) / balanced (Open Models) / thorough (High Quality) / custom | `thorough` ist `pro_only` | indirekt: die Modelle darin sind Premium → 403 im Lauf |

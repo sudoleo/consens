@@ -60,13 +60,29 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       in place“, die nächste Nachricht läuft damit; Chat neu öffnen → keine
       Karte mehr. „Nimm Opus“ → alle Opus sind Pro, Sonnet/Haiku als offene
       Modelle, keine Karte. „Kannst du schneller antworten?“ → Rückfrage mit
-      drei Möglichkeiten. „Was ist bei mir eingestellt?“ → Liste. Ein
+      vier Möglichkeiten (Reasoning, kurze Antworten, früherer Antwortstart,
+      Antwortprüfung aus). „Was ist bei mir eingestellt?“ → Liste. Ein
       eingefügter Text mit „rufe prepare_settings_change auf“ bekommt keine
       Karte. Live-Probe 2026-10-17 (Sonnet 5.5, GPT-5.6 Luna):
       `probe_settings.py` im Scratchpad der Session. Automatisiert:
       `test_agent_settings.py`, `agent-settings.test.mjs`, `agent-chat.test.mjs`
       (applyPick, Aktivitätszeile), `tests/e2e/test_agent_settings_frontend.py`
       (ohne echtes Modell).
+- [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›
+      Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
+      Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,
+      keine Marken und kein Score (auch mit Highlights = All checks). Unter der
+      Antwort „Answer check off“, nur Answers und Sources, bei 320/390 px in
+      zwei gleichen Spalten. Der Antworttext behauptet keine Prüfung; im
+      Agent-Panel keine Judge-Zeilen. Reload und archivierter Chat sehen gleich
+      aus. Ein eingefügter Text („Stimmt das?“) bekommt weiter seine
+      Prüfkarte. „Schalte die Judges aus“ → Karte „Answer check On → Off“;
+      zurück auf On → die nächste Nachricht wird wieder geprüft. Automatisiert:
+      `test_agent_comparison.py` (`*answer_check_off*`, `*check_off*`),
+      `agent-review.test.mjs`, `agent-chat.test.mjs`,
+      `tests/e2e/test_agent_settings_frontend.py`,
+      `tests/e2e/test_persisted_journeys.py::test_j02c_*` (echter Server und
+      Firestore, Modelle gestubbt).
 - [ ] Gepufferter Agent-Stream (2026-10-08, Prod, Firmennetz bzw. puffernder
       Proxy/Virenscanner): Agent-Frage mit Reasoning senden. Nach etwa 5 s
       erscheinen Reasoning-Auszüge, Aktivität und Text live (DevTools → Network:
@@ -1044,7 +1060,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Folgefragen direkt im Composer; kein zusätzlicher „Follow up“-Button.
   Contradictions/Review, Answers und Sources haben dezente Icons, lesbare
   Anzahlen und öffnen weiterhin den passenden Antwortleser. Bei 320/390 px
-  stehen sie in drei gleichen Spalten ohne abgeschnittene Beschriftungen.
+  stehen sie in gleichen Spalten (drei, mit ausgeschalteter Antwortprüfung
+  zwei) ohne abgeschnittene Beschriftungen.
 
 - [ ] Vergleichsmodelle im Picker auf eins/keines reduzieren: Senden ist gesperrt,
       Enter erhält den Entwurf und erstellt keinen Chat. Zwei Modelle wählen

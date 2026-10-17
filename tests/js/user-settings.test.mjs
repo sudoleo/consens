@@ -343,6 +343,20 @@ describe("sync with the account", () => {
     expect(server.patches()).toEqual([]);
   });
 
+  it("keeps the Agent choices it knows when the account holds a newer one", async () => {
+    // A page of this version and an account saved by a newer one: only the
+    // unknown field is left out (the server merges agent_preferences field by field).
+    const server = fakeServer({ settings: { agent_preferences: { autonomy: "free", judges: "off", future: "x" } },
+      revision: 3 });
+    const { settings, start } = open({ server, storage: { [SYNC_KEY]: JSON.stringify({ owner: UID, pending: [] }) } });
+    await start();
+    expect(settings.get("agent_preferences")).toEqual({ autonomy: "free", judges: "off" });
+    expect(server.patches()).toEqual([]);
+    // A value it cannot read for a field it knows still refuses the change.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(settings.set("agent_preferences", { autonomy: "free", judges: "maybe" })).toBe(false);
+  });
+
   it("keeps a change made before the account answered and sends it", async () => {
     const server = fakeServer({ settings: { run_mode: "agent", claim_counts: false }, revision: 2 });
     const { settings, start } = open({ server });

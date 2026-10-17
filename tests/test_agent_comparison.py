@@ -730,13 +730,30 @@ def test_a_later_run_failure_keeps_the_answer_check_off(store):
     assert saved["status"] == "failed" and saved["agent_review"]["status"] == "off"
 
 
+def test_a_review_that_cannot_be_saved_with_the_check_off_is_no_provider_error(store):
+    """The 600 kB review budget refuses the final save: the user reads that the
+    answer is saved, never "the provider could not finish" (which invites paying again)."""
+    loop = make_loop(store, Script(), preferences=AgentPreferences(judges="off"))
+    def full():
+        raise ValueError("Comparison review storage budget reached")
+    loop.comparison.skip_review = full
+    with pytest.raises(AnalysisBudgetExceeded):
+        list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["agent_failure"] == {"code": "run_limit",
+                                      "error": "The answer could not be finalized. The answer itself has been saved."}
+    assert saved["assistant_response"] == "The first option costs 100."
+
+
 @pytest.mark.parametrize("autonomy", ["guided", "free"])
 def test_the_prompt_says_when_the_answer_check_is_off(autonomy):
     from app.services.agent_comparison import JUDGES_OFF_PROMPT, preference_prompt
     on = preference_prompt(AgentPreferences(autonomy=autonomy))
     off = preference_prompt(AgentPreferences(autonomy=autonomy, judges="off"))
     assert JUDGES_OFF_PROMPT not in on and off.endswith(JUDGES_OFF_PROMPT)
-    assert ("the judges always check" in on) == (autonomy == "free") and "the judges always check" not in off
+    judged = "the judges check every answer that rests on comparisons"
+    assert (judged in on) == (autonomy == "free") and judged not in off
+    assert "check_text) is still checked" in off and "Compare as usual" in off
 
 
 def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
@@ -986,6 +1003,24 @@ def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick
     assert review["status"] == "partial" and review_is_bound(review, saved["consensus"])
     assert {"code": "models_unavailable", "count": 1} in review["checks"][0]["issues"]
     assert not any(t.is_alive() for t, _ in loop.comparison._running[comparison["id"]].values())
+
+
+def test_a_model_still_writing_with_the_check_off_is_stopped_without_naming_a_check(store, quick_quorum):
+    script = Straggler(release_on_answer=False, depth="quick")
+    loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="balanced", judges="off"))
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    comparison = review["comparisons"][0]
+    assert saved["status"] == "completed" and review["status"] == "off" and review_is_bound(review, saved["consensus"])
+    [cut] = comparison["failed_models"]
+    assert cut["failure"] == {"code": "late_cutoff", "error": "It was still writing when the answer was finished."}
+    assert not script.judge_prompts
+    view = store.delegation_view(UID, loop.chat_id, loop.turn_id)
+    [stopped] = [a for a in view["agents"] if a.get("status") == "stopped"]
+    notes = [m["text"] for m in store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=stopped["id"])["messages"]
+             if m["kind"] == "failure"]
+    assert notes == ["It was still writing when the answer was finished. The answer uses the other answers."]
 
 
 def test_text_of_a_model_stopped_mid_answer_is_kept_as_incomplete_but_never_checked(store, quick_quorum):

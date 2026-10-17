@@ -115,6 +115,18 @@ describe("model answer reader", () => {
     expect([...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')].map(card => card.open))
       .toEqual([false, false, true]);
   });
+  it("opens the first section a context offers when asked for one it does not (answer check off)", () => {
+    const ctx = boot(); ctx.project(run());
+    const renderPanel = vi.fn(() => ctx.document.createElement('div'));
+    const snapshot = { key: 'tool:off', question: 'Unchecked answer', sections: ['answers', 'sources'],
+      answers: [{ provider: 'OpenAI', label: 'GPT', text: 'Independent answer', status: 'complete', sources: [] }],
+      contextGroup: () => [snapshot], renderPanel };
+    ctx.reader.openContext(snapshot, { section: 'differences' });
+    expect(renderPanel).not.toHaveBeenCalledWith('differences');
+    expect(ctx.document.getElementById('answerReaderInspector').hidden).toBe(true);
+    expect(ctx.document.getElementById('answerReaderColumns').textContent).toContain('Independent answer');
+    expect(ctx.document.querySelector('#answerReaderSections [data-section="differences"]').hidden).toBe(true);
+  });
   it("opens the weightiest finding first when no marker picks one", () => {
     const ctx = boot(); ctx.project(run());
     const snapshot = { key: 'tool:first', question: 'Which plan?', answers: [], contextGroup: () => [snapshot],

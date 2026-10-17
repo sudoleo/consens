@@ -550,7 +550,7 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         status.locator('summary').click()
         detail = status.locator('.agent-evidence-status-detail')
         expect(detail).to_be_visible()
-        expect(detail).to_contain_text('GPT-5.6 Luna: no answer, it was still writing when the answer was checked.')
+        expect(detail).to_contain_text('GPT-5.6 Luna: no answer, it was still writing when the answer was finished.')
         expect(detail).to_contain_text('DeepSeek V4 Flash: no answer, no complete answer arrived.')
         status.locator('summary').click()
         expect(cards.first).to_have_attribute('open', '')

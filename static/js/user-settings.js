@@ -189,11 +189,15 @@
       return chosen || undefined;
     },
     write(value) { writeKey(AGENT_PREFERENCES_KEY, value === null ? null : JSON.stringify(value)); },
+    // A field this version does not know (a newer one from the account) is
+    // left out alone, the others stay: the account keeps it, because a
+    // change merges into agent_preferences field by field (user_settings.py
+    // FIELDWISE_SETTINGS). Until 2026-10-17 one unknown field dropped all.
     normalize(value) {
       if (!isPlainObject(value)) return undefined;
-      const unknown = Object.keys(value).some(field => !Object.prototype.hasOwnProperty.call(AGENT_CHOICES, field)
-        || (value[field] !== null && value[field] !== undefined && !AGENT_CHOICES[field].includes(value[field])));
-      return unknown ? undefined : chosenAgentPreferences(value);
+      const invalid = Object.keys(AGENT_CHOICES).some(field => value[field] !== null && value[field] !== undefined
+        && !AGENT_CHOICES[field].includes(value[field]));
+      return invalid ? undefined : chosenAgentPreferences(value);
     },
   });
 

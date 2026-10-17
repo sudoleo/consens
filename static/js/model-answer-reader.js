@@ -933,6 +933,9 @@
     // panels or model answers when inspecting another tool's result.
     openContext(snapshot, { section = 'answers', model, quote, trigger, index = null } = {}) {
       if (!snapshot?.renderPanel) return false;
+      // A section the context does not offer (e.g. the review of an answer
+      // whose check is off) opens its first section instead.
+      if (snapshot.sections && !snapshot.sections.includes(section)) section = snapshot.sections[0];
       document.dispatchEvent(new CustomEvent('consensio:reader-opening'));
       direct = false;
       return section === 'answers' ? openSnapshot(snapshot, model, trigger, quote)

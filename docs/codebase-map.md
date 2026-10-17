@@ -3116,7 +3116,7 @@ Antwort. Ungeprüfte Worker-Ergebnisse halten die Antwort zurück (`_retract`
 plus Aufforderung zu `review_agent`). `_finish_merged` gleicht den sichtbaren
 Text an (`_show_answer`, auch nach `_drop_presearch_text`), fixiert ihn
 (`freeze_for_synthesis`, `capture`) und führt nach Vergleichen über
-`_finish_review` `judge_answer` (und eine eingeschaltete Widerspruchsprüfung)
+`_finish_review` `judge_answer`
 über `app_registry` als eigene sichtbare Zeile aus („Checked the answer“). Mit
 ausgeschalteter Antwortprüfung (`judges: off`, seit 2026-10-17) schließt
 `skip_review` die Antwort ohne Judge ab: je Vergleich ein an Text und Grundlage
@@ -3426,7 +3426,8 @@ Eine gewünschte Überarbeitung beginnt mit einer neuen Nutzernachricht.
 Text neben einem Toolcall bleibt Planung und öffnet keine Syntheseversion
 (`_retract`, höchstens als Fortschrittszeile `note`; Ausnahme nur reine
 `SIDE_TOOLS`). Weitere Teilvergleiche bleiben möglich, bis der Agent die Antwort
-schreibt. Danach führt der Server `judge_answer` über `app_registry` aus. Abrechnung, Bindungen und
+schreibt. Danach führt der Server `judge_answer` über `app_registry` aus (bei
+`judges: off` stattdessen `skip_review`). Abrechnung, Bindungen und
 bestehende Fallback-Judges bleiben identisch; zusätzliche Erinnerungsrunden sind
 nicht nötig. Drei aufeinanderfolgende Tool-Batches ohne einen gültig ausgeführten
 Toolcall brechen als Protokollstillstand ab; gültige Arbeit begrenzen nur die
@@ -3648,7 +3649,7 @@ Seitenlesens (`DelegationLoop._terminal`) Firestore nur kurz
 solche Fehler den ganzen Turn als „stopped“ ab (Audit A12). Geschlossener Chat,
 Lauf oder Konto brechen weiter ab.
 Scheitert ein Lauf erst nach abgeschlossenem Review, behält
-`AgentRunStore.finish` den Review-Status `succeeded`/`partial`; nur laufende
+`AgentRunStore.finish_run` den Review-Status `succeeded`/`partial`/`off`; nur laufende
 bzw. ausstehende Reviews werden zu `failed`/`missing`/`cancelled`.
 `agentReview.failureNote` entscheidet über den Hinweis unter der Antwort: unter
 einer vollständigen, geprüften Antwort keiner, sonst ein ruhiger Satz zur
@@ -3685,8 +3686,9 @@ oder im Antwortleser. Folgefragen verwenden direkt den Composer, ohne
 zusätzliche Antwortaktion. `agent-review.js::evidenceButton`
 gibt Contradictions/Review, Answers und Sources dieselbe dezente Icon-Gestaltung
 und lesbare ARIA-Namen samt Anzahl; der Antwortleser-Vertrag bleibt unverändert.
-Bis 540 px stehen die drei Vergleichsaktionen in gleich breiten Spalten mit
-Icon/Anzahl über dem Label. Einzelne Quellenaktionen ohne Vergleich bleiben
+Bis 540 px stehen die Vergleichsaktionen in gleich breiten Spalten mit
+Icon/Anzahl über dem Label (`grid-auto-columns`: drei, ohne Review bei
+ausgeschalteter Antwortprüfung zwei). Einzelne Quellenaktionen ohne Vergleich bleiben
 kompakt. Die Gestaltung gilt auch für gespeicherte und archivierte Antworten.
 
 **UI-Verträge.** agent-activity.js zeigt die Laufzeit in der Überschrift des
@@ -3889,7 +3891,8 @@ Key claims (Claims ohne Inline-Marke) stehen vor der Evidenzzeile. Archivierte A
 (`.thread-history-footer`) aus, weil `.agent-review` dieselben Links trägt.
 Schlägt ein Lauf erst nach einer vollständigen, geprüften Antwort fehl, zeigt die
 Kopfzeile `Thought for …` (dieselbe Regel wie `failureNote`).
-Statuslabels: `Partly checked`, `Check could not run`, `Answer not checked`;
+Statuslabels: `Partly checked`, `Check could not run`, `Answer not checked`,
+`Answer check off` (keine Prüfhinweise: `checkIssues` ist für `off` leer);
 Ausfallgründe erscheinen nur als kurze Code-Phrase (`failureReason`).
 `Answers` zählt vollständige Antworten; die Details behalten auch Fehlermodelle.
 Alte Reviews werden aus ihren vorhandenen Judge-Metadaten erklärt.
@@ -5655,7 +5658,12 @@ der letzten Änderung je Einstellung) und `updated_at`.
 nie gespeichert; ein beschädigter Wert gilt als 1). `PATCH /api/my/settings` mit
 `{settings: {name: wert | null}}` (1 bis 11 Namen) ändert nur die genannten
 Einstellungen (`null` = zurück zum Default; `compare_models` ist eine Einheit und
-wird als Ganzes ersetzt) und prüft **Einstellung für Einstellung**
+wird als Ganzes ersetzt; `agent_preferences` wird seit 2026-10-17 feldweise
+zusammengeführt, `FIELDWISE_SETTINGS`: eine offene Seite einer älteren Version
+kennt ein neueres Feld wie `judges` nicht und darf es mit ihrer nächsten
+Änderung nicht löschen; einzeln entfernt wird nie ein Feld, `null` setzt die
+ganze Einstellung zurück. Der Browser lässt ein unbekanntes Feld aus dem Konto
+ebenso einzeln weg, `user-settings.js`) und prüft **Einstellung für Einstellung**
 (`validate_changes`): Unbekannte Namen und Werte außerhalb der Regeln kommen in
 `rejected` zurück, die übrigen werden trotzdem gespeichert (eine Version mehr
 oder weniger im Browser verliert so nicht die ganze Änderung). 422 nur für eine

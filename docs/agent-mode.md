@@ -170,8 +170,25 @@ Marken, kein Model-Pulse-Pick und keine `differences_stats`.
 
 - **Prompt:** `preference_prompt` hängt `JUDGES_OFF_PROMPT` an (keine Prüfung,
   kein Score, keine Highlights, auch wenn ein Toolergebnis „the app checks it“
-  sagt); im freien Modus fällt der Satz „the judges always check …“ aus
-  `FREE_PROMPT` weg.
+  sagt, auch die Anweisungen davor und App-Notizen; „Compare as usual“, ein
+  eingefügter Text wird weiter geprüft); `FREE_PROMPT` nennt die Prüfung nur
+  noch als Nutzer-Einstellung („while the answer check is on (a user
+  setting)“) und lässt den Satz bei `off` weg.
+- **Kein Schimmer:** `agent-chat.js` zeigt den Prüf-Zustand nicht, wenn der
+  Lauf mit `judges: off` startete (die fixierte Antwort ist kurz `required`,
+  bevor `skip_review` `off` speichert). Der Reader öffnet bei einem
+  Abschnitt, den der Kontext nicht anbietet, den ersten angebotenen
+  (`openContext`).
+- **Nachzügler:** ein beim Fixieren gestopptes Modell heißt in beiden Modi
+  „It was still writing when the answer was finished.“; die Notiz nennt die
+  Prüfung nur, wenn sie läuft.
+- **Fehler beim Abschluss:** scheitert das Speichern in `skip_review`
+  (`ValueError`, z. B. das 600-kB-Budget der Review), endet der Turn mit
+  `AnalysisBudgetExceeded` („The answer could not be finalized. The answer
+  itself has been saved.“), nie als Providerfehler.
+- **Version-Skew:** `agent_preferences` wird am Konto feldweise
+  zusammengeführt (`user_settings.FIELDWISE_SETTINGS`); ein offener Tab mit
+  altem Code löscht `judges` deshalb nicht.
 - **Eingefügter Text:** `check_text` prüft weiter. Bittet der Nutzer, einen
   fremden Text zu prüfen, ist diese Prüfung die Antwort selbst; nur die Judges
   der Agent-Antwort entfallen.
@@ -304,7 +321,8 @@ prüft nur den Rest, in parallelen Fenstern zu 16 Sätzen; Differences läuft wi
 bisher erst am fertigen Text. Grund: Für echte Nutzer kam die Prüfung im Median
 25 s, in jedem zehnten Lauf über 99 s nach dem letzten Wort. Wird der gezeigte
 Text zurückgezogen (Toolcall danach), stoppen seine Fenster. Ein Fenster mehr
-kostet etwa 0,25 Cent.
+kostet etwa 0,25 Cent. Mit ausgeschalteter Antwortprüfung (`judges: off`)
+startet kein Fenster (`CoveragePrefetch._enabled`) und es gibt keine Vorschau.
 Seit 2026-10-18 sieht der Nutzer die Fenster auch früher: Sobald die Antwort
 fest steht, gehen die schon fertigen Fenster und danach jedes weitere, sobald
 es fertig ist, als vorläufige Satzmarken an die offene Seite (Event
@@ -408,8 +426,8 @@ nie, der Agent sah ihr Ergebnis nicht, und sie kam meist ohne Urteil zurück.
 Einen Faktenstreit klärt der Agent vor dem Schreiben selbst mit `read_source`
 (siehe „Quellen nachlesen“).
 
-Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend und
-abgebrochen. Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen
+Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend,
+abgebrochen und aus („Answer check off“, vom Nutzer ausgeschaltet). Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen
 haben und die Vergleichsgrundlage vollständig ist. Modellübereinstimmung ist
 keine unabhängige Faktenprüfung. Ohne Vergleich läuft keine automatische Prüfung.
 

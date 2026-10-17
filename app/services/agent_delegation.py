@@ -1380,7 +1380,12 @@ class DelegationLoop(AgentLoop):
         """A completed answer needs its check, not another routing generation."""
         if not self.comparison.finalized and self.comparison.preferences.judges == "off":
             # The user switched the answer check off: final without judges.
-            self.comparison.skip_review()
+            try:
+                self.comparison.skip_review()
+            except ValueError:
+                # The review storage budget, as a failed check would say it:
+                # never a provider error that invites paying again.
+                raise AnalysisBudgetExceeded("The answer could not be finalized. The answer itself has been saved.")
         if not self.comparison.finalized:
             call = {"id": "server_judge_answer", "type": "function",
                     "function": {"name": "judge_answer", "arguments": "{}"}}

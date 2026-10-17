@@ -117,6 +117,17 @@ def test_update_changes_only_the_named_settings_and_notes_when(repository, datab
     assert set(stored) == {"values", "revision", "field_revisions", "updated_at"}
 
 
+def test_agent_preferences_change_field_by_field(repository):
+    """An open page of an older version sends agent_preferences without a
+    field it does not know (judges, since 2026-10-17); the account keeps it."""
+    repository.update(UID, {"agent_preferences": {"depth": "quick", "judges": "off"}})
+    values, revision, _ = repository.update(UID, {"agent_preferences": {"depth": "full", "autonomy": "free"}})
+    assert values["agent_preferences"] == {"depth": "full", "autonomy": "free", "judges": "off"} and revision == 2
+    # null still resets the whole setting to the app default.
+    assert "agent_preferences" not in repository.update(UID, {"agent_preferences": None})[0]
+    assert repository.update(UID, {"agent_preferences": {"quorum": "fast"}})[0]["agent_preferences"] == {"quorum": "fast"}
+
+
 def test_update_drops_a_stored_value_that_no_longer_validates(repository, database):
     database.documents[SETTINGS_PATH] = {"values": {"run_mode": "legacy", "claim_counts": True}, "revision": 4}
     assert repository.get(UID) == ({"claim_counts": True}, 4, {})

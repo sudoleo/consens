@@ -400,6 +400,7 @@ def test_the_prompt_asks_for_a_clear_request_asks_back_otherwise_and_points_to_t
     # Unclear wishes: ask back with the account's real choices, never guess.
     assert "When it is unclear which setting or which value they mean, do not guess and prepare nothing" in prompt
     assert '"faster" can mean a lower reasoning level, brief answers, an earlier answer start or no answer check' in prompt
+    assert '"no judges" or "no check" is the answer check' in prompt
     assert "when everything the user could mean needs Pro (on_pro in read_settings), do not ask which one" in prompt
     assert "ask the user which one, never pick one for them" in prompt
     assert "When the user asks what is set or what they can choose, call read_settings" in prompt
