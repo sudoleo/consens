@@ -2210,6 +2210,11 @@ COVERAGE_TEMPERATURE = 0.0
 MAX_COVERAGE_CLAIMS = MAX_CONSENSUS_SENTENCES
 # Longer answers are covered in parallel windows of this many sentences.
 COVERAGE_WINDOW = MAX_CONSENSUS_SENTENCES
+# The Agent's windows (since 2026-10-17): small enough that a window is done
+# seconds after its last sentence was written, so the check of a finished
+# answer is waiting only for its last paragraph. Each window repeats the model
+# answers as input (~+0.25 ct per window with GPT-6 Luna).
+AGENT_COVERAGE_WINDOW = 16
 # One attempt of either judge (Differences, Coverage, Coverage repair) may take
 # this long; then it stops and the plan moves to the next family. Measured
 # 2026-10-15: Coverage in Agent receipts median 13 s, p90 21 s; Differences in
@@ -2325,32 +2330,187 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
     return coverage.parse_coverage_payload(raw, labels, ids) or {}
 
 
-def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_model: str, *, chat_mode: bool = False):
+def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_model: str, *, chat_mode: bool = False,
+                        window: int | None = None, prefetch=None):
     """Belegt jeden nummerierten Satz. Gibt (coverage | None, meta | None).
 
     None heisst: der Coverage-Judge hat gar nichts geliefert. Dann bleibt es
     bei dem, was der Differences-Judge an Claims mitgebracht hat (in der Regel
     nichts) - eine Antwort ohne Marken ist ehrlicher als eine, in der jeder
-    Satz grau als "unbelegt" dasteht, weil ein Provider ausgefallen ist."""
+    Satz grau als "unbelegt" dasteht, weil ein Provider ausgefallen ist.
+
+    ``window``: Saetze je Aufruf (Standard COVERAGE_WINDOW). ``prefetch``
+    (Agent): Fenster, die schon waehrend des Schreibens liefen
+    (agent_coverage_prefetch.CoveragePrefetch). Ihre Saetze werden hier nur
+    noch eingesammelt, solange sie im fertigen Text wortgleich an derselben
+    Stelle stehen; der Rest laeuft sofort parallel dazu."""
     ids = coverage.sentence_ids(context.sentences)
     if not ids:
         return None, None
     attempts = _coverage_attempts(differences_model, api_keys, chat_mode=chat_mode)
     if not attempts:
         return None, None
-    if len(ids) <= COVERAGE_WINDOW:
+    window = max(1, int(window or COVERAGE_WINDOW))
+    if prefetch is not None:
+        return _run_coverage_with_prefetch(context, api_keys, attempts, ids, window, prefetch)
+    if len(ids) <= window:
         return _run_coverage_window(context, api_keys, attempts, ids)
-    return _run_coverage_windows(context, api_keys, attempts, ids)
+    return _run_coverage_windows(context, api_keys, attempts, ids, window)
 
 
-def _run_coverage_windows(context, api_keys, attempts, ids):
-    """Long answers: one Coverage call per window of COVERAGE_WINDOW ids.
+def settled_sentence_count(partial_answer: str, limit=CHAT_MAX_CONSENSUS_SENTENCES) -> int:
+    """How many leading sentences of an answer still being written are final.
+
+    Sentences are numbered line by line, and whether a line is a table header
+    depends on the line after it. So only sentences on complete lines that
+    are followed by another complete line count: their number and wording
+    are the same once the answer is finished."""
+    text = str(partial_answer or "")
+    last = text.rfind("\n")
+    if last < 0:
+        return 0
+    complete = text[:last]
+    settled_end = complete.rfind("\n")
+    if settled_end < 0:
+        return 0
+    spans = []
+    _enumerate_consensus_sentences(complete, limit=limit, spans=spans)
+    return sum(1 for _, end in spans if end <= settled_end)
+
+
+def prefetch_coverage_window(answers: Mapping[str, str], partial_answer: str, ids: list, api_keys: dict,
+                             differences_model: str, *, resolved_question: str = "", read_sources=None,
+                             chat_mode: bool = True):
+    """Coverage of the sentences ``ids`` of an answer still being written.
+
+    The judge sees the answer written so far, numbered as it will be once it
+    is finished (settled_sentence_count decides which ids may be asked). Its
+    own anonymization differs from the final check's, so the stances come
+    back keyed by model name (and ``("page", url)`` for read pages):
+    ``{"sentences": {id: text}, "entries": {id: entry}, "meta": meta}``, or
+    None when nothing usable came back."""
+    context = _build_judge_context(
+        answers, partial_answer, None, resolved_question,
+        sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES if chat_mode else MAX_CONSENSUS_SENTENCES,
+    )
+    if context is None:
+        return None
+    context = _with_read_sources(context, read_sources)
+    known = set(coverage.sentence_ids(context.sentences))
+    ids = [sid for sid in ids if sid in known]
+    attempts = _coverage_attempts(differences_model, api_keys, chat_mode=chat_mode)
+    if not ids or not attempts:
+        return None
+    parsed, meta = _run_coverage_window(context, api_keys, attempts, ids)
+    if not parsed:
+        return None
+    keys = {**context.anon_map, **{label: ("page", url) for label, url, _ in context.sources}}
+    entries = {sid: {"classification": entry["classification"],
+                     "models": {keys[label]: stance for label, stance in entry["models"].items() if label in keys},
+                     "quotes": {keys[label]: quote for label, quote in entry["quotes"].items() if label in keys}}
+               for sid, entry in parsed.items()}
+    number = coverage.sentence_id_number
+    return {"sentences": {sid: context.sentences[number(sid) - 1] for sid in parsed},
+            "entries": entries, "meta": meta}
+
+
+def _adopt_prefetched(context, result) -> dict:
+    """A prefetched window's entries in this context's labels, for the
+    sentences that are still word for word the same. An entry naming a model
+    or page this check does not have is dropped (and asked again)."""
+    labels = {name: label for label, name in context.anon_map.items()}
+    labels.update({("page", url): label for label, url, _ in context.sources})
+    number = coverage.sentence_id_number
+    adopted = {}
+    for sid, entry in (result or {}).get("entries", {}).items():
+        n = number(sid)
+        if not n or n > len(context.sentences) or context.sentences[n - 1] != result["sentences"].get(sid):
+            continue
+        if any(key not in labels for key in (*entry["models"], *entry["quotes"])):
+            continue
+        models = {labels[key]: stance for key, stance in entry["models"].items()}
+        for label in _coverage_labels(context):
+            models.setdefault(label, "not_addressed")
+        adopted[sid] = {"classification": entry["classification"], "models": models,
+                        "quotes": {labels[key]: quote for key, quote in entry["quotes"].items()}}
+    return adopted
+
+
+def _run_coverage_with_prefetch(context, api_keys, attempts, ids, window, prefetch):
+    """Coverage of a finished answer whose first windows ran while it was written.
+
+    Sentences no window is working on start at once, in parallel; then the
+    early windows are collected (they started first and usually finish
+    first). What they could not deliver, or what changed, is asked again."""
+    launched = prefetch.launched()
+    pending = [sid for sid in ids if launched.get(sid) is not None
+               and context.sentences[coverage.sentence_id_number(sid) - 1] == launched[sid]]
+    pending_set = set(pending)
+    rest = [sid for sid in ids if sid not in pending_set]
+    cancellation = current_provider_cancellation()
+    budget = current_analysis_budget()
+    from contextvars import copy_context
+
+    def run(part):
+        with bind_analysis_budget(budget):
+            if cancellation is None:
+                return _run_coverage_windows(context, api_keys, attempts, part, window)
+            with bind_provider_cancellation(cancellation):
+                return _run_coverage_windows(context, api_keys, attempts, part, window)
+
+    parsed, metas = {}, []
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="coverage-rest") as pool:
+        rest_future = pool.submit(copy_context().run, run, rest) if rest else None
+        for result in prefetch.results():
+            adopted = {sid: entry for sid, entry in _adopt_prefetched(context, result).items() if sid in pending_set}
+            parsed.update(adopted)
+            if adopted and result.get("meta"):
+                metas.append({**result["meta"], "prefetched": True})
+        prefetched = len(parsed)
+        redo = [sid for sid in pending if sid not in parsed]
+        if redo:
+            part, meta = run(redo)
+            parsed.update(part or {})
+            if meta:
+                metas.append(meta)
+        if rest_future is not None:
+            try:
+                part, meta = rest_future.result()
+            except Exception as exc:
+                logging.warning("Coverage windows failed category=%s", safe_exception(exc))
+                part, meta = None, None
+            parsed.update(part or {})
+            if meta:
+                metas.append(meta)
+    if not metas:
+        return None, None
+    final = [m for m in metas if not m.get("prefetched")]
+    meta = dict(final[0] if final else metas[0])
+    meta.pop("prefetched", None)
+    meta.update({
+        "attempts": sum(m.get("attempts", 0) for m in metas),
+        # The time the check took after the answer was finished.
+        "duration_ms": max((m.get("duration_ms", 0) for m in final), default=0),
+        "sentences": len(ids),
+        "covered": len(parsed),
+        "prefetched": prefetched,
+        "repaired": sum(m.get("repaired", 0) for m in metas),
+        "missing": len(coverage.missing_sentence_ids(parsed, ids)),
+        "windows": sum(m.get("windows", 1) for m in metas),
+    })
+    return parsed, meta
+
+
+def _run_coverage_windows(context, api_keys, attempts, ids, window=COVERAGE_WINDOW):
+    """Long answers: one Coverage call per window of ``window`` ids.
 
     Every window sees the whole numbered answer as context but covers only its
     own binding id list, so each call stays as large as a normal answer. The
     windows run in parallel; a failed window leaves its ids missing (grey),
     it never discards the windows that did return."""
-    windows = [ids[start:start + COVERAGE_WINDOW] for start in range(0, len(ids), COVERAGE_WINDOW)]
+    if not ids:
+        return {}, None
+    windows = [ids[start:start + window] for start in range(0, len(ids), window)]
     cancellation = current_provider_cancellation()
     budget = current_analysis_budget()
     from contextvars import copy_context
@@ -2670,7 +2830,8 @@ def _in_background(work, name: str, *, cancellation=None):
         raise
 
 
-def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: bool = False):
+def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: bool = False,
+                            window: int | None = None, prefetch=None):
     """Startet den Coverage-Judge im Nebenläufer und gibt (pool, future, stop).
 
     Der Aufrufer muss ``pool.shutdown()`` sicherstellen. Der Worker bekommt
@@ -2686,7 +2847,8 @@ def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: 
     def _work():
         try:
             with bind_analysis_budget(budget), bind_provider_cancellation(stop):
-                return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode)
+                return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode,
+                                           window=window, prefetch=prefetch)
         finally:
             unlink()
 
@@ -2750,6 +2912,8 @@ def query_differences(
     statement_claims: bool = False,
     passes: int = 1,
     read_sources=None,
+    coverage_window: int | None = None,
+    coverage_prefetch=None,
 ) -> tuple:
     """
     Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
@@ -2770,6 +2934,10 @@ def query_differences(
     `read_sources` (Agent, [{url, title, text}]): Seiten, die der Agent
     nachgelesen hat. Nur der Coverage-Judge sieht sie, als eigene Bloecke;
     ihr Votum steht als claims[].read_sources und zaehlt nie als Stimme.
+    `coverage_window` (Agent): Saetze je Coverage-Aufruf, kleiner als
+    COVERAGE_WINDOW, damit die Fenster parallel schnell fertig sind.
+    `coverage_prefetch` (Agent): Coverage-Fenster, die schon waehrend des
+    Schreibens liefen (_run_coverage_with_prefetch).
     Gibt (legacy_text, structured_data | None) zurück.
     """
     passes = 2 if passes and int(passes) > 1 else 1
@@ -2801,7 +2969,8 @@ def query_differences(
         return "Invalid model selected for difference comparison.", None
 
     coverage_pool, coverage_future, coverage_stop = _coverage_in_background(
-        context, api_keys, differences_model, chat_mode=chat_mode
+        context, api_keys, differences_model, chat_mode=chat_mode,
+        window=coverage_window, prefetch=coverage_prefetch,
     )
     second_pool = second_future = None
     second_cancellation = None

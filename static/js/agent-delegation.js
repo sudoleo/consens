@@ -20,7 +20,11 @@
     const titles = [...new Set(judges.map(agent => agent.title))];
     const done = new Set(titles.filter(title => judges.some(agent => agent.title === title && agent.status === "completed")));
     const busy = judges.filter(agent => activeStates.has(agent.status));
-    const status = view.running && (busy.length || done.size < titles.length) ? "working"
+    // Coverage windows start while the answer is still being written
+    // (agent_coverage_prefetch); the answer's check is done only after its
+    // Differences judge, so finished early windows never read as done.
+    const answerCheckOpen = titles.includes("Coverage judge") && !titles.includes("Differences judge");
+    const status = view.running && (busy.length || done.size < titles.length || answerCheckOpen) ? "working"
       : done.size === titles.length ? "completed" : "failed";
     const metered = judges.filter(agent => measured(agent.usage));
     const usage = metered.length ? { input_tokens: metered.reduce((n, a) => n + a.usage.input_tokens, 0),

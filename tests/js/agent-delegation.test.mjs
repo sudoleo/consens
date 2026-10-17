@@ -450,6 +450,16 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("keeps the Answer check working while early Coverage windows finish before the answer is done", () => {
+    const window1 = { ...agent(1, "completed"), kind: "judge", title: "Coverage judge", usage: null };
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [window1], status: "running" }) }));
+    receive(w, window1);
+    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    d.querySelector(".agent-sidebar-toggle").click();
+    expect(d.querySelector(".agent-session .agent-session-state").textContent).not.toMatch(/^Completed/);
+    dom.window.close();
+  });
+
   it("names a check that no model could run, once, in the Answer check row", () => {
     const failed = { ...agent(1, "failed"), kind: "judge", title: "Differences judge", usage: null };
     const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [failed], status: "failed" }) }));

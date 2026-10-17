@@ -1,0 +1,158 @@
+"""Coverage windows of the Agent's answer while it is still being written.
+
+The Coverage judge checks every sentence of the answer against the model
+answers. It used to start only once the answer was finished: for real users
+it then took 25 s (median) and up to 99 s after the last word (14 days to
+2026-10-17), and a check that arrives that late is rarely seen. Now every
+window of AGENT_COVERAGE_WINDOW sentences starts as soon as those sentences
+are settled (consensus_engine.settled_sentence_count). The check of the
+finished answer collects these windows and asks only the rest
+(consensus_engine._run_coverage_with_prefetch).
+
+The windows run through the same judge transport as the check itself
+(ComparisonTools.judge_transport): metered, stopped with the turn, and in a
+chat with Google data routed like every other call of that chat.
+"""
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from functools import partial
+import hashlib
+import json
+import logging
+import threading
+
+from app.core import config as cfg
+from app.core.observability import safe_exception
+from app.services.llm.provider_runtime import ProviderCancellation, bind_provider_cancellation
+from app.services.llm.task_transport import bind_task_transport
+
+
+def judge_basis(answers: dict, question: str, read_sources) -> str:
+    """What a window's verdicts rest on; a check with another basis cannot use them."""
+    pages = [(str(item.get("url") or ""), str(item.get("text") or "")) for item in read_sources or ()]
+    encoded = json.dumps([sorted(answers.items()), question or "", pages], ensure_ascii=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+class _ComparisonWindows:
+    """The windows one comparison's check can collect (engine protocol)."""
+
+    def __init__(self, windows):
+        self._windows = windows
+
+    def launched(self) -> dict:
+        """Sentence id -> the exact sentence a window is checking."""
+        sentences = {}
+        for launched, _ in self._windows:
+            sentences.update(launched)
+        return sentences
+
+    def results(self):
+        """Each window's result as it finishes; a failed window yields nothing."""
+        for _, future in self._windows:
+            try:
+                result = future.result()
+            except Exception as exc:
+                logging.info("Early coverage window ended without a result category=%s", safe_exception(exc))
+                continue
+            if result:
+                yield result
+
+
+class CoveragePrefetch:
+    """Starts Coverage windows of the visible answer while it streams."""
+
+    def __init__(self, tools):
+        self.tools = tools
+        self.lock = threading.Lock()
+        self.pool = None
+        self.stop = None
+        self._unlink = lambda: None
+        # Comparison id -> (basis, [(launched sentences, future), ...]).
+        self.windows = {}
+        self.started = 0
+
+    def _enabled(self):
+        tools = self.tools
+        return bool(tools.comparisons) and not tools.text and tools.preferences.judges != "off"
+
+    def update(self, text: str) -> None:
+        """The answer as far as it is visible; starts every window that is complete."""
+        from app.services.llm import coverage_judge as coverage
+        from app.services.llm.consensus_engine import (AGENT_COVERAGE_WINDOW, CHAT_MAX_CONSENSUS_SENTENCES,
+                                                       _enumerate_consensus_sentences, settled_sentence_count)
+        with self.lock:
+            if not self._enabled():
+                return
+            settled = settled_sentence_count(text)
+            if settled - self.started < AGENT_COVERAGE_WINDOW:
+                return
+            _, sentences = _enumerate_consensus_sentences(text, limit=CHAT_MAX_CONSENSUS_SENTENCES)
+            while settled - self.started >= AGENT_COVERAGE_WINDOW:
+                numbers = range(self.started + 1, self.started + AGENT_COVERAGE_WINDOW + 1)
+                launched = {coverage.sentence_id(n): sentences[n - 1] for n in numbers}
+                for comparison in list(self.tools.comparisons):
+                    self._launch(comparison, text, launched)
+                self.started += AGENT_COVERAGE_WINDOW
+
+    def _launch(self, comparison, text, launched):
+        tools = self.tools
+        with tools.lock:
+            checked = [a for a in comparison["answers"] if not a.get("late")]
+        if len(checked) < 2:
+            return
+        answers = {cfg.provider_label(a["provider"]): a["text"] for a in checked}
+        read_sources = tools.reader.judge_sources() if tools.reader is not None else None
+        basis = judge_basis(answers, comparison["question"], read_sources)
+        known, windows = self.windows.setdefault(comparison["id"], (basis, []))
+        if known != basis:
+            # The comparison changed under the answer: the final check asks again.
+            return
+        if self.pool is None:
+            from app.services.agent_comparison import JUDGE_PARALLEL
+            self.pool = ThreadPoolExecutor(max_workers=JUDGE_PARALLEL, thread_name_prefix="coverage-prefetch")
+        if self.stop is None:
+            self.stop = ProviderCancellation()
+            self._unlink = tools.loop.cancellation.register(self.stop) or (lambda: None)
+        transport = (partial(tools.judge_transport, subject="passage_answer")
+                     if tools.passage is not None else tools.judge_transport)
+        stop, reference, api_key = self.stop, tools._judge_reference(), tools.loop.api_key
+        ids = list(launched)
+
+        def work():
+            from app.services.llm.consensus_engine import prefetch_coverage_window
+            with bind_task_transport(transport), bind_provider_cancellation(stop):
+                return prefetch_coverage_window(answers, text, ids, {"OpenRouter": api_key}, reference,
+                                                resolved_question=comparison["question"], read_sources=read_sources)
+
+        windows.append((launched, self.pool.submit(copy_context().run, work)))
+
+    def for_comparison(self, comparison, answers: dict, read_sources):
+        """The windows the check of ``comparison`` may collect, or None."""
+        with self.lock:
+            basis, windows = self.windows.get(comparison["id"], (None, []))
+        if not windows or basis != judge_basis(answers, comparison["question"], read_sources):
+            return None
+        return _ComparisonWindows(list(windows))
+
+    def discard(self) -> None:
+        """The visible text was no answer after all: stop its windows."""
+        with self.lock:
+            self._stop()
+            self.windows, self.started = {}, 0
+
+    def close(self) -> None:
+        """The check collected what it needs: nothing outlives the turn."""
+        with self.lock:
+            self._stop()
+            if self.pool is not None:
+                self.pool.shutdown(wait=False)
+                self.pool = None
+
+    def _stop(self):
+        if self.stop is not None:
+            self.stop.cancel()
+            self._unlink()
+            self.stop, self._unlink = None, (lambda: None)

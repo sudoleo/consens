@@ -1025,6 +1025,9 @@ class DelegationLoop(AgentLoop):
                                 event = self._candidate_delta(value, research)
                                 if event is None:
                                     continue
+                                if self.comparison and self.comparison.comparisons:
+                                    # Settled sentences start their Coverage windows now.
+                                    self.comparison.answer_progress(value.published)
                             elif event and event["type"] == "delta" and not publish_text:
                                 # Neither planning nor follow-up checks may replace
                                 # or append to the dedicated user-facing answer.
@@ -1435,6 +1438,8 @@ class DelegationLoop(AgentLoop):
         if published and not value.text.startswith(published):
             yield self.status(value.step_id, "retract", status="working", clear_response=True)
             published = ""
+            if self.comparison:
+                self.comparison.discard_answer_progress()
         rest = value.text[len(published):]
         if rest:
             yield {"type": "delta", "text": rest}
@@ -1449,6 +1454,8 @@ class DelegationLoop(AgentLoop):
             return
         self.completion.text = ""
         value.published = ""
+        if self.comparison:
+            self.comparison.discard_answer_progress()
         yield self.status(value.step_id, "retract", status="working", clear_response=True)
         if note:
             from app.services.agent_answer_mode import NOTE_CHARS

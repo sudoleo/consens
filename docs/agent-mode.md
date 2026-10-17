@@ -296,6 +296,15 @@ Differences und Coverage genau den sichtbaren Text. Text neben einem Toolcall is
 eine Einleitung und zählt nicht als Antwort. Der Schritt wird wie jeder
 Modellaufruf abgerechnet. Bei Abbruch oder Tokenlimit bleibt der Teiltext
 ungeprüft erhalten; die Judges starten nicht.
+Die Satzprüfung (Coverage) läuft seit 2026-10-17 schon beim Schreiben mit:
+Sobald 16 Sätze fest stehen (ihre Zeile und die folgende sind vollständig),
+prüft ein Coverage-Fenster sie gegen die Modellantworten. Nach dem letzten
+Wort übernimmt die Prüfung diese Ergebnisse für jeden wortgleichen Satz und
+prüft nur den Rest, in parallelen Fenstern zu 16 Sätzen; Differences läuft wie
+bisher erst am fertigen Text. Grund: Für echte Nutzer kam die Prüfung im Median
+25 s, in jedem zehnten Lauf über 99 s nach dem letzten Wort. Wird der gezeigte
+Text zurückgezogen (Toolcall danach), stoppen seine Fenster. Ein Fenster mehr
+kostet etwa 0,25 Cent.
 Die Schreibregeln stehen im Agent-Prompt (`AGENT_ANSWER_SECTION`, „WRITING THE
 ANSWER“) mit der eigenen beratenden Stimme des Chatmodells. Es schreibt aus seinem
 eigenen Kontext: Gesprächsverlauf, Toolergebnisse mit den vollständigen

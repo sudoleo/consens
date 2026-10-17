@@ -3194,7 +3194,24 @@ selbst gesetzte Sperre (`check_cooldown=False`). `_admit_chat_step` kürzt für
 Vergleichsantworten und für Agent-Schritte nach einem Vergleich bei Konkurrenz
 die Output-Grenze (`clamp_floor`), statt zu warten. Die Judges indexieren im
 Chat bis zu `CHAT_MAX_CONSENSUS_SENTENCES` Sätze; `_run_coverage_windows` teilt
-Coverage in parallele Fenster (`COVERAGE_WINDOW`).
+Coverage in parallele Fenster (`COVERAGE_WINDOW`, im Agent `AGENT_COVERAGE_WINDOW`
+= 16 Sätze).
+**Prüfung beim Schreiben (seit 2026-10-17):** Jede gezeigte Antwort-Delta ruft
+`ComparisonTools.answer_progress(value.published)` (`DelegationLoop._step` nach
+`_candidate_delta`). `agent_coverage_prefetch.CoveragePrefetch` startet für je 16
+feste Sätze (`consensus_engine.settled_sentence_count`: nur Zeilen, auf die
+noch eine vollständige Zeile folgt) ein Coverage-Fenster über
+`judge_transport` (gemessen, Turn-Abbruch, Google-Routing) mit dem bisher
+geschriebenen Text (`prefetch_coverage_window`, Stimmen nach Modellname statt
+Label). `judge()` übergibt sie als `coverage_prefetch` an `query_differences`;
+`_run_coverage_with_prefetch` startet sofort die nicht laufenden Sätze,
+sammelt die frühen Fenster ein, übernimmt nur wortgleiche Sätze an derselben
+Nummer (`_adopt_prefetched`, neue Labels) und fragt den Rest erneut. Ein
+anderer Prüfbestand (`judge_basis`: Antworten, Frage, gelesene Seiten) verwirft
+alles. `_retract` und ein Schnitt in `_show_answer` stoppen laufende Fenster
+(`discard_answer_progress`), `judge()`/`skip_review()` schließen den Pool.
+Coverage-Meta trägt `prefetched` (übernommene Sätze); `duration_ms` misst die
+Zeit nach Antwortende.
 Im Toolergebnis eines Vergleichs nennen die Antworten ihre Quellen nur per URL
 (seit 2026-10-10); `sources` führt jede zitierte Quelle einmal mit `cited_by`,
 `supports` (gestützte Antwortsätze) und `excerpt` (Originalauszug), gebaut von
@@ -6223,6 +6240,7 @@ app/services/
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
+  agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)

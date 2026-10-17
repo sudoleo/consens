@@ -582,6 +582,8 @@ class ComparisonTools:
         # Cited pages the orchestrator opened (agent_read_source.SourceReader),
         # set by the loop when read_source is on.
         self.reader = None
+        # Coverage windows of the answer while it streams (answer_progress).
+        self.prefetch = None
         arguments = free_compare_args(models) if self.free else CompareArgs
         if memory_changes:
             # The required memory decision rides on the calls that start the
@@ -788,6 +790,27 @@ class ComparisonTools:
                 raise ValueError("Comparison review storage budget reached")
         self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id, self.loop.run_token, data, self.text)
         self.loop.outgoing.put_nowait({"type": "review", "review": data})
+
+    def answer_progress(self, text):
+        """The answer as far as the user sees it while it streams: settled
+        sentences start their Coverage windows now, not after the last word
+        (agent_coverage_prefetch). Never breaks the answer itself."""
+        try:
+            if self.prefetch is None:
+                from app.services.agent_coverage_prefetch import CoveragePrefetch
+                self.prefetch = CoveragePrefetch(self)
+            self.prefetch.update(text)
+        except Exception as exc:
+            logging.warning("Early coverage could not start category=%s", safe_exception(exc))
+
+    def discard_answer_progress(self):
+        """The streamed text was taken back (a tool call followed): its windows stop."""
+        if self.prefetch is not None:
+            self.prefetch.discard()
+
+    def _close_prefetch(self):
+        if self.prefetch is not None:
+            self.prefetch.close()
 
     def capture(self, text):
         # The visible synthesis is immutable within a turn. Subsequent assistant
@@ -1362,7 +1385,7 @@ class ComparisonTools:
         return self.compare(args, cancellation=cancellation, check=check)
 
     def judge(self, args, *, cancellation):
-        from app.services.llm.consensus_engine import query_differences
+        from app.services.llm.consensus_engine import AGENT_COVERAGE_WINDOW, query_differences
         loop = self.loop
         loop._check(cancellation)
         if not self.comparisons:
@@ -1402,11 +1425,17 @@ class ComparisonTools:
                 # answer is the same text and still talks about the pasted one.
                 transport = (partial(self.judge_transport, subject="passage_answer")
                              if self.passage is not None else self.judge_transport)
+                answers = {cfg.provider_label(a["provider"]): a["text"] for a in checked}
+                # Windows that ran while the answer was written; the check
+                # collects them and asks only the rest (agent_coverage_prefetch).
+                prefetch = (self.prefetch.for_comparison(comparison, answers, read_sources)
+                            if self.prefetch is not None else None)
                 with bind_task_transport(transport), bind_provider_cancellation(cancellation):
-                    _, data = query_differences({cfg.provider_label(a["provider"]): a["text"] for a in checked},
+                    _, data = query_differences(answers,
                         self.text, {"OpenRouter": loop.api_key}, differences_model=self._judge_reference(),
                         resolved_question=comparison["question"], chat_mode=True, passes=DIFFERENCES_PASSES,
-                        read_sources=read_sources)
+                        read_sources=read_sources, coverage_window=AGENT_COVERAGE_WINDOW,
+                        coverage_prefetch=prefetch)
                 loop._check(cancellation)
                 if isinstance(data, dict):
                     check["differences_data"] = data
@@ -1420,6 +1449,7 @@ class ComparisonTools:
             self.review["status"] = "cancelled" if cancellation.cancelled else "failed"
             raise
         finally:
+            self._close_prefetch()
             self.versions[-1].update(status=self.review["status"], checks=self.review["checks"])
             self.checkpoint()
         self.finalized = True
@@ -1435,6 +1465,7 @@ class ComparisonTools:
         reviewed (review_is_bound) and the page says why nothing is marked."""
         if not self.comparisons or not self.text:
             raise ValueError("No comparison or answer to finish.")
+        self._close_prefetch()
         self.finish_comparisons()
         digest = answer_hash(self.text)
         with self.lock:
