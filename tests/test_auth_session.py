@@ -39,6 +39,16 @@ class AuthSessionTests(unittest.TestCase):
         self.assertIn("samesite=lax", cookie)
         self.assertEqual(response.headers.get("cache-control"), "no-store")
 
+    def test_confirm_registration_is_rate_limited_per_ip(self):
+        statuses = []
+        with patch.object(auth_router, "verify_user_token", side_effect=ValueError("bad")):
+            for _ in range(31):
+                statuses.append(self.client.post(
+                    "/confirm-registration", json={"id_token": "bad-token"}
+                ).status_code)
+        self.assertEqual(statuses[:30], [401] * 30)
+        self.assertEqual(statuses[30], 429)
+
     def test_confirm_registration_notifies_for_recent_google_account(self):
         user = SimpleNamespace(
             email_verified=True,

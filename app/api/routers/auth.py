@@ -133,6 +133,9 @@ async def register_user(
     
 
 @router.post("/confirm-registration")
+# Runs on every sign-in and page load (firebase.js), so the limit only stops
+# a flood: each call costs a revocation lookup at Firebase.
+@limiter.limit("30/minute")
 def confirm_registration(
     request: Request,
     background_tasks: BackgroundTasks,

@@ -85,6 +85,28 @@ def _mock_auth_tier() -> str:
 if _mock_auth_enabled():
     logging.warning("MOCK_AUTH=1 aktiv - Firebase-Auth ist fuer das E2E-Sentinel-Token gemockt. NIE in Produktion setzen.")
 
+class _ResponseHeaders:
+    """ASGI response headers as the ordered list they are.
+
+    A dict would keep only the last of repeated headers (two ``Set-Cookie``
+    in one response) and, with mixed-case keys, emit a second copy next to
+    the route's own lowercase header instead of replacing it.
+    """
+
+    def __init__(self, raw):
+        self.items = [(bytes(name).lower(), bytes(value)) for name, value in raw]
+
+    def get(self, name: bytes) -> Optional[bytes]:
+        return next((value for key, value in self.items if key == name), None)
+
+    def remove(self, name: bytes) -> None:
+        self.items = [(key, value) for key, value in self.items if key != name]
+
+    def set(self, name: bytes, value: bytes) -> None:
+        self.remove(name)
+        self.items.append((name, value))
+
+
 class CustomSecurityMiddleware:
     def __init__(self, app):
         self.app = app
@@ -118,7 +140,7 @@ class CustomSecurityMiddleware:
 
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
-                headers = dict(message.get("headers", []))
+                headers = _ResponseHeaders(message.get("headers", []))
                 script_src = (
                     "script-src 'self' "
                     + ("" if strict_script_page else "'unsafe-inline' ")
@@ -153,35 +175,36 @@ class CustomSecurityMiddleware:
                     "base-uri 'self'; "
                     "frame-src 'self' blob: https://accounts.google.com https://*.google.com https://*.gstatic.com https://*.firebaseapp.com https://*.web.app;"
                 )
-                headers[b"Content-Security-Policy"] = csp.encode("utf-8")
-                headers[b"X-Content-Type-Options"] = b"nosniff"
-                headers[b"X-Frame-Options"] = b"DENY"
-                headers[b"Strict-Transport-Security"] = b"max-age=31536000; includeSubDomains"
+                # The OAuth callback renders its own nonce-based policy.
+                route_csp = headers.get(b"content-security-policy")
+                headers.set(b"content-security-policy", csp.encode("utf-8"))
+                headers.set(b"x-content-type-options", b"nosniff")
+                headers.set(b"x-frame-options", b"DENY")
+                headers.set(b"strict-transport-security", b"max-age=31536000; includeSubDomains")
                 # strict-origin-when-cross-origin: an fremde Seiten geht nur noch
                 # die Origin, nicht der volle Pfad. Private Watch-Seiten
                 # (/s/{id}) sind Secret-URLs - ihr Pfad darf nie im
                 # Referer-Header eines ausgehenden Klicks landen.
-                headers[b"Referrer-Policy"] = b"strict-origin-when-cross-origin"
+                headers.set(b"referrer-policy", b"strict-origin-when-cross-origin")
                 if path.startswith("/__/auth/") or path == "/__/firebase/init.json":
                     # Firebase's own sign-in helpers (proxied in
                     # firebase_auth_proxy.py) load Google's scripts under
                     # their own rules, and /__/auth/iframe must be framable by
                     # the app page that hands the result back.
-                    headers.pop(b"Content-Security-Policy", None)
-                    headers[b"X-Frame-Options"] = b"SAMEORIGIN"
+                    headers.remove(b"content-security-policy")
+                    headers.set(b"x-frame-options", b"SAMEORIGIN")
                 if path == "/agent/google/callback":
-                    headers[b"Content-Security-Policy"] = headers.pop(b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'")
-                    headers.pop(b"referrer-policy", None)
-                    headers[b"Referrer-Policy"] = b"no-referrer"
+                    headers.set(b"content-security-policy", route_csp or b"default-src 'none'; frame-ancestors 'none'")
+                    headers.set(b"referrer-policy", b"no-referrer")
                 if sensitive_api_response:
                     # An event stream keeps no-transform (no proxy buffering
                     # or re-encoding), see SSE_HEADERS.
-                    stream = headers.get(b"content-type", b"").lower().startswith(b"text/event-stream")
-                    headers[b"Cache-Control"] = b"private, no-store, no-transform" if stream else b"private, no-store"
-                    headers[b"Pragma"] = b"no-cache"
-                    headers[b"Expires"] = b"0"
-                    headers[b"Vary"] = b"X-API-Key, Authorization"
-                message["headers"] = list(headers.items())
+                    stream = (headers.get(b"content-type") or b"").lower().startswith(b"text/event-stream")
+                    headers.set(b"cache-control", b"private, no-store, no-transform" if stream else b"private, no-store")
+                    headers.set(b"pragma", b"no-cache")
+                    headers.set(b"expires", b"0")
+                    headers.set(b"vary", b"X-API-Key, Authorization")
+                message["headers"] = headers.items
             await send(message)
 
         await self.app(scope, receive, send_wrapper)

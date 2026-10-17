@@ -105,7 +105,7 @@
           <li>Usage is subject to the limits displayed for your account. Limits may be adjusted prospectively for capacity, security or provider-cost reasons, taking users' reasonable interests into account. Account usage counters can persist across server restarts.</li>
           <li>Features labelled "Pro" or similar are simply the more expensive runs. They are enabled manually for individual accounts, cannot currently be purchased, and are subject to the limits and availability described in the app. Mandatory rights remain unaffected.</li>
           <li>If you store your own OpenRouter API key, it is saved in your browser and transmitted through our server to OpenRouter with each request. OpenRouter then routes requests to the selected underlying model provider. You are responsible for the costs and the security of your key, and should review the applicable OpenRouter and provider terms.</li>
-          <li>Administrator-issued Consensus API runs and Scheduled Publisher/Watch runs use server-configured model sets through OpenRouter. The actual recipients depend on those configurations and routing; there is no general EU-only processing guarantee.</li>
+          <li>Administrator-issued Consensus API runs and Watch/Topic runs use server-configured model sets through OpenRouter. The actual recipients depend on those configurations and routing; there is no general EU-only processing guarantee.</li>
           <li>Consensus API questions and results are stored for asynchronous retrieval and idempotency with a 30-day expiry after acceptance, followed by periodic cleanup. A client may delete a completed run earlier; deleting a run does not undo processing already performed by model providers.</li>
         </ul>
       </section>
@@ -114,7 +114,7 @@
         <h2>7. Public sharing of consensus answers</h2>
         <p>
           Logged-in users can publish a consensus answer as a public, read-only page ("shared page").
-          Publishing your private conversation requires your Share action or an explicit publishing request through the API. Separately, operator-configured Scheduled Publisher and Topic runs can publish AI-generated material automatically. Private conversation storage is not public sharing.
+          Publishing your private conversation requires your Share action or an explicit publishing request through the API. Separately, operator-configured Topic runs can publish AI-generated material automatically. Private conversation storage is not public sharing.
         </p>
         <ul>
           <li>A shared page contains the question, the consensus answer, the differences analysis, the list of
@@ -126,7 +126,7 @@
             until then).</li>
           <li>We may remove (block) shared pages that violate these terms or applicable law, and we may limit the
             number of pages a user can create per day. Search-engine indexing of shared pages is disabled by default
-            and can be enabled for selected pages through operator-controlled publication and indexing settings, including the Scheduled Publisher.</li>
+            and can be enabled for selected pages through operator-controlled publication and indexing settings.</li>
         </ul>
         <p>
           Every shared page offers a "Report this page" function that can be used without an account. Reports are
@@ -190,7 +190,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 29 September 2026" %}
+  {% set public_footer_note = "Last updated: 17 October 2026" %}
   {% include "partials/public_footer.html" %}
 </body>
 </html>
