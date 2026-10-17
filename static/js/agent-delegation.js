@@ -22,10 +22,11 @@
     const busy = judges.filter(agent => activeStates.has(agent.status));
     // Coverage windows start while the answer is still being written
     // (agent_coverage_prefetch); the answer's check is done only after its
-    // Differences judge, so finished early windows never read as done.
+    // Differences judge, so finished early windows never read as done, not
+    // even when the run ended before the check (then it did not finish).
     const answerCheckOpen = titles.includes("Coverage judge") && !titles.includes("Differences judge");
     const status = view.running && (busy.length || done.size < titles.length || answerCheckOpen) ? "working"
-      : done.size === titles.length ? "completed" : "failed";
+      : done.size === titles.length && !answerCheckOpen ? "completed" : "failed";
     const metered = judges.filter(agent => measured(agent.usage));
     const usage = metered.length ? { input_tokens: metered.reduce((n, a) => n + a.usage.input_tokens, 0),
       output_tokens: metered.reduce((n, a) => n + a.usage.output_tokens, 0),
@@ -42,7 +43,8 @@
     return { id: CHECK_ID, kind: "check", title: textOnly ? "Text check" : "Answer check", status, usage, duration_ms: duration,
       checkedText: titles.includes("Text check"), textOnly,
       progress_text: busy.find(agent => agent.progress_text)?.progress_text || "",
-      missing: status === "failed" ? titles.filter(title => !done.has(title)).map(title => checkNames[title] || "answer") : [] };
+      missing: status === "failed" ? [...titles.filter(title => !done.has(title)).map(title => checkNames[title] || "answer"),
+        ...(answerCheckOpen ? ["differences"] : [])] : [] };
   }
   function span(view, agents) {
     const starts = agents.map(agent => Date.parse(agent.created_at));

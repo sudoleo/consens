@@ -88,9 +88,12 @@ def stored_preferences(value):
     return AgentPreferences.model_validate(value or {}).model_dump()
 
 
-# Per check: two differences passes and up to four Coverage windows
-# (CHAT_MAX_CONSENSUS_SENTENCES / COVERAGE_WINDOW), plus one slot of headroom.
-JUDGE_PARALLEL = 7
+# Judge calls at once: two differences passes plus Coverage windows of
+# AGENT_COVERAGE_WINDOW sentences, some already started while the answer was
+# written (agent_coverage_prefetch). A window waiting for a slot also waits on
+# its own attempt limit, so a typical answer (up to ~160 sentences, ten
+# windows) must fit without a second wave.
+JUDGE_PARALLEL = 12
 DEPTH_GUIDANCE = {
     "quick": " Answer briefly: the direct answer and the key reasons, in about 1500 characters, "
              "unless the task clearly needs more.",

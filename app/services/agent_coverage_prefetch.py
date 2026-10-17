@@ -50,13 +50,26 @@ class _ComparisonWindows:
         return sentences
 
     def results(self):
-        """Each window's result as it finishes; a failed window yields nothing."""
+        """Each window's result as it finishes; a failed window yields nothing.
+
+        Waits only as long as the check that collects them may run: once its
+        own stop fires (the check's deadline, a user stop), it takes what is
+        there and leaves the rest to ComparisonTools.judge's cleanup."""
+        from concurrent.futures import TimeoutError as WaitTimeout
+        from app.services.llm.provider_runtime import current_provider_cancellation
+        stop = current_provider_cancellation()
         for _, future in self._windows:
-            try:
-                result = future.result()
-            except Exception as exc:
-                logging.info("Early coverage window ended without a result category=%s", safe_exception(exc))
-                continue
+            while True:
+                if stop is not None and stop.cancelled:
+                    return
+                try:
+                    result = future.result(timeout=.25)
+                except WaitTimeout:
+                    continue
+                except Exception as exc:
+                    logging.info("Early coverage window ended without a result category=%s", safe_exception(exc))
+                    result = None
+                break
             if result:
                 yield result
 
@@ -146,20 +159,24 @@ class CoveragePrefetch:
         return _ComparisonWindows(list(windows))
 
     def discard(self) -> None:
-        """The visible text was no answer after all: stop its windows."""
+        """The visible text was no answer after all: stop its windows.
+        Windows still queued never start (no empty judge row)."""
         with self.lock:
             self._stop()
+            for _, windows in self.windows.values():
+                for _, future in windows:
+                    future.cancel()
             self.windows, self.started, self.scanned = {}, 0, 0
 
     def close(self, *, wait: bool = False) -> None:
-        """Stop what still runs. ``wait`` (run end, ComparisonTools.close):
-        until every window's paid step has ended, so the run settles it
-        before it finishes (DelegationLoop.run)."""
+        """Stop what still runs; queued windows never start. ``wait`` (run
+        end, ComparisonTools.close): until every started window's paid step
+        has ended, so the run settles it before it finishes (DelegationLoop.run)."""
         with self.lock:
             self._stop()
             pool, self.pool = self.pool, None
         if pool is not None:
-            pool.shutdown(wait=wait)
+            pool.shutdown(wait=wait, cancel_futures=True)
 
     def _stop(self):
         if self.stop is not None:

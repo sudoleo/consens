@@ -3209,7 +3209,12 @@ sammelt die frühen Fenster ein, übernimmt nur wortgleiche Sätze an derselben
 Nummer (`_adopt_prefetched`, neue Labels) und fragt den Rest erneut. Ein
 anderer Prüfbestand (`judge_basis`: Antworten, Frage, gelesene Seiten) verwirft
 alles. `_retract` und ein Schnitt in `_show_answer` stoppen laufende Fenster
-(`discard_answer_progress`), `judge()`/`skip_review()` schließen den Pool.
+(`discard_answer_progress`, noch wartende Fenster starten gar nicht mehr),
+`judge()`/`skip_review()` schließen den Pool, `ComparisonTools.close()` wartet
+am Laufende auf laufende Fenster (sonst Settle-Konflikt in `finish_run`).
+Nur Chat-Läufe (`account_budget_only`); neu gerechnet wird nur nach einem
+Zeilenumbruch. Das Einsammeln endet mit der Frist der Prüfung
+(`_ComparisonWindows.results` beachtet deren Stopp). `JUDGE_PARALLEL` = 12.
 Coverage-Meta trägt `prefetched` (übernommene Sätze); `duration_ms` misst die
 Zeit nach Antwortende.
 Im Toolergebnis eines Vergleichs nennen die Antworten ihre Quellen nur per URL
@@ -7107,6 +7112,9 @@ Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
 `deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
 ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR
 landet es direkt bei OpenAI, DeepSeek bei den schnellsten US-Hostern.
+Die 429-Sperre (`agent_provider_limits.ProviderCooldowns`) schlüsselt deshalb
+auch nach der Provider-Route: ein 429 auf dem ZDR-Weg eines Google-Chats sperrt
+das Modell nicht für alle anderen Chats.
 Datenschutz/AGB/About beschreiben das, die Landing-Zeile zu ZDR ist entfernt.
 
 **Tombstones aus der ZDR-Zeit (2026-10-08 bis 2026-10-17):** Unter
