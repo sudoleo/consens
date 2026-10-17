@@ -7038,7 +7038,18 @@ neueres Modell derselben Reihe, identische Presets) und je eine Live-Probe (App-
 genutzten Modelle. Zustand liegt neben dem Task
 (`~/.claude/scheduled-tasks/consens-model-release-check/last-seen.json`), damit
 nur Neues gemeldet wird; der Aufruf ist in `.claude/settings.local.json`
-freigegeben, weil ein unbeaufsichtigter Lauf sonst an der Rückfrage hängt. Grok 4.3 ist
+freigegeben, weil ein unbeaufsichtigter Lauf sonst an der Rückfrage hängt.
+`scripts/daily_chat_review.py` (lokaler geplanter Task `consens-chat-review`,
+täglich 07:15, seit 2026-10-18) liest nur: Turns externer Konten seit dem
+letzten Lauf (eigene Konten per E-Mail-Marker `maxl.plack`/`ml.plack`/`nodon`
+über Firebase Auth ausgeschlossen, Nutzer als Pseudonym `U…`), je Turn Frage,
+Antwortanfang, Ablauf aus den Receipts (Vergleichsdauer, langsamstes Modell,
+Ausfälle, Schreib- und Prüfdauer, Judge-Timeouts, Kosten) und Prüfstatus, dazu
+gezählte Warnungen aus dem Render-Log. `collect` gibt JSON aus und merkt sich
+den Stand in `pending.json`, `save` übernimmt ihn nach `state.json` (beides
+unter `~/.claude/scheduled-tasks/consens-chat-review/`). Der Task schreibt
+daraus einen kurzen Bericht mit Vorschlägen, die Max bestätigen muss; beide
+Befehle sind in `.claude/settings.local.json` freigegeben. Grok 4.3 ist
 seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
 (OpenRouter-Standard „low“; Reasoning-Schalter und Agent-Menü setzen die Stufe).
 Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten
