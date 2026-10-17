@@ -179,8 +179,8 @@ def test_error_reporter_loads_before_app_modules():
 @pytest.mark.parametrize("asset,allowed", [
     ("dist/app.012345abcdef.js", True),
     ("dist/app.012345abcdef.css", True),
-    ("vendor/katex/0.17.0/dist/katex.min.js", True),
-    ("vendor/katex/0.17.0/dist/contrib/auto-render.min.js", True),
+    ("vendor/katex/0.19.0/dist/katex.min.js", True),
+    ("vendor/katex/0.19.0/dist/contrib/auto-render.min.js", True),
     ("js/analytics-opt-out.js", True),
     ("dist/app.012345abcdef.js?token=private", False),
     ("dist/app.private.js", False),

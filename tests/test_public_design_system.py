@@ -118,7 +118,7 @@ def test_product_result_mockup_is_reused():
 
 def test_share_page_loads_the_common_math_renderer():
     template = read("templates/share.html")
-    assert "asset_url('/static/vendor/katex/0.17.0/dist/katex.min.js')" in template
+    assert "asset_url('/static/vendor/katex/0.19.0/dist/katex.min.js')" in template
     assert "asset_url('/static/js/math-render.js')" in template
     # Die Klassenliste des Shells waechst (share-shell, topic-detail-shell);
     # gepruefft wird, dass der Renderer am Shell haengt, nicht ihre Reihenfolge.

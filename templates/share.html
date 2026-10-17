@@ -28,7 +28,7 @@
 <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/select.css') }}">
-  <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.css') }}">
+  <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
@@ -41,8 +41,8 @@
       }
     })();
   </script>
-  <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.js') }}"></script>
-  <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js') }}"></script>
   <script defer src="{{ asset_url('/static/js/math-render.js') }}"></script>
   {% if not is_private %}{% include "partials/analytics.html" %}{% endif %}
   <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->

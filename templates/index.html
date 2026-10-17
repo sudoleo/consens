@@ -46,7 +46,7 @@
      with the HTML instead of after the CSS, so first paint usually has Inter. #}
   <link rel="preload" href="/static/fonts/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ frontend.style }}">
-  <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.css') }}">
+  <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
@@ -55,10 +55,10 @@
        document order, so both are in place before firebase.js and the app
        group below. -->
   <script defer src="{{ asset_url('/static/vendor/marked/12.0.2/marked.min.js') }}"></script>
-  <script defer src="{{ asset_url('/static/vendor/dompurify/3.4.16/dist/purify.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/dompurify/3.4.17/dist/purify.min.js') }}"></script>
   <!-- KaTeX: mathematische Ausdruecke aus Modellantworten lesbar setzen. -->
-  <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.js') }}"></script>
-  <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js') }}"></script>
   {#
     Everything below the local vendor libraries: the auth watchdog, the two ES modules
     and the deferred app group. Notes on individual files (load-order

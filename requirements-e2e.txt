@@ -1,5 +1,5 @@
 -r requirements-test.txt
 
 # Pinned so every CI OS installs the same binary wheel.
-greenlet==3.1.1
-playwright==1.60.0
+greenlet==3.5.6
+playwright==1.64.0

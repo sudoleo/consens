@@ -52,8 +52,8 @@ describe("critical resource reporting", () => {
     for (const src of [
       "/static/dist/app.012345abcdef.js?token=private",
       "/static/dist/firebase.abcdef012345.js",
-      "/static/vendor/katex/0.17.0/dist/katex.min.js",
-      "/static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js",
+      "/static/vendor/katex/0.19.0/dist/katex.min.js",
+      "/static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js",
     ]) {
       const script = document.createElement("script");
       script.src = src;
@@ -61,7 +61,7 @@ describe("critical resource reporting", () => {
     }
     expect(reports.map(report => report.asset)).toEqual([
       "dist/app.012345abcdef.js", "dist/firebase.abcdef012345.js",
-      "vendor/katex/0.17.0/dist/katex.min.js", "vendor/katex/0.17.0/dist/contrib/auto-render.min.js",
+      "vendor/katex/0.19.0/dist/katex.min.js", "vendor/katex/0.19.0/dist/contrib/auto-render.min.js",
     ]);
     expect(JSON.stringify(reports)).not.toContain("private");
     dom.window.close();
@@ -222,7 +222,7 @@ describe("critical resource reporting", () => {
 
   it("does not alert when the server delivers an asset the browser refused itself", async () => {
     const { window, document, reports, probes } = boot({ served: true });
-    for (const href of ["/static/dist/app.4f2dceaa1823.css", "/static/vendor/katex/0.17.0/dist/katex.min.css?v=2105ed91f651"]) {
+    for (const href of ["/static/dist/app.4f2dceaa1823.css", "/static/vendor/katex/0.19.0/dist/katex.min.css?v=2105ed91f651"]) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
       link.href = href;
