@@ -15,8 +15,21 @@ vom laufenden Turn, für Preset und Anzeige nur aus der Karte; das Modell
 ein offener Chat sonst mit seinem gespeicherten Modell weiterliefe. Der
 Pro-Hinweis nennt keine Kontaktadresse. Ablauf und Regeln:
 [agent-mode.md](agent-mode.md) „Einstellungen umstellen“ und
-[codebase-map.md](codebase-map.md) „Agent-Einstellungen“. Live-Probe mit einem
-echten Modell steht noch aus.
+[codebase-map.md](codebase-map.md) „Agent-Einstellungen“.
+
+**Zweite Runde (2026-10-17, vor dem Deploy):** unabhängiges Review und
+Live-Proben mit echten Modellen (Claude Sonnet 5.5 in 17 Fällen, GPT-5.6 Luna in
+10). Daraus kamen: `read_settings` (was gilt, Standards, Wahl des Kontos) und
+Rückfragen statt Raten bei unklaren Wünschen; Modellsuche nach Wörtern mit
+Tippfehler-Vorschlag, ohne Pro direkt „alle Treffer sind Pro“; das
+Werkzeug liest doch das Kontodokument (Preset, Anzeige, Kontowahl des Modells
+für „schon so“); mehrere Aufrufe eines Turns addieren sich; nach Fremdinhalten
+nur mit Zitat aus der Nutzernachricht; Pro wie im Picker (ohne Admin);
+Google-Modellbeschränkung; die Karte merkt sich übernommen/abgewiesen pro
+Antwort; der Grund bei Pro-Stufen sagt, dass kein anderes Modell sie aufhebt
+(Sonnet schlug sonst „anderes Modell wählen“ als Umweg vor); `claim_counts`
+als `on`/`off` (Sonnet schickte `"false"` als Text). Wer fragt, wie man Pro
+bekommt, erhält die Worte des Early-Access-Dialogs samt contact@consens.io.
 
 **Empfehlung in einem Satz:** Variante (c) — ein Werkzeug
 `prepare_settings_change`, das nur vorschlägt und am Server gegen Stufe und

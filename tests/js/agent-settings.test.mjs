@@ -114,7 +114,7 @@ describe("Agent settings card", () => {
     render({ settings: { claim_counts: true }, notes: {} });
     expect(card().dataset.state).toBe("applied");
     expect(card().querySelector(".agent-settings-list").hidden).toBe(true);
-    expect(card().querySelector(".agent-settings-status").textContent).toBe("These settings apply from your next message.");
+    expect(card().querySelector(".agent-settings-status").textContent).toBe("These settings are already in place.");
   });
 
   it("applies only the settings it knows, never a system prompt or memory", () => {
@@ -129,6 +129,30 @@ describe("Agent settings card", () => {
     const other = boot();
     other.render({ settings: { system_prompt: "x", claim_counts: "yes" }, notes: {} });
     expect(other.card()).toBeNull();
+  });
+
+  it("remembers an applied or dismissed card per answer across visits", () => {
+    const first = boot();
+    first.render({ settings: { claim_counts: true }, notes: {} }, "chat:turn-a");
+    first.card().querySelector(".agent-settings-link").click();
+    first.render({ settings: { agreement_display: "off" }, notes: {} }, "chat:turn-b");
+    first.card().querySelector(".agent-settings-apply").click();
+    const stored = first.window.localStorage.getItem("consensio.agentSettingsCards.v1");
+    expect(JSON.parse(stored)).toEqual(["chat:turn-a", "chat:turn-b"]);
+    // The chat opened again later: neither card comes back.
+    const later = boot({ storage: { "consensio.agentSettingsCards.v1": stored } });
+    later.render({ settings: { claim_counts: true }, notes: {} }, "chat:turn-a");
+    expect(later.card()).toBeNull();
+    later.render({ settings: { agreement_display: "off" }, notes: {} }, "chat:turn-b");
+    expect(later.card()).toBeNull();
+    later.render({ settings: { claim_counts: true }, notes: {} }, "chat:turn-c");
+    expect(later.card()).not.toBeNull();
+  });
+
+  it("shows the model for new chats when this chat already runs it", () => {
+    const { render, rows } = boot({ storage: { "consensio.agentModel.v1": JSON.stringify({ model_id: "opus", reasoning_effort: "default" }) } });
+    render({ settings: { agent_model: { model_id: "sonnet", reasoning_effort: "medium" } }, notes: {} });
+    expect(rows()).toEqual(["Chat model in new chats: Claude Opus 4.8 → Claude Sonnet 5.5"]);
   });
 
   it("goes with its answer: another turn, no proposal or Dismiss removes it", () => {

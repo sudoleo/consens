@@ -293,10 +293,17 @@
   }
   // The Agent's settings card (agent-settings.js): the pick for the next
   // message, in this chat and as the account's choice, as if made in the picker.
+  // False when the picker would not take it as given (a Pro model or level
+  // this page does not unlock): the card then says it could not apply it.
   function applyPick(value) {
     const model = catalog?.models.find(item => item.id === canonicalId(value?.model_id));
     if (!selectable(model) || !canUse()) return false;
-    rememberSelection({ model_id: model.id, reasoning_effort: effortFor(model, value.reasoning_effort) });
+    const effort = effortFor(model, value.reasoning_effort || "default");
+    if (effort !== (value.reasoning_effort || "default")) return false;
+    rememberSelection({ model_id: model.id, reasoning_effort: effort });
+    // A pick made earlier on the new-chat screen would otherwise beat the
+    // account's pick in the next new chat.
+    selections.delete(`${catalogOwner}:draft`);
     render();
     return true;
   }
@@ -680,7 +687,10 @@
     App.agentWatch?.render(answerBody, { key: context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null });
     // A settings change the Agent prepared: its card, applied with one click.
-    App.agentSettings?.render(answerBody, { key: context.runId,
+    // Keyed like the saved chat's view (chat:turn), so applying or dismissing
+    // holds when the chat is opened again.
+    App.agentSettings?.render(answerBody, {
+      key: context.metadata.chatId && state.completedTurn?.id ? `${context.metadata.chatId}:${state.completedTurn.id}` : context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();

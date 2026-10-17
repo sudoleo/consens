@@ -1437,14 +1437,32 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   <Frage>“ bereitet einen Vorschlag vor.
 - **Agent-Einstellungen (`app/services/agent_settings.py`, `agent-settings.js`,
   seit 2026-10-17)**: Auf „stell X um“ schreibt der Agent keine Einstellung, er
-  bereitet sie vor. `prepare_settings_change` (registriert auf jedem
-  Account-Mode-Turn mit Vergleich, auch mit Google-Daten: nur aufgezählte
-  Werte) nimmt Chatmodell (Name, wie der Nutzer ihn nennt), Reasoning
-  (Stufe oder `higher`/`lower`), Tiefe, Antwortstart, Agent-Freiheit,
-  Vergleichs-Preset und die drei Anzeige-Schalter. Es prüft mit denselben
+  bereitet sie vor. Zwei Werkzeuge, registriert auf jedem Account-Mode-Turn
+  mit Vergleich, auch mit Google-Daten (nur aufgezählte Werte):
+  `read_settings` (ohne Argumente; ein leerer Argument-String gilt in
+  `ToolRegistry.validate` als `{}`) liefert, was für die nächste Nachricht
+  gilt (Modell/Stufe vom laufenden Turn, Vorlieben aus
+  `comparison.preferences`, Preset und Anzeige aus dem Kontodokument, einmal
+  pro Turn gelesen, unlesbar = Standard), die Standards und die Wahl des
+  Kontos samt Pro-Sperren; damit beantwortet der Agent „was ist eingestellt?“
+  und fragt bei unklaren Wünschen („schneller“, „GPT“) mit echten Optionen
+  zurück, statt zu raten (`ORCHESTRATOR_PROMPT`). `prepare_settings_change`
+  nimmt eine Liste `changes: [{setting, value}]` (nur das Genannte, jede
+  Einstellung einmal, Werte je Einstellung geprüft; eine Probe mit neun
+  optionalen Feldern ließ Claude alle mit erfundenen Werten füllen; Objekt-,
+  `name: wert`- und JSON-String-Formen liest ein `model_validator`, leere
+  Werte fallen weg; Auto zählt bei der Stufenwahl mit der Stufe, auf der es
+  läuft, `_Choice.strength`):
+  Chatmodell (Name, wie der Nutzer ihn nennt: exakt, enthalten oder
+  alle Wörter; mehrdeutig/unbekannt = Ablehnung mit Treffern bzw. ähnlichsten
+  Namen, nie geraten), Reasoning (Stufe oder `higher`/`lower`), Tiefe,
+  Antwortstart, Agent-Freiheit, Vergleichs-Preset und die drei
+  Anzeige-Schalter. Es prüft mit denselben
   Regeln wie `POST /agent` (`agent_model_options()`: `premium`,
   `reasoning_efforts`, `free_default_effort`; `PRO_REASONING_EFFORTS`;
-  `pro_only` der Presets; Pro = `is_user_pro or is_user_admin`): ein
+  `pro_only` der Presets; Pro = `is_user_pro` wie im Picker, ohne Admin; in
+  Chats mit Google-Daten zusätzlich `restricted_model`; nach Fremdinhalten
+  (`memory_locked`) nur mit `evidence`-Zitat aus der neuesten Nachricht): ein
   Premium-Modell ohne Pro wird abgelehnt (mit den freien Modellen derselben
   Familie), eine zu hohe Stufe auf die höchste erlaubte begrenzt, eine nicht
   angebotene auf die nächstgelegene (Gleichstand: die leichtere), Auto ohne
@@ -1452,23 +1470,32 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Stufe, sonst Auto. Ergebnis je Änderung `prepared|adjusted|refused|unchanged`
   mit Grund; Gesamtstatus `prepared` nur, wenn alles wie verlangt vorbereitet
   ist (sonst schreibt `_side_results_accepted` eine mitgeschriebene Antwort
-  neu). Gespeichert wird nur bei mindestens einer Änderung, als
+  neu). Was schon gilt, ist `unchanged` und kommt nicht auf die Karte.
+  Gespeichert wird nur bei mindestens einer Änderung, als
   `turn.agent_settings_proposal = {settings: {name: wert}, notes:
   {agent_model: grund}}` in Kontoform (vorher durch
-  `user_settings.validate_changes`), nur bei `pending`. Systemprompt, Memory,
+  `user_settings.validate_changes`), nur bei `pending`; mehrere Aufrufe eines
+  Turns addieren sich (ein späterer Wert gewinnt, eine nun als gültig erkannte
+  Einstellung verlässt die Karte). Systemprompt, Memory,
   Datenschutz, Verbindungen, Benachrichtigungen und Konto stehen bewusst
   nicht im Schema. `App.agentSettings.render(body, {key, proposal})` zeigt die
   Karte unter einer abgeschlossenen Antwort (nach Memory-Hinweis und
   Watch-Karte): je Zeile „jetzt → neu“, „jetzt“ aus dieser Seite beim Rendern
   (`App.agentChat.pick()`/`modelLabel`, `App.agentPreferences.get()`,
   `App.activeConsensusPresetId()`, `App.userSettings.get`), Gleiches fällt
-  weg; nichts mehr offen = „Settings in place“. „Apply“ übernimmt nur die
+  weg (fährt der Chat das Modell schon, Zeile „Chat model in new chats“);
+  nichts mehr offen = „Settings in place“. „Apply“ übernimmt nur die
   bekannten Einstellungen: das Modell über `App.agentChat.applyPick` (wie der
   Picker: dieser Chat und die Kontowahl, sonst bliebe ein offener Chat auf
-  seinem Modell), den Rest über `App.userSettings.set(…, {source: "agent"})`,
-  damit die Besitzer-Module ihn sofort anzeigen; gespeichert wird per PATCH
-  wie jede Änderung. „Dismiss“ blendet die Karte für diese Antwort bis zum
-  Neuladen aus. Begründung: [agent-settings-evaluation-2026-10-17.md](agent-settings-evaluation-2026-10-17.md).
+  seinem Modell; löscht den Neuer-Chat-Entwurfsslot; `false`, wenn
+  `effortFor` die Stufe ändern würde), den Rest über
+  `App.userSettings.set(…, {source: "agent"})`, damit die Besitzer-Module ihn
+  sofort anzeigen; gespeichert wird per PATCH wie jede Änderung. Übernommen
+  oder „Dismiss“ merkt sich die Karte pro `chat:turn` (Live- und
+  Verlaufsansicht nutzen denselben Schlüssel) in localStorage
+  `consensio.agentSettingsCards.v1` (≤ 100). Die Aktivitätszeile liest
+  `outcome` (`SettingsTools.activity`). `claim_counts` heißt im Werkzeug
+  `on`/`off` (ein Modell schickte `"false"` als Text). Begründung: [agent-settings-evaluation-2026-10-17.md](agent-settings-evaluation-2026-10-17.md).
   `MOCK_LLM`: „Settings: depth=quick, reasoning=low“ bereitet das vor.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
@@ -6176,7 +6203,7 @@ app/services/
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Agent-Prompt samt Kartenhinweis; startet nie eine Watch
-  agent_settings.py          prepare_settings_change: Einstellungsvorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt; schreibt nie eine Einstellung
+  agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge

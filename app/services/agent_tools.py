@@ -124,7 +124,9 @@ class ToolRegistry:
                 value[key] = item
             return value
         try:
-            value = json.loads(raw, object_pairs_hook=unique)
+            # A call without arguments may stream none at all; that is an
+            # empty object (read_settings takes no arguments).
+            value = json.loads(raw if raw.strip() else "{}", object_pairs_hook=unique)
         except json.JSONDecodeError as exc:
             raise ValueError(f"{tool.name} arguments are not valid JSON ({exc.msg}); send one JSON object.") from exc
         if isinstance(value, dict):

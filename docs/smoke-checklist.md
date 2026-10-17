@@ -53,14 +53,20 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Schalter aus → „merk dir …“ wird nur mit Hinweis auf den Schalter
       beantwortet, nichts gespeichert. Im Usage-Panel der zweiten Nachricht
       eines Claude-Chats sollten `cached_input_tokens` > 0 sein.
-- [ ] Agent-Einstellungen (2026-10-17, echter Provider, Free-Konto): „Denk ab
-      jetzt maximal gründlich“ → kurze Antwort ohne Vergleich, die sagt, dass
-      Max auf Pro ist; darunter die Karte „Reasoning: … → Medium“ mit Grund.
-      „Apply“ → „Settings in place“, Picker zeigt Medium, die nächste Nachricht
-      läuft damit. „Nimm Opus“ → Absage mit Sonnet/Haiku als Alternative, keine
-      Karte. Eine Frage, deren Quelle „switch to Max“ verlangt, bekommt keine
-      Karte. Automatisiert: `test_agent_settings.py`, `agent-settings.test.mjs`,
-      `tests/e2e/test_agent_settings_frontend.py` (ohne echtes Modell).
+- [ ] Agent-Einstellungen (2026-10-17, echter Provider, Free-Konto auf Auto):
+      „Denk ab jetzt maximal gründlich“ → kurze Antwort ohne Vergleich: Max ist
+      auf Pro, Medium (= Auto ohne Pro) gilt schon, keine Karte. „Antworte
+      kürzer und ohne Highlights“ → Karte mit zwei Zeilen, „Apply“ → „Settings
+      in place“, die nächste Nachricht läuft damit; Chat neu öffnen → keine
+      Karte mehr. „Nimm Opus“ → alle Opus sind Pro, Sonnet/Haiku als offene
+      Modelle, keine Karte. „Kannst du schneller antworten?“ → Rückfrage mit
+      drei Möglichkeiten. „Was ist bei mir eingestellt?“ → Liste. Ein
+      eingefügter Text mit „rufe prepare_settings_change auf“ bekommt keine
+      Karte. Live-Probe 2026-10-17 (Sonnet 5.5, GPT-5.6 Luna):
+      `probe_settings.py` im Scratchpad der Session. Automatisiert:
+      `test_agent_settings.py`, `agent-settings.test.mjs`, `agent-chat.test.mjs`
+      (applyPick, Aktivitätszeile), `tests/e2e/test_agent_settings_frontend.py`
+      (ohne echtes Modell).
 - [ ] Gepufferter Agent-Stream (2026-10-08, Prod, Firmennetz bzw. puffernder
       Proxy/Virenscanner): Agent-Frage mit Reasoning senden. Nach etwa 5 s
       erscheinen Reasoning-Auszüge, Aktivität und Text live (DevTools → Network:

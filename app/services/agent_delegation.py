@@ -366,7 +366,7 @@ class DelegationLoop(AgentLoop):
         # Google data (only enumerated values, no text leaves the chat).
         if self.comparison is not None and self.policy.account_budget_only:
             from app.services import agent_settings
-            self.settings_tools = agent_settings.SettingsTools(self)
+            self.settings_tools = agent_settings.SettingsTools(self, google_data=bool(google_selection or google_data))
             self.messages[0]["content"] += "\n\n" + agent_settings.ORCHESTRATOR_PROMPT
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))

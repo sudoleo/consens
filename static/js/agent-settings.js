@@ -11,11 +11,31 @@
   'use strict';
   const App = window.App = window.App || {};
   const views = new WeakMap();
-  // Answers whose card was applied or dismissed in this page. A reload shows
-  // the card again, and a change already in place then says so.
+  // Answers (chat:turn) whose card was applied in this page: it says so.
   const applied = new Set();
-  const dismissed = new Set();
+  // Answers whose card was applied or dismissed, also on earlier visits: the
+  // card does not come back when the chat is opened again. A per-viewer
+  // convenience in localStorage, bounded; a blocked storage keeps it for
+  // this page only.
+  const CLOSED_KEY = 'consensio.agentSettingsCards.v1';
+  const CLOSED_MAX = 100;
   let serial = 0;
+
+  function closedKeys() {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(CLOSED_KEY) || '[]');
+      return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [];
+    } catch (_) { return []; }
+  }
+  const closed = new Set(closedKeys());
+
+  function close(key) {
+    closed.add(key);
+    try {
+      const keys = [...closedKeys().filter(item => item !== key), key].slice(-CLOSED_MAX);
+      window.localStorage.setItem(CLOSED_KEY, JSON.stringify(keys));
+    } catch (_) { /* storage blocked: this page remembers it */ }
+  }
 
   // The Settings dialog's and the picker's words (templates/index.html,
   // agent-chat.js effortCopy; agent_settings.py names the same).
@@ -79,9 +99,18 @@
     const add = (label, from, to) => { if (from !== to) result.push({ label, from, to }); };
     for (const [name, value] of Object.entries(proposal.settings)) {
       if (name === 'agent_model') {
+        // This chat's next message first; when it already runs the change,
+        // what new chats start with (the account's pick).
         const now = App.agentChat?.pick?.() || {};
-        add('Chat model', modelLabel(now.model_id), modelLabel(value.model_id));
-        add('Reasoning', EFFORTS[now.reasoning_effort || 'default'], EFFORTS[value.reasoning_effort || 'default']);
+        const account = App.userSettings.get('agent_model') || {};
+        const effort = value.reasoning_effort || 'default';
+        const chatDiffers = now.model_id !== value.model_id || (now.reasoning_effort || 'default') !== effort;
+        if (chatDiffers || !account.model_id || account.model_id === value.model_id) {
+          add('Chat model', modelLabel(now.model_id), modelLabel(value.model_id));
+          add('Reasoning', EFFORTS[now.reasoning_effort || 'default'], EFFORTS[effort]);
+        } else {
+          add('Chat model in new chats', modelLabel(account.model_id), modelLabel(value.model_id));
+        }
       } else if (name === 'agent_preferences') {
         const now = App.agentPreferences?.get?.() || {};
         for (const [field, [label, labels]] of Object.entries(PREFERENCES)) {
@@ -137,7 +166,9 @@
     view.list.hidden = done;
     view.note.textContent = done ? '' : view.proposal.note;
     view.note.hidden = !view.note.textContent;
-    view.status.textContent = view.message || (done ? 'These settings apply from your next message.' : '');
+    // Applied here says so (view.message); a card opened later, with nothing
+    // left to change, only says that these settings are in place.
+    view.status.textContent = view.message || (done ? 'These settings are already in place.' : '');
     view.status.hidden = !view.status.textContent;
     view.apply.hidden = view.dismiss.hidden = done;
   }
@@ -159,6 +190,7 @@
       view.message = 'Some settings could not be applied. Change them in Settings.';
     } else {
       applied.add(view.key);
+      close(view.key);
       view.message = 'Applied. These settings apply from your next message.';
     }
     App.trackAppEvent?.('app_agent_settings_applied', { settings: Object.keys(view.proposal.settings).join(','), failed: failed.length });
@@ -166,7 +198,7 @@
   }
 
   function dismiss(view) {
-    dismissed.add(view.key);
+    close(view.key);
     view.card.remove();
   }
 
@@ -174,12 +206,15 @@
     if (!body) return;
     let view = views.get(body);
     const value = normalize(proposal);
-    if (view && (!value || view.key !== key || dismissed.has(key))) {
+    // Closed: dismissed, or applied on an earlier visit. Applied in this
+    // page keeps its "in place" card until the answer changes.
+    const gone = closed.has(key) && !applied.has(key);
+    if (view && (!value || view.key !== key || gone)) {
       view.card.remove();
       views.delete(body);
       view = null;
     }
-    if (!value || dismissed.has(key)) return;
+    if (!value || gone) return;
     if (!view) {
       view = create(key);
       views.set(body, view);

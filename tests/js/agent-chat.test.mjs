@@ -137,6 +137,24 @@ describe("single-model agent chat", () => {
     }
     dom.window.close();
   });
+  it('applies the settings card pick like the picker, and refuses what the picker would change', async () => {
+    const {window:w, document:d, dom} = boot();
+    await selectAgent(w);
+    // A pick on the new-chat screen (the draft slot), then the card's pick.
+    const select = d.querySelector('#agentModelDropdown');
+    select.value = 'gpt-5.6-sol';
+    select.dispatchEvent(new w.Event('change'));
+    expect(w.App.agentChat.pick().model_id).toBe('gpt-5.6-sol');
+    expect(w.App.agentChat.applyPick({model_id:'gpt-4o', reasoning_effort:'default'})).toBe(true);
+    expect(w.App.agentChat.pick()).toEqual({model_id:'gpt-4o', reasoning_effort:'default'});
+    expect(w.App.userSettings.get('agent_model')).toEqual({model_id:'gpt-4o', reasoning_effort:'default'});
+    expect(w.App.agentChat.modelLabel('gpt-4o')).toBe('GPT-4o');
+    // Without Pro the picker turns High into Auto: the card must not claim it applied.
+    expect(w.App.agentChat.applyPick({model_id:'deepseek/deepseek-v4.1-flash', reasoning_effort:'high'})).toBe(false);
+    expect(w.App.agentChat.applyPick({model_id:'missing', reasoning_effort:'default'})).toBe(false);
+    expect(w.App.agentChat.pick().model_id).toBe('gpt-4o');
+    dom.window.close();
+  });
   it('keeps unresolved admin models visible and disabled, and repairs a saved unavailable selection', async () => {
     const catalog = {...CATALOG, models: [...CATALOG.models,
       {id:'future-missing', label:'Future model', available:false,
@@ -800,6 +818,22 @@ describe("single-model agent chat", () => {
     expect(step[0]).toBe('Searched the web · 5 sources: skat.dk, virk.dk, borger.dk, +1');
     w.App.agentActivity.render(host, {running:true, events:[{...search, sources:[]}]});
     expect(host.querySelector('.agent-progress-step').textContent).toBe('Searched the web · 2 searches');
+    dom.window.close();
+  });
+
+  it('says what came of a settings change, not "prepared" for a refusal', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    const step = event => {
+      w.App.agentActivity.render(host, {running:true, events:[event]});
+      return [...host.querySelectorAll('.agent-progress-step')].map(p => p.textContent)[0];
+    };
+    const call = {id:'c', kind:'tool', name:'prepare_settings_change', status:'succeeded'};
+    expect(step({...call, outcome:'prepared'})).toBe('Prepared a settings change for you to apply');
+    expect(step({...call, outcome:'adjusted'})).toBe('Prepared a settings change for you to apply');
+    expect(step({...call, outcome:'refused'})).toBe('Settings change not prepared');
+    expect(step({...call, outcome:'unchanged'})).toBe('Settings already in place');
+    expect(step({id:'r', kind:'tool', name:'read_settings', status:'succeeded'})).toBe('Checked your settings');
     dom.window.close();
   });
 

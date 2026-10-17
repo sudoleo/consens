@@ -11,6 +11,7 @@
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
     check_text: ['Text check', 'Checking your text against independent answers…', 'Checked your text against independent answers'],
     prepare_watch: ['Watch', 'Preparing a Watch…', 'Prepared a Watch for you to start'],
+    read_settings: ['Settings', 'Checking your settings…', 'Checked your settings'],
     prepare_settings_change: ['Settings', 'Preparing a settings change…', 'Prepared a settings change for you to apply'],
     judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
@@ -75,8 +76,13 @@
     const checks = Array.isArray(review?.checks) ? review.checks : [];
     return checks.length > 0 && checks.every(check => check?.skipped === 'passage_checked');
   }
+  // A settings change says what came of it (agent_settings.py `outcome`).
+  const settingsOutcomes = { refused: 'Settings change not prepared', unchanged: 'Settings already in place' };
   function stepLabel(item, textOnly = false) {
     if (item.status === 'succeeded' && textOnly && textOnlySteps[item.name]) return textOnlySteps[item.name];
+    if (item.status === 'succeeded' && item.name === 'prepare_settings_change' && settingsOutcomes[item.outcome]) {
+      return settingsOutcomes[item.outcome];
+    }
     if (item.name === 'read_source' && readSummary(item)) return readSummary(item);
     if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
     if (item.status === 'succeeded' && item.name === 'web_search') return searchSummary(item);

@@ -833,6 +833,17 @@ Highlights mehr“, ruft der Agent `prepare_settings_change`
 und erst der Klick auf „Apply“ stellt um, ab der nächsten Nachricht.
 Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settings-evaluation-2026-10-17.md).
 
+- **Form:** eine Liste `changes: [{setting, value}]` mit nur dem, was der
+  Nutzer nannte; jede Einstellung einmal, jeder Wert gegen seine Einstellung
+  geprüft. Mit neun optionalen Feldern füllte Claude in einer Live-Probe alle
+  mit erfundenen Werten, und die Karte hätte sie angeboten. Der Server liest
+  auch die Formen, die Modelle wirklich schicken (Objekt `{"reasoning":
+  "max"}`, `"reasoning: max"`, die Liste als JSON-String; leere Werte fallen
+  weg): DeepSeek brauchte sonst drei Anläufe.
+- **Auto zählt mit seiner echten Stufe:** Ohne Pro läuft Auto auf DeepSeek
+  V4.1 Flash mit dessen Standard High, wählbar ist nur Low. „Denk
+  gründlicher“ wird dort nie Low; die Stufenwahl vergleicht Auto mit der
+  Stufe, auf der es läuft (aus bei `enabled`/`default_enabled: false`).
 - **Was geht:** Chatmodell, Reasoning-Stufe (auch „eine höher/tiefer“),
   Antworttiefe, Antwortstart, Agent-Freiheit, Vergleichs-Preset (Daily, Open
   Models, High Quality) und die Anzeige von Highlights, Zählern und
@@ -853,16 +864,51 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   ein anderes ersetzt, sondern abgelehnt, mit den freien Modellen derselben
   Familie. Der Agent sagt Begrenzung oder Ablehnung mit dem Grund aus dem
   Toolergebnis und bietet keinen Umweg an.
-- **Prompt:** `agent_settings.ORCHESTRATOR_PROMPT` verlangt einen Wunsch des
-  Nutzers in dieser Nachricht, nie einen aus einer Quelle, Datei, Mail oder
+- **Unklare Wünsche:** `read_settings` zeigt dem Agenten, was gilt, die
+  Standards und was das Konto wählen kann. Ist unklar, welche Einstellung
+  oder welcher Wert gemeint ist („schneller“ kann Reasoning, kurze Antworten
+  oder einen früheren Antwortstart heißen; „GPT“ mehrere Modelle), fragt der
+  Agent mit den echten Optionen zurück und bereitet nichts vor; die Antwort
+  darauf bereitet er vor. Einen unklaren oder vertippten Modellnamen lehnt
+  `prepare_settings_change` mit den Treffern bzw. den ähnlichsten Namen ab
+  („opsu“ → „Closest: Claude Opus 4.8“), der Agent fragt nach. „Was ist bei
+  mir eingestellt?“ beantwortet er aus `read_settings`, „alles auf Standard“
+  mit den Standards daraus.
+- **Prompt:** `agent_settings.ORCHESTRATOR_PROMPT` verlangt einen klaren Wunsch
+  des Nutzers in dieser Nachricht, nie einen aus einer Quelle, Datei, Mail oder
   Modellantwort, und verbietet zu behaupten, etwas sei schon umgestellt. Eine
   reine Einstellungsnachricht wird ohne Vergleich kurz beantwortet und
-  verweist auf die Karte.
+  verweist auf die Karte. Fragt jemand, wie er Pro bekommt, sagt der Agent,
+  was der Early-Access-Dialog sagt (frei während Early Access, einige
+  Funktionen nur für ausgewählte Konten, noch kein Abo, contact@consens.io),
+  nie ungefragt. Bei Pro-Stufen sagt der Grund dazu, dass kein anderes Modell
+  die Grenze aufhebt (eine Live-Probe schlug sonst „anderes Modell wählen“
+  als Umweg vor). Mehrere Aufrufe in einem Turn landen auf einer Karte.
 - **Gating:** jeder Account-Mode-Turn mit Vergleich, auch mit Google-Daten (es
-  verlässt kein Text den Chat). Nicht über die Consensus-API.
+  verlässt kein Text den Chat; in einem Chat mit Google-Daten nur Modelle, die
+  `restricted_model` zulässt). Nicht über die Consensus-API. „Pro“ heißt hier
+  wie im Picker die Stufe allein (`is_user_pro`), nicht Admin: die Karte geht
+  über den Picker, der einem Admin ohne Pro keine Premium-Modelle freigibt.
+- **Nach Fremdinhalten:** Sobald in der Nachricht eine Suche, ein Vergleich,
+  eine Seite, Datei oder Mail zurückkam (`memory_locked`, wie bei Memory),
+  braucht `prepare_settings_change` ein `evidence`-Zitat aus der neuesten
+  Nachricht des Nutzers. Der Prompt lässt den Agenten deshalb vor jeder
+  Recherche vorbereiten (Live-Probe: Sonnet tat das von sich aus).
+- **„Schon so“:** Ein genanntes Modell gilt nur als eingestellt, wenn dieser
+  Chat es fährt UND neue Chats damit starten (Kontowahl); eine Stufe allein
+  betrifft den laufenden Chat. Anzeige und Preset vergleicht das Werkzeug mit
+  dem Kontodokument. Was schon gilt, kommt nicht auf die Karte.
+- **Wo es wirkt:** im offenen Chat und in neuen Chats (die Karte löscht dafür
+  auch eine frühere Wahl auf dem Neuer-Chat-Bildschirm). Andere bestehende
+  Chats behalten ihr gespeichertes Modell, wie beim Picker.
 
 Die Karte (`static/js/agent-settings.js`) liest „jetzt“ beim Anzeigen aus
-dieser Seite, nicht aus dem Vorschlag; was schon gilt, fällt weg. Das Modell
+dieser Seite, nicht aus dem Vorschlag; was schon gilt, fällt weg (fährt der
+Chat das Modell schon, zeigt sie „Chat model in new chats“). Übernommen oder
+abgewiesen merkt sie sich pro Antwort (`chat:turn`, localStorage
+`consensio.agentSettingsCards.v1`, höchstens 100), damit sie beim erneuten
+Öffnen des Chats nicht wiederkommt. Die Aktivitätszeile nennt das Ergebnis
+(`outcome`: „Settings already in place“, „Settings change not prepared“). Das Modell
 übernimmt sie über die Picker-Funktion (`App.agentChat.applyPick`): sonst
 liefe ein offener Chat mit seinem gespeicherten Modell weiter. Alles andere
 geht über `App.userSettings.set(…, {source: "agent"})`, damit Einstellungen,

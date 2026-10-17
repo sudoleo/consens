@@ -518,6 +518,9 @@ def test_refused_tool_calls_say_what_to_change(caplog):
         registry.validate(call("open_url", '{"url": "https://consens.io"}'))
     assert "web pages" in str(unknown.value)
     with pytest.raises(ValueError, match="not valid JSON"):
+        registry.validate(call("compare_models", '{"question": '))
+    # No arguments streamed is an empty object: the refusal names what is missing.
+    with pytest.raises(ValueError, match="question: Field required"):
         registry.validate(call("compare_models", ""))
     secret = "private question text"
     with pytest.raises(ValueError) as invalid:
