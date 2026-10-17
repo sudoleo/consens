@@ -27,6 +27,7 @@ if ($Command -eq 'help') {
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
     Write-Host 'rules:    client SDK access checks using a disposable Firestore emulator'
+    Write-Host '          browser and rules queue behind each other machine-wide (fixed ports): start, then wait'
     Write-Host 'CI: pushes run backend/frontend and the dependency audit; browser-and-rules also runs nightly;'
     Write-Host '    full checks run when a PR becomes ready for review or by manual selection.'
     Write-Host 'Setup and maintenance: docs/testing.md'
@@ -79,6 +80,67 @@ function Invoke-DevStep([string]$Label, [string]$Executable, [string[]]$Argument
         $script:devExitCode = $LASTEXITCODE
         throw "$Label failed (exit $LASTEXITCODE)."
     }
+}
+
+# Browser and rules runs share fixed ports (the emulator port from
+# firebase.json, the app test ports 8031/8033). Sessions working in parallel
+# used to break each other's runs; a later run now queues on a named mutex
+# per emulator port. Windows releases it when the holding process ends, also
+# after a crash or kill. The port itself is checked too, because a direct
+# "firebase emulators:exec" or an orphaned emulator does not take the mutex.
+$queueMutex = $null
+$queueOwnerFile = $null
+$queueMaxMinutes = 120
+
+function Get-PortListener([int]$Port) {
+    if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) { return $null }
+    $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $listener) { return $null }
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
+    $name = if ($process) { $process.Name } else { 'a process' }
+    return "port $Port is held by $name (PID $($listener.OwningProcess)) outside dev.ps1"
+}
+
+function Enter-EmulatorQueue([int]$Port, [string]$Description) {
+    $script:queueMutex = New-Object System.Threading.Mutex($false, "consensio-dev-emulator-$Port")
+    $ownerFile = Join-Path ([IO.Path]::GetTempPath()) "consensio-dev-emulator-$Port.txt"
+    $started = Get-Date
+    $lastNotice = $null
+    $wait = 0
+    while ($true) {
+        $owned = $false
+        try { $owned = $script:queueMutex.WaitOne($wait) }
+        catch [System.Threading.AbandonedMutexException] { $owned = $true }
+        $wait = 5000
+        if ($owned) {
+            $holder = Get-PortListener $Port
+            if (-not $holder) { break }
+            $script:queueMutex.ReleaseMutex()
+        }
+        else {
+            $holder = "$(Get-Content -LiteralPath $ownerFile -Raw -ErrorAction SilentlyContinue)".Trim()
+            if (-not $holder) { $holder = 'another browser or rules run' }
+        }
+        if (((Get-Date) - $started).TotalMinutes -ge $queueMaxMinutes) {
+            throw "Gave up after $queueMaxMinutes minutes in the emulator queue: $holder. Never stop other sessions' processes; ask the user."
+        }
+        if (-not $lastNotice -or ((Get-Date) - $lastNotice).TotalSeconds -ge 60) {
+            Write-Host "[dev] Queued behind: $holder. This run starts by itself once the port is free."
+            $lastNotice = Get-Date
+        }
+        if ($owned) { Start-Sleep -Seconds 3 }
+    }
+    $script:queueOwnerFile = $ownerFile
+    [IO.File]::WriteAllText($ownerFile, "$Description in $PSScriptRoot (PID $PID, since $((Get-Date).ToString('HH:mm')))")
+    if ($lastNotice) { Write-Host ('[dev] Started after {0:N0} s in the emulator queue.' -f ((Get-Date) - $started).TotalSeconds) }
+}
+
+function Exit-EmulatorQueue {
+    if (-not $script:queueMutex) { return }
+    if ($script:queueOwnerFile) { Remove-Item -LiteralPath $script:queueOwnerFile -ErrorAction SilentlyContinue }
+    try { $script:queueMutex.ReleaseMutex() } catch { }
+    $script:queueMutex.Dispose()
+    $script:queueMutex = $null
 }
 
 # Bring the local main checkout up to date with origin/main. Dependencies
@@ -258,6 +320,7 @@ with sync_playwright() as p:
             Set-DevEnvironment 'GOOGLE_APPLICATION_CREDENTIALS' $null
             Invoke-DevStep 'Emulator isolation' $python @('-c', 'from app.core.e2e_profile import assert_safe_e2e_environment; assert_safe_e2e_environment()')
 
+            Enter-EmulatorQueue ([int]$firestore.port) "$Target $selectedTests"
             # Firebase owns startup and shutdown, including a failing pytest
             # command. No background process or second terminal is needed.
             $testCommand = if ($Target -eq 'rules') { "node --test $selectedTests" } else { "venv\Scripts\python.exe -m pytest $selectedTests -q" }
@@ -274,6 +337,7 @@ catch {
     [Console]::Error.WriteLine("[dev] ERROR: $($_.Exception.Message)")
 }
 finally {
+    Exit-EmulatorQueue
     foreach ($name in $savedEnvironment.Keys) {
         Set-DevEnvironment $name $savedEnvironment[$name]
     }

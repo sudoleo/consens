@@ -71,19 +71,25 @@ def call(tmp_path, module, calls, scenario='normal'):
     return json.loads(proc.stdout.rsplit('RESULT:',1)[1])
 
 
+# One interpreter runs every argument set of a test: the harness executes each
+# call as its own __main__, while a fresh Python with the app imports costs
+# seconds per start. The shared event list staying empty proves that no call
+# reached the dataset or a provider; codes[i] belongs to the i-th set.
+INVALID_EXECUTION_ARGS = [['--live'], ['--live','--budget','-1'], ['--live','--budget','nan'],
+                          ['--live','--budget','inf'], ['--live','--budget','0'], ['--live','--dry-run','--budget','1']]
+
+
 @pytest.mark.parametrize('module',['benchmark.run_sample','benchmark.run_experiment'])
-@pytest.mark.parametrize('args', [['--live'], ['--live','--budget','-1'], ['--live','--budget','nan'],
-                                  ['--live','--budget','inf'], ['--live','--budget','0'], ['--live','--dry-run','--budget','1']])
-def test_invalid_execution_args_stop_before_dataset_or_provider(tmp_path,module,args):
-    value=call(tmp_path,module,[args])
-    assert value == {'codes':[2], 'events':[]}
+def test_invalid_execution_args_stop_before_dataset_or_provider(tmp_path,module):
+    value=call(tmp_path,module,INVALID_EXECUTION_ARGS)
+    assert value == {'codes':[2]*len(INVALID_EXECUTION_ARGS), 'events':[]}
     assert not (tmp_path/'runs').exists()
 
 
-@pytest.mark.parametrize('run_id',['../escape','/absolute','C:\\outside','..'])
-def test_sample_run_id_cannot_escape_output_root(tmp_path,run_id):
-    value=call(tmp_path,'benchmark.run_sample',[['--run-id',run_id]])
-    assert value == {'codes':[2], 'events':[]}
+def test_sample_run_id_cannot_escape_output_root(tmp_path):
+    run_ids=['../escape','/absolute','C:\\outside','..']
+    value=call(tmp_path,'benchmark.run_sample',[['--run-id',run_id] for run_id in run_ids])
+    assert value == {'codes':[2]*len(run_ids), 'events':[]}
 
 
 @pytest.mark.parametrize('module',['benchmark.run_sample','benchmark.run_experiment'])

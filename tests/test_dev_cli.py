@@ -10,8 +10,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
+import threading
+import time
 
 import pytest
 
@@ -64,11 +67,11 @@ def cli(tmp_path, request):
         "    import fake_tools\n    fake_tools.main('pytest')\n", encoding="utf-8",
     )
     (root / "fake_tools.py").write_text('''
-import json, os, subprocess, sys
+import json, os, subprocess, sys, time
 
 def record(tool, args):
     with open(os.environ['DEV_LOG'], 'a', encoding='utf-8') as stream:
-        stream.write(json.dumps({'tool': tool, 'args': args, 'cwd': os.getcwd(),
+        stream.write(json.dumps({'tool': tool, 'args': args, 'cwd': os.getcwd(), 'time': time.time(),
             'env': {key: os.environ.get(key) for key in (
                 'RUN_E2E', 'UNIT_TEST_MODE', 'E2E_TEST_MODE', 'FIRESTORE_EMULATOR_HOST',
                 'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT', 'FIREBASE_PROJECT_ID',
@@ -147,6 +150,7 @@ exit $code
         calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()] if log.exists() else []
         return result, calls
 
+    run.shell = request.param
     return root, run
 
 
@@ -231,6 +235,69 @@ def test_browser_failure_restores_initially_absent_environment_entries(cli):
     result, calls = run("browser", failure="pytest", inherited=False)
     assert result.returncode == 23, result.stdout + result.stderr
     assert calls[-1]["tool"] == "emulator-stop"
+
+
+def _hold_emulator_queue(shell, tmp_path, *, release):
+    """Another session's run: owns the queue for the fixture's port 9876."""
+    ready = tmp_path / "queue-held"
+    released = tmp_path / "queue-released"
+    end = (f"Set-Content -LiteralPath '{released}' ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); "
+           "$m.ReleaseMutex()" if release else "exit 0")
+    holder = subprocess.Popen([shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+        "$m = New-Object System.Threading.Mutex($false, 'consensio-dev-emulator-9876'); $null = $m.WaitOne(); "
+        "$owner = Join-Path ([IO.Path]::GetTempPath()) 'consensio-dev-emulator-9876.txt'; "
+        "[IO.File]::WriteAllText($owner, 'browser tests/e2e/test_other.py in another checkout'); "
+        f"Set-Content -LiteralPath '{ready}' held; Start-Sleep -Seconds 4; {end}"])
+    deadline = time.monotonic() + 30
+    while not ready.exists():
+        assert holder.poll() is None and time.monotonic() < deadline, "queue holder did not start"
+        time.sleep(0.1)
+    return holder, released
+
+
+def test_browser_queues_behind_another_run_and_starts_when_it_ends(cli, tmp_path):
+    _, run = cli
+    holder, released = _hold_emulator_queue(run.shell, tmp_path, release=True)
+    result, calls = run("browser", test_path="tests/e2e/test_example.py")
+    holder.wait(timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Queued behind: browser tests/e2e/test_other.py in another checkout" in result.stdout
+    firebase = next(call for call in calls if call["tool"] == "firebase")
+    assert firebase["time"] * 1000 >= int(released.read_text(encoding="utf-8-sig").strip())
+    assert [call["tool"] for call in calls][-1] == "emulator-stop"
+
+
+def test_queue_survives_a_run_that_died_without_releasing(cli, tmp_path):
+    _, run = cli
+    holder, _ = _hold_emulator_queue(run.shell, tmp_path, release=False)
+    result, calls = run("rules")
+    holder.wait(timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [call["tool"] for call in calls] == ["java", "firebase", "emulator-start", "node", "emulator-stop"]
+
+
+def test_browser_waits_for_an_emulator_port_held_outside_the_queue(cli):
+    _, run = cli
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 9876))
+    listener.listen()
+    closed = []
+
+    def close_later():
+        time.sleep(4)
+        closed.append(time.time())
+        listener.close()
+
+    closer = threading.Thread(target=close_later)
+    closer.start()
+    try:
+        result, calls = run("browser", test_path="tests/e2e/test_example.py")
+    finally:
+        closer.join()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "port 9876 is held by python" in result.stdout
+    firebase = next(call for call in calls if call["tool"] == "firebase")
+    assert firebase["time"] >= closed[0]
 
 
 @pytest.mark.parametrize("target,path", [("backend", "tests/e2e/test_example.py"), ("frontend", "../outside.py")])

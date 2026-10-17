@@ -53,7 +53,7 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 |---|---|
 | `frontend` | `npm test`, danach `npm run build:check`. Ein veralteter Build führt zum Fehler; mit `npm run build` bewusst neu erzeugen. |
 | `backend` | `venv/Scripts/python.exe -m pytest tests -q` mit `UNIT_TEST_MODE=1`; geerbte E2E-Schalter werden für den Lauf entfernt. |
-| `browser` | Voraussetzungen und Build prüfen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
+| `browser` | Voraussetzungen und Build prüfen, in die [Warteschlange](#warteschlange-für-browser--und-rules-läufe) einreihen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
 | `rules` | Derselbe sichere Emulator-Lebenszyklus, dann der separate Node-Clientrunner für `tests/rules/firestore.rules.test.mjs`; kein Admin-SDK als Zugriffsbeleg. |
 
 Die Frontend-Suite prüft auch die atomare Build-Veröffentlichung, unveränderte
@@ -100,8 +100,23 @@ Einstellungen werden für den Browserlauf ersetzt beziehungsweise entfernt.
 Danach stellt das Skript Arbeitsverzeichnis und alle von ihm geänderten
 Umgebungsvariablen wieder her, auch bei Fehlern. Fehlercodes der aufgerufenen
 Werkzeuge werden weitergegeben; fehlende Voraussetzungen liefern Exit-Code 1.
-Ein bereits belegter Emulatorport ist ein Startfehler, kein Anlass, fremde
-Prozesse zu beenden. Auch der App-Testport muss frei sein.
+
+### Warteschlange für Browser- und Rules-Läufe
+
+Emulatorport (`firebase.json`) und App-Testports 8031/8033 sind fest; mehrere
+Sessions auf demselben Rechner haben sich früher gegenseitig die Läufe
+abgebrochen („Port 8085 is not open“). `browser` und `rules` reihen sich deshalb
+vor dem Emulatorstart in eine rechnerweite Warteschlange ein: ein benannter
+Windows-Mutex je Emulatorport, den Windows auch nach Absturz oder Abbruch des
+haltenden Prozesses freigibt. Wartende Läufe melden etwa einmal pro Minute,
+hinter wem sie stehen (`[dev] Queued behind: browser tests/e2e/… in <Checkout>
+(PID …, since …)`), und starten dann von selbst; nach 120 Minuten geben sie mit
+Fehler auf. Zusätzlich wartet der Lauf, solange der Emulatorport von einem
+Prozess außerhalb der Warteschlange belegt ist (direktes `emulators:exec`,
+verwaister Emulator), und nennt dessen Namen und PID. Fremde Prozesse werden nie
+beendet. Die Wartezeit zählt zur Laufzeit: Agents starten Browser-Läufe im
+Hintergrund und warten auf das Ende, statt sie zu wiederholen. `backend` und
+`frontend` brauchen keine festen Ports und laufen ohne Warteschlange.
 
 ### Pflege
 
@@ -113,8 +128,8 @@ Einstiegspunkten oder Voraussetzungen im selben Auftrag in `dev.ps1`, dieser
 Dokumentation und gegebenenfalls `tests/e2e/README.md` nachziehen. Keine zweite
 Liste einzelner Tests im Skript pflegen.
 
-Die Regressionstests für Aufruf, Fehlercodes, Pfadauswahl und Wiederherstellung
-der Shell laufen mit temporären CLI-Doubles auf den verfügbaren Windows-
+Die Regressionstests für Aufruf, Fehlercodes, Pfadauswahl, Warteschlange und
+Wiederherstellung der Shell laufen mit temporären CLI-Doubles auf den verfügbaren Windows-
 PowerShell-Versionen; sie ersetzen keinen echten Emulatorlauf:
 
 ```powershell

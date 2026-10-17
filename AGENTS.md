@@ -84,11 +84,16 @@ passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
   **nicht** nach einer Implementierung gestartet. Stattdessen nur die Dateien
   zum geänderten Verhalten (`-TestPath tests/e2e/<datei>`, meist 1–3 Dateien),
   dazu `frontend` (Sekunden) und bei Backend-Änderungen die betroffenen
-  Backend-Dateien statt aller (Gesamtlauf 3–7 min). Die volle Browser-Suite
+  Backend-Dateien statt aller. Der Gesamtlauf dauert 6–10 min, während
+  andere Sessions arbeiten länger, und bremst sie alle (4 Kerne); die CI
+  führt ihn bei jedem Push ohnehin aus. Lokal deshalb nur bei übergreifenden
+  Änderungen (Abhängigkeiten, Python-Version, `conftest.py`, gemeinsame
+  Kern-Infrastruktur). Die volle Browser-Suite
   läuft in der CI (`workflow_dispatch` → `browser-and-rules`) und nur lokal,
-  wenn der Nutzer sie ausdrücklich verlangt. Nie zwei Browser-Läufe
-  gleichzeitig starten (feste Ports 8085/8031/8033, sonst Fehlalarme) und
-  einen schon laufenden Lauf nicht „nochmal“ anstoßen, sondern abwarten oder
-  gezielt abbrechen. Für Verhalten ohne
+  wenn der Nutzer sie ausdrücklich verlangt. Browser- und Rules-Läufe nur über
+  `dev.ps1` starten: Es reiht sie rechnerweit ein (feste Ports
+  8085/8031/8033) und meldet, hinter wem sie warten. Im Hintergrund starten
+  und abwarten; kein direktes `emulators:exec`/`pytest tests/e2e`, keinen
+  Lauf „nochmal“ anstoßen, keine fremden Prozesse beenden. Für Verhalten ohne
   Auto-Tests die betroffenen Punkte in `docs/smoke-checklist.md` prüfen;
   reine Dokumentationskorrekturen auf Inhalt, Links und Diff prüfen.
