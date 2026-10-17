@@ -201,6 +201,23 @@ def test_agent_preferences_hold_only_what_changes(store):
     assert proposal(store, loop)["settings"] == {"agent_preferences": {"depth": "quick", "autonomy": "free"}}
 
 
+@pytest.mark.parametrize("value", ["off", "disabled", False])
+def test_the_answer_check_is_an_agent_preference_open_to_every_account(store, value):
+    loop = settings_loop(store)
+    assert loop.settings_tools.read(agent_settings.ReadSettings())["answer_check"] == {
+        "label": "Answer check", "now": "On", "choices": {"on": "On", "off": "Off"}}
+    result = loop.settings_tools.prepare(PrepareSettings.model_validate(
+        {"changes": [{"setting": "answer_check", "value": value}]}))
+    assert result["status"] == "prepared"
+    assert change(result, "Answer check") == {"setting": "Answer check", "from": "On", "to": "Off", "status": "prepared"}
+    assert proposal(store, loop)["settings"] == {"agent_preferences": {"judges": "off"}}
+    # The account takes what the card applies.
+    assert user_settings.validate_changes(proposal(store, loop)["settings"]) == (
+        {"agent_preferences": {"judges": "off"}}, [])
+    off = settings_loop(store, preferences=AgentPreferences(judges="off"))
+    assert prepare(off, answer_check="off")["status"] == "unchanged"
+
+
 @pytest.mark.parametrize("pro,status", [(False, "refused"), (True, "prepared")])
 def test_high_quality_is_pro_and_the_other_lineups_are_open(store, pro, status):
     loop = settings_loop(store, pro=pro)
@@ -312,7 +329,7 @@ def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_acco
     assert read["defaults"] == {
         "chat_model": "Claude Sonnet 5.5",
         "reasoning": "medium",
-        "depth": "auto", "answer_start": "all", "agent_freedom": "guided", "comparison_lineup": "fast",
+        "depth": "auto", "answer_start": "all", "agent_freedom": "guided", "answer_check": "on", "comparison_lineup": "fast",
         "answer_highlights": "all", "claim_counts": "off", "agreement_score": "full"}
     assert read["claim_counts"]["choices"] == {"on": "On", "off": "Off"}
     assert "system prompt" in read["elsewhere"] and "composer" in read["elsewhere"]
@@ -382,7 +399,7 @@ def test_the_prompt_asks_for_a_clear_request_asks_back_otherwise_and_points_to_t
     assert "When the user clearly asks for a change in this message" in prompt
     # Unclear wishes: ask back with the account's real choices, never guess.
     assert "When it is unclear which setting or which value they mean, do not guess and prepare nothing" in prompt
-    assert '"faster" can mean a lower reasoning level, brief answers or an earlier answer start' in prompt
+    assert '"faster" can mean a lower reasoning level, brief answers, an earlier answer start or no answer check' in prompt
     assert "when everything the user could mean needs Pro (on_pro in read_settings), do not ask which one" in prompt
     assert "ask the user which one, never pick one for them" in prompt
     assert "When the user asks what is set or what they can choose, call read_settings" in prompt

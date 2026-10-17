@@ -8,7 +8,8 @@ function boot(allowed) {
   const ctx = loadScripts(["static/js/user-settings.js", "static/js/agent-preferences.js"], {
     body: `<select id="agentDepthSelect"><option value="auto">A</option><option value="quick">Q</option><option value="full">F</option></select>
       <select id="agentQuorumSelect"><option value="balanced">B</option><option value="fast">F</option><option value="all">A</option></select>
-      <select id="agentAutonomySelect"><option value="guided">G</option><option value="free">F</option></select>`,
+      <select id="agentAutonomySelect"><option value="guided">G</option><option value="free">F</option></select>
+      <select id="agentJudgesSelect"><option value="on">On</option><option value="off">Off</option></select>`,
     before(window) {
       window.App = { agentChat: { canUse: () => allowed }, settingsTabs: { setTabAvailable: vi.fn() } };
     },
@@ -21,7 +22,7 @@ function boot(allowed) {
 it("saves every choice, restores them and ignores unknown stored values", () => {
   const { window: w, document: d } = boot(true);
   // Since 2026-10-07 the answer waits for every model by default.
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "guided" });
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on" });
   const depth = d.getElementById("agentDepthSelect");
   depth.value = "full"; depth.dispatchEvent(new w.Event("change"));
   // Only the explicit choice is stored, so a later default still applies.
@@ -30,14 +31,20 @@ it("saves every choice, restores them and ignores unknown stored values", () => 
   quorum.value = "fast"; quorum.dispatchEvent(new w.Event("change"));
   const autonomy = d.getElementById("agentAutonomySelect");
   autonomy.value = "free"; autonomy.dispatchEvent(new w.Event("change"));
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "full", quorum: "fast", autonomy: "free" });
+  // Answer check off: the judges skip the agent's answer.
+  const judges = d.getElementById("agentJudgesSelect");
+  judges.value = "off"; judges.dispatchEvent(new w.Event("change"));
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off" });
+  expect(JSON.parse(w.localStorage.getItem("consensio.agentPreferences.v2")))
+    .toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off" });
   // Unknown stored values fall back to the defaults.
-  w.localStorage.setItem("consensio.agentPreferences.v2", JSON.stringify({ depth: "deep", quorum: "fast" }));
+  w.localStorage.setItem("consensio.agentPreferences.v2", JSON.stringify({ depth: "deep", quorum: "fast", judges: "maybe" }));
   w.App.agentPreferences.sync();
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "fast", autonomy: "guided" });
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "fast", autonomy: "guided", judges: "on" });
   expect(depth.value).toBe("auto");
   expect(quorum.value).toBe("fast");
   expect(autonomy.value).toBe("guided");
+  expect(judges.value).toBe("on");
 });
 
 it("moves v1 settings over without pinning the old defaults", () => {
@@ -46,7 +53,7 @@ it("moves v1 settings over without pinning the old defaults", () => {
   // default of that time, not a choice; "free" was chosen.
   w.localStorage.removeItem("consensio.agentPreferences.v2");
   w.localStorage.setItem("consensio.agentPreferences.v1", JSON.stringify({ depth: "auto", quorum: "balanced", autonomy: "free" }));
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "free" });
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "free", judges: "on" });
   expect(w.localStorage.getItem("consensio.agentPreferences.v1")).toBe(null);
   expect(JSON.parse(w.localStorage.getItem("consensio.agentPreferences.v2"))).toEqual({ autonomy: "free" });
   // A real v1 choice of a faster start survives.

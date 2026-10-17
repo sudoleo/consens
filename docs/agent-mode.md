@@ -140,7 +140,7 @@ Einstellungen → **Agent · Beta** (nur für Konten mit Agent-Zugang, gespeiche
 seit 2026-10-12 als Kontoeinstellung `agent_preferences` am Konto, lokale Kopie
 unter `consensio.agentPreferences.v2`, nur ausdrücklich gewählte Werte; v1
 speicherte bei jeder Änderung alle Felder, beim Umzug fallen deren alte
-Standardwerte weg; siehe codebase-map §4 „Kontoeinstellungen“) legt drei Werte fest, die jede
+Standardwerte weg; siehe codebase-map §4 „Kontoeinstellungen“) legt vier Werte fest, die jede
 Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
 einfriert (Teil der Request-Identität bei Recovery): **Answer depth**
 (`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
@@ -149,8 +149,40 @@ Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
 weil eine späte Antwort weder in den Text noch in die Prüfung kommt;
 `balanced` wie unten beschrieben, Label „Every model on thorough questions“;
 `fast` ab der Hälfte der Antworten mit 1,1-facher
-Nachfrist und mindestens einer Sekunde) und
-**Agent freedom** (`autonomy`, siehe unten).
+Nachfrist und mindestens einer Sekunde),
+**Agent freedom** (`autonomy`, siehe unten) und **Answer check** (`judges`,
+siehe „Antwortprüfung ausschalten“).
+
+### Antwortprüfung ausschalten (seit 2026-10-17)
+
+**Answer check** (`AgentPreferences.judges`: `on` = Standard, `off`) schaltet
+die beiden Judges (Differences und Coverage) für die eigene Antwort des Agenten
+ab, auf Wunsch von Max. Die Vergleiche laufen unverändert; ist die Antwort
+fixiert, ruft `DelegationLoop._finish_review` statt `judge_answer`
+`ComparisonTools.skip_review()` auf: Nachzügler stoppen wie vor den Judges
+(`finish_comparisons`), und jeder Vergleich bekommt einen Check mit Status
+`off`, der an genau diesen Text und diese Grundlage gebunden ist
+(`answer_hash`, `basis_hash`, `differences_data: null`). Die Review hat
+Status `off`; `review_is_bound` und `finish_run` zählen ihn zu den fertigen
+Prüfungen (`REVIEW_DONE`), und ein späterer Fehler im Lauf schreibt ihn nicht in
+`failed` um. Kein Judge-Aufruf, keine Kosten dafür, kein Agreement-Score, keine
+Marken, kein Model-Pulse-Pick und keine `differences_stats`.
+
+- **Prompt:** `preference_prompt` hängt `JUDGES_OFF_PROMPT` an (keine Prüfung,
+  kein Score, keine Highlights, auch wenn ein Toolergebnis „the app checks it“
+  sagt); im freien Modus fällt der Satz „the judges always check …“ aus
+  `FREE_PROMPT` weg.
+- **Eingefügter Text:** `check_text` prüft weiter. Bittet der Nutzer, einen
+  fremden Text zu prüfen, ist diese Prüfung die Antwort selbst; nur die Judges
+  der Agent-Antwort entfallen.
+- **Anzeige** (`agent-review.js`): eine ruhige Statuszeile „Answer check off“
+  statt Marken und Score; die Evidenzzeile und der Reader bieten nur Answers
+  und Sources (`context.sections`), die Vergleichskarte „Explore sources“.
+  `failureNote` behandelt eine fixierte Antwort mit `off` wie eine geprüfte.
+- **Agent:** `prepare_settings_change` kennt `answer_check` (`on`/`off`), siehe
+  „Einstellungen umstellen“.
+- Consensus, Watches und Topics behalten ihre Prüfung; der Schalter gehört zu
+  Agent · Beta. Ältere Turns ohne `judges` gelten als `on` (`stored_preferences`).
 
 ### Agent freedom: geführt oder frei
 
@@ -187,7 +219,7 @@ Zwei Regeln setzt der Server durch, nicht der Prompt:
   jede direkte Antwort einen Vergleich.
 
 Danach laufen Synthese und Judges unverändert; der Judge kommt in beiden Modi
-immer am Ende. Ältere Turns ohne `autonomy` gelten bei der Recovery-Identität als
+am Ende, solange der Nutzer die Antwortprüfung nicht ausgeschaltet hat. Ältere Turns ohne `autonomy` gelten bei der Recovery-Identität als
 `guided` (`stored_preferences`).
 
 `compare_models` hat ein Entscheidungsfeld: `depth` (Standard `full`) steuert
@@ -322,7 +354,9 @@ die Pro-Tabelle und weitere Modellfamilien werden nicht als Ausweichstufen genut
 **Nach der Antwort.** Ein Schritt ohne Toolcalls beendet die Steuerung.
 `DelegationLoop._finish_merged` zeigt den Text vollständig, fixiert ihn
 (`capture`) und prüft ihn nach Vergleichen mit `judge_answer` über `app_registry` (`_finish_review`);
-die Prüfung bleibt eine eigene sichtbare Zeile („Checked the answer“). Danach
+die Prüfung bleibt eine eigene sichtbare Zeile („Checked the answer“). Mit
+ausgeschalteter Antwortprüfung (`judges: off`) schließt `skip_review` die
+Antwort ohne Judges ab, siehe „Antwortprüfung ausschalten“. Danach
 lehnen `compare_models` und `read_source` ab. Bis 2026-10-14 beendete das Tool
 `answer` die Steuerung, lief nach allen anderen Aufrufen seines Schritts, und
 erst danach schrieb ein eigener Schritt die Antwort.
@@ -846,7 +880,8 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   gründlicher“ wird dort nie Low; die Stufenwahl vergleicht Auto mit der
   Stufe, auf der es läuft (aus bei `enabled`/`default_enabled: false`).
 - **Was geht:** Chatmodell, Reasoning-Stufe (auch „eine höher/tiefer“),
-  Antworttiefe, Antwortstart, Agent-Freiheit, Vergleichs-Preset (Daily, Open
+  Antworttiefe, Antwortstart, Agent-Freiheit, Antwortprüfung (`answer_check`
+  on/off, seit 2026-10-17; `true`/`false` zählen als on/off), Vergleichs-Preset (Daily, Open
   Models, High Quality) und die Anzeige von Highlights, Zählern und
   Agreement-Score. Alle Werte sind aufgezählt; ein Modell nennt der Agent mit
   dem Namen des Nutzers, der Server sucht es in der Modellliste (mehrdeutig
@@ -867,8 +902,8 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   Toolergebnis und bietet keinen Umweg an.
 - **Unklare Wünsche:** `read_settings` zeigt dem Agenten, was gilt, die
   Standards und was das Konto wählen kann. Ist unklar, welche Einstellung
-  oder welcher Wert gemeint ist („schneller“ kann Reasoning, kurze Antworten
-  oder einen früheren Antwortstart heißen; „GPT“ mehrere Modelle), fragt der
+  oder welcher Wert gemeint ist („schneller“ kann Reasoning, kurze Antworten,
+  einen früheren Antwortstart oder keine Antwortprüfung heißen; „GPT“ mehrere Modelle), fragt der
   Agent mit den echten Optionen zurück und bereitet nichts vor; die Antwort
   darauf bereitet er vor. Einen unklaren oder vertippten Modellnamen lehnt
   `prepare_settings_change` mit den Treffern bzw. den ähnlichsten Namen ab

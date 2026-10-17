@@ -65,6 +65,7 @@ FAST_MIN_GRACE_SECONDS = 1.0
 AgentDepth = Literal["auto", "quick", "full"]
 AgentQuorum = Literal["balanced", "fast", "all"]
 AgentAutonomy = Literal["guided", "free"]
+AgentJudges = Literal["on", "off"]
 
 
 class AgentPreferences(BaseModel):
@@ -75,6 +76,11 @@ class AgentPreferences(BaseModel):
     # guided: every comparison asks all selected models. free: the orchestrator
     # picks the models of each comparison, at least two families (server rule).
     autonomy: AgentAutonomy = "guided"
+    # Answer check (user setting since 2026-10-17): "off" skips the
+    # Differences and Coverage judges of the agent's own answer
+    # (ComparisonTools.skip_review). A pasted text the user asks to check
+    # (check_text) is still checked: that check is the answer.
+    judges: AgentJudges = "on"
 
 
 def stored_preferences(value):
@@ -149,7 +155,12 @@ aspect needs depth, and a broader panel for decisions with real consequences. If
 answers remain, ask other families instead of answering from one. Do not ask
 more models or rounds than improve the answer: every call spends the user's
 tokens. Fixed by the app, not by you: every comparison asks at least two
-families, and the judges always check an answer that rests on comparisons."""
+families{judges}."""
+FREE_PROMPT_JUDGES = ", and the judges always check an answer that rests on comparisons"
+# The tool results still say "the app checks it"; this line, in the system
+# prompt, is what holds for the message.
+JUDGES_OFF_PROMPT = ("\nThe user switched the answer check off in Settings: no judge checks your answer in this "
+                     "message, whatever a tool result says, so it gets no agreement score or highlights.")
 
 
 def preference_prompt(preferences, max_comparisons=BOUNDED_COMPARISONS):
@@ -159,7 +170,10 @@ def preference_prompt(preferences, max_comparisons=BOUNDED_COMPARISONS):
         text += (f"\nThe user fixed the comparison depth to \"{preferences.depth}\" in Settings; "
                  "every comparison uses it whatever depth you pass.")
     if preferences.autonomy == "free":
-        text += FREE_PROMPT.format(limit=max_comparisons)
+        text += FREE_PROMPT.format(limit=max_comparisons,
+                                   judges=FREE_PROMPT_JUDGES if preferences.judges == "on" else "")
+    if preferences.judges == "off":
+        text += JUDGES_OFF_PROMPT
     return text
 
 
@@ -194,6 +208,11 @@ def review_issues(comparison, data):
     return issues
 
 
+# A finished review of the fixed answer; "off": the user switched the
+# answer check off (AgentPreferences.judges), nothing was judged.
+REVIEW_DONE = frozenset({"succeeded", "partial", "failed", "off"})
+
+
 def review_is_bound(review, text):
     digest = answer_hash(text)
     comparisons = review.get("comparisons") or []
@@ -204,7 +223,7 @@ def review_is_bound(review, text):
         basis = answer_hash(json.dumps(comparison["answers"], sort_keys=True, ensure_ascii=False))
         if (check.get("comparison_id") != comparison["id"] or check.get("answer_hash") != digest
                 or check.get("basis_hash") != basis or comparison.get("basis_hash") != basis
-                or check.get("status") not in {"succeeded", "partial", "failed"}):
+                or check.get("status") not in REVIEW_DONE):
             return False
     return True
 
@@ -1351,7 +1370,7 @@ class ComparisonTools:
         if not self.text:
             raise ValueError("The answer has not been written yet.")
         if self.review is not None:
-            if self.review["status"] in {"succeeded", "partial", "failed"}:
+            if self.review["status"] in REVIEW_DONE:
                 self.finalized = True
                 return {"status": self.review["status"], "finalized": True}
             raise ValueError("The fixed answer's review has not completed.")
@@ -1407,6 +1426,25 @@ class ComparisonTools:
         self.record_stats()
         return {"status": self.review["status"], "answer_hash": answer_hash(self.text),
                 "checks": self.review["checks"], "finalized": True}
+
+    def skip_review(self):
+        """The answer check is off (AgentPreferences.judges): the fixed
+        answer is final without a judge call. Like judge(), stragglers stop
+        first and every comparison gets a check bound to this exact text and
+        basis, with status "off" and no differences data, so the run ends as
+        reviewed (review_is_bound) and the page says why nothing is marked."""
+        if not self.comparisons or not self.text:
+            raise ValueError("No comparison or answer to finish.")
+        self.finish_comparisons()
+        digest = answer_hash(self.text)
+        with self.lock:
+            self.review = {"status": "off", "checks": [
+                {"comparison_id": comparison["id"], "basis_hash": comparison.get("basis_hash"),
+                 "answer_hash": digest, "status": "off", "differences_data": None}
+                for comparison in self.comparisons]}
+            self.versions[-1].update(status="off", checks=self.review["checks"])
+            self.checkpoint()
+            self.finalized = True
 
     def record_stats(self):
         """Anonymous Differences telemetry like a Consensus run's

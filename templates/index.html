@@ -1216,12 +1216,26 @@
                 <label for="agentAutonomySelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Agent freedom</strong>
-                    <small>Guided asks all your comparison models every time. Free lets Agent decide which of them to ask and how many rounds the best answer needs. Every answer still rests on at least two models and is checked at the end.</small>
+                    <small>Guided asks all your comparison models every time. Free lets Agent decide which of them to ask and how many rounds the best answer needs. Every answer still rests on at least two models.</small>
                   </span>
                   <span class="settings-select">
                     <select id="agentAutonomySelect">
                       <option value="guided" selected>Guided</option>
                       <option value="free">Free</option>
+                    </select>
+                  </span>
+                </label>
+              </div>
+              <div class="settings-section">
+                <label for="agentJudgesSelect" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Answer check</strong>
+                    <small>Two judges check every answer that rests on comparisons against the model answers: the agreement score and the highlights come from them. Off finishes the answer sooner, without score or highlights. A text you ask Agent to check is still checked.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="agentJudgesSelect">
+                      <option value="on" selected>On</option>
+                      <option value="off">Off</option>
                     </select>
                   </span>
                 </label>

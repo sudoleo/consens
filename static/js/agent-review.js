@@ -2,13 +2,17 @@
 (function () {
   "use strict";
   const App = window.App = window.App || {};
+  // "off": the user switched the answer check off (Settings › Agent · Beta),
+  // so no judge ran; the line says why the answer has no marks.
   const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
-    partial: "Partly checked", failed: "Check could not run", cancelled: "Check stopped", missing: "Answer not checked" };
+    partial: "Partly checked", failed: "Check could not run", cancelled: "Check stopped", missing: "Answer not checked",
+    off: "Answer check off" };
   // Turns saved between 7303e034 and the full answer check (both 2026-10-09) did not
   // check the answer of a comparison that checked a pasted text (`skipped`);
   // since then it is judged like any answer.
   const PASSAGE_CHECKED = "passage_checked";
   const PASSAGE_NOTE = "This comparison checked your text sentence by sentence; the result is shown above the answer.";
+  const OFF_NOTE = "The answer check is off in Settings › Agent · Beta, so this answer was not checked against the model answers.";
   // Short, calm reasons for one model call that ended without a result. The
   // provider's own error text never reaches the page (see provider_failure).
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
@@ -20,11 +24,12 @@
   function failureReason(failure) {
     return reasons[failure?.code] || 'no complete answer arrived';
   }
-  // The answer text is fixed and its review finished before the run ended.
+  // The answer text is fixed and its review finished (or was switched off)
+  // before the run ended.
   function reviewedAnswer(review, raw) {
     const version = review?.versions?.find(v => v.id === review.answer_version);
     return Boolean(version && typeof raw === 'string' && raw.trim() && raw === version.text
-      && version.hash === review.answer_hash && ['succeeded', 'partial'].includes(review.status));
+      && version.hash === review.answer_hash && ['succeeded', 'partial', 'off'].includes(review.status));
   }
   // The note under an answer whose run did not finish cleanly. A complete,
   // checked answer needs none: whatever failed afterwards changes nothing the
@@ -199,7 +204,9 @@
       }
       for (const issue of issues) card.append(node('p', 'agent-activity-limitation', issueText(issue)));
       const actions = node('div', 'agent-activity-insight-actions');
-      for (const [section, label] of [['answers', 'Read model answers'], ['differences', 'Explore review and sources']]) {
+      // Without a check there is no review to explore, only the sources.
+      const explore = check?.status === 'off' ? ['sources', 'Explore sources'] : ['differences', 'Explore review and sources'];
+      for (const [section, label] of [['answers', 'Read model answers'], explore]) {
         const button = node('button', 'consensus-tab', label); button.type = 'button';
         button.disabled = section === 'answers' ? !answers.length : !check;
         button.addEventListener('click', () => {
@@ -402,8 +409,10 @@
       const answers = comparison.answers || [];
       const sources = turnSources;
       const findAnswer = name => answers.find(a => [a.provider, a.provider_label, a.model?.label].some(v => v?.toLowerCase() === name?.toLowerCase()));
+      // With the answer check off the reader has no review tab.
+      const off = check?.status === 'off';
       const context = { key: `agent-evidence:${comparison.id}`, question: comparison.question, scopeLabel: "Comparison focus",
-        check, modelCount: answers.length,
+        check, modelCount: answers.length, ...(off ? { sections: ['answers', 'sources'] } : {}),
         contextLabel: comparison.question.length > 64 ? comparison.question.slice(0, 61) + "…" : comparison.question,
         contextGroup: () => contexts,
         answers: [
@@ -441,6 +450,8 @@
         const footer = node("div", "agent-evidence-footer");
         if (check?.skipped === PASSAGE_CHECKED) {
           panel.append(node("p", "agent-review-note", PASSAGE_NOTE));
+        } else if (off) {
+          panel.append(node("p", "agent-review-note", OFF_NOTE));
         } else if (!check || !check.differences_data) {
           panel.append(node("p", "agent-review-note", exact ? "The answer has no completed check for this comparison yet."
             : "The text changed. This version needs a new review."));
@@ -493,7 +504,7 @@
       context.links = () => {
         const differences = check?.differences_data?.differences || [];
         const contradictions = differences.filter(d => d.type === "contradiction").length;
-        return [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null],
+        return [...(off ? [] : [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null]]),
           ["answers", "Answers", answers.length], ["sources", "Sources", sources.length]];
       };
       return context;

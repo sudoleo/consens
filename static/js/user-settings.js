@@ -165,6 +165,7 @@
     depth: ["auto", "quick", "full"],
     quorum: ["balanced", "fast", "all"],
     autonomy: ["guided", "free"],
+    judges: ["on", "off"],
   };
 
   function chosenAgentPreferences(value, unchosen) {

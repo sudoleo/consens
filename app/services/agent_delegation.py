@@ -1375,6 +1375,9 @@ class DelegationLoop(AgentLoop):
 
     def _finish_review(self, value):
         """A completed answer needs its check, not another routing generation."""
+        if not self.comparison.finalized and self.comparison.preferences.judges == "off":
+            # The user switched the answer check off: final without judges.
+            self.comparison.skip_review()
         if not self.comparison.finalized:
             call = {"id": "server_judge_answer", "type": "function",
                     "function": {"name": "judge_answer", "arguments": "{}"}}

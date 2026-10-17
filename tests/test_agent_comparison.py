@@ -691,6 +691,54 @@ def test_later_run_failure_keeps_finished_review_result(store):
     assert saved["agent_review"]["checks"][0]["differences_data"] is not None
 
 
+@pytest.mark.parametrize("compares", [1, 2])
+def test_answer_check_off_finishes_the_fixed_answer_without_any_judge(store, compares, monkeypatch):
+    """Settings › Answer check off (AgentPreferences.judges): the comparisons
+    run as usual, the answer is final and bound to them, and no judge runs,
+    so no score, no Model Pulse pick and no differences stats."""
+    from app.services import differences_stats
+    recorded = []
+    monkeypatch.setattr(differences_stats, "record_differences_stats", lambda data, **meta: recorded.append(data))
+    script = Script(compares=compares)
+    loop = make_loop(store, script, preferences=AgentPreferences(judges="off"))
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    assert saved["status"] == "completed" and saved["consensus"] == "The first option costs 100."
+    assert review["status"] == "off" and review_is_bound(review, saved["consensus"])
+    assert [(c["status"], c["differences_data"]) for c in review["checks"]] == [("off", None)] * compares
+    assert review["versions"][-1]["status"] == "off"
+    assert loop.comparison.judge_calls == 0 and recorded == []
+    # Paid: the steering steps and two answers per comparison, nothing else.
+    assert len(script.calls) == (compares + 1) + 2 * compares
+    assert not any(e.get("kind") == "tool" and e.get("name") == "judge_answer" for e in events)
+    from app.services import persistence_guard
+    assert persistence_guard.agent_best_model_choice(review) == (None, [])
+    assert "answer check off" in loop.messages[0]["content"]
+
+
+def test_a_later_run_failure_keeps_the_answer_check_off(store):
+    loop = make_loop(store, Script(), preferences=AgentPreferences(judges="off"))
+    skip = loop.comparison.skip_review
+    def skip_then_fail():
+        skip()
+        raise RuntimeError("late provider failure")
+    loop.comparison.skip_review = skip_then_fail
+    with pytest.raises(RuntimeError):
+        list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "failed" and saved["agent_review"]["status"] == "off"
+
+
+@pytest.mark.parametrize("autonomy", ["guided", "free"])
+def test_the_prompt_says_when_the_answer_check_is_off(autonomy):
+    from app.services.agent_comparison import JUDGES_OFF_PROMPT, preference_prompt
+    on = preference_prompt(AgentPreferences(autonomy=autonomy))
+    off = preference_prompt(AgentPreferences(autonomy=autonomy, judges="off"))
+    assert JUDGES_OFF_PROMPT not in on and off.endswith(JUDGES_OFF_PROMPT)
+    assert ("the judges always check" in on) == (autonomy == "free") and "the judges always check" not in off
+
+
 def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
     client, store, calls = api
     loop = make_loop(store, Script())

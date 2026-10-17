@@ -666,7 +666,8 @@
     const liveReview = context.metadata.agentReview;
     const fixed = running && Boolean((state.text || state.streamText || '').trim()) && Boolean(liveReview?.versions?.length);
     const checking = fixed && ['required', 'running'].includes(liveReview.status);
-    const checked = fixed && ['succeeded', 'partial'].includes(liveReview.status);
+    // "off": the answer check is switched off, the fixed answer is final.
+    const checked = fixed && ['succeeded', 'partial', 'off'].includes(liveReview.status);
     setAnswerChecking(answerBody, checking);
     if (checking) context.metadata.revealMarks = true;
     if (!running || framed || checked) {
@@ -766,7 +767,7 @@
           bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
           reasoning_effort: settings.reasoning_effort || 'default',
           comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
-          agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided" },
+          agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
@@ -1135,7 +1136,7 @@
           useOwnKeys: false, providers: [],
           agentSettings: { model_id: body.model_id, reasoning_effort: body.reasoning_effort },
           comparisonModels: body.comparison_models || {},
-          agentPreferences: body.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided" },
+          agentPreferences: body.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
           googleSelection: body.google_selection || null, googleDataConsent: body.google_data_consent === true },
         metadata: { draftQuestion: "", quotedContext: "", fileIds: body.file_ids || [], agentActivity: [],
           agentSettings: settings, chatId: body.chat_id, requestSent: true, resumed: true },
@@ -1445,7 +1446,7 @@
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
           deepSearch: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
-          agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "all", autonomy: "guided" },
+          agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
           googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
           googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
         metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
@@ -1508,7 +1509,7 @@
         model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: comparisonModels,
-        agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided" },
+        agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,

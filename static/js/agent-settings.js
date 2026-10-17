@@ -45,6 +45,7 @@
     depth: ['Answer depth', { auto: 'Automatic', quick: 'Always brief', full: 'Always thorough' }],
     quorum: ['Answer start', { all: 'After every model', balanced: 'Every model on thorough questions', fast: 'As soon as half answered' }],
     autonomy: ['Agent freedom', { guided: 'Guided', free: 'Free' }],
+    judges: ['Answer check', { on: 'On', off: 'Off' }],
   };
   const SETTINGS = {
     consensus_preset: ['Comparison models', { fast: 'Daily', balanced: 'Open Models', thorough: 'High Quality', custom: 'Custom' },

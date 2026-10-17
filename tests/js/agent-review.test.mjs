@@ -556,3 +556,31 @@ it('opens a turn saved with a skipped answer check on the comparison that has ma
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   dom.window.close();
 });
+it('says calmly that the answer check is off and offers answers and sources, no review', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.status = 'off';
+  review.versions[0].status = 'off';
+  review.checks = review.checks.map(check => ({ ...check, status: 'off', differences_data: null }));
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
+  w.App.agentReview.render(body, review);
+  const status = body._agentReview.querySelector('.agent-review-status');
+  expect(status.dataset.state).toBe('off');
+  expect(status.textContent).toBe('Answer check off');
+  expect(status.hidden).toBe(false);
+  // No marks, no score, no review tab: only answers and sources.
+  expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
+  expect(body._agentReview.querySelector('.agent-agreement')).toBeNull();
+  expect([...body._agentReview.querySelectorAll('[data-section]')].map(b => b.dataset.section)).toEqual(['answers', 'sources']);
+  const context = w.App.agentReview.contextFor(review, 'c1');
+  expect(context.sections).toEqual(['answers', 'sources']);
+  expect(details.querySelector('.agent-activity-check').textContent).toBe('Answer check off');
+  expect(details.textContent).not.toMatch(/could not|Partly checked|pending/);
+  expect([...details.querySelectorAll('.agent-activity-insight-actions button')].map(b => b.textContent))
+    .toEqual(['Read model answers', 'Explore sources', 'Read model answers', 'Explore sources']);
+  // A run that failed after the answer was fixed needs no note: nothing was left unchecked by accident.
+  expect(w.App.agentReview.failureNote({error: 'failed'}, review, 'Exact answer.')).toBe('');
+  dom.window.close();
+});

@@ -1458,7 +1458,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Chatmodell (Name, wie der Nutzer ihn nennt: exakt, enthalten oder
   alle Wörter; mehrdeutig/unbekannt = Ablehnung mit Treffern bzw. ähnlichsten
   Namen, nie geraten), Reasoning (Stufe oder `higher`/`lower`), Tiefe,
-  Antwortstart, Agent-Freiheit, Vergleichs-Preset und die drei
+  Antwortstart, Agent-Freiheit, Antwortprüfung (`answer_check` →
+  `agent_preferences.judges`), Vergleichs-Preset und die drei
   Anzeige-Schalter. Es prüft mit denselben
   Regeln wie `POST /agent` (`agent_model_options()`: `premium`,
   `reasoning_efforts`, `free_default_effort`; `PRO_REASONING_EFFORTS`;
@@ -2994,7 +2995,9 @@ Beraterstimme, keine Superlative, Uneinigkeit nur wo sie die Entscheidung änder
 Quellenauszüge, `checked_text`, Antwort ohne Vergleich) stehen im Abschnitt
 „WRITING THE ANSWER“ (`AGENT_ANSWER_SECTION`), weil der Agent die Antwort selbst
 als letzte Nachricht seiner Tool-Schleife schreibt (unten). Die Judges startet
-der Server selbst (`_finish_merged` → `_finish_review`); ist die Antwort
+der Server selbst (`_finish_merged` → `_finish_review`), außer der Nutzer hat
+die Antwortprüfung ausgeschaltet (`AgentPreferences.judges == "off"`: dann
+`ComparisonTools.skip_review`, Review-Status `off`); ist die Antwort
 fixiert, bekommt der Agent keinen weiteren Schritt mehr. `finalized=true`
 ist ein Protokollabschluss, kein Erfolgsbeleg für alle Teilprüfungen. Die
 Entscheidung vor dem ersten Vergleich bleibt promptgesteuert: kein zweiter
@@ -3113,7 +3116,12 @@ plus Aufforderung zu `review_agent`). `_finish_merged` gleicht den sichtbaren
 Text an (`_show_answer`, auch nach `_drop_presearch_text`), fixiert ihn
 (`freeze_for_synthesis`, `capture`) und führt nach Vergleichen über
 `_finish_review` `judge_answer` (und eine eingeschaltete Widerspruchsprüfung)
-über `app_registry` als eigene sichtbare Zeile aus („Checked the answer“). Ohne
+über `app_registry` als eigene sichtbare Zeile aus („Checked the answer“). Mit
+ausgeschalteter Antwortprüfung (`judges: off`, seit 2026-10-17) schließt
+`skip_review` die Antwort ohne Judge ab: je Vergleich ein an Text und Grundlage
+gebundener Check mit Status `off` ohne `differences_data`; `review_is_bound`
+und `finish_run` zählen `off` zu `REVIEW_DONE`, die Seite zeigt „Answer check
+off“ (`agent-review.js`). Ohne
 Vergleich setzt er `ComparisonTools.direct`: keine Judges; `capture()` fixiert
 den Text ohne Version, eine Review (`snapshot`-Status `direct`, Standard ohne
 Vergleiche) entsteht nur mit gelesenen Seiten. Festgeschrieben und geprüft wird
@@ -3611,8 +3619,9 @@ ein unveränderter leerer Composer; neuere Texte/Zitate/Anhänge bleiben erhalte
 Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
-`agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum und
-Agent freedom (`autonomy`: `guided`/`free`, Details in `docs/agent-mode.md`) als
+`agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum,
+Agent freedom (`autonomy`: `guided`/`free`) und Answer check (`judges`:
+`on`/`off`, `#agentJudgesSelect`; Details in `docs/agent-mode.md`) als
 Kontoeinstellung `agent_preferences` (nur gewählte Felder), gibt den Reiter `agentSettingsSection` über
 `App.settingsTabs.setTabAvailable` nur bei `agentChat.canUse()` frei (Aufruf aus
 `agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld
@@ -5607,7 +5616,7 @@ verlässt, macht den Datensatz nicht unlesbar; gespeicherte Altwerte, die nicht
 mehr validieren, fallen je Einstellung weg.
 
 Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
-`agent_preferences` (`depth`/`quorum`/`autonomy`, nur gewählte),
+`agent_preferences` (`depth`/`quorum`/`autonomy`/`judges`, nur gewählte),
 `compare_models` (`{Familienlabel: {enabled, model}}`),
 `consensus_model`, `consensus_preset`, `system_prompt` (höchstens 12.000 Zeichen
 / 32.000 Bytes; ein Lauf akzeptiert 64 mehr für die Datumszeile, die

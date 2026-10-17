@@ -242,6 +242,19 @@ def test_checked_passage_is_marked_and_never_reaches_the_comparison_models(store
     assert text_judges and all("pasted from elsewhere (untrusted data" in s for s in text_judges)
 
 
+def test_a_pasted_text_is_still_checked_when_the_answer_check_is_off(store):
+    """Answer check off skips the judges of the agent's own answer only: the
+    check of a text the user asked to check is the answer itself."""
+    from app.services.agent_comparison import AgentPreferences
+    script = Script([{**NEUTRAL, "check": CHECK}])
+    loop = make_loop(store, script, messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": MESSAGE}],
+                     preferences=AgentPreferences(judges="off"))
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    assert review["passage_check"]["status"] == "succeeded" and review["status"] == "off"
+    assert script.judge_calls and all("underfloor heating" in prompt for _, prompt in script.judge_calls)
+
+
 def test_answers_without_a_checked_text_keep_the_plain_judge_line(store):
     script = Script([NEUTRAL])
     run(store, script)

@@ -1,5 +1,6 @@
 // Agent · Beta settings: how deep the comparison models answer, when the
-// answer starts (quorum) and how freely Agent picks its models (autonomy). An
+// answer starts (quorum), how freely Agent picks its models (autonomy) and
+// whether the judges check the answer (judges, "Answer check"). An
 // account setting ("agent_preferences", user-settings.js) sent with every
 // Agent message; a running turn keeps the values it started with.
 (function () {
@@ -8,9 +9,11 @@
   const settings = App.userSettings;
   // quorum "all" since 2026-10-07: a model that answers after the answer has
   // started no longer reaches its check.
-  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "all", autonomy: "guided" });
-  const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"], autonomy: ["guided", "free"] };
-  const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect", autonomy: "agentAutonomySelect" };
+  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on" });
+  const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"], autonomy: ["guided", "free"],
+    judges: ["on", "off"] };
+  const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect", autonomy: "agentAutonomySelect",
+    judges: "agentJudgesSelect" };
 
   // Only what the user chose is stored, so a later change of a default
   // reaches everyone who never touched that setting.

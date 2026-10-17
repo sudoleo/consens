@@ -373,9 +373,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 raise TurnStatusConflict("Agent step has not settled")
             review = (turn.to_dict() or {}).get("agent_review")
             if status == "succeeded" and review and review.get("comparisons"):
-                from app.services.agent_comparison import review_is_bound
-                if (not review_is_bound(review, completion.text)
-                        or review.get("status") not in {"succeeded", "partial", "failed"}):
+                from app.services.agent_comparison import REVIEW_DONE, review_is_bound
+                if not review_is_bound(review, completion.text) or review.get("status") not in REVIEW_DONE:
                     raise TurnStatusConflict("The exact answer version has not been reviewed")
             daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"]) if data.get("quota_day") else None
             daily = daily_ref.get(transaction=tx).to_dict() or {} if daily_ref else {}
@@ -420,9 +419,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         # A crash/stop cannot leave a saved review looking live.
                         # A review that had already finished keeps its result:
                         # a later failure (a final bookkeeping or provider step)
-                        # must not relabel a checked answer as unreviewed.
+                        # must not relabel a checked answer as unreviewed,
+                        # nor one whose check the user switched off.
                         review = dict(review)
-                        if review.get("status") not in {"succeeded", "partial"}:
+                        if review.get("status") not in {"succeeded", "partial", "off"}:
                             review["status"] = ("cancelled" if status == "cancelled" else
                                                 "missing" if review.get("status") == "required" else "failed")
                         for comparison in review.get("comparisons", []):
