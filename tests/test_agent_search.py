@@ -162,6 +162,20 @@ def test_cooldown_is_bounded_and_isolated_by_key_and_model():
     assert len(gate.entries) == 256
 
 
+def test_a_google_chats_rate_limit_does_not_block_the_fastest_route():
+    """A chat with Google data runs the model only on zero-retention
+    endpoints (since 2026-10-17); a 429 there must not lock every other
+    chat out of the same model on its own, faster route."""
+    from app.services.google_connections import restricted_model
+    gate = ProviderCooldowns(clock=lambda: 100)
+    model = resolve_agent_model()
+    google = restricted_model(model)
+    gate.record(google, "key", _ProviderHTTPStatusError(429, retry_after=60))
+    gate.check(model, "key")
+    with pytest.raises(AgentProviderCooldown):
+        gate.check(google, "key")
+
+
 @pytest.mark.parametrize("streamed", [False, True])
 def test_rate_limit_blocks_immediate_resubmission_without_another_paid_claim(api, monkeypatch, streamed):
     client, store, calls = api

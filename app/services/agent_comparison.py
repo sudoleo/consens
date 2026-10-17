@@ -89,9 +89,12 @@ def stored_preferences(value):
     return AgentPreferences.model_validate(value or {}).model_dump()
 
 
-# Per check: two differences passes and up to four Coverage windows
-# (CHAT_MAX_CONSENSUS_SENTENCES / COVERAGE_WINDOW), plus one slot of headroom.
-JUDGE_PARALLEL = 7
+# Judge calls at once: two differences passes plus Coverage windows of
+# AGENT_COVERAGE_WINDOW sentences, some already started while the answer was
+# written (agent_coverage_prefetch). A window waiting for a slot also waits on
+# its own attempt limit, so a typical answer (up to ~160 sentences, ten
+# windows) must fit without a second wave.
+JUDGE_PARALLEL = 12
 DEPTH_GUIDANCE = {
     "quick": " Answer briefly: the direct answer and the key reasons, in about 1500 characters, "
              "unless the task clearly needs more.",
@@ -1340,6 +1343,10 @@ class ComparisonTools:
         """Run end: no comparison call may outlive the producer, and a saved
         review never keeps showing a model as still answering."""
         self.source_evidence.close()
+        if self.prefetch is not None:
+            # Early Coverage windows of an answer whose check never ran (check
+            # off, failure, stop): end them before the run settles its steps.
+            self.prefetch.close(wait=True)
         pending = False
         for comparison in self.comparisons:
             cid = comparison["id"]

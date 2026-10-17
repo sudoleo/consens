@@ -6,6 +6,7 @@ while honoring Retry-After; other models remain usable.
 """
 from collections import OrderedDict
 from hashlib import sha256
+import json
 import math
 from threading import Lock
 from time import monotonic
@@ -24,7 +25,11 @@ class ProviderCooldowns:
         self.entries = OrderedDict()
 
     def key(self, model, api_key):
-        return sha256(api_key.encode()).digest(), model.model
+        # The route is part of the key: a chat with Google data runs the same
+        # model only on zero-retention endpoints, so its 429 says nothing about
+        # the fastest route every other chat takes (openrouter_contract).
+        provider = (getattr(model, "request_config", None) or {}).get("provider") or {}
+        return sha256(api_key.encode()).digest(), model.model, json.dumps(provider, sort_keys=True)
 
     def check(self, model, api_key):
         with self.lock:

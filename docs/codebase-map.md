@@ -3209,7 +3209,12 @@ sammelt die frühen Fenster ein, übernimmt nur wortgleiche Sätze an derselben
 Nummer (`_adopt_prefetched`, neue Labels) und fragt den Rest erneut. Ein
 anderer Prüfbestand (`judge_basis`: Antworten, Frage, gelesene Seiten) verwirft
 alles. `_retract` und ein Schnitt in `_show_answer` stoppen laufende Fenster
-(`discard_answer_progress`), `judge()`/`skip_review()` schließen den Pool.
+(`discard_answer_progress`, noch wartende Fenster starten gar nicht mehr),
+`judge()`/`skip_review()` schließen den Pool, `ComparisonTools.close()` wartet
+am Laufende auf laufende Fenster (sonst Settle-Konflikt in `finish_run`).
+Nur Chat-Läufe (`account_budget_only`); neu gerechnet wird nur nach einem
+Zeilenumbruch. Das Einsammeln endet mit der Frist der Prüfung
+(`_ComparisonWindows.results` beachtet deren Stopp). `JUDGE_PARALLEL` = 12.
 Coverage-Meta trägt `prefetched` (übernommene Sätze); `duration_ms` misst die
 Zeit nach Antwortende.
 **Vorläufige Marken (seit 2026-10-18):** `judge()` gibt `query_differences`
@@ -7067,7 +7072,18 @@ neueres Modell derselben Reihe, identische Presets) und je eine Live-Probe (App-
 genutzten Modelle. Zustand liegt neben dem Task
 (`~/.claude/scheduled-tasks/consens-model-release-check/last-seen.json`), damit
 nur Neues gemeldet wird; der Aufruf ist in `.claude/settings.local.json`
-freigegeben, weil ein unbeaufsichtigter Lauf sonst an der Rückfrage hängt. Grok 4.3 ist
+freigegeben, weil ein unbeaufsichtigter Lauf sonst an der Rückfrage hängt.
+`scripts/daily_chat_review.py` (lokaler geplanter Task `consens-chat-review`,
+täglich 07:15, seit 2026-10-18) liest nur: Turns externer Konten seit dem
+letzten Lauf (eigene Konten per E-Mail-Marker `maxl.plack`/`ml.plack`/`nodon`
+über Firebase Auth ausgeschlossen, Nutzer als Pseudonym `U…`), je Turn Frage,
+Antwortanfang, Ablauf aus den Receipts (Vergleichsdauer, langsamstes Modell,
+Ausfälle, Schreib- und Prüfdauer, Judge-Timeouts, Kosten) und Prüfstatus, dazu
+gezählte Warnungen aus dem Render-Log. `collect` gibt JSON aus und merkt sich
+den Stand in `pending.json`, `save` übernimmt ihn nach `state.json` (beides
+unter `~/.claude/scheduled-tasks/consens-chat-review/`). Der Task schreibt
+daraus einen kurzen Bericht mit Vorschlägen, die Max bestätigen muss; beide
+Befehle sind in `.claude/settings.local.json` freigegeben. Grok 4.3 ist
 seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
 (OpenRouter-Standard „low“; Reasoning-Schalter und Agent-Menü setzen die Stufe).
 Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten
@@ -7125,6 +7141,9 @@ Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
 `deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
 ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR
 landet es direkt bei OpenAI, DeepSeek bei den schnellsten US-Hostern.
+Die 429-Sperre (`agent_provider_limits.ProviderCooldowns`) schlüsselt deshalb
+auch nach der Provider-Route: ein 429 auf dem ZDR-Weg eines Google-Chats sperrt
+das Modell nicht für alle anderen Chats.
 Datenschutz/AGB/About beschreiben das, die Landing-Zeile zu ZDR ist entfernt.
 
 **Tombstones aus der ZDR-Zeit (2026-10-08 bis 2026-10-17):** Unter

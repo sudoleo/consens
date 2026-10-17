@@ -460,6 +460,19 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("calls an answer check unfinished when the run ended after early Coverage windows only", () => {
+    const window1 = { ...agent(1, "completed"), kind: "judge", title: "Coverage judge", usage: null };
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [window1], status: "failed" }) }));
+    receive(w, window1);
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    d.querySelector(".agent-sidebar-toggle").click();
+    const row = d.querySelector(".agent-session");
+    expect(row.querySelector(".agent-session-state").textContent).toMatch(/^Not finished · /);
+    row.open = true; row.dispatchEvent(new w.Event("toggle"));
+    expect(row.querySelector(".agent-judge-note").textContent).toBe("The differences check could not run. The answer is shown without it.");
+    dom.window.close();
+  });
+
   it("names a check that no model could run, once, in the Answer check row", () => {
     const failed = { ...agent(1, "failed"), kind: "judge", title: "Differences judge", usage: null };
     const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [failed], status: "failed" }) }));
