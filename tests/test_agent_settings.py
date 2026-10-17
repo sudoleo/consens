@@ -303,14 +303,15 @@ def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_acco
     assert "Claude Opus 4.8" in read["chat_model"]["on_pro"] and "Claude Opus 4.8" not in read["chat_model"]["choices"]
     assert "Grok 4.7" not in read["chat_model"]["choices"]
     assert read["reasoning"] == {"now": "Medium", "choices": {"low": "Low", "medium": "Medium"},
-                                 "on_pro": ["High", "Extra high", "Max"]}
+                                 "on_pro": ["High", "Extra high", "Max"],
+                                 "auto": "Without Pro, Auto runs as Medium, so Medium is the default here."}
     assert read["depth"]["now"] == "Always brief" and read["answer_start"]["now"] == "After every model"
     assert read["comparison_lineup"]["now"] == "Open Models" and read["comparison_lineup"]["on_pro"] == ["High Quality"]
     assert "thorough" not in read["comparison_lineup"]["choices"]
     assert read["claim_counts"]["now"] == "On" and read["answer_highlights"]["now"] == "All checks"
     assert read["defaults"] == {
         "chat_model": "Claude Sonnet 5.5",
-        "reasoning": "default (Auto; without Pro it runs as Medium, so Medium is the default here)",
+        "reasoning": "medium",
         "depth": "auto", "answer_start": "all", "agent_freedom": "guided", "comparison_lineup": "fast",
         "answer_highlights": "all", "claim_counts": "off", "agreement_score": "full"}
     assert read["claim_counts"]["choices"] == {"on": "On", "off": "Off"}
@@ -619,3 +620,13 @@ def test_a_model_list_outage_is_a_readable_refusal(store):
         prepare(loop, reasoning="low")
     # Settings without the model still work.
     assert prepare(loop, claim_counts="on")["status"] == "prepared"
+
+
+@pytest.mark.parametrize("name,value,expected", [
+    ("comparison_lineup", "Open Models", "balanced"), ("comparison_lineup", "High Quality", "thorough"),
+    ("reasoning", "Extra high", "xhigh"), ("reasoning", "Auto", "default"), ("depth", "Always brief", "quick"),
+    ("reasoning", "default (Auto)", "default"), ("comparison_lineup", "fast (Daily)", "fast"),
+])
+def test_the_words_the_app_shows_count_as_values(name, value, expected):
+    request = agent_settings._Request(PrepareSettings(**changes(**{name: value})))
+    assert getattr(request, name) == expected

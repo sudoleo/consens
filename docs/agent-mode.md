@@ -839,7 +839,8 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   mit erfundenen Werten, und die Karte hätte sie angeboten. Der Server liest
   auch die Formen, die Modelle wirklich schicken (Objekt `{"reasoning":
   "max"}`, `"reasoning: max"`, die Liste als JSON-String; leere Werte fallen
-  weg): DeepSeek brauchte sonst drei Anläufe.
+  weg; Anzeigenamen wie „Open Models“ zählen als Werte, Klammerzusätze nicht):
+  DeepSeek brauchte sonst drei Anläufe.
 - **Auto zählt mit seiner echten Stufe:** Ohne Pro läuft Auto auf DeepSeek
   V4.1 Flash mit dessen Standard High, wählbar ist nur Low. „Denk
   gründlicher“ wird dort nie Low; die Stufenwahl vergleicht Auto mit der

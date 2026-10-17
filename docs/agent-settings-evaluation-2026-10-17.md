@@ -31,6 +31,17 @@ Antwort; der Grund bei Pro-Stufen sagt, dass kein anderes Modell sie aufhebt
 als `on`/`off` (Sonnet schickte `"false"` als Text). Wer fragt, wie man Pro
 bekommt, erhält die Worte des Early-Access-Dialogs samt contact@consens.io.
 
+**Finale Live-Probe mit dem deployten Code (c49d7fcc, nach Aufladen des
+OpenRouter-Guthabens):** Claude Sonnet 5.5 21/21 Fälle richtig, jeder
+Werkzeugaufruf im ersten Anlauf, keine ungefragten Änderungen; DeepSeek V4.1
+Flash 12/12 (die Werkzeugform nun im ersten Anlauf); GPT-5.6 Luna 10/11, der
+elfte ein Anbieter-Timeout (Luna-Erreichbarkeit, kein Fehler der Funktion).
+Nachgezogen: Anzeigenamen als Werte („Open Models“, „Extra high“),
+Klammerzusätze werden ignoriert, `read_settings` nennt Standards als reine
+Werte (Luna hatte „default (Auto)“ wörtlich übernommen). Kosten aller Proben
+zusammen rund 3 $. Ein Klicktest in der angemeldeten Prod-App steht aus (der
+eingebaute Browser ist nicht angemeldet).
+
 **Empfehlung in einem Satz:** Variante (c) — ein Werkzeug
 `prepare_settings_change`, das nur vorschlägt und am Server gegen Stufe und
 Modell prüft, plus eine Karte unter der Antwort mit „alt → neu“, die der Nutzer

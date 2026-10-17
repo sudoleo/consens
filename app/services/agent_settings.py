@@ -132,6 +132,12 @@ VALUES = {
     "agreement_score": ("full (score and summary), summary, off: the agreement verdict below answers",
                         ("full", "summary", "off")),
 }
+# The labels the app shows, as values (a live probe sent "Open Models").
+VALUE_ALIASES = {
+    "reasoning": {"auto": "default", "off": "none", "extra high": "xhigh", "extra-high": "xhigh", "maximum": "max"},
+    "comparison_lineup": {"daily": "fast", "open models": "balanced", "open": "balanced", "high quality": "thorough"},
+    "depth": {"automatic": "auto", "brief": "quick", "always brief": "quick", "thorough": "full", "always thorough": "full"},
+}
 SETTING_NAMES = ("chat_model", *VALUES)
 SETTINGS_HELP = ("Settings and values: chat_model: the model's name as the user says it, e.g. \"Claude Opus\" or "
                  "\"GPT-5.6 Sol\"; " + "; ".join(f"{name}: {meaning}" for name, (meaning, _) in VALUES.items()) + ".")
@@ -218,10 +224,13 @@ class _Request:
             if name == "chat_model":
                 if len(value) < 2:
                     raise ValueError("chat_model needs the model's name.")
-            elif value.lower() not in VALUES[name][1]:
-                raise ValueError(f"{name} takes {', '.join(VALUES[name][1])}; {value!r} is none of them.")
             else:
-                value = value.lower()
+                # The words the app shows count too ("Open Models", "Extra high"),
+                # and a note in brackets is no part of the value ("default (Auto)").
+                value = re.sub(r"\s*\([^)]*\)\s*$", "", value).lower()
+                value = VALUE_ALIASES.get(name, {}).get(value, value)
+                if value not in VALUES[name][1]:
+                    raise ValueError(f"{name} takes {', '.join(VALUES[name][1])}; {change.value!r} is none of them.")
             setattr(self, name, value)
 
 
@@ -497,11 +506,13 @@ class SettingsTools:
         auto = choice.auto if choice else "default"
         result["defaults"] = {
             "chat_model": default["label"] if default else None,
-            "reasoning": "default (Auto)" if auto == "default" else
-                         f"default (Auto; without Pro it runs as {EFFORT_LABELS[auto]}, so {EFFORT_LABELS[auto]} is the default here)",
+            # Values only: a live probe passed a described default verbatim.
+            "reasoning": "default" if auto == "default" else auto,
             **{argument: getattr(AgentPreferences(), field) for argument, (field, _, _) in PREFERENCES.items()},
             "comparison_lineup": cfg.APP_DEFAULT_CONSENSUS_PRESET,
             **{argument: fallback for argument, (_, _, _, fallback) in DISPLAY.items()}}
+        if auto != "default":
+            result["reasoning"]["auto"] = f"Without Pro, Auto runs as {EFFORT_LABELS[auto]}, so {EFFORT_LABELS[auto]} is the default here."
         result["elsewhere"] = ELSEWHERE
         return result
 
