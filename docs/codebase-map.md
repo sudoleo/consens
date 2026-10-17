@@ -3221,7 +3221,7 @@ Zeit nach Antwortende.
 `coverage_progress=partial(ComparisonTools.preview_coverage, comparison_id,
 answer_hash)` mit. `_CoverageProgress` sammelt die Voten jedes fertigen
 Fensters (übernommene frühe Fenster in Fertig-Reihenfolge,
-`_ComparisonWindows.results` per `as_completed`, Rest- und Neufrage-Fenster
+`_ComparisonWindows.results` per `wait(FIRST_COMPLETED)`, Rest- und Neufrage-Fenster
 über `_run_coverage_windows(progress=…)`, ein einzelnes Fenster in
 `_run_coverage_judge`) und baut daraus Claims nur für beantwortete Sätze
 (`_coverage_claims(only=…)` + `_verify_claims`); ein fehlschlagender Empfänger
