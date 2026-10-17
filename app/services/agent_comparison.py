@@ -1317,6 +1317,10 @@ class ComparisonTools:
         """Run end: no comparison call may outlive the producer, and a saved
         review never keeps showing a model as still answering."""
         self.source_evidence.close()
+        if self.prefetch is not None:
+            # Early Coverage windows of an answer whose check never ran (check
+            # off, failure, stop): end them before the run settles its steps.
+            self.prefetch.close(wait=True)
         pending = False
         for comparison in self.comparisons:
             cid = comparison["id"]

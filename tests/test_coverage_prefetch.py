@@ -122,7 +122,9 @@ def test_early_verdicts_are_used_only_for_the_same_sentence_and_the_rest_runs_on
 class FakeLoop:
     def __init__(self):
         from app.services.llm.provider_runtime import ProviderCancellation
+        from types import SimpleNamespace
         self.cancellation, self.api_key = ProviderCancellation(), "k"
+        self.policy = SimpleNamespace(account_budget_only=True)
 
 
 class FakeTools:
@@ -184,13 +186,16 @@ def test_no_windows_when_the_check_is_off_or_the_answer_is_fixed():
     assert calls == []
 
 
-def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(store):
-    from test_agent_comparison import Script, make_loop
-    from test_agent_runs import UID
-    from app.services.llm.agent_client import measured_usage
+ANSWER = "".join(f"Fact number {n} holds true for this option.\n" for n in range(1, 41))
 
-    answer = "".join(f"Fact number {n} holds true for this option.\n" for n in range(1, 41))
-    coverage_calls, lock = [], threading.Lock()
+
+def streaming_turn(store, *, chat=True, fail_after=None, judge_delay=0.0):
+    """A scripted Agent turn whose answer streams line by line. Returns
+    (loop, coverage calls as (ids, prompt), raised exception or None)."""
+    from dataclasses import replace
+    from test_agent_comparison import Script, make_loop
+    from app.services.llm.agent_client import measured_usage
+    calls, lock = [], threading.Lock()
 
     class StreamingScript(Script):
         def factory(self):
@@ -203,7 +208,9 @@ def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(
                     script.calls.append((step, model.model))
                     completion.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                     completion.text, completion.finish_reason = "", "stop"
-                    for line in answer.splitlines(keepends=True):
+                    for index, line in enumerate(ANSWER.splitlines(keepends=True), 1):
+                        if fail_after is not None and index > fail_after:
+                            raise RuntimeError("The provider stopped mid-answer")
                         completion.text += line
                         yield {"type": "delta", "text": line}
                     return
@@ -211,14 +218,26 @@ def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(
                 if schema and "sentences" in schema["properties"]:
                     ids = schema["properties"]["sentences"]["items"]["properties"]["id"]["enum"]
                     with lock:
-                        coverage_calls.append((list(ids), messages[-1]["content"]))
+                        calls.append((list(ids), messages[-1]["content"]))
+                    time.sleep(judge_delay)
                 yield from base(model=model, messages=messages, **kwargs)
 
             completion.stream = stream
             return completion
 
     loop = make_loop(store, StreamingScript())
-    list(loop.run())
+    loop.policy = replace(loop.policy, account_budget_only=chat)
+    try:
+        list(loop.run())
+    except Exception as exc:
+        return loop, calls, exc
+    return loop, calls, None
+
+
+def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(store):
+    from test_agent_runs import UID
+    loop, coverage_calls, error = streaming_turn(store)
+    assert error is None
     review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
     assert review["status"] == "succeeded"
     asked = [ids for ids, _ in coverage_calls]
@@ -230,3 +249,24 @@ def test_agent_turn_checks_settled_windows_while_writing_and_asks_nothing_twice(
     assert len(data["claims"]) == 40
     # Two early windows, the rest, and the differences pass (tests pin one pass).
     assert loop.comparison.judge_calls == 4
+
+
+def test_bounded_runs_keep_their_judge_calls_for_the_finished_answer(store):
+    loop, coverage_calls, error = streaming_turn(store, chat=False)
+    assert error is None
+    assert coverage_calls and all("Fact number 40" in prompt for _, prompt in coverage_calls)
+    assert sorted(sum((ids for ids, _ in coverage_calls), []), key=lambda key: int(key[1:])) == [
+        f"s{n}" for n in range(1, 41)]
+
+
+def test_a_turn_that_fails_mid_answer_settles_its_early_windows_before_it_ends(store):
+    from test_agent_runs import UID
+    loop, coverage_calls, error = streaming_turn(store, fail_after=36, judge_delay=.3)
+    # Two windows started while writing; the run end stopped what had not finished.
+    windows = [window for _, launched in loop.comparison.prefetch.windows.values() for window in launched]
+    assert len(windows) == 2 and all(future.done() for _, future in windows)
+    assert coverage_calls and coverage_calls[0][0][0] == "s1"
+    root = loop.store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    assert root["run_status"] != "running"
+    assert "running" not in (root.get("step_states") or {}).values()
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] != "pending"

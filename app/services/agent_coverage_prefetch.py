@@ -73,10 +73,16 @@ class CoveragePrefetch:
         # Comparison id -> (basis, [(launched sentences, future), ...]).
         self.windows = {}
         self.started = 0
+        # How much of the text has been looked at: a sentence can only settle
+        # with a new line break, so most deltas cost nothing.
+        self.scanned = 0
 
     def _enabled(self):
         tools = self.tools
-        return bool(tools.comparisons) and not tools.text and tools.preferences.judges != "off"
+        # Chat turns only: a bounded run caps its judge calls
+        # (ComparisonTools.judge_transport), and early windows must not use them up.
+        return (bool(tools.comparisons) and not tools.text and tools.preferences.judges != "off"
+                and getattr(tools.loop.policy, "account_budget_only", False))
 
     def update(self, text: str) -> None:
         """The answer as far as it is visible; starts every window that is complete."""
@@ -84,7 +90,9 @@ class CoveragePrefetch:
         from app.services.llm.consensus_engine import (AGENT_COVERAGE_WINDOW, CHAT_MAX_CONSENSUS_SENTENCES,
                                                        _enumerate_consensus_sentences, settled_sentence_count)
         with self.lock:
-            if not self._enabled():
+            fresh = "\n" in text[self.scanned:] if len(text) >= self.scanned else True
+            self.scanned = len(text)
+            if not fresh or not self._enabled():
                 return
             settled = settled_sentence_count(text)
             if settled - self.started < AGENT_COVERAGE_WINDOW:
@@ -141,15 +149,17 @@ class CoveragePrefetch:
         """The visible text was no answer after all: stop its windows."""
         with self.lock:
             self._stop()
-            self.windows, self.started = {}, 0
+            self.windows, self.started, self.scanned = {}, 0, 0
 
-    def close(self) -> None:
-        """The check collected what it needs: nothing outlives the turn."""
+    def close(self, *, wait: bool = False) -> None:
+        """Stop what still runs. ``wait`` (run end, ComparisonTools.close):
+        until every window's paid step has ended, so the run settles it
+        before it finishes (DelegationLoop.run)."""
         with self.lock:
             self._stop()
-            if self.pool is not None:
-                self.pool.shutdown(wait=False)
-                self.pool = None
+            pool, self.pool = self.pool, None
+        if pool is not None:
+            pool.shutdown(wait=wait)
 
     def _stop(self):
         if self.stop is not None:
