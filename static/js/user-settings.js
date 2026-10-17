@@ -28,7 +28,9 @@
 // Exports: window.App.userSettings
 // Event:   "consensio:settings-change" on window,
 //          detail {names, source, previous}; source is "local" (this page
-//          changed it), "server", "tab" (another tab) or "signout".
+//          changed it), "agent" (this page applied the Agent's settings
+//          card: saved like "local", but every owner module shows it),
+//          "server", "tab" (another tab) or "signout".
 // =====================================================================
 
 (function () {
@@ -461,7 +463,9 @@
   // A change the user made on this page. null or undefined: back to the
   // default. options.derived marks a correction the app makes itself (a
   // model that left the list): before the account answered it stays on this
-  // page, so it can never win over the account's own value.
+  // page, so it can never win over the account's own value. options.source
+  // "agent": the Agent's settings card applied it (agent-settings.js); the
+  // modules that own the setting apply it as they do a change from the account.
   function set(name, value, options = {}) {
     const setting = definition(name);
     const next = value === null || value === undefined ? null : setting.normalize(value);
@@ -480,7 +484,7 @@
       const owner = session ? session.uid : syncRecord().owner;
       if (owner) addPending(owner, [name]);
     }
-    refresh([name], "local");
+    refresh([name], options.source === "agent" ? "agent" : "local");
     scheduleFlush();
     return true;
   }

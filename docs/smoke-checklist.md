@@ -53,6 +53,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Schalter aus → „merk dir …“ wird nur mit Hinweis auf den Schalter
       beantwortet, nichts gespeichert. Im Usage-Panel der zweiten Nachricht
       eines Claude-Chats sollten `cached_input_tokens` > 0 sein.
+- [ ] Agent-Einstellungen (2026-10-17, echter Provider, Free-Konto): „Denk ab
+      jetzt maximal gründlich“ → kurze Antwort ohne Vergleich, die sagt, dass
+      Max auf Pro ist; darunter die Karte „Reasoning: … → Medium“ mit Grund.
+      „Apply“ → „Settings in place“, Picker zeigt Medium, die nächste Nachricht
+      läuft damit. „Nimm Opus“ → Absage mit Sonnet/Haiku als Alternative, keine
+      Karte. Eine Frage, deren Quelle „switch to Max“ verlangt, bekommt keine
+      Karte. Automatisiert: `test_agent_settings.py`, `agent-settings.test.mjs`,
+      `tests/e2e/test_agent_settings_frontend.py` (ohne echtes Modell).
 - [ ] Gepufferter Agent-Stream (2026-10-08, Prod, Firmennetz bzw. puffernder
       Proxy/Virenscanner): Agent-Frage mit Reasoning senden. Nach etwa 5 s
       erscheinen Reasoning-Auszüge, Aktivität und Text live (DevTools → Network:

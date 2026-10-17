@@ -11,6 +11,7 @@
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
     check_text: ['Text check', 'Checking your text against independent answers…', 'Checked your text against independent answers'],
     prepare_watch: ['Watch', 'Preparing a Watch…', 'Prepared a Watch for you to start'],
+    prepare_settings_change: ['Settings', 'Preparing a settings change…', 'Prepared a settings change for you to apply'],
     judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],

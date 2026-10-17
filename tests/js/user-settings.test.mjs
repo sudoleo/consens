@@ -272,6 +272,19 @@ describe("change events", () => {
     expect(events).toEqual([{ names: ["claim_counts"], source: "local", previous: { claim_counts: false } }]);
   });
 
+  it("announce what the Agent's settings card applied as \"agent\" and save it like a change made here", async () => {
+    const server = fakeServer({ settings: { claim_counts: false }, revision: 1 });
+    const { settings, events, start } = open({ server });
+    await start();
+    events.length = 0;
+    expect(settings.set("claim_counts", true, { source: "agent" })).toBe(true);
+    // Any other source name is this page's own change.
+    settings.set("agreement_display", "off", { source: "server" });
+    await settings.flush();
+    expect(events.map(event => [event.names, event.source])).toEqual([[["claim_counts"], "agent"], [["agreement_display"], "local"]]);
+    expect(server.patches()).toEqual([{ claim_counts: true, agreement_display: "off" }]);
+  });
+
   it("follow another tab, but not a write that changes no value", () => {
     const { window, settings, events, local } = open({ storage: { runMode: "compare" } });
     const heard = vi.fn();

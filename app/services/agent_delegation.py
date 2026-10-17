@@ -214,6 +214,9 @@ class DelegationLoop(AgentLoop):
         self.watch_tools = None
         # The latest Watch this turn prepared (agent_watch.py).
         self.watch_proposal = None
+        self.settings_tools = None
+        # The latest settings change this turn prepared (agent_settings.py).
+        self.settings_proposal = None
         self.google_evidence = []
         self.google_data_consent = google_data_consent
         self.config = dict(delegation_config)
@@ -357,6 +360,15 @@ class DelegationLoop(AgentLoop):
             self.watch_tools = WatchTools(self)
             self.messages[0]["content"] += "\n\n" + ORCHESTRATOR_PROMPT
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.watch_tools.tools()],
+                                         argument_limit=max(self.registry.argument_limit, 24_000))
+        # A settings change the user asks for is prepared, never written
+        # (agent_settings.py): on their own account-mode turns, also with
+        # Google data (only enumerated values, no text leaves the chat).
+        if self.comparison is not None and self.policy.account_budget_only:
+            from app.services import agent_settings
+            self.settings_tools = agent_settings.SettingsTools(self)
+            self.messages[0]["content"] += "\n\n" + agent_settings.ORCHESTRATOR_PROMPT
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
@@ -1457,7 +1469,8 @@ class DelegationLoop(AgentLoop):
 
     def _side_results_accepted(self, value, results):
         """Whether every side tool of a step that wrote its answer did what
-        the answer may say: the memory change accepted, the Watch prepared."""
+        the answer may say: the memory change accepted, the Watch or the
+        settings change prepared as asked."""
         for call in value.tool_calls:
             result = results.get(call["id"])
             try:
@@ -1466,7 +1479,8 @@ class DelegationLoop(AgentLoop):
                 content = None
             if not isinstance(content, dict) or "error" in content or content.get("status") == "refused":
                 return False
-            if (call.get("function") or {}).get("name") == "prepare_watch" and content.get("status") != "prepared":
+            if ((call.get("function") or {}).get("name") in {"prepare_watch", "prepare_settings_change"}
+                    and content.get("status") != "prepared"):
                 return False
         return True
 
@@ -1637,6 +1651,8 @@ class DelegationLoop(AgentLoop):
                     self.memory.mock_turn(self.answer_conversation[-1]["content"])
                     if self.watch_tools:
                         self.watch_tools.mock_turn(self.answer_conversation[-1]["content"])
+                    if self.settings_tools:
+                        self.settings_tools.mock_turn(self.answer_conversation[-1]["content"])
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
                 value = None
                 for index in steps:

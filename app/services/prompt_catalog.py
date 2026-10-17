@@ -35,7 +35,7 @@ _ENTRIES = (
      "System prompt of the user's selected Agent model: it steers the run (comparisons, depth, memory, tools) "
      "and writes the answer itself as its last message (WRITING THE ANSWER, AGENT_ANSWER_SECTION). At runtime "
      "the comparison settings, the per-message comparison limit and the source reading "
-     "(AGENT_READ_SOURCE_PROMPT), file, document, Google, Watch (agent_watch.py; reading and Watch not in chats "
+     "(AGENT_READ_SOURCE_PROMPT), file, document, Google, Watch (agent_watch.py), settings (agent_settings.py; reading and Watch not in chats "
      "with Google data) and memory instructions are appended (in chats with Google data also a no-web-search "
      "note); date, reference time and selected model travel with the latest user message. After each "
      "comparison that returned answers the app adds AGENT_WRITE_NOTE as its own message (the answer is the "

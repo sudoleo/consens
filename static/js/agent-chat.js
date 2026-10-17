@@ -291,6 +291,18 @@
     if (effort.disabled || effort.parentElement.hidden) App.collapseExpandedModelPicker?.(effort);
     window.syncCustomModelPickers?.();
   }
+  // The Agent's settings card (agent-settings.js): the pick for the next
+  // message, in this chat and as the account's choice, as if made in the picker.
+  function applyPick(value) {
+    const model = catalog?.models.find(item => item.id === canonicalId(value?.model_id));
+    if (!selectable(model) || !canUse()) return false;
+    rememberSelection({ model_id: model.id, reasoning_effort: effortFor(model, value.reasoning_effort) });
+    render();
+    return true;
+  }
+  function modelLabel(id) {
+    return catalog?.models.find(item => item.id === canonicalId(id))?.label || null;
+  }
   function changeSelection() {
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
@@ -453,6 +465,8 @@
       App.agentMemory?.nudge(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}` });
       App.agentWatch?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null });
+      App.agentSettings?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
+        proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_settings_proposal : null });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -462,6 +476,7 @@
       // A saved Consensus turn or a new chat: no check of a pasted text.
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
       App.agentWatch?.render(document.getElementById("agentAnswerBody"), {});
+      App.agentSettings?.render(document.getElementById("agentAnswerBody"), {});
     }
     window.updateQuestionInputAccess?.();
     syncPendingReview();
@@ -664,6 +679,9 @@
     // A Watch the Agent prepared: its card under the completed answer that points to it.
     App.agentWatch?.render(answerBody, { key: context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null });
+    // A settings change the Agent prepared: its card, applied with one click.
+    App.agentSettings?.render(answerBody, { key: context.runId,
+      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
@@ -1503,6 +1521,8 @@
     }
   }
   App.agentChat = { canUse, modeState, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
+    // The settings card (agent-settings.js): the next message's pick, its labels, and applying one.
+    pick: () => selection(), modelLabel, applyPick,
     render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,
     tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget,
     // demo.js: show (true) or release (false) the answer surface for the demo.

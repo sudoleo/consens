@@ -1550,6 +1550,7 @@
   // --- Exporte fuer das in initApp verbliebene Wiring + andere Module ---
   window.App.selectConsensusPreset = presetId => selectConsensusPreset(document.getElementById('consensusModelDropdown'), presetId);
   window.App.previewConsensusPreset = previewConsensusPreset;
+  window.App.activeConsensusPresetId = getActiveConsensusPresetId;
   window.App.applyTierDefaultModels = applyTierDefaultModels;
   window.App.setModelSelectionState = setModelSelectionState;
   window.App.setRunModelBlock = setRunModelBlock;

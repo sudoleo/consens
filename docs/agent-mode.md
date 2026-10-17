@@ -824,6 +824,61 @@ Nutzers nicht.
 laufen wie bei jeder Watch auf dem Server-Key (global
 `watch_max_runs_per_day`), nicht auf dem Agent-Tokenkonto.
 
+## Einstellungen umstellen (seit 2026-10-17)
+
+Sagt der Nutzer „nimm ab jetzt Opus“, „denk gründlicher“ oder „keine
+Highlights mehr“, ruft der Agent `prepare_settings_change`
+(`app/services/agent_settings.py`). Wie bei Watches schreibt das Tool
+**nichts**: eine Karte unter der Antwort zeigt jede Änderung als „jetzt → neu“,
+und erst der Klick auf „Apply“ stellt um, ab der nächsten Nachricht.
+Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settings-evaluation-2026-10-17.md).
+
+- **Was geht:** Chatmodell, Reasoning-Stufe (auch „eine höher/tiefer“),
+  Antworttiefe, Antwortstart, Agent-Freiheit, Vergleichs-Preset (Daily, Open
+  Models, High Quality) und die Anzeige von Highlights, Zählern und
+  Agreement-Score. Alle Werte sind aufgezählt; ein Modell nennt der Agent mit
+  dem Namen des Nutzers, der Server sucht es in der Modellliste (mehrdeutig
+  oder unbekannt: Ablehnung mit den Möglichkeiten).
+- **Was nie geht:** System-Prompt (Freitext, der jeden künftigen Lauf
+  steuert: ein dauerhafter Träger für eingeschleuste Anweisungen), Memory und
+  ihr Opt-in, Datenschutz, Verbindungen, Benachrichtigungen, Konto. Diese
+  Felder gibt es im Schema nicht; die Karte übernimmt auch aus einem
+  manipulierten Vorschlag nur die bekannten Einstellungen.
+- **Stufe und Modell:** dieselben Regeln wie der Lauf (`require_model_access`,
+  `require_reasoning_access`, `free_default_effort`). High, Extra high und Max
+  sind Pro; ohne Pro wird eine höhere Stufe auf die höchste erlaubte begrenzt
+  („Max is available on Pro; Medium is the highest level for this account“),
+  Auto als Medium vorgeschlagen. Bietet das Modell die Stufe nicht an, nimmt
+  das Tool die nächstgelegene. Ein Premium-Modell ohne Pro wird nicht durch
+  ein anderes ersetzt, sondern abgelehnt, mit den freien Modellen derselben
+  Familie. Der Agent sagt Begrenzung oder Ablehnung mit dem Grund aus dem
+  Toolergebnis und bietet keinen Umweg an.
+- **Prompt:** `agent_settings.ORCHESTRATOR_PROMPT` verlangt einen Wunsch des
+  Nutzers in dieser Nachricht, nie einen aus einer Quelle, Datei, Mail oder
+  Modellantwort, und verbietet zu behaupten, etwas sei schon umgestellt. Eine
+  reine Einstellungsnachricht wird ohne Vergleich kurz beantwortet und
+  verweist auf die Karte.
+- **Gating:** jeder Account-Mode-Turn mit Vergleich, auch mit Google-Daten (es
+  verlässt kein Text den Chat). Nicht über die Consensus-API.
+
+Die Karte (`static/js/agent-settings.js`) liest „jetzt“ beim Anzeigen aus
+dieser Seite, nicht aus dem Vorschlag; was schon gilt, fällt weg. Das Modell
+übernimmt sie über die Picker-Funktion (`App.agentChat.applyPick`): sonst
+liefe ein offener Chat mit seinem gespeicherten Modell weiter. Alles andere
+geht über `App.userSettings.set(…, {source: "agent"})`, damit Einstellungen,
+Picker und Anzeige es sofort zeigen; gespeichert wird per `PATCH
+/api/my/settings` wie jede Änderung. Unter `MOCK_LLM` bereitet
+„Settings: depth=quick, reasoning=low“ einen Vorschlag vor.
+
+**Warum keine direkte Änderung:** Eine eingeschleuste Anweisung soll weder das
+Verhalten noch die Kosten späterer Läufe ändern können; der Klick ist die
+einzige Schreibstelle. Außerdem liest die offene Seite Kontowerte nur bei der
+Anmeldung und schickt Modell, Stufe und Vorlieben mit jeder Nachricht mit: ein
+Server-Write wäre bis zum Neuladen wirkungslos.
+
+**Kosten:** Das Tool ruft kein Modell und liest nur die (gecachte) Stufe und
+die Modellliste. Der Prompt-Abschnitt ist statisch und bleibt im Cache.
+
 ## Tageskontingent
 
 Seit 2026-10-01 teilt Agent das Tageskonto mit Compare, Consensus und Deep

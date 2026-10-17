@@ -1435,6 +1435,41 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Vorschlag bekommt keinen `offerWatch`-Hinweis. Ablauf und Begründung:
   [agent-mode.md](agent-mode.md) „Watch vorschlagen“. `MOCK_LLM`: „Watch:
   <Frage>“ bereitet einen Vorschlag vor.
+- **Agent-Einstellungen (`app/services/agent_settings.py`, `agent-settings.js`,
+  seit 2026-10-17)**: Auf „stell X um“ schreibt der Agent keine Einstellung, er
+  bereitet sie vor. `prepare_settings_change` (registriert auf jedem
+  Account-Mode-Turn mit Vergleich, auch mit Google-Daten: nur aufgezählte
+  Werte) nimmt Chatmodell (Name, wie der Nutzer ihn nennt), Reasoning
+  (Stufe oder `higher`/`lower`), Tiefe, Antwortstart, Agent-Freiheit,
+  Vergleichs-Preset und die drei Anzeige-Schalter. Es prüft mit denselben
+  Regeln wie `POST /agent` (`agent_model_options()`: `premium`,
+  `reasoning_efforts`, `free_default_effort`; `PRO_REASONING_EFFORTS`;
+  `pro_only` der Presets; Pro = `is_user_pro or is_user_admin`): ein
+  Premium-Modell ohne Pro wird abgelehnt (mit den freien Modellen derselben
+  Familie), eine zu hohe Stufe auf die höchste erlaubte begrenzt, eine nicht
+  angebotene auf die nächstgelegene (Gleichstand: die leichtere), Auto ohne
+  Pro als Medium vorgeschlagen; ein Modellwechsel behält eine angebotene
+  Stufe, sonst Auto. Ergebnis je Änderung `prepared|adjusted|refused|unchanged`
+  mit Grund; Gesamtstatus `prepared` nur, wenn alles wie verlangt vorbereitet
+  ist (sonst schreibt `_side_results_accepted` eine mitgeschriebene Antwort
+  neu). Gespeichert wird nur bei mindestens einer Änderung, als
+  `turn.agent_settings_proposal = {settings: {name: wert}, notes:
+  {agent_model: grund}}` in Kontoform (vorher durch
+  `user_settings.validate_changes`), nur bei `pending`. Systemprompt, Memory,
+  Datenschutz, Verbindungen, Benachrichtigungen und Konto stehen bewusst
+  nicht im Schema. `App.agentSettings.render(body, {key, proposal})` zeigt die
+  Karte unter einer abgeschlossenen Antwort (nach Memory-Hinweis und
+  Watch-Karte): je Zeile „jetzt → neu“, „jetzt“ aus dieser Seite beim Rendern
+  (`App.agentChat.pick()`/`modelLabel`, `App.agentPreferences.get()`,
+  `App.activeConsensusPresetId()`, `App.userSettings.get`), Gleiches fällt
+  weg; nichts mehr offen = „Settings in place“. „Apply“ übernimmt nur die
+  bekannten Einstellungen: das Modell über `App.agentChat.applyPick` (wie der
+  Picker: dieser Chat und die Kontowahl, sonst bliebe ein offener Chat auf
+  seinem Modell), den Rest über `App.userSettings.set(…, {source: "agent"})`,
+  damit die Besitzer-Module ihn sofort anzeigen; gespeichert wird per PATCH
+  wie jede Änderung. „Dismiss“ blendet die Karte für diese Antwort bis zum
+  Neuladen aus. Begründung: [agent-settings-evaluation-2026-10-17.md](agent-settings-evaluation-2026-10-17.md).
+  `MOCK_LLM`: „Settings: depth=quick, reasoning=low“ bereitet das vor.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,stripMath,render}`.
@@ -3167,7 +3202,8 @@ beantwortet“, Suche, Tiefe, `check_text`, status_update) und seit 2026-10-14 d
 Schreibregeln (`AGENT_ANSWER_SECTION`, „WRITING THE ANSWER“). Zur Laufzeit
 folgen Vergleichseinstellungen, Lesen (`AGENT_READ_SOURCE_REPLACEMENTS`/
 `AGENT_READ_SOURCE_PROMPT`), Dateien/Dokumente/Google, Watch
-(`agent_watch.ORCHESTRATOR_PROMPT` samt Kartenhinweis) und zuletzt Memory
+(`agent_watch.ORCHESTRATOR_PROMPT` samt Kartenhinweis), Einstellungen
+(`agent_settings.ORCHESTRATOR_PROMPT`) und zuletzt Memory
 (`agent_memory.orchestrator_prompt`); ein anderer System-Prompt (Tests, Proben)
 bekommt die Schreibregeln angehängt, falls sie fehlen. Das frühere
 zweite Protokoll `agent_comparison.PROMPT`, das alte `SYNTHESIS_PROMPT` und der
@@ -5549,9 +5585,11 @@ eigene OpenRouter-Key (fremdes Geheimnis), das Analytics-Opt-out, gesehene
 Hinweise und alles im sessionStorage.
 
 **Browser**: `static/js/user-settings.js` (`App.userSettings`, Head-Bundle) ist
-der einzige Besitzer: `get(name)`, `set(name, wert | null, {derived})`,
+der einzige Besitzer: `get(name)`, `set(name, wert | null, {derived, source})`,
 `accepts(name, wert)`, `onChange(names, handler)` über
-`consensio:settings-change` (`detail.source`: `local`, `server`, `tab`,
+`consensio:settings-change` (`detail.source`: `local`, `agent` (die
+Einstellungskarte des Agenten, `set(…, {source: "agent"})`: gespeichert wie
+`local`, aber die Module wenden sie an wie einen Kontowert), `server`, `tab`,
 `signout`; `previous`; nach einer Rückkehr aus dem Back/Forward-Cache gleicht
 `pageshow` nach). Die lokale Kopie liegt unter den bisherigen
 localStorage-Schlüsseln (`runMode`, `checkSources`, `pref_*`, `systemPrompt`,
@@ -6138,6 +6176,7 @@ app/services/
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Agent-Prompt samt Kartenhinweis; startet nie eine Watch
+  agent_settings.py          prepare_settings_change: Einstellungsvorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt; schreibt nie eine Einstellung
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
@@ -6587,6 +6626,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Text); gelöscht mit Chat bzw. Konto. Seit 2026-10-11 kann ein Agent-Turn
   `agent_watch` tragen (`question`, `goals`, `interval`: der Watch-Vorschlag,
   siehe §3 „Agent-Watch“; ob er gestartet wurde, steht nur in `watches`).
+  Seit 2026-10-17 kann er `agent_settings_proposal` tragen (`settings` in
+  Kontoform, `notes`; siehe §3 „Agent-Einstellungen“; übernommen wird nur
+  über die Karte nach `users/{uid}/settings/app`).
 - `chat_deletion_jobs/{sha256(uid:chat)[:40]}` — dauerhafte, idempotente
   Einzelchat-Löschaufträge (`uid`, `chat_id`, `status`, `attempts`,
   `last_error`-Kategorie, `next_attempt_at`), angelegt atomar mit dem

@@ -586,6 +586,41 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-watch-link { min-height: 44px; }
 }
 
+/* ---- A settings change the Agent prepared (agent-settings.js) -------------
+   The Watch card's block: each change as "now → new", the new value in the
+   reading colour, then Apply. After Apply the words say it is in place. */
+.agent-settings-card {
+  max-width: 66ch;
+  margin: 14px 0 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+.agent-settings-card p { margin: 0; }
+.agent-settings-card [hidden] { display: none; }
+.agent-settings-title { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.agent-settings-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; margin: 8px 0 0; }
+.agent-settings-list dt { color: var(--ink-3); }
+.agent-settings-list dd { margin: 0; overflow-wrap: anywhere; }
+.agent-settings-to { color: var(--ink); font-weight: var(--font-weight-semibold); }
+.agent-settings-card :is(.agent-settings-note, .agent-settings-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
+.agent-settings-apply { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.agent-settings-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-settings-link:hover { color: var(--ink); }
+.agent-settings-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.agent-settings-card[data-state="applied"] .agent-settings-actions { display: none; }
+@media (max-width: 480px) {
+  .agent-settings-list { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .agent-settings-list dd { margin-bottom: 6px; }
+}
+@media (pointer: coarse) {
+  .agent-settings-link { min-height: 44px; }
+}
+
 /* ---- A pasted text the Agent checked (passage-check.js) --------------------
    One section at the top of the answer; the user's message stays as it was
    sent. No box, no uppercase label, no grey filler (house rules): the result
