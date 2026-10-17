@@ -6405,6 +6405,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `app/services/account_tier.py` geschrieben und im Admin-Tab **Accounts**
   gelesen. Ein fehlgeschlagener Audit-Write lässt die bereits gesetzte Stufe
   stehen und wird geloggt — der Adminvorgang darf daran nicht scheitern.
+  Die Kontolöschung (Bereich `tier_audit`) löscht die Zeilen des Kontos und
+  leert `changed_by`, wo das Konto nur als Admin steht.
 - `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
   eingefrorenem Request/Modellplan, `idempotency_hash`, eigenem `usage_key`, Status und Status-
   Zeitstempeln, einstündigem Running-Lease, der bei Annahme eingefrorenen Stufe

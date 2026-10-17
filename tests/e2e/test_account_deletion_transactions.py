@@ -8,7 +8,7 @@ from native_support import native_db, tree
 from test_file_storage_transactions import cloud_files, save
 
 
-AREAS = {"api_access", "user_subcollections", "chats", "waitlist_feedback", "owned_shares", "pending_results",
+AREAS = {"api_access", "user_subcollections", "chats", "waitlist_feedback", "tier_audit", "owned_shares", "pending_results",
     "answer_receipts", "orphan_watches", "watch_indexes", "watch_brief", "notification_outbox",
     "persistence_guards", "email_follows", "profile", "firebase_auth"}
 
@@ -24,7 +24,7 @@ def seed(db, uid):
         refs.append(ref)
     for collection, field, value in (
         ("api_consensus_keys", "uid", uid), ("api_consensus_runs", "uid", uid),
-        ("pro_waitlist", "uid", uid), ("feedback", "uid", uid), ("pending_results", "owner_uid", uid),
+        ("pro_waitlist", "uid", uid), ("feedback", "uid", uid), ("account_tier_audit", "uid", uid), ("pending_results", "owner_uid", uid),
         ("answer_receipts", "owner_uid", uid), ("notification_outbox", "uid", uid),
         ("watch_followers", "email", uid + "@example.invalid"), ("topic_followers", "email", uid + "@example.invalid"),
     ):

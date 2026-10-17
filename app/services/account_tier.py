@@ -221,3 +221,17 @@ def list_recent_changes(limit: int = 25, db=None) -> list[dict]:
             "changed_at": changed_at.isoformat() if isinstance(changed_at, datetime) else "",
         })
     return entries
+
+
+def delete_account_audit(uid: str, db=None) -> None:
+    """Kontoloeschung: Protokollzeilen des Kontos loeschen.
+
+    Zeilen, in denen das Konto nur als Admin (``changed_by``) steht, gehoeren
+    zu anderen Konten und bleiben; die uid wird dort geleert.
+    """
+    db = db if db is not None else db_firestore
+    collection = db.collection(AUDIT_COLLECTION)
+    for doc in _where_equal(collection, "uid", uid).stream():
+        collection.document(doc.id).delete()
+    for doc in _where_equal(collection, "changed_by", uid).stream():
+        collection.document(doc.id).set({"changed_by": ""}, merge=True)

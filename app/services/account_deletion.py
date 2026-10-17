@@ -12,6 +12,7 @@ from app.core.background_tasks import task_succeeded
 from app.core.observability import safe_exception
 from app.core.security import invalidate_auth_tombstone_cache
 from app.services import (
+    account_tier,
     follow_challenges,
     notification_outbox,
     persistence_guard,
@@ -96,6 +97,8 @@ class FirestoreAccountDeletion:
             ("user_subcollections", lambda: self._delete_user_subcollections(uid)),
             ("chats", lambda: ChatStore(self._db).delete_all_chats(uid)),
             ("waitlist_feedback", lambda: self._delete_uid_queries(uid)),
+            # Admin tier changes name the account and may carry a free-text note.
+            ("tier_audit", lambda: account_tier.delete_account_audit(uid, db=self._db)),
             ("owned_shares", lambda: self._delete_owned_shares(uid)),
             ("pending_results", lambda: self._delete_query("pending_results", "owner_uid", uid)),
             ("answer_receipts", lambda: self._delete_query("answer_receipts", "owner_uid", uid)),

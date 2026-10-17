@@ -251,6 +251,22 @@ def test_recent_changes_are_readable(db):
     assert changes[0]["changed_at"].startswith("2026-08-31")
 
 
+def test_account_deletion_removes_the_accounts_audit_rows(db):
+    audit = db.stores["account_tier_audit"]
+    audit["own"] = {"uid": "gone", "to_tier": "pro", "changed_by": "admin-uid",
+                    "note": "friend of Max"}
+    audit["as_admin"] = {"uid": "other", "to_tier": "plus", "changed_by": "gone",
+                         "note": "kept"}
+    audit["unrelated"] = {"uid": "other", "to_tier": "free", "changed_by": "admin-uid"}
+
+    account_tier.delete_account_audit("gone", db=db)
+
+    assert "own" not in audit
+    assert audit["as_admin"] == {"uid": "other", "to_tier": "plus", "changed_by": "",
+                                 "note": "kept"}
+    assert audit["unrelated"]["changed_by"] == "admin-uid"
+
+
 # --- Endpoints -------------------------------------------------------------
 
 def test_endpoints_require_admin(client, db):

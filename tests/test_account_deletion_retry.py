@@ -82,6 +82,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "follows": 0,
         "auth": 0,
         "outbox": 0,
+        "tier_audit": 0,
     }
 
     monkeypatch.setattr(
@@ -152,6 +153,14 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         def delete_all_chats(self, uid):
             calls["chats"] += 1
 
+    def tier_audit(uid, db=None):
+        calls["tier_audit"] += 1
+
+    monkeypatch.setattr(
+        "app.services.account_deletion.account_tier.delete_account_audit",
+        tier_audit,
+    )
+
     with patch("app.services.account_deletion.ChatStore", Chats):
         service.start("owner", email="Owner@Example.test")
         first_errors = service.cleanup_uid("owner")
@@ -170,6 +179,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["guards"] == 1
     assert calls["follows"] == 1
     assert calls["outbox"] == 1
+    assert calls["tier_audit"] == 1
     assert calls["auth"] == 1
     job = db.collection("account_deletion_jobs").document("owner").data
     assert job["status"] == "completed"
