@@ -1694,11 +1694,43 @@ def _formatted_quote_finder():
     return find
 
 
+_TARGET_GAP_RE = re.compile(r"\s*(?:\.{3}|…)\s*")
+
+
+def _verified_target(sentence, target, _find, _find_formatted_quote) -> str:
+    """The disputed words as they stand in the claim's sentence, or "".
+
+    The same exact rule as a dissent quote, against the sentence itself: words
+    from a neighbouring sentence or in other words are dropped, and the app
+    then marks the whole sentence. A judge that shortened a span with "..."
+    still names both of its ends; they count when both stand in that order."""
+    sentence = str(sentence or "")
+    target = str(target or "").strip()
+    if not sentence or not target:
+        return ""
+    key = "__target__" + sentence
+
+    def find(needle):
+        return _find(key, sentence, needle) or _find_formatted_quote(key, sentence, needle)
+
+    span = find(target)
+    if span:
+        return span
+    parts = [part for part in _TARGET_GAP_RE.split(target) if part.strip()]
+    if len(parts) != 2:
+        return ""
+    head, tail = find(parts[0]), find(parts[1])
+    start = sentence.find(head) if head else -1
+    end = sentence.find(tail, start + len(head)) if tail and start >= 0 else -1
+    return sentence[start:end + len(tail)] if end >= 0 else ""
+
+
 def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _find=None,
                    _find_formatted_quote=None) -> None:
     """Anchors gegen die Konsensantwort, Dissens-Zitate gegen die jeweilige
-    Modellantwort. Ein Zitat, das dort nicht auffindbar ist, wird geleert -
-    halluzinierte Zitate erreichen die Oberflaeche nie.
+    Modellantwort, die bestrittenen Worte (``target``) gegen den Satz selbst.
+    Ein Zitat, das dort nicht auffindbar ist, wird geleert - halluzinierte
+    Zitate erreichen die Oberflaeche nie.
 
     Laeuft fuer Claims aus BEIDEN Quellen: dem Coverage-Judge (Regelfall) und
     aelteren Differences-Payloads."""
@@ -1718,6 +1750,16 @@ def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _fi
                 len(str(claim.get("anchor") or "")),
             )
         for item in claim.get("dissent") or []:
+            if item.get("target"):
+                target = _verified_target(claim.get("anchor"), item["target"], _find, _find_formatted_quote)
+                if target:
+                    item["target"] = _clip(target, coverage.MAX_COVERAGE_TARGET_CHARS)
+                else:
+                    logging.info(
+                        "Dropping unverifiable dissent target model=%s target_chars=%d",
+                        item["model"], len(str(item.get("target") or "")),
+                    )
+                    item.pop("target")
             if not item.get("quote"):
                 continue
             model_text = model_answers.get(item["model"]) or ""
@@ -2532,7 +2574,9 @@ def prefetch_coverage_window(answers: Mapping[str, str], partial_answer: str, id
     keys = {**context.anon_map, **{label: ("page", url) for label, url, _ in context.sources}}
     entries = {sid: {"classification": entry["classification"],
                      "models": {keys[label]: stance for label, stance in entry["models"].items() if label in keys},
-                     "quotes": {keys[label]: quote for label, quote in entry["quotes"].items() if label in keys}}
+                     "quotes": {keys[label]: quote for label, quote in entry["quotes"].items() if label in keys},
+                     "targets": {keys[label]: target for label, target in entry.get("targets", {}).items()
+                                 if label in keys}}
                for sid, entry in parsed.items()}
     number = coverage.sentence_id_number
     return {"sentences": {sid: context.sentences[number(sid) - 1] for sid in parsed},
@@ -2551,13 +2595,15 @@ def _adopt_prefetched(context, result) -> dict:
         n = number(sid)
         if not n or n > len(context.sentences) or context.sentences[n - 1] != result["sentences"].get(sid):
             continue
-        if any(key not in labels for key in (*entry["models"], *entry["quotes"])):
+        targets = entry.get("targets", {})
+        if any(key not in labels for key in (*entry["models"], *entry["quotes"], *targets)):
             continue
         models = {labels[key]: stance for key, stance in entry["models"].items()}
         for label in _coverage_labels(context):
             models.setdefault(label, "not_addressed")
         adopted[sid] = {"classification": entry["classification"], "models": models,
-                        "quotes": {labels[key]: quote for key, quote in entry["quotes"].items()}}
+                        "quotes": {labels[key]: quote for key, quote in entry["quotes"].items()},
+                        "targets": {labels[key]: target for key, target in targets.items()}}
     return adopted
 
 
@@ -2806,6 +2852,7 @@ def _coverage_claims(coverage_result: dict, context: _JudgeContext, only=None) -
         agree, dissent = [], []
         stances = (entry or {}).get("models") or {}
         quotes = (entry or {}).get("quotes") or {}
+        targets = (entry or {}).get("targets") or {}
         for label in context.labels:
             real = anon_map.get(label)
             if not real:
@@ -2814,9 +2861,13 @@ def _coverage_claims(coverage_result: dict, context: _JudgeContext, only=None) -
             if stance in coverage.SUPPORTING_STANCES:
                 agree.append(real)
             elif stance in coverage.OPPOSING_STANCES:
-                dissent.append({"model": real, "quote": _clip(
-                    quotes.get(label), MAX_DIFF_QUOTE_CHARS
-                )})
+                item = {"model": real, "quote": _clip(quotes.get(label), MAX_DIFF_QUOTE_CHARS)}
+                # Die bestrittenen Worte des Satzes; _verify_claims prueft sie
+                # gegen den Satz. Fehlt sie, markiert die App den ganzen Satz.
+                target = _clip(targets.get(label), coverage.MAX_COVERAGE_TARGET_CHARS)
+                if target:
+                    item["target"] = target
+                dissent.append(item)
 
         claim = {
             "anchor": anchor,

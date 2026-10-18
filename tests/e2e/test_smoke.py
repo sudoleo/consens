@@ -1075,15 +1075,21 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     # Und die Marke ist wirklich eine Flaeche, keine Unterstreichung: eine
     # Linie unter dem Satz las sich wie ein Link (User-Befund 2026-08-15).
+    # Seit 2026-10-19 traegt sie nur die Stelle des Streits: im Fixture nennt
+    # der Coverage-Judge "1889"; der Satz bleibt das Steuerelement ohne Flaeche.
     mark_paint = app_page.evaluate(
         """() => {
           const el = document.querySelector("#consensusAnswerBody .cx-claim.is-major");
-          const style = getComputedStyle(el);
-          return {bg: style.backgroundColor, line: style.textDecorationLine};
+          const spot = el.querySelector(".cx-spot");
+          const style = getComputedStyle(spot || el);
+          return {spot: spot && spot.textContent, bg: style.backgroundColor, line: style.textDecorationLine,
+                  sentence: getComputedStyle(el).backgroundColor};
         }"""
     )
+    assert mark_paint["spot"] == "1889", mark_paint
     assert mark_paint["line"] == "none", mark_paint
     assert mark_paint["bg"] not in ("rgba(0, 0, 0, 0)", "transparent"), mark_paint
+    assert mark_paint["sentence"] in ("rgba(0, 0, 0, 0)", "transparent"), mark_paint
 
     # Touch: die unstrittige Claim-Passage selbst oeffnet dasselbe Agreement-
     # Sheet wie ihr sichtbarer Badge. Die Widerspruchspassage oben bleibt

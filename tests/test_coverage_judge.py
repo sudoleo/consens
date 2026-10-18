@@ -18,6 +18,7 @@ from app.services.llm.consensus_engine import (
     _coverage_attempts,
     _coverage_claims,
     _run_coverage_judge,
+    _verify_claims,
     query_differences,
 )
 from app.services.llm.consensus_scoring import compute_agreement_score
@@ -39,10 +40,11 @@ def judge_context(consensus=CONSENSUS):
     )
 
 
-def coverage_payload(context, stances_by_id, classifications=None, quotes=None):
+def coverage_payload(context, stances_by_id, classifications=None, quotes=None, targets=None):
     """Ein vollstaendiges Coverage-JSON fuer die Saetze eines Kontexts."""
     classifications = classifications or {}
     quotes = quotes or {}
+    targets = targets or {}
     sentences = []
     for number in range(1, len(context.sentences) + 1):
         key = coverage.sentence_id(number)
@@ -54,7 +56,7 @@ def coverage_payload(context, stances_by_id, classifications=None, quotes=None):
             "classification": classifications.get(key, "claim"),
             "models": stances,
             "counter_quotes": [
-                {"model": label, "quote": quote}
+                {"model": label, "quote": quote, "target": (targets.get(key) or {}).get(label, "")}
                 for label, quote in (quotes.get(key) or {}).items()
             ],
         })
@@ -95,6 +97,14 @@ class CoverageSchemaTests(unittest.TestCase):
         item = schema["properties"]["sentences"]["items"]
         self.assertEqual(item["properties"]["id"]["enum"], ["s1", "s2"])
 
+    def test_every_counter_quote_names_the_disputed_words(self):
+        """Nur die Stelle des Streits wird markiert (2026-10-19): jedes
+        Gegenzitat nennt die Worte des Satzes, denen es widerspricht."""
+        schema = coverage.build_coverage_schema(["Model A"], ["s1"])
+        quote = schema["properties"]["sentences"]["items"]["properties"]["counter_quotes"]["items"]
+        self.assertEqual(quote["required"], ["model", "quote", "target"])
+        self.assertEqual(quote["properties"]["target"], {"type": "string"})
+
 
 class CoveragePromptTests(unittest.TestCase):
     def test_prompt_carries_the_binding_id_list(self):
@@ -110,6 +120,20 @@ class CoveragePromptTests(unittest.TestCase):
         # Der haeufigste Fehlschluss eines Klassifikators: aus dem eigenen
         # Wissen ergaenzen, was die Antwort gar nicht sagt.
         self.assertIn("never fill a gap from your own knowledge", prompt)
+
+    def test_prompt_asks_for_the_point_of_dispute_from_the_sentence_itself(self):
+        prompt = coverage.build_coverage_prompt(
+            labels=["Model A"],
+            responses_text='<response label="Model A">\none\n</response>',
+            numbered_answer="[1] One.",
+            ids=["s1"],
+        )
+        # Die zwei Fehler des Echttests: Worte aus dem Nachbarsatz und "...".
+        self.assertIn('"target" (in every counter_quotes entry)', prompt)
+        self.assertIn("never from a response or a neighbouring sentence", prompt)
+        self.assertIn('shortened with "..."', prompt)
+        self.assertIn('except for the few words of a "target"', prompt)
+        self.assertIn('"target": "disputed words of s7"', prompt)
 
     def test_repair_prompt_asks_only_for_the_missing_ids(self):
         prompt = coverage.build_coverage_prompt(
@@ -201,6 +225,34 @@ class CoverageClaimTests(unittest.TestCase):
         self.assertEqual(disputed["coverage"], "split")
         self.assertEqual(by_sentence[1]["coverage"], "supported")
 
+    def test_the_disputed_words_travel_with_their_dissent(self):
+        result = coverage.parse_coverage_payload(
+            coverage_payload(
+                self.context,
+                {"s2": {self.labels[0]: "supports", self.labels[1]: "contradicts"}},
+                quotes={"s2": {self.labels[1]: "completed in 1887"}},
+                targets={"s2": {self.labels[1]: "1889"}},
+            ),
+            self.labels,
+            coverage.sentence_ids(self.context.sentences),
+        )
+        self.assertEqual(result["s2"]["targets"], {self.labels[1]: "1889"})
+        claims = {claim["sentence_id"]: claim for claim in _coverage_claims(result, self.context)}
+        self.assertEqual(claims[2]["dissent"][0]["target"], "1889")
+
+    def test_a_dissent_without_named_words_carries_no_target(self):
+        result = coverage.parse_coverage_payload(
+            coverage_payload(
+                self.context,
+                {"s2": {self.labels[0]: "supports", self.labels[1]: "contradicts"}},
+                quotes={"s2": {self.labels[1]: "completed in 1887"}},
+            ),
+            self.labels,
+            coverage.sentence_ids(self.context.sentences),
+        )
+        claims = {claim["sentence_id"]: claim for claim in _coverage_claims(result, self.context)}
+        self.assertNotIn("target", claims[2]["dissent"][0])
+
     def test_a_non_claim_sentence_is_skipped_on_purpose(self):
         """Der EINZIGE legitime Weg, einen Satz zu ueberspringen: eine
         ausgesprochene Klassifikation, kein Verschwinden."""
@@ -236,6 +288,36 @@ class CoverageClaimTests(unittest.TestCase):
         claims = _coverage_claims({}, self.context)
         for claim in claims:
             self.assertIn(claim["anchor"], CONSENSUS)
+
+
+class CoverageTargetVerificationTests(unittest.TestCase):
+    """The server checks the disputed words against the claim's own sentence,
+    with the same exact rule as a dissent quote; the rest is dropped and the
+    app then marks the whole sentence."""
+
+    def verified(self, sentence, target):
+        claim = {"anchor": sentence, "agree": ["OpenAI"],
+                 "dissent": [{"model": "Mistral", "quote": "", "target": target}]}
+        _verify_claims([claim], sentence, {"Mistral": ""})
+        return claim["dissent"][0].get("target")
+
+    def test_words_of_the_sentence_are_kept_as_they_stand(self):
+        sentence = "The Pro 5 is much dearer, around 300 $ at one shop."
+        self.assertEqual(self.verified(sentence, "around 300 $"), "around 300 $")
+        self.assertEqual(self.verified(sentence, "AROUND  300 $"), "around 300 $")
+
+    def test_words_from_another_sentence_are_dropped(self):
+        self.assertIsNone(self.verified("Exceptions can shift the place of supply abroad.", "German VAT may be due"))
+
+    def test_a_span_shortened_with_dots_counts_by_its_two_ends(self):
+        sentence = "At Claude Pro (20 $) the API value is about 5 $ per month."
+        self.assertEqual(self.verified(sentence, "At Claude Pro (20 $) ... about 5 $"),
+                         "At Claude Pro (20 $) the API value is about 5 $")
+        self.assertIsNone(self.verified(sentence, "about 5 $ … At Claude Pro"))
+
+    def test_bold_markup_inside_the_sentence_does_not_hide_the_words(self):
+        sentence = "In Kona **Vincent Luis** won the men's race."
+        self.assertIn("Vincent Luis", self.verified(sentence, "Vincent Luis won the men's race"))
 
 
 class CoverageScoringTests(unittest.TestCase):

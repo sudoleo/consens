@@ -270,7 +270,7 @@ class SanitizerTests(unittest.TestCase):
 
     def test_differences_whitelist(self):
         data = {
-            "claims": [{"anchor": "x" * 800, "agree": ["OpenAI", 42], "dissent": [{"model": "Grok", "quote": "q", "secret": "drop"}], "sentence_id": 7, "anchor_occurrence": 1}],
+            "claims": [{"anchor": "x" * 800, "agree": ["OpenAI", 42], "dissent": [{"model": "Grok", "quote": "q", "target": "t" * 300, "secret": "drop"}, {"model": "Gemini", "quote": "r", "target": ""}], "sentence_id": 7, "anchor_occurrence": 1}],
             "differences": [
                 {"claim": "c", "consensus_anchor": "the stored sentence", "type": "contradiction", "severity": "major", "positions": [{"stance": "s", "models": ["Grok"], "quote": "q", "in_answer": True}, {"stance": "t", "models": ["OpenAI"], "quote": "r", "in_answer": "yes"}], "verify": "v", "sentence_id": 7, "anchor_occurrence": 1},
                 {"claim": "no positions", "positions": []},
@@ -287,6 +287,9 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(len(result["claims"][0]["anchor"]), 500)
         self.assertEqual(result["claims"][0]["agree"], ["OpenAI"])
         self.assertNotIn("secret", result["claims"][0]["dissent"][0])
+        # The disputed words of the sentence survive, capped; an empty one is left out.
+        self.assertEqual(result["claims"][0]["dissent"][0]["target"], "t" * 200)
+        self.assertNotIn("target", result["claims"][0]["dissent"][1])
         self.assertEqual(result["claims"][0]["sentence_id"], 7)
         self.assertEqual(result["claims"][0]["anchor_occurrence"], 1)
         self.assertEqual(len(result["differences"]), 1)

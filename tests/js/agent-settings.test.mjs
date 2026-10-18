@@ -76,7 +76,7 @@ describe("Agent settings card", () => {
     render({ settings: { agent_model: { model_id: "opus", reasoning_effort: "max" }, agent_preferences: { depth: "quick" },
       consensus_highlights: "none" }, notes: {} });
     expect(rows()).toEqual(["Chat model: Claude Sonnet 5.5 → Claude Opus 4.8", "Reasoning: Medium → Max",
-      "Answer depth: Automatic → Always brief", "Answer highlights: All checks → No highlights"]);
+      "Answer depth: Automatic → Always brief", "Answer highlights: Disagreements & issues → No highlights"]);
     card().querySelector(".agent-settings-apply").click();
     // The chat model goes through the picker, so an open chat takes it as well.
     expect(window.App.agentChat.applyPick).toHaveBeenCalledWith({ model_id: "opus", reasoning_effort: "max" });

@@ -52,7 +52,7 @@
       () => App.activeConsensusPresetId?.() || App.userSettings.get('consensus_preset')],
     consensus_highlights: ['Answer highlights', { all: 'All checks', contradictions: 'Contradictions only',
       concerns: 'Disagreements & issues', critical: 'Critical contradictions', none: 'No highlights' },
-    () => App.userSettings.get('consensus_highlights') || 'all'],
+    () => App.userSettings.get('consensus_highlights') || 'concerns'],
     claim_counts: ['Inline claim counts', { true: 'On', false: 'Off' }, () => App.userSettings.get('claim_counts') === true],
     agreement_display: ['Agreement score', { full: 'Score and summary', summary: 'Summary only', off: 'Hidden' },
       () => App.userSettings.get('agreement_display') || 'full'],

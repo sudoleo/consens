@@ -71,7 +71,7 @@ PREFERENCES = {
 DISPLAY = {
     "answer_highlights": ("consensus_highlights", "Answer highlights", {
         "all": "All checks", "contradictions": "Contradictions only", "concerns": "Disagreements & issues",
-        "critical": "Critical contradictions", "none": "No highlights"}, "all"),
+        "critical": "Critical contradictions", "none": "No highlights"}, "concerns"),
     # "on"/"off" for the model (a live probe sent "false" as text for a
     # boolean); the account keeps a boolean (ACCOUNT_VALUES).
     "claim_counts": ("claim_counts", "Inline claim counts", {"on": "On", "off": "Off"}, "off"),

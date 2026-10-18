@@ -45,12 +45,13 @@ function reordered(value) {
 }
 
 // The app always sets the Highlights mode (consensus-insights.js, default
-// "all"); these cases run the folded "Disagreements & issues" card unless
-// they name another mode.
-function boot({ mode = "concerns" } = {}) {
+// "concerns" since 2026-10-19); these cases run the folded "Disagreements &
+// issues" card unless they name another mode. `anchor` loads the text search
+// that finds the disputed words of a sentence (consensus-anchor.js).
+function boot({ mode = "concerns", anchor = false } = {}) {
   const popover = vi.fn();
   const openContext = vi.fn();
-  const env = loadScripts(["static/js/passage-check.js"], {
+  const env = loadScripts([...(anchor ? ["static/js/consensus-anchor.js"] : []), "static/js/passage-check.js"], {
     body: BODY,
     before: window => {
       window.App = { claimPopover: { open: popover } };
@@ -107,6 +108,23 @@ describe("result card of a checked pasted text", () => {
     line.click();
     expect(popover).toHaveBeenCalledTimes(1);
     expect(popover.mock.calls[0][1]).toBe(mark);
+  });
+
+  it("colours only the words other models dispute, as the answer does", () => {
+    const { window, body, card } = boot({ anchor: true });
+    const disputed = claim("You always need **underfloor heating** for that.", { agree: ["Gemini"], dissent: ["Claude", "GPT"] });
+    disputed.dissent = disputed.dissent.map(item => ({ ...item, target: "**underfloor heating**" }));
+    window.App.passageCheck.apply(body, review({ claims: [disputed] }));
+    const mark = card().querySelector(".passage-check-quotes .pc-claim");
+    expect(mark.textContent).toBe("You always need underfloor heating for that.");
+    expect(mark.classList.contains("has-spot")).toBe(true);
+    expect([...mark.querySelectorAll(".cx-spot")].map(spot => spot.textContent)).toEqual(["underfloor heating"]);
+    // Words that are not in the sentence leave the whole sentence marked.
+    disputed.dissent = disputed.dissent.map(item => ({ ...item, target: "not in this sentence" }));
+    window.App.passageCheck.apply(body, review({ claims: [disputed] }));
+    const plain = card().querySelector(".passage-check-quotes .pc-claim");
+    expect(plain.classList.contains("has-spot")).toBe(false);
+    expect(plain.querySelector(".cx-spot")).toBe(null);
   });
 
   it("says a single dissenting model disagrees, and shortens a long quote", () => {

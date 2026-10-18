@@ -3295,6 +3295,15 @@ body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
   outline: none;
 }
 
+/* The disputed words inside a sentence follow its sentence. */
+.consensus-answer-body .cx-claim.is-marker-filtered .cx-spot,
+body.consensus-markers-hidden .consensus-answer-body .cx-spot {
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
 .consensus-differences-panel {
   max-width: none;
 }

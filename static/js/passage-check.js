@@ -85,7 +85,8 @@
         end: units[claim.end],
         agree: Array.isArray(claim.agree) ? claim.agree.map(String) : [],
         dissent: (Array.isArray(claim.dissent) ? claim.dissent : [])
-          .filter(item => item && item.model).map(item => ({ model: String(item.model), quote: String(item.quote || "") })),
+          .filter(item => item && item.model).map(item => ({ model: String(item.model), quote: String(item.quote || ""),
+            target: String(item.target || "") })),
         anchor: String(claim.anchor || text.slice(units[claim.start], units[claim.end]))
       }))
       .sort((a, b) => a.start - b.start);
@@ -111,7 +112,7 @@
       check.status, check.text, check.answerTo, check.models.slice().sort(),
       check.issues.map(issue => [issue.code, issue.count]).sort(),
       check.claims.map(claim => [claim.start, claim.end, verdict(claim), claim.agree.slice().sort(),
-        claim.dissent.map(item => [item.model, item.quote]).sort()])]);
+        claim.dissent.map(item => [item.model, item.quote, item.target]).sort()])]);
   }
 
   // Pasted Markdown (ChatGPT's copy button) reads as text: bold and italic
@@ -189,7 +190,7 @@
   }
 
   function highlightMode() {
-    return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "all";
+    return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "concerns";
   }
 
   // "All checks" promises every verdict highlighted, so the card opens on the
@@ -216,8 +217,40 @@
     return element;
   }
 
+  // The words other models dispute (dissent[].target, checked by the server
+  // against the sentence) carry the colour; without them the whole sentence
+  // does, as in the answer (consensus-insights.js wrapSpots).
+  function spotRanges(text, claim) {
+    const anchor = window.App.consensusAnchor?.create(value => displayText(value, true));
+    if (!anchor || !QUOTED.has(verdict(claim))) return [];
+    const ranges = [];
+    claim.dissent.forEach(item => {
+      if (!item.target) return;
+      for (const needle of [displayText(item.target, true), item.target].map(anchor.normalizeForSearch).filter(Boolean)) {
+        const hit = anchor.findRangesInText(text, needle)[0];
+        if (hit) { ranges.push(hit); break; }
+      }
+    });
+    ranges.sort((a, b) => a.start - b.start);
+    return ranges.reduce((merged, range) => {
+      const last = merged[merged.length - 1];
+      if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+      else merged.push({ start: range.start, end: range.end });
+      return merged;
+    }, []);
+  }
+
   function mark(claim, index, text, { quoted = false } = {}) {
-    const span = node("span", `cx-claim pc-claim is-interactive ${MARKS[verdict(claim)]}`, text);
+    const span = node("span", `cx-claim pc-claim is-interactive ${MARKS[verdict(claim)]}`);
+    const spots = spotRanges(text, claim);
+    let cursor = 0;
+    spots.forEach(range => {
+      if (range.start > cursor) span.append(text.slice(cursor, range.start));
+      span.append(node("span", "cx-spot", text.slice(range.start, range.end)));
+      cursor = range.end;
+    });
+    if (cursor < text.length) span.append(text.slice(cursor));
+    span.classList.toggle("has-spot", spots.length > 0);
     span.dataset.claim = String(index);
     span.dataset.verdict = verdict(claim);
     span.tabIndex = 0;

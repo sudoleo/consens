@@ -79,7 +79,7 @@ describe("consensus sentence-check visibility", () => {
     const ctx = { window, document };
     const mark = document.querySelector("#consensusAnswerBody .cx-claim");
     expect(mark.getAttribute("role")).toBe("button");
-    expect(document.body.dataset.consensusHighlightMode).toBe("all");
+    expect(document.body.dataset.consensusHighlightMode).toBe("concerns");
 
     choose(ctx, document.body.classList.contains("consensus-markers-hidden") ? "concerns" : "none");
     expect(document.body.classList.contains("consensus-markers-hidden")).toBe(true);
@@ -162,7 +162,8 @@ describe("sentence highlight filters", () => {
           expect(mark.hasAttribute("role")).toBe(false);
         });
       expect(body.querySelectorAll(".claim-badge:not(.is-marker-filtered)").length)
-        .toBe(mode === "all" || mode === "none" ? 3 : mode === "concerns" ? 1 : 0);
+        // "No highlights" keeps the remembered filter (the default) for later.
+        .toBe(mode === "all" ? 3 : mode === "concerns" || mode === "none" ? 1 : 0);
       expect(marks.filter(mark => !mark.classList.contains("is-marker-filtered")
         && !ctx.document.body.classList.contains("consensus-markers-hidden")))
         .toHaveLength(visibleCount);
@@ -239,7 +240,7 @@ describe("sentence highlight filters", () => {
 
   it("falls back for invalid values and retains the session choice when writes fail", () => {
     const ctx = boot(null, "invalid", true);
-    expect(ctx.document.getElementById("consensusHighlightsSelect").value).toBe("all");
+    expect(ctx.document.getElementById("consensusHighlightsSelect").value).toBe("concerns");
     choose(ctx, "critical");
     renderMixed(ctx, true);
     expect(ctx.document.querySelectorAll(".cx-claim:not(.is-marker-filtered)")).toHaveLength(1);
@@ -252,17 +253,17 @@ describe("sentence highlight filters", () => {
 
 
 describe("highlight defaults", () => {
-  it("defaults new browsers to all checks while preserving an explicit choice", () => {
-    // Green on agreed sentences shows that the answer was compared at all.
+  it("defaults new browsers to disagreements only while preserving an explicit choice", () => {
+    // Since 2026-10-19 a mark means "the models disagree here": red, amber
+    // and every contradiction the footer counts, the minor one included;
+    // agreement and emphasis stay unmarked until the reader picks "All checks".
     const fresh=boot(); renderMixed(fresh);
-    expect(fresh.document.body.dataset.consensusHighlightMode).toBe("all");
-    expect(fresh.document.querySelectorAll(".cx-claim:not(.is-marker-filtered)")).toHaveLength(6);
-    expect(fresh.document.getElementById("consensusHighlightsSelect").value).toBe("all");
-    const explicit=boot("true","concerns"); renderMixed(explicit);
-    expect(explicit.document.body.dataset.consensusHighlightMode).toBe("concerns");
-    // Disagreements & issues: red, amber and every contradiction the footer
-    // counts, the minor one included; agreement and emphasis stay unmarked.
-    const visible = Array.from(explicit.document.querySelectorAll(".cx-claim:not(.is-marker-filtered)")).map(mark => mark.textContent);
+    expect(fresh.document.body.dataset.consensusHighlightMode).toBe("concerns");
+    expect(fresh.document.getElementById("consensusHighlightsSelect").value).toBe("concerns");
+    const visible = Array.from(fresh.document.querySelectorAll(".cx-claim:not(.is-marker-filtered)")).map(mark => mark.textContent);
     expect(visible).toEqual([SENTENCES[1], SENTENCES[3], SENTENCES[4]]);
+    const explicit=boot("true","all"); renderMixed(explicit);
+    expect(explicit.document.body.dataset.consensusHighlightMode).toBe("all");
+    expect(explicit.document.querySelectorAll(".cx-claim:not(.is-marker-filtered)")).toHaveLength(6);
   });
 });

@@ -322,7 +322,19 @@
    lasen schlammig (Rot als Rose). Lautstaerke nach Informationswert,
    gemessen in OKLab gegen --ground: Gruen dE 2,9 (der Normalfall, deckt den
    Grossteil) < Nuance-Grau 4,2 < Bernstein 5,5 < Rot 6,2 - also nie lauter
-   als vorher (max. 6,5), aber endlich gestaffelt. Textkontrast >= 12:1. */
+   als vorher (max. 6,5), aber endlich gestaffelt. Textkontrast >= 12:1.
+
+   Nur die Stelle des Streits (2026-10-19, User-Vorgabe): eingefaerbte Saetze
+   ueber die halbe Antwort sahen im Light Mode wie ein angestrichenes
+   Schulbuch aus, im Dark Mode lag heller Text auf braunen und roten Baendern.
+   Seitdem traegt in einem bestrittenen Satz nur die bestrittene Stelle die
+   Farbe (.cx-spot, wenige Worte, siehe unten), und die Standard-Einstellung
+   zeigt nur Unterschiede; Gruen und Grau erst unter "All checks". Weil nur
+   noch wenige Worte gefaerbt sind, duerfen Bernstein und Rot klarer sein
+   (Honig #f0b429, Rot #e5484d). Im Dark Mode nimmt die Schrift der Stelle
+   denselben Ton an (Ton in Ton), statt hell auf dunklem Farbband zu
+   stehen. Ohne benannte Stelle (aeltere Laeufe) traegt der ganze Satz
+   dieselbe Farbe. */
 :root {
   --cx-mark-agree: #eaf6ed;
   --cx-mark-agree-strong: #dcf2e2;
@@ -334,10 +346,11 @@
      die gemessenen Saetze sehen und nicht die ungemessenen. */
   --cx-mark-thin: #f2f3f5;
   --cx-mark-thin-strong: #e7e9ed;
-  --cx-mark-split: #fbead2;
-  --cx-mark-split-strong: #fbe0b9;
-  --cx-mark-major: #fbe1e0;
-  --cx-mark-major-strong: #fbd0ce;
+  /* Deckend, ueber --ground gemischt: Honig 27 % / 40 %, Rot 17 % / 28 %. */
+  --cx-mark-split: #f7e7c2;
+  --cx-mark-split-strong: #f6dea6;
+  --cx-mark-major: #f6dcdd;
+  --cx-mark-major-strong: #f4c8ca;
 }
 
 .dark-mode {
@@ -352,10 +365,13 @@
   --cx-mark-note-strong: color-mix(in srgb, var(--ink) 16%, transparent);
   --cx-mark-thin: color-mix(in srgb, var(--ink) 6%, transparent);
   --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 13%, transparent);
-  --cx-mark-split: color-mix(in srgb, #ff9f0a 13%, transparent);
-  --cx-mark-split-strong: color-mix(in srgb, #ff9f0a 23%, transparent);
-  --cx-mark-major: color-mix(in srgb, #ff453a 22%, transparent);
-  --cx-mark-major-strong: color-mix(in srgb, #ff453a 34%, transparent);
+  --cx-mark-split: color-mix(in srgb, #f0b429 17%, transparent);
+  --cx-mark-split-strong: color-mix(in srgb, #f0b429 27%, transparent);
+  --cx-mark-major: color-mix(in srgb, #ff7b72 19%, transparent);
+  --cx-mark-major-strong: color-mix(in srgb, #ff7b72 29%, transparent);
+  /* Ton in Ton: die Schrift einer markierten Stelle */
+  --cx-ink-split: #f5d58f;
+  --cx-ink-major: #ffb3ad;
 }
 
 .cx-claim {
@@ -413,6 +429,64 @@
 .cx-claim.is-major {
   --cx-mark: var(--cx-mark-major);
   --cx-mark-strong: var(--cx-mark-major-strong);
+}
+
+/* Die Stelle des Streits. Ein bestrittener Satz mit benannter Stelle
+   (.has-spot, consensus-insights.js wrapSpots) verliert seine Flaeche; die
+   Stelle (.cx-spot) traegt die Farbe seines Zustands. Der Satz bleibt das
+   Steuerelement: Zeiger und Tastatur legen einen Hauch seiner Farbe ueber
+   den ganzen Satz und vertiefen die Stelle, damit sichtbar bleibt, worauf
+   sich die Karte bezieht. */
+.cx-claim.has-spot {
+  --cx-paint: transparent;
+}
+
+.cx-claim.has-spot.is-hovered {
+  --cx-paint: color-mix(in srgb, var(--cx-mark) 45%, transparent);
+}
+
+.cx-spot {
+  --cx-spot-paint: var(--cx-mark, transparent);
+  --cx-bleed: 0.09em;
+  padding: 0.1em 0;
+  border-radius: 3px;
+  background-color: var(--cx-spot-paint);
+  box-shadow: calc(-1 * var(--cx-bleed)) 0 0 var(--cx-spot-paint), var(--cx-bleed) 0 0 var(--cx-spot-paint);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
+}
+
+.cx-claim.has-spot.is-hovered .cx-spot {
+  --cx-spot-paint: var(--cx-mark-strong, var(--cx-mark));
+}
+
+.cx-spot.cx-join-start {
+  box-shadow: var(--cx-bleed) 0 0 var(--cx-spot-paint);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.cx-spot.cx-join-end {
+  box-shadow: calc(-1 * var(--cx-bleed)) 0 0 var(--cx-spot-paint);
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.cx-spot.cx-join-start.cx-join-end { box-shadow: none; }
+
+/* Dark Mode, Ton in Ton: die markierte Stelle nimmt auch in der Schrift
+   ihren Ton an, statt hell auf einem dunklen Farbband zu stehen. Gilt nur,
+   solange die Marke sichtbar ist (Highlights-Filter, "No highlights", eine
+   ungemalte Satzpruefung). */
+.dark-mode:not(.consensus-markers-hidden) .cx-claim.is-split:not(.has-spot, .is-marker-filtered, .is-quiet),
+.dark-mode:not(.consensus-markers-hidden) .cx-claim.is-split.has-spot:not(.is-marker-filtered, .is-quiet) .cx-spot {
+  color: var(--cx-ink-split);
+}
+
+.dark-mode:not(.consensus-markers-hidden) .cx-claim.is-major:not(.has-spot, .is-marker-filtered, .is-quiet),
+.dark-mode:not(.consensus-markers-hidden) .cx-claim.is-major.has-spot:not(.is-marker-filtered, .is-quiet) .cx-spot {
+  color: var(--cx-ink-major);
 }
 
 :root {

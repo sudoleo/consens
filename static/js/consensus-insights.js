@@ -119,10 +119,12 @@
           };
           const highlightSelect = $("consensusHighlightsSelect");
           const highlightHelp = $("consensusHighlightsHelp");
-          // "All checks" by default (2026-10-12): the quiet green on agreed
-          // sentences shows that the answer was compared at all; red and amber
-          // stay louder by design (components-consensus-visuals.css).
-          let highlightMode = "all";
+          // Only disagreements by default (2026-10-19, user decision): a mark
+          // means "the models do not agree here". Agreement (green) and thin
+          // coverage (grey) show only after the reader picks "All checks";
+          // from 2026-10-12 to 2026-10-19 that was the default.
+          const DEFAULT_HIGHLIGHT_MODE = "concerns";
+          let highlightMode = DEFAULT_HIGHLIGHT_MODE;
           let markersVisible = true;
           const MARKERS_HIDDEN_CLASS = "consensus-markers-hidden";
           const claimCountsToggle = $("claimCountsSwitch");
@@ -146,7 +148,7 @@
             markersVisible = stored !== "none";
             // hasOwnProperty, not Object.hasOwn: this runs while the bundle
             // loads, and older engines (Chromium < 93) lack Object.hasOwn.
-            highlightMode = Object.prototype.hasOwnProperty.call(MARKER_FILTERS, stored) ? stored : "all";
+            highlightMode = Object.prototype.hasOwnProperty.call(MARKER_FILTERS, stored) ? stored : DEFAULT_HIGHLIGHT_MODE;
             return markersVisible;
           }
 
@@ -397,6 +399,7 @@
           // --- Textsuche: Whitespace kollabieren, Anführungszeichen vereinheitlichen
           const {
             normalizeForSearch,
+            findRangesInText,
             findRangeInTextNode,
             searchVariants,
             sentenceBounds,
@@ -426,6 +429,52 @@
               if (index < spans.length - 1) span.classList.add("cx-join-end");
             });
             return spans;
+          }
+
+          // Nur die Stelle des Streits traegt die Farbe (2026-10-19, User-
+          // Vorgabe): in einem bestrittenen Satz die Worte, denen ein Modell
+          // widerspricht (dissent[].target, vom Coverage-Judge benannt und
+          // serverseitig gegen den Satz geprueft), nicht der ganze Satz. Der
+          // Satz-Span bleibt das Steuerelement (Klick, Tastatur, Hover,
+          // Highlights-Filter); .has-spot nimmt ihm nur die Flaeche. Findet
+          // sich kein Ziel im Satz (aeltere Laeufe, verworfene Ziele), bleibt
+          // der ganze Satz markiert.
+          function wrapSpots(spans, targets) {
+            const slices = [];
+            let flat = "";
+            spans.forEach(function (span) {
+              const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+              let node;
+              while ((node = walker.nextNode())) {
+                if (!node.nodeValue || node.parentElement?.closest(".cx-spot")) continue;
+                slices.push({ node: node, start: flat.length, end: flat.length + node.nodeValue.length });
+                flat += node.nodeValue;
+              }
+            });
+            const ranges = [];
+            targets.forEach(function (target) {
+              // Nur ganze Fassungen: eine auf acht Woerter gekuerzte Variante
+              // (searchVariants) markierte bloss einen Teil der Stelle.
+              const needles = [stripMarkdown(target), target].map(normalizeForSearch).filter(Boolean);
+              for (const needle of needles) {
+                const hit = findRangesInText(flat, needle)[0];
+                if (hit) { ranges.push(hit); break; }
+              }
+            });
+            if (!ranges.length) return;
+            ranges.sort(function (a, b) { return a.start - b.start; });
+            const merged = [];
+            ranges.forEach(function (range) {
+              const last = merged[merged.length - 1];
+              if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+              else merged.push({ start: range.start, end: range.end });
+            });
+            // Von hinten nach vorn: splitText verschiebt sonst die Offsets der
+            // naechsten Stelle in denselben Textknoten.
+            merged.reverse().forEach(function (range) {
+              wrapFlatRange(slices, range.start, range.end, "cx-spot");
+            });
+            spans.forEach(function (span) { span.classList.add("has-spot"); });
           }
 
           // --- Popover / Bottom Sheet -------------------------------------
@@ -1627,6 +1676,17 @@
             //                    statt wie ungeprueft auszusehen
             const unanchored = [];
             const claimControls = [];
+            // Satz-Spans -> bestrittene Worte. Ein Widerspruch und ein Claim
+            // auf demselben Satz teilen sich dieselben Spans (markSentence).
+            const spotTargets = new Map();
+            function collectSpotTargets(spans, claim) {
+              const targets = claim.dissent
+                .map(function (item) { return item && typeof item.target === "string" ? item.target.trim() : ""; })
+                .filter(Boolean);
+              if (!targets.length) return;
+              if (!spotTargets.has(spans)) spotTargets.set(spans, { spans: spans, targets: [] });
+              spotTargets.get(spans).targets.push(...targets);
+            }
             const coverageCounts = { supported: 0, split: 0, thin: 0 };
             claims.forEach(function (claim) {
               const coverage = claimCoverage(claim);
@@ -1641,6 +1701,7 @@
                 unanchored.push(claim);
                 return;
               }
+              collectSpotTargets(result.spans, claim);
               const overlappingDifference = differenceControls.find(function (entry) {
                 return entry.spans === result.spans;
               });
@@ -1687,6 +1748,10 @@
                 openClaimPopover(claim, anchor, modelsCompared, answerNavigation);
               }, function () { return buildClaimPreview(claim, modelsCompared); });
             });
+
+            // 3. Die Stelle des Streits: in einem bestrittenen Satz traegt nur
+            //    sie die Farbe (wrapSpots).
+            spotTargets.forEach(function (entry) { wrapSpots(entry.spans, entry.targets); });
 
             if (unanchored.length) {
               // Der Anker ist eine woertliche Kopie des Konsenstextes und
@@ -2759,7 +2824,8 @@
             // Inline-Markierungen auflösen: Span entfernen, Text an Ort und
             // Stelle lassen. normalize() führt die Textknoten wieder zusammen,
             // damit eine erneute Ankersuche nicht an Fragmenten scheitert.
-            insightRoot.querySelectorAll(".cx-claim:not(.pc-claim)").forEach(function (span) {
+            // Die Stellen-Spans (.cx-spot) liegen in den Satz-Spans und gehen zuerst.
+            insightRoot.querySelectorAll(".cx-claim:not(.pc-claim) .cx-spot, .cx-claim:not(.pc-claim)").forEach(function (span) {
               const parent = span.parentNode;
               if (!parent) return;
               while (span.firstChild) parent.insertBefore(span.firstChild, span);
@@ -2823,7 +2889,7 @@
           restoreClaimCounts();
           highlightSelect?.addEventListener("change", function () {
             const show = this.value !== "none";
-            if (show) highlightMode = Object.prototype.hasOwnProperty.call(MARKER_FILTERS, this.value) ? this.value : "all";
+            if (show) highlightMode = Object.prototype.hasOwnProperty.call(MARKER_FILTERS, this.value) ? this.value : DEFAULT_HIGHLIGHT_MODE;
             settings.set("consensus_highlights", show ? highlightMode : "none");
             applyConsensusMarkerVisibility(show, true);
           });

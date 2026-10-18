@@ -161,7 +161,7 @@ def _build_mock_coverage_json(prompt: str) -> str:
                 for label in labels
             },
             "counter_quotes": (
-                [{"model": dissent_label, "quote": "was completed in 1887"}]
+                [{"model": dissent_label, "quote": "was completed in 1887", "target": "1889"}]
                 if contradicts else []
             ),
         })

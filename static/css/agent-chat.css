@@ -480,8 +480,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   /* The marks stroke on in reading order; badges settle in behind them. */
   /* Only marks the reader's highlight setting shows take part, and none the
      reader already saw as a provisional mark in the same colour. */
+  /* A sentence whose disputed words are named strokes only those words
+     (.cx-spot inherits the sentence's --cx-reveal-delay). */
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown) {
+    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown, .has-spot),
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
+    .cx-claim.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown) .cx-spot {
     background-color: transparent;
     background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
     background-repeat: no-repeat;
@@ -495,7 +499,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
      still runs, agent-review.js preview) arrive quietly: each fades in once,
      without the stroke. */
   body:not(.consensus-markers-hidden) #agentAnswerBody
-    .cx-claim.is-mark-arriving:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered) {
+    .cx-claim.is-mark-arriving:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
+  body:not(.consensus-markers-hidden) #agentAnswerBody
+    .cx-claim.is-mark-arriving.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered) .cx-spot {
     animation: agent-mark-arrive .45s ease-out backwards;
   }
   body:not(.consensus-markers-hidden) #agentAnswerBody .claim-badge.is-mark-arriving:not(.is-marker-filtered) {
@@ -503,7 +509,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
-#agentAnswerBody.is-marks-settling .cx-claim { transition: none; }
+#agentAnswerBody.is-marks-settling :is(.cx-claim, .cx-spot) { transition: none; }
 @keyframes agent-answer-sheen-in { from { opacity: 0; } }
 /* One period moves the repeating 250% gradient by exactly one tile, so the
    loop is seamless. */
@@ -822,7 +828,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    text that still opens its card. Under pointer and focus it shows that it
    is a sentence, in neutral grey: its verdict colour stays the setting's. */
 .cx-claim.pc-claim.is-quiet { --cx-paint: transparent; }
+.cx-claim.pc-claim.is-quiet .cx-spot { --cx-spot-paint: transparent; }
 .cx-claim.pc-claim:not(.is-quiet):is(:hover, :focus-visible) { --cx-paint: var(--cx-mark-strong); }
+/* With its disputed words named, the sentence only takes a hint of its
+   colour under pointer and focus; the words deepen (wrapSpots). */
+.cx-claim.pc-claim.has-spot:not(.is-quiet) { --cx-paint: transparent; }
+.cx-claim.pc-claim.has-spot:not(.is-quiet):is(:hover, :focus-visible) { --cx-paint: color-mix(in srgb, var(--cx-mark) 45%, transparent); }
+.cx-claim.pc-claim.has-spot:not(.is-quiet):is(:hover, :focus-visible) .cx-spot { --cx-spot-paint: var(--cx-mark-strong); }
 .cx-claim.pc-claim.is-quiet:is(:hover, :focus-visible) { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
 @media (prefers-reduced-motion: no-preference) {
   .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe 1.8s ease-in-out infinite; }

@@ -325,12 +325,12 @@ def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_acco
     assert read["depth"]["now"] == "Always brief" and read["answer_start"]["now"] == "After every model"
     assert read["comparison_lineup"]["now"] == "Open Models" and read["comparison_lineup"]["on_pro"] == ["High Quality"]
     assert "thorough" not in read["comparison_lineup"]["choices"]
-    assert read["claim_counts"]["now"] == "On" and read["answer_highlights"]["now"] == "All checks"
+    assert read["claim_counts"]["now"] == "On" and read["answer_highlights"]["now"] == "Disagreements & issues"
     assert read["defaults"] == {
         "chat_model": "Claude Sonnet 5.5",
         "reasoning": "medium",
         "depth": "auto", "answer_start": "all", "agent_freedom": "guided", "answer_check": "on", "comparison_lineup": "fast",
-        "answer_highlights": "all", "claim_counts": "off", "agreement_score": "full"}
+        "answer_highlights": "concerns", "claim_counts": "off", "agreement_score": "full"}
     assert read["claim_counts"]["choices"] == {"on": "On", "off": "Off"}
     assert "system prompt" in read["elsewhere"] and "composer" in read["elsewhere"]
     pro = settings_loop(store, pro=True, effort="default", account={"consensus_preset": "thorough"}).settings_tools.read(

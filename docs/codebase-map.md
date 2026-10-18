@@ -1145,10 +1145,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   lokal `consensio.showConsensusMarkers.v1` + `consensio.consensusHighlightMode.v1`): `all`,
   `contradictions` (inklusive grauer Detailwidersprüche), `concerns`
   (alle Widersprüche inklusive leichter und Split-Claims — passt damit zur Zahl „Contradictions N“ im Antwort-Fuß)
-  oder `critical` (kritische Widersprüche). Default ist seit 2026-10-12 `all`:
-  das leise Grün auf übereinstimmenden Sätzen zeigt überhaupt erst, dass
-  verglichen wurde; Rot/Bernstein bleiben durch die Staffelung lauter
-  (`components-consensus-visuals.css`). Fachliche Optionsnamen und ein
+  oder `critical` (kritische Widersprüche). Default ist seit 2026-10-19
+  wieder `concerns` (User-Vorgabe): eine Marke heißt „hier sind sich die
+  Modelle nicht einig“; Zustimmung (Grün) und dünne Abdeckung (Grau) erscheinen
+  nur, wenn jemand ausdrücklich `all` wählt (von 2026-10-12 bis 2026-10-19 war
+  `all` der Default). Derselbe Default steht in `consensus-insights.js`
+  (`DEFAULT_HIGHLIGHT_MODE`), `passage-check.js`, `agent-settings.js`,
+  `templates/index.html` und `agent_settings.DISPLAY`. Fachliche Optionsnamen und ein
   umbrechender Hilfetext erklären die Farben. Bestehende explizite Auswahlen
   bleiben erhalten; fehlende/ungültige Werte fallen auf `all` zurück.
   „No highlights“ verwendet weiterhin `consensio.showConsensusMarkers.v1`.
@@ -2308,6 +2311,25 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Treffen zwei Marken denselben Satz, hebt `markSentence` die Marke über
   `MARK_LEVELS` (unanimous < minor < split < major) auf die stärkere Stufe an,
   statt die zuerst gesetzte Klasse zu behalten.
+  **Nur die Stelle des Streits (seit 2026-10-19, User-Vorgabe):** eingefärbte
+  Sätze über die halbe Antwort lasen sich im Light Mode wie ein angestrichenes
+  Schulbuch, im Dark Mode lag heller Text auf dunklen Farbbändern. Nennt ein
+  Dissens die bestrittenen Worte (`claims[].dissent[].target`, siehe
+  Coverage-Judge), wrappt `wrapSpots` (`consensus-insights.js`) genau diese
+  Worte im Satz in `<span class="cx-spot">` (Suche mit
+  `normalizeForSearch`/`findRangesInText` über die Textknoten der Satz-Spans,
+  überlappende Stellen verschmolzen, von hinten nach vorn gewrappt); der Satz
+  bekommt `.has-spot` und verliert seine Fläche, bleibt aber Steuerelement
+  (Klick, Tastatur, Hover, Highlights-Filter). Ein Widerspruch und ein Claim
+  auf demselben Satz teilen die Spans, die rote Marke nimmt also die Stelle
+  des Claims. Ohne gefundene Stelle (ältere Läufe, verworfene Ziele) bleibt
+  der ganze Satz markiert. Hover legt einen Hauch der Satzfarbe über den
+  Satz und vertieft die Stelle. Bernstein und Rot sind seitdem klarer (Honig
+  #f0b429, Rot #e5484d, deckend über `--ground` gemischt); im Dark Mode nimmt
+  die Schrift der Stelle denselben Ton an (`--cx-ink-split`/`--cx-ink-major`).
+  `resetConsensusInsights` löst `.cx-spot` vor `.cx-claim` auf; Filter und
+  „No highlights“ nehmen der Stelle die Fläche (`shell.css`); der Marker-Strich
+  beim ersten Erscheinen läuft über die Stelle (`agent-chat.css`).
   Die Inline-Quote ist standardmäßig ausgeblendet. Settings → Display →
   `#claimCountsSwitch` aktiviert sie über die Kontoeinstellung `claim_counts`
   (lokal `consensio.showClaimCounts.v1`) / die Body-Klasse `claim-counts-visible`.
@@ -4297,8 +4319,10 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
   als Fürstimmen), gemalt nach der Highlights-Einstellung
-  (`body[data-consensus-highlight-mode]`, Standard „all" — die Karte öffnet dann
-  auf dem ganzen Text); der Rest ist
+  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19 „concerns";
+  unter „all" öffnet die Karte auf dem ganzen Text); bestrittene Worte
+  (`dissent[].target`) tragen wie in der Antwort allein die Farbe (`.cx-spot`,
+  `spotRanges`); der Rest ist
   `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
   Urteilsfarbe. Zitierte Sätze sind immer gemalt. Klick/Enter auf einen Satz
   öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
@@ -5032,8 +5056,17 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   `coverage: "thin"` gerendert statt weggelassen. Klassifikationen:
   `claim` (wird markiert) / `not_a_claim` / `too_vague` / `context_only`;
   Stances je Modell: `supports` / `contradicts` / `not_addressed` / `unclear`.
+  Jedes Gegenzitat (`counter_quotes[]`) nennt seit 2026-10-19 auch `target`:
+  die Worte DIESES Satzes, denen es widerspricht (kürzeste Spanne, meist 1–6
+  Wörter, nie aus Antwort oder Nachbarsatz, nie mit „…“ gekürzt). Der Server
+  prüft sie in `_verify_claims` mit derselben exakten Regel wie Zitate gegen
+  den Satz (`_verified_target`, eine Spanne „A … B“ zählt über ihre beiden
+  Enden) und leert den Rest; `parse_coverage_payload` liefert sie als
+  `targets`, die Vorab-Fenster tragen sie mit (`_adopt_prefetched`).
+  Echttest mit dem Prod-Judge: 92 % der Ziele standen wörtlich im Satz.
   Ergebnis landet als `differences_data.claims` (unveränderte Feldform plus
-  `coverage`) und der Judge als `differences_data.judges.coverage`
+  `coverage`, `dissent[].target` nur wenn vorhanden; `sanitize_differences_data`
+  behält es, max. 200 Zeichen) und der Judge als `differences_data.judges.coverage`
   ({provider, model, tier, attempts, duration_ms, sentences, covered,
   repaired, missing}). Fällt der Coverage-Judge komplett aus, bleibt der Lauf
   intakt und die Antwort einfach ohne Marken — besser als jeder Satz grau.

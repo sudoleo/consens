@@ -209,7 +209,7 @@ const DEMO_DATA = {
         agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"],
         dissent: [{
           model: "DeepSeek",
-          quote: "Do not rely on a boiler test alone"
+          quote: "Do not rely on a boiler test alone", target: "Test it this winter"
         }],
         coverage: "split"
       },
@@ -217,8 +217,8 @@ const DEMO_DATA = {
         anchor: "Rooms that stay warm keep their radiators",
         agree: ["OpenAI", "Anthropic", "Gemini", "Grok"],
         dissent: [
-          { model: "Mistral", quote: "Replace the radiators in every room you use daily" },
-          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most" }
+          { model: "Mistral", quote: "Replace the radiators in every room you use daily", target: "keep their radiators" },
+          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most", target: "keep their radiators" }
         ],
         coverage: "split"
       },
@@ -238,9 +238,9 @@ const DEMO_DATA = {
         anchor: "The models split on the target flow temperature",
         agree: ["OpenAI", "Gemini", "Grok"],
         dissent: [
-          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below" },
-          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C" },
-          { model: "DeepSeek", quote: "so the system can run at 45 °C or below" }
+          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below", target: "target flow temperature" },
+          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C", target: "target flow temperature" },
+          { model: "DeepSeek", quote: "so the system can run at 45 °C or below", target: "target flow temperature" }
         ],
         coverage: "split"
       },
@@ -248,9 +248,9 @@ const DEMO_DATA = {
         anchor: "They also disagree on what that costs you",
         agree: ["Mistral", "Anthropic", "DeepSeek"],
         dissent: [
-          { model: "OpenAI", quote: "costs a few percent on the annual bill" },
-          { model: "Gemini", quote: "The step down to 45 °C is worth a few percent" },
-          { model: "Grok", quote: "saves less than the radiators cost" }
+          { model: "OpenAI", quote: "costs a few percent on the annual bill", target: "to about a quarter" },
+          { model: "Gemini", quote: "The step down to 45 °C is worth a few percent", target: "to about a quarter" },
+          { model: "Grok", quote: "saves less than the radiators cost", target: "to about a quarter" }
         ],
         coverage: "split"
       },
@@ -258,9 +258,9 @@ const DEMO_DATA = {
         anchor: "Keeping the gas boiler as a backup for the coldest days divides them as well",
         agree: ["Mistral", "Gemini", "Grok"],
         dissent: [
-          { model: "OpenAI", quote: "I would also take the gas boiler out completely" },
-          { model: "Anthropic", quote: "Do not keep the gas boiler as a backup" },
-          { model: "DeepSeek", quote: "You keep the standing charge and lose the reason you switched" }
+          { model: "OpenAI", quote: "I would also take the gas boiler out completely", target: "Keeping the gas boiler as a backup" },
+          { model: "Anthropic", quote: "Do not keep the gas boiler as a backup", target: "Keeping the gas boiler as a backup" },
+          { model: "DeepSeek", quote: "You keep the standing charge and lose the reason you switched", target: "Keeping the gas boiler as a backup" }
         ],
         coverage: "split"
       },
@@ -281,7 +281,7 @@ const DEMO_DATA = {
         agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"],
         dissent: [{
           model: "DeepSeek",
-          quote: "A boiler at 50 °C on a mild day says little about a heat pump at minus ten"
+          quote: "A boiler at 50 °C on a mild day says little about a heat pump at minus ten", target: "Test week at 50 °C"
         }],
         coverage: "split"
       },
@@ -289,9 +289,9 @@ const DEMO_DATA = {
         anchor: "Replace those two radiators, or more.",
         agree: ["OpenAI", "Gemini", "Grok"],
         dissent: [
-          { model: "Mistral", quote: "Replace the radiators in every room you use daily" },
-          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C" },
-          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most" }
+          { model: "Mistral", quote: "Replace the radiators in every room you use daily", target: "Replace those two radiators" },
+          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C", target: "Replace those two radiators" },
+          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most", target: "Replace those two radiators" }
         ],
         coverage: "split"
       },
@@ -305,9 +305,9 @@ const DEMO_DATA = {
         anchor: "Target flow temperature.",
         agree: ["OpenAI", "Gemini", "Grok"],
         dissent: [
-          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below" },
-          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C" },
-          { model: "DeepSeek", quote: "so the system can run at 45 °C or below" }
+          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below", target: "Target flow temperature" },
+          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C", target: "Target flow temperature" },
+          { model: "DeepSeek", quote: "so the system can run at 45 °C or below", target: "Target flow temperature" }
         ],
         coverage: "split"
       },

@@ -430,10 +430,15 @@ def sanitize_differences_data(data):
         dissent = []
         for entry in (claim.get("dissent") or [])[:6]:
             if isinstance(entry, dict) and entry.get("model"):
-                dissent.append({
+                item = {
                     "model": _clip(entry.get("model"), 40),
                     "quote": _clip(entry.get("quote"), 500),
-                })
+                }
+                # The disputed words of the sentence: the app marks only them.
+                target = _clip(entry.get("target"), 200)
+                if target:
+                    item["target"] = target
+                dissent.append(item)
         sanitized_claim = {
             "anchor": anchor,
             "agree": _sanitize_str_list(claim.get("agree"), 40, 12),

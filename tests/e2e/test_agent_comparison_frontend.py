@@ -766,8 +766,10 @@ def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(bro
     """Coverage windows that are done mark the fixed answer quietly while the
     Differences judge still runs (coverage_preview, since 2026-10-18). The
     final review replaces them and strokes on only what is new or changed;
-    the saved turn shows the saved review alone."""
-    context, page = _real_firebase_page(browser, phase4_server)
+    the saved turn shows the saved review alone. Green marks show only
+    under "All checks" (the default shows disagreements only)."""
+    context, page = _real_firebase_page(browser, phase4_server,
+        init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','all')")
     chat, turn = "a" * 32, "b" * 32
     seats, billing = "The smaller plan includes five seats.", "Monthly billing is available on both plans."
     text = f"{seats}\n\n{billing}\n"
