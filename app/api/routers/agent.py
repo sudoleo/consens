@@ -509,8 +509,9 @@ def run_agent(request: Request, payload: AgentRequest):
             completed = store.get_turn(uid, payload.chat_id, turn["id"])
             yield pack("final", _final(uid, payload, store, completed))
         except persistence_guard.PersistenceLimitError as exc:
-            logging.warning("Agent bookmark refused code=%s", exc.code)
-            yield pack("error", _bookmark_limit_failure(exc))
+            refused = _bookmark_limit_failure(exc)
+            logging.warning("Agent bookmark refused code=%s", refused["code"])
+            yield pack("error", refused)
         except Exception as exc:
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
             yield pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True, "recovery_state": "saved"})
