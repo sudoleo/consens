@@ -169,7 +169,7 @@ LEDGER = PulseLedger()
 
 def _icon(key):
     provider = cfg.PROVIDERS.get(key)
-    return f"/static/icons/chat_icons/{provider.icon}" if provider else "/static/favicon.png"
+    return provider.icon_url if provider else "/static/favicon.png"
 
 
 def normalize(period=None, mode=None, rival=None, sort=None) -> dict:

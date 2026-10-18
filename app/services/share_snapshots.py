@@ -82,9 +82,7 @@ PROVIDER_CITATION_LABELS = {
 # Provider-Logos analog zum Model-Picker auf /app (static/icons/chat_icons/).
 # Aus der Registry abgeleitet, damit neue Familien auch auf Share-Seiten ihr
 # Icon erhalten, ohne hier eine zweite Anbieter-Liste pflegen zu muessen.
-PROVIDER_ICONS = {
-    provider.label: provider.icon for provider in cfg.PROVIDERS.values()
-}
+PROVIDERS_BY_LABEL = {provider.label: provider for provider in cfg.PROVIDERS.values()}
 # Reverse-Map: Zitations-Label -> Provider-Key (Labels sind eindeutig).
 _CITATION_LABEL_TO_PROVIDER = {v: k for k, v in PROVIDER_CITATION_LABELS.items()}
 
@@ -322,21 +320,20 @@ def consensus_model_view(consensus_model):
         return None
     is_pro = raw.endswith("-Pro")
     base = raw[:-4] if is_pro else raw
-    provider = base if base in PROVIDER_ICONS else None
+    provider = base if base in PROVIDERS_BY_LABEL else None
     if provider is None:
         low = raw.lower()
-        for key in PROVIDER_ICONS:
+        for key in PROVIDERS_BY_LABEL:
             if key.lower() in low:
                 provider = key
                 break
-    icon = PROVIDER_ICONS.get(provider) if provider else None
     model_id = _CONSENSUS_ENGINE_MODELS.get(raw)
     model_label = cfg.get_model_label(model_id) if model_id else ""
     return {
         "provider": provider or "",
         "label": PROVIDER_CITATION_LABELS.get(provider) if provider else raw,
         "model": model_label,
-        "icon": ("/static/icons/chat_icons/%s" % icon) if icon else "",
+        "icon": PROVIDERS_BY_LABEL[provider].icon_url if provider else "",
         "pro": is_pro,
     }
 
@@ -354,7 +351,6 @@ def consulted_models_view(included_models):
         label, _, model_name = str(entry).partition(": ")
         label = label.strip()
         provider = _CITATION_LABEL_TO_PROVIDER.get(label)
-        icon = PROVIDER_ICONS.get(provider) if provider else None
         model_name = model_name.strip()
         if model_name and "-" in model_name and " " not in model_name:
             model_name = cfg.get_model_label(model_name)
@@ -362,7 +358,7 @@ def consulted_models_view(included_models):
             "provider": provider or "",
             "label": label,
             "model": model_name,
-            "icon": ("/static/icons/chat_icons/%s" % icon) if icon else "",
+            "icon": PROVIDERS_BY_LABEL[provider].icon_url if provider else "",
         })
     return view
 

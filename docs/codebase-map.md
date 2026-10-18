@@ -7109,6 +7109,12 @@ werden aus `dom_key`/`short_label` gebildet (`anthropic` -> `claudeResponse`,
 `selectClaude`), die Namen aus `title`/`short_label`/`citation_label`.
 Eine neue Familie braucht damit nur einen Registry-Eintrag und ein Icon unter
 `static/icons/chat_icons/`; `/ask_<dom_key>` wird aus der Registry registriert.
+Die Logo-URL kommt immer aus `ProviderConfig.icon_url` (`asset_url`, also mit
+Inhalts-Hash und ein Jahr Browser-Cache), für Picker, Model Pulse, Leaderboard
+und Share-Seiten; Templates binden Logos über `{{ asset_url(...) }}` ein
+(`tests/test_static_images.py` verbietet nackte `src="/static/icons/…"`). Ein
+neues PNG-Logo vor dem Commit mit `scripts/shrink_images.py` auf 144 px
+verkleinern (Budget 20 KB pro Logo, ebenda auch das Landing-OG-Bild ≤ 300 KB).
 
 Ein Lauf vergleicht hoechstens `cfg.MAX_RUN_FAMILIES` (6) Modelle, auch wenn
 mehr Familien konfiguriert sind: der Picker sperrt die naechste Familie

@@ -22,6 +22,11 @@ from app.services.public_markdown import (
 )
 
 
+def icon_file(url):
+    """Logo file name of a content-hashed /static URL."""
+    return url.split("?", 1)[0].rsplit("/", 1)[-1]
+
+
 # --- Minimaler Firestore-Fake (nur was share_snapshots braucht) ---
 
 class FakeSnap:
@@ -422,14 +427,15 @@ class SanitizerTests(unittest.TestCase):
         )
         self.assertEqual(view[0]["provider"], "OpenAI")
         self.assertEqual(view[0]["model"], "GPT-5.1")
-        self.assertTrue(view[0]["icon"].endswith("chatgpt.png"))
+        self.assertEqual(icon_file(view[0]["icon"]), "chatgpt.png")
+        self.assertRegex(view[0]["icon"], r"^/static/icons/chat_icons/chatgpt\.png\?v=[0-9a-f]{12}$")
         # Eintrag ohne Modellname behält Provider-Label, kein Icon-Verlust:
         self.assertEqual(view[1]["provider"], "Gemini")
         self.assertEqual(view[1]["model"], "")
-        self.assertTrue(view[1]["icon"].endswith("gemini-icon.png"))
-        self.assertTrue(view[3]["icon"].endswith("kimi.svg"))
-        self.assertTrue(view[4]["icon"].endswith("zai.svg"))
-        self.assertTrue(view[5]["icon"].endswith("meta.svg"))
+        self.assertEqual(icon_file(view[1]["icon"]), "gemini-icon.png")
+        self.assertEqual(icon_file(view[3]["icon"]), "kimi.svg")
+        self.assertEqual(icon_file(view[4]["icon"]), "zai.svg")
+        self.assertEqual(icon_file(view[5]["icon"]), "meta.svg")
         self.assertEqual(view[5]["provider"], "Meta")
         # Unbekanntes Label bleibt erhalten, aber ohne Icon:
         unknown = snapshots.consulted_models_view(["FooAI: x"])
@@ -440,7 +446,7 @@ class SanitizerTests(unittest.TestCase):
         pro = snapshots.consensus_model_view("Anthropic-Pro")
         self.assertEqual(pro["provider"], "Anthropic")
         self.assertTrue(pro["pro"])
-        self.assertTrue(pro["icon"].endswith("claude.png"))
+        self.assertEqual(icon_file(pro["icon"]), "claude.png")
         self.assertTrue(pro["model"])  # konkretes Modell aufgelöst
         direct = snapshots.consensus_model_view(snapshots.cfg.GEMINI_36_FLASH_MODEL)
         self.assertEqual(direct["provider"], "Gemini")
@@ -448,14 +454,14 @@ class SanitizerTests(unittest.TestCase):
         kimi = snapshots.consensus_model_view("Kimi-Pro")
         glm = snapshots.consensus_model_view("GLM")
         self.assertEqual(kimi["provider"], "Kimi")
-        self.assertTrue(kimi["icon"].endswith("kimi.svg"))
+        self.assertEqual(icon_file(kimi["icon"]), "kimi.svg")
         self.assertTrue(kimi["model"])
         self.assertEqual(glm["provider"], "GLM")
-        self.assertTrue(glm["icon"].endswith("zai.svg"))
+        self.assertEqual(icon_file(glm["icon"]), "zai.svg")
         self.assertTrue(glm["model"])
         muse = snapshots.consensus_model_view("Meta-Pro")
         self.assertEqual(muse["provider"], "Meta")
-        self.assertTrue(muse["icon"].endswith("meta.svg"))
+        self.assertEqual(icon_file(muse["icon"]), "meta.svg")
         self.assertEqual(muse["model"], "Muse Spark 1.3")
         self.assertTrue(muse["pro"])
         self.assertIsNone(snapshots.consensus_model_view(""))

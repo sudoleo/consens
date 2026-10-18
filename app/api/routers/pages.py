@@ -320,7 +320,7 @@ _LEADERBOARD_AVAILABLE_SINCE = {
 }
 _LEADERBOARD_FAMILY_VIEW = {
     family: {
-        "icon": f"/static/icons/chat_icons/{cfg.PROVIDERS[provider].icon}",
+        "icon": cfg.PROVIDERS[provider].icon_url,
         "available_since": _LEADERBOARD_AVAILABLE_SINCE.get(provider),
     }
     for provider, family in _LEADERBOARD_FAMILY_BY_PROVIDER.items()

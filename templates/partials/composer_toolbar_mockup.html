@@ -11,7 +11,7 @@
   </span>
   <span class="lp-composer-models" aria-label="Comparison model providers">
     {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Mistral', 'mistral.png', false), ('Claude', 'claude.png', false), ('Gemini', 'gemini-icon.png', false), ('DeepSeek', 'deepseek.png', false), ('Grok', 'grok.png', true)] %}
-    <span class="lp-composer-model" title="{{ name }}"><img src="/static/icons/chat_icons/{{ icon }}" alt="{{ name }}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+    <span class="lp-composer-model" title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{{ name }}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
     {% endfor %}
   </span>
 </div>

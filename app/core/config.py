@@ -276,6 +276,14 @@ class ProviderConfig:
     def ask_endpoint(self) -> str:
         return f"/ask_{self.dom_key}"
 
+    @property
+    def icon_url(self) -> str:
+        # Mit Inhalts-Hash: Browser behalten das Logo ein Jahr, statt es auf
+        # jeder Seite neu zu bestaetigen (/static ohne Hash ist no-cache).
+        from app.core.assets import asset_url
+
+        return asset_url(f"/static/icons/chat_icons/{self.icon}")
+
 
 def _provider(key, label, prefix, base, pro, models, required=(),
               dom_key="", title="", short_label="", icon="", icon_class="",
@@ -1435,7 +1443,7 @@ def get_model_families() -> list[dict]:
             "title": provider.title,
             "shortLabel": provider.short_label,
             "citationLabel": provider.citation_label,
-            "icon": f"/static/icons/chat_icons/{provider.icon}",
+            "icon": provider.icon_url,
             "iconClass": provider.icon_class,
             "apiPrefix": provider.openrouter_prefix,
             "domKey": provider.dom_key,

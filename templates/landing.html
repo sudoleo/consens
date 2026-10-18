@@ -200,7 +200,7 @@
                         <span class="lp-agent-step-label" data-run-compare>Comparing perspectives…</span>
                         <span class="lp-agent-models" aria-hidden="true">
                           {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('Gemini', 'gemini-icon.png', false), ('Mistral', 'mistral.png', false), ('DeepSeek', 'deepseek.png', false), ('Grok', 'grok.png', true)] %}
-                          <span class="lp-agent-model" data-model="{{ loop.index0 }}" title="{{ name }}"><img src="/static/icons/chat_icons/{{ icon }}" alt="" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+                          <span class="lp-agent-model" data-model="{{ loop.index0 }}" title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
                           {% endfor %}
                         </span>
                         <span class="lp-agent-count" data-run-count></span>
@@ -457,12 +457,12 @@
             </div>
             <div class="bench-mini-icons">
               <span><img src="/static/favicon.png" alt="consens.io"></span>
-              <span><img src="/static/icons/chat_icons/claude.png" alt="Claude"></span>
-              <span><img src="/static/icons/chat_icons/chatgpt.png" alt="GPT-5.5"></span>
-              <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="Gemini"></span>
-              <span><img src="/static/icons/chat_icons/grok.png" alt="Grok"></span>
-              <span><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span>
-              <span><img src="/static/icons/chat_icons/mistral.png" alt="Mistral"></span>
+              <span><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt="Claude"></span>
+              <span><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt="GPT-5.5"></span>
+              <span><img src="{{ asset_url('/static/icons/chat_icons/gemini-icon.png') }}" alt="Gemini"></span>
+              <span><img src="{{ asset_url('/static/icons/chat_icons/grok.png') }}" alt="Grok"></span>
+              <span><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt="DeepSeek"></span>
+              <span><img src="{{ asset_url('/static/icons/chat_icons/mistral.png') }}" alt="Mistral"></span>
             </div>
           </div>
           <div class="lp-bench-aside">
@@ -584,15 +584,15 @@
           <p class="lp-lead">Direct comparison across major model families, so every answer can be checked against independent alternatives.</p>
         </div>
         <div class="lp-logos lp-reveal">
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/chatgpt.png" alt="OpenAI ChatGPT"></span><span>ChatGPT</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/claude.png" alt="Anthropic Claude"></span><span>Claude</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/gemini-icon.png" alt="Google Gemini"></span><span>Gemini</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/mistral.png" alt="Mistral AI"></span><span>Mistral</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span><span>DeepSeek</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/grok.png" alt="xAI Grok"></span><span>Grok</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/kimi.svg" alt="Moonshot AI Kimi"></span><span>Kimi</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/zai.svg" alt="Z.ai GLM"></span><span>GLM</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/meta.svg" alt="Meta Muse"></span><span>Muse</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt="OpenAI ChatGPT"></span><span>ChatGPT</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt="Anthropic Claude"></span><span>Claude</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/gemini-icon.png') }}" alt="Google Gemini"></span><span>Gemini</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/mistral.png') }}" alt="Mistral AI"></span><span>Mistral</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt="DeepSeek"></span><span>DeepSeek</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/grok.png') }}" alt="xAI Grok"></span><span>Grok</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/kimi.svg') }}" alt="Moonshot AI Kimi"></span><span>Kimi</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/zai.svg') }}" alt="Z.ai GLM"></span><span>GLM</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/meta.svg') }}" alt="Meta Muse"></span><span>Muse</span></div>
         </div>
       </div>
     </section>

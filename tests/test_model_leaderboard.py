@@ -183,9 +183,9 @@ def test_public_model_leaderboard_aggregates_aliases_and_sets_cache(monkeypatch)
     kimi = next(row for row in data["rows"] if row["family"] == "Moonshot AI / Kimi")
     glm = next(row for row in data["rows"] if row["family"] == "Z.ai / GLM")
     meta = next(row for row in data["rows"] if row["family"] == "Meta / Muse")
-    assert kimi["icon"].endswith("/kimi.svg")
-    assert glm["icon"].endswith("/zai.svg")
-    assert meta["icon"].endswith("/meta.svg")
+    assert kimi["icon"].split("?")[0].endswith("/kimi.svg")
+    assert glm["icon"].split("?")[0].endswith("/zai.svg")
+    assert meta["icon"].split("?")[0].endswith("/meta.svg")
     assert kimi["available_since"] == glm["available_since"] == "2026-08-31"
     # Jede spaeter ergaenzte Familie traegt ihr eigenes Startdatum, sonst
     # liest sich ein niedriger Stand wie ein Ergebnis.
