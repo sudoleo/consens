@@ -318,7 +318,8 @@
     // Marks the reader already saw as provisional marks of this answer, in
     // the same colour, stay still with their badges: only new or changed
     // marks (a contradiction, a sentence checked last) stroke on (preview()).
-    const shown = body._shownMarks?.hash === hash ? body._shownMarks.keys : null;
+    // Without a hash (an answer that failed before its review) nothing was shown.
+    const shown = hash && body._shownMarks?.hash === hash ? body._shownMarks.keys : null;
     let still = false;
     const moving = (document.body.classList.contains('consensus-markers-hidden') ? []
       : [...body.querySelectorAll(`${MARKS}, .claim-badge`)].filter(visible)).filter(el => {
@@ -410,7 +411,7 @@
     document.createElement('div'), sources, { answerNavigation: { canOpen: () => false, open() {} }, focusDifference() {} });
     window.linkifyAgentSources?.(body, sources);
     // What the reader has seen; a mark not seen before fades in, once.
-    const shown = body._shownMarks?.hash === review.answer_hash ? body._shownMarks.keys : new Set();
+    const shown = review.answer_hash && body._shownMarks?.hash === review.answer_hash ? body._shownMarks.keys : new Set();
     let arriving = false;
     for (const el of body.querySelectorAll(`${MARKS}, .claim-badge`)) {
       if (el.matches(MARKS)) {

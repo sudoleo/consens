@@ -514,7 +514,7 @@ Prüfungen und bewusst angeforderte vollständige Regressionen:
 | Anlass | Prüfungen |
 |---|---|
 | Push auf `main`, PR geöffnet/aktualisiert/wieder geöffnet | Python und JavaScript/Build, `dependency-audit`; keine Browser-/Emulator- oder Windows-Suite |
-| Nachts um 02:17 UTC auf `main` | `browser-and-rules` und `dependency-audit` |
+| Nachts um 02:17 UTC auf `main` (GitHub startet oft Stunden später) | `browser-and-rules` und `dependency-audit` |
 | PR wechselt von Entwurf zu „Ready for review“ | Alle vier Testgruppen, einschließlich Chromium/Firestore/Clientregeln und Windows-Einstiegen, dazu `dependency-audit` |
 | „Run workflow“ → `quick` (Standard) | Python und JavaScript/Build, `dependency-audit` |
 | „Run workflow“ → einzelne Suite | Nur `backend`, `frontend`, `browser-and-rules`, `windows-entry-points` oder `dependency-audit` |
@@ -532,6 +532,19 @@ oder bei „Ready for review“.
 Fehlgeschlagene Backend- und Browser-Tests stehen als Annotationen am Lauf
 (`scripts/ci_annotate_failures.py`): Jobs-Logs brauchen einen GitHub-Login,
 Annotationen nicht, also ist ein roter Lauf aus der Fehler-Mail heraus lesbar.
+Rote Läufe gehen als Mail an den, der gepusht hat. Darum prüft jede Session ihren Push selbst (AGENTS.md):
+
+```powershell
+venv\Scripts\python.exe scripts\ci_status.py --wait   # Lauf des eigenen HEAD abwarten
+venv\Scripts\python.exe scripts\ci_status.py          # alle Läufe auf main der letzten 26 h
+```
+
+Das Skript liest die öffentliche GitHub-API ohne Login (60 Anfragen pro Stunde) und
+nennt je rotem Job die fehlgeschlagenen Tests; Exit-Code 0 grün, 1 rot, 2 unklar.
+Die geplante Aufgabe `consens-ci-watch` (CI-Wächter, lokal, 03:50 Uhr oder beim
+nächsten Start der Desktop-App) liest die letzten 30 Stunden und repariert, was
+rot ist, vor allem die nächtliche Browser-Suite.
+
 Die Linux-Jobs laufen fest auf `ubuntu-24.04`, nicht auf `ubuntu-latest`: der
 Browser-Job installiert Chromiums Systempakete je Ubuntu-Release. Den Pin nur
 bewusst und mit einem `full`-Lauf verschieben.

@@ -288,6 +288,9 @@ def streaming_turn(store, *, chat=True, fail_after=None, judge_delay=0.0, events
     from test_agent_comparison import Script, make_loop
     from app.services.llm.agent_client import measured_usage
     calls, lock = [], threading.Lock()
+    # The first window's judge call has begun. The provider fails only after
+    # that, so "a window was in flight" does not depend on thread timing.
+    first_window_asked = threading.Event()
 
     class StreamingScript(Script):
         def factory(self):
@@ -302,6 +305,7 @@ def streaming_turn(store, *, chat=True, fail_after=None, judge_delay=0.0, events
                     completion.text, completion.finish_reason = "", "stop"
                     for index, line in enumerate(ANSWER.splitlines(keepends=True), 1):
                         if fail_after is not None and index > fail_after:
+                            first_window_asked.wait(10)
                             raise RuntimeError("The provider stopped mid-answer")
                         completion.text += line
                         yield {"type": "delta", "text": line}
@@ -311,6 +315,8 @@ def streaming_turn(store, *, chat=True, fail_after=None, judge_delay=0.0, events
                     ids = schema["properties"]["sentences"]["items"]["properties"]["id"]["enum"]
                     with lock:
                         calls.append((list(ids), messages[-1]["content"]))
+                    if ids[0] == "s1":
+                        first_window_asked.set()
                     time.sleep(judge_delay)
                 yield from base(model=model, messages=messages, **kwargs)
 
@@ -359,7 +365,8 @@ def test_a_turn_that_fails_mid_answer_settles_its_early_windows_before_it_ends(s
     # Two windows started while writing; the run end stopped what had not finished.
     windows = [window for _, launched in loop.comparison.prefetch.windows.values() for window in launched]
     assert len(windows) == 2 and all(future.done() for _, future in windows)
-    assert coverage_calls and coverage_calls[0][0][0] == "s1"
+    # Both windows ask in parallel; which call is recorded first is up to the threads.
+    assert any(ids[0] == "s1" for ids, _ in coverage_calls)
     root = loop.store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
     assert root["run_status"] != "running"
     assert "running" not in (root.get("step_states") or {}).values()

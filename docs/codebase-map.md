@@ -213,7 +213,9 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
   LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
 - **CI**: `.github/workflows/tests.yml` (Backend/Frontend bei jedem Push,
   `dependency-audit` mit pip-audit, nachts zusätzlich Browser/Emulator/Rules;
-  fehlgeschlagene Tests als Annotationen über `scripts/ci_annotate_failures.py`),
+  fehlgeschlagene Tests als Annotationen über `scripts/ci_annotate_failures.py`,
+  ohne Login lesbar mit `scripts/ci_status.py`; täglicher CI-Wächter als
+  geplante Aufgabe `consens-ci-watch`),
   `.github/dependabot.yml` (monatlich je ein gesammelter PR für pip, npm,
   Actions; keine pip-/npm-Majors). Details in
   `docs/testing.md`.
