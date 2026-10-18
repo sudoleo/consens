@@ -9,10 +9,20 @@
        man nicht sieht. Mit resizes-content schrumpft das Viewport, der
        Composer sitzt auf der Tastaturkante und der Thread darueber. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-  <meta name="description" content="Use consens.io to compare multiple AI model answers side by side in one workspace.">
+  <meta name="description" content="consens.io is an AI agent that checks its answer against six leading models, marks where they disagree, and watches for changes.">
   <meta name="robots" content="noindex, follow">
   <link rel="canonical" href="https://www.consens.io/app">
-  <title>Compare AI Answers | consens.io</title>
+  {# /app is not indexed, but people share its address: the link preview
+     needs the same card as the landing page. #}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="The AI Agent That Checks Six Models | consens.io">
+  <meta property="og:description" content="Ask once. consens.io checks the answer against six leading AI models and marks where they disagree.">
+  <meta property="og:url" content="https://www.consens.io/app">
+  {% include "partials/og_card.html" %}
+  <meta name="twitter:title" content="The AI Agent That Checks Six Models | consens.io">
+  <meta name="twitter:description" content="Ask once. consens.io checks the answer against six leading AI models and marks where they disagree.">
+  <title>consens.io</title>
   <meta id="appBootstrapConfig"
         data-firebase-api-key="{{ firebase_api_key | e }}"
         data-firebase-auth-domain="{{ firebase_auth_domain | e }}"

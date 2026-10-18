@@ -22,8 +22,8 @@ from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token
 from app.services import (
-    check_page, drift_signal, favicons, mailer, source_links, topic_figures,
-    topic_images, topic_runner, topics,
+    check_page, drift_signal, favicons, mailer, og_image, source_links,
+    topic_figures, topic_images, topic_runner, topics,
 )
 from app.services.history_view import PAGE_CHART_WIDTH, build_history_view, day_label
 from app.services.public_markdown import (
@@ -457,6 +457,10 @@ async def topic_page(
     }
     if lead:
         jsonld["abstract"] = lead[:300]
+    # The link preview shows the Topic's question, like a shared answer does.
+    og_card = f"{canonical_url}/og.png" if og_image.is_available() else ""
+    if og_card:
+        jsonld["image"] = og_card
     response = templates.TemplateResponse(request=request, name="topic.html", context={
         "topic": public_topic,
         "topic_image": topic_images.visual_view(topic["id"], topic),
@@ -483,6 +487,8 @@ async def topic_page(
         "canonical_url": canonical_url,
         "page_url": page_url,
         "page_title": title,
+        "og_card_image": og_card,
+        "og_card_alt": title,
         "meta_description": meta_description,
         "robots_meta": robots,
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
@@ -494,6 +500,50 @@ async def topic_page(
         "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
     )
     return response
+
+
+@router.get("/topics/{slug}/og.png")
+@limiter.limit("60/minute")
+async def topic_og_card(request: Request, slug: str):
+    """Open-Graph card of a public Topic: its title and how it is checked."""
+    if not og_image.is_available():
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        topic, _retired = await asyncio.to_thread(topics.resolve_topic_by_slug, slug)
+    except topics.TopicError:
+        raise HTTPException(status_code=404, detail="Not found")
+    except Exception as exc:
+        logging.error("topic_og_card lookup failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Error loading topic")
+    if (
+        not topic
+        or topic.get("status") not in {"active", "paused"}
+        or not topic.get("latest_run_id")
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+    public_topic = topics.topic_public_view(topic)
+    title = (public_topic.get("seo") or {}).get("title") or public_topic["title"]
+    model_count = len(public_topic["models"])
+    checked = og_image.date_label(public_topic.get("latest_run_at") or "")
+    png = await asyncio.to_thread(
+        functools.partial(
+            og_image.card_png, f"topic:{public_topic['id']}", question=title,
+            facts=[f"{model_count} AI models" if model_count else "Several AI models"],
+            dateline=f"Checked {checked}" if checked else "",
+        )
+    )
+    if png is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            # The card shows only the public title; an archived Topic's card
+            # may outlive its page by an hour.
+            "Cache-Control": "public, max-age=3600",
+            "X-Robots-Tag": "noindex",
+        },
+    )
 
 
 @router.get("/api/topics/{topic_id}/image/{token}")

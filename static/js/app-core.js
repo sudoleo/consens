@@ -67,7 +67,8 @@
     return modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked).length;
   }
 
-  const DEFAULT_APP_TITLE = "Compare AI Answers | consens.io";
+  // Same as <title> in templates/index.html.
+  const DEFAULT_APP_TITLE = "consens.io";
 
   function setAppTitle(question = "") {
     const normalized = String(question || "").replace(/\s+/g, " ").trim();

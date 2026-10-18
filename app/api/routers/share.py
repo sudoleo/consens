@@ -446,17 +446,14 @@ def share_og_card(request: Request, slug_id: str):
     if not isinstance(score, (int, float)):
         score = display_data.get("agreement_score")
     display_payload = snapshots.public_share_payload(display_data)
-    checked_label = (
-        "Answered " + display_payload["answered_at"][:10]
-        if display_payload["answered_at"] else ""
-    )
+    answered_on = og_image.date_label(display_payload["answered_at"])
+    checked_label = f"Answered {answered_on}" if answered_on else ""
     png = og_image.share_card_png(
         share_id,
         question=str(data.get("question") or ""),
         score=score if isinstance(score, (int, float)) else None,
         model_count=model_count,
         contradiction_count=contradiction_count,
-        history_scores=[],
         checked_label=checked_label,
     )
     if png is None:
@@ -775,12 +772,9 @@ def share_page(request: Request, slug_id: str):
             else markdown_to_plaintext(payload["consensus_md"], limit=160, sources=payload["sources"])
         )
 
-    # Generierte OG-Karte (Scoreboard als Bild) statt Favicon, wenn möglich.
+    # Generierte OG-Karte mit der Frage, sonst die Markenkarte der Landing.
     og_is_card = og_image.is_available() and not is_private
-    og_image_url = (
-        page_url + "/og.png" if og_is_card
-        else SITE_URL + "/static/favicon-square.png"
-    )
+    og_image_url = page_url + "/og.png" if og_is_card else og_image.brand_card_url()
 
     jsonld = {
         "@context": "https://schema.org",

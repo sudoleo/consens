@@ -102,7 +102,7 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     }
     assert app_page.evaluate("() => window.App.state.get('userTier')") == 'free'
     assert app_page.evaluate("() => typeof window.App.consensusLifecycle") == "object"
-    expect(app_page).to_have_title("Compare AI Answers | consens.io")
+    expect(app_page).to_have_title("consens.io")
 
     # Kurze Nachlaufzeit fuer asynchrone Init-Fehler (Tooltips, Usage-Fetch).
     app_page.wait_for_timeout(1500)

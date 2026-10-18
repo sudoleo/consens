@@ -11,11 +11,9 @@
   <meta property="og:title" content="AI Consensus Topics">
   <meta property="og:description" content="{{ description }}">
   <meta property="og:url" content="https://www.consens.io/topics">
-  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
-  <meta name="twitter:card" content="summary">
+  {% include "partials/og_card.html" %}
   <meta name="twitter:title" content="AI Consensus Topics">
   <meta name="twitter:description" content="{{ description }}">
-  <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>AI Consensus Topics | consens.io</title>
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">

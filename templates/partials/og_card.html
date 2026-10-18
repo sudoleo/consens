@@ -1,0 +1,21 @@
+{#- Link-preview image of a page (WhatsApp, LinkedIn, Slack, X, iMessage).
+    A page with a card of its own sets og_card_image (1200 x 630 PNG) and
+    og_card_alt before the include; every other page shows the brand card of
+    the landing page, never the favicon, which the services draw as a tiny
+    box beside the title. Tests: tests/test_og_cards.py. -#}
+{%- if og_card_image is defined and og_card_image %}
+  {%- set og_card_src = og_card_image %}
+  {%- set og_card_text = og_card_alt if og_card_alt is defined and og_card_alt else "consens.io" %}
+{%- else %}
+  {%- set og_card_src = "https://www.consens.io" ~ asset_url("/static/og-home-v2.png") %}
+  {%- set og_card_text = "The risk of one perspective | consens.io" %}
+{%- endif %}
+  <meta property="og:image" content="{{ og_card_src }}">
+  <meta property="og:image:secure_url" content="{{ og_card_src }}">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="{{ og_card_text }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="{{ og_card_src }}">
+  <meta name="twitter:image:alt" content="{{ og_card_text }}">
