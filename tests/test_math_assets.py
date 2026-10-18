@@ -54,3 +54,19 @@ def test_jinja_global_sees_route_context_and_includes():
     assert page.render(answer_html=r"<p>\(x^2\)</p>") == "katex"
     local = env.from_string(r"{% set lead = '$$a$$' %}{{ 'katex' if page_has_math() else 'none' }}")
     assert local.render() == "katex"
+
+
+def test_json_ld_escapes_do_not_count_as_latex():
+    env = Environment()
+
+    class Templates:
+        pass
+
+    templates = Templates()
+    templates.env = env
+    register_math_globals(templates)
+    page = env.from_string("{{ 'katex' if page_has_math() else 'none' }}")
+    escaped = r'{"text":"Kostet $5 f\u00fcr Kinder.\nSonst $10"}'
+    assert contains_math(escaped)  # what the unfiltered scan would have said
+    assert page.render(jsonld=escaped, answer_html="<p>Kostet $5 für Kinder.</p>") == "none"
+    assert page.render(jsonld=escaped, answer_html=r"<p>\(x\)</p>") == "katex"

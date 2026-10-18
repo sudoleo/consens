@@ -56,7 +56,14 @@ def page_has_math(context) -> bool:
 
     # ``context.vars`` holds template-local {% set %}s, ``parent`` the route
     # context plus the env globals (functions and site-wide JSON-LD).
-    return contains_math(dict(context.parent)) or contains_math(dict(context.vars))
+    return contains_math(_page_values(context.parent)) or contains_math(_page_values(context.vars))
+
+
+def _page_values(variables) -> dict:
+    # JSON-LD repeats page text JSON-escaped: "für" and a literal "\n"
+    # look like LaTeX commands, so "$5 für $10" would count as a
+    # formula. The same text is in the HTML fields, which are scanned.
+    return {key: value for key, value in variables.items() if not key.endswith("jsonld")}
 
 
 def register_math_globals(templates) -> None:
