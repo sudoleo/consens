@@ -1,13 +1,18 @@
 /* Buchstabenwolken hinter dem leeren Startbildschirm (letter-clouds.js).
    Erstes Kind von <body>, z-index 0: jede spätere positionierte Ebene
    (Container mit Begrüßung und Composer, Sidebar, Menüs) liegt darüber.
-   Nimmt keine Klicks an; die Welle hört auf pointerdown am Dokument. */
+   Nimmt keine Klicks an; die Welle hört auf pointerdown am Dokument.
+   Die Seitenfarbe als Hintergrund ändert am Bild nichts (der Nebel deckt
+   ohnehin mit ihr), aber iPhone-Safari färbt die Leiste unten nach dieser
+   Ebene: transparent nahm es eine gemessene oder ältere Farbe (manchmal
+   Weiß), siehe .app-mobile-header-edge in shell.css. */
 .letter-clouds {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
+  background: var(--bg-color);
   opacity: 1;
   transition: opacity 0.4s ease;
 }

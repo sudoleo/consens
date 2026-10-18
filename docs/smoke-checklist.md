@@ -692,6 +692,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ohne Thread-Streifen dazwischen und ohne Hinweissatz; Tastatur zu, sitzt
       er wieder am unteren Rand. Automatisiert nur mit nachgestelltem
       `visualViewport` (`test_mobile_navigation.py`).
+- [ ] iPhone (echtes Safari, iOS 26, dunkles Theme): `/app` frisch öffnen,
+      eine Frage stellen, „New chat“, Sidebar auf und zu — der Streifen hinter
+      der Statusleiste und der unter der unteren Leiste bleiben in jedem
+      Schritt in der Seitenfarbe, nie weiß. Automatisiert ist nur, dass Safari
+      an beiden Kanten einen Kasten mit deckender Seitenfarbe findet
+      (`SAFARI_BAR_COLOURS` in `test_mobile_navigation.py`).
 - [ ] Landing auf dem Handy (375 px) bis ganz unten scrollen: die Seite
       verschiebt sich nie seitlich (`test_public_composer_mockups.py`).
 - [ ] Quellen-Pillen im Consensus stehen hinter Punkt, Frage- oder

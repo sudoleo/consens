@@ -24,6 +24,39 @@ def seed_long_answer(page):
 
 COMPOSER_SURFACE = {'light': 'rgba(245, 245, 245, 0.96)', 'dark': 'rgba(48, 51, 56, 0.96)'}
 
+# iPhone Safari (iOS 26; WebKit LocalFrameView::fixedContainerEdges) paints
+# the strips behind its status bar and bottom bar: it hit-tests the middle of
+# each edge 4px in, ignoring pointer-events, walks up to the first fixed or
+# sticky box about as wide as the viewport and takes the opaque background met
+# on the way (boxes over 10px tall). Without one it measures pixels and keeps
+# the result, which showed white bars over the dark app now and then.
+SAFARI_BAR_COLOURS = """() => {
+  const style = document.createElement('style');
+  style.textContent = '*,*::before,*::after{pointer-events:auto!important}';
+  document.head.append(style);
+  try {
+    const w = document.documentElement.clientWidth;
+    const wide = el => el.getBoundingClientRect().width >= 0.9 * (w - 8);
+    const read = y => {
+      const colours = new Set();
+      for (let el = document.elementFromPoint(w / 2, y); el; el = el.parentElement) {
+        const cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) continue;
+        if (wide(el) && el.getBoundingClientRect().height > 10 && cs.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+          colours.add(cs.backgroundColor);
+        }
+        if ((cs.position === 'fixed' || cs.position === 'sticky') && wide(el)) {
+          return colours.size === 1 ? [...colours][0] : [...colours].join(' + ') || 'measured by Safari';
+        }
+      }
+      return 'no fixed box';
+    };
+    return {top: read(4), bottom: read(innerHeight - 5), page: getComputedStyle(document.body).backgroundColor};
+  } finally {
+    style.remove();
+  }
+}"""
+
 
 @pytest.mark.parametrize('width,theme', [(320, 'light'), (390, 'dark'), (768, 'light'), (1099, 'dark')])
 def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, phase4_server, width, theme):
@@ -492,5 +525,28 @@ def test_guest_start_header_keeps_the_mark_beside_the_auth_buttons(browser, phas
         mark = brand.bounding_box()
         assert mark['x'] + mark['width'] <= page.locator('#authTopLoginBtn').bounding_box()['x']
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width,theme', [(320, 'light'), (390, 'dark')])
+def test_iphone_safari_finds_the_page_colour_at_both_bars(browser, phase4_server, width, theme):
+    context, page = _real_firebase_page(browser, phase4_server,
+        init_script=f"localStorage.setItem('theme','{theme}')")
+    try:
+        page.set_viewport_size({'width': width, 'height': 820})
+        expect(page.locator('body')).to_have_class(re.compile(r'\bis-hero\b'))
+        # Start screen: the header's edge strip on top, the letter clouds below.
+        page.wait_for_function("() => App.letterClouds.state().active"
+            " && getComputedStyle(document.querySelector('.letter-clouds')).opacity === '1'")
+        bars = page.evaluate(SAFARI_BAR_COLOURS)
+        assert bars['top'] == bars['page'] and bars['bottom'] == bars['page'], bars
+
+        # Thread: the same strip on top, the fixed composer below.
+        seed_long_answer(page)
+        page.wait_for_function("() => document.body.classList.contains('composer-collapsed')"
+            " && !document.body.classList.contains('composer-animating')")
+        bars = page.evaluate(SAFARI_BAR_COLOURS)
+        assert bars['top'] == bars['page'] and bars['bottom'] == bars['page'], bars
     finally:
         context.close()

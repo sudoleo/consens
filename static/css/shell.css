@@ -829,7 +829,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
    3. Topbar / view switch
    -------------------------------------------------------------------------- */
 .app-mobile-header { display: contents; }
-.mobile-conversation-actions, .mobile-sidebar-views { display: none; }
+.app-mobile-header-edge, .mobile-conversation-actions, .mobile-sidebar-views { display: none; }
 
 /* The view switch draws its own surface and sliding thumb
    (components-watch.css); nothing here may paint the active button. */
@@ -2624,6 +2624,11 @@ body:not(.is-hero) .input-section {
     box-sizing: border-box;
     margin: 0;
     transform: translateX(-50%);
+    /* iPhone Safari colours the strip behind its bottom bar after this box
+       (see .app-mobile-header-edge); transparent, it measured pixels and kept
+       an older colour. The halo (::before) already paints the same ground
+       over the whole box, so this changes nothing on screen. */
+    background: var(--composer-halo);
   }
 }
 
@@ -4304,6 +4309,27 @@ body .theme-toggle:is(:hover, :focus-visible) {
   }
 
   .app-mobile-header > * { pointer-events: auto; }
+
+  /* iPhone Safari (iOS 26) paints the strip behind its status bar in the
+     colour of the fixed box at the top edge: WebKit hit-tests the middle of
+     the edge 4px in and walks up to the first fixed box about as wide as the
+     viewport. With an opaque background on the way it takes that colour;
+     without one (this header is transparent) it measures pixels and keeps
+     the result, sampled only until the first tap — so the bar was sometimes
+     white. This strip under the islands is what Safari finds: --ground, full
+     width, taller than WebKit's 10px floor. Solid only at the very top, it
+     fades out before the islands; once scrolled, ::before covers it anyway. */
+  .app-mobile-header > .app-mobile-header-edge {
+    display: block;
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: -1;
+    height: calc(env(safe-area-inset-top, 0px) + 24px);
+    pointer-events: none;
+    background: var(--ground);
+    -webkit-mask-image: linear-gradient(180deg, #000 calc(env(safe-area-inset-top, 0px) + 8px), transparent);
+    mask-image: linear-gradient(180deg, #000 calc(env(safe-area-inset-top, 0px) + 8px), transparent);
+  }
 
   /* The fade appears only once something scrolls beneath it
      (mobile-header.js sets .is-scrolled); on an empty start screen it would

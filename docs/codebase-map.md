@@ -946,7 +946,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   selbst transparent und `pointer-events: none` (nur die Inseln nehmen Taps);
   sobald darunter gescrollt ist (`.is-scrolled` aus `mobile-header.js`, Window-
   oder Watch-Scroll), löst ein `--ground`-Verlauf (`::before`, 28 px unter die
-  Inseln) den Text auf, ohne Blur. Popover an den Inseln (`.consensus-actions-menu`,
+  Inseln) den Text auf, ohne Blur. **Safari-Leisten (seit 2026-10-18):**
+  iPhone-Safari (iOS 26, kein `theme-color` mehr) färbt die Streifen hinter
+  Statusleiste und unterer Leiste nach dem fixierten Kasten an der Kante
+  (WebKit `fixedContainerEdges`: Mitte der Kante 4 px innen treffen, ohne
+  `pointer-events`, aufwärts bis zur ersten fixed/sticky-Box mit ≥ 90 %
+  Viewport-Breite; deren deckender Hintergrund auf dem Weg gilt). Fehlt er,
+  misst Safari Pixel und behält das Ergebnis (oben nur bis zum ersten Tap,
+  unten bei breiten Ebenen die vorige Farbe) — so kamen sporadisch weiße
+  Leisten. Deshalb tragen alle drei Kanten-Kästen die Seitenfarbe:
+  `.app-mobile-header-edge` (Span im Kopf, 24 px, `--ground`, nach 8 px
+  ausgeblendet, `pointer-events: none`), die fixierte Thread-
+  `.input-section` (`--composer-halo`, deckungsgleich mit ihrem Halo) und
+  `.letter-clouds` (`--bg-color`, der Nebel deckt ohnehin). Neue fixierte,
+  viewportbreite Ebenen an einer Kante brauchen ebenfalls einen deckenden
+  Hintergrund; `SAFARI_BAR_COLOURS` in `tests/e2e/test_mobile_navigation.py`
+  bildet die Regel nach. Popover an den Inseln (`.consensus-actions-menu`,
   `.watch-feature-nudge`) liegen darüber. Der einmalige Watches-Hinweis
   (`#viewSwitchWatches.has-watch-pulse`) erscheint mobil als ruhiger grüner Punkt
   am Menü-Knopf und am Watches-Reiter der Sidebar, bis Watches geöffnet wurde.
@@ -1911,8 +1926,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 - **Buchstabenwolken im Hero (seit 2026-10-16)** — `static/js/letter-clouds.js`
   (App-Gruppe vor `app-init.js`, `App.letterClouds` `{state(), splash(x, y)}`)
   und `static/css/letter-clouds.css`. Das Modul hängt `.letter-clouds` als
-  erstes Kind in `<body>` (fixed, `z-index: 0`, `pointer-events: none`; jede
-  spätere positionierte Ebene liegt darüber) und läuft nur, solange
+  erstes Kind in `<body>` (fixed, `z-index: 0`, `pointer-events: none`,
+  Hintergrund `--bg-color` für die Safari-Leiste unten, siehe „Mobile
+  Kopfleiste“; jede spätere positionierte Ebene liegt darüber) und läuft nur, solange
   `body.is-hero` gesetzt und keine `.watch-page` sichtbar ist (MutationObserver
   auf `body.class` und `.watch-page[hidden]`). Verlässt der Nutzer den Hero
   (erste Frage, Bookmark, Demo, Watches), bekommt die Ebene `.is-off`
