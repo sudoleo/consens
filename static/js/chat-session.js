@@ -76,7 +76,7 @@
   // error_code + Text; alles andere bleibt beim generischen Retry-Hinweis.
   const PERSISTENCE_ERROR_MESSAGES = {
     chat_limit_reached:
-      "You have reached the maximum number of saved conversations. Delete one to start another.",
+      "You've reached the maximum number of saved chats. Delete an old chat to start a new one.",
     turn_limit_reached:
       "This conversation has reached its maximum length. Start a new comparison to continue.",
     chat_rate_limited:

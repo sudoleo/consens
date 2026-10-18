@@ -1740,6 +1740,51 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('says the chat list is full before anything is sent and keeps the draft', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    const limit = 'You\'ve reached the maximum number of saved chats. Delete an old chat to start a new one.';
+    w.App.chatPersistenceErrorMessage = vi.fn(data => data?.error?.error_code === 'chat_limit_reached' ? limit : '');
+    w.fetch.mockImplementation(async url => url === '/chats'
+      ? { ok: false, status: 403, json: async () => ({ error: { error: 'At most 200 chats per account', error_code: 'chat_limit_reached' } }) }
+      : { ok: true, json: async () => structuredClone(CATALOG) });
+    d.body.insertAdjacentHTML('beforeend', '<div id="bookmarksContainer"></div>');
+    d.getElementById('questionInput').value = 'One more question';
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    w.App.agentChat.project(run); w.App.agentChat.render();
+    expect(w.streamSSERequest).not.toHaveBeenCalled();
+    expect(d.getElementById('agentAnswerError').textContent).toBe(`Message not sent. ${limit}`);
+    expect(d.getElementById('agentAnswerError').hidden).toBe(false);
+    expect(d.getElementById('questionInput').value).toBe('One more question');
+    expect(d.getElementById('agentRecover').hidden).toBe(true);
+    expect(d.querySelector('.bookmark.run-entry')).toBeNull();
+    dom.window.close();
+  });
+
+  it('shows a full bookmark storage even under a checked answer and offers recovery', async () => {
+    // Local run 2026-10-19: the answer was checked, so the generic failure
+    // note stayed silent; only "Check saved answer" was left, without a why.
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn(), failureNote: vi.fn(() => '') };
+    const full = 'Your saved chats are full. Delete an old chat, then recover this answer.';
+    w.streamSSERequest = vi.fn(async (_url, _payload, _signal, handlers) => {
+      handlers.delta.append('Answer.');
+      return { ok: true, data: { error: full, code: 'bookmark_count_limit', recoverable: true, recovery_state: 'saved' } };
+    });
+    d.getElementById('questionInput').value = 'Question';
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    w.App.agentChat.project(run); w.App.agentChat.render();
+    expect(d.getElementById('agentAnswerBody').textContent).toBe('Answer.');
+    expect(d.getElementById('agentAnswerError').textContent).toBe(full);
+    expect(d.getElementById('agentAnswerError').hidden).toBe(false);
+    expect(d.getElementById('agentRecover').hidden).toBe(false);
+    expect(d.getElementById('agentRecover').textContent).toBe('Recover saved answer');
+    dom.window.close();
+  });
+
   it('explains a token reservation refusal in plain words with next steps', async () => {
     const { window: w, document: d, dom } = boot();
     d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div>');

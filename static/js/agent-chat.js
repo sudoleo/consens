@@ -572,6 +572,7 @@
     return value >= 10000 ? `${Math.round(value / 1000)}k` : value >= 1000 ? `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`
       : value.toLocaleString();
   }
+  const BOOKMARK_FAILURES = new Set(['bookmark_count_limit', 'bookmark_storage_limit', 'bookmark_too_large', 'bookmark_unavailable']);
   // Budget refusals carry a stable code; show a plain next step, not ledger terms.
   function failureNotice(failure, review, text, { retry = true } = {}) {
     const code = failure?.code || failure?.error_code;
@@ -582,6 +583,10 @@
       actions: [['choose-model', 'Try a smaller model'], ['compare', 'Choose models']] };
     }
     if (code === 'agent_tokens_exhausted') return { text: `You've used today's Agent tokens. They reset at ${resetTime()}.` };
+    // The answer is complete; only its sidebar entry was not saved. Said even
+    // under a checked answer, which failureNote treats as settled: the
+    // reader must know to free space and recover it (2026-10-19).
+    if (BOOKMARK_FAILURES.has(code)) return { text: failure.error || failure.message || '' };
     const note = App.agentReview?.failureNote?.(failure, review, text);
     // Any other stop (provider busy, timeout, lost connection) can be sent
     // again as it was; a busy model can also be swapped first. A refusal of

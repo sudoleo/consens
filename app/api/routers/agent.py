@@ -514,7 +514,8 @@ def run_agent(request: Request, payload: AgentRequest):
             yield pack("error", refused)
         except Exception as exc:
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
-            yield pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True, "recovery_state": "saved"})
+            yield pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.",
+                                 "code": "bookmark_unavailable", "recoverable": True, "recovery_state": "saved"})
 
     def produce():
         # The whole run, on its own thread: every frame goes into the live

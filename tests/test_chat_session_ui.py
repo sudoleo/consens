@@ -555,7 +555,7 @@ const run = (overrides = {{}}) => session.beginRun({{
   assert.strictEqual(await session.ensurePendingTurn({{
     idToken: "token", question: "Question one", consensusModel: "Gemini"
   }}), null);
-  assert.ok(/maximum number of saved conversations/.test(session.lastPersistenceError));
+  assert.ok(/maximum number of saved chats/.test(session.lastPersistenceError));
 
   // Ein neuer Lauf startet ohne den alten Grund.
   run({{ question: "Question two" }});
@@ -597,7 +597,7 @@ const run = (overrides = {{}}) => session.beginRun({{
 
   // Agent legt seinen Chat selbst an (agent-chat.js) und nutzt dieselben
   // Texte - auch in der Form, in die main.py das detail verpackt.
-  assert.ok(/maximum number of saved conversations/.test(App.chatPersistenceErrorMessage({{
+  assert.ok(/maximum number of saved chats/.test(App.chatPersistenceErrorMessage({{
     error: {{ error: "At most 200 chats per account", error_code: "chat_limit_reached" }}
   }})));
   assert.strictEqual(App.chatPersistenceErrorMessage({{ error: "Authentication failed" }}), "");
