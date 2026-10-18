@@ -4611,6 +4611,16 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   (`_coverage_attempts`/`_differences_attempts`, Chat: Gemini) übernimmt. Der
   zweite Differences-Pass kennt nur den primären Judge und endet dann ohne Ausweichen, nie
   doppelt; ein Nutzer-Stopp beendet beide Judges weiterhin ohne Ausweichen.
+  Innerhalb dieser Grenze startet `_hedged_judge_call` seit 2026-10-18 nach
+  `JUDGE_HEDGE_SECONDS` (15 s) eine identische zweite Anfrage an dasselbe
+  Modell, wenn die erste noch läuft (Coverage-Fenster, Coverage-Repair,
+  Differences in `run_pass`; nicht `stream_differences`). Die erste Antwort
+  gewinnt, die andere wird über ihre eigene, verknüpfte Cancellation beendet;
+  die erste Anfrage bleibt im aufrufenden Thread (sonst unverändertes
+  Verhalten), das Duplikat läuft im Thread `<Aufrufer>-judge-hedge`. Ein
+  Duplikat startet nur, wenn das Budget danach noch einen Call für den
+  Fallback-Judge übrig hat (`_spare_judge_call`). Ein Hänger kostet so rund
+  15 s plus eine normale Judge-Dauer statt 90 s bis zum Familienwechsel.
   Der Coverage-Thread hat eine eigene, verknüpfte Cancellation
   (`_coverage_in_background` → `(pool, future, stop)`); läuft die Frist von
   `_collect_coverage` ab, wird er beendet statt abgewartet. Anlass: Agent-

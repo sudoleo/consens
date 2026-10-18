@@ -2223,6 +2223,93 @@ AGENT_COVERAGE_WINDOW = 16
 # 180 s analysis deadline, and the answer lost every green mark although the
 # fallback judge was never asked.
 JUDGE_ATTEMPT_SECONDS = 90.0
+# A judge call still running after this long gets an identical second request
+# alongside; the first answer wins and the other one is stopped. With the
+# medians above only the slow tail pays for a duplicate (~0.25 ct with Luna),
+# and a stalled provider then costs the check these seconds instead of
+# JUDGE_ATTEMPT_SECONDS (chat review 2026-10-18: Luna judge timeouts in prod).
+JUDGE_HEDGE_SECONDS = 15.0
+
+
+def _spare_judge_call(budget) -> bool:
+    """A duplicate request never takes the call the fallback judge needs."""
+    return budget is None or not math.isfinite(budget.max_calls) or budget.max_calls - budget.calls >= 2
+
+
+def _hedged_judge_call(call):
+    """Runs ``call()``; still running after JUDGE_HEDGE_SECONDS, an identical
+    request starts alongside and the first one to answer is returned.
+
+    The first request stays in the calling thread, so a call that answers in
+    time runs exactly as without hedging. The duplicate runs in its own thread;
+    both requests have their own cancellation, linked to the caller's: a user
+    stop or the attempt's time limit reaches both, and the slower one is
+    stopped alone. A failed request waits for the other; only when both fail
+    does the first request's error propagate."""
+    from contextvars import copy_context
+    from app.services.llm.task_transport import task_transport
+
+    parent = current_provider_cancellation()
+    budget = current_analysis_budget()
+    # The duplicate starts from the timer's thread with the caller's context
+    # (task transport), captured here.
+    context = copy_context()
+    name = threading.current_thread().name
+    own = ProviderCancellation()
+    unlink_own = parent.register(own) if parent is not None else (lambda: None)
+    lock = threading.Lock()
+    settled = threading.Event()
+    duplicate = {}
+
+    def start_duplicate():
+        with lock:
+            if settled.is_set() or not _spare_judge_call(budget) or (parent is not None and parent.cancelled):
+                return
+            stop = ProviderCancellation()
+            unlink = parent.register(stop) if parent is not None else (lambda: None)
+
+            def work():
+                try:
+                    with bind_analysis_budget(budget), bind_provider_cancellation(stop):
+                        result = call()
+                    # The duplicate won: the first request is stopped.
+                    own.cancel()
+                    return result
+                finally:
+                    unlink()
+
+            logging.info("Judge call hedged after %.0f s", JUDGE_HEDGE_SECONDS)
+            pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{name}-judge-hedge")
+            duplicate.update(pool=pool, stop=stop, future=pool.submit(context.run, work))
+
+    timer = threading.Timer(JUDGE_HEDGE_SECONDS, start_duplicate)
+    timer.daemon = True
+    timer.start()
+    try:
+        try:
+            with bind_provider_cancellation(own):
+                return call()
+        except Exception as exc:
+            first_error = exc
+        with lock:
+            settled.set()
+        future = duplicate.get("future")
+        if future is not None:
+            try:
+                return future.result()
+            except Exception:
+                pass
+        raise first_error
+    finally:
+        timer.cancel()
+        with lock:
+            settled.set()
+        unlink_own()
+        future = duplicate.get("future")
+        if future is not None:
+            if not future.done():
+                duplicate["stop"].cancel()
+            duplicate["pool"].shutdown(wait=task_transport.get() is not None)
 
 
 class _AttemptTimedOut(Exception):
@@ -2317,11 +2404,11 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
     )
     try:
         with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
-            raw = _call_coverage_engine(
+            raw = _hedged_judge_call(lambda: _call_coverage_engine(
                 engine, api_keys, prompt,
                 coverage.build_coverage_schema(labels, ids),
                 is_retry=False,
-            )
+            ))
     except (ProviderCancelled, AnalysisBudgetExceeded):
         raise
     except Exception as exc:
@@ -2625,7 +2712,7 @@ def _run_coverage_window(context, api_keys, attempts, ids):
         started = time.monotonic()
         try:
             with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
-                raw = _call_coverage_engine(engine, api_keys, prompt, schema, is_retry)
+                raw = _hedged_judge_call(lambda: _call_coverage_engine(engine, api_keys, prompt, schema, is_retry))
         except (ProviderCancelled, AnalysisBudgetExceeded):
             break
         except _AttemptTimedOut:
@@ -3047,7 +3134,7 @@ def query_differences(
             attempt_started = time.monotonic()
             try:
                 with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
-                    raw = _call_engine_text(
+                    raw = _hedged_judge_call(lambda: _call_engine_text(
                         provider, api_model, model_ref, api_keys,
                         system=_differences_system_prompt(output_language),
                         prompt=attempt_prompt,
@@ -3056,7 +3143,7 @@ def query_differences(
                         json_mode=True,
                         effort=_judge_effort(provider, api_model, judge_tier),
                         json_schema=DIFFERENCES_JSON_SCHEMA,
-                    )
+                    ))
             except (ProviderCancelled, AnalysisBudgetExceeded):
                 break
             except _AttemptTimedOut:
