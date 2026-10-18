@@ -909,6 +909,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Fortsetzungsbasis und kehrt in `is-hero` zurück; aktive Runs und deren
   Bookmark-Saves laufen weiter. Nur
   `firebase.js::resetLoadedRunAfterLogout` cancelt/verwirft sämtliche Contexts.
+- **Sidebar-Startzustand** (seit 2026-10-18) — ab 1100px gilt die eigene Wahl
+  (`localStorage["sidebar_collapsed"]`, nur der Toggle schreibt sie), ohne sie
+  ist die Sidebar für Gäste eingeklappt und für Konten offen
+  (`app-init.js::prefersCollapsedSidebar`; Gast = kein `auth.currentUser`, bei
+  unbekannter Auth kein `id_token`). `app-bootstrap.js` malt dieselbe Regel in
+  den ersten Frame, `checkWindowSize` und ein Listener auf
+  `consensio:auth-state` halten sie: Anmelden öffnet, Abmelden schließt, ohne
+  Gleiten (`body.is-sidebar-settling` schaltet die Transitions kurz ab) und
+  ohne etwas zu speichern. Die Overlay-Sidebar (≤1099px) startet immer zu und
+  öffnet sich beim Login nicht.
 - **Reading Chrome** — `app-init.js` beobachtet beim lesbaren Consensus den
   Window-Scroll und im geöffneten Watch-Dashboard dessen eigenen
   Scroll-Container. Nach deutlichem Abwärtsscrollen fahren der fixierte
@@ -8298,8 +8308,9 @@ am Laufende offen, solange sie im Bild ist (oberhalb des Viewports klappt sie mi
 MutationObserver vor dem ersten Paint `agent-mode-enabled`, das gespeicherte
 Theme (`body.dark-mode` nach `localStorage.theme`, sonst Systemvorgabe — vorher
 erst in `app-init.js`, jeder dunkle Reload malte zuerst hell, und iPhone-Safari
-behielt das Weiß hinter der Statusleiste), den gespeicherten
-Sidebar-Zustand (`sidebar_collapsed`, Overlay < 1100 px), `#authTopActions`
+behielt das Weiß hinter der Statusleiste), den
+Sidebar-Zustand (`sidebar_collapsed`, sonst Gast zu/Konto offen; Overlay < 1100 px
+immer zu), `#authTopActions`
 nur für Gäste ohne `id_token` und bei `html.agent-shell-expected` die
 Agent-Texte (Begrüßung, „New chat“, Composer-Platzhalter), die `renderShellNow`
 bzw. `syncComposer` bis zur bekannten Berechtigung hält; Gäste ohne `id_token`

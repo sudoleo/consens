@@ -25,7 +25,7 @@ const APP_SCRIPTS = bundles.groups
 // oder die hier geprueft werden.
 const APP_MARKUP = `
   <button id="toggleSidebarButton" class="sidebar-toggle" type="button"></button>
-  <aside class="sidebar">
+  <aside id="appSidebar" class="sidebar">
     <div class="bookmarks-section">
       <button id="bookmarksToggle" type="button" aria-expanded="true"></button>
       <div id="bookmarksContainer"></div>
@@ -41,9 +41,9 @@ const APP_MARKUP = `
   <input id="openrouterKey">
 `;
 
-async function bootApp({ storage = {}, prefersDark = false } = {}) {
+async function bootApp({ storage = {}, prefersDark = false, narrow = false } = {}) {
   const errors = [];
-  const media = { prefersDark, narrow: false };
+  const media = { prefersDark, narrow };
   const loaded = loadScripts(APP_SCRIPTS, {
     body: APP_MARKUP,
     before(window) {
@@ -70,11 +70,13 @@ async function bootApp({ storage = {}, prefersDark = false } = {}) {
       window.createStartDemoChip = () => { window.demoChipShown = true; };
     },
   });
+  // Was app-bootstrap.js in den ersten Frame malt, bevor initApp laeuft.
+  const firstFrameCollapsed = loaded.document.getElementById("appSidebar").classList.contains("collapsed");
   // initApp startet mit DOMContentLoaded, genau wie im Browser.
   if (loaded.document.readyState === "loading") {
     await new Promise((resolve) => loaded.document.addEventListener("DOMContentLoaded", resolve));
   }
-  return { ...loaded, errors, media };
+  return { ...loaded, errors, media, firstFrameCollapsed };
 }
 
 // Beobachter (MutationObserver, Timer) der Module laufen nach dem Klick;
@@ -113,15 +115,17 @@ describe("app-init.js mit gesperrtem localStorage", () => {
     const { window, document, errors, media } = await bootApp({ storage: "blocked" });
     const sidebar = document.querySelector(".sidebar");
 
-    document.getElementById("toggleSidebarButton").click();
+    // Ein Gast ohne eigene Wahl beginnt eingeklappt.
     expect(sidebar.classList.contains("collapsed")).toBe(true);
+    document.getElementById("toggleSidebarButton").click();
+    expect(sidebar.classList.contains("collapsed")).toBe(false);
 
     // Ueber das Overlay-Layout und zurueck: die Wahl liest sich neu ein.
     media.narrow = true;
     window.dispatchEvent(new window.Event("resize"));
     media.narrow = false;
     window.dispatchEvent(new window.Event("resize"));
-    expect(sidebar.classList.contains("collapsed")).toBe(true);
+    expect(sidebar.classList.contains("collapsed")).toBe(false);
     await settle(window);
     expect(errors).toEqual([]);
     window.close();
@@ -162,8 +166,9 @@ describe("app-init.js mit funktionierendem localStorage", () => {
     document.querySelector(".theme-toggle").click();
     expect(storedValue(window, "theme")).toBe("light");
 
+    // Der Gast beginnt eingeklappt; sein Klick oeffnet, und das wird gemerkt.
     document.getElementById("toggleSidebarButton").click();
-    expect(storedValue(window, "sidebar_collapsed")).toBe("true");
+    expect(storedValue(window, "sidebar_collapsed")).toBe("false");
 
     window.toggleBookmarks();
     expect(storedValue(window, "bookmarks_collapsed")).toBe("true");
@@ -194,6 +199,73 @@ describe("app-init.js mit funktionierendem localStorage", () => {
     expect(storedValue(window, "consensio.questionDraft.v1")).toBeNull();
 
     await settle(window);
+    expect(errors).toEqual([]);
+    window.close();
+  });
+});
+
+describe("Sidebar beim ersten Besuch (seit 2026-10-18)", () => {
+  function isOpen(document) {
+    return document.getElementById("toggleSidebarButton").getAttribute("aria-expanded") === "true";
+  }
+
+  it("ist fuer einen Gast vom ersten Frame an eingeklappt und oeffnet sich nach dem Login", async () => {
+    const { window, document, errors, firstFrameCollapsed } = await bootApp();
+    const sidebar = document.querySelector(".sidebar");
+
+    expect(firstFrameCollapsed).toBe(true);
+    expect(sidebar.classList.contains("collapsed")).toBe(true);
+    expect(isOpen(document)).toBe(false);
+
+    window.App.authState.publish("account-a");
+    expect(sidebar.classList.contains("collapsed")).toBe(false);
+    expect(isOpen(document)).toBe(true);
+    // Die App hat sie geoeffnet, nicht der Leser: nichts gemerkt.
+    expect(storedValue(window, "sidebar_collapsed")).toBeNull();
+    expect(document.body.classList.contains("is-sidebar-settling")).toBe(false);
+
+    window.App.authState.publish(null);
+    expect(sidebar.classList.contains("collapsed")).toBe(true);
+    await settle(window);
+    expect(errors).toEqual([]);
+    window.close();
+  });
+
+  it("malt ein gespeichertes Konto offen, ohne Sprung bis zur Anmeldung", async () => {
+    const { window, document, errors, firstFrameCollapsed } = await bootApp({
+      storage: { id_token: "stored-session" },
+    });
+
+    expect(firstFrameCollapsed).toBe(false);
+    expect(document.querySelector(".sidebar").classList.contains("collapsed")).toBe(false);
+    window.App.authState.publish("account-a");
+    expect(document.querySelector(".sidebar").classList.contains("collapsed")).toBe(false);
+    expect(errors).toEqual([]);
+    window.close();
+  });
+
+  it("laesst eine eigene Wahl beim An- und Abmelden stehen", async () => {
+    const shut = await bootApp({ storage: { sidebar_collapsed: "true", id_token: "stored-session" } });
+    expect(shut.firstFrameCollapsed).toBe(true);
+    shut.window.App.authState.publish("account-a");
+    expect(shut.document.querySelector(".sidebar").classList.contains("collapsed")).toBe(true);
+    shut.window.close();
+
+    const open = await bootApp({ storage: { sidebar_collapsed: "false" } });
+    expect(open.firstFrameCollapsed).toBe(false);
+    open.window.App.authState.publish(null);
+    expect(open.document.querySelector(".sidebar").classList.contains("collapsed")).toBe(false);
+    open.window.close();
+  });
+
+  it("oeffnet das Overlay unter 1100px auch nach dem Login nicht", async () => {
+    const { window, document, errors, firstFrameCollapsed } = await bootApp({ narrow: true });
+    const sidebar = document.querySelector(".sidebar");
+
+    expect(firstFrameCollapsed).toBe(true);
+    window.App.authState.publish("account-a");
+    expect(sidebar.classList.contains("collapsed")).toBe(true);
+    expect(isOpen(document)).toBe(false);
     expect(errors).toEqual([]);
     window.close();
   });

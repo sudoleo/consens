@@ -4,6 +4,7 @@ Real static/firebase.js against a stubbed Firebase SDK that records every
 call. No request reaches Firebase, Google or Firestore.
 """
 import json
+import re
 
 from playwright.sync_api import expect
 
@@ -305,3 +306,33 @@ def test_landing_field_arrives_with_the_caret_in_the_composer(browser, phase4_se
         expect(page.locator("#loginModal")).to_be_hidden()
     finally:
         context.close()
+
+
+def test_a_guest_starts_with_the_sidebar_shut_and_signing_in_opens_it(browser, phase4_server):
+    """The first visit begins at the question, not at an empty chat list.
+
+    Without a choice of the reader's own: shut for a guest, open once the
+    account is there; the app's own opening is not remembered as a choice.
+    """
+    context, page = _guest_page(browser, phase4_server)
+    try:
+        sidebar = page.locator("#appSidebar")
+        toggle = page.locator("#toggleSidebarButton")
+        expect(sidebar).to_have_class(re.compile(r"\bcollapsed\b"))
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        expect(sidebar).not_to_have_class(re.compile(r"\bcollapsed\b"))
+        expect(toggle).to_have_attribute("aria-expanded", "true")
+        assert page.evaluate("() => localStorage.getItem('sidebar_collapsed')") is None
+
+        # The reader's own choice outlasts the next sign-in (the open
+        # sidebar's own toggle; the floating one is hidden then).
+        page.locator("#sidebarToggleInner").click()
+        expect(sidebar).to_have_class(re.compile(r"\bcollapsed\b"))
+        page.evaluate("async () => { await window.__switchE2EUser(null); }")
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        expect(sidebar).to_have_class(re.compile(r"\bcollapsed\b"))
+    finally:
+        context.close()
+

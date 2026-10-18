@@ -539,6 +539,28 @@
           return window.matchMedia(`(max-width: ${SIDEBAR_OVERLAY_BREAKPOINT}px)`).matches;
         }
 
+        // Neben dem Inhalt (ab 1100px): die eigene Wahl, sonst seit
+        // 2026-10-18 fuer Gaeste eingeklappt (der erste Besuch beginnt bei der
+        // Frage, nicht bei einer leeren Chatliste) und fuer Konten offen.
+        // Dieselbe Regel malt app-bootstrap.js in den ersten Frame.
+        function prefersCollapsedSidebar() {
+          const stored = readStored(SIDEBAR_COLLAPSED_STORAGE_KEY);
+          if (stored !== null) return stored === "true";
+          if (window.auth?.currentUser) return false;
+          const authState = window.__consensioAuthState;
+          return authState?.known ? !authState.uid : !readStored("id_token");
+        }
+
+        // Ohne Gleiten: Start und Anmeldung sind keine Geste des Lesers, die
+        // Spalte soll nicht vor ihm zur Seite rutschen.
+        function setSidebarCollapsedInstantly(sidebar, collapsed) {
+          if (sidebar.classList.contains("collapsed") === collapsed) return;
+          document.body.classList.add("is-sidebar-settling");
+          sidebar.classList.toggle("collapsed", collapsed);
+          void sidebar.offsetWidth;
+          document.body.classList.remove("is-sidebar-settling");
+        }
+
         const threadComposer = document.querySelector(".input-section");
         function syncThreadComposerReserve() {
           if (!threadComposer || !usesOverlaySidebar()) {
@@ -767,14 +789,22 @@
             sidebar.classList.add("collapsed");
             sidebar.classList.remove("active");
           } else {
-            const prefersCollapsed = readStored(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
-            sidebar.classList.toggle("collapsed", prefersCollapsed);
+            setSidebarCollapsedInstantly(sidebar, prefersCollapsedSidebar());
             sidebar.classList.remove("active");
           }
           updateToggleButton();
         }
         window.addEventListener("resize", checkWindowSize);
         checkWindowSize(); // Initial
+
+        // Anmelden oeffnet, Abmelden schliesst die Sidebar - nur ohne eigene
+        // Wahl und nur neben dem Inhalt; das Overlay bleibt zu.
+        window.addEventListener("consensio:auth-state", function () {
+          const sidebar = document.querySelector(".sidebar");
+          if (!sidebar || usesOverlaySidebar()) return;
+          setSidebarCollapsedInstantly(sidebar, prefersCollapsedSidebar());
+          updateToggleButton();
+        });
 
         // Fixed navigation should make room while a result is being read. The
         // main app scrolls the window, whereas the Watch dashboard owns an

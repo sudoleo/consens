@@ -479,10 +479,16 @@ body:has(.sidebar.active) .brand-float {
     user-select: none;
   }
 
+  /* So does the sidebar the app opens or shuts by itself (start, sign-in;
+     app-init.js setSidebarCollapsedInstantly). */
   body.is-resizing-sidebar .container,
   body.is-resizing-sidebar .sidebar,
   body.is-resizing-sidebar .app-nav-float,
-  body.is-resizing-sidebar .view-switch {
+  body.is-resizing-sidebar .view-switch,
+  body.is-sidebar-settling .container,
+  body.is-sidebar-settling .sidebar,
+  body.is-sidebar-settling .app-nav-float,
+  body.is-sidebar-settling .view-switch {
     transition: none !important;
   }
 }

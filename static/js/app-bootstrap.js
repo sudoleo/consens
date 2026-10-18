@@ -94,11 +94,15 @@
     const sidebar = !seeded.has("sidebar") && document.getElementById("appSidebar");
     if (sidebar) {
       seeded.add("sidebar");
-      // Same rule as checkWindowSize() in app-init.js, which keeps it later.
+      // Same rule as prefersCollapsedSidebar() in app-init.js, which keeps it
+      // later: the reader's own choice, else shut for a guest and open for an
+      // account.
       const overlay = window.matchMedia("(max-width: 1099px)").matches;
-      let collapsed = overlay;
-      try { collapsed = overlay || localStorage.getItem("sidebar_collapsed") === "true"; } catch (_) { /* storage unavailable */ }
-      sidebar.classList.toggle("collapsed", collapsed);
+      const authState = window.__consensioAuthState;
+      let stored = null;
+      try { stored = localStorage.getItem("sidebar_collapsed"); } catch (_) { /* storage unavailable */ }
+      const guest = authState?.known ? !authState.uid : !token;
+      sidebar.classList.toggle("collapsed", overlay || (stored === null ? guest : stored === "true"));
     }
     const authTopActions = !seeded.has("auth") && document.getElementById("authTopActions");
     if (authTopActions) {
