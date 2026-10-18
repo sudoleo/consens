@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageChops
 
 from app.api.routers import pages as pages_router
 from app.core.assets import asset_url
@@ -107,3 +107,27 @@ def test_topic_cards_end_with_their_page(public_topics):  # noqa: F811
     topics.create_topic(topic_payload(slug="draft-topic"), actor_uid="admin", db=h.topic_db)
     for slug in ("gone-topic", "draft-topic", "no-such-topic"):
         assert h.client.get(f"/topics/{slug}/og.png").status_code == 404
+
+
+def test_the_stored_brand_card_is_the_whatsapp_safe_one():
+    # static/og-home-v2.png comes from scripts/render_brand_card.py; an image
+    # that runs to the edges loses its text in WhatsApp's composer preview.
+    with Image.open(ROOT / "static" / "og-home-v2.png") as stored:
+        image = stored.convert("RGB")
+    assert image.size == (1200, 630)
+    # The stored file is a 256-colour palette: the ground may move by a step.
+    corner = image.getpixel((4, 4))
+    assert all(abs(a - b) <= 4 for a, b in zip(corner, og_image.BG))
+    ground = Image.new("RGB", image.size, corner)
+    drawn = ImageChops.difference(image, ground).convert("L").point(lambda value: 255 if value > 8 else 0)
+    left, _top, right, _bottom = drawn.getbbox()
+    assert left >= 130 and right <= 1070
+
+
+def test_the_landing_preview_text_matches_its_card():
+    head = (ROOT / "templates" / "landing.html").read_text(encoding="utf-8").split("</head>", 1)[0]
+    alt = "Six models answer. See where they disagree. | consens.io"
+    assert meta(head, "og:image:alt") == meta(head, "twitter:image:alt") == alt
+    assert meta(head, "og:title") == "The AI Agent That Checks Six Models | consens.io"
+    partial = pages_router.templates.env.get_template("partials/og_card.html")
+    assert meta(partial.render(og_card_image=""), "og:image:alt") == alt

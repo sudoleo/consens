@@ -3,11 +3,14 @@
 Statt des Favicons zeigt der Link-Preview die Frage der Seite: darüber leise
 das Datum, unten neben der Wortmarke, was hinter der Antwort steht (Agreement,
 Modelle, Widersprüche). Rein aus gespeicherten Daten gerendert – keine LLM-Calls.
+Dazu die Markenkarte für alle übrigen Seiten (``render_brand_card``, als
+static/og-home-v2.png gespeichert von scripts/render_brand_card.py).
 
-Gestaltet als Geschwister der Markenkarte der Landing (static/og-home-v2.png):
-derselbe helle Grund, Wortmarke unten links, Inter in ruhigem Gewicht. Keine
-Linien, keine Versalien-Etiketten; Farbe trägt nur die Score-Ziffer (Ampel wie
-in der App: ab 65 grün, ab 40 amber, darunter rot).
+Eine Sprache für alle Karten: heller Grund, Inter in ruhigem Gewicht, die
+Bildmarke von consens.io. Keine Linien, keine Versalien-Etiketten; Farbe trägt
+nur die Score-Ziffer (Ampel wie in der App: ab 65 grün, ab 40 amber, darunter
+rot). Alles Wichtige bleibt im sicheren Bereich: WhatsApp zeigt die Karte im
+Eingabefeld beschnitten auf etwa 1,6:1, also rund 90 px weniger an jeder Seite.
 """
 
 from __future__ import annotations
@@ -30,28 +33,35 @@ except Exception:  # pragma: no cover - Pillow fehlt nur in Alt-Umgebungen
     _PIL_OK = False
 
 WIDTH, HEIGHT = 1200, 630
-MARGIN = 88
+# Seitenrand der Fragekarten: nach WhatsApps Beschnitt bleiben gut 50 px Luft.
+MARGIN = 144
 FONT_PATH = os.path.join("static", "fonts", "Inter-Variable.ttf")
-# Die Bildmarke als Alphamaske; gefärbt wird sie beim Zeichnen.
+# Bildmarke und Anbieter-Logos als Alphamasken; gefärbt wird beim Zeichnen.
 MARK_PATH = os.path.join("static", "favicon-dark.png")
+LOGO_DIR = os.path.join("static", "icons", "chat_icons")
 
 # Grund der Markenkarte, Tinte und Ampel aus static/css/variables.css (hell).
 BG = (250, 250, 247)
 INK = (29, 30, 32)
 MUTED = (100, 103, 109)
+LOGO_GREY = (150, 152, 157)
 AGREE = (40, 125, 104)
 PARTIAL = (148, 107, 31)
 DISPUTE = (177, 79, 91)
 
 # Fragengröße nach Länge: die größte Stufe, in der die ganze Frage passt.
-QUESTION_STEPS = ((88, 2), (76, 3), (66, 3), (58, 4), (50, 4), (44, 5))
+QUESTION_STEPS = ((84, 2), (72, 3), (62, 3), (54, 4), (48, 4), (42, 5))
 QUESTION_TOP, QUESTION_BOTTOM = 112, 468
 DATELINE_Y = 82  # Grundlinie der Datumszeile
 FOOTER_Y = 548  # optische Mitte der Fußzeile
 FACTS_SEPARATOR = "  ·  "
 
 # Die Markenkarte der Landing: Vorschaubild jeder Seite ohne eigene Karte.
+# Ihre Zeile ist der Hero-Satz der Landing (templates/landing.html, h1), die
+# sechs Marken sind die Familien eines vollen Laufs.
 BRAND_CARD = "/static/og-home-v2.png"
+BRAND_HEADLINE = ("Six models answer.", "See where they disagree.")
+BRAND_LOGOS = ("chatgpt.png", "claude.png", "gemini-icon.png", "grok.png", "deepseek.png", "mistral.png")
 
 _cache = TTLCache(maxsize=256, ttl=1800)
 
@@ -136,17 +146,31 @@ def _score_color(score: int):
     return AGREE if score >= 65 else PARTIAL if score >= 40 else DISPUTE
 
 
-def _draw_brand(image, draw) -> int:
-    """Bildmarke + Wortmarke unten links; gibt die rechte Kante zurück."""
-    mark = Image.open(MARK_PATH).convert("RGBA")
-    height = 38
-    width = round(mark.width * height / mark.height)
-    alpha = mark.getchannel("A").resize((width, height), Image.LANCZOS)
-    image.paste(Image.new("RGB", (width, height), INK), (MARGIN, FOOTER_Y - height // 2), alpha)
-    word_font = _font(30, 420)
-    word_x = MARGIN + width + 16
-    draw.text((word_x, FOOTER_Y), "consens.io", font=word_font, fill=INK, anchor="lm")
-    return word_x + int(draw.textlength("consens.io", font=word_font))
+def _paste_mask(image, path: str, height: int, xy: tuple[int, int], color) -> int:
+    """Zeichnet die Form einer PNG (ihren Alphakanal) in einer Farbe; gibt die Breite zurück."""
+    with Image.open(path) as source:
+        alpha = source.convert("RGBA").getchannel("A")
+    width = round(alpha.width * height / alpha.height)
+    image.paste(Image.new("RGB", (width, height), color), xy,
+                alpha.resize((width, height), Image.LANCZOS))
+    return width
+
+
+def _lockup(draw, mark_height: int, word_size: int):
+    """Font, Markenbreite, Abstand und Gesamtbreite von Bildmarke + Wortmarke."""
+    word_font = _font(word_size, 420)
+    with Image.open(MARK_PATH) as mark:
+        mark_width = round(mark.width * mark_height / mark.height)
+    gap = round(mark_height * 0.42)
+    return word_font, mark_width, gap, mark_width + gap + int(draw.textlength("consens.io", font=word_font))
+
+
+def _draw_lockup(image, draw, x: int, center_y: int, mark_height: int = 36, word_size: int = 28) -> int:
+    """Bildmarke + Wortmarke ab x, mittig auf center_y; gibt die rechte Kante zurück."""
+    word_font, mark_width, gap, total = _lockup(draw, mark_height, word_size)
+    _paste_mask(image, MARK_PATH, mark_height, (x, center_y - mark_height // 2), INK)
+    draw.text((x + mark_width + gap, center_y), "consens.io", font=word_font, fill=INK, anchor="lm")
+    return x + total
 
 
 def _draw_facts(draw, score, facts: list[str], left_limit: int) -> None:
@@ -155,8 +179,8 @@ def _draw_facts(draw, score, facts: list[str], left_limit: int) -> None:
     Passt sie nicht neben die Marke, fallen Fakten von hinten weg; der Score
     bleibt immer stehen.
     """
-    number_font = _font(30, 640)
-    text_font = _font(26, 460)
+    number_font = _font(28, 640)
+    text_font = _font(24, 460)
     parts = []  # (text, font, fill)
     if isinstance(score, (int, float)):
         value = max(0, min(100, int(score)))
@@ -189,7 +213,7 @@ def render_card(*, question: str, score=None, facts: list[str] = (), dateline: s
     draw = ImageDraw.Draw(image)
 
     if dateline:
-        draw.text((MARGIN, DATELINE_Y), dateline, font=_font(26, 460), fill=MUTED, anchor="ls")
+        draw.text((MARGIN, DATELINE_Y), dateline, font=_font(24, 460), fill=MUTED, anchor="ls")
 
     font, size, lines = _question_layout(draw, question)
     line_height = round(size * 1.18)
@@ -199,8 +223,41 @@ def render_card(*, question: str, score=None, facts: list[str] = (), dateline: s
         draw.text((MARGIN, y), line, font=font, fill=INK)
         y += line_height
 
-    brand_right = _draw_brand(image, draw)
-    _draw_facts(draw, score, list(facts), brand_right + 56)
+    brand_right = _draw_lockup(image, draw, MARGIN, FOOTER_Y)
+    _draw_facts(draw, score, list(facts), brand_right + 48)
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue()
+
+
+def render_brand_card() -> bytes:
+    """Die Markenkarte: Wortmarke, Hero-Satz in zwei Tönen, sechs Marken.
+
+    Alles steht zentriert, damit jede Vorschau es zeigt, auch eine, die das
+    Bild seitlich beschneidet.
+    """
+    image = Image.new("RGB", (WIDTH, HEIGHT), BG)
+    draw = ImageDraw.Draw(image)
+
+    total = _lockup(draw, 38, 30)[3]
+    _draw_lockup(image, draw, (WIDTH - total) // 2, 112, mark_height=38, word_size=30)
+
+    headline = _font(70, 560)
+    for line, fill, baseline in zip(BRAND_HEADLINE, (INK, MUTED), (272, 360)):
+        draw.text((WIDTH // 2, baseline), line, font=headline, fill=fill, anchor="ms")
+
+    # Each mark fits a 40 x 48 box, so the wide ones (DeepSeek, Mistral) do
+    # not outweigh the round ones.
+    gap, sizes = 44, []
+    for name in BRAND_LOGOS:
+        with Image.open(os.path.join(LOGO_DIR, name)) as logo:
+            height = min(40, round(48 * logo.height / logo.width))
+            sizes.append((height, round(logo.width * height / logo.height)))
+    x = (WIDTH - sum(width for _, width in sizes) - gap * (len(sizes) - 1)) // 2
+    for name, (height, width) in zip(BRAND_LOGOS, sizes):
+        _paste_mask(image, os.path.join(LOGO_DIR, name), height, (x, 500 - height // 2), LOGO_GREY)
+        x += width + gap
 
     buffer = io.BytesIO()
     image.save(buffer, format="PNG", optimize=True)

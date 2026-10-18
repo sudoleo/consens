@@ -357,7 +357,9 @@ Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
 Link-Vorschaubild (`og:image`, `twitter:card` `summary_large_image`, 1200 × 630)
 kommt seit 2026-10-18 überall aus `templates/partials/og_card.html`, auch für
 `/app`: Ohne eigene Karte zeigt eine Seite die Markenkarte der Landing
-(`static/og-home-v2.png` mit `asset_url`-Hash), nie das Favicon. Eigene Karten
+(`static/og-home-v2.png` mit `asset_url`-Hash; gezeichnet von
+`og_image.render_brand_card`, gespeichert mit `scripts/render_brand_card.py`
+und danach `scripts/shrink_images.py`), nie das Favicon. Eigene Karten
 setzen `og_card_image`/`og_card_alt` vor dem Include (Share-, Watch- und
 Topic-Seiten, gerendert von `app/services/og_image.py`). Nur `landing.html`
 schreibt dieselben Tags noch selbst aus; `tests/test_og_cards.py` verbietet
@@ -5977,11 +5979,19 @@ keinen Abgleich.
   noch vorhandenes Zähler-Dokument in Prod ist verwaist und wird nie gelesen.
 
 ### Sharing
-- Vorschaukarten (`app/services/og_image.py`, seit 2026-10-18 neu gestaltet als
-  Geschwister der Landing-Markenkarte): heller Grund, darüber leise das Datum
-  („Answered Oct 12, 2026“ bzw. bei Topics „Checked …“), die Frage in Inter
-  520 so groß, wie sie ganz passt (88 → 44 px, erst danach „…“), unten links
-  Bildmarke + Wortmarke, rechts Agreement und Fakten. Farbe trägt nur die
+- Vorschaukarten (`app/services/og_image.py`, seit 2026-10-18 in einer
+  Sprache): heller Grund, darüber leise das Datum („Answered Oct 12, 2026“
+  bzw. bei Topics „Checked …“), die Frage in Inter 520 so groß, wie sie ganz
+  passt (84 → 42 px, erst danach „…“), unten links Bildmarke + Wortmarke,
+  rechts Agreement und Fakten. Die Markenkarte (`render_brand_card`) steht
+  zentriert: Wortmarke, der Hero-Satz der Landing in zwei Tönen („Six models
+  answer.“ / „See where they disagree.“), darunter die sechs Anbieter-Marken
+  als graue Silhouetten. **Sicherer Bereich:** WhatsApp zeigt die Karte im
+  Eingabefeld auf etwa 1,6:1 beschnitten (rund 90 px weniger je Seite; die
+  alte Markenkarte verlor dort das „T“ ihres Titels). Deshalb 144 px Rand,
+  und `tests/test_og_image.py`/`tests/test_og_cards.py` verlangen für jede
+  Karte und die gespeicherte PNG mindestens 130 px leeren Rand links und
+  rechts. Farbe trägt nur die
   Score-Ziffer (Ampel wie in der App: ab 65 grün, ab 40 amber, darunter rot);
   passt die Faktenzeile nicht neben die Wortmarke, fallen Fakten von hinten
   weg, der Score bleibt. Keine Linien, keine Versalien, keine Sparkline mehr.

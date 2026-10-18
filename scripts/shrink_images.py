@@ -9,12 +9,13 @@ shows at most 144 device pixels wide. This script scales each one to
 premultiplied, so edges keep no dark fringe) and keeps the result only when
 the file gets smaller. No palette reduction: logos keep their gradients.
 
-The landing share image (``static/og-home-v2.png``, 1200x630) is flat colour.
-As RGB it weighed 451 KB, above the roughly 300 KB at which WhatsApp is
-widely reported to drop the picture from a link preview. It uses about 120
-colours, so a 256-colour palette without dithering keeps every channel of
-every pixel within 13/255 of the source at 21 KB. If a palette would move any
-channel by more than ``MAX_PALETTE_ERROR``, the file stays as it is.
+The landing share image (``static/og-home-v2.png``, 1200x630, written by
+``scripts/render_brand_card.py``) is flat colour. WhatsApp is widely reported
+to drop the picture from a link preview above roughly 300 KB; the first
+version weighed 451 KB as RGB. A 256-colour palette without dithering keeps
+every channel of every pixel within a few steps of the source (the current
+card: 42 -> 12 KB). If a palette would move any channel by more than
+``MAX_PALETTE_ERROR``, the file stays as it is.
 
 Pillow is an app dependency:
 

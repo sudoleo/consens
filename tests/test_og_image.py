@@ -147,3 +147,41 @@ def test_a_word_wider_than_the_card_breaks_instead_of_running_off_it():
     # Nothing but ground in the right margin.
     margin = image.crop((1200 - og_image.MARGIN + 4, 0, 1200, og_image.QUESTION_BOTTOM))
     assert margin.getcolors(1)[0][1] == og_image.BG
+
+
+# WhatsApp shows the card in its composer cut to about 1.6:1, roughly 90 px
+# off each side (2026-10-18, the old brand card lost the "T" of its title).
+# Everything drawn keeps at least 40 px of air inside that crop.
+SAFE_LEFT, SAFE_RIGHT = 130, 1200 - 130
+
+
+def content_box(image):
+    ground = Image.new("RGB", image.size, og_image.BG)
+    return ImageChops.difference(image, ground).getbbox()
+
+
+@pytest.mark.parametrize("card", [
+    lambda: og_image.render_brand_card(),
+    lambda: og_image.render_share_card(**{**BASE, "checked_label": "Answered Sep 30, 2026"}),
+    lambda: og_image.render_card(question="When will GPT-6 be released?", facts=["6 AI models"],
+                                 dateline="Checked Oct 15, 2026"),
+    lambda: og_image.render_card(question="word " * 400, score=55,
+                                 facts=["6 AI models", "12 contradictions"]),
+])
+def test_every_card_stays_inside_whatsapps_crop(card):
+    left, _top, right, _bottom = content_box(decoded(card()))
+    assert left >= SAFE_LEFT and right <= SAFE_RIGHT
+
+
+def test_brand_card_says_the_landing_claim_over_six_marks(drawn):
+    image = decoded(og_image.render_brand_card())
+    assert drawn == ["consens.io", *og_image.BRAND_HEADLINE]
+    assert has_color(image, og_image.INK) and has_color(image, og_image.MUTED)
+    # Six marks in one grey row under the claim, centred.
+    row = image.crop((0, 470, 1200, 530))
+    left, _top, right, _bottom = content_box(row)
+    assert has_color(row, og_image.LOGO_GREY)
+    assert abs((left + right) / 2 - 600) <= 4
+    columns = [x for x in range(left, right) if content_box(row.crop((x, 0, x + 1, 60)))]
+    groups = 1 + sum(1 for a, b in zip(columns, columns[1:]) if b - a > 20)
+    assert groups == len(og_image.BRAND_LOGOS) == 6

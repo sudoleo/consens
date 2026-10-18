@@ -8,7 +8,7 @@
   {%- set og_card_text = og_card_alt if og_card_alt is defined and og_card_alt else "consens.io" %}
 {%- else %}
   {%- set og_card_src = "https://www.consens.io" ~ asset_url("/static/og-home-v2.png") %}
-  {%- set og_card_text = "The risk of one perspective | consens.io" %}
+  {%- set og_card_text = "Six models answer. See where they disagree. | consens.io" %}
 {%- endif %}
   <meta property="og:image" content="{{ og_card_src }}">
   <meta property="og:image:secure_url" content="{{ og_card_src }}">
