@@ -191,7 +191,11 @@ def test_watch_navigation_uses_the_same_mobile_surface(browser, phase4_server, n
             expect(page.locator('#mobileSidebarViews #viewSwitch')).to_be_visible()
             page.wait_for_function('() => document.getElementById("appSidebar").getBoundingClientRect().left >= -.5')
             reader_screenshot(page, 'mobile-topbar-sidebar-watches')
-            page.locator('#viewSwitchConsensus').click()
+            # The drawer shows Watches as a row, the Chat half of the switch
+            # is gone there: back to chat is New chat, as in every chat app.
+            expect(page.locator('#viewSwitchWatches')).to_have_class(re.compile(r'\bis-active\b'))
+            expect(page.locator('#mobileSidebarViews #viewSwitchConsensus')).to_be_hidden()
+            page.locator('#newRunButton').click()
         expect(page.locator('#watchDashboard')).to_be_hidden()
         expect(page.locator('#toggleSidebarButton')).to_be_visible()
     finally:

@@ -23,7 +23,7 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert "sidebar-rail-btn" not in template
     assert "sidebar-rail-btn" not in app_init
     assert template.count('class="sidebar-heading-label"') == 1
-    assert "<span>Bookmarks</span>" in template
+    assert "<span>Chats</span>" in template
     assert 'id="sidebarModelPicker"' in template
     assert '<strong>Models</strong>' in template
     assert '<span>Leaderboard</span>' not in template

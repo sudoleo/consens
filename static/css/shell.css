@@ -4601,3 +4601,124 @@ body .theme-toggle:is(:hover, :focus-visible) {
   .sidebar-footer-meta > .sidebar-footer-link:first-child { padding-left: 6px; margin-left: -6px; }
   .sidebar-footer-meta .sidebar-footer-icon { width: 44px; height: 44px; }
 }
+
+/* ---- Mobile drawer in the ChatGPT language (2026-10-18) -------------------
+   One list of plain rows instead of a stack of controls: navigation rows with
+   a 20px glyph (New chat, Watches), a quiet section label, chat titles as
+   text, the account as the last row. No filled pill, no tab strip, no
+   separator lines; a tint only says where you are. Every rule is scoped to
+   the overlay drawer (<1100px), so the desktop sidebar is unchanged. */
+@media (max-width: 1099px) {
+  .sidebar {
+    --drawer-tint: color-mix(in srgb, var(--ink) 5%, transparent);
+    --drawer-tint-strong: color-mix(in srgb, var(--ink) 7.5%, transparent);
+    gap: 0;
+    padding: max(6px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Head: the mark and the panel glyph, nothing else. */
+  .sidebar-brand-row { min-height: 52px; padding: 0 0 0 10px; margin-bottom: 4px; }
+  .sidebar-brand-link .app-favicon { height: 20px; }
+  .sidebar-brand-link .sidebar-brand-title { font-size: var(--font-size-base); }
+  #sidebarToggleInner.sidebar-toggle-square { color: var(--ink-2); border-radius: var(--radius-sm); }
+  #sidebarToggleInner svg { width: 22px; height: 22px; }
+
+  /* Navigation rows: glyph + word, transparent at rest. */
+  .sidebar .sidebar-new-run,
+  #mobileSidebarViews #viewSwitchWatches,
+  .sidebar .sidebar-model-entry {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; min-width: 0; min-height: 44px; height: auto; margin: 0;
+    padding: 0 10px; border: 0; border-radius: var(--radius-sm);
+    background: transparent; box-shadow: none;
+    color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular, 400);
+    line-height: var(--line-height-tight); text-align: left; justify-content: flex-start;
+  }
+  .sidebar .sidebar-new-run svg,
+  #mobileSidebarViews #viewSwitchWatches > svg,
+  .sidebar .sidebar-model-entry > svg { display: block; width: 20px; height: 20px; flex: 0 0 20px; }
+  .sidebar .sidebar-new-run:hover,
+  #mobileSidebarViews #viewSwitchWatches:hover,
+  .sidebar .sidebar-model-entry:hover { background: var(--drawer-tint); border-color: transparent; color: var(--ink); }
+  /* Where you are: New chat on the empty start screen, Watches while open. */
+  body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar .sidebar-new-run,
+  #mobileSidebarViews #viewSwitchWatches.is-active { background: var(--drawer-tint-strong); }
+
+  /* The view switch becomes one more row: Watches. Back to chat is New chat
+     or a chat below, as in every chat app; the Chat half has nothing to add. */
+  .sidebar-pinned { margin: 0; padding: 0; }
+  .mobile-sidebar-views { margin: 0; }
+  .sidebar #mobileSidebarViews #viewSwitch { display: block; gap: 0; border: 0; padding: 0; }
+  #mobileSidebarViews .view-switch-thumb,
+  #mobileSidebarViews #viewSwitchConsensus { display: none; }
+  #mobileSidebarViews #viewSwitchWatches::before { content: none; }
+  #mobileSidebarViews #viewSwitchWatches.has-watch-pulse::after { top: 50%; right: 14px; margin-top: -3px; }
+
+  /* Models (only outside Agent): one line, the count as a quiet value. */
+  .models-section { margin: 0; }
+  .sidebar .sidebar-model-copy { flex: 1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .sidebar .sidebar-model-copy strong { font-size: var(--font-size-sm); font-weight: var(--font-weight-regular, 400); }
+  .sidebar .sidebar-model-copy span { color: var(--ink-3); font-size: var(--font-size-ui); font-weight: var(--font-weight-regular, 400); }
+  .sidebar .sidebar-model-chevron,
+  .sidebar-pinned .sidebar-separator { display: none; }
+
+  /* Section label: a quiet word, not a control. The list runs out softly at
+     both ends instead of cutting a row in half; the extra bottom room lets
+     the last chat scroll clear of the fade. */
+  .sidebar > .sidebar-content {
+    margin-top: 0; padding: 0 0 24px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 32px), transparent);
+  }
+  .sidebar-bookmarks-head { min-height: 36px; margin: 18px 0 2px; }
+  .sidebar-bookmarks-head .sidebar-toggle-btn {
+    min-height: 36px; padding: 0 10px; background: transparent;
+    color: var(--ink-3); font-size: var(--font-size-ui); font-weight: var(--font-weight-medium);
+  }
+  .sidebar-bookmarks-head .sidebar-toggle-btn:hover,
+  .sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible { background: transparent; color: var(--ink-2); }
+  .sidebar-bookmarks-head .sidebar-heading-label { display: block; text-align: left; }
+  .sidebar-bookmarks-head .sidebar-heading-label span { color: inherit; }
+  .sidebar-bookmarks-head .sidebar-heading-label svg { display: none; }
+  /* The arrow only speaks when the list is folded away. */
+  .bookmarks-section:not(.is-collapsed) .sidebar-bookmarks-head .sidebar-toggle-arrow { visibility: hidden; }
+  .sidebar-search-trigger { right: 2px; width: 40px; height: 36px; border-radius: var(--radius-xs); }
+  .sidebar-search-trigger svg { width: 17px; height: 17px; }
+  .sidebar-search-box { inset: 0 2px; }
+
+  /* Chats: a title per row, the row's menu glyph quiet on the right. */
+  .sidebar .bookmark {
+    display: flex; align-items: center; min-height: 40px; margin: 0;
+    padding: 0 44px 0 10px; border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm); color: var(--ink);
+  }
+  /* Pending and running entries keep the same row height (layout.css gives
+     them block layout and their own padding). */
+  .sidebar .bookmark.is-pending { display: flex; padding-top: 0; padding-bottom: 0; padding-left: 10px; }
+  .sidebar .bookmark p { flex: 1; min-width: 0; line-height: var(--line-height-tight); }
+  .sidebar .bookmark:hover { background: var(--drawer-tint); }
+  .sidebar .bookmark.is-active { background: var(--drawer-tint-strong); }
+  .sidebar .bookmark .delete-bookmark {
+    right: 2px !important; min-width: 40px; height: 40px; max-height: none;
+    border-radius: var(--radius-xs); opacity: 1;
+  }
+  /* Grey only at rest: the armed "Delete" keeps its red (layout.css). */
+  .sidebar .bookmark .delete-bookmark:not(.is-armed) { color: var(--ink-3); }
+  .sidebar .bookmark .delete-bookmark:not(.is-armed):hover { background: transparent; color: var(--ink); }
+  .sidebar .bookmark .delete-bookmark.is-armed { right: 6px !important; height: 28px; min-width: 0; }
+  .sidebar .bookmark.is-confirming-delete { padding-right: 84px; background: var(--drawer-tint); }
+
+  /* Account: one row, no rule above it; the list simply ends. */
+  .sidebar-settings { border-top: 0; padding-top: 6px; gap: 0; }
+  .sidebar-footer-row { min-height: 52px; gap: 10px; padding: 0 2px 0 8px; border-radius: var(--radius-sm); }
+  .sidebar-footer-row .email-icon { width: 32px; height: 32px; font-size: var(--font-size-sm); }
+  #accountIdentity.account-identity { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+  .account-plan-line { font-size: var(--font-size-xs); }
+  .account-plan-name.is-plus,
+  .account-plan-name.is-pro,
+  .dark-mode .account-plan-name.is-pro { color: var(--ink-3); }
+  .sidebar-settings #editSystemPromptBtn { color: var(--ink-2); }
+  .sidebar-settings .settings-icon svg { width: 20px; height: 20px; }
+  .sidebar-footer-row .quota-trigger { width: 44px; height: 44px; }
+  .sidebar-footer-meta { padding-left: 10px; }
+}

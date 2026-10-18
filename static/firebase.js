@@ -3264,7 +3264,7 @@ function updateBookmarkDOM(bookmark) {
 // activation right after arming, never counts as that confirmation.
 const BOOKMARK_DELETE_ARM_MS = 5000;
 const BOOKMARK_DELETE_CONFIRM_DELAY_MS = 400;
-const BOOKMARK_DELETE_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+const BOOKMARK_DELETE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>';
 let armedBookmarkDelete = null;
 
 function labelDeleteControl(control, title) {

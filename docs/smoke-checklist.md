@@ -349,10 +349,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Modellwechsel bleiben die neu gerenderten Icons anklickbar.
       Bei offener Desktop-Sidebar bleibt das Eingabefeld in der Viewport-Mitte;
       mobil verschwindet die schwebende Brand vollständig.
-- [ ] Mobile Sidebar: Consensus/Watches erscheinen als kompakte Textnavigation
-      mit beiden ausgeschriebenen Namen und Unterstreichung der aktiven Ansicht.
-      Bei 320–1099 px, Light/Dark und Tastaturbedienung bleiben beide Ziele
-      erreichbar; ein Ansichtswechsel schließt die Sidebar. Beim Vergrößern auf
+- [ ] Mobile Sidebar (ChatGPT-Sprache, 2026-10-18): New chat und Watches sind
+      schlichte Zeilen mit Glyph, getönt nur die aktuelle Ansicht (leerer
+      Start → New chat, Watch-Seite → Watches, offener Chat → seine Zeile).
+      „Chats“ ist eine leise Überschrift mit Lupe; jede Chat-Zeile trägt ein
+      gedämpftes ···, Antippen zeigt „Delete“, erst das zweite löscht. Die Liste
+      läuft oben/unten weich aus, keine Trennlinien. Bei 320–1099 px,
+      Light/Dark und Tastaturbedienung bleiben New chat, Watches, Suche und
+      Chats erreichbar; aus Watches führt New chat zurück. Beim Vergrößern auf
       Desktop kehrt die Navigation als schwebender Switch zurück.
 - [ ] Mobile Gast-Kopfleiste: Log in und Sign up öffnen den jeweiligen Auth-Dialog;
       New chat erscheint erst angemeldet. Beide Buttons wirken flach und bleiben

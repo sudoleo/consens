@@ -962,11 +962,28 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Beide Auth-Aktionen bleiben auch neben den Antwortaktionen erreichbar. Ihre
   dezent gerundeten Flächen sind 32 px hoch, die Touchziele weiterhin 44 px.
   Das mobile Seitenmenü liegt beim Öffnen über der Watch-Seite.
-  `#viewSwitch` wandert mobil nach `#mobileSidebarViews` und erscheint dort als
-  kompakte Textnavigation mit ausgeschriebenem Consensus/Watches, aktiver
-  Unterstreichung und 44-px-Touchflächen. Auf Desktop kehrt er als Pillen-Switch
-  an seinen ursprünglichen Ort zurück. Auch aus Watches führt New chat über den bestehenden
+  `#viewSwitch` wandert mobil nach `#mobileSidebarViews`. Dort zeigt er seit
+  2026-10-18 nur noch `#viewSwitchWatches` als Navigationszeile (Augen-Glyph,
+  wie New chat); die Chat-Hälfte ist im Menü ausgeblendet, zurück geht es wie
+  in jeder Chat-App über New chat oder einen Chat der Liste. Auf Desktop kehrt
+  er als Pillen-Switch an seinen ursprünglichen Ort zurück. Auch aus Watches führt New chat über den bestehenden
   `#newRunButton`-Handler zum leeren Composer, ohne Hintergrund-Runs abzubrechen.
+  **Mobiles Menü in ChatGPT-Sprache** (seit 2026-10-18, eigener Block am Ende
+  von `shell.css`, vollständig unter `max-width: 1099px`): eine Liste
+  schlichter Zeilen statt gestapelter Bedienelemente. New chat (Stift-Glyph)
+  und Watches sind 44-px-Zeilen mit 20-px-Glyph, transparent im Ruhezustand;
+  getönt (`--drawer-tint-strong`, aus `--ink` gemischt) ist nur, wo man ist:
+  New chat auf dem leeren Startbildschirm (`body.is-hero` ohne offene
+  Watch-Seite), Watches bei offener Watch-Seite, der offene Chat (`.is-active`).
+  „Chats“ (vorher „Bookmarks“, auch auf Desktop) ist eine leise Überschrift
+  ohne Symbol, der Pfeil erscheint nur bei eingeklappter Liste. Chat-Zeilen sind
+  40 px hoch, rechts steht statt des × ein gedämpftes ··· (`BOOKMARK_DELETE_ICON`
+  in `firebase.js`, auch für Desktop-Hover); Antippen schaltet wie bisher auf
+  „Delete“ um, erst das zweite Antippen löscht. Die Liste läuft oben und unten
+  per `mask-image` weich aus statt eine Zeile anzuschneiden; Trennlinien
+  (Reiter-Unterstrich, Linie über dem Konto) entfallen, der Tarif im Fuß ist
+  grau (Gold bleibt am Kürzel). Imprint · Privacy · Terms bleiben bewusst
+  sichtbar unter dem Konto (Impressum direkt erreichbar).
   Beide Sidebar-Toggles
   referenzieren `#appSidebar` per `aria-controls`. Der Inhaltsanfang reserviert
   die Leistenhöhe. Reading Chrome blendet mobil die gesamte Leiste gemeinsam
@@ -1026,7 +1043,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Leertaste öffnen damit die vorhandene Modellwahl; nur der Sidebar-Einstieg
   schließt zuvor eine mobile Overlay-Sidebar. Die Provider-Inklusion im Custom-Picker nutzt klare
   Checkboxen statt Toggle-Switches. Die Chat-Suche belegt keine
-  permanente Zeile mehr, sondern ersetzt bei Hover/Fokus den Bookmarks-Titel
+  permanente Zeile mehr, sondern ersetzt bei Hover/Fokus den Titel „Chats“
   (auf Touch-Geräten bleibt sie dauerhaft erreichbar). Die frühere Sidebar-/
   Help-FAQ-Rangliste lebt jetzt ausschließlich auf `/model-pulse`; die
   Landingpage verlinkt oben dezent dorthin und die App-Shell lädt keinen
