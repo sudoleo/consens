@@ -304,6 +304,32 @@ def test_recovery_never_starts_a_new_call(api):
     assert store.get_chat(UID, chat_id)["turn_count"] == 0
 
 
+def test_full_bookmark_storage_says_so_and_recovers_after_space_is_freed(api):
+    """Local run 2026-10-19: the answer finished, the bookmark cap refused its
+    sidebar entry and "Recover saved answer" ended in a 500 Chat storage error."""
+    client, store, calls = api
+    usage = store.db.collection(persistence_guard.USAGE_COLLECTION).document(
+        persistence_guard._owner_key("bookmarks", UID))
+    usage.set({"bookmark_count": persistence_guard.MAX_BOOKMARKS_PER_USER, "bookmark_bytes": 0})
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "full", "bookmark_id": "bm1"}
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert "event: final" not in response.text
+    error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
+    assert error["code"] == "bookmark_count_limit"
+    assert "chats are full" in error["error"]
+    assert error["recoverable"] is True and error["recovery_state"] == "saved"
+    recover = {**payload, "recover_only": True}
+    refused = client.post("/agent", json=recover, headers=AUTH)
+    assert refused.status_code == 409
+    assert refused.json()["code"] == "bookmark_count_limit" and refused.json()["recoverable"] is True
+    usage.set({"bookmark_count": persistence_guard.MAX_BOOKMARKS_PER_USER - 1, "bookmark_bytes": 0})
+    recovered = client.post("/agent", json=recover, headers=AUTH)
+    assert recovered.status_code == 200 and recovered.json()["response"] == "A helpful answer"
+    assert recovered.json()["bookmark_meta"]
+    assert len(calls) == 1
+
+
 def test_old_replay_keeps_newest_bookmark_and_sums_both_calls(api):
     client, store, calls = api
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]

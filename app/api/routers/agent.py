@@ -184,6 +184,18 @@ def _final(uid, payload, store, turn):
             "google_data": google_data, "google_consent": google_consent, "token_budget": agent_quota.snapshot(store.db, uid)}
 
 
+def _bookmark_limit_failure(exc):
+    """The answer is saved in the chat, but the sidebar entry hit a storage cap.
+
+    Freeing space and recovering adds the entry; an answer too large for any
+    entry cannot be recovered that way.
+    """
+    if exc.code == "bookmark_too_large":
+        return {"error": "This answer is too large to keep in your chats.", "code": exc.code, "recoverable": False}
+    return {"error": "Your saved chats are full. Delete an old chat, then recover this answer.",
+            "code": exc.code, "recoverable": True, "recovery_state": "saved"}
+
+
 def _save_interrupted(uid, payload, store, turn_id):
     try:
         turn = store.get_turn(uid, payload.chat_id, turn_id)
@@ -393,6 +405,9 @@ def run_agent(request: Request, payload: AgentRequest):
             raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from None
         if isinstance(exc, ValueError):
             raise HTTPException(status_code=422, detail=str(exc)) from None
+        if isinstance(exc, persistence_guard.PersistenceLimitError):
+            # Recovering a finished answer whose bookmark does not fit.
+            return JSONResponse(_bookmark_limit_failure(exc), status_code=409)
         _raise_store_error(exc, operation="prepare agent turn", uid=uid)
 
     def pack(event_type, data):
@@ -493,6 +508,9 @@ def run_agent(request: Request, payload: AgentRequest):
         try:
             completed = store.get_turn(uid, payload.chat_id, turn["id"])
             yield pack("final", _final(uid, payload, store, completed))
+        except persistence_guard.PersistenceLimitError as exc:
+            logging.warning("Agent bookmark refused code=%s", exc.code)
+            yield pack("error", _bookmark_limit_failure(exc))
         except Exception as exc:
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
             yield pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True, "recovery_state": "saved"})

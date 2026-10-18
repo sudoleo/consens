@@ -16,7 +16,14 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 USAGE_COLLECTION = "persistence_usage"
-MAX_BOOKMARKS_PER_USER = 250
+# A backstop, not the limit users meet: that is the chat cap
+# (chat_store.MAX_CHATS_PER_OWNER, one bookmark per chat), which refuses a new
+# chat up front with a clear message. This one only refuses when the answer is
+# already paid for, so it must sit well above the chat cap: bookmarks without a
+# chat (Compare saves, older answers) count too. At 250 an account with 181
+# chats and 87 older bookmarks got no sidebar entry for a finished Agent
+# answer (2026-10-19).
+MAX_BOOKMARKS_PER_USER = 500
 MAX_BOOKMARK_DOCUMENT_BYTES = 750_000
 MAX_BOOKMARK_BYTES_PER_USER = 25_000_000
 FEEDBACK_COOLDOWN_SECONDS = 30

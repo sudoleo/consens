@@ -158,7 +158,12 @@ class Database:
 
 
 def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
-    assert persistence_guard.MAX_BOOKMARKS_PER_USER == 250
+    assert persistence_guard.MAX_BOOKMARKS_PER_USER == 500
+    # The chat cap is the limit users meet, before a run. The bookmark cap
+    # refuses only after it, so it leaves as much room again for bookmarks
+    # without a chat (2026-10-19: 181 chats + 87 older bookmarks hit 250).
+    from app.services import chat_store
+    assert persistence_guard.MAX_BOOKMARKS_PER_USER >= 2 * chat_store.MAX_CHATS_PER_OWNER
     db = Database()
     ref = db.collection("users").document("u1").collection("bookmarks").document("b1")
     first = persistence_guard.write_bookmark(
