@@ -27,8 +27,6 @@ body {
   position: relative;
   container-type: inline-size;
   isolation: isolate;
-  /* Width and center follow the space available beside the sidebar. */
-  transition: width var(--dur-layer) var(--ease-standard), left var(--dur-layer) var(--ease-standard);
 }
 
 /* Center the reading column in the remaining canvas, excluding the fixed
@@ -39,9 +37,15 @@ body {
     --app-sidebar-offset: var(--sidebar-width);
   }
 
+  /* Width and center follow the space available beside the sidebar. Only
+     here, where the sidebar pushes the column: a resize or a turned tablet
+     that crosses a breakpoint swaps the width formula, and animating that
+     started from the old formula at the new width (60px on a 390px phone
+     coming from the desktop layout), overflowing the page sideways. */
   .container {
     width: min(var(--app-container-width), calc(100% - var(--app-sidebar-offset) - 48px));
     left: calc(var(--app-sidebar-offset) / 2);
+    transition: width var(--dur-layer) var(--ease-standard), left var(--dur-layer) var(--ease-standard);
   }
 
   body:not(:has(.watch-page:not([hidden]))) .view-switch {

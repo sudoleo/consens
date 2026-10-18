@@ -13,7 +13,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Sidebar, Zahnrad-Fußzeile und Toggle folgen, die Lesespalte bleibt mittig;
       neu laden → gleiche Breite ohne Springen; Doppelklick → zurück auf
       Standard; mit Tab auf den Griff und Pfeiltasten. Im schmalen Fenster und
-      bei eingeklappter Sidebar kein Griff. Automatisiert:
+      bei eingeklappter Sidebar kein Griff. Fenster mit offener Sidebar unter
+      1100 px ziehen (oder Tablet drehen) → die Spalte steht sofort in der
+      neuen Breite, ohne Gleiten und ohne seitliches Überlaufen. Automatisiert:
       `sidebar-resize.test.mjs`, `tests/e2e/test_sidebar_resize.py`.
 - [ ] Google als Quelle (Standard: nur lesen): echte OAuth-Rückkehr mit nur
       Lese-Scopes, Widerruf, Zustimmung **einmal pro Chat** (Folgefrage ohne
