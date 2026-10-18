@@ -26,28 +26,29 @@ COMPOSER_SURFACE = {'light': 'rgba(245, 245, 245, 0.96)', 'dark': 'rgba(48, 51, 
 
 # iPhone Safari (iOS 26; WebKit LocalFrameView::fixedContainerEdges) paints
 # the strips behind its status bar and bottom bar: it hit-tests the middle of
-# each edge 4px in, ignoring pointer-events, walks up to the first fixed or
-# sticky box about as wide as the viewport and takes the opaque background met
-# on the way (boxes over 10px tall). Without one it measures pixels and keeps
-# the result, which showed white bars over the dark app now and then.
+# each edge 4px in, ignoring pointer-events, and walks up to the first fixed or
+# sticky box about as wide as the viewport. A box that is not also about as
+# tall gives the opaque background met on the way (boxes over 10px tall).
+# Without one Safari measures pixels and keeps the result; a viewport-sized
+# box or a sidebar keeps the colour from before, so a theme switch left the
+# old colour (white under the dark app). Only a page colour counts as fixed.
 SAFARI_BAR_COLOURS = """() => {
   const style = document.createElement('style');
   style.textContent = '*,*::before,*::after{pointer-events:auto!important}';
   document.head.append(style);
   try {
-    const w = document.documentElement.clientWidth;
-    const wide = el => el.getBoundingClientRect().width >= 0.9 * (w - 8);
+    const w = document.documentElement.clientWidth, h = innerHeight;
     const read = y => {
       const colours = new Set();
       for (let el = document.elementFromPoint(w / 2, y); el; el = el.parentElement) {
-        const cs = getComputedStyle(el);
+        const cs = getComputedStyle(el), box = el.getBoundingClientRect();
         if (cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) continue;
-        if (wide(el) && el.getBoundingClientRect().height > 10 && cs.backgroundColor !== 'rgba(0, 0, 0, 0)') {
-          colours.add(cs.backgroundColor);
-        }
-        if ((cs.position === 'fixed' || cs.position === 'sticky') && wide(el)) {
-          return colours.size === 1 ? [...colours][0] : [...colours].join(' + ') || 'measured by Safari';
-        }
+        const wide = box.width >= 0.9 * (w - 8), tall = box.height >= 0.9 * (h - 8);
+        if (wide && box.height > 10 && cs.backgroundColor !== 'rgba(0, 0, 0, 0)') colours.add(cs.backgroundColor);
+        if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+        if (tall) return 'kept from before (' + el.className + ')';
+        if (!wide) continue;
+        return colours.size === 1 ? [...colours][0] : [...colours].join(' + ') || 'measured by Safari';
       }
       return 'no fixed box';
     };
@@ -536,7 +537,8 @@ def test_iphone_safari_finds_the_page_colour_at_both_bars(browser, phase4_server
     try:
         page.set_viewport_size({'width': width, 'height': 820})
         expect(page.locator('body')).to_have_class(re.compile(r'\bis-hero\b'))
-        # Start screen: the header's edge strip on top, the letter clouds below.
+        # Start screen: the header's edge strip on top; below, the bottom
+        # strip over the letter clouds (which fill the viewport).
         page.wait_for_function("() => App.letterClouds.state().active"
             " && getComputedStyle(document.querySelector('.letter-clouds')).opacity === '1'")
         bars = page.evaluate(SAFARI_BAR_COLOURS)
@@ -546,6 +548,18 @@ def test_iphone_safari_finds_the_page_colour_at_both_bars(browser, phase4_server
         seed_long_answer(page)
         page.wait_for_function("() => document.body.classList.contains('composer-collapsed')"
             " && !document.body.classList.contains('composer-animating')")
+        bars = page.evaluate(SAFARI_BAR_COLOURS)
+        assert bars['top'] == bars['page'] and bars['bottom'] == bars['page'], bars
+    finally:
+        context.close()
+
+    # Watches fill the viewport too; the bottom strip lies above them.
+    context, page = _real_firebase_page(browser, phase4_server, path='/app/watches',
+        init_script=f"localStorage.setItem('theme','{theme}')")
+    try:
+        page.set_viewport_size({'width': width, 'height': 820})
+        expect(page.locator('#watchDashboard')).to_be_visible()
+        expect(page.locator('.app-mobile-header')).to_be_visible()
         bars = page.evaluate(SAFARI_BAR_COLOURS)
         assert bars['top'] == bars['page'] and bars['bottom'] == bars['page'], bars
     finally:

@@ -695,10 +695,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       er wieder am unteren Rand. Automatisiert nur mit nachgestelltem
       `visualViewport` (`test_mobile_navigation.py`).
 - [ ] iPhone (echtes Safari, iOS 26, dunkles Theme): `/app` frisch öffnen,
-      eine Frage stellen, „New chat“, Sidebar auf und zu — der Streifen hinter
-      der Statusleiste und der unter der unteren Leiste bleiben in jedem
-      Schritt in der Seitenfarbe, nie weiß. Automatisiert ist nur, dass Safari
-      an beiden Kanten einen Kasten mit deckender Seitenfarbe findet
+      eine Frage stellen, „New chat“, Sidebar auf und zu, Watches öffnen —
+      der Streifen hinter der Statusleiste und der unter der unteren Leiste
+      bleiben in jedem Schritt in der Seitenfarbe, nie weiß. Dann in den
+      Einstellungen das Theme wechseln (hell ↔ dunkel), Einstellungen und
+      Sidebar schließen: beide Leisten folgen auf Startbildschirm, im Thread
+      und auf Watches (solange Sidebar/Dialog offen sind, bleibt die alte
+      Farbe — Safari-Absicht). Automatisiert ist nur, dass Safari an beiden
+      Kanten einen flachen Kasten mit deckender Seitenfarbe findet
       (`SAFARI_BAR_COLOURS` in `test_mobile_navigation.py`).
 - [ ] Landing auf dem Handy (375 px) bis ganz unten scrollen: die Seite
       verschiebt sich nie seitlich (`test_public_composer_mockups.py`).

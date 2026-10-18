@@ -962,17 +962,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Statusleiste und unterer Leiste nach dem fixierten Kasten an der Kante
   (WebKit `fixedContainerEdges`: Mitte der Kante 4 px innen treffen, ohne
   `pointer-events`, aufwärts bis zur ersten fixed/sticky-Box mit ≥ 90 %
-  Viewport-Breite; deren deckender Hintergrund auf dem Weg gilt). Fehlt er,
-  misst Safari Pixel und behält das Ergebnis (oben nur bis zum ersten Tap,
-  unten bei breiten Ebenen die vorige Farbe) — so kamen sporadisch weiße
-  Leisten. Deshalb tragen alle drei Kanten-Kästen die Seitenfarbe:
-  `.app-mobile-header-edge` (Span im Kopf, 24 px, `--ground`, nach 8 px
-  ausgeblendet, `pointer-events: none`), die fixierte Thread-
-  `.input-section` (`--composer-halo`, deckungsgleich mit ihrem Halo) und
-  `.letter-clouds` (`--bg-color`, der Nebel deckt ohnehin). Neue fixierte,
-  viewportbreite Ebenen an einer Kante brauchen ebenfalls einen deckenden
-  Hintergrund; `SAFARI_BAR_COLOURS` in `tests/e2e/test_mobile_navigation.py`
-  bildet die Regel nach. Popover an den Inseln (`.consensus-actions-menu`,
+  Viewport-Breite; ist sie nicht auch fast viewporthoch, gilt der deckende
+  Hintergrund auf dem Weg). Fehlt er, misst Safari Pixel und behält das
+  Ergebnis; viewportgroße Ebenen (Buchstabenwolken, Watches-Seite, Dialoge,
+  Dimmer) und die Sidebar behalten die vorige Farbe — so blieben weiße
+  Leisten stehen, sporadisch und zuverlässig nach einem Theme-Wechsel. Jede
+  Kante hat deshalb einen flachen, vollbreiten Kasten in Seitenfarbe:
+  oben `.app-mobile-header-edge` (Span im Kopf, 24 px, `--ground`, nach 8 px
+  ausgeblendet, `pointer-events: none`), unten im Thread die fixierte
+  `.input-section` (`--composer-halo`, deckungsgleich mit ihrem Halo), auf
+  Startbildschirm und Watches `.app-bottom-edge` (fixed, 24 px, z 1 über den
+  Wolken bzw. 1401 über `.watch-page`, im Thread aus). Solange Sidebar oder
+  Dialog offen sind, hält Safari die alte Farbe absichtlich fest; danach
+  folgt sie. Neue fixierte Ebenen an einer Kante: flach + deckende
+  Seitenfarbe, oder darunter bleiben; `SAFARI_BAR_COLOURS` in
+  `tests/e2e/test_mobile_navigation.py` bildet die Regel nach und meldet
+  „kept from before“. Popover an den Inseln (`.consensus-actions-menu`,
   `.watch-feature-nudge`) liegen darüber. Der einmalige Watches-Hinweis
   (`#viewSwitchWatches.has-watch-pulse`) erscheint mobil als ruhiger grüner Punkt
   am Menü-Knopf und am Watches-Reiter der Sidebar, bis Watches geöffnet wurde.
@@ -1938,8 +1943,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (App-Gruppe vor `app-init.js`, `App.letterClouds` `{state(), splash(x, y)}`)
   und `static/css/letter-clouds.css`. Das Modul hängt `.letter-clouds` als
   erstes Kind in `<body>` (fixed, `z-index: 0`, `pointer-events: none`,
-  Hintergrund `--bg-color` für die Safari-Leiste unten, siehe „Mobile
-  Kopfleiste“; jede spätere positionierte Ebene liegt darüber) und läuft nur, solange
+  die Farbe für Safaris untere Leiste gibt `.app-bottom-edge` darüber, siehe
+  „Mobile Kopfleiste“; jede spätere positionierte Ebene liegt darüber) und läuft nur, solange
   `body.is-hero` gesetzt und keine `.watch-page` sichtbar ist (MutationObserver
   auf `body.class` und `.watch-page[hidden]`). Verlässt der Nutzer den Hero
   (erste Frage, Bookmark, Demo, Watches), bekommt die Ebene `.is-off`

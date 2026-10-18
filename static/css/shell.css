@@ -829,7 +829,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
    3. Topbar / view switch
    -------------------------------------------------------------------------- */
 .app-mobile-header { display: contents; }
-.app-mobile-header-edge, .mobile-conversation-actions, .mobile-sidebar-views { display: none; }
+.app-mobile-header-edge, .app-bottom-edge, .mobile-conversation-actions, .mobile-sidebar-views { display: none; }
 
 /* The view switch draws its own surface and sliding thumb
    (components-watch.css); nothing here may paint the active button. */
@@ -4310,15 +4310,19 @@ body .theme-toggle:is(:hover, :focus-visible) {
 
   .app-mobile-header > * { pointer-events: auto; }
 
-  /* iPhone Safari (iOS 26) paints the strip behind its status bar in the
-     colour of the fixed box at the top edge: WebKit hit-tests the middle of
-     the edge 4px in and walks up to the first fixed box about as wide as the
-     viewport. With an opaque background on the way it takes that colour;
-     without one (this header is transparent) it measures pixels and keeps
-     the result, sampled only until the first tap — so the bar was sometimes
-     white. This strip under the islands is what Safari finds: --ground, full
-     width, taller than WebKit's 10px floor. Solid only at the very top, it
-     fades out before the islands; once scrolled, ::before covers it anyway. */
+  /* iPhone Safari (iOS 26) paints the strips behind its status bar and its
+     bottom bar in the colour of the fixed box at that edge: WebKit hit-tests
+     the middle of the edge 4px in and walks up to the first fixed box about
+     as wide as the viewport. A box that is not much taller than wide (header,
+     composer, these strips) gives its opaque background as the colour. A
+     transparent one makes Safari measure pixels and keep the result; a
+     viewport-sized layer, a sidebar or a dim keeps the colour from before —
+     after a theme switch that left a white bar under the dark app. Each edge
+     therefore has a short, full-width box in the page colour, taller than
+     WebKit's 10px floor. While the sidebar or a dialog is open Safari keeps
+     the old colour on purpose; it follows once they close.
+     Top: this strip under the islands, solid only at the very top, gone
+     before the islands; once scrolled, ::before covers it anyway. */
   .app-mobile-header > .app-mobile-header-edge {
     display: block;
     position: absolute;
@@ -4330,6 +4334,25 @@ body .theme-toggle:is(:hover, :focus-visible) {
     -webkit-mask-image: linear-gradient(180deg, #000 calc(env(safe-area-inset-top, 0px) + 8px), transparent);
     mask-image: linear-gradient(180deg, #000 calc(env(safe-area-inset-top, 0px) + 8px), transparent);
   }
+
+  /* Bottom: on the start screen the letter clouds fill the viewport, which
+     Safari treats as "keep the colour from before". This strip sits just
+     above them (z 1, under the sidebar's dim). In the thread the fixed
+     composer is the edge itself; the Watches page (z 1400) is viewport-sized
+     too, so there the strip goes above it. */
+  .app-bottom-edge {
+    display: block;
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 1;
+    height: 24px;
+    pointer-events: none;
+    background: var(--ground);
+    -webkit-mask-image: linear-gradient(0deg, #000 8px, transparent);
+    mask-image: linear-gradient(0deg, #000 8px, transparent);
+  }
+  body:not(.is-hero) .app-bottom-edge { display: none; }
+  body:has(.watch-page:not([hidden])) .app-bottom-edge { display: block; z-index: 1401; }
 
   /* The fade appears only once something scrolls beneath it
      (mobile-header.js sets .is-scrolled); on an empty start screen it would
