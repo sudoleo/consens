@@ -37,14 +37,15 @@
   laufenden Session ausdrücklich verlangt; eine Freigabe aus einer früheren
   Session oder Aufgabe gilt nicht. Im Abschluss stattdessen sagen, dass die
   Änderung auf `main` liegt, aber noch nicht live ist.
-- **CI nach jedem Push selbst prüfen:** Jeder rote CI-Lauf ist eine Mail an den
-  Nutzer, und die will er nicht. Nach jedem Push auf `main` deshalb
+- **CI nach jedem Push prüfen, ohne darauf zu warten:** Ein rotes `main` bremst
+  alle folgenden Sessions, und die verursachende Session kennt den Fehler am
+  besten. Nach jedem Push auf `main` deshalb
   `venv/Scripts/python.exe scripts/ci_status.py --wait` im Hintergrund starten
-  (wartet auf den Lauf des eigenen Commits und nennt fehlgeschlagene Tests ohne
-  Login). Ist er rot, im selben Auftrag reparieren und erneut prüfen, bevor du
-  abschließt: veraltete Tests an gewolltes Verhalten anpassen, echte Fehler im
-  Code beheben, wackelige (zeitabhängige) Tests deterministisch machen statt
-  sie erneut anzustoßen. Vor UI-Änderungen geänderte Texte, IDs und Selektoren
+  und den Auftrag trotzdem sofort abschließen; der Nutzer wartet nicht auf die
+  CI. Meldet sich der Hintergrundlauf grün (Exit 0), nichts dazu sagen. Meldet
+  er rot (Exit 1), reparieren: veraltete Tests an gewolltes Verhalten anpassen,
+  echte Fehler im Code beheben, wackelige (zeitabhängige) Tests
+  deterministisch machen statt sie erneut anzustoßen. Vor UI-Änderungen geänderte Texte, IDs und Selektoren
   in `tests/e2e` suchen und die Treffer mitziehen, denn die Browser-Suite läuft
   nur nachts. Was dort rot wird, repariert der tägliche CI-Wächter (geplante
   Aufgabe `consens-ci-watch`).
