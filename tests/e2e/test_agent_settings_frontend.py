@@ -135,10 +135,13 @@ def test_agent_settings_card_applies_the_change_and_the_next_message_carries_it(
         assert requests[1]["reasoning_effort"] == "low"
         assert requests[1]["agent_preferences"]["depth"] == "quick"
         assert requests[0]["agent_preferences"]["judges"] == "on" and requests[1]["agent_preferences"]["judges"] == "off"
-        # The answer says calmly why it has no marks, and offers answers and sources only.
+        # No line under the answer (the reader switched the check off), no
+        # review link, and no "Sources 0": only the model answers.
         status = page.locator("#agentAnswer .agent-review-status")
-        expect(status).to_have_text("Answer check off")
-        expect(page.locator("#agentAnswer .agent-review [data-section]")).to_have_count(2)
+        expect(status).to_have_attribute("data-state", "off")
+        expect(status).to_be_hidden()
+        expect(page.locator("#agentAnswer .agent-review [data-section]")).to_have_count(1)
+        expect(page.locator('#agentAnswer .agent-review [data-section="answers"]')).to_be_visible()
         expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
         _shot(page, f"agent-answer-check-off-{width}-{'dark' if dark else 'light'}")
         assert requests[1]["comparison_models"] == open_models != requests[0]["comparison_models"]

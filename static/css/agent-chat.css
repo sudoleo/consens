@@ -143,17 +143,24 @@
   width: 25px; height: 25px; min-height: 25px; padding: 3px; margin-left: -6px;
   background: var(--ground); border: 2px solid var(--ground); border-radius: 50%;
 }
+/* Provider marks rest monochrome, as in the composer and the model picker,
+   and take their own colours while you point at them. The grey sits on the
+   button, not the image: dark mode inverts the black logos on the image
+   itself (components-model-picker.css). */
 .agent-model-stack .agent-inline-model {
   animation: agent-icon-enter .24s cubic-bezier(.2, .7, .2, 1) var(--agent-icon-delay, 0ms) both;
-  transition: background-color var(--dur-state) var(--ease-standard);
+  filter: grayscale(1);
+  transition: background-color var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard);
 }
 @keyframes agent-icon-enter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .agent-model-stack .agent-inline-model:first-child { margin-left: 0; }
-.agent-model-stack .agent-inline-model:is(:hover, :focus-visible) { z-index: 2; background: var(--raise); }
+.agent-model-stack .agent-inline-model:is(:hover, :focus-visible) { z-index: 2; background: var(--raise); filter: none; }
 .agent-history-models { margin: 2px 0 12px; }
+/* An earlier turn shows its marks beside "Thought for …", like the live one. */
+.agent-activity > summary > .agent-history-models { margin: 0; }
 .model-mark-fallback { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; font-size: var(--font-size-xs); color: var(--ink-2); }
 .agent-session-progress { font-size: var(--font-size-xs); line-height: 1.7; color: var(--ink-2); }
 .agent-session-task > summary { cursor: pointer; padding: 8px 0; color: var(--ink-3); }
@@ -306,8 +313,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @media (max-width: 540px) {
   .agent-review > .agent-evidence-grid { flex: 1 0 100%; }
   /* One equal column per link: three, or two without a review (answer
-     check off) instead of an empty third column. */
+     check off) or without sources instead of an empty third column. A
+     single link keeps the width of one of three, not the whole row. */
   .agent-evidence-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch; gap: 4px; margin-left: 0; }
+  .agent-evidence-grid:has(> :only-child) { grid-auto-columns: calc((100% - 8px) / 3); }
   /* All links keep one top and height. */
   .agent-evidence-grid .agent-evidence-link { align-content: start; }
   .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 0; min-height: 56px; padding: 6px 0; }
@@ -508,8 +517,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 
 /* ---- Progress at the models ------------------------------------------------
    While the agent works, each comparison model's icon in the summary row
-   waits muted and gently pulses; it takes its own colour the moment that
-   model's answer is in. The icons are the progress: no separate line
+   waits faint and gently pulses; it turns solid (still monochrome, its own
+   colours only on hover) the moment that model's answer is in. A waiting
+   icon stays grey even under the pointer. The icons are the progress: no separate line
    between the summary and the live text, and no ring around the icons.
    When the answer has been checked, the agreement number catches the light
    once (below). The grey sits on the button, not the image (as in the

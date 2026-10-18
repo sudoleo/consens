@@ -410,7 +410,10 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.keyboard.press('Escape')
         page.evaluate('turn => window.App.followup.renderStoredTurns([turn])', saved)
         history = page.locator('.thread-history-turn')
-        history.locator('.agent-activity > summary').click()
+        # The summary carries the model marks too (a click there opens an
+        # answer, as in the live turn): open the activity at its title.
+        expect(history.locator('.agent-activity > summary > .agent-history-models')).to_have_count(1)
+        history.locator('.agent-activity-title').click()
         expect(history.locator('.agent-activity-insights')).to_be_visible()
         expect(history.locator('.agent-activity-insights')).to_contain_text('6 model answers')
         expect(history.locator('.agent-history-models img')).to_have_count(6)

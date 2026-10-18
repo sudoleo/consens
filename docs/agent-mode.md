@@ -192,9 +192,12 @@ Marken, kein Model-Pulse-Pick und keine `differences_stats`.
 - **Eingefügter Text:** `check_text` prüft weiter. Bittet der Nutzer, einen
   fremden Text zu prüfen, ist diese Prüfung die Antwort selbst; nur die Judges
   der Agent-Antwort entfallen.
-- **Anzeige** (`agent-review.js`): eine ruhige Statuszeile „Answer check off“
-  statt Marken und Score; die Evidenzzeile und der Reader bieten nur Answers
-  und Sources (`context.sections`), die Vergleichskarte „Explore sources“.
+- **Anzeige** (`agent-review.js`): keine Marken, kein Score und seit
+  2026-10-18 auch keine Statuszeile unter der Antwort (`summaryText` ist für
+  `off` leer; „off“ unter jeder Antwort las sich wie eine Warnung). Den Grund
+  nennen die Aktivität („Answer check off“) und der Reader. Die Evidenzzeile
+  und der Reader bieten nur Answers und Sources (`context.sections`), die
+  Vergleichskarte „Explore sources“.
   `failureNote` behandelt eine fixierte Antwort mit `off` wie eine geprüfte.
 - **Agent:** `prepare_settings_change` kennt `answer_check` (`on`/`off`), siehe
   „Einstellungen umstellen“.
@@ -427,7 +430,8 @@ Einen Faktenstreit klärt der Agent vor dem Schreiben selbst mit `read_source`
 (siehe „Quellen nachlesen“).
 
 Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend,
-abgebrochen und aus („Answer check off“, vom Nutzer ausgeschaltet). Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen
+abgebrochen und aus („Answer check off“, vom Nutzer ausgeschaltet; nur in
+Aktivität und Reader, nicht als Zeile unter der Antwort). Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen
 haben und die Vergleichsgrundlage vollständig ist. Modellübereinstimmung ist
 keine unabhängige Faktenprüfung. Ohne Vergleich läuft keine automatische Prüfung.
 

@@ -869,6 +869,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   deshalb 20 px über den Rand); (3) Chips an der Nachricht
   (`.message-attachments`) liegen auf `--ground` statt im Well und heben
   deshalb in `shell.css` auf `--raise` — dieselbe Kachel, ein anderer Grund.
+  Seit 2026-10-18 stehen sie per `order: -1` ÜBER der Blase (erst das Bild,
+  dann die Frage), Bildkacheln ohne Rahmenlinie mit den Ecken der Blase.
   Bilder an der Nachricht zeigen sich seit 2026-10-06 selbst als kleine
   Kachel (`.is-image-tile`, 96 px hoch) statt als „IMG“-Plakette:
   `attachments.js` (`imageTile`) nimmt direkt nach dem Senden das Bild aus dem
@@ -3966,7 +3968,12 @@ Key claims (Claims ohne Inline-Marke) stehen vor der Evidenzzeile. Archivierte A
 Schlägt ein Lauf erst nach einer vollständigen, geprüften Antwort fehl, zeigt die
 Kopfzeile `Thought for …` (dieselbe Regel wie `failureNote`).
 Statuslabels: `Partly checked`, `Check could not run`, `Answer not checked`,
-`Answer check off` (keine Prüfhinweise: `checkIssues` ist für `off` leer);
+`Answer check off` (keine Prüfhinweise: `checkIssues` ist für `off` leer; unter
+der Antwort steht für `off` keine Zeile, nur Aktivität und Reader nennen es).
+Die Evidenzzeile lässt `Sources` ohne Quelle weg (kein „Sources 0“). Archivierte
+Agent-Turns setzen ihre Modell-Logos (`.agent-history-models`) neben
+`Thought for …` in die Aktivitätszeile, wie der Live-Turn (agent-delegation.js);
+eine eigene Zeile nur ohne Aktivität. Die Logos ruhen einfarbig (Farbe bei Hover).
 Ausfallgründe erscheinen nur als kurze Code-Phrase (`failureReason`).
 `Answers` zählt vollständige Antworten; die Details behalten auch Fehlermodelle.
 Alte Reviews werden aus ihren vorhandenen Judge-Metadaten erklärt.

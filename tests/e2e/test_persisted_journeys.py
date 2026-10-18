@@ -264,15 +264,18 @@ def test_j02c_answer_check_off_in_settings_ends_the_turn_without_any_judge(journ
     assert review['status'] == 'off' and [c['status'] for c in review['checks']] == ['off']
     # The compare step, six comparison answers and the answer: no judge call.
     assert len(state['calls']) == 8, state['calls']
+    # No line under the answer: the reader switched the check off.
     status = j.page.locator('#agentAnswer .agent-review-status')
-    expect(status).to_have_text('Answer check off')
+    expect(status).to_have_attribute('data-state', 'off')
+    expect(status).to_be_hidden()
     expect(j.page.locator('#agentAnswer .agent-agreement')).to_have_count(0)
     j.page.screenshot(path=f'test-results/{j.uid}-answer-check-off.png')
-    # Saved and reopened: the same calm line, and the setting stays off.
+    # Saved and reopened: still off and quiet, and the setting stays off.
     j.page.reload(wait_until='domcontentloaded')
     j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
     j.page.evaluate('id => window.openBookmark(id)', next(iter(state['collections']['bookmarks'])))
-    expect(j.page.locator('.agent-review-status').last).to_have_text('Answer check off', timeout=15000)
+    expect(j.page.locator('.agent-review-status').last).to_have_attribute('data-state', 'off', timeout=15000)
+    expect(j.page.locator('.agent-review-status').last).to_be_hidden()
     assert j.page.evaluate('() => App.agentPreferences.get().judges') == 'off'
 
 

@@ -653,6 +653,36 @@ it('opens a turn saved with a skipped answer check on the comparison that has ma
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   dom.window.close();
 });
+it('offers no Sources link when the answer has no source', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  for (const comparison of review.comparisons) for (const answer of comparison.answers) delete answer.sources;
+  w.App.agentReview.render(body, review);
+  expect([...body._agentReview.querySelectorAll('[data-section]')].map(b => b.dataset.section)).toEqual(['differences', 'answers']);
+  dom.window.close();
+});
+it('puts the inline model row of an earlier turn beside its "Thought for" line', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  body.classList.add('thread-history-answer-body');
+  const activity = d.createElement('div');
+  activity.innerHTML = '<details class="agent-activity"><summary><span class="agent-activity-title">Thought for 29s</span></summary></details>';
+  body.before(activity);
+  const toggled = vi.fn(); activity.querySelector('summary').addEventListener('click', toggled);
+  w.App.agentReview.render(body, snapshot());
+  const models = activity.querySelector('summary > .agent-history-models');
+  expect(models).not.toBeNull();
+  expect(models.tagName).toBe('SPAN');
+  expect(body.previousElementSibling).toBe(activity);
+  // A mark opens its answer; the activity stays as it is.
+  models.querySelector('button').click();
+  expect(toggled).not.toHaveBeenCalled();
+  // A second render keeps one row.
+  w.App.agentReview.render(body, { ...snapshot(), status: 'succeeded' });
+  expect(activity.querySelectorAll('.agent-history-models').length).toBe(1);
+  dom.window.close();
+});
 it('says calmly that the answer check is off and offers answers and sources, no review', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
@@ -665,10 +695,12 @@ it('says calmly that the answer check is off and offers answers and sources, no 
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
   w.App.agentReview.render(body, review);
+  // No line under the answer: the reader switched the check off and the
+  // activity says so; "off" under every answer read like a warning.
   const status = body._agentReview.querySelector('.agent-review-status');
   expect(status.dataset.state).toBe('off');
-  expect(status.textContent).toBe('Answer check off');
-  expect(status.hidden).toBe(false);
+  expect(status.textContent).toBe('');
+  expect(status.hidden).toBe(true);
   expect(status.title).not.toMatch(/the check uses/);
   const panel = w.App.agentReview.contextFor(review, 'c1').renderPanel('answers');
   expect(panel.textContent).toContain('Claude: no answer, the provider stopped responding.');

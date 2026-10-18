@@ -116,8 +116,11 @@
   // The line under the answer speaks only when it changes how far the reader
   // can rely on the marks. A finished check, or one that simply had fewer
   // answers to work with, needs no words: the marks and counts say enough.
+  // Nor does a check the reader switched off: repeating "off" under every
+  // answer reads like a warning (the reader and the activity still say it).
   const decisive = new Set(['insufficient_answers', 'differences_unavailable', 'coverage_unavailable']);
   function summaryText(state, issues) {
+    if (state === 'off') return '';
     if (!['succeeded', 'partial'].includes(state)) return states[state] || states.partial;
     const codes = new Set(issues.map(i => i.code).filter(code => decisive.has(code)));
     if (codes.has('insufficient_answers')) return 'Not compared · fewer than two models answered';
@@ -584,8 +587,9 @@
       context.links = () => {
         const differences = check?.differences_data?.differences || [];
         const contradictions = differences.filter(d => d.type === "contradiction").length;
+        // "Sources 0" would lead to an empty list.
         return [...(off ? [] : [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null]]),
-          ["answers", "Answers", answers.length], ["sources", "Sources", sources.length]];
+          ["answers", "Answers", answers.length], ...(sources.length ? [["sources", "Sources", sources.length]] : [])];
       };
       return context;
     });
@@ -625,7 +629,10 @@
     summary.hidden = [...summary.children].every(child => child.hidden);
     if (body.classList.contains('thread-history-answer-body')) {
       body._agentModels?.remove();
-      const models = node('div', 'agent-inline-models agent-history-models');
+      // Beside "Thought for …", where the live turn shows them
+      // (agent-delegation.js); a row of their own only without that line.
+      const activity = body.parentElement?.querySelector(':scope > * > .agent-activity > summary');
+      const models = node(activity ? 'span' : 'div', 'agent-inline-models agent-history-models');
       const stack = node('span', 'agent-model-stack'); models.append(stack);
       const seen = new Set();
       for (const context of contexts) for (const answer of context.answers) {
@@ -638,8 +645,15 @@
         button.addEventListener('click', () => App.answerReader?.openContext(context, { model: answer.provider, trigger: button }));
         stack.append(button);
       }
-      // Above the result card of a checked text, if the answer has one.
-      (body._passageCard?.parentNode === body.parentNode ? body._passageCard : body).before(models); body._agentModels = models;
+      if (activity) {
+        // A click on a mark opens its answer, not the activity.
+        models.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); });
+        activity.append(models);
+      } else {
+        // Above the result card of a checked text, if the answer has one.
+        (body._passageCard?.parentNode === body.parentNode ? body._passageCard : body).before(models);
+      }
+      body._agentModels = models;
     }
     contexts.forEach(c => App.answerReader?.refreshContext(c));
   }

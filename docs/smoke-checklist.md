@@ -74,8 +74,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
       Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,
       keine Marken und kein Score (auch mit Highlights = All checks). Unter der
-      Antwort „Answer check off“, nur Answers und Sources, bei 320/390 px in
-      zwei gleichen Spalten. Der Antworttext behauptet keine Prüfung; im
+      Antwort keine Statuszeile, nur Answers und (falls es Quellen gibt)
+      Sources; bei 320/390 px in gleichen Spalten, ein einzelner Link nur ein
+      Drittel breit. Der Antworttext behauptet keine Prüfung; im
       Agent-Panel keine Judge-Zeilen. Reload und archivierter Chat sehen gleich
       aus. Ein eingefügter Text („Stimmt das?“) bekommt weiter seine
       Prüfkarte. „Schalte die Judges aus“ → Karte „Answer check On → Off“;
@@ -719,8 +720,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „New comparison“.
 
 - [ ] Anhänge hängen an der Nachricht, nicht am Feld: nach dem Senden ist die
-      Anhangleiste des Composers leer und die Chips stehen unter der gesendeten
-      Frage (auch nach dem Archivieren im Verlauf und beim Bookmark-Restore).
+      Anhangleiste des Composers leer und die Chips stehen direkt über der
+      gesendeten Frage, Bilder ohne Rahmenlinie (auch nach dem Archivieren im
+      Verlauf und beim Bookmark-Restore).
       Eine Folgefrage schickt die Datei nicht erneut mit.
 - [ ] Handy: nach dem Absenden und beim Scrollen nach unten schrumpft der
       Composer in jedem Modus auf eine Zeile ((+), Feld, Senden); Modus,
