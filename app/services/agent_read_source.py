@@ -221,7 +221,8 @@ class ReadSourceArgs(ProgressArgs):
         "One URL exactly as it appears in the sources of a comparison answer of this message, in the sources "
         "of an earlier message of this chat or in the user's messages.")
     purpose: Literal["user_request", "settle_contradiction", "exact_wording"] = Field(description=
-        "user_request: the user asks what this page says or asks you to read or check it. "
+        "user_request: the user asks what this page says, asks you to read or check it, or limits the answer to "
+        "the source it belongs to (such as only the official site). "
         "settle_contradiction: the answers disagree on a fact that matters and this source decides it. "
         "exact_wording: the answer will quote a key figure, definition or official statement from it.")
     point: str = Field(min_length=1, max_length=300, description=

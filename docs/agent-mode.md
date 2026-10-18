@@ -1587,6 +1587,16 @@ about this“ zitiert: `user_urls` liest nur `agent_memory.user_words`, also ohn
 das Zitat (vorher kamen Links aus Antworttext so doch durch). Typografische
 Anführungszeichen („…“, «…», ‚…‘) beenden einen Link wie gerade, und ein
 großgeschriebenes `HTTPS://` zählt mit.
+Seit 2026-10-18 gilt auch eine Quelle, auf die der Nutzer die Antwort
+beschränkt („nur die offizielle Karriereseite“), als Lesegrund
+(`purpose: user_request`): Der Agent liest deren zitierte Seiten statt Kopien
+auf anderen Seiten und sagt, was er dort nicht bestätigen konnte. Anlass
+(Chat-Report 2026-10-18): Die Modelle zitierten 23 TenneT-Karriereseiten, der
+Agent las nur eine Jobbörsen-Kopie. Probe am selben Tag: Exa liefert für die
+Stellenliste (`SearchJobs/feed`) gar keinen Text, für eine einzelne Stellenanzeige
+8.000 Zeichen. Weiterklicken über Links einer gelesenen Seite ist deshalb nicht
+gebaut: Exas Auszug behält kaum Links (Stellenanzeige 13 nackte URLs der
+Navigation, Karriereseite 2, docs.python.org keine).
 Gespeicherte Quellen sind Provider-Zitate oder bereits gelesene Seiten. Schalter:
 `AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
 Code: `agent_read_source.py`.

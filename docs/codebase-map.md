@@ -3339,6 +3339,9 @@ dem Tool-Ereignis `host`/`read`/`sources`; `agent_costs.fetch_bounds` reserviert
 die Seite, `_admit_chat_step` rechnet bei einem Abruf mit der vollen kleinsten
 Reservierung. Lesen geht seit 2026-10-11 auch ohne Vergleich (`purpose:
 "user_request"`, danach direkt die Antwort); danach bleibt `compare_models` gesperrt.
+Seit 2026-10-18 ist auch eine Quelle, auf die der Nutzer die Antwort beschränkt
+(„nur die offizielle Seite“), ein Lesegrund (`user_request`, Regel in
+`AGENT_READ_SOURCE_PROMPT`): deren zitierte Seiten statt Kopien anderswo.
 Details: [agent-mode.md](agent-mode.md), „Quellen nachlesen“.
 **Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
 Prompt des Agenten: Steuerung (`_AGENT_STEERING`: Vergleichen oder direkt

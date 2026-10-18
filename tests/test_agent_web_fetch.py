@@ -304,6 +304,10 @@ def test_prompt_explains_reading_only_when_on(store, enabled):
     # Reading before a comparison closes the door to one: the prompt says when.
     assert "when the user only wants to know what a page says, read it and answer without a comparison" in content
     assert "an earlier message of this chat (the links in earlier answers), or a page the user linked" in content
+    # Chat review 2026-10-18: "only the official site" was answered from a job
+    # board's copy although official pages were cited; the user's limit is a reason to read.
+    assert "the cited pages of a source the user limits the answer to" in content
+    assert "limits the answer to the source it belongs to" in json.dumps(loop.registry.tools["read_source"].schema())
     for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
         assert AGENT_SYSTEM_PROMPT.count(old) == 1 and old not in content and new in content
     assert content.count(AGENT_READ_SOURCE_PROMPT.format(limit=READS_PER_MESSAGE)) == 1
