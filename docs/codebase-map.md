@@ -7170,7 +7170,13 @@ gezählte Warnungen aus dem Render-Log. `collect` gibt JSON aus und merkt sich
 den Stand in `pending.json`, `save` übernimmt ihn nach `state.json` (beides
 unter `~/.claude/scheduled-tasks/consens-chat-review/`). Der Task schreibt
 daraus einen kurzen Bericht mit Vorschlägen, die Max bestätigen muss; beide
-Befehle sind in `.claude/settings.local.json` freigegeben. Grok 4.3 ist
+Befehle sind in `.claude/settings.local.json` freigegeben. Weil Läufe
+geplanter Tasks in der Desktop-App still enden, pingt ein Task, der Max
+braucht (Vorschläge, fertiger Freitags-Post, offene Entscheidung), einmal per
+`scripts/task_ping.py "<Satz>"`: Operator-Bot, Ziel
+`TASK_PING_TELEGRAM_CHAT_ID` aus der lokalen `.env` (bewusst nicht
+`TELEGRAM_CHAT_ID`, sonst alarmierten lokale Server), Text auf 300 Zeichen
+gekürzt, damit kein Bericht in Telegram landet; ebenfalls freigegeben. Grok 4.3 ist
 seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
 (OpenRouter-Standard „low“; Reasoning-Schalter und Agent-Menü setzen die Stufe).
 Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten
