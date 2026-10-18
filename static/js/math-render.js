@@ -1,7 +1,8 @@
 // =====================================================================
 // math-render.js
 // Gemeinsame LaTeX-Darstellung fuer App- und Share-Seiten.
-// KaTeX + auto-render werden davor aus dem CDN geladen.
+// KaTeX + auto-render werden davor aus static/vendor geladen; auf
+// oeffentlichen Seiten nur bei einer Formel, sonst bei Bedarf von hier.
 // Export: window.ConsensusMath.{prepareMarkdown,render}.
 // =====================================================================
 
@@ -179,15 +180,59 @@
     pending.forEach(function (entry) { entry[0].nodeValue = entry[1]; });
   }
 
-  function render(root) {
-    if (!root) return;
-    normalizeDollarMath(root);
-    if (typeof window.renderMathInElement !== "function") return;
+  function typeset(root) {
     window.renderMathInElement(root, {
       delimiters: delimiters,
       throwOnError: false,
       trust: false
     });
+  }
+
+  // Oeffentliche Seiten binden KaTeX nur ein, wenn der Server eine Formel
+  // gefunden hat (partials/katex.html). Hat er eine uebersehen, nennt das
+  // Meta-Tag die Dateien, und KaTeX wird hier einmal nachgeladen. Ohne
+  // Meta-Tag (z. B. /app, wo KaTeX immer geladen wird) bleibt alles wie zuvor.
+  const MATH_TEXT_RE = /\$\$|\\\(|\\\[|\\begin\{/;
+  let katexLoad = null;
+  const waitingRoots = new Set();
+
+  function loadKatex() {
+    if (katexLoad) return katexLoad;
+    const meta = document.querySelector('meta[name="katex-assets"]');
+    if (!meta) return null;
+    function add(tag, attrs) {
+      return new Promise(function (resolve, reject) {
+        const el = document.createElement(tag);
+        Object.keys(attrs).forEach(function (key) { el[key] = attrs[key]; });
+        el.onload = resolve;
+        el.onerror = reject;
+        document.head.appendChild(el);
+      });
+    }
+    add("link", { rel: "stylesheet", href: meta.dataset.css }).catch(function () {});
+    // async=false: dynamisch eingefuegte Skripte laufen sonst in
+    // Ankunftsreihenfolge, auto-render braucht aber katex vorher.
+    katexLoad = Promise.all([
+      add("script", { src: meta.dataset.js, async: false }),
+      add("script", { src: meta.dataset.autoRender, async: false })
+    ]).then(function () {
+      waitingRoots.forEach(function (root) {
+        if (root.isConnected) typeset(root);
+      });
+      waitingRoots.clear();
+    }, function () { waitingRoots.clear(); });
+    return katexLoad;
+  }
+
+  function render(root) {
+    if (!root) return;
+    normalizeDollarMath(root);
+    if (typeof window.renderMathInElement === "function") {
+      typeset(root);
+      return;
+    }
+    if (!MATH_TEXT_RE.test(root.textContent || "")) return;
+    if (loadKatex()) waitingRoots.add(root);
   }
 
   window.ConsensusMath = {

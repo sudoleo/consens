@@ -1,0 +1,16 @@
+{#
+  KaTeX only for pages with a formula (app/core/math_assets.py): most public
+  pages have none and skip a blocking stylesheet and ~270 KB of script. The
+  meta tag always names the files, so math-render.js can still load them if
+  the server check missed a formula.
+#}
+  <meta name="katex-assets"
+        data-css="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}"
+        data-js="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.js') }}"
+        data-auto-render="{{ asset_url('/static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js') }}">
+  {% if page_has_math() %}
+  <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}">
+  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js') }}"></script>
+  {% endif %}
+  <script defer src="{{ asset_url('/static/js/math-render.js') }}"></script>

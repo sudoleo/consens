@@ -233,6 +233,9 @@ def register_asset_globals(templates) -> None:
 
     templates.env.globals["asset_url"] = asset_url
     templates.env.globals["frontend_assets"] = frontend_assets
+    from app.core.math_assets import register_math_globals
+
+    register_math_globals(templates)
 
 
 # Local dependencies a stylesheet or ES module pulls in by URL. Their bytes

@@ -1486,10 +1486,24 @@ class SharePageRouteTests(unittest.TestCase):
         body = response.text
         self.assertIn(r"\(F:\mathbb C^3\to\mathbb C^3\)", body)
         self.assertIn(r"\(\det(DF)=-2\)", body)
-        self.assertRegex(body, r"/static/vendor/katex/0\.19\.0/dist/katex\.min\.js\?v=[\w.-]+")
+        self.assertRegex(body, r'<script defer src="/static/vendor/katex/0\.19\.0/dist/katex\.min\.js\?v=[\w.-]+"')
+        self.assertRegex(body, r'<link rel="stylesheet" href="/static/vendor/katex/0\.19\.0/dist/katex\.min\.css\?v=')
         self.assertNotIn("cdn.jsdelivr.net", body)
         self.assertRegex(body, r"/static/js/math-render\.js\?v=[\w.-]+")
         self.assertRegex(body, r'class="page-shell[^"]*" data-math-render')
+
+    def test_share_without_math_skips_katex_but_names_its_files(self):
+        # Most shares have no formula: no blocking KaTeX stylesheet and no
+        # 270 KB script. The meta tag lets math-render.js load it if needed.
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+
+        body = response.text
+        self.assertNotIn('<script defer src="/static/vendor/katex', body)
+        self.assertNotIn('<link rel="stylesheet" href="/static/vendor/katex', body)
+        self.assertRegex(body, r'<meta name="katex-assets"\s+data-css="/static/vendor/katex/0\.19\.0/dist/katex\.min\.css\?v=')
+        self.assertRegex(body, r"/static/js/math-render\.js\?v=[\w.-]+")
 
     def test_private_share_requires_owner_and_is_never_publicly_cached(self):
         doc = self._share_doc(visibility="private", owner_uid="owner-1")

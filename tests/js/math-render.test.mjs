@@ -281,3 +281,75 @@ describe("ConsensusMath.render", () => {
     expect(box.textContent).toBe(text);
   });
 });
+
+// Oeffentliche Seiten ohne Formel binden KaTeX nicht mehr ein
+// (partials/katex.html). Uebersieht der Server eine Formel, laedt
+// math-render.js die Dateien aus dem Meta-Tag nach und setzt danach.
+describe("ConsensusMath.render ohne geladenes KaTeX", () => {
+  function bootWithMeta() {
+    return loadScripts(["static/js/math-render.js"], {
+      before(window) {
+        const meta = window.document.createElement("meta");
+        meta.name = "katex-assets";
+        meta.dataset.css = "/static/vendor/katex.min.css?v=1";
+        meta.dataset.js = "/static/vendor/katex.min.js?v=1";
+        meta.dataset.autoRender = "/static/vendor/auto-render.min.js?v=1";
+        window.document.head.appendChild(meta);
+      },
+    });
+  }
+
+  function addedAssets(document) {
+    return Array.from(document.head.querySelectorAll("link[href], script[src]"));
+  }
+
+  it("laedt KaTeX bei einer Formel einmal nach und setzt dann alle wartenden Bloecke", async () => {
+    const { window, document } = bootWithMeta();
+    const first = document.createElement("p");
+    first.textContent = "Inline $x^2$ here.";
+    const second = document.createElement("p");
+    second.textContent = String.raw`\[ a+b \]`;
+    document.body.append(first, second);
+
+    window.ConsensusMath.render(first);
+    window.ConsensusMath.render(second);
+
+    const assets = addedAssets(document);
+    expect(assets.map((el) => el.getAttribute("href") || el.getAttribute("src"))).toEqual([
+      "/static/vendor/katex.min.css?v=1",
+      "/static/vendor/katex.min.js?v=1",
+      "/static/vendor/auto-render.min.js?v=1",
+    ]);
+    // Reihenfolge der Ausfuehrung wie bei <script defer>: katex vor auto-render.
+    expect(assets.slice(1).every((el) => el.async === false)).toBe(true);
+
+    const seen = [];
+    window.renderMathInElement = (root) => seen.push(root);
+    assets.forEach((el) => el.dispatchEvent(new window.Event("load")));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(seen).toEqual([first, second]);
+  });
+
+  it("laedt nichts fuer Text ohne Formel", () => {
+    const { document, window } = bootWithMeta();
+    const box = document.createElement("p");
+    box.textContent = "6,7 Mrd. $ in Q1, a_b und c^d.";
+    document.body.appendChild(box);
+
+    window.ConsensusMath.render(box);
+
+    expect(addedAssets(document)).toEqual([]);
+  });
+
+  it("ohne Meta-Tag bleibt es beim bisherigen Verhalten", () => {
+    const { document, window } = boot();
+    const box = document.createElement("p");
+    box.textContent = String.raw`\(x\)`;
+    document.body.appendChild(box);
+
+    window.ConsensusMath.render(box);
+
+    expect(addedAssets(document)).toEqual([]);
+  });
+});

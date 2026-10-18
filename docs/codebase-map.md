@@ -1504,6 +1504,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,stripMath,render}`.
+  **KaTeX nur bei Formel (seit 2026-10-18):** Share-, Watch- und Topic-Seiten
+  binden `templates/partials/katex.html` ein. Das Stylesheet und die beiden
+  KaTeX-Skripte stehen nur dann im HTML, wenn der Jinja-Global
+  `page_has_math()` (`app/core/math_assets.py`, registriert über
+  `register_asset_globals`) im Template-Kontext eine Formel findet; die
+  Prüfung ist absichtlich eine Obermenge dessen, was `render()` setzt. Das
+  Meta-Tag `katex-assets` nennt die Dateien immer: Findet `render()` eine
+  Formel ohne geladenes KaTeX, lädt es CSS + Skripte einmal nach
+  (`async=false`, Reihenfolge wie `defer`) und setzt danach alle wartenden
+  Blöcke. `/app` hat kein Meta-Tag und lädt KaTeX weiter immer.
   Innerhalb einer Formel ist Markdown Notation, kein Markup: Backslashes und
   alle ASCII-Satzzeichen werden geschützt; insbesondere bleibt ein einzelnes
   `=` in mehrzeiligen Formeln Formelinhalt statt Setext-Überschrift. Derselbe
