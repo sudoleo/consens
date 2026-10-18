@@ -1,3 +1,4 @@
+import importlib.util
 import re
 from pathlib import Path
 
@@ -73,12 +74,12 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     app_tokens = read("static/css/variables.css")
     public_tokens = read("static/css/public-tokens.css")
 
-    # Two Inter files plus the metric-matched local fallback (no download).
-    assert typography.count('@font-face {') == 3
-    assert typography.count("url(") == 2
+    # Three Inter parts per style plus the metric-matched local fallback (no
+    # download). The full source files are no longer referenced.
+    assert typography.count('@font-face {') == 7
+    assert typography.count("url(") == 6
     assert 'font-family: "Inter Fallback";' in typography and "size-adjust:" in typography
-    assert "../fonts/inter/InterVariable.woff2" in typography
-    assert "../fonts/inter/InterVariable-Italic.woff2" in typography
+    assert "InterVariable.woff2" not in typography and "InterVariable-Italic.woff2" not in typography
     for contract in (
         '--font-sans: "Inter Variable"',
         "--font-weight-regular: 400;",
@@ -94,15 +95,70 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     assert typography_import.search(public_tokens)
 
     font_dir = ROOT / "static" / "fonts" / "inter"
-    assert (font_dir / "InterVariable.woff2").stat().st_size > 300_000
-    assert (font_dir / "InterVariable-Italic.woff2").stat().st_size > 300_000
     assert "SIL OPEN FONT LICENSE" in (font_dir / "OFL.txt").read_text(encoding="utf-8")
 
     for template_path in (ROOT / "templates").rglob("*.html"):
         assert "fonts.googleapis.com" not in template_path.read_text(encoding="utf-8")
     # /app fetches Inter with the HTML, at the exact URL @font-face resolves to.
-    assert ('<link rel="preload" href="/static/fonts/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>'
+    assert ('<link rel="preload" href="/static/fonts/inter/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin>'
             in read("templates/index.html"))
+
+    security = read("app/core/security.py")
+    assert "fonts.googleapis.com" not in security
+    assert "fonts.gstatic.com" not in security
+
+
+def _inter_subsets():
+    path = ROOT / "scripts" / "subset_inter_font.py"
+    spec = importlib.util.spec_from_file_location("subset_inter_font", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_inter_parts_have_disjoint_ranges_and_a_small_latin_file():
+    subsets = _inter_subsets()
+    declared = subsets.declared_ranges(read("static/css/typography.css"))
+    font_dir = ROOT / "static" / "fonts" / "inter"
+
+    assert set(declared) == {f"{style}-{part}.woff2" for style in subsets.STYLES for part in subsets.PARTS}
+    for style in subsets.STYLES:
+        ranges = {part: subsets.parse_css_ranges(declared[f"{style}-{part}.woff2"]) for part in subsets.PARTS}
+        # The Latin face is declared exactly as the script cuts it; the other
+        # two hold only characters outside it and never overlap each other.
+        assert declared[f"{style}-latin.woff2"] == subsets.css_ranges(subsets.LATIN_RANGES)
+        assert all(subsets.part_of(codepoint) == "latin-ext" for codepoint in ranges["latin-ext"])
+        assert all(subsets.part_of(codepoint) == "rest" for codepoint in ranges["rest"])
+        # The part every page loads stays far below the 344/379 KB source.
+        assert 60_000 < (font_dir / f"{style}-latin.woff2").stat().st_size < 160_000
+        for part in ("latin-ext", "rest"):
+            assert (font_dir / f"{style}-{part}.woff2").stat().st_size > 60_000
+
+
+def test_interface_text_never_needs_more_than_the_latin_font_file():
+    """A character outside the Latin part in a template, script or stylesheet
+    would make every page showing it download a second Inter file. Add the
+    character's block to LATIN_RANGES in scripts/subset_inter_font.py and
+    re-run it, or write the character differently."""
+    subsets = _inter_subsets()
+    declared = subsets.declared_ranges(read("static/css/typography.css"))
+    # Only characters Inter has outside its Latin part fetch another file;
+    # one Inter lacks entirely (a fullwidth plus) falls back to the system font.
+    fetches = set()
+    for name, ranges in declared.items():
+        if not name.endswith("-latin.woff2"):
+            fetches |= subsets.parse_css_ranges(ranges)
+    offenders = []
+    for folder in (ROOT / "templates", ROOT / "static" / "js", ROOT / "static" / "css"):
+        for path in folder.rglob("*"):
+            if path.suffix not in {".html", ".js", ".css"} or "vendor" in path.parts:
+                continue
+            for character in set(path.read_text(encoding="utf-8")):
+                if ord(character) in fetches:
+                    offenders.append((path.relative_to(ROOT).as_posix(), f"U+{ord(character):04X} {character}"))
+    # Only in source comments, never rendered.
+    comments_only = {("static/js/letter-clouds.js", "U+03B8 θ")}
+    assert sorted(set(offenders) - comments_only) == []
 
     security = read("app/core/security.py")
     assert "fonts.googleapis.com" not in security

@@ -538,7 +538,18 @@ die Topic-Detailseite nutzt die `.wp-*`-Regeln der Watch-Seite in
 `public-pages.css` (dort auch `.wp-subheading` für die Leitfrage unter dem Titel).
 Die gemeinsame Typografie-Grundlage liegt in `static/css/typography.css` und
 wird von `variables.css` (App/Admin) sowie `public-tokens.css` (Marketing/Public)
-importiert. Sie hostet Inter Variable lokal als normale und kursive WOFF2-Datei,
+importiert. Sie hostet Inter Variable lokal, seit 2026-10-18 je Schnitt (normal,
+kursiv) in drei WOFF2-Teilen mit disjunkter `unicode-range`: `-latin` (Latein,
+Latin-1, Satzzeichen und die Symbolblöcke der Oberfläche, ca. 130/145 KB statt
+344/379 KB) lädt jede Seite, `-latin-ext` (Akzente jenseits Latin-1,
+Vietnamesisch) und `-rest` (Griechisch, Kyrillisch, Sonderzeichen) nur eine
+Seite, die eines ihrer Zeichen enthält. Alle Teile behalten jedes
+OpenType-Feature und beide Achsen. Erzeugt und geprüft werden sie mit
+`scripts/subset_inter_font.py` (`--check`; braucht fonttools + brotli, keine
+App-Abhängigkeit) aus den unveränderten Quelldateien `InterVariable[-Italic].woff2`,
+die kein Stylesheet mehr lädt. `/app` lädt den normalen Latein-Teil per
+Preload vor. Ein Test verlangt, dass jedes Nicht-ASCII-Zeichen der Oberfläche
+(Templates, JS, CSS) im Latein-Teil liegt. Die Typografie-Grundlage
 definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-Tokens
 und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
 CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und

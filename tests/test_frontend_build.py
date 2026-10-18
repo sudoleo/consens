@@ -150,8 +150,9 @@ def test_css_bundle_keeps_relative_asset_paths_resolvable():
     css = sheet.read_text(encoding="utf-8")
 
     assert "@import" not in css, "imports must be inlined, not re-fetched"
-    assert "../fonts/inter/InterVariable.woff2" in css
-    for relative in ("../fonts/inter/InterVariable.woff2", "../icons/consensus.png"):
+    assert "../fonts/inter/InterVariable-latin.woff2" in css
+    for relative in ("../fonts/inter/InterVariable-latin.woff2", "../fonts/inter/InterVariable-Italic-rest.woff2",
+                     "../icons/consensus.png"):
         assert (sheet.parent / relative).resolve().is_file(), relative
 
 
