@@ -482,7 +482,13 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
             page.evaluate('exitHeroMode()')
             assert page.evaluate(measure) == collapsed_direct
             page.evaluate('enterDirectComparisonView()')
-        assert page.locator('.input-section').evaluate("el => getComputedStyle(el).backgroundColor") == 'rgba(0, 0, 0, 0)'
+        # No band of its own behind the composer. Below 1100px the fixed
+        # section carries the page colour on purpose, so iPhone Safari finds
+        # it for its bottom bar (see test_iphone_safari_finds_the_page_colour_at_both_bars).
+        section_bg, page_bg = page.evaluate("""() => [
+          getComputedStyle(document.querySelector('.input-section')).backgroundColor,
+          getComputedStyle(document.body).backgroundColor]""")
+        assert section_bg == ('rgba(0, 0, 0, 0)' if width >= 1100 else page_bg)
         # Use the actual trigger, including the collapsed mobile composer.
         page.locator('#questionInput').click()
         trigger = page.locator('.consensus-model-inline .model-picker-display')
