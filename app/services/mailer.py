@@ -73,11 +73,44 @@ async def send_message(message: EmailMessage) -> bool:
     return await asyncio.to_thread(_deliver, message)
 
 
-def _base_message(recipient: str, subject: str, plain: str, html_body: str) -> EmailMessage:
+class _OneLineHeader(str):
+    """A header the generator writes as it is, on one line.
+
+    Past 78 characters the email package folds a value it cannot break at a
+    space into RFC 2047 encoded-words (``=?utf-8?q?=3Chttps...``). That is
+    fine for a subject, but a URL list (RFC 2369) is no text: mail clients
+    no longer find the link in it. RFC 5322 allows 998 characters per line."""
+
+    def __new__(cls, name: str, value: str):
+        if len(name) + len(value) + 2 > 998 or "\r" in value or "\n" in value:
+            raise ValueError(f"{name} does not fit on one header line")
+        header = super().__new__(cls, value)
+        header.name = name
+        header.defects = []
+        return header
+
+    def __getnewargs__(self):
+        # copy.deepcopy and pickle rebuild the header through __new__.
+        return (self.name, str(self))
+
+    def fold(self, *, policy) -> str:
+        return f"{self.name}: {self}{policy.linesep}"
+
+
+def _base_message(recipient: str, subject: str, plain: str, html_body: str,
+                  *, unsubscribe_url: str = "") -> EmailMessage:
     message = EmailMessage()
     message["From"] = _smtp_config()["sender"] or "consens.io"
     message["To"] = recipient
     message["Subject"] = subject
+    if unsubscribe_url:
+        # One-click unsubscribe (RFC 2369 + RFC 8058): Gmail, Apple Mail and
+        # Outlook show their own "Unsubscribe" next to the sender and POST
+        # "List-Unsubscribe=One-Click" to this URL. Without it a reader who
+        # wants out reports spam, which also hurts the sign-in mails sent
+        # from the same address. The route acts on that POST, never on a GET.
+        message["List-Unsubscribe"] = _OneLineHeader("List-Unsubscribe", f"<{unsubscribe_url}>")
+        message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     message.set_content(plain)
     message.add_alternative(html_body, subtype="html")
     return message
@@ -394,7 +427,7 @@ def build_change_message(*, recipient: str, question: str, delta: dict,
             f'<a href="{html.escape(unsubscribe_url)}">Pause this watch</a>.'
         ),
     )
-    return _base_message(recipient, subject, plain, html_body)
+    return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
 def build_run_message(*, recipient: str, question: str, delta: dict, moved: bool,
@@ -432,7 +465,7 @@ def build_run_message(*, recipient: str, question: str, delta: dict, moved: bool
         ),
         width=680,
     )
-    return _base_message(recipient, subject, plain, html_body)
+    return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
 def build_condition_message(*, recipient: str, question: str, goal: str, reason: str,
@@ -570,7 +603,7 @@ def build_topic_change_message(*, recipient: str, title: str, question: str,
             f'<a href="{html.escape(unsubscribe_url)}">Unfollow</a>.'
         ),
     )
-    return _base_message(recipient, subject, plain, html_body)
+    return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
 def build_follower_change_message(*, recipient: str, question: str, delta: dict,
@@ -601,7 +634,7 @@ def build_follower_change_message(*, recipient: str, question: str, delta: dict,
             f'<a href="{html.escape(unsubscribe_url)}">Unfollow</a>.'
         ),
     )
-    return _base_message(recipient, subject, plain, html_body)
+    return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
 def build_paused_message(*, recipient: str, question: str, share_url: str,
@@ -625,7 +658,7 @@ def build_paused_message(*, recipient: str, question: str, share_url: str,
         body=body,
         footer=f'<a href="{html.escape(unsubscribe_url)}">Pause/unsubscribe</a>',
     )
-    return _base_message(recipient, subject, plain, html_body)
+    return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
 def _brief_status_label(status: str) -> str:
@@ -736,7 +769,7 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
         ),
         width=680,
     )
-    return _base_message(recipient, subject, plain, html_body)
+    return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
 def build_account_setup_message(*, recipient: str, setup_url: str) -> EmailMessage:

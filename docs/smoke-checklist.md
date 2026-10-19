@@ -833,7 +833,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       senden im Modus „When it moves“ nichts. „After every check“ sendet bei
       jedem Lauf genau eine Mail mit der Antwort. Ein belegt erreichtes Ziel
       sendet genau eine „Resolved: …“-Mail, die Watch steht danach auf
-      „Resolved“ und läuft nicht mehr. Abmelde-Link pausiert ohne Login.
+      „Resolved“ und läuft nicht mehr. Abmelde-Link pausiert ohne Login, aber
+      erst nach dem Klick auf „Pause watch“ (das bloße Öffnen ändert nichts).
+      Im Mailkopf stehen `List-Unsubscribe` (eine Zeile, Klartext-URL) und
+      `List-Unsubscribe-Post`; in Gmail erscheint „Abbestellen“ neben dem
+      Absender und pausiert die Watch ohne weitere Seite.
 - [ ] Belegmodell (`docs/watch-evidence-model.md`): ein Check, dessen Suche die
       Quellen der geltenden Antwort nur nicht wiederfindet, steht als „Answer
       stands“; die öffentliche Seite zeigt weiter die geltende Version plus
@@ -882,7 +886,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „Answer from …“ mit „See the current answer“, ist `noindex` und rendert den
       unveränderlichen alten Consensus.
 - [ ] Topic-Follow sendet mit Test-SMTP eine Double-Opt-in-Mail; erst der
-      Bestätigungslink persistiert das Abo. Ein neuer Minor-/Major-Snapshot
+      Bestätigungslink plus Klick auf „Confirm and follow“ persistiert das Abo.
+      Ein neuer Minor-/Major-Snapshot
       versendet genau ein Update, Stable nicht; der Abmelde-Link entfernt nur
       das Topic-Abo und verändert weder Nutzer-Watches noch Share-Follower.
 - [ ] `/admin#topics`: Create/Edit, Slug/Kategorie/Intervall, Status

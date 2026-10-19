@@ -1,6 +1,7 @@
 import asyncio
 import html
 import logging
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -328,15 +329,39 @@ def patch_watch_brief(request: Request, data: dict = Body(...)):
 
 
 def _unsubscribe_page(heading: str, message: str, status_code: int,
-                      link_href: str = "/", link_label: str = "Return to consens.io") -> HTMLResponse:
+                      link_href: str = "/", link_label: str = "Return to consens.io",
+                      *, action: str = "", button: str = "") -> HTMLResponse:
+    # With ``action`` the page is a confirmation step: its button posts there
+    # and is the only thing on the page that changes anything.
+    form = (
+        f"<form method='post' action='{html.escape(action)}'>"
+        "<button type='submit' style='font:inherit;padding:10px 18px;cursor:pointer'>"
+        f"{html.escape(button)}</button></form>"
+        if action else ""
+    )
     content = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<meta name='robots' content='noindex'><title>Consensus Watch</title></head>"
         "<body style='font-family:system-ui;max-width:640px;margin:12vh auto;padding:24px'>"
-        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>"
+        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>{form}"
         f"<p><a href='{html.escape(link_href)}'>{html.escape(link_label)}</a></p></body></html>"
     )
     return HTMLResponse(content, status_code=status_code, headers={"X-Robots-Tag": "noindex, noarchive"})
+
+
+# A link in a mail only asks; the button on the page it opens acts. Mail
+# scanners, link previews and prefetchers open every link in a message, so a
+# GET that paused a watch or confirmed a follow did so without the reader.
+# The POST is also what a mail client sends for the List-Unsubscribe header
+# (RFC 8058), with the token in the same query string.
+def _confirm_step(path: str, token: str, parse, *, heading: str, message: str,
+                  button: str, error_heading: str) -> HTMLResponse:
+    try:
+        parse(token)
+    except watch_service.WatchError as exc:
+        return _unsubscribe_page(error_heading, exc.message, _STATUS_BY_CODE.get(exc.code, 400))
+    return _unsubscribe_page(heading, message, 200,
+                             action=f"{path}?token={quote(token, safe='')}", button=button)
 
 
 @router.post("/api/share/{share_id}/follow")
@@ -373,6 +398,17 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
 
 @router.get("/watch/follow/confirm", response_class=HTMLResponse)
 @limiter.limit("20/minute")
+def follow_confirm_page(request: Request, token: str = ""):
+    return _confirm_step(
+        "/watch/follow/confirm", token, watch_followers.parse_follow_confirm_token,
+        heading="Confirm your follow",
+        message="Confirm to get an e-mail when the AI consensus on this question shifts materially.",
+        button="Confirm and follow", error_heading="Unable to confirm",
+    )
+
+
+@router.post("/watch/follow/confirm", response_class=HTMLResponse)
+@limiter.limit("20/minute")
 def follow_confirm(request: Request, token: str = ""):
     try:
         result = watch_followers.confirm_follow(token)
@@ -388,6 +424,17 @@ def follow_confirm(request: Request, token: str = ""):
 
 @router.get("/watch/follow/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
+def follow_unsubscribe_page(request: Request, token: str = ""):
+    return _confirm_step(
+        "/watch/follow/unsubscribe", token, watch_followers.parse_follow_unsubscribe_token,
+        heading="Unfollow this question?",
+        message="You will no longer receive updates for this question.",
+        button="Unfollow", error_heading="Unable to unfollow",
+    )
+
+
+@router.post("/watch/follow/unsubscribe", response_class=HTMLResponse)
+@limiter.limit("20/minute")
 def follow_unsubscribe(request: Request, token: str = ""):
     try:
         watch_followers.unsubscribe_follow(token)
@@ -400,6 +447,17 @@ def follow_unsubscribe(request: Request, token: str = ""):
 
 @router.get("/watch/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
+def unsubscribe_page(request: Request, token: str = ""):
+    return _confirm_step(
+        "/watch/unsubscribe", token, watch_service.parse_unsubscribe_token,
+        heading="Pause this watch?",
+        message="Pausing stops the checks and the updates for this consensus watch. You can resume it in the app.",
+        button="Pause watch", error_heading="Unable to unsubscribe",
+    )
+
+
+@router.post("/watch/unsubscribe", response_class=HTMLResponse)
+@limiter.limit("20/minute")
 def unsubscribe(request: Request, token: str = ""):
     try:
         watch_service.unsubscribe(token)
@@ -410,6 +468,17 @@ def unsubscribe(request: Request, token: str = ""):
 
 
 @router.get("/watch/brief/unsubscribe", response_class=HTMLResponse)
+@limiter.limit("20/minute")
+def unsubscribe_brief_page(request: Request, token: str = ""):
+    return _confirm_step(
+        "/watch/brief/unsubscribe", token, watch_brief.parse_brief_unsubscribe_token,
+        heading="Turn off the morning brief?",
+        message="You will no longer receive the daily watch digest. Individual watch alerts are unaffected.",
+        button="Turn off the brief", error_heading="Unable to unsubscribe",
+    )
+
+
+@router.post("/watch/brief/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def unsubscribe_brief(request: Request, token: str = ""):
     try:

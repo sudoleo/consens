@@ -1307,6 +1307,11 @@ def _parse_topic_token(token: str, *, unsubscribe: bool) -> tuple[str, str]:
     return str(payload.get("tid") or ""), normalize_email(payload.get("em"))
 
 
+def parse_follow_token(token: str, *, unsubscribe: bool) -> tuple[str, str]:
+    """(topic_id, email) of a confirm or unfollow link; reads and writes nothing."""
+    return _parse_topic_token(token, unsubscribe=unsubscribe)
+
+
 def confirm_follow(token: str, *, db=None, now=None) -> dict:
     db = db if db is not None else db_firestore
     topic_id, email = _parse_topic_token(token, unsubscribe=False)

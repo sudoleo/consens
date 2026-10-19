@@ -1383,6 +1383,54 @@ class MailerTests(unittest.TestCase):
         self.assertIn("unsubscribe?token=x", message.as_string())
         self.assertTrue(message["Subject"].startswith("Moved: "))
 
+    def test_mails_with_an_unsubscribe_link_offer_one_click_unsubscribe(self):
+        """List-Unsubscribe + List-Unsubscribe-Post (RFC 2369/8058) on every
+        mail whose body offers the link, written as smtplib sends it. The URL
+        stays on one header line: folded into RFC 2047 encoded-words (what
+        the email package does past 78 characters) mail clients lose it."""
+        import copy
+        import email
+        import email.generator
+        import email.policy
+        import io
+
+        url = "https://www.consens.io/watch/unsubscribe?token=" + "t" * 120 + "." + "s" * 43
+        common = {"recipient": "owner@example.test", "unsubscribe_url": url}
+        page = "https://www.consens.io/s/q-id"
+        delta = {"summary": "Two models flipped."}
+        messages = {
+            "change": mailer.build_change_message(
+                question="Q", delta=delta, share_url=page, **common),
+            "run": mailer.build_run_message(
+                question="Q", delta=delta, moved=True, consensus="A", share_url=page, **common),
+            "topic": mailer.build_topic_change_message(
+                title="T", question="Q", delta=delta, topic_url=page, **common),
+            "follower": mailer.build_follower_change_message(
+                question="Q", delta=delta, share_url=page, **common),
+            "paused": mailer.build_paused_message(question="Q", share_url=page, **common),
+            "brief": mailer.build_brief_message(
+                date_label="Monday", items=[], changes_count=0,
+                site_url="https://www.consens.io", **common),
+        }
+        for kind, message in messages.items():
+            buffer = io.BytesIO()
+            email.generator.BytesGenerator(buffer).flatten(copy.copy(message), linesep="\r\n")
+            head = buffer.getvalue().split(b"\r\n\r\n", 1)[0].decode("ascii")
+            self.assertIn(f"\r\nList-Unsubscribe: <{url}>\r\n", head, kind)
+            parsed = email.message_from_bytes(buffer.getvalue(), policy=email.policy.default)
+            self.assertEqual(parsed["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click", kind)
+
+        # No link in the body, no header: the resolved watch already stopped,
+        # and a confirmation mail belongs to no list yet.
+        resolved = mailer.build_condition_message(
+            question="Q", goal="G", reason="R", sources=[], consensus="A", share_url=page, **common)
+        confirm = mailer.build_follow_confirm_message(
+            recipient="reader@example.test", question="Q",
+            confirm_url="https://www.consens.io/watch/follow/confirm?token=x", share_url=page)
+        for message in (resolved, confirm):
+            self.assertIsNone(message["List-Unsubscribe"])
+            self.assertIsNone(message["List-Unsubscribe-Post"])
+
     def test_change_mail_is_a_change_log_without_a_score(self):
         """What changed, why (with the source), what held, the goal -- in that
         order, and no agreement score: it is not a reason to write."""
@@ -2872,13 +2920,21 @@ class BriefRouteTests(unittest.TestCase):
 
     def test_brief_unsubscribe_page(self):
         with patch.object(watch_router.watch_brief, "unsubscribe_brief", return_value={"uid": "u1"}):
-            response = self.client.get("/watch/brief/unsubscribe?token=x")
+            response = self.client.post("/watch/brief/unsubscribe?token=x")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Morning brief disabled", response.text)
         with patch.object(watch_router.watch_brief, "unsubscribe_brief",
                           side_effect=WatchError("invalid_token", "This unsubscribe link is invalid.")):
-            response = self.client.get("/watch/brief/unsubscribe?token=broken")
+            response = self.client.post("/watch/brief/unsubscribe?token=broken")
         self.assertEqual(response.status_code, 400)
+        # The link itself only asks; an invalid one says so right away.
+        with patch.object(watch_router.watch_brief, "unsubscribe_brief") as unsubscribe:
+            self.assertEqual(self.client.get("/watch/brief/unsubscribe?token=broken").status_code, 400)
+            with patch.object(watch_router.watch_brief, "parse_brief_unsubscribe_token", return_value="u1"):
+                page = self.client.get("/watch/brief/unsubscribe?token=x")
+        unsubscribe.assert_not_called()
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("<form method='post' action='/watch/brief/unsubscribe?token=x'>", page.text)
 
 
 class AdminWatchRouteTests(unittest.TestCase):
@@ -3104,11 +3160,11 @@ class FollowRouteTests(unittest.TestCase):
     def test_follow_confirm_route_renders_page(self):
         result = {"share_id": "F" * 16, "email": "a@example.com", "question": "Q", "share_path": "/s/q-" + "F" * 16}
         with patch.object(watch_router.watch_followers, "confirm_follow", return_value=result):
-            response = self.client.get("/watch/follow/confirm?token=x")
+            response = self.client.post("/watch/follow/confirm?token=x")
         self.assertEqual(response.status_code, 200)
         self.assertIn("following", response.text)
         with patch.object(watch_router.watch_followers, "confirm_follow", side_effect=WatchError("invalid_token", "This link is invalid.")):
-            response = self.client.get("/watch/follow/confirm?token=x")
+            response = self.client.post("/watch/follow/confirm?token=x")
         self.assertEqual(response.status_code, 400)
 
 

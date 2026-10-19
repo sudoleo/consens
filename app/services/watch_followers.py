@@ -97,14 +97,18 @@ def request_follow(share_id: str, email, db=None) -> dict:
     }
 
 
-def confirm_follow(token: str, db=None, *, now=None) -> dict:
-    db = db if db is not None else db_firestore
+def parse_follow_confirm_token(token: str) -> tuple[str, str]:
+    """(share_id, email) of a confirmation link; reads and writes nothing."""
     payload = parse_token_payload(token)
     if ("un" in payload or "tt" in payload or "wid" in payload
             or not share_snapshots.is_valid_share_id(payload.get("sid"))):
         raise WatchError("invalid_token", "This link is invalid.")
-    share_id = payload["sid"]
-    email = normalize_email(payload.get("em"))
+    return payload["sid"], normalize_email(payload.get("em"))
+
+
+def confirm_follow(token: str, db=None, *, now=None) -> dict:
+    db = db if db is not None else db_firestore
+    share_id, email = parse_follow_confirm_token(token)
     ref = db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email))
     share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
 
@@ -170,15 +174,19 @@ def confirm_follow(token: str, db=None, *, now=None) -> dict:
     }
 
 
-def unsubscribe_follow(token: str, db=None) -> dict:
-    db = db if db is not None else db_firestore
+def parse_follow_unsubscribe_token(token: str) -> tuple[str, str]:
+    """(share_id, email) of an unfollow link; reads and writes nothing."""
     payload = parse_token_payload(token)
     if (type(payload.get("un")) is not int or payload["un"] != 1
             or "tt" in payload or "wid" in payload
             or not share_snapshots.is_valid_share_id(payload.get("sid"))):
         raise WatchError("invalid_token", "This link is invalid.")
-    share_id = payload["sid"]
-    email = normalize_email(payload.get("em"))
+    return payload["sid"], normalize_email(payload.get("em"))
+
+
+def unsubscribe_follow(token: str, db=None) -> dict:
+    db = db if db is not None else db_firestore
+    share_id, email = parse_follow_unsubscribe_token(token)
     db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email)).delete()
     return {"share_id": share_id, "email": email}
 

@@ -1,7 +1,10 @@
 """Watch and Telegram routes exercise their real persistence services."""
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from html import unescape
 from unittest.mock import Mock
+from urllib.parse import quote
+import re
 import pytest
 from app.services import (
     watch_service as watch,
@@ -126,8 +129,9 @@ def test_telegram_link_test_disconnect_are_bound_to_authenticated_owner(watch_ht
     "endpoint", ["/watch/unsubscribe", "/watch/follow/unsubscribe"]
 )
 @pytest.mark.parametrize("kind", ["invalid", "expired", "wrong_type"])
+@pytest.mark.parametrize("method", ["GET", "POST"])
 def test_unsubscribe_invalid_expired_and_wrong_type_never_mutate(
-    watch_http, endpoint, kind
+    watch_http, endpoint, kind, method
 ):
     h = watch_http
     token = "broken"
@@ -146,7 +150,7 @@ def test_unsubscribe_invalid_expired_and_wrong_type_never_mutate(
             {"tt": "topic", "tid": "topic", "em": "reader@example.test", "un": 1}
         )
     before = deepcopy(dict(h.watch_db.stores))
-    response = h.client.get(endpoint, params={"token": token})
+    response = h.client.request(method, endpoint, params={"token": token})
     assert response.status_code == (410 if kind == "expired" else 400), response.text
     assert "noindex" in response.headers["x-robots-tag"]
     assert {k: v for k, v in h.watch_db.stores.items() if v} == {
@@ -166,14 +170,14 @@ def test_watch_and_follower_unsubscribe_change_only_the_bound_resource(watch_htt
     }
     token = followers.make_follow_unsubscribe_token(h.share_id, email)
     assert (
-        h.client.get("/watch/follow/unsubscribe", params={"token": token}).status_code
+        h.client.post("/watch/follow/unsubscribe", params={"token": token}).status_code
         == 200
     )
     assert list(h.watch_db.stores[followers.FOLLOWERS_COLLECTION]) == ["control"]
     token = watch.make_unsubscribe_token(h.watch["id"])
     for _ in range(2):
         assert (
-            h.client.get("/watch/unsubscribe", params={"token": token}).status_code
+            h.client.post("/watch/unsubscribe", params={"token": token}).status_code
             == 200
         )
     stored = h.watch_db.stores[watch.WATCHES_COLLECTION][h.watch["id"]]
@@ -186,10 +190,62 @@ def test_follower_confirmation_escapes_stored_question(watch_http):
         "question"
     ] = '<img src=x onerror="alert(1)"> question'
     pending = followers.request_follow(h.share_id, "reader@example.test", db=h.watch_db)
-    response = h.client.get("/watch/follow/confirm", params={"token": pending["token"]})
+    response = h.client.post("/watch/follow/confirm", params={"token": pending["token"]})
     assert response.status_code == 200, response.text
     assert "<img" not in response.text and "&lt;img" in response.text
     assert len(h.watch_db.stores[followers.FOLLOWERS_COLLECTION]) == 1
+
+
+def _form_action(page):
+    match = re.search(r"<form method='post' action='([^']*)'>", page)
+    return unescape(match.group(1)) if match else None
+
+
+def test_mail_links_only_ask_and_their_post_acts(watch_http):
+    """Mail scanners, link previews and link checkers open every link in a
+    message. A GET or HEAD shows a question and changes nothing; the page's
+    button posts to the same URL and acts. That POST is also the one-click
+    unsubscribe a mail client sends for List-Unsubscribe (RFC 8058): it
+    answers 200 without a redirect."""
+    h = watch_http
+    reader, newcomer = "reader@example.test", "new@example.test"
+    h.watch_db.stores[watch_brief.BRIEFS_COLLECTION]["owner"] = {"enabled": True}
+    h.watch_db.stores[followers.FOLLOWERS_COLLECTION][
+        followers.follower_id(h.share_id, reader)
+    ] = {"share_id": h.share_id, "email": reader}
+    links = {
+        "/watch/unsubscribe": watch.make_unsubscribe_token(h.watch["id"]),
+        "/watch/brief/unsubscribe": watch_brief.make_brief_unsubscribe_token("owner"),
+        "/watch/follow/unsubscribe": followers.make_follow_unsubscribe_token(
+            h.share_id, reader
+        ),
+        "/watch/follow/confirm": followers.request_follow(
+            h.share_id, newcomer, db=h.watch_db
+        )["token"],
+    }
+    before = deepcopy(dict(h.watch_db.stores))
+    for path, token in links.items():
+        page = h.client.get(path, params={"token": token})
+        assert page.status_code == 200, (path, page.text)
+        assert "noindex" in page.headers["x-robots-tag"]
+        assert _form_action(page.text) == f"{path}?token={quote(token, safe='')}"
+        assert h.client.head(path, params={"token": token}).status_code == 200
+    assert {k: v for k, v in h.watch_db.stores.items() if v} == {
+        k: v for k, v in before.items() if v
+    }
+
+    for path, token in links.items():
+        one_click = {} if path.endswith("confirm") else {"List-Unsubscribe": "One-Click"}
+        response = h.client.post(
+            path, params={"token": token}, data=one_click, follow_redirects=False
+        )
+        assert response.status_code == 200, (path, response.text)
+        assert _form_action(response.text) is None
+    assert h.watch_db.stores[watch.WATCHES_COLLECTION][h.watch["id"]]["status"] == "paused"
+    assert h.watch_db.stores[watch_brief.BRIEFS_COLLECTION]["owner"]["enabled"] is False
+    followers_now = h.watch_db.stores[followers.FOLLOWERS_COLLECTION]
+    assert followers.follower_id(h.share_id, reader) not in followers_now
+    assert followers.follower_id(h.share_id, newcomer) in followers_now
 
 
 @pytest.mark.parametrize(

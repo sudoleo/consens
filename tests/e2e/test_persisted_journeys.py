@@ -4,7 +4,6 @@ Only Firebase identity SDK and external model/messaging services are replaced.
 No browser route interception of application APIs and no injected UI answers.
 """
 import json
-import html
 import re
 import os
 from pathlib import Path
@@ -343,8 +342,10 @@ def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey
     expect(j.page.locator('#shareFollowDone')).to_contain_text('Check your inbox')
     mail = j.control('state')['messages'][-1]['text']
     token = re.search(r'/watch/follow/confirm\?token=([^\s]+)', mail).group(1)
-    confirmation = j.request('GET', '/watch/follow/confirm?token=' + token)
-    assert confirmation.ok and "You're following this question" in html.unescape(confirmation.text())
+    # The mail link only asks (mail scanners open every link); its button confirms.
+    j.page.goto(j.base + '/watch/follow/confirm?token=' + token)
+    j.page.get_by_role('button', name='Confirm and follow').click()
+    expect(j.page.locator('h1')).to_have_text("You're following this question")
     advanced = j.control('watch-run', {'watch_id': wid})
     version = advanced['run']['run_id']
     assert version and advanced['share']['latest_watch_run_id'] == version

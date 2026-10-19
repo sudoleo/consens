@@ -186,8 +186,17 @@ def _admin_topic_view(topic: dict) -> dict:
 
 
 def _message_page(
-    heading: str, message: str, status_code: int, *, href: str = "/topics"
+    heading: str, message: str, status_code: int, *, href: str = "/topics",
+    action: str = "", button: str = "",
 ) -> HTMLResponse:
+    # With ``action`` the page is a confirmation step: its button posts there
+    # and is the only thing on the page that changes anything.
+    form = (
+        f"<form method='post' action='{html.escape(action)}'>"
+        "<button type='submit' style='font:inherit;padding:10px 18px;cursor:pointer'>"
+        f"{html.escape(button)}</button></form>"
+        if action else ""
+    )
     content = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -195,7 +204,7 @@ def _message_page(
         "<style>body{font-family:Inter,system-ui,sans-serif;max-width:680px;margin:12vh auto;"
         "padding:24px;color:#172033}a{color:#335cff}</style></head><body>"
         f"<p style='color:#335cff;font-weight:700'>consens.io Topics</p>"
-        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>"
+        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>{form}"
         f"<p><a href='{html.escape(href)}'>Open Topics</a></p></body></html>"
     )
     return HTMLResponse(
@@ -663,7 +672,34 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
     }
 
 
+def _follow_link_step(path: str, token: str, *, unsubscribe: bool, heading: str,
+                      message: str, button: str, error_heading: str) -> HTMLResponse:
+    """GET of a link from a follow mail: checks the token and asks for the
+    click that acts. Mail scanners and link previews open every link in a
+    message; only the POST changes anything (it is also the one-click
+    unsubscribe a mail client sends for the List-Unsubscribe header)."""
+    try:
+        topics.parse_follow_token(token, unsubscribe=unsubscribe)
+    except Exception as exc:
+        error = getattr(exc, "message", "This link is invalid or expired.")
+        code = _STATUS_BY_CODE.get(getattr(exc, "code", ""), 400)
+        return _message_page(error_heading, error, code)
+    return _message_page(heading, message, 200,
+                         action=f"{path}?token={quote(token, safe='')}", button=button)
+
+
 @router.get("/topic-follow/confirm", response_class=HTMLResponse)
+@limiter.limit("20/minute")
+async def topic_follow_confirm_page(request: Request, token: str = ""):
+    return _follow_link_step(
+        "/topic-follow/confirm", token, unsubscribe=False,
+        heading="Confirm your follow",
+        message="Confirm to get an e-mail when the curated consensus on this topic changes materially.",
+        button="Confirm and follow", error_heading="Unable to confirm",
+    )
+
+
+@router.post("/topic-follow/confirm", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 async def topic_follow_confirm(request: Request, token: str = ""):
     try:
@@ -681,6 +717,17 @@ async def topic_follow_confirm(request: Request, token: str = ""):
 
 
 @router.get("/topic-follow/unsubscribe", response_class=HTMLResponse)
+@limiter.limit("20/minute")
+async def topic_follow_unsubscribe_page(request: Request, token: str = ""):
+    return _follow_link_step(
+        "/topic-follow/unsubscribe", token, unsubscribe=True,
+        heading="Unfollow this topic?",
+        message="You will no longer receive curated consensus updates for this topic.",
+        button="Unfollow", error_heading="Unable to unfollow",
+    )
+
+
+@router.post("/topic-follow/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 async def topic_follow_unsubscribe(request: Request, token: str = ""):
     try:

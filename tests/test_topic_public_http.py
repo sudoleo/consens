@@ -76,7 +76,14 @@ def test_follow_neutral_response_confirmation_escaping_and_unsubscribe(public_to
     plain = message.get_body(preferencelist=("plain",)).get_content()
     confirm_url = re.search(r"Confirm: (\S+)", plain).group(1)
     token = parse_qs(urlparse(confirm_url).query)["token"][0]
-    response = h.client.get("/topic-follow/confirm", params={"token": token})
+    # Opening the link only asks: mail scanners and link previews open every
+    # link in a message. The page's button posts to the same URL.
+    before = deepcopy(h.topic_db.documents)
+    page = h.client.get("/topic-follow/confirm", params={"token": token})
+    assert page.status_code == 200, page.text
+    assert f"<form method='post' action='/topic-follow/confirm?token={token}'>" in page.text
+    assert h.topic_db.documents == before
+    response = h.client.post("/topic-follow/confirm", params={"token": token})
     assert response.status_code == 200, response.text
     assert "<img" not in response.text and "&lt;img" in response.text
     assert (
@@ -88,14 +95,19 @@ def test_follow_neutral_response_confirmation_escaping_and_unsubscribe(public_to
     )
     assert repeat.json() == first.json() and h.send.await_count == 1
     assert (
-        h.client.get("/topic-follow/confirm", params={"token": token}).status_code
+        h.client.post("/topic-follow/confirm", params={"token": token}).status_code
         == 400
     )
     unsubscribe = topics.make_unsubscribe_token(topic["id"], "reader@example.test")
+    page = h.client.get("/topic-follow/unsubscribe", params={"token": unsubscribe})
+    assert page.status_code == 200 and "action='/topic-follow/unsubscribe?token=" in page.text
+    assert topics.list_followers(topic["id"], db=h.topic_db) != []
+    # The one-click POST a mail client sends for List-Unsubscribe (RFC 8058).
     for _ in range(2):
         assert (
-            h.client.get(
-                "/topic-follow/unsubscribe", params={"token": unsubscribe}
+            h.client.post(
+                "/topic-follow/unsubscribe", params={"token": unsubscribe},
+                data={"List-Unsubscribe": "One-Click"}, follow_redirects=False,
             ).status_code
             == 200
         )
@@ -106,7 +118,8 @@ def test_follow_neutral_response_confirmation_escaping_and_unsubscribe(public_to
     "endpoint", ["/topic-follow/confirm", "/topic-follow/unsubscribe"]
 )
 @pytest.mark.parametrize("kind", ["invalid", "expired", "wrong_type", "wrong_action"])
-def test_topic_tokens_reject_without_writes(public_topics, endpoint, kind):
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_topic_tokens_reject_without_writes(public_topics, endpoint, kind, method):
     h = public_topics
     topic = publish(h, "token-topic")
     token = "invalid"
@@ -127,7 +140,7 @@ def test_topic_tokens_reject_without_writes(public_topics, endpoint, kind):
             else topics.make_confirm_token
         )(topic["id"], "reader@example.test")
     before = deepcopy(h.topic_db.documents)
-    response = h.client.get(endpoint, params={"token": token})
+    response = h.client.request(method, endpoint, params={"token": token})
     assert response.status_code == (410 if kind == "expired" else 400), response.text
     assert h.topic_db.documents == before
     assert "noindex" in response.headers["x-robots-tag"]
