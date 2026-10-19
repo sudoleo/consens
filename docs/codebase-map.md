@@ -4716,6 +4716,15 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Duplikat startet nur, wenn das Budget danach noch einen Call für den
   Fallback-Judge übrig hat (`_spare_judge_call`). Ein Hänger kostet so rund
   15 s plus eine normale Judge-Dauer statt 90 s bis zum Familienwechsel.
+  Gegen eine durchweg langsame Spur hilft der Hedge nicht (Chat-Review
+  2026-10-19: jeder Luna-Call 20–24 s auf OpenAIs Standard-Spur, 8 Duplikate,
+  keins gewann). Deshalb fragen die Agent-Judges (`judge_transport`) per
+  `JUDGE_SERVICE_TIER_BY_PROVIDER` bei der OpenAI-Familie `service_tier:
+  "priority"` an (OpenRouter-Endpunkt `openai/fast`, doppelter Preis, ~2 ct
+  pro geprüfter Antwort; fällt ohne Priority-Endpunkt auf die Standard-Spur
+  zurück). Andere Familien bleiben auf der Standard-Spur (Anthropics Priority
+  ist der teure Fast-Mode); der Consensus-Pfad (`_call_engine_text`) bleibt
+  unverändert.
   Der Coverage-Thread hat eine eigene, verknüpfte Cancellation
   (`_coverage_in_background` → `(pool, future, stop)`); läuft die Frist von
   `_collect_coverage` ab, wird er beendet statt abgewartet. Anlass: Agent-
@@ -7248,7 +7257,9 @@ täglich 07:15, seit 2026-10-18) liest nur: Turns externer Konten seit dem
 letzten Lauf (eigene Konten per E-Mail-Marker `maxl.plack`/`ml.plack`/`nodon`
 über Firebase Auth ausgeschlossen, Nutzer als Pseudonym `U…`), je Turn Frage,
 Antwortanfang, Ablauf aus den Receipts (Vergleichsdauer, langsamstes Modell,
-Ausfälle, Schreib- und Prüfdauer, Judge-Timeouts, Kosten) und Prüfstatus, dazu
+Ausfälle, Schreib- und Prüfdauer, Judge-Timeouts, langsamster Judge-Call,
+Kosten; gestoppte Judge-Calls, meist Hedge-Verlierer, getrennt als
+`judge_calls_stopped` und nicht in der Prüfdauer) und Prüfstatus, dazu
 gezählte Warnungen aus dem Render-Log. `collect` gibt JSON aus und merkt sich
 den Stand in `pending.json`, `save` übernimmt ihn nach `state.json` (beides
 unter `~/.claude/scheduled-tasks/consens-chat-review/`). Der Task schreibt
@@ -7312,7 +7323,9 @@ entfernt. Gemini
 unter denen, die Prompts nicht sammeln. Gesetzt in `AgentCompletion.stream`,
 `PageFetch.stream`, `build_provider_payload`, `_call_engine_text`, dem
 Consensus-Stream und `memory_edit`; Registry-Felder des Modells (Kimi
-`only`) kommen obendrauf. Zero Data Retention gilt nur noch in Chats mit
+`only`) kommen obendrauf. Ein `service_tier` im `request_config` geht als
+Top-Level-Feld mit (Agent-Judges der OpenAI-Familie: `priority`, siehe
+`JUDGE_SERVICE_TIER_BY_PROVIDER`). Zero Data Retention gilt nur noch in Chats mit
 Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
 `deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
 ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR

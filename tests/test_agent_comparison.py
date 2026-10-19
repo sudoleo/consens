@@ -1465,6 +1465,22 @@ def test_judge_temperature_follows_the_consensus_rule_for_reasoning_models(store
     assert ("temperature" in seen[0]) is sent
 
 
+@pytest.mark.parametrize("provider,api_model,model_ref,tier", [
+    ("openai", "openai/gpt-5.6-luna", "gpt-5.6-luna", "priority"),
+    ("gemini", "google/gemini-3.5-flash-lite", "gemini-3.5-flash-lite", None),
+    ("anthropic", "anthropic/claude-haiku-4.5", "claude-haiku-4-5", None)])
+def test_openai_judges_ask_for_the_priority_lane(store, provider, api_model, model_ref, tier):
+    # Chat review 2026-10-19: Luna judges on the standard lane kept the check
+    # 25 s behind the answer. Anthropic's priority would be its fast mode.
+    from types import SimpleNamespace
+    loop = make_loop(store, Script())
+    seen = []
+    loop.comparison.call = lambda model, messages, **kwargs: (seen.append(model.request_config), SimpleNamespace(text="{}"))[1]
+    loop.comparison.judge_transport(provider, api_model, model_ref, system="", prompt="p", max_tokens=1000,
+                                    temperature=0.2, json_mode=True, effort="low", json_schema={"type": "object"})
+    assert seen[0].get("service_tier") == tier
+
+
 def test_newer_openai_generations_count_as_reasoning_models_for_temperature():
     from app.services.llm.consensus_engine import _effective_temperature
     assert _effective_temperature("openai", "openai/gpt-6-luna", 0.2) is None

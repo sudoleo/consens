@@ -2272,6 +2272,18 @@ JUDGE_ATTEMPT_SECONDS = 90.0
 # and a stalled provider then costs the check these seconds instead of
 # JUDGE_ATTEMPT_SECONDS (chat review 2026-10-18: Luna judge timeouts in prod).
 JUDGE_HEDGE_SECONDS = 15.0
+# The Agent's judge calls (ComparisonTools.judge_transport) ask for this
+# service tier, per family. Chat review 2026-10-19: a check still took 25 s
+# after the answer because every Luna judge call needed 20-24 s on OpenAI's
+# standard lane in the US daytime (8-15 s to the first token), against 10 s at
+# night. Nothing hung, so no hedge ever won. OpenRouter's endpoint stats the
+# same evening: priority 0.9 s to the first token and 95 tokens/s, standard
+# 3.3 s and 59 tokens/s. Priority costs twice the price, about 2 ct more per
+# checked answer; the token account counts tokens, not price. When no priority
+# endpoint answers, OpenRouter falls back to the standard lane. Other families
+# stay on their standard lane (Anthropic's priority is its much pricier fast
+# mode).
+JUDGE_SERVICE_TIER_BY_PROVIDER = {"openai": "priority"}
 
 
 def _spare_judge_call(budget) -> bool:

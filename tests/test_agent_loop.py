@@ -76,6 +76,20 @@ def loop_for(store, **kwargs):
                      cancellation=ProviderCancellation(), **kwargs)
 
 
+def test_a_service_tier_of_the_model_config_reaches_the_request(store, monkeypatch):
+    # The way judges ask for OpenAI's priority lane (ComparisonTools.judge_transport).
+    requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}), packet(finish="stop", usage=usage())]])
+    chat_id, turn = pending(store)
+    model = configured_model(resolve_agent_model("claude-haiku-4-5"))
+    model = replace(model, request_config={**model.request_config, "service_tier": "priority"})
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat_id, turn_id=turn["id"], model=model,
+                     messages=store.messages(UID, chat_id, turn, model=model), api_key="test",
+                     cancellation=ProviderCancellation())
+    list(loop.run())
+    assert requests[0]["service_tier"] == "priority"
+    assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny"}
+
+
 def test_native_search_stays_in_selected_model_request_with_real_citations(store, monkeypatch):
     sources = [{"type": "url_citation", "url_citation": {"url": "https://example.com/report", "title": "Report"}},
                {"type": "url_citation", "url_citation": {"url": "javascript:alert(1)", "title": "Bad"}}]

@@ -114,7 +114,11 @@ def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
     steps.sort(key=lambda s: s.get("created_at") or t0)
     chat = [s for s in steps if s["kind"] == "chat"]
     comparison = [s for s in steps if s["kind"] == "comparison"]
-    judges = [s for s in steps if s["kind"] == "judge"]
+    # A stopped judge call is mostly the loser of a hedge (consensus_engine.
+    # _hedged_judge_call): it is no judge call of its own and does not make
+    # the check longer (review 2026-10-19 counted 8 of them as 17 calls).
+    judges = [s for s in steps if s["kind"] == "judge" and s.get("status") != "cancelled"]
+    stopped_judges = sum(1 for s in steps if s["kind"] == "judge" and s.get("status") == "cancelled")
     flow = {"steps": len(steps), "chat_model": model_name(chat[0].get("model")) if chat else None}
     if comparison:
         c0 = min(s["created_at"] for s in comparison)
@@ -139,6 +143,11 @@ def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
         flow["judge_timeouts"] = sum(1 for s in judges if s.get("settled_at") and s.get("status") != "succeeded"
                                      and seconds(s["created_at"], s["settled_at"]) >= JUDGE_TIMEOUT_SECONDS)
         flow["judge_models"] = dict(Counter(model_name(s.get("model")) for s in judges))
+        ended = [s for s in judges if s.get("settled_at")]
+        if ended:
+            flow["slowest_judge_seconds"] = max(seconds(s["created_at"], s["settled_at"]) for s in ended)
+    if stopped_judges:
+        flow["judge_calls_stopped"] = stopped_judges
     usage = turn.get("agent_usage") or {}
     flow["cost_usd"] = round((usage.get("estimated_cost_nano_usd") or 0) / 1e9, 3)
     flow["web_searches"] = usage.get("web_search_requests") or 0
