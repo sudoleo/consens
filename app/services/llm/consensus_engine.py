@@ -1706,7 +1706,8 @@ def _verified_target(sentence, target, _find, _find_formatted_quote) -> str:
     still names both of its ends; they count when both stand in that order."""
     sentence = str(sentence or "")
     target = str(target or "").strip()
-    if not sentence or not target:
+    # A dash or a full stop alone marks nothing a reader could recognise.
+    if not sentence or not re.search(r"\w", target):
         return ""
     key = "__target__" + sentence
 
@@ -3361,6 +3362,16 @@ def check_text_coverage(
         if not isinstance(number, int) or not 1 <= number <= len(spans):
             continue
         claim["start"], claim["end"] = spans[number - 1]
+        # The disputed words as the user pasted them: the judge's copy writes
+        # "<" and "[1]" differently, but keeps every character where it was.
+        judged_sentence = judged[claim["start"]:claim["end"]]
+        for item in claim.get("dissent") or []:
+            at = judged_sentence.find(item.get("target") or "\0")
+            if at < 0:
+                item.pop("target", None)
+            else:
+                begin = claim["start"] + at
+                item["target"] = original[begin:begin + len(item["target"])]
         # The card quotes what the user pasted, not the judge's copy of it.
         claim["anchor"] = _clip(original[claim["start"]:claim["end"]], MAX_DIFF_TEXT_CHARS)
         located.append(claim)

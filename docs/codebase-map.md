@@ -2318,7 +2318,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Coverage-Judge), wrappt `wrapSpots` (`consensus-insights.js`) genau diese
   Worte im Satz in `<span class="cx-spot">` (Suche mit
   `normalizeForSearch`/`findRangesInText` über die Textknoten der Satz-Spans,
-  überlappende Stellen verschmolzen, von hinten nach vorn gewrappt); der Satz
+  überlappende Stellen verschmolzen, von hinten nach vorn gewrappt; weil der
+  Server die Markdown-Originalspanne liefert, sucht `visibleWords` zusätzlich
+  ohne ungepaarte `**`, Links und `[S1]`-Tags); der Satz
   bekommt `.has-spot` und verliert seine Fläche, bleibt aber Steuerelement
   (Klick, Tastatur, Hover, Highlights-Filter). Ein Widerspruch und ein Claim
   auf demselben Satz teilen die Spans, die rote Marke nimmt also die Stelle
@@ -5061,7 +5063,10 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Wörter, nie aus Antwort oder Nachbarsatz, nie mit „…“ gekürzt). Der Server
   prüft sie in `_verify_claims` mit derselben exakten Regel wie Zitate gegen
   den Satz (`_verified_target`, eine Spanne „A … B“ zählt über ihre beiden
-  Enden) und leert den Rest; `parse_coverage_payload` liefert sie als
+  Enden; ohne Buchstabe oder Ziffer fällt sie weg) und leert den Rest; bei
+  der Prüfung eingefügter Texte zeigt sie danach auf den eingefügten Text,
+  nicht auf die Judge-Kopie (`_judge_copy` schreibt `<`/`[1]` anders, aber
+  längengleich); `parse_coverage_payload` liefert sie als
   `targets`, die Vorab-Fenster tragen sie mit (`_adopt_prefetched`).
   Echttest mit dem Prod-Judge: 92 % der Ziele standen wörtlich im Satz.
   Ergebnis landet als `differences_data.claims` (unveränderte Feldform plus

@@ -439,6 +439,20 @@
           // Highlights-Filter); .has-spot nimmt ihm nur die Flaeche. Findet
           // sich kein Ziel im Satz (aeltere Laeufe, verworfene Ziele), bleibt
           // der ganze Satz markiert.
+          // Der Server liefert die Stelle als Originalspanne aus dem Markdown.
+          // Beginnt oder endet sie in einer Auszeichnung ("Vincent Luis** won")
+          // oder traegt sie einen Quellentag ("330 m.[S1]"), stehen im DOM nur
+          // die sichtbaren Worte: Sternchen sind <strong>, der Tag ein
+          // uebersprungener Chip. stripMarkdown laesst ungepaarte Sternchen
+          // stehen, deshalb diese dritte Fassung.
+          function visibleWords(value) {
+            return String(value || "")
+              .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+              .replace(/\[S?\d+(?:\s*,\s*S?\d+)*\]/gi, " ")
+              .replace(/\*{1,3}|_{2,3}|~~|`/g, "")
+              .replace(/\s+([.,;:!?])/g, "$1");
+          }
+
           function wrapSpots(spans, targets) {
             const slices = [];
             let flat = "";
@@ -455,7 +469,8 @@
             targets.forEach(function (target) {
               // Nur ganze Fassungen: eine auf acht Woerter gekuerzte Variante
               // (searchVariants) markierte bloss einen Teil der Stelle.
-              const needles = [stripMarkdown(target), target].map(normalizeForSearch).filter(Boolean);
+              const needles = [stripMarkdown(target), target, visibleWords(target)]
+                .map(normalizeForSearch).filter(Boolean);
               for (const needle of needles) {
                 const hit = findRangesInText(flat, needle)[0];
                 if (hit) { ranges.push(hit); break; }
@@ -2824,7 +2839,8 @@
             // Inline-Markierungen auflösen: Span entfernen, Text an Ort und
             // Stelle lassen. normalize() führt die Textknoten wieder zusammen,
             // damit eine erneute Ankersuche nicht an Fragmenten scheitert.
-            // Die Stellen-Spans (.cx-spot) liegen in den Satz-Spans und gehen zuerst.
+            // Die Stellen-Spans (.cx-spot) in den Satz-Spans gehen mit: die
+            // Reihenfolge ist egal, jeder Span gibt nur seine Kinder ab.
             insightRoot.querySelectorAll(".cx-claim:not(.pc-claim) .cx-spot, .cx-claim:not(.pc-claim)").forEach(function (span) {
               const parent = span.parentNode;
               if (!parent) return;

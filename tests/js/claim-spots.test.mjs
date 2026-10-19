@@ -13,8 +13,13 @@ afterEach(() => {
   opened = [];
 });
 
-function boot(html, mode = null) {
-  const env = loadScripts(["static/js/user-settings.js", "static/js/consensus-anchor.js", "static/js/consensus-insights.js"], {
+// `markdown` loads the vendored Markdown library as the app does: with it,
+// stripMarkdown keeps an unpaired "**" (the bundle-free fallback drops it).
+const MARKDOWN = ["static/vendor/marked/12.0.2/marked.min.js", "static/vendor/dompurify/3.4.17/dist/purify.min.js"];
+
+function boot(html, mode = null, { markdown = false } = {}) {
+  const env = loadScripts([...(markdown ? MARKDOWN : []),
+    "static/js/user-settings.js", "static/js/consensus-anchor.js", "static/js/consensus-insights.js"], {
     body: `<select id="consensusHighlightsSelect">
         <option value="all">All checks</option><option value="contradictions">Contradictions only</option>
         <option value="concerns">Disagreements</option><option value="critical">Critical</option><option value="none">None</option>
@@ -117,4 +122,24 @@ it("follows the highlight filter and leaves nothing behind on reset", () => {
   expect(document.querySelector(".cx-spot, .cx-claim")).toBe(null);
   expect(document.querySelector("p").textContent).toBe(sentence);
   expect(document.querySelector("p").childNodes.length).toBe(1);
+});
+
+it.each([
+  // The server returns the span of the Markdown source: it may start or end
+  // inside emphasis, or carry a source tag the page shows as a chip.
+  ["<p>In Kona <strong>Vincent Luis</strong> won the men's race.</p>", "In Kona **Vincent Luis** won the men's race.",
+    "Vincent Luis** won", "Vincent Luis won"],
+  ["<p>In Kona <strong>Vincent Luis</strong> won the men's race.</p>", "In Kona **Vincent Luis** won the men's race.",
+    "In Kona **Vincent", "In Kona Vincent"],
+  ['<p>It is 330 m tall.<a class="src-ref" href="https://example.org">example.org</a> Later.</p>', "It is 330 m tall.[S1]",
+    "330 m tall.[S1]", "330 m tall."],
+  ['<p>See <a href="https://x.y">the guide</a> for details.</p>', "See [the guide](https://x.y) for details.",
+    "[the guide](https://x.y)", "the guide"],
+])("finds the visible words of a Markdown span with the real Markdown library (%#)", (html, anchor, target, visible) => {
+  const { window, document } = boot(html, null, { markdown: true });
+  expect(typeof window.marked?.parseInline).toBe("function");
+  window.renderConsensusInsights({ models_compared: ["OpenAI", "Gemini", "GLM"], differences: [],
+    claims: [split(anchor, [{ model: "GLM", quote: "otherwise", target }])] }, 3);
+  expect(spots(document).join("")).toBe(visible);
+  expect(document.querySelector(".cx-claim").classList.contains("has-spot")).toBe(true);
 });

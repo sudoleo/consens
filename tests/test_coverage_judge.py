@@ -320,6 +320,43 @@ class CoverageTargetVerificationTests(unittest.TestCase):
         self.assertIn("Vincent Luis", self.verified(sentence, "Vincent Luis won the men's race"))
 
 
+class PassageTargetTests(unittest.TestCase):
+    """A pasted text is judged as a copy that writes "<" and "[1]" differently
+    (_judge_copy). The disputed words must point at what the user pasted, or
+    the card could not find them in the text it shows."""
+
+    def test_disputed_words_are_taken_from_the_pasted_text(self):
+        from app.services.llm.consensus_engine import check_text_coverage
+        pasted = "Heat pumps are fine in old houses. Running costs stay <5% [1] of the bill."
+
+        def engine(provider, api_model, model_ref, api_keys, **kwargs):
+            prompt, schema = kwargs["prompt"], kwargs["json_schema"]
+            items = schema["properties"]["sentences"]["items"]["properties"]
+            labels = list(items["models"]["properties"])
+            entries = []
+            for key in items["id"]["enum"]:
+                disputed = f"[{key[1:]}] Running costs" in prompt
+                entries.append({"id": key, "classification": "claim",
+                                "models": {label: ("contradicts" if disputed and i == 0 else "supports")
+                                           for i, label in enumerate(labels)},
+                                "counter_quotes": ([{"model": labels[0], "quote": "answer one",
+                                                     "target": "‹5% (1)"}] if disputed else [])})
+            return json.dumps({"sentences": entries})
+
+        with mock.patch("app.services.llm.consensus_engine._call_engine_text", side_effect=engine):
+            result = check_text_coverage({"openai": "answer one about costs", "mistral": "answer two about costs"},
+                                         pasted, ALL_KEYS, "OpenAI")
+        disputed = next(c for c in result["claims"] if c["dissent"])
+        self.assertEqual(disputed["dissent"][0]["target"], "<5% [1]")
+        self.assertIn(disputed["dissent"][0]["target"], pasted[disputed["start"]:disputed["end"]])
+
+    def test_a_target_without_a_letter_or_digit_is_dropped(self):
+        claim = {"anchor": "Costs rise - sometimes.", "agree": ["OpenAI"],
+                 "dissent": [{"model": "Mistral", "quote": "", "target": " - "}]}
+        _verify_claims([claim], "Costs rise - sometimes.", {"Mistral": ""})
+        self.assertNotIn("target", claim["dissent"][0])
+
+
 class CoverageScoringTests(unittest.TestCase):
     def test_thin_claims_do_not_lift_the_agreement_score(self):
         """Eine einzelne Stimme ist 100 % Zustimmung der Stimmen, die es gibt -
