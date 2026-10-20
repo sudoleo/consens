@@ -192,12 +192,12 @@ def test_follower_confirmation_escapes_stored_question(watch_http):
     pending = followers.request_follow(h.share_id, "reader@example.test", db=h.watch_db)
     response = h.client.post("/watch/follow/confirm", params={"token": pending["token"]})
     assert response.status_code == 200, response.text
-    assert "<img" not in response.text and "&lt;img" in response.text
+    assert "<img src=x" not in response.text and "&lt;img src=x" in response.text
     assert len(h.watch_db.stores[followers.FOLLOWERS_COLLECTION]) == 1
 
 
 def _form_action(page):
-    match = re.search(r"<form method='post' action='([^']*)'>", page)
+    match = re.search(r"<form method=[\"']post[\"'] action=[\"']([^\"']*)[\"']", page)
     return unescape(match.group(1)) if match else None
 
 
@@ -240,7 +240,13 @@ def test_mail_links_only_ask_and_their_post_acts(watch_http):
             path, params={"token": token}, data=one_click, follow_redirects=False
         )
         assert response.status_code == 200, (path, response.text)
-        assert _form_action(response.text) is None
+        # Done: the page never asks for the same step again. A paused watch
+        # offers the way back instead (its own resume link).
+        action = _form_action(response.text)
+        if path == "/watch/unsubscribe":
+            assert action.startswith("/watch/resume?token="), action
+        else:
+            assert action is None, (path, action)
     assert h.watch_db.stores[watch.WATCHES_COLLECTION][h.watch["id"]]["status"] == "paused"
     assert h.watch_db.stores[watch_brief.BRIEFS_COLLECTION]["owner"]["enabled"] is False
     followers_now = h.watch_db.stores[followers.FOLLOWERS_COLLECTION]

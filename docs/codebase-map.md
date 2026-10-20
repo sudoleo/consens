@@ -344,7 +344,7 @@ Script-/Style-Tags rendert `app/core/assets.py` aus `static/js/bundles.json`),
 `admin.html`, `admin_benchmark.html` (Admin-Benchmark-Visualisierung, eigenes
 Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
 Consensus-Seite), `watch_share.html` (dieselbe Route `/s/…`, sobald die Seite
-Watch-Metadaten oder -History hat), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
+Watch-Metadaten oder -History hat), `share_unavailable.html`, `notice.html` (Hinweisseite hinter Mail-Links und für ein HTML-429, `app/core/notice_page.py`), plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
 `topics.html` und `topic.html` bilden den öffentlichen Topics-Hub bzw. die
 Detailseite; `topic.html` und `watch_share.html` setzen sich seit 2026-10-15 aus
@@ -7817,13 +7817,29 @@ Button auf der geöffneten Seite handelt. Mail-Scanner, Linkvorschauen und
 Link-Checker öffnen jeden Link einer Nachricht (auch per HEAD); vorher
 pausierte schon das bloße Öffnen von `/watch/unsubscribe` die Watch und
 bestätigte `/watch/follow/confirm` einen Double-Opt-in ohne den Empfänger.
-Betroffen sind alle sechs Mail-Links: `/watch/unsubscribe`,
-`/watch/brief/unsubscribe`, `/watch/follow/confirm|unsubscribe` und
-`/topic-follow/confirm|unsubscribe`. GET (und HEAD) prüft nur den Token
-(`parse_unsubscribe_token`, `parse_brief_unsubscribe_token`,
+Betroffen sind alle Mail-Links: `/watch/unsubscribe`, `/watch/resume`
+(seit 2026-10-20), `/watch/brief/unsubscribe`, `/watch/follow/confirm|unsubscribe`
+und `/topic-follow/confirm|unsubscribe`. GET (und HEAD) prüft nur den Token
+(`parse_unsubscribe_token`, `parse_resume_token`, `parse_brief_unsubscribe_token`,
 `watch_followers.parse_follow_confirm_token|parse_follow_unsubscribe_token`,
 `topics.parse_follow_token`), zeigt Fehler sofort und sonst ein Formular,
 das per POST auf dieselbe URL samt Token geht; nur der POST schreibt.
+**Die Seiten dahinter (Apple-Audit K3)** sind eine Jinja-Vorlage im Stil der
+öffentlichen Seiten: `templates/notice.html` über `app/core/notice_page.notice_page(...)`
+(public-pages/public-shell-CSS, Navigation, Footer, `no-store`, noindex). Sie
+nennen, worum es geht (Frage der Watch über `watch_service.watch_link_view`,
+Frage der Seite, Topic-Titel) und bieten den nächsten Schritt: nach dem
+Pausieren „Resume watch“ (eigener Token `make_resume_token`, Payload `rs: 1`;
+ein Pause-Link setzt nie fort, ein Resume-Link pausiert nie) und „Open Watches“.
+Eine schon pausierte Watch zeigt beim Öffnen des Pause-Links ihren Zustand mit
+„Resume watch“; eine erreichte Watch bleibt „resolved“ (der Pause-Link setzt
+sie nicht mehr auf „paused“). `POST /watch/resume` (`watch_service.resume_from_token`)
+setzt unter den Grenzen des Owners fort (`update_watch` mit seiner Stufe; voll →
+„No free watch slot“, erreichtes Ziel → nur in der App). Die „Paused“-Mail nach
+drei Fehlern (K6) hat „Resume watch“ als Hauptknopf und keinen Pausier-Link
+mehr; ihr List-Unsubscribe-Header bleibt. Der Morning Brief (K5) führt auf
+`/app/watches`, erreichte Ziele stehen als eigene Zeile „Reached. …“, Zeiten in
+der Zeitzone des Briefs ohne Namen, andere als Stadt („Los Angeles time“).
 Jede Mail, deren Text einen Abmeldelink zeigt (Change, Every-run, Pause,
 Follower, Topic, Morning Brief), trägt dazu `List-Unsubscribe: <URL>` und
 `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 2369/8058): Gmail,

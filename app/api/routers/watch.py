@@ -1,5 +1,4 @@
 import asyncio
-import html
 import logging
 from urllib.parse import quote
 
@@ -7,14 +6,15 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.core import config as cfg
+from app.core.notice_page import WATCHES_LINK, notice_page
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.entitlements import entitlements_for
 from app.core.security import extract_id_token, get_user_tier, verify_user_token
 from app.core.site import SITE_URL
 from app.services import (
-    mailer, telegram_watch, watch_brief, watch_followers, watch_images, watch_scheduler,
-    watch_service,
+    mailer, share_snapshots, telegram_watch, watch_brief, watch_followers, watch_images,
+    watch_scheduler, watch_service,
 )
 
 
@@ -328,40 +328,91 @@ def patch_watch_brief(request: Request, data: dict = Body(...)):
     return {"status": "success", "brief": brief}
 
 
-def _unsubscribe_page(heading: str, message: str, status_code: int,
-                      link_href: str = "/", link_label: str = "Return to consens.io",
-                      *, action: str = "", button: str = "") -> HTMLResponse:
-    # With ``action`` the page is a confirmation step: its button posts there
-    # and is the only thing on the page that changes anything.
-    form = (
-        f"<form method='post' action='{html.escape(action)}'>"
-        "<button type='submit' style='font:inherit;padding:10px 18px;cursor:pointer'>"
-        f"{html.escape(button)}</button></form>"
-        if action else ""
-    )
-    content = (
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<meta name='robots' content='noindex'><title>Consensus Watch</title></head>"
-        "<body style='font-family:system-ui;max-width:640px;margin:12vh auto;padding:24px'>"
-        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>{form}"
-        f"<p><a href='{html.escape(link_href)}'>{html.escape(link_label)}</a></p></body></html>"
-    )
-    return HTMLResponse(content, status_code=status_code, headers={"X-Robots-Tag": "noindex, noarchive"})
-
-
 # A link in a mail only asks; the button on the page it opens acts. Mail
 # scanners, link previews and prefetchers open every link in a message, so a
 # GET that paused a watch or confirmed a follow did so without the reader.
 # The POST is also what a mail client sends for the List-Unsubscribe header
-# (RFC 8058), with the token in the same query string.
-def _confirm_step(path: str, token: str, parse, *, heading: str, message: str,
-                  button: str, error_heading: str) -> HTMLResponse:
+# (RFC 8058), with the token in the same query string. Every page names what
+# the link is about and offers the way back (app/core/notice_page.py).
+_LINK_ERROR_MESSAGES = {
+    "expired_token": "This link has expired. Open Watches to change the watch there.",
+    "invalid_token": "This link is incomplete or was changed. Open Watches to change the watch there.",
+}
+
+
+def _token_url(path: str, token: str) -> str:
+    return f"{path}?token={quote(token, safe='')}"
+
+
+def _link_error(request: Request, exc: watch_service.WatchError, *,
+                eyebrow: str = "Consensus Watch", links=(WATCHES_LINK,)):
+    gone = exc.code == "not_found"
+    return notice_page(
+        request, status_code=_STATUS_BY_CODE.get(exc.code, 400), eyebrow=eyebrow,
+        heading="This watch no longer exists" if gone and eyebrow == "Consensus Watch"
+        else "This link no longer works",
+        message=_LINK_ERROR_MESSAGES.get(exc.code, exc.message), links=links,
+    )
+
+
+def _watch_state_page(request: Request, view: dict, *, paused_now: bool = False,
+                      resumed_now: bool = False):
+    """The page for a watch reached by a mail link, by its current state."""
+    watch_id = view["watch_id"]
+    common = {
+        "eyebrow": "Consensus Watch", "subject_label": "Watch", "subject": view["question"],
+    }
+    if view["status"] == watch_service.WATCH_STATUS_RESOLVED:
+        return notice_page(
+            request, heading="This watch reached its goal",
+            message="It stopped checking and freed its slot. Open it to watch for something new.",
+            links=[WATCHES_LINK], **common,
+        )
+    if view["status"] == "active":
+        return notice_page(
+            request, heading="Watch resumed" if resumed_now else "This watch is active",
+            message="It checks again on its usual schedule and writes when something moves."
+            if resumed_now else "It checks on its usual schedule and writes when something moves.",
+            links=[WATCHES_LINK], **common,
+        )
+    return notice_page(
+        request, heading="Watch paused" if paused_now else "This watch is paused",
+        message="It no longer checks or writes. Resume it whenever you like."
+        if paused_now else "It does not check or write until you resume it.",
+        action=_token_url("/watch/resume", watch_service.make_resume_token(watch_id)),
+        button="Resume watch", links=[WATCHES_LINK], **common,
+    )
+
+
+def _share_question(share_id: str) -> tuple[str, str]:
+    """(question, page path) of a public page, ("", "") when unavailable."""
     try:
-        parse(token)
-    except watch_service.WatchError as exc:
-        return _unsubscribe_page(error_heading, exc.message, _STATUS_BY_CODE.get(exc.code, 400))
-    return _unsubscribe_page(heading, message, 200,
-                             action=f"{path}?token={quote(token, safe='')}", button=button)
+        share = share_snapshots.get_share(share_id) or {}
+    except Exception as exc:
+        logging.warning("follow page lookup failed category=%s", safe_exception(exc))
+        return "", ""
+    if share.get("status") != "active" or str(share.get("visibility") or "public") != "public":
+        return "", ""
+    return (
+        " ".join(str(share.get("question") or "").split()),
+        share_snapshots.share_path(share.get("slug") or "", share_id),
+    )
+
+
+def _view_or_error(request: Request, watch_id: str):
+    try:
+        view = watch_service.watch_link_view(watch_id)
+    except Exception as exc:
+        logging.error("watch link lookup failed category=%s", safe_exception(exc))
+        return None, notice_page(
+            request, status_code=503, eyebrow="Consensus Watch",
+            heading="This page could not load",
+            message="Your watch is unchanged. Please try the link again in a moment.",
+            links=[WATCHES_LINK],
+        )
+    if not view:
+        return None, _link_error(request, watch_service.WatchError("not_found", "This watch no longer exists."))
+    return view, None
 
 
 @router.post("/api/share/{share_id}/follow")
@@ -396,14 +447,23 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
     return {"status": "success", "message": "Check your inbox and confirm to start following."}
 
 
+_FOLLOW_EYEBROW = "Question you follow"
+
+
 @router.get("/watch/follow/confirm", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def follow_confirm_page(request: Request, token: str = ""):
-    return _confirm_step(
-        "/watch/follow/confirm", token, watch_followers.parse_follow_confirm_token,
-        heading="Confirm your follow",
-        message="Confirm to get an e-mail when the AI consensus on this question shifts materially.",
-        button="Confirm and follow", error_heading="Unable to confirm",
+    try:
+        share_id, _email = watch_followers.parse_follow_confirm_token(token)
+    except watch_service.WatchError as exc:
+        return _link_error(request, exc, eyebrow=_FOLLOW_EYEBROW, links=[{"href": "/", "label": "Open consens.io"}])
+    question, path = _share_question(share_id)
+    return notice_page(
+        request, eyebrow=_FOLLOW_EYEBROW, heading="Follow this question?",
+        message="You get one e-mail whenever the AI consensus on it shifts materially. No account needed.",
+        subject_label="Question", subject=question,
+        action=_token_url("/watch/follow/confirm", token), button="Confirm and follow",
+        links=[{"href": path, "label": "Open the page"}] if path else [],
     )
 
 
@@ -412,24 +472,30 @@ def follow_confirm_page(request: Request, token: str = ""):
 def follow_confirm(request: Request, token: str = ""):
     try:
         result = watch_followers.confirm_follow(token)
-        question = " ".join(str(result.get("question") or "").split())[:120]
-        return _unsubscribe_page(
-            "You're following this question",
-            f"We will e-mail you when the AI consensus on \"{question}\" shifts materially.",
-            200, link_href=result.get("share_path") or "/", link_label="Open the consensus page",
-        )
     except watch_service.WatchError as exc:
-        return _unsubscribe_page("Unable to confirm", exc.message, _STATUS_BY_CODE.get(exc.code, 400))
+        return _link_error(request, exc, eyebrow=_FOLLOW_EYEBROW, links=[{"href": "/", "label": "Open consens.io"}])
+    return notice_page(
+        request, eyebrow=_FOLLOW_EYEBROW, heading="You're following this question",
+        message="We e-mail you when the AI consensus on it shifts materially.",
+        subject_label="Question", subject=result.get("question") or "",
+        links=[{"href": result.get("share_path") or "/", "label": "Open the page"}],
+    )
 
 
 @router.get("/watch/follow/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def follow_unsubscribe_page(request: Request, token: str = ""):
-    return _confirm_step(
-        "/watch/follow/unsubscribe", token, watch_followers.parse_follow_unsubscribe_token,
-        heading="Unfollow this question?",
-        message="You will no longer receive updates for this question.",
-        button="Unfollow", error_heading="Unable to unfollow",
+    try:
+        share_id, _email = watch_followers.parse_follow_unsubscribe_token(token)
+    except watch_service.WatchError as exc:
+        return _link_error(request, exc, eyebrow=_FOLLOW_EYEBROW, links=[{"href": "/", "label": "Open consens.io"}])
+    question, path = _share_question(share_id)
+    return notice_page(
+        request, eyebrow=_FOLLOW_EYEBROW, heading="Unfollow this question?",
+        message="You will no longer get e-mails when the AI consensus on it moves.",
+        subject_label="Question", subject=question,
+        action=_token_url("/watch/follow/unsubscribe", token), button="Unfollow",
+        links=[{"href": path, "label": "Open the page"}] if path else [],
     )
 
 
@@ -437,22 +503,36 @@ def follow_unsubscribe_page(request: Request, token: str = ""):
 @limiter.limit("20/minute")
 def follow_unsubscribe(request: Request, token: str = ""):
     try:
-        watch_followers.unsubscribe_follow(token)
-        return _unsubscribe_page(
-            "Unfollowed", "You will no longer receive updates for this question.", 200,
-        )
+        result = watch_followers.unsubscribe_follow(token)
     except watch_service.WatchError as exc:
-        return _unsubscribe_page("Unable to unfollow", exc.message, _STATUS_BY_CODE.get(exc.code, 400))
+        return _link_error(request, exc, eyebrow=_FOLLOW_EYEBROW, links=[{"href": "/", "label": "Open consens.io"}])
+    question, path = _share_question(result.get("share_id") or "")
+    return notice_page(
+        request, eyebrow=_FOLLOW_EYEBROW, heading="Unfollowed",
+        message="You will no longer get e-mails about this question. You can follow it again on its page.",
+        subject_label="Question", subject=question,
+        links=[{"href": path or "/", "label": "Open the page" if path else "Open consens.io"}],
+    )
 
 
 @router.get("/watch/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def unsubscribe_page(request: Request, token: str = ""):
-    return _confirm_step(
-        "/watch/unsubscribe", token, watch_service.parse_unsubscribe_token,
-        heading="Pause this watch?",
-        message="Pausing stops the checks and the updates for this consensus watch. You can resume it in the app.",
-        button="Pause watch", error_heading="Unable to unsubscribe",
+    try:
+        watch_id = watch_service.parse_unsubscribe_token(token)
+    except watch_service.WatchError as exc:
+        return _link_error(request, exc)
+    view, error = _view_or_error(request, watch_id)
+    if error:
+        return error
+    if view["status"] != "active":
+        return _watch_state_page(request, view)
+    return notice_page(
+        request, eyebrow="Consensus Watch", heading="Pause this watch?",
+        message="Pausing stops its checks and its e-mails. You can resume it any time.",
+        subject_label="Watch", subject=view["question"],
+        action=_token_url("/watch/unsubscribe", token), button="Pause watch",
+        links=[WATCHES_LINK],
     )
 
 
@@ -460,21 +540,75 @@ def unsubscribe_page(request: Request, token: str = ""):
 @limiter.limit("20/minute")
 def unsubscribe(request: Request, token: str = ""):
     try:
-        watch_service.unsubscribe(token)
-        heading, message, status_code = "Watch paused", "You will no longer receive updates for this consensus watch.", 200
+        result = watch_service.unsubscribe(token)
     except watch_service.WatchError as exc:
-        heading, message, status_code = "Unable to unsubscribe", exc.message, _STATUS_BY_CODE.get(exc.code, 400)
-    return _unsubscribe_page(heading, message, status_code)
+        return _link_error(request, exc)
+    view, error = _view_or_error(request, result["watch_id"])
+    return error or _watch_state_page(request, view, paused_now=True)
+
+
+@router.get("/watch/resume", response_class=HTMLResponse)
+@limiter.limit("20/minute")
+def resume_page(request: Request, token: str = ""):
+    try:
+        watch_id = watch_service.parse_resume_token(token)
+    except watch_service.WatchError as exc:
+        return _link_error(request, exc)
+    view, error = _view_or_error(request, watch_id)
+    if error:
+        return error
+    if view["status"] not in {"paused", "paused_error"}:
+        return _watch_state_page(request, view)
+    return notice_page(
+        request, eyebrow="Consensus Watch", heading="Resume this watch?",
+        message="It checks again on its usual schedule and writes when something moves.",
+        subject_label="Watch", subject=view["question"],
+        action=_token_url("/watch/resume", token), button="Resume watch",
+        links=[WATCHES_LINK],
+    )
+
+
+@router.post("/watch/resume", response_class=HTMLResponse)
+@limiter.limit("20/minute")
+def resume(request: Request, token: str = ""):
+    try:
+        result = watch_service.resume_from_token(token, get_user_tier)
+    except watch_service.WatchError as exc:
+        if exc.code == "limit_reached":
+            return notice_page(
+                request, status_code=409, eyebrow="Consensus Watch",
+                heading="No free watch slot",
+                message="All your active watch slots are in use. Pause or delete another watch, then resume this one.",
+                links=[WATCHES_LINK],
+            )
+        return _link_error(request, exc)
+    except Exception as exc:
+        logging.error("resume watch failed category=%s", safe_exception(exc))
+        return notice_page(
+            request, status_code=500, eyebrow="Consensus Watch",
+            heading="The watch could not be resumed",
+            message="Nothing changed. Please try again, or resume it on your Watches page.",
+            links=[WATCHES_LINK],
+        )
+    view, error = _view_or_error(request, result["watch_id"])
+    return error or _watch_state_page(request, view, resumed_now=True)
+
+
+_BRIEF_EYEBROW = "Morning brief"
 
 
 @router.get("/watch/brief/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def unsubscribe_brief_page(request: Request, token: str = ""):
-    return _confirm_step(
-        "/watch/brief/unsubscribe", token, watch_brief.parse_brief_unsubscribe_token,
-        heading="Turn off the morning brief?",
-        message="You will no longer receive the daily watch digest. Individual watch alerts are unaffected.",
-        button="Turn off the brief", error_heading="Unable to unsubscribe",
+    try:
+        watch_brief.parse_brief_unsubscribe_token(token)
+    except watch_service.WatchError as exc:
+        return _link_error(request, exc, eyebrow=_BRIEF_EYEBROW)
+    return notice_page(
+        request, eyebrow=_BRIEF_EYEBROW, heading="Turn off the morning brief?",
+        message="You will no longer get the daily digest of your watches. Watch alerts are unaffected.",
+        action=_token_url("/watch/brief/unsubscribe", token), button="Turn off the brief",
+        links=[WATCHES_LINK],
     )
 
 
@@ -483,7 +617,11 @@ def unsubscribe_brief_page(request: Request, token: str = ""):
 def unsubscribe_brief(request: Request, token: str = ""):
     try:
         watch_brief.unsubscribe_brief(token)
-        heading, message, status_code = "Morning brief disabled", "You will no longer receive the daily watch digest. Individual watch alerts are unaffected.", 200
     except watch_service.WatchError as exc:
-        heading, message, status_code = "Unable to unsubscribe", exc.message, _STATUS_BY_CODE.get(exc.code, 400)
-    return _unsubscribe_page(heading, message, status_code)
+        return _link_error(request, exc, eyebrow=_BRIEF_EYEBROW)
+    return notice_page(
+        request, eyebrow=_BRIEF_EYEBROW, heading="Morning brief turned off",
+        message="You will no longer get the daily digest. Watch alerts are unaffected; "
+                "you can turn the brief back on under Delivery on your Watches page.",
+        links=[WATCHES_LINK],
+    )

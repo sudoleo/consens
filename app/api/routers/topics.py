@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from app.core.assets import register_asset_globals
 from app.core import not_found
 from app.core import seo_entity
+from app.core.notice_page import notice_page
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
@@ -185,33 +186,28 @@ def _admin_topic_view(topic: dict) -> dict:
     return result
 
 
-def _message_page(
-    heading: str, message: str, status_code: int, *, href: str = "/topics",
-    action: str = "", button: str = "",
-) -> HTMLResponse:
-    # With ``action`` the page is a confirmation step: its button posts there
-    # and is the only thing on the page that changes anything.
-    form = (
-        f"<form method='post' action='{html.escape(action)}'>"
-        "<button type='submit' style='font:inherit;padding:10px 18px;cursor:pointer'>"
-        f"{html.escape(button)}</button></form>"
-        if action else ""
+_TOPIC_EYEBROW = "Topic you follow"
+_TOPICS_LINK = {"href": "/topics", "label": "Open Topics"}
+
+
+def _topic_link_error(request: Request, exc: Exception, fallback: str):
+    return notice_page(
+        request, status_code=_STATUS_BY_CODE.get(getattr(exc, "code", ""), 400),
+        eyebrow=_TOPIC_EYEBROW, heading="This link no longer works",
+        message=getattr(exc, "message", fallback), links=[_TOPICS_LINK],
     )
-    content = (
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<meta name='robots' content='noindex'><title>Topics | consens.io</title>"
-        "<style>body{font-family:Inter,system-ui,sans-serif;max-width:680px;margin:12vh auto;"
-        "padding:24px;color:#172033}a{color:#335cff}</style></head><body>"
-        f"<p style='color:#335cff;font-weight:700'>consens.io Topics</p>"
-        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>{form}"
-        f"<p><a href='{html.escape(href)}'>Open Topics</a></p></body></html>"
-    )
-    return HTMLResponse(
-        content,
-        status_code=status_code,
-        headers={"X-Robots-Tag": "noindex, noarchive"},
-    )
+
+
+def _topic_name(topic_id: str) -> tuple[str, str]:
+    """(title, page path) of a public topic for a mail-link page."""
+    try:
+        topic = topics.get_topic(topic_id) or {}
+    except Exception as exc:
+        logging.warning("topic link lookup failed category=%s", safe_exception(exc))
+        return "", ""
+    if topic.get("status") not in {"active", "paused"} or not topic.get("slug"):
+        return "", ""
+    return " ".join(str(topic.get("title") or "").split()), f"/topics/{topic['slug']}"
 
 
 @router.get("/topics", response_class=HTMLResponse)
@@ -672,30 +668,33 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
     }
 
 
-def _follow_link_step(path: str, token: str, *, unsubscribe: bool, heading: str,
-                      message: str, button: str, error_heading: str) -> HTMLResponse:
+def _follow_link_step(request: Request, path: str, token: str, *, unsubscribe: bool,
+                      heading: str, message: str, button: str):
     """GET of a link from a follow mail: checks the token and asks for the
     click that acts. Mail scanners and link previews open every link in a
     message; only the POST changes anything (it is also the one-click
     unsubscribe a mail client sends for the List-Unsubscribe header)."""
     try:
-        topics.parse_follow_token(token, unsubscribe=unsubscribe)
+        topic_id, _email = topics.parse_follow_token(token, unsubscribe=unsubscribe)
     except Exception as exc:
-        error = getattr(exc, "message", "This link is invalid or expired.")
-        code = _STATUS_BY_CODE.get(getattr(exc, "code", ""), 400)
-        return _message_page(error_heading, error, code)
-    return _message_page(heading, message, 200,
-                         action=f"{path}?token={quote(token, safe='')}", button=button)
+        return _topic_link_error(request, exc, "This link is invalid or expired.")
+    title, topic_path = _topic_name(topic_id)
+    return notice_page(
+        request, eyebrow=_TOPIC_EYEBROW, heading=heading, message=message,
+        subject_label="Topic", subject=title,
+        action=f"{path}?token={quote(token, safe='')}", button=button,
+        links=[{"href": topic_path, "label": "Open the topic"}] if topic_path else [_TOPICS_LINK],
+    )
 
 
 @router.get("/topic-follow/confirm", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def topic_follow_confirm_page(request: Request, token: str = ""):
     return _follow_link_step(
-        "/topic-follow/confirm", token, unsubscribe=False,
-        heading="Confirm your follow",
-        message="Confirm to get an e-mail when the curated consensus on this topic changes materially.",
-        button="Confirm and follow", error_heading="Unable to confirm",
+        request, "/topic-follow/confirm", token, unsubscribe=False,
+        heading="Follow this topic?",
+        message="You get an e-mail when the curated consensus on it changes materially.",
+        button="Confirm and follow",
     )
 
 
@@ -704,26 +703,24 @@ def topic_follow_confirm_page(request: Request, token: str = ""):
 async def topic_follow_confirm(request: Request, token: str = ""):
     try:
         result = await asyncio.to_thread(topics.confirm_follow, token)
-        return _message_page(
-            "You're following this topic",
-            f"We will e-mail you when the curated consensus on “{result['title']}” changes materially.",
-            200,
-            href=f"/topics/{result['slug']}",
-        )
     except Exception as exc:
-        message = getattr(exc, "message", "This confirmation link is invalid or expired.")
-        code = _STATUS_BY_CODE.get(getattr(exc, "code", ""), 400)
-        return _message_page("Unable to confirm", message, code)
+        return _topic_link_error(request, exc, "This confirmation link is invalid or expired.")
+    return notice_page(
+        request, eyebrow=_TOPIC_EYEBROW, heading="You're following this topic",
+        message="We e-mail you when the curated consensus on it changes materially.",
+        subject_label="Topic", subject=result.get("title") or "",
+        links=[{"href": f"/topics/{result['slug']}", "label": "Open the topic"}],
+    )
 
 
 @router.get("/topic-follow/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def topic_follow_unsubscribe_page(request: Request, token: str = ""):
     return _follow_link_step(
-        "/topic-follow/unsubscribe", token, unsubscribe=True,
+        request, "/topic-follow/unsubscribe", token, unsubscribe=True,
         heading="Unfollow this topic?",
-        message="You will no longer receive curated consensus updates for this topic.",
-        button="Unfollow", error_heading="Unable to unfollow",
+        message="You will no longer get curated consensus updates for it.",
+        button="Unfollow",
     )
 
 
@@ -731,16 +728,16 @@ def topic_follow_unsubscribe_page(request: Request, token: str = ""):
 @limiter.limit("20/minute")
 async def topic_follow_unsubscribe(request: Request, token: str = ""):
     try:
-        await asyncio.to_thread(topics.unsubscribe_follow, token)
-        return _message_page(
-            "Topic unfollowed",
-            "You will no longer receive curated consensus updates for this topic.",
-            200,
-        )
+        result = await asyncio.to_thread(topics.unsubscribe_follow, token)
     except Exception as exc:
-        message = getattr(exc, "message", "This unsubscribe link is invalid or expired.")
-        code = _STATUS_BY_CODE.get(getattr(exc, "code", ""), 400)
-        return _message_page("Unable to unfollow", message, code)
+        return _topic_link_error(request, exc, "This unsubscribe link is invalid or expired.")
+    title, topic_path = await asyncio.to_thread(_topic_name, result.get("topic_id") or "")
+    return notice_page(
+        request, eyebrow=_TOPIC_EYEBROW, heading="Topic unfollowed",
+        message="You will no longer get curated consensus updates for it. You can follow it again on its page.",
+        subject_label="Topic", subject=title,
+        links=[{"href": topic_path, "label": "Open the topic"}] if topic_path else [_TOPICS_LINK],
+    )
 
 
 async def _deliver_topic_notifications(item_ids) -> None:

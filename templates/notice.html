@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, noarchive">
+  <title>{{ heading }} | consens.io</title>
+  <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
+  <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
+  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
+  {#- No inline script: the same page answers under paths with a strict script CSP. -#}
+  <script src="{{ asset_url('/static/js/public-theme.js') }}"></script>
+  <style>
+    /* What the link is about, by name: a long question wraps and stops
+       after four lines instead of widening the page. */
+    .notice-subject-label {
+      margin: 0;
+      color: var(--ink-3);
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+    }
+    .legal-panel .notice-subject {
+      display: -webkit-box;
+      margin: 4px 0 0;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-semibold);
+      line-height: var(--line-height-heading);
+      overflow-wrap: anywhere;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 4;
+    }
+    .notice-subject + .links { margin-top: 22px; }
+    .notice-actions button {
+      font: inherit;
+      font-weight: var(--font-weight-medium);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  {% set public_nav_cta_href = "/app" %}
+  {% set public_nav_cta_label = "Open app" %}
+  {% include "partials/public_nav.html" %}
+
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="eyebrow">{{ eyebrow }}</p>
+      <h1>{{ heading }}</h1>
+      <p class="lead">{{ message }}</p>
+    </header>
+    <div class="page-content">
+      <section class="legal-panel">
+        {% if subject %}
+        <p class="notice-subject-label">{{ subject_label }}</p>
+        <p class="notice-subject" title="{{ subject }}">{{ subject }}</p>
+        {% endif %}
+        {% if action %}
+        <form method="post" action="{{ action }}" class="links notice-actions">
+          <button type="submit" class="button-primary">{{ button }}</button>
+          {% for link in links %}
+          <a href="{{ link.href }}" class="button-secondary">{{ link.label }}</a>
+          {% endfor %}
+        </form>
+        {% elif links %}
+        <div class="links">
+          {% for link in links %}
+          <a href="{{ link.href }}" class="{{ 'button-primary' if loop.first else 'button-secondary' }}">{{ link.label }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </section>
+    </div>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+</body>
+</html>

@@ -81,11 +81,11 @@ def test_follow_neutral_response_confirmation_escaping_and_unsubscribe(public_to
     before = deepcopy(h.topic_db.documents)
     page = h.client.get("/topic-follow/confirm", params={"token": token})
     assert page.status_code == 200, page.text
-    assert f"<form method='post' action='/topic-follow/confirm?token={token}'>" in page.text
+    assert f'<form method="post" action="/topic-follow/confirm?token={token}"' in page.text
     assert h.topic_db.documents == before
     response = h.client.post("/topic-follow/confirm", params={"token": token})
     assert response.status_code == 200, response.text
-    assert "<img" not in response.text and "&lt;img" in response.text
+    assert "<img src=x" not in response.text and "&lt;img src=x" in response.text
     assert (
         topics.list_followers(topic["id"], db=h.topic_db)[0]["email"]
         == "reader@example.test"
@@ -100,7 +100,7 @@ def test_follow_neutral_response_confirmation_escaping_and_unsubscribe(public_to
     )
     unsubscribe = topics.make_unsubscribe_token(topic["id"], "reader@example.test")
     page = h.client.get("/topic-follow/unsubscribe", params={"token": unsubscribe})
-    assert page.status_code == 200 and "action='/topic-follow/unsubscribe?token=" in page.text
+    assert page.status_code == 200 and 'action="/topic-follow/unsubscribe?token=' in page.text
     assert topics.list_followers(topic["id"], db=h.topic_db) != []
     # The one-click POST a mail client sends for List-Unsubscribe (RFC 8058).
     for _ in range(2):

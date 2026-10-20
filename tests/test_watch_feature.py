@@ -2922,7 +2922,7 @@ class BriefRouteTests(unittest.TestCase):
         with patch.object(watch_router.watch_brief, "unsubscribe_brief", return_value={"uid": "u1"}):
             response = self.client.post("/watch/brief/unsubscribe?token=x")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Morning brief disabled", response.text)
+        self.assertIn("Morning brief turned off", response.text)
         with patch.object(watch_router.watch_brief, "unsubscribe_brief",
                           side_effect=WatchError("invalid_token", "This unsubscribe link is invalid.")):
             response = self.client.post("/watch/brief/unsubscribe?token=broken")
@@ -2934,7 +2934,7 @@ class BriefRouteTests(unittest.TestCase):
                 page = self.client.get("/watch/brief/unsubscribe?token=x")
         unsubscribe.assert_not_called()
         self.assertEqual(page.status_code, 200)
-        self.assertIn("<form method='post' action='/watch/brief/unsubscribe?token=x'>", page.text)
+        self.assertIn('<form method="post" action="/watch/brief/unsubscribe?token=x"', page.text)
 
 
 class AdminWatchRouteTests(unittest.TestCase):

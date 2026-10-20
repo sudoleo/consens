@@ -1284,9 +1284,41 @@ def parse_unsubscribe_token(token: str, *, now=None) -> str:
     payload = parse_token_payload(token, now=now)
     watch_id = payload.get("wid")
     if (not isinstance(watch_id, str) or not watch_id
+            or any(key in payload for key in ("tt", "sid", "tid", "em", "un", "rs"))):
+        raise WatchError("invalid_token", "This link is invalid.")
+    return watch_id
+
+
+def make_resume_token(watch_id: str, *, now=None, max_age_days=UNSUBSCRIBE_MAX_AGE_DAYS) -> str:
+    """The "Resume watch" link of the paused mail and the pause page. Its own
+    kind: a pause link never resumes and a resume link never pauses."""
+    return sign_token_payload({"wid": watch_id, "rs": 1}, now=now, max_age_days=max_age_days)
+
+
+def parse_resume_token(token: str, *, now=None) -> str:
+    payload = parse_token_payload(token, now=now)
+    watch_id = payload.get("wid")
+    if (type(payload.get("rs")) is not int or payload["rs"] != 1
+            or not isinstance(watch_id, str) or not watch_id
             or any(key in payload for key in ("tt", "sid", "tid", "em", "un"))):
         raise WatchError("invalid_token", "This link is invalid.")
     return watch_id
+
+
+def watch_link_view(watch_id: str, db=None) -> dict:
+    """What a page behind a mail link names: the question and the state of
+    the watch. Reads only; {} when the watch is gone."""
+    db = db if db is not None else db_firestore
+    snap = db.collection(WATCHES_COLLECTION).document(str(watch_id or "")).get()
+    data = snap.to_dict() if snap.exists else None
+    if not data:
+        return {}
+    share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+    return {
+        "watch_id": str(watch_id),
+        "question": " ".join(str(share.get("question") or data.get("question") or "").split()),
+        "status": str(data.get("status") or "paused"),
+    }
 
 
 def unsubscribe(token: str, db=None) -> dict:
@@ -1297,14 +1329,41 @@ def unsubscribe(token: str, db=None) -> dict:
     data = snap.to_dict() if snap.exists else None
     if not data:
         raise WatchError("not_found", "This watch no longer exists.")
-    data = _apply_watch_updates(
-        str(data.get("owner_uid") or ""),
-        watch_id,
-        {"status": "paused", "claimed_until": None, "current_run_id": None},
-        tier=TIER_PRO,
-        db=db,
-    )
-    return {"watch_id": watch_id, "question": str(data.get("question") or "")[:200]}
+    if data.get("status") != WATCH_STATUS_RESOLVED:
+        # A reached goal already stopped the watch; "paused" would hide that.
+        _apply_watch_updates(
+            str(data.get("owner_uid") or ""),
+            watch_id,
+            {"status": "paused", "claimed_until": None, "current_run_id": None},
+            tier=TIER_PRO,
+            db=db,
+        )
+    return {"watch_id": watch_id}
+
+
+def resume_from_token(token: str, tier_for, db=None) -> dict:
+    """Resume a paused watch from its mail link, under the owner's limits.
+
+    ``tier_for(uid)`` returns the owner's tier: the active-watch limit and
+    the allowed intervals apply as in the app. A reached goal is not resumed
+    here -- it needs a new goal, which only the app can ask for."""
+    db = db if db is not None else db_firestore
+    watch_id = parse_resume_token(token)
+    snap = db.collection(WATCHES_COLLECTION).document(watch_id).get()
+    data = snap.to_dict() if snap.exists else None
+    if not data:
+        raise WatchError("not_found", "This watch no longer exists.")
+    status = data.get("status")
+    if status == "active":
+        return {"watch_id": watch_id, "status": "active"}
+    if status == WATCH_STATUS_RESOLVED:
+        raise WatchError(
+            "goal_reached",
+            "This watch reached its goal. Open it to watch for something new.",
+        )
+    uid = str(data.get("owner_uid") or "")
+    watch = update_watch(uid, watch_id, {"status": "active"}, tier_for(uid), db=db)
+    return {"watch_id": watch_id, "status": watch["status"]}
 
 
 def delete_watches_for_share(
