@@ -52,6 +52,8 @@ function boot({ watches = [], limits = null, user = true, path = "/app/watches",
       body: SHELL,
       before(window) {
         window.history.replaceState(null, "", path);
+        // jsdom has no scrolling; the page restores the chat's position.
+        window.scrollTo = () => {};
         if (captureIntervals) {
           window.__intervals = [];
           window.setInterval = fn => { window.__intervals.push(fn); return window.__intervals.length; };
