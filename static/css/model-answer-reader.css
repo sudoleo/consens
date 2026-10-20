@@ -297,7 +297,7 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-context-top { font-size: var(--font-size-xs); }
 .answer-reader-sections { background: transparent; border-radius: 0; gap: 24px; padding: 0; margin-bottom: 0; }
 .answer-reader-sections button { flex: none; position: relative; padding: 13px 2px; border-radius: 0; font-size: var(--font-size-ui); }
-.answer-reader-sections button[aria-pressed="true"] { background: transparent; font-weight: 600; }
+.answer-reader-sections button[aria-pressed="true"] { background: transparent; color: var(--ink); }
 .answer-reader-sections button[aria-pressed="true"]::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--ink); border-radius: 2px; }
 .answer-reader-sections button:hover { background: transparent; color: var(--ink); }
 .answer-reader-toolbar { margin-top: 14px; }

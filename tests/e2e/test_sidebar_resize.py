@@ -134,3 +134,44 @@ def test_keyboard_resizing_and_collapsed_or_narrow_sidebars(app_page):
     page.wait_for_timeout(300)
     _open_sidebar(page)
     assert _geometry(page)["sidebar"] == 480
+
+
+# Apple audit C3: opening the sidebar, the Chat | Watches switch jumped 130 px
+# in one frame and the logo vanished; closing it, two logos and two panel
+# glyphs stood side by side for about 200 ms. Sampled per frame: the switch
+# glides with the column, and there is only ever one logo and one toggle.
+_FRAMES = """(ms) => new Promise(resolve => {
+  const shown = el => { const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return 0;
+    let o = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) o *= Number(getComputedStyle(n).opacity); return o; };
+  const x = el => el.getBoundingClientRect().x;
+  const out = [], t0 = performance.now();
+  const step = () => {
+    const panelLogo = document.querySelector('#logoLink').getBoundingClientRect();
+    out.push({ switchX: x(document.querySelector('#viewSwitch')),
+      floatLogo: shown(document.querySelector('.app-nav-float .brand-float')),
+      panelLogoOnScreen: panelLogo.right > 0 && shown(document.querySelector('#logoLink')) > 0,
+      floatToggle: shown(document.querySelector('#toggleSidebarButton')), floatToggleX: x(document.querySelector('#toggleSidebarButton')),
+      panelToggle: shown(document.querySelector('#sidebarToggleInner')), panelToggleX: x(document.querySelector('#sidebarToggleInner')) });
+    if (performance.now() - t0 < ms) requestAnimationFrame(step); else resolve(out);
+  };
+  requestAnimationFrame(step);
+})"""
+
+
+def _assert_one_of_each(frames):
+    steps = [abs(b["switchX"] - a["switchX"]) for a, b in zip(frames, frames[1:])]
+    assert sum(1 for s in steps if s > 0.5) >= 4, steps
+    assert max(steps) < 0.6 * sum(steps), steps
+    assert not [f for f in frames if f["floatLogo"] > 0.05 and f["panelLogoOnScreen"]]
+    assert not [f for f in frames if f["floatToggle"] > 0 and f["panelToggle"] > 0
+                and abs(f["floatToggleX"] - f["panelToggleX"]) > 2]
+
+
+def test_logo_toggle_and_switch_move_with_the_sidebar(app_page, get_console_errors):
+    page = app_page
+    _open_sidebar(page)
+    page.locator("#sidebarToggleInner").click()
+    _assert_one_of_each(page.evaluate(_FRAMES, 700))
+    page.locator(".app-nav-float .sidebar-toggle").click()
+    _assert_one_of_each(page.evaluate(_FRAMES, 700))
+    assert get_console_errors() == []

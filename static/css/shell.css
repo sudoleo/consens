@@ -83,6 +83,45 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: none;
 }
 
+/* Desktop: the floating toggle sits exactly on the panel's own toggle while
+   the panel is open (layout.css: left = sidebar width - 46px), and both
+   move with the panel's duration and curve. Closing, the panel's toggle
+   steps out at once and the floating one glides from that spot to the
+   corner; opening, the floating one glides back and hands over when the
+   panel has arrived. One glyph, never two (Apple-Audit C3). Hidden means
+   visibility: hidden, so neither can be tabbed to while it is not shown. */
+@media (min-width: 1100px) {
+  /* The float keeps its (hidden) parts laid out over the panel's corner:
+     only a part that is shown may take a click, never the box around it. */
+  .app-nav-float { pointer-events: none; }
+  .app-nav-float > * { pointer-events: auto; }
+
+  body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
+    display: flex;
+    visibility: hidden;
+    transition: visibility 0s linear var(--dur-layer);
+  }
+
+  body:has(.sidebar.collapsed) .app-nav-float .sidebar-toggle {
+    visibility: visible;
+    transition: visibility 0s linear 0s;
+  }
+
+  .sidebar #sidebarToggleInner {
+    transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard),
+      visibility 0s linear var(--dur-layer);
+  }
+
+  .sidebar.collapsed #sidebarToggleInner {
+    visibility: hidden;
+    transition: visibility 0s linear 0s;
+  }
+
+  body.is-sidebar-settling :is(.brand-float, .app-nav-float .sidebar-toggle, #sidebarToggleInner) {
+    transition: none !important;
+  }
+}
+
 /* Overlay widths use .active rather than the absence of .collapsed. */
 @media (max-width: 1099px) {
   body:has(.sidebar.active) .app-nav-float .sidebar-toggle {
@@ -252,48 +291,59 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   color: inherit;
 }
 
-/* Primary action of the whole sidebar: a real navigation row, not a control
-   squeezed into the brand header. */
+/* ---- One row, three entries (Apple-Audit G2) ------------------------------
+   New comparison, Models and Chats are the same component: a 16px glyph
+   centred in an 18px column, the label 9px after it in 14px/500, 36px tall
+   with 6/8px of padding, and the same 4px inset as the sections below, so
+   glyphs and words stand on two straight lines. Models adds its count as a
+   quiet second line in --ink-3. They used to differ in size (15/16px glyph,
+   14 and 12px labels), weight (500/600), height (37/44px) and left edge. */
 .sidebar-new-run {
   flex: 0 0 auto;
-  width: 100%;
-  min-width: 100%;
+  width: auto;
+  min-width: 0;
+  margin: 0 4px;
   box-sizing: border-box;
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  border: 1px solid transparent;
+  column-gap: 9px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--raise);
+  background: transparent;
   color: var(--ink);
-  padding: 10px 12px;
   font: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-solid);
+  line-height: var(--line-height-tight);
+  text-align: left;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
+  transition: background-color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-new-run:hover,
-.sidebar-new-run:focus-visible {
-  background: var(--app-surface-hover);
-  border-color: var(--line-soft);
-  outline: none;
+.sidebar-new-run:hover {
+  background: var(--hover);
+}
+
+/* Where you are: the empty start screen is the new comparison. */
+body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
+  background: var(--selected);
 }
 
 .sidebar-new-run svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
+  width: 16px;
+  height: 16px;
+  justify-self: center;
 }
 
 /* Bookmarks stays visible as the navigation label. Hover reveals a dedicated
    search affordance; only clicking it replaces the row with the input. */
 .sidebar-bookmarks-head {
   position: relative;
-  min-height: 44px;
+  min-height: 36px;
   margin-bottom: 5px;
 }
 
@@ -4201,10 +4251,10 @@ body .theme-toggle:is(:hover, :focus-visible) {
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
 }
 
-/* Mobile navigation: no bar, two islands. The menu is a round button on the
-   left, the thread's actions a pill on the right; both wear the composer's
-   material (surface, 1px edge, shadow), so top and bottom read as one
-   system. Between them the thread stays visible. Once something scrolls
+/* Mobile navigation: no bar, two groups of bare glyphs. The menu mark on the
+   left, the thread's actions on the right; since 2026-10-20 neither sits in
+   a raised island (Apple-Audit G17: rahmenlos wie am Desktop). Between them
+   the thread stays visible. Once something scrolls
    beneath, the ground dissolves it over the top of the screen, the same way
    the composer's halo does at the bottom: tone, no blur.
    The existing scroll controller hides/reveals the entire header together. */
@@ -4302,7 +4352,10 @@ body .theme-toggle:is(:hover, :focus-visible) {
     transition: none;
   }
 
-  /* The edge is a ring, not a border, so the touch target stays 44px. */
+  /* The menu mark is bare, as on the desktop (Apple-Audit G17, Max'
+     decision): no raised circle, no ring, no shadow - a framed icon button
+     breaks the house rule. Once something scrolls beneath, the header's
+     ground fade (::before) carries it, not a backing of its own. */
   .app-mobile-header .sidebar-toggle {
     position: relative;
     width: 44px;
@@ -4401,12 +4454,12 @@ body .theme-toggle:is(:hover, :focus-visible) {
 
   body:has(.watch-page:not([hidden])) .app-mobile-header .app-nav-float { display: flex; }
 
-  /* The right island: New chat, then the answer's actions, in one pill. With
-     only New chat in it (start screen) it is as round as the menu. */
+  /* The right group: New chat, then the answer's actions, bare like the
+     menu mark on the left (Apple-Audit G17): one row of plain glyphs. */
   .mobile-conversation-actions {
     display: flex; align-items: center; gap: 0; order: 4; margin-inline-start: auto;
-    border-radius: var(--radius-pill); background: var(--composer-surface);
-    box-shadow: 0 0 0 1px var(--composer-edge), var(--composer-shadow);
+    border-radius: var(--radius-pill); background: transparent;
+    box-shadow: none;
   }
   .app-mobile-header .auth-top-actions { margin-inline-start: auto; }
   .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions { margin-inline-start: 0; }
@@ -4423,8 +4476,8 @@ body .theme-toggle:is(:hover, :focus-visible) {
     width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0;
     border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer;
   }
-  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--app-surface-hover); }
-  .app-mobile-header .consensus-actions-wrapper.open .consensus-actions-toggle { background: var(--app-surface-hover); }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--hover); }
+  .app-mobile-header .consensus-actions-wrapper.open .consensus-actions-toggle { background: var(--selected); }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 22px; height: 22px; flex: 0 0 22px; }
   .app-mobile-header :is(.consensus-share-pill, .consensus-actions-toggle) > span { display: none; }
@@ -4471,10 +4524,9 @@ body .theme-toggle:is(:hover, :focus-visible) {
   }
   #mobileSidebarViews .view-switch-btn.is-active {
     background: transparent; box-shadow: none; color: var(--ink);
-    font-weight: var(--font-weight-semibold);
   }
   #mobileSidebarViews .view-switch-btn.is-active::before { background: currentColor; }
-  #mobileSidebarViews .view-switch-btn:hover { background: var(--raise); color: var(--ink); }
+  #mobileSidebarViews .view-switch-btn:hover { background: var(--hover); color: var(--ink); }
   #mobileSidebarViews .view-switch-btn:focus-visible {
     outline: var(--focus-ring); outline-offset: -3px;
   }
@@ -4624,8 +4676,10 @@ body .theme-toggle:is(:hover, :focus-visible) {
   #mobileSidebarViews #viewSwitchWatches::before { content: none; }
   #mobileSidebarViews #viewSwitchWatches.has-watch-pulse::after { top: 50%; right: 14px; margin-top: -3px; }
 
-  /* Models (only outside Agent): one line, the count as a quiet value. */
+  /* Models (only outside Agent): one line, the count as a quiet value. All
+     rows share one left edge with New chat (Apple-Audit G2). */
   .models-section { margin: 0; }
+  .sidebar .sidebar-section { padding-inline: 0; }
   .sidebar .sidebar-model-copy { flex: 1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: 8px; }
   .sidebar .sidebar-model-copy strong { font-size: var(--font-size-sm); font-weight: var(--font-weight-regular, 400); }
   .sidebar .sidebar-model-copy span { color: var(--ink-3); font-size: var(--font-size-ui); font-weight: var(--font-weight-regular, 400); }

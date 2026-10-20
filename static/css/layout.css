@@ -111,7 +111,7 @@ body:has(.sidebar.collapsed) .app-nav-float {
     visibility: hidden;
     pointer-events: none;
     transform: translate(-50%, calc(-100% - 20px));
-    transition-delay: 0s, 0s, 0s, 0s, 0.22s;
+    transition-delay: 0s, 0s, 0s, 0.22s;
   }
 }
 
@@ -133,6 +133,27 @@ body:has(.sidebar.collapsed) .app-nav-float {
 
 body:has(.sidebar.collapsed) .brand-float {
   display: inline-flex;
+}
+
+/* Desktop: there is only ever one logo (Apple-Audit C3). Opening, the
+   floating mark fades out at once, before the panel brings its own; closing,
+   it fades in once the panel's mark has slid out of view, so the two never
+   stand side by side. It stays laid out, invisible, to fade at all. */
+@media (min-width: 1100px) {
+  .brand-float {
+    display: inline-flex;
+    opacity: 0;
+    visibility: hidden;
+    /* Gone within the first frames, before the panel's own mark reaches the
+       screen edge (about 55 ms into the slide). */
+    transition: opacity calc(var(--dur-press) / 2) linear, visibility 0s linear calc(var(--dur-press) / 2);
+  }
+
+  body:has(.sidebar.collapsed) .brand-float {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--dur-state) var(--ease-out) calc(var(--dur-layer) / 2), visibility 0s linear 0s;
+  }
 }
 
 /* Offene Overlay-Sidebar (mobil): Brand ausblenden, der Sidebar-Kopf zeigt es. */

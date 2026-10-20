@@ -180,7 +180,7 @@
 .agent-session-detail .agent-message-body { font-size: var(--font-size-xs); line-height: 1.7; white-space: normal; }
 .agent-session-detail .agent-message-body p { white-space: normal; }
 @media (min-width: 1200px) {
-  body.single-agent-active:not(.answer-reader-docked) .container { transition: width var(--dur-state) var(--ease-standard), max-width var(--dur-state) var(--ease-standard), margin-left var(--dur-state) var(--ease-standard); }
+  body.single-agent-active:not(.answer-reader-docked) .container { transition: width var(--dur-layer) var(--ease-standard), max-width var(--dur-layer) var(--ease-standard), margin-left var(--dur-layer) var(--ease-standard); }
   /* Activity overlays the shell without changing the reading column. */
   body.single-agent-active:not(.answer-reader-docked) .container {
     --agent-chat-width: min(var(--app-container-width), calc(100vw - var(--app-sidebar-offset) - 48px));

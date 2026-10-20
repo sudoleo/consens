@@ -1156,7 +1156,12 @@ function setMode(mode) {
 
 function selectAuthTab(mode) {
   if (formEl.dataset.mode === mode && !formEl.hidden) return;
-  setMode(mode);
+  // Sign up hides the password row: the dialog follows its fields with one
+  // height movement instead of jumping (Apple-Audit C9; App.watchUi.smoothHeight).
+  const smooth = window.App?.watchUi?.smoothHeight;
+  const box = formEl.closest(".auth-modal");
+  if (smooth && box) smooth(box, () => setMode(mode));
+  else setMode(mode);
   trackAppEvent("auth_mode_changed", { mode });
 }
 
