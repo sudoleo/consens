@@ -44,7 +44,59 @@ describe("Agent sidebar", () => {
     expect(w.App.agentDelegation.isTicking()).toBe(false);
     dom.window.close();
   });
-  it('opens as a sheet only on request under 1200 px, with a scrim and a focus trap', () => {
+  it('leaves the way it came: slides out with its scrim and is hidden only then (Apple audit C5)', async () => {
+    const {window:w,document:d,dom} = bootNarrow();
+    receive(w, agent());
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    d.querySelector('.agent-sidebar-toggle').click();
+    const sidebar = d.getElementById('agentSidebar'), scrim = d.querySelector('.agent-sidebar-scrim');
+    d.querySelector('.agent-sidebar-close').click();
+    expect(sidebar.hidden).toBe(false);
+    expect(sidebar.classList.contains('is-leaving')).toBe(true);
+    expect(scrim.classList.contains('is-leaving')).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 260));
+    expect(sidebar.hidden).toBe(true);
+    expect(scrim.hidden).toBe(true);
+    expect(sidebar.classList.contains('is-leaving')).toBe(false);
+    dom.window.close();
+  });
+  it("stays open over a chat's next message, waiting for its calls (Apple audit A9)", async () => {
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[agent(1,'completed')],status:'succeeded'})}));
+    receive(w, agent(1, 'completed'));
+    w.App.agentDelegation.project({chatId,turnId,running:false});
+    d.querySelector('.agent-sidebar-toggle').click();
+    const sidebar = d.getElementById('agentSidebar');
+    expect(sidebar.hidden).toBe(false);
+    // The follow-up starts: the server has not named its turn yet.
+    w.App.agentDelegation.project({chatId,running:true});
+    expect(sidebar.hidden).toBe(false);
+    expect(sidebar.classList.contains('is-leaving')).toBe(false);
+    expect(sidebar.querySelector('.agent-sidebar-progress').textContent).toBe('Starting…');
+    // Its turn arrives: the panel shows it, still open, without a new entrance.
+    w.App.agentDelegation.project({chatId,turnId:'e'.repeat(32),running:true});
+    expect(sidebar.hidden).toBe(false);
+    expect(sidebar.classList.contains('is-leaving')).toBe(false);
+    dom.window.close();
+  });
+  it("shows a saved turn's model icons at once and lets only live arrivals settle in (Apple audit A10)", async () => {
+    let release;
+    const {window:w,document:d,dom} = boot(() => new Promise(resolve => { release = () => resolve({ok:true,json:async () => ({agents:[agent(1,'completed')],status:'succeeded'})}); }));
+    w.App.agentDelegation.project({chatId,turnId,running:false,
+      models:[{model:{model:'anthropic/claude-haiku-4.5',label:'Haiku',provider:'anthropic'}}]});
+    const icon = d.querySelector('.agent-inline-model');
+    expect(icon).not.toBeNull();
+    expect(icon.classList.contains('is-arriving')).toBe(false);
+    await vi.waitFor(() => expect(typeof release).toBe('function'));
+    release(); await settle(); await settle();
+    // The loaded list completes the same icon instead of replacing it.
+    expect(d.querySelector('.agent-inline-model')).toBe(icon);
+    w.App.agentDelegation.project({chatId,turnId:'f'.repeat(32),running:true});
+    w.App.agentDelegation.receive({ metadata: { chatId }, auth: { uid: "owner" } },
+      { version: 1, chat_id: chatId, turn_id: 'f'.repeat(32), agent: agent(1, 'working', 'b'.repeat(32)) });
+    expect(d.querySelector('.agent-inline-model').classList.contains('is-arriving')).toBe(true);
+    dom.window.close();
+  });
+  it('opens as a sheet only on request under 1200 px, with a scrim and a focus trap', async () => {
     const {window:w,document:d,dom} = bootNarrow();
     receive(w, agent());
     w.App.agentDelegation.project({chatId,turnId,running:true});
@@ -61,9 +113,11 @@ describe("Agent sidebar", () => {
     const scrim = d.querySelector('.agent-sidebar-scrim');
     expect(scrim.hidden).toBe(false);
     scrim.click();
+    expect(d.activeElement).toBe(toggle);
+    // It slides out first (C5), then is hidden.
+    await new Promise(resolve => setTimeout(resolve, 260));
     expect(sidebar.hidden).toBe(true);
     expect(scrim.hidden).toBe(true);
-    expect(d.activeElement).toBe(toggle);
     dom.window.close();
   });
   it('does not rewrite row titles or status text when nothing changed', () => {
@@ -311,6 +365,8 @@ describe("Agent sidebar", () => {
     expect(d.activeElement).toBe(focused);
     d.querySelector(".agent-sidebar-close").click();
     receive(w, agent(2, "question")); receive(w, agent(1));
+    // It slides out first (Apple audit C5).
+    await new Promise(resolve => setTimeout(resolve, 260));
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
     expect(d.querySelector(".agent-session").dataset.status).toBe("question");
     expect(d.querySelectorAll(".agent-session")).toHaveLength(1);
@@ -320,6 +376,8 @@ describe("Agent sidebar", () => {
     d.querySelector(".agent-sidebar-toggle").click();
     expect(d.getElementById("agentSidebar").hidden).toBe(false);
     d.getElementById("agentSidebar").dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(d.body.classList.contains("agent-sidebar-open")).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 260));
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
     dom.window.close();
   });

@@ -20,6 +20,13 @@
   from { opacity: 0; transform: translate(var(--agent-enter-x), var(--agent-enter-y)); }
   to { opacity: 1; transform: translate(0, 0); }
 }
+/* It leaves the way it came (agent-delegation.js setPanelVisible, Apple
+   audit C5): the same distance and direction, a little faster. */
+.agent-sidebar.is-leaving { animation: agent-sidebar-leave .2s cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes agent-sidebar-leave {
+  from { opacity: 1; transform: translate(0, 0); }
+  to { opacity: 0; transform: translate(var(--agent-enter-x), var(--agent-enter-y)); }
+}
 .agent-sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 34px; padding-left: 2px; }
 .agent-sidebar-header h2 { margin: 0; font-size: var(--font-size-sm); font-weight: 600; }
 .agent-sidebar-actions { display: flex; align-items: center; gap: 4px; }
@@ -203,6 +210,8 @@
 @media (prefers-reduced-motion: no-preference) {
   .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter .2s ease both; }
   @keyframes agent-scrim-enter { from { opacity: 0; } }
+  .agent-sidebar-scrim.is-leaving { animation: agent-scrim-leave .2s ease both; pointer-events: none; }
+  @keyframes agent-scrim-leave { to { opacity: 0; } }
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model,
@@ -370,6 +379,17 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity > summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .agent-activity > summary:hover { color: var(--ink); }
 .agent-activity-title { font-weight: 500; font-variant-numeric: tabular-nums; }
+/* A field of fixed width for the clock (agent-activity.js setTitle): the
+   verb is as wide as the wider of "Working for" and "Thought for" (the
+   other one stands invisibly in the same cell), the time as wide as its
+   largest value in its unit. The chevron and the model icons stay put while
+   it ticks and when it ends (Apple audit A7). */
+.agent-activity-verb { display: inline-grid; justify-items: start; }
+.agent-activity-verb > .agent-activity-verb-text, .agent-activity-verb::after { grid-area: 1 / 1; }
+.agent-activity-verb::after { content: attr(data-ghost); visibility: hidden; speak: never; }
+.agent-activity-time { display: inline-block; text-align: left; }
+.agent-activity-time[data-unit="seconds"] { min-width: 3ch; }
+.agent-activity-time[data-unit="minutes"] { min-width: 6.4ch; }
 .agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform var(--dur-state) var(--ease-standard); opacity: .6; }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(225deg); }
 .agent-activity.is-closing .agent-activity-chevron { transform: rotate(45deg); }

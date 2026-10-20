@@ -70,6 +70,18 @@ describe('composer autosize', () => {
     app.dom.window.close();
   });
 
+  it('measures without letting the page get shorter, so the end of a chat stays put (Apple audit A12)', () => {
+    const held = [];
+    const app = boot({ measure: (_, field) => { held.push(field.parentElement.style.minHeight); return 52; } });
+    app.field.parentElement.getBoundingClientRect = () => ({ height: 124 });
+    app.input('A first letter');
+    // While the field stood at 0 px, its holder kept its whole height ...
+    expect(held.at(-1)).toBe('124px');
+    // ... and lets go of it afterwards.
+    expect(app.field.parentElement.style.minHeight).toBe('');
+    app.dom.window.close();
+  });
+
   it('still responds to placeholder changes and explicit viewport changes', async () => {
     const app = boot({ measure: (_, field) => field.placeholder.length > 30 ? 190 : 52 });
     app.tick();

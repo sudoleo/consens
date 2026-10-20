@@ -1941,6 +1941,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   pro Animationsframe hoechstens einmal nach. Reine Hoehenmeldungen werden
   ignoriert, damit eigene Schreibzugriffe keine Schleife erzeugen. So bleibt
   nach einer schmalen Zwischenbreite kein ueberhohes leeres Feld stehen.
+  Gemessen wird bei Hoehe 0, aber der Elternblock haelt dabei seine Hoehe
+  (`min-height`, danach geloest): die Seite wird fuer die Messung nie kuerzer,
+  sonst zog die Scroll-Klammer des Browsers am Chatende den Text beim ersten
+  Tastendruck hoch (seit 2026-10-20, Apple-Audit A12).
   `tests/js/composer-autosize.test.mjs` prueft diese Ereignisgrenzen; der Smoke-
   Browserfall prueft echtes Layout inklusive der abgeschlossenen Transition.
 - **Hero ↔ Thread gleitet (2026-10-03)** — `.input-section` hat keine
@@ -5404,7 +5408,11 @@ Versionsdaten ersetzen niemals den bekannten Familiennamen.
 Ab 1400px ist der einfache Leser rechts angedockt, mit entsprechend schmalerer
 Chatspalte. Die Dockbreite waechst zwischen 520 und 720px (36vw); der Chat bleibt in der
 Restflaeche zwischen linker Navigation und Leser zentriert, auch bei eingeklappter
-Navigation. Die Textbreite des Chats bleibt auf 900px begrenzt.
+Navigation. Die Textbreite des Chats bleibt auf 900px begrenzt. Andocken und
+Lösen halten die Zeile fest, die den Leser öffnete (sonst den ersten Textblock
+oben im Bild): `modeLayout` misst sie vor dem Klassenwechsel und scrollt im
+selben Bild um die Verschiebung zurück (`readingAnchor`, seit 2026-10-20,
+Apple-Audit A8).
 Auf kleineren Viewports sowie beim erweiterten Zweiervergleich oeffnet er modal
 (native Fokusbegrenzung/Escape); bis 1099px bildschirmfuellend
 inklusive Safe-Area-Abstaenden. Im Dialog stehen zwei Antworten erst ab 760px tatsaechlicher
@@ -8670,8 +8678,26 @@ bei Platz neben der Spalte). Das Panel-Symbol neben den Modell-Icons
 `aria-controls="agentSidebar"`) oder ein Modell-Icon öffnet sie: unter 1200 px
 als Sheet mit Scrim, Fokusfalle und Escape, ab 1200 px daneben; offen rückt
 die Spalte nach links (`body.agent-sidebar-open`), statt unter der Leiste zu
-liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
+liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt, **und seit
+2026-10-20 auch pro Chat** (`agent-panel:{uid}:{chatId}` in sessionStorage,
+Apple-Audit A9): ein neuer Turn übernimmt die Wahl des Chats, und solange eine
+Folgefrage ihren Turn noch nicht kennt (`project({chatId, running})` ohne
+`turnId`), bleibt eine offene Leiste mit „Starting…“ stehen, statt zu- und
+wieder aufzugehen. Sie geht auf demselben Weg, wie sie kam
+(`setPanelVisible`, `.is-leaving` gleitet/blendet samt Scrim aus, erst danach
+`hidden`; C5). Logo-Einflug (`.agent-inline-model.is-arriving`) nur für Modelle,
+die während eines laufenden Turns dazukommen; ein gespeicherter Turn zeigt seine
+Logos sofort aus `agent_review` (`project({models})`, `agent-chat.js`
+`reviewModels`), die spätere Agent-Liste ergänzt dieselben Knöpfe (A10). Der
+2,5-s-Takt existiert nur
 während eines laufenden bzw. abschließenden Laufs und endet danach.
+Die Kopfzeile tickt in einem Feld fester Breite (A7): `.agent-activity-verb`
+reserviert die Breite des breiteren Verbs („Working for“/„Thought for“, das
+andere unsichtbar per `data-ghost`), `.agent-activity-time[data-unit]` die des
+größten Werts seiner Einheit; eine live tickende Uhr hält von der ersten Sekunde
+an den Minuten-Platz und behält ihn fürs Endlabel. Pfeil und Logos stehen still
+(gemessen: Chevron bei 9 s, 10 s, 1 min und „Thought for“ auf demselben Pixel),
+der Wortlaut bleibt.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
 Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:
 `checkRow` fasst alle Versuche, Wiederholungen und Backup-Judges zu einer Zeile

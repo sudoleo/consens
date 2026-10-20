@@ -459,7 +459,16 @@
     get("PreviewIntro").hidden = !selected?.preview;
     const modal = open && !direct && (!wideScreen.matches || expanded || pair);
     const docked = open && !direct && !modal;
+    // Docking narrows the reading column (model-answer-reader.css) and every
+    // line wraps anew. The line the reader clicked stays where it was: its
+    // top is measured before and restored right after, in the same frame
+    // (Apple audit A8). Undocking holds it the same way.
+    const keep = docked !== document.body.classList.contains("answer-reader-docked") ? readingAnchor() : null;
     document.body.classList.toggle("answer-reader-docked", docked);
+    if (keep) {
+      const shift = keep.element.getBoundingClientRect().top - keep.top;
+      if (Math.abs(shift) > .5) window.scrollTo({ top: Math.max(0, window.scrollY + shift), left: window.scrollX, behavior: "instant" });
+    }
     document.body.classList.toggle("answer-reader-modal", modal);
     root.classList.toggle("is-direct", direct);
     if (composer && composerAnchor.parentNode) {
@@ -764,6 +773,25 @@
       }
     }
     return true;
+  }
+  // What to hold in place when the column width changes: the element that
+  // opened the reader, if it stands in the thread on screen, else the first
+  // block of text at the top of the screen.
+  function readingAnchor() {
+    const column = document.querySelector(".container");
+    if (!column) return null;
+    const onScreen = element => {
+      const box = element?.isConnected && column.contains(element) ? element.getBoundingClientRect() : null;
+      return box && box.height > 0 && box.bottom > 0 && box.top < window.innerHeight ? box : null;
+    };
+    const trigger = opener?.closest?.(".cx-claim, .src-ref, .consensus-tab, button, a") || opener;
+    let box = onScreen(trigger);
+    if (box) return { element: trigger, top: box.top };
+    for (const element of column.querySelectorAll(".consensus-answer-body > *, .thread-ask, .thread-history-question")) {
+      box = onScreen(element);
+      if (box && box.top >= 0) return { element, top: box.top };
+    }
+    return null;
   }
   function rememberOpener(trigger) {
     const target = trigger || document.activeElement;

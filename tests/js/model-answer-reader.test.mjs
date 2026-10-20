@@ -49,6 +49,29 @@ function archive(ctx, id = "t1") {
 }
 afterEach(() => { contexts.splice(0).forEach(ctx => ctx.dom.window.close()); });
 
+describe("model answer reader docking", () => {
+  it("keeps the line that opened it where it was when the column narrows (Apple audit A8)", () => {
+    const ctx = boot();
+    const { document, window } = ctx;
+    let scrollY = 1000;
+    Object.defineProperty(window, "scrollY", { get: () => scrollY, configurable: true });
+    window.scrollTo = vi.fn(({ top }) => { scrollY = top; });
+    const column = document.createElement("div"); column.className = "container";
+    const trigger = document.createElement("button"); trigger.className = "consensus-tab";
+    column.append(trigger); document.body.append(column);
+    // Docked, the narrower column wraps every line: the trigger lands 140 px lower.
+    trigger.getBoundingClientRect = () => ({ top: (document.body.classList.contains("answer-reader-docked") ? 440 : 300) - (scrollY - 1000),
+      bottom: 0, height: 20 });
+    trigger.getBoundingClientRect = (base => () => { const box = base(); box.bottom = box.top + 20; return box; })(trigger.getBoundingClientRect);
+    ctx.project(run());
+    trigger.focus();
+    ctx.reader.openPanel("sources", trigger);
+    expect(document.body.classList.contains("answer-reader-docked")).toBe(true);
+    expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 1140, behavior: "instant" }));
+    expect(trigger.getBoundingClientRect().top).toBe(300);
+  });
+});
+
 describe("model answer reader", () => {
   it("keeps explicit tool evidence isolated across panels, bases, refresh and reset", () => {
     const ctx = boot(); ctx.project(run());

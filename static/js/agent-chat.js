@@ -477,7 +477,8 @@
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_settings_proposal : null });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
-        usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
+        usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending",
+        models: reviewModels(basis.currentTurn?.agent_review) } : null);
     }
     if (!agent || (!context && !basis)) {
       markLiveTurn(null);
@@ -489,6 +490,19 @@
     }
     window.updateQuestionInputAccess?.();
     syncPendingReview();
+  }
+  // The models a saved turn compared, from its review: its icons stand at
+  // once, before the activity list loads (agent-delegation.js, Apple audit A10).
+  function reviewModels(review) {
+    const models = new Map();
+    for (const comparison of review?.comparisons || []) {
+      for (const answer of comparison.answers || []) {
+        const label = answer.model?.label || answer.provider_label || answer.provider;
+        const key = answer.model?.model || label;
+        if (key && !models.has(key)) models.set(key, { model: { model: answer.model?.model, label, provider: answer.provider } });
+      }
+    }
+    return [...models.values()];
   }
   // Links become the same source pills the finished answer shows while their
   // block streams in. Turning them into pills only when the check arrived
@@ -771,9 +785,13 @@
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();
-    App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
+    const delegated = context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation;
+    // Before the server named the new turn, a chat whose activity panel is
+    // open keeps it open, waiting (agent-delegation.js, Apple audit A9).
+    App.agentDelegation?.project(delegated ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
-      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId) } : null);
+      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running }
+      : running ? { chatId: context.metadata.chatId || context.basis?.chatId, running: true } : null);
   }
   function apiError(data) {
     const error = data?.error || data?.detail;

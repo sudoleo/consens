@@ -7,6 +7,13 @@
     const COMPOSER_MULTILINE_CLASS = "is-multiline";
 
     function measureQuestionInput() {
+      // The field is measured at height 0, but its holder keeps its height
+      // meanwhile: the page never gets shorter for the measurement, so a
+      // reader at the end of a long chat is not pulled up by the browser's
+      // scroll clamp on the first key press (Apple audit A12).
+      const holder = questionInput.parentElement;
+      const heldMinHeight = holder ? holder.style.minHeight : "";
+      if (holder) holder.style.minHeight = `${holder.getBoundingClientRect().height}px`;
       questionInput.style.height = "0px";
       questionInput.style.overflowY = "hidden";
       const styles = window.getComputedStyle(questionInput);
@@ -17,6 +24,7 @@
 
       questionInput.style.height = `${Math.ceil(nextHeight)}px`;
       questionInput.style.overflowY = contentHeight > maxHeight + 1 ? "auto" : "hidden";
+      if (holder) holder.style.minHeight = heldMinHeight;
       return { minHeight, nextHeight };
     }
 

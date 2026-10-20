@@ -108,6 +108,36 @@
     if (statuses[status] === statuses.cancelled) return `Stopped after ${time}`;
     return `Thought for ${time}`;
   }
+  // The clock ticks in a field of fixed width, so the chevron and the model
+  // icons after it never move (Apple audit A7): the time sits in a slot as
+  // wide as its largest value in the same unit ("59s", "9m 59s"), and the
+  // verb ("Working for" / "Thought for") takes the width of the wider of
+  // the two, so the end of the run changes the words, not the line.
+  const SETTLED_VERBS = { running: "Working for", done: "Thought for" };
+  function setTitle(view, ms, running, status) {
+    const label = durationLabel(ms, running, status);
+    if (view.title.dataset.label === label) return;
+    view.title.dataset.label = label;
+    const time = Number.isFinite(ms) ? durationText(ms) : "";
+    const verb = time ? label.slice(0, label.length - time.length).trimEnd() : label;
+    const verbEl = view.title.querySelector(".agent-activity-verb-text");
+    const timeEl = view.title.querySelector(".agent-activity-time");
+    if (verbEl.textContent !== verb) verbEl.textContent = verb;
+    // The other verb stands invisibly in the same cell (agent-chat.css), so
+    // the field is as wide as the wider one; it is no text of the title.
+    const paired = verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : verb === SETTLED_VERBS.done ? SETTLED_VERBS.running : "";
+    const holder = verbEl.parentElement;
+    if (paired) holder.dataset.ghost = paired; else delete holder.dataset.ghost;
+    view.title.querySelector(".agent-activity-gap").textContent = time ? " " : "";
+    if (timeEl.textContent !== time) timeEl.textContent = time;
+    const seconds = Math.floor(Math.max(0, ms || 0) / 1000);
+    const unit = !time ? "" : seconds < 60 ? "seconds" : seconds < 600 ? "minutes" : "long";
+    // A live clock reserves the minutes slot from its first second, and the
+    // label it ends with keeps the slot it ticked in: neither the first
+    // minute nor the end of the run moves the line.
+    if (running) view.liveSlot = unit === "long" ? "long" : "minutes";
+    timeEl.dataset.unit = view.liveSlot && unit !== "long" ? view.liveSlot : unit;
+  }
   function updateClock(view, elapsedMs, running, status) {
     clearInterval(view.clockTimer);
     view.clockTimer = null;
@@ -118,7 +148,7 @@
     view.clockRunning = running;
     const tick = () => {
       const elapsed = view.elapsedMs === null ? null : view.elapsedMs + (view.clockRunning ? performance.now() - view.clockAt : 0);
-      view.title.textContent = durationLabel(elapsed, running, status);
+      setTitle(view, elapsed, running, status);
     };
     tick();
     if (running) view.clockTimer = setInterval(tick, 1000);
@@ -298,6 +328,12 @@
       title.className = "agent-activity-title";
       title.setAttribute("role", "timer");
       title.setAttribute('aria-live', 'off');
+      const verb = document.createElement("span"); verb.className = "agent-activity-verb";
+      const verbText = document.createElement("span"); verbText.className = "agent-activity-verb-text";
+      verb.append(verbText);
+      const gap = document.createElement("span"); gap.className = "agent-activity-gap";
+      const time = document.createElement("span"); time.className = "agent-activity-time";
+      title.append(verb, gap, time);
       const chevron = document.createElement("span");
       chevron.className = "agent-activity-chevron";
       chevron.setAttribute("aria-hidden", "true");
