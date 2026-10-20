@@ -201,7 +201,7 @@ def test_attachments_open_for_every_tier_but_not_for_guests():
     with pytest.raises(HTTPException) as excinfo:
         parse_attachments(data, attachments_allowed=False)
     assert excinfo.value.status_code == 403
-    assert excinfo.value.detail == "Sign in to attach files."
+    assert excinfo.value.detail == "Log in to attach files."
 
 
 # --- Firestore-Lookup ------------------------------------------------------

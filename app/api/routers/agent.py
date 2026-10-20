@@ -52,7 +52,7 @@ def require_agent_access(uid):
     rather than fail later inside a route.
     """
     if not uid:
-        raise HTTPException(status_code=401, detail="Sign in to use Agent.")
+        raise HTTPException(status_code=401, detail="Log in to use Agent.")
     try:
         get_user_tier(uid)
     except TierStatusUnavailable:
@@ -514,7 +514,7 @@ def run_agent(request: Request, payload: AgentRequest):
             yield pack("error", refused)
         except Exception as exc:
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
-            yield pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.",
+            yield pack("error", {"error": "The answer was saved, but it couldn’t be added to your chats. Recover the saved answer to reopen it.",
                                  "code": "bookmark_unavailable", "recoverable": True, "recovery_state": "saved"})
 
     def produce():

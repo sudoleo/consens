@@ -310,7 +310,7 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
 
     def test_watch_requires_one_notification_channel(self):
-        with self.assertRaisesRegex(WatchError, "e-mail or Telegram"):
+        with self.assertRaisesRegex(WatchError, "email or Telegram"):
             watch_service.create_watch(
                 "u1", share_id=self.share_id, interval="weekly", tier="free",
                 email_enabled=False, telegram_enabled=False, db=self.db,
