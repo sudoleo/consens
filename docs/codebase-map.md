@@ -1222,8 +1222,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   mittlerer Titel entfällt. Der Kopf ist 56 px hoch mit Safe-Area-Zuschlag,
   selbst transparent und `pointer-events: none` (nur die Inseln nehmen Taps);
   sobald darunter gescrollt ist (`.is-scrolled` aus `mobile-header.js`,
-  Window-Scroll, auch auf der Watch-Seite), löst ein `--ground`-Verlauf (`::before`, 28 px unter die
-  Inseln) den Text auf, ohne Blur. **Safari-Leisten (seit 2026-10-18):**
+  Window-Scroll, auch auf der Watch-Seite), liegt `--ground` deckend hinter
+  dem ganzen Kopf und läuft 20 px darunter aus (`::before`, ohne Blur; seit
+  2026-10-20, Apple-Audit F13: vorher war der Grund schon 24 px unter der
+  Oberkante halb durchsichtig, und die Zeile zwischen den Knöpfen blieb lesbar). **Safari-Leisten (seit 2026-10-18):**
   iPhone-Safari (iOS 26, kein `theme-color` mehr) färbt die Streifen hinter
   Statusleiste und unterer Leiste nach dem fixierten Kasten an der Kante
   (WebKit `fixedContainerEdges`: Mitte der Kante 4 px innen treffen, ohne
@@ -8996,6 +8998,18 @@ Handy.
   Satzkarte, Dialog), Dimmflächen ohne Inhalt nehmen keinen Pan
   (`touch-action: none`). `tests/e2e/test_touch_layers.py` prüft Sperre und
   Wischen mit CDP-Touch-Events.
+  **Notch und Home-Balken (F12):** `/app` hat `viewport-fit=cover`
+  (`templates/index.html`), damit `env(safe-area-inset-*)` überhaupt wirkt
+  (vorher rechneten alle Abstände mit 0). Die Ränder halten frei: der Kopf
+  (`--app-mobile-header-height` + Padding), der fixierte Composer
+  (`padding-bottom: calc(10px | 8px + inset)`, Breite minus linke/rechte
+  Insets; sein Grund reicht weiter bis an die Kante), der `body`-Rand im
+  Querformat (`max(10px | 6px, inset)` links/rechts), die Schublade (oben,
+  unten, links), das Aktivitäts-Sheet, das Modellmenü am Handy, Hinweise
+  (`overlays.css`), Antwortleser und Dialoge. Öffentliche Seiten bleiben ohne
+  `cover` (Safari rahmt sie im Querformat in der Seitenfarbe).
+  `tests/e2e/test_safe_areas.py` simuliert die iPhone-Insets per CDP
+  (`Emulation.setSafeAreaInsetsOverride`), hoch- und querformatig.
 
 ---
 

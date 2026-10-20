@@ -1557,7 +1557,7 @@ body:has(.sidebar.active) .brand-float {
 
 @media (max-width: 640px) {
   body {
-    padding-inline: 6px;
+    padding-inline: max(6px, env(safe-area-inset-left, 0px)) max(6px, env(safe-area-inset-right, 0px));
   }
 
   .brand-float-title {

@@ -748,12 +748,12 @@
   .model-picker-menu,
   .consensus-model .select-wrapper .model-picker-menu {
     position: fixed;
-    top: 64px;
-    right: 12px;
-    left: 12px;
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
     width: auto;
     max-width: none;
-    max-height: calc(100dvh - 88px);
+    max-height: calc(100dvh - 88px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     z-index: 1500;
     overscroll-behavior: contain;
   }

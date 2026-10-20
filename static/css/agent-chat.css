@@ -216,7 +216,9 @@
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
   /* A sheet over the chat is a floating layer: the one place it lifts. */
-  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto; right: 12px; left: 12px; bottom: 12px; width: auto; max-height: min(80dvh, 720px); z-index: 1300;
+  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto;
+    right: max(12px, env(safe-area-inset-right, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: min(80dvh, 720px); z-index: 1300;
     border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
 }
 @media (prefers-reduced-motion: no-preference) {

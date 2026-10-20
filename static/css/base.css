@@ -11,6 +11,10 @@ body {
   margin: 0;
   padding: 10px;
   padding-top: 10px;
+  /* With viewport-fit=cover (index.html, Apple audit F12) the page reaches
+     under the notch of a phone on its side; the column keeps clear of it. */
+  padding-left: max(10px, env(safe-area-inset-left, 0px));
+  padding-right: max(10px, env(safe-area-inset-right, 0px));
   min-height: 100vh;
   box-sizing: border-box;
 }

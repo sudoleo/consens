@@ -2704,9 +2704,12 @@ body:not(.is-hero) .input-section {
     left: 50%;
     right: auto;
     bottom: 0;
-    width: min(var(--app-container-width), calc(100vw - 40px));
+    width: min(var(--app-container-width), calc(100vw - 40px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
     box-sizing: border-box;
     margin: 0;
+    /* The field stands above the home indicator (Apple-Audit F12); the
+       composer's ground still reaches the screen's edge under it. */
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
     /* iPhone Safari colours the strip behind its bottom bar after this box
        (see .app-mobile-header-edge); transparent, it measured pixels and kept
@@ -2718,7 +2721,7 @@ body:not(.is-hero) .input-section {
 
 @media (max-width: 640px) {
   body:not(.is-hero) .input-section {
-    width: calc(100vw - 32px);
+    width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
   }
 }
 
@@ -2757,7 +2760,7 @@ body:not(.is-hero) .input-section {
 
   body.composer-collapsed:not(.is-hero) .input-section {
     padding-top: 8px;
-    padding-bottom: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Auf- und Zuklappen ist eine Bewegung, kein Sprung. Zwischen den beiden
@@ -4475,17 +4478,19 @@ body .theme-toggle:focus-visible {
 
   /* The fade appears only once something scrolls beneath it
      (mobile-header.js sets .is-scrolled); on an empty start screen it would
-     dissolve nothing into nothing. Solid under the status bar, then gone
-     28px below the islands. */
+     dissolve nothing into nothing. Solid ground behind the whole bar, so no
+     line of the answer reads between the buttons (Apple-Audit F13: a half
+     transparent band looked washed out, neither surface nor free text),
+     then a short fade, gone 20px below it. */
   .app-mobile-header::before {
     content: "";
     position: absolute;
-    inset: 0 0 -28px;
+    inset: 0 0 -20px;
     z-index: -1;
     pointer-events: none;
     background: var(--ground);
-    -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(env(safe-area-inset-top, 0px) + 24px), transparent 100%);
-    mask-image: linear-gradient(180deg, #000 0, #000 calc(env(safe-area-inset-top, 0px) + 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 24px), transparent 100%);
     opacity: 0;
     transition: opacity var(--dur-state) var(--ease-standard);
   }
@@ -4794,7 +4799,7 @@ body .theme-toggle:focus-visible {
     --drawer-tint: color-mix(in srgb, var(--ink) 5%, transparent);
     --drawer-tint-strong: color-mix(in srgb, var(--ink) 7.5%, transparent);
     gap: 0;
-    padding: max(6px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px));
+    padding: max(6px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
   }
 
   /* Head: the mark and the panel glyph, nothing else. */
