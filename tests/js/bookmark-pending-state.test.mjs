@@ -131,7 +131,7 @@ describe("pending bookmark markup", () => {
     expect(row.classList.contains("is-pending")).toBe(true);
     expect(row.getAttribute("aria-disabled")).toBe("true");
     expect(row.querySelector(".bookmark-pending-spinner")).not.toBeNull();
-    expect(row.querySelector(".delete-bookmark")).toBeNull();
+    expect(row.querySelector(".bookmark-menu-button")).toBeNull();
     expect(row.textContent.trim()).toBe("A careful question");
     expect(row.getAttribute("aria-label")).toContain("A careful question");
     dom.window.close();

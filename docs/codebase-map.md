@@ -1020,9 +1020,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Watch-Seite), Watches bei offener Watch-Seite, der offene Chat (`.is-active`).
   „Chats“ (vorher „Bookmarks“, auch auf Desktop) ist eine leise Überschrift
   ohne Symbol, der Pfeil erscheint nur bei eingeklappter Liste. Chat-Zeilen sind
-  40 px hoch, rechts steht statt des × ein gedämpftes ··· (`BOOKMARK_DELETE_ICON`
-  in `firebase.js`, auch für Desktop-Hover); Antippen schaltet wie bisher auf
-  „Delete“ um, erst das zweite Antippen löscht. Die Liste läuft oben und unten
+  40 px hoch, rechts steht ein gedämpftes ··· (`.bookmark-menu-button`,
+  `BOOKMARK_MENU_ICON` in `firebase.js`, auch für Desktop-Hover); es öffnet seit
+  2026-10-20 ein echtes Menü (Rename, Share, Delete, siehe „Chatliste:
+  Zeilen, Menü, Löschen mit Undo“). Die Liste läuft oben und unten
   per `mask-image` weich aus statt eine Zeile anzuschneiden; Trennlinien
   (Reiter-Unterstrich, Linie über dem Konto) entfallen, der Tarif im Fuß ist
   grau (Gold bleibt am Kürzel). Imprint · Privacy · Terms bleiben bewusst
@@ -2744,8 +2745,11 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   direkt darunter „Watched“). Ein geöffnetes Bookmark beendet den Hero-
   Leerzustand sofort. Bookmark-
   Jeder vom Server bestätigte Save (`upsertBookmarkMeta`, nicht das Laden der
-  Liste) fordert für ein Bookmark ohne `title_source: "generated"` einmal pro
-  Sitzung `POST /bookmarks/{id}/title` an (`requestBookmarkTitle`) und blendet
+  Liste) fordert für ein Bookmark ohne `title_source` `"generated"`/`"user"`
+  (`KEPT_TITLE_SOURCES`) einmal pro
+  Sitzung `POST /bookmarks/{id}/title` an (`requestBookmarkTitle`); ein vom
+  Nutzer gesetzter Name kommt über `PATCH /bookmarks/{id}/title` (`{title}`,
+  `rename_bookmark`, schreibt auch den Chat-Titel) und bleibt. `requestBookmarkTitle` blendet
   den Namen in Sidebar-Zeile, Run-Zeile und `bookmarksData` weich ein
   (`applyBookmarkTitle`); ältere Unterhaltungen bekommen ihn beim nächsten
   Turn. Liste, Saves und Löschen stoßen außerdem
@@ -4403,6 +4407,35 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   fehlendes, fehlerhaftes oder fremdes Transkript (`chat_id` ≠ Detail) fällt wie
   bisher auf die gespeicherten Fortsetzungsdaten zurück. Jedes Registry-
   Sichtereignis räumt eine noch stehende Öffnung weg.
+- **Chatliste: Zeilen, Menü, Löschen mit Undo (seit 2026-10-20, Apple-Audit
+  E2/E5/H11/C7/A11/C12).** Eine gespeicherte Zeile ist `div.bookmark[data-id]`
+  mit `p[role=button][tabindex=0]` (Titel = Tastatur-Bedienelement, Enter/Leertaste
+  öffnet, der Fokusring liegt um die ganze Zeile) und `.bookmark-menu-button`
+  („…“, `aria-haspopup="menu"`). Klicks und Tasten laufen über je **einen
+  delegierten Listener** (`firebase.js` für gespeicherte Zeilen, `run-view.js`
+  für `.run-entry`). Das Menü (`.bookmark-menu`, auf `<body>`, Material des
+  Composer-Menüs) bietet Rename (Titel wird zum gleich großen Feld; Enter/
+  Verlassen speichert über `PATCH /bookmarks/{id}/title`, `title_source:
+  "user"`, das wie `generated` spätere Saves und Namensgenerierung übersteht,
+  `persistence_guard.KEPT_TITLE_SOURCES`), Share (öffnet den Chat, dann den
+  Share-Dialog) und Delete. **Löschen** blendet die Zeile sofort aus
+  (`.is-undo-pending`), verlässt einen offenen Chat sofort und zeigt
+  `App.undoNotice` „Chat deleted · Undo“ (5 s, Hover/Fokus pausieren); erst
+  danach läuft das unveränderte `deleteBookmark` (Fence, Run-Abbruch, DELETE).
+  Ein neuer Lauf (Registry `created`), eine verdeckte Seite und Logout löschen
+  sofort (`settleUndoableBookmarkDeletes`), damit Chat-Limit und Seitenende nie
+  warten. Die Lauf-Zeile (`ensureRunRow`) wird einmal gebaut und schreibt
+  danach nur geänderte Wörter (Puls läuft durch), hat die Höhe einer
+  gespeicherten Zeile und wird am Ende **an Ort und Stelle** zur gespeicherten
+  Zeile (`settleRunRow`: Status blendet aus, `padding-right` gleitet).
+  Neue Zeilen öffnen ihren Platz weich (`bookmarkUi.insertSoftly`). Eine Suche
+  ohne Treffer sagt „No chats match …“ (`#bookmarksSearchEmpty`, `app-init.js`
+  `filterBookmarks`); die leere Liste eines neuen Kontos bleibt leer.
+- **`App.undoNotice` (`static/js/undo-notice.js`, `css/undo-notice.css`) —
+  gemeinsamer Baustein** für jeden rücknehmbaren Schritt, bis Welle 2 das
+  gemeinsame Hinweis-System baut: `show({text, actionLabel, onAction, onExpire,
+  duration})` → `{settle(), cancel()}`; eine neue Zeile erledigt die vorige
+  (ihr `onExpire` läuft). Eine Zeile unten mittig, `role=status`.
 - Jeder asynchrone Callback prüft Run- und Auth-Identität, mutiert ausschließlich
   den eigenen Context und rendert den Haupt-DOM nur, wenn dessen `runId` gerade
   sichtbar ist. Quellen-Mapping arbeitet auf expliziten Listen statt

@@ -93,8 +93,10 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
     assert "window.App.consensusPipeline?.detach?.()" in view
     assert "pipeline.setRunFacts?.(runFacts(context))" in view
     assert 'row.dataset.runId = context.runId' in view
-    assert 'const open = () => { registry.show(context.runId); window.App.chatScroll?.opened?.(); };' in view
-    assert 'row.addEventListener("click", open)' in view
+    # One delegated listener opens every run row, also one that became a
+    # saved row in place (Apple audit C7/A11).
+    assert "registry.show(row.dataset.runId);\n    window.App.chatScroll?.opened?.();" in view
+    assert '"#bookmarksContainer .bookmark.run-entry[data-run-id]"' in view
     assert "if (registry.isVisible(context.runId))" not in view  # projector is already selected-only
 
     new_comparison = init.split('getElementById("newRunButton")', 1)[1].split(

@@ -32,6 +32,8 @@
 /* The composer row's layout, for every mode (see its header). */
 @import url('./css/composer.css');
 @import url('./css/chat-scroll.css');
+/* "Chat deleted · Undo" and every other undoable step (undo-notice.js). */
+@import url('./css/undo-notice.css');
 /* Native selects: chevron and open list, after every component's box. */
 @import url('./css/select.css');
 /* The login / sign-up dialog, standalone after every component layer. */

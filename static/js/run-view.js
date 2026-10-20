@@ -428,6 +428,18 @@
     return "Running";
   }
 
+  const RUN_STATUSES = ["starting", "running", "succeeded", "failed", "canceled"];
+  function setIfChanged(element, property, value) {
+    if (element[property] !== value) element[property] = value;
+  }
+  function setAttributeIfChanged(element, name, value) {
+    if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+  }
+  // A run's row is built once; afterwards only what changed is written, so
+  // its pulse runs on instead of restarting with every registry event
+  // (Apple audit C7). It has a saved row's height and becomes the saved row
+  // in place when the chat is saved (firebase.js replacePendingBookmarkWithReady),
+  // so the list below it never moves (A11).
   function ensureRunRow(context) {
     if (!context?.bookmark?.id || !context.auth?.uid) return;
     if (context.bookmark.deleted || context.bookmark.deleting) return;
@@ -442,39 +454,54 @@
       row.dataset.id = context.bookmark.id;
       row.setAttribute("role", "button");
       row.setAttribute("tabindex", "0");
-      const open = () => { registry.show(context.runId); window.App.chatScroll?.opened?.(); };
-      row.addEventListener("click", open);
-      row.addEventListener("keydown", event => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          open();
-        }
-      });
+      const label = document.createElement("p");
+      const status = document.createElement("span");
+      status.className = "run-entry-status";
+      status.setAttribute("aria-hidden", "true");
+      row.append(label, status);
       const savedRow = document.querySelector(
         `.bookmark:not(.run-entry)[data-id="${context.bookmark.id}"]`
       );
-      if (savedRow) savedRow.replaceWith(row);
-      else container.prepend(row);
+      if (savedRow) {
+        // A follow-up keeps its chat's place and marking.
+        if (savedRow.classList.contains("is-active")) row.classList.add("is-active");
+        savedRow.replaceWith(row);
+      } else {
+        container.prepend(row);
+        window.App.bookmarkUi?.insertSoftly?.(row);
+      }
     }
-
-    const active = row.classList.contains("is-active");
-    row.className = `bookmark run-entry run-status-${context.status}`;
-    if (active) row.classList.add("is-active");
-    if (context.status === "starting" || context.status === "running") row.classList.add("is-pending");
-    row.setAttribute("aria-label", `${context.bookmark.title || context.question}. ${statusLabel(context)}. Open run.`);
-    row.title = `${statusLabel(context)} — open this run`;
-    row.replaceChildren();
-    const label = document.createElement("p");
+    for (const status of RUN_STATUSES) row.classList.toggle(`run-status-${status}`, status === context.status);
+    row.classList.toggle("is-pending", context.status === "starting" || context.status === "running");
+    setAttributeIfChanged(row, "aria-label", `${context.bookmark.title || context.question}. ${statusLabel(context)}. Open run.`);
+    setIfChanged(row, "title", `${statusLabel(context)} — open this run`);
+    const label = row.querySelector(":scope > p");
     // The whole name; the row's own ellipsis cuts it where the space ends.
-    label.textContent = String(context.bookmark.title || context.question || "New comparison").replace(/\s+/g, " ").trim();
-    const status = document.createElement("span");
-    status.className = "run-entry-status";
-    status.textContent = context.persistence?.errors?.length && context.status === "succeeded"
+    if (label) setIfChanged(label, "textContent", String(context.bookmark.title || context.question || "New comparison").replace(/\s+/g, " ").trim());
+    const status = row.querySelector(":scope > .run-entry-status");
+    if (status) setIfChanged(status, "textContent", context.persistence?.errors?.length && context.status === "succeeded"
       ? `${statusLabel(context)} · not saved`
-      : statusLabel(context);
-    status.setAttribute("aria-hidden", "true");
-    row.append(label, status);
+      : statusLabel(context));
   }
+
+  // One listener for every run row, also one that became a saved row in
+  // place (firebase.js serves those).
+  function openRunRow(row) {
+    if (!registry.get(row.dataset.runId)) return;
+    registry.show(row.dataset.runId);
+    window.App.chatScroll?.opened?.();
+  }
+  document.addEventListener("click", event => {
+    const row = event.target.closest?.("#bookmarksContainer .bookmark.run-entry[data-run-id]");
+    if (row) openRunRow(row);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest?.("#bookmarksContainer .bookmark.run-entry[data-run-id]");
+    if (!row || event.target !== row) return;
+    event.preventDefault();
+    openRunRow(row);
+  });
 
   window.addEventListener("consensio:run-registry-change", event => {
     const context = event.detail?.context;

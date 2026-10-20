@@ -589,7 +589,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   background: transparent;
   box-shadow: none;
   color: var(--ink);
-  /* Right side stays free for the delete X (layout.css); on touch it is
+  /* Right side stays free for the "…" menu (layout.css); on touch it is
      always shown with a row-high tap target. */
   padding: 6px 34px 6px 8px;
 }
@@ -1025,7 +1025,8 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
     animation: send-fan-out 0.6s ease-out;
   }
 
-  .input-action-btn-primary.is-cancel-action svg {
+  .input-action-btn-primary.is-cancel-action svg,
+  .input-action-btn-primary.is-returning svg {
     animation: send-stop-in 0.22s ease-out 0.06s backwards;
   }
 }
@@ -4803,15 +4804,12 @@ body .theme-toggle:is(:hover, :focus-visible) {
   .sidebar .bookmark p { flex: 1; min-width: 0; line-height: var(--line-height-tight); }
   .sidebar .bookmark:hover { background: var(--drawer-tint); }
   .sidebar .bookmark.is-active { background: var(--drawer-tint-strong); }
-  .sidebar .bookmark .delete-bookmark {
+  .sidebar .bookmark .bookmark-menu-button {
     right: 2px !important; min-width: 40px; height: 40px; max-height: none;
-    border-radius: var(--radius-xs); opacity: 1;
+    border-radius: var(--radius-xs); opacity: 1; color: var(--ink-3);
   }
-  /* Grey only at rest: the armed "Delete" keeps its red (layout.css). */
-  .sidebar .bookmark .delete-bookmark:not(.is-armed) { color: var(--ink-3); }
-  .sidebar .bookmark .delete-bookmark:not(.is-armed):hover { background: transparent; color: var(--ink); }
-  .sidebar .bookmark .delete-bookmark.is-armed { right: 6px !important; height: 28px; min-width: 0; }
-  .sidebar .bookmark.is-confirming-delete { padding-right: 84px; background: var(--drawer-tint); }
+  .sidebar .bookmark .bookmark-menu-button:is(:hover, [aria-expanded="true"]) { background: transparent; color: var(--ink); }
+  .sidebar .bookmark.has-menu { background: var(--drawer-tint); }
 
   /* Account: one row, no rule above it; the list simply ends. */
   .sidebar-settings { border-top: 0; padding-top: 6px; gap: 0; }

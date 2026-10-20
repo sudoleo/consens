@@ -1613,7 +1613,8 @@ def test_bookmark_detail_is_owner_scoped_and_frontend_loads_on_open():
     assert 'fetch("/bookmarks/" + encodeURIComponent(bookmarkId)' in firebase
     assert 'const path = "/bookmarks?limit=35"' in firebase
     assert "bookmarkDetailCache.clear()" in firebase
-    assert "window.openBookmark(bookmark.id)" in firebase
+    # One delegated listener opens every saved row (Apple audit E2/E5).
+    assert "window.openBookmark(row.dataset.id)" in firebase
 
 
 # ---------------------------------------------------------------------------

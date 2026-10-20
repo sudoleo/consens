@@ -1,5 +1,5 @@
 {
-  "sources": "664bdc26eaf5",
+  "sources": "4225aa7bf014",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -50,6 +50,7 @@
     "static/css/status-palette.css",
     "static/css/topics.css",
     "static/css/typography.css",
+    "static/css/undo-notice.css",
     "static/css/variables.css",
     "static/demo.js",
     "static/firebase.js",
@@ -114,6 +115,7 @@
     "static/js/sources.js",
     "static/js/tab-status.js",
     "static/js/token-budget.js",
+    "static/js/undo-notice.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
     "static/js/user-settings.js",
@@ -206,7 +208,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.81096a4e81a3.js",
+      "src": "/static/dist/firebase.50f1bafc8e5e.js",
       "module": true,
       "defer": false
     },
@@ -218,24 +220,24 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.3b860bb94729.js",
+      "src": "/static/dist/app.c91999d6368e.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.c880168c38ef.css"
+    "app": "/static/dist/app.692a184423f6.css"
   },
   "previous_assets": [
-    "app.b45c46837863.css",
-    "app.fc2a55cdac17.css",
-    "app.91ac8cb51d33.js",
-    "app.4f741ddb98e5.js",
+    "app.a86bcd46f803.css",
+    "app.c880168c38ef.css",
+    "app.86ecabe8adeb.js",
+    "app.3b860bb94729.js",
     "auth.5e487d1e2570.js",
     "demo.9cb7e261a771.js",
     "demo.f96893d39783.js",
-    "firebase.1f0f60fb0e67.js",
-    "firebase.02d5cd4749ea.js",
+    "firebase.ede1695825aa.js",
+    "firebase.81096a4e81a3.js",
     "head.9076e14a6904.js",
     "head.b8a4fe4a421c.js"
   ]

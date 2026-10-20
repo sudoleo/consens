@@ -1,0 +1,79 @@
+/* One quiet line at the bottom (undo-notice.js): what just happened and the
+   way back. Ink on the page colour inverted, no frame, no glass; it rises a
+   few pixels in and goes the same way out. Above every sheet and the phone
+   menu, which is where a chat is deleted. */
+.undo-notice {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  z-index: 2000;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px 14px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 6px 6px 6px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--ink);
+  color: var(--ground);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  box-shadow: var(--lift);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity var(--dur-state) var(--ease-standard), transform var(--dur-state) var(--ease-out);
+  pointer-events: none;
+}
+
+.undo-notice[hidden] {
+  display: none;
+}
+
+.undo-notice.is-shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.undo-notice-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.undo-notice-action {
+  flex: none;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.undo-notice-action[hidden] {
+  display: none;
+}
+
+.undo-notice-action:hover {
+  background: color-mix(in srgb, var(--ground) 14%, transparent);
+}
+
+.undo-notice-action:focus-visible {
+  outline: 2px solid var(--ground);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .undo-notice-action { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .undo-notice { transition: none; transform: translate(-50%, 0); }
+}
+
+@media (forced-colors: active) {
+  .undo-notice { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+}

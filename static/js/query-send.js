@@ -883,6 +883,13 @@
         clearTimeout(button._launchTimer);
         button._launchTimer = setTimeout(() => button.classList.remove("is-launching"), 800);
       }
+      // The arrow comes back the way the stop square came: the same short
+      // fade and scale (Apple audit C12), not in one frame.
+      button.classList.toggle("is-returning", !running && button.dataset.icon === "stop");
+      clearTimeout(button._returnTimer);
+      if (button.classList.contains("is-returning")) {
+        button._returnTimer = setTimeout(() => button.classList.remove("is-returning"), 400);
+      }
       button.dataset.icon = state;
       button.innerHTML = running ? STOP_ICON : SEND_ICON;
     }

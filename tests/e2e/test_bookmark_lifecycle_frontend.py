@@ -8,9 +8,19 @@ from test_agent_chat_frontend import CATALOG
 from test_model_answer_reader import reader_screenshot
 
 
+def _open_row_menu(page, row):
+    row.hover()
+    row.locator('.bookmark-menu-button').click()
+    menu = page.locator('.bookmark-menu')
+    expect(menu).to_be_visible()
+    return menu
+
+
 @pytest.mark.parametrize('width,status,reduced', [(1280, 200, False), (390, 403, False), (390, 500, True)])
-def test_delete_disappears_before_server_reply_and_restores_on_failure(browser, phase4_server, width, status, reduced):
-    context, page = _real_firebase_page(browser, phase4_server)
+def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phase4_server, width, status, reduced):
+    """Apple audit E2: "…" is a menu; Delete hides the chat at once and only
+    deletes it once "Chat deleted · Undo" ran out."""
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     requests, errors = [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
@@ -24,92 +34,127 @@ def test_delete_disappears_before_server_reply_and_restores_on_failure(browser, 
         if width < 1100:
             page.locator('#toggleSidebarButton').click()
         row = page.locator('.bookmark[data-id="first"]')
-        row.hover()
-        control = row.locator('.delete-bookmark')
-        # The first click only arms the control; nothing is deleted yet.
-        # A double-click arms only: its second click never confirms.
-        control.dblclick()
-        expect(control).to_have_text('Delete')
-        expect(row).to_have_count(1)
-        page.wait_for_timeout(450)
+        menu = _open_row_menu(page, row)
+        expect(menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Share', 'Delete'])
+        reader_screenshot(page, f'bookmark-menu-{width}')
+        menu.get_by_role('menuitem', name='Delete').click()
+        expect(row).to_be_hidden()
+        notice = page.locator('#undoNotice')
+        expect(notice).to_contain_text('Chat deleted')
+        reader_screenshot(page, f'bookmark-undo-{width}')
+        # Undo brings it back; nothing went to the server.
+        notice.get_by_role('button', name='Undo').click()
+        expect(row).to_be_visible()
+        page.wait_for_timeout(250)
         assert not requests
-        control.click()
-        expect(row).to_have_count(0)
-        assert len(requests) == 1
-        # A stale metadata refresh cannot resurrect the optimistically hidden row.
+
+        menu = _open_row_menu(page, row)
+        menu.get_by_role('menuitem', name='Delete').click()
+        expect(row).to_be_hidden()
+        assert not requests
+        # A stale metadata refresh cannot resurrect the hidden row.
         page.evaluate('() => window.loadBookmarks()')
-        expect(row).to_have_count(0)
-        page.evaluate("() => { void window.deleteBookmark('first'); }")
+        expect(row).to_be_hidden()
+        # The line runs out (settled here instead of waiting 5 s): now it deletes.
+        page.evaluate('() => App.undoNotice.current().settle()')
+        page.wait_for_function('() => true')
+        page.wait_for_timeout(150)
         assert len(requests) == 1
+        expect(row).to_have_count(0)
         _json(requests[0], {'status': 'success'} if status == 200 else {'detail': 'Deletion failed'}, status)
         page.wait_for_timeout(250)
         expect(row).to_have_count(0 if status == 200 else 1)
-        expect(page.locator('.bookmark[data-id="second"]')).to_have_count(1)
+        expect(page.locator('.bookmark[data-id="second"]')).to_be_visible()
         if status != 200:
+            expect(row).to_be_visible()
             assert page.evaluate("bookmarksData.some(item => item.id === 'first')")
-            # The restored item can retry, including an ambiguous server failure.
-            row.hover()
-            row.locator('.delete-bookmark').click()
-            page.wait_for_timeout(450)
-            row.locator('.delete-bookmark').click()
-            expect(row).to_have_count(0)
-            assert len(requests) == 2
-            _json(requests[1], {'status': 'success'})
         assert not errors
     finally:
         context.close()
 
 
-ARMED = re.compile(r'(^|\s)is-armed(\s|$)')
-
-
-@pytest.mark.parametrize('width,cancel', [(1280, 'escape'), (390, 'elsewhere')])
-def test_armed_delete_cancels_without_deleting(browser, phase4_server, width, cancel):
-    # The phone case runs with touch: the X is always shown there.
+@pytest.mark.parametrize('width', [1280, 390])
+def test_chat_rows_open_by_keyboard_and_rename_in_place(browser, phase4_server, width):
+    """Apple audit E5/E2: the title is the row's keyboard control; the menu
+    is a real menu (keys, Escape, a press elsewhere); Rename edits in place."""
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
-    requests, errors = [], []
+    renames, opened, errors = [], [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
         page.set_viewport_size({'width': width, 'height': 800})
         bookmarks = [{'id': 'first', 'title': 'Keep me even with a long title that runs to the edge', 'query': 'Question', 'mode': 'Agent'},
                      {'id': 'second', 'title': 'Other chat', 'query': 'Another question', 'mode': 'Agent'}]
         page.route('**/bookmarks?*', lambda r: _json(r, {'bookmarks': bookmarks, 'next_cursor': None}))
-        page.route('**/bookmark', lambda r: requests.append(r))
+
+        def title(route):
+            body = route.request.post_data_json
+            renames.append(body)
+            _json(route, {'status': 'success', 'bookmark': {'id': 'first', 'title': body['title'], 'title_source': 'user',
+                                                            'query': 'Question', 'mode': 'Agent'}})
+        page.route('**/bookmarks/first/title', title)
         page.evaluate('() => window.loadBookmarks()')
+        page.evaluate("() => { window.openBookmark = id => { window.__opened = (window.__opened || []).concat(id); return Promise.resolve(); }; }")
         if width < 1100:
             page.locator('#toggleSidebarButton').click()
-        row = page.locator('.bookmark[data-id="first"]')
-        row.hover()
-        control = row.locator('.delete-bookmark')
-        reader_screenshot(page, f'bookmark-delete-idle-{width}')
-        control.click()
-        expect(control).to_have_text('Delete')
-        # The second step reads as destructive, also with a touch-stuck :hover.
-        expect(control).to_have_css('color', 'rgb(177, 79, 91)')
-        # The title ends before "Delete" instead of running under it.
-        title = row.locator('p')
-        assert title.bounding_box()['x'] + title.bounding_box()['width'] <= control.bounding_box()['x'] + 1
-        reader_screenshot(page, f'bookmark-delete-armed-{width}')
-        if cancel == 'escape':
-            page.keyboard.press('Escape')
-        else:
-            # Any click outside the armed control disarms it (inside the
-            # sidebar here: a click beside it closes the phone overlay).
-            page.evaluate("() => document.getElementById('bookmarksContainer').click()")
-        expect(control).not_to_have_class(ARMED)
-        expect(control).to_have_text('')
-        # Arming another row disarms the first; its click arms, never deletes.
-        row.hover()
-        control.click()
-        other = page.locator('.bookmark[data-id="second"] .delete-bookmark')
-        page.locator('.bookmark[data-id="second"]').hover()
-        other.click()
-        expect(control).not_to_have_class(ARMED)
-        expect(other).to_have_text('Delete')
-        page.wait_for_timeout(100)
-        assert not requests
-        expect(page.locator('.bookmark')).to_have_count(2)
+        first = page.locator('.bookmark[data-id="first"]')
+        # The title is focusable and Enter opens the chat.
+        first.locator('p').focus()
+        page.keyboard.press('Enter')
+        assert page.evaluate('window.__opened') == ['first']
+        page.keyboard.press('Tab')
+        assert page.evaluate("document.activeElement.classList.contains('bookmark-menu-button')")
+        page.keyboard.press('Enter')
+        menu = page.locator('.bookmark-menu')
+        expect(menu).to_be_visible()
+        assert page.evaluate("document.activeElement.textContent") == 'Rename'
+        page.keyboard.press('ArrowDown')
+        assert page.evaluate("document.activeElement.textContent") == 'Share'
+        page.keyboard.press('Escape')
+        expect(menu).to_have_count(0)
+        assert page.evaluate("document.activeElement.classList.contains('bookmark-menu-button')")
+        # A press elsewhere closes it, opening no chat.
+        _open_row_menu(page, first)
+        page.evaluate("() => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        expect(page.locator('.bookmark-menu')).to_have_count(0)
+        # Rename in place: same row height, Escape keeps the old name, Enter saves.
+        height = first.bounding_box()['height']
+        _open_row_menu(page, first).get_by_role('menuitem', name='Rename').click()
+        field = first.locator('.bookmark-rename-input')
+        expect(field).to_be_focused()
+        assert abs(first.bounding_box()['height'] - height) < 0.5
+        page.keyboard.type('Changed my mind')
+        page.keyboard.press('Escape')
+        expect(first.locator('p')).to_have_text('Keep me even with a long title that runs to the edge')
+        assert not renames
+        _open_row_menu(page, first).get_by_role('menuitem', name='Rename').click()
+        page.keyboard.press('Control+A')
+        page.keyboard.type('Heat pump plan')
+        page.keyboard.press('Enter')
+        expect(first.locator('p')).to_have_text('Heat pump plan')
+        page.wait_for_timeout(200)
+        assert renames == [{'title': 'Heat pump plan'}]
+        assert page.evaluate("bookmarksData.find(item => item.id === 'first').title") == 'Heat pump plan'
+        assert page.evaluate('window.__opened') == ['first']
+        # A long press on a phone selects no text.
+        assert page.evaluate("getComputedStyle(document.querySelector('.bookmark')).userSelect") == 'none'
         assert not errors
+    finally:
+        context.close()
+
+
+def test_chat_search_without_a_match_says_so(browser, phase4_server):
+    """Apple audit H11."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        bookmarks = [{'id': 'first', 'title': 'Heat pump', 'query': 'Question', 'mode': 'Agent'}]
+        page.route('**/bookmarks?*', lambda r: _json(r, {'bookmarks': bookmarks, 'next_cursor': None}))
+        page.evaluate('() => window.loadBookmarks()')
+        expect(page.locator('.bookmark[data-id="first"]')).to_be_visible()
+        page.evaluate("() => window.filterBookmarks('volcano')")
+        expect(page.locator('#bookmarksSearchEmpty')).to_have_text('No chats match “volcano”')
+        page.evaluate("() => window.filterBookmarks('heat')")
+        expect(page.locator('#bookmarksSearchEmpty')).to_be_hidden()
+        expect(page.locator('.bookmark[data-id="first"]')).to_be_visible()
     finally:
         context.close()
 

@@ -1153,12 +1153,25 @@ body:has(.sidebar.active) .brand-float {
 .bookmarks-load-more:hover { color: var(--sidebar-text); border-color: var(--accent); }
 .bookmark.is-loading { opacity: .58; pointer-events: none; }
 .bookmark.is-deleting { pointer-events: none; overflow: hidden; }
+/* Deleted, its Undo still offered (firebase.js deleteBookmarkWithUndo). */
+.bookmark.is-undo-pending { display: none !important; }
+/* A search without a match says so, quietly (app-init.js filterBookmarks). */
+.bookmarks-search-empty {
+  margin: 6px 8px 4px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.bookmarks-search-empty[hidden] { display: none; }
 
 /* Ein Run reserviert seinen Sidebar-Platz sofort: gleiche schlichte Zeile wie
-   ein fertiges Bookmark, nur gedaempft und mit kleinem Spinner rechts. */
+   ein fertiges Bookmark, nur gedaempft und mit kleinem Spinner rechts. Sie
+   hat die Hoehe einer gespeicherten Zeile (shell.css .sidebar .bookmark):
+   2 px mehr verschoben am Laufende die ganze Liste (Apple-Audit A11). */
 .sidebar .bookmark.is-pending {
   display: block;
-  padding: 7px 30px 7px 8px;
+  padding-right: 30px;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -1233,12 +1246,22 @@ body:has(.sidebar.active) .brand-float {
   border: 0;
   border-radius: var(--radius-xs);
   text-align: left;
-  transition: background-color var(--dur-press) var(--ease-standard);
+  /* padding-right: a finished run's status words leave and its title takes
+     their room in one glide (firebase.js settleRunRow). */
+  transition: background-color var(--dur-press) var(--ease-standard), padding-right var(--dur-state) var(--ease-standard);
   position: relative;
   width: 100%;
   display: block;
   color: inherit;
   box-sizing: border-box;
+}
+/* A chat row is a control, not text: a long press on a phone opens the
+   chat menu's way, not a text selection or the link callout. */
+.sidebar .bookmark {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .bookmark p {
   display: block;
@@ -1249,12 +1272,17 @@ body:has(.sidebar.active) .brand-float {
   margin: 0;
   line-height: var(--line-height-ui);
 }
+/* The title is the row's keyboard control (role="button"); the ring goes
+   round the whole row. */
+.bookmark > p:focus-visible { outline: none; }
+.sidebar .bookmark:has(> p:focus-visible),
+.sidebar .bookmark.run-entry:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .sidebar .bookmark:hover {
   background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
 }
-/* Loeschen-X erst beim Hovern des Bookmarks einblenden. Der erste Klick
-   macht daraus "Delete", erst der zweite loescht (firebase.js). */
-.delete-bookmark {
+/* "…": more options for this chat (Rename, Share, Delete). Quiet until the
+   row is pointed at or focused, always there on touch. */
+.bookmark-menu-button {
   position: absolute !important;
   right: 6px !important;
   top: 50% !important;
@@ -1269,43 +1297,118 @@ body:has(.sidebar.active) .brand-float {
   background: transparent;
   color: var(--sidebar-text-muted);
   cursor: pointer;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-solid);
-  white-space: nowrap;
   opacity: 0;
   transform: translateY(-50%) !important;
   transition: opacity var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
-.delete-bookmark svg { display: block; }
-.bookmark:hover .delete-bookmark,
-.delete-bookmark:focus-visible,
-.delete-bookmark.is-armed {
+.bookmark-menu-button svg { display: block; }
+.bookmark:hover .bookmark-menu-button,
+.bookmark:focus-within .bookmark-menu-button,
+.bookmark.has-menu .bookmark-menu-button,
+.bookmark.is-active .bookmark-menu-button {
   opacity: 1;
 }
-.delete-bookmark:hover,
-.delete-bookmark:focus-visible {
-  background: color-mix(in srgb, var(--clear-button-bg) 74%, transparent);
-  color: var(--clear-button-text);
+.bookmark-menu-button:hover,
+.bookmark-menu-button:focus-visible,
+.bookmark-menu-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
   outline: none;
 }
-.delete-bookmark.is-armed,
-.delete-bookmark.is-armed:hover,
-.delete-bookmark.is-armed:focus-visible {
-  padding: 0 9px;
-  /* Opaque: a long title must not show through "Delete". */
-  background: color-mix(in srgb, var(--dispute) 12%, var(--raise));
-  color: var(--dispute);
+.bookmark-menu-button:focus-visible { outline: var(--focus-ring); }
+/* The row whose menu is open keeps its tint. */
+.sidebar .bookmark.has-menu { background: var(--raise); }
+/* Renaming: the title becomes a field of the same size. */
+.bookmark.is-renaming { cursor: text; }
+.bookmark > p[hidden] { display: none; }
+/* Above the global input[type="text"] frame (components-input.css): the row
+   is the field. Touch screens keep the global 16px against iOS zoom. */
+.sidebar .bookmark input.bookmark-rename-input,
+.sidebar .bookmark input.bookmark-rename-input:focus {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  /* Exactly the title's line: the row keeps its height. */
+  height: calc(var(--line-height-ui) * 1em);
+  line-height: var(--line-height-ui);
+  outline: none;
+  box-shadow: 0 1px 0 var(--ink-3);
+  -webkit-user-select: text;
+  user-select: text;
 }
-.delete-bookmark.is-armed:focus-visible { outline: var(--focus-ring); }
-/* The armed row keeps its tint, and its title ends before the wider
-   "Delete" control instead of running under it. */
-.sidebar .bookmark.is-confirming-delete { background: var(--raise); padding-right: 68px; }
 
-/* Touch-Geraete haben kein Hover: das X bleibt sichtbar, aber als ruhiges
-   Symbol in Volltonfarbe statt halbtransparent, mit Zeilenhoehe als Tippziel. */
+/* The chat menu (firebase.js showBookmarkMenu): the composer menu's material
+   (composer.css .attach-menu), on <body> so the list never cuts it. */
+.bookmark-menu {
+  position: fixed;
+  z-index: 1700;
+  width: max-content;
+  min-width: 168px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--well);
+  box-shadow: var(--lift);
+  outline: none;
+  transform-origin: top right;
+}
+.bookmark-menu.opens-up { transform-origin: bottom right; }
+@media (prefers-reduced-motion: no-preference) {
+  .bookmark-menu { animation: bookmark-menu-in var(--dur-state) var(--ease-out); }
+  @keyframes bookmark-menu-in { from { opacity: 0; transform: scale(.97); } }
+}
+.bookmark-menu-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-size-ui);
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+.bookmark-menu-item:is(:hover, :focus-visible) { background: var(--raise); }
+.bookmark-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+.bookmark-menu-item svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--ink-2);
+}
+.bookmark-menu-item.is-destructive,
+.bookmark-menu-item.is-destructive svg { color: var(--dispute); }
+@media (pointer: coarse) {
+  .bookmark-menu-item { min-height: 44px; }
+}
+
+/* Touch-Geraete haben kein Hover: "…" bleibt sichtbar, als ruhiges Symbol
+   mit Zeilenhoehe als Tippziel. */
 @media (hover: none) {
-  .delete-bookmark {
+  .bookmark-menu-button {
     right: 2px !important;
     min-width: 40px;
     height: 100%;
@@ -1313,9 +1416,8 @@ body:has(.sidebar.active) .brand-float {
     opacity: 1;
     color: color-mix(in srgb, var(--sidebar-text-muted) 72%, var(--ground, transparent));
   }
-  /* A tap leaves :hover stuck on touch; only the idle X ignores it. */
-  .delete-bookmark:not(.is-armed):hover { background: transparent; color: color-mix(in srgb, var(--sidebar-text-muted) 72%, var(--ground, transparent)); }
-  .delete-bookmark.is-armed { right: 4px !important; min-width: 0; height: 26px; }
+  /* A tap leaves :hover stuck on touch; only the closed menu ignores it. */
+  .bookmark-menu-button:not([aria-expanded="true"]):hover { background: transparent; color: color-mix(in srgb, var(--sidebar-text-muted) 72%, var(--ground, transparent)); }
 }
 
 @media (max-width: 1099px) {

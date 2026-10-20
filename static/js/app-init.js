@@ -597,8 +597,9 @@
           // A click in a dialog (Settings opened from the sidebar, its
           // backdrop) belongs to the dialog, not to the page behind it. The
           // sidebar stays, so closing the dialog can hand focus back to the
-          // gear inside it.
-          if (event.target.closest("dialog")) return;
+          // gear inside it. A chat's row menu and its "Undo" line belong to
+          // the list too.
+          if (event.target.closest("dialog, .bookmark-menu, .undo-notice")) return;
 
           if (!sidebar.contains(event.target) && !event.target.closest(".sidebar-toggle")) {
             closeOverlaySidebar();
@@ -1180,12 +1181,33 @@
           });
         }
 
+        // A search without a match says so in one quiet line (Apple audit
+        // H11); an empty list of a new account stays empty on purpose.
         window.filterBookmarks = function (query) {
-          const q = String(query || "").trim().toLowerCase();
+          const shown = String(query || "").trim();
+          const q = shown.toLowerCase();
+          const container = document.getElementById("bookmarksContainer");
+          let matches = 0;
           document.querySelectorAll("#bookmarksContainer .bookmark").forEach(el => {
             const text = el.querySelector("p")?.textContent?.toLowerCase() || "";
-            el.style.display = q && !text.includes(q) ? "none" : "";
+            const match = !q || text.includes(q);
+            el.style.display = match ? "" : "none";
+            if (match && !el.classList.contains("is-undo-pending")) matches += 1;
           });
+          let empty = document.getElementById("bookmarksSearchEmpty");
+          if (q && !matches && container) {
+            if (!empty) {
+              empty = document.createElement("p");
+              empty.id = "bookmarksSearchEmpty";
+              empty.className = "bookmarks-search-empty";
+              empty.setAttribute("role", "status");
+            }
+            empty.textContent = `No chats match “${shown}”`;
+            if (empty.parentElement !== container) container.prepend(empty);
+            empty.hidden = false;
+          } else if (empty) {
+            empty.hidden = true;
+          }
         };
 
         const bookmarkSearchHead = document.querySelector(".sidebar-bookmarks-head");
