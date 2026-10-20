@@ -1308,9 +1308,11 @@ def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     assert "function bookmarkDisplayQuestion(bookmark)" in firebase
     # Auch ein Direktvergleich-Bookmark laedt mit seiner Frage zurueck.
     assert "window.App?.setThreadQuestion?.(displayQuestion);" in firebase
-    assert "renderStoredTurns?.(materialized.historyTurns)" in firebase
+    # One step, never emptied first (Apple audit A1).
+    assert "renderStoredTurns?.(materialized.historyTurns.length" in firebase
     assert '"/conversation?limit=50"' in firebase
-    assert "function loadBookmarkConversationOnce(bookmark)" in firebase
+    # By bookmark ID, beside the detail request (Apple audit D2).
+    assert "function loadBookmarkConversationOnce(bookmarkId)" in firebase
     assert "Bookmark conversation was incomplete" in firebase
     assert "Bookmark conversation pagination repeated a page" in firebase
     assert "function bookmarkFallbackTurn(bookmark)" in firebase
