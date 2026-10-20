@@ -74,7 +74,7 @@
   let dpr = 1, cw = 7, rh = 13, W = 0, H = 0, cols = 0, rows = 0;
   let chars = null, fw = 0, fh = 0, img = null, cvis = null, atlas = null;
   let noise = null, theme = "", calm = null, calmAt = -1e9;
-  let active = false, raf = 0, timer = 0, lastCloud = -1e9, born = now();
+  let active = false, raf = 0, timer = 0, lastCloud = -1e9, born = now(), stale = false;
   const rip = [];
 
   // Kachelbares Wertrauschen, beim ersten Start einmal berechnet und auf
@@ -154,7 +154,11 @@
     for (let p = 0; p < d.length; p += 4) { d[p] = r; d[p + 1] = gr; d[p + 2] = b; d[p + 3] = 255; }
     f.putImageData(img, 0, 0);
   }
+  // Ein neues Format behält die Zeichen, die schon dastehen: Öffnet sich die
+  // Android-Tastatur oder dreht sich das Gerät, würfelten sonst alle Zeichen
+  // auf einmal neu (Apple-Audit D11). Nur hinzugekommene Zellen sind neu.
   function resize() {
+    stale = false;
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     cw = Math.round(7.2 * dpr);
     rh = Math.round(13 * dpr);
@@ -162,10 +166,14 @@
     H = layer.clientHeight || window.innerHeight;
     gc.width = Math.round(W * dpr);
     gc.height = Math.round(H * dpr);
+    const kept = chars, keptCols = cols;
     cols = Math.ceil(gc.width / cw);
     rows = Math.ceil(gc.height / rh);
     chars = new Uint8Array(cols * rows);
-    for (let k = 0; k < chars.length; k++) chars[k] = (Math.random() * NCH) | 0;
+    for (let k = 0; k < chars.length; k++) {
+      const i = k % cols, old = ((k / cols) | 0) * keptCols + i;
+      chars[k] = kept && i < keptCols && old < kept.length ? kept[old] : (Math.random() * NCH) | 0;
+    }
     fw = Math.ceil(W / FOG) + 1;
     fh = Math.ceil(H / FOG) + 1;
     fc.width = fw;
@@ -355,7 +363,7 @@
       active = true;
       born = now();
       if (!noise) buildNoise();
-      if (!img) resize(); else paintAll();
+      if (!img || stale) resize(); else paintAll();
       lastCloud = -1e9;
       layer.classList.remove("is-off");
       wake();
@@ -370,17 +378,38 @@
     }
   }
 
+  // Hinter einem Chat bleibt die Ebene unsichtbar liegen. Sobald sie
+  // ausgeblendet ist, gibt sie ihre Leinwände frei (bei DPR 2 rund 30 MB),
+  // statt sie für den nächsten leeren Startbildschirm aufzuheben; der baut
+  // ohnehin neu auf und blendet ein (Apple-Audit D11).
+  function release() {
+    if (active || !img) return;
+    gc.width = gc.height = 0;
+    fc.width = fc.height = 0;
+    img = cvis = chars = atlas = null;
+    cols = rows = 0;
+  }
+
   if (supported) {
     new MutationObserver(sync).observe(body, { attributes: true, attributeFilter: ["class"] });
+    layer.addEventListener("transitionend", event => {
+      if (event.target === layer && event.propertyName === "opacity") release();
+    });
     const watchPage = document.querySelector(".watch-page");
     if (watchPage) new MutationObserver(sync).observe(watchPage, { attributes: true, attributeFilter: ["hidden"] });
     darkQuery?.addEventListener?.("change", themeCheck);
     reduceQuery?.addEventListener?.("change", () => { lastCloud = -1e9; wake(); });
     document.addEventListener("visibilitychange", wake);
     let resizeTimer = 0;
+    // Hinter einem Chat malt die Ebene bei einer Größenänderung nichts neu;
+    // sie misst beim nächsten Start neu.
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => { if (img) { resize(); wake(); } }, 150);
+      if (!active) { stale = true; return; }
+      resizeTimer = setTimeout(() => {
+        if (!img) return;
+        if (active) { resize(); wake(); } else stale = true;
+      }, 150);
     }, { passive: true });
     document.addEventListener("pointerdown", event => {
       if (!active || event.button !== 0) return;

@@ -465,15 +465,21 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* Answer check: a quiet light band passes over the fixed answer while the
    judges run, in the rhythm of the Thinking header. It is an overlay in the
    page colour, not a text gradient, so tables, code and links stay readable.
-   It fades out as the marks arrive. */
+   It fades out as the marks arrive.
+   The band is a stripe that moves by transform alone and never leaves the
+   answer's box, so the compositor slides it over text painted once. An
+   overlay the size of the answer with a moving background repainted the
+   whole answer in every frame: 10-12 frames per second exactly while the
+   reader reads (Apple audit D1). Each pass grows in and shrinks out
+   (scaleX), which leaves opacity to the fade at the end. */
 #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
-    content: ''; position: absolute; inset: -2px -6px; pointer-events: none; border-radius: var(--radius-2xs);
-    background-image: linear-gradient(105deg, transparent 38%,
-      color-mix(in srgb, var(--bg-color, #fff) 40%, transparent) 50%, transparent 62%);
-    background-size: 250% 100%;
-    animation: label-shine 2.8s linear infinite, agent-answer-sheen-in .5s ease backwards;
+    content: ''; position: absolute; top: -2px; bottom: -2px; left: -6px; width: calc((100% + 12px) * .4);
+    pointer-events: none;
+    background-image: linear-gradient(90deg, transparent,
+      color-mix(in srgb, var(--bg-color, #fff) 40%, transparent) 50%, transparent);
+    animation: agent-answer-sheen 2.4s linear infinite;
     transition: opacity var(--dur-light) var(--ease-standard);
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
@@ -510,7 +516,14 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
 #agentAnswerBody.is-marks-settling :is(.cx-claim, .cx-spot) { transition: none; }
-@keyframes agent-answer-sheen-in { from { opacity: 0; } }
+/* The stripe is 40% of the box: 150% of its own width carries it from the
+   left edge to the right one. */
+@keyframes agent-answer-sheen {
+  from { transform: translateX(0) scaleX(0); }
+  25% { transform: translateX(37.5%) scaleX(1); }
+  75% { transform: translateX(112.5%) scaleX(1); }
+  to { transform: translateX(150%) scaleX(0); }
+}
 /* One period moves the repeating 250% gradient by exactly one tile, so the
    loop is seamless. */
 @keyframes label-shine {

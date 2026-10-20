@@ -165,12 +165,24 @@
     if (text !== undefined) el.textContent = text;
     return el;
   }
+  // What the comparison cards show. The streaming answer counts only through
+  // whether a check belongs to it, a model's text only through being there:
+  // both change on every tick while the agent writes, and rebuilding the cards
+  // each time swallowed clicks on their buttons (Apple audit D7).
+  const UNSHOWN_TEXT = new Set(['text', 'partial_text']);
+  function activitySignature(review, raw) {
+    const bound = (review?.comparisons || []).map(c => Boolean(currentCheck(review, c, raw)));
+    return JSON.stringify([review, bound], (key, value) =>
+      UNSHOWN_TEXT.has(key) && typeof value === 'string' ? value !== '' : key === 'claims' ? undefined : value);
+  }
   function renderActivity(host, review, raw) {
     const comparisons = review?.comparisons || [];
     host.hidden = !comparisons.length;
-    const signature = JSON.stringify([review, raw]);
-    if (host.dataset.signature === signature) return;
-    host.dataset.signature = signature;
+    // The buttons open the newest review's contexts, also when it rendered the same.
+    host._activityReview = review;
+    const signature = activitySignature(review, raw);
+    if (host._activitySignature === signature) return;
+    host._activitySignature = signature;
     host.replaceChildren();
     if (!comparisons.length) return;
     host.append(node('h3', '', 'Comparison details'));
@@ -216,7 +228,7 @@
         button.disabled = section === 'answers' ? !answers.length : !check;
         button.addEventListener('click', () => {
           const key = `agent-evidence:${comparison.id}`;
-          const context = activityContexts.get(review)?.find(c => c.key === key) || contextsByKey.get(key);
+          const context = activityContexts.get(host._activityReview)?.find(c => c.key === key) || contextsByKey.get(key);
           if (context) App.answerReader?.openContext(context, { section, trigger: button });
         });
         actions.append(button);
@@ -224,21 +236,42 @@
       card.append(actions); host.append(card);
     });
   }
+  // The links a markdown text carries, parsed once per text. Every open of a
+  // chat and every review update ran marked and DOMPurify again over each
+  // turn's answer and all its model answers (Apple audit D5). The cache
+  // holds the newest texts up to a size, so a streaming answer's many
+  // intermediate versions push out only themselves over time.
+  const textLinks = new Map();
+  let textLinkChars = 0;
+  function linksOf(text) {
+    const known = textLinks.get(text);
+    if (known) return known;
+    const links = [];
+    const template = document.createElement('template');
+    template.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text));
+    for (const link of template.content.querySelectorAll('a[href]')) {
+      if (link.closest('code, pre') || link.querySelector('img, svg')) continue;
+      const preceding = link.previousSibling?.textContent || '';
+      const title = /^https?:\/\//i.test(link.textContent)
+        ? preceding.match(/(?:^|[.,;:\n])\s*([^()[\]\n,;:]{1,100}?)\s*\($/)?.[1]?.trim() || link.textContent
+        : link.textContent;
+      links.push({ url: link.getAttribute('href'), title });
+    }
+    textLinks.set(text, links);
+    textLinkChars += text.length;
+    while (textLinks.size > 1 && (textLinks.size > 160 || textLinkChars > 2_000_000)) {
+      const oldest = textLinks.keys().next().value;
+      textLinkChars -= oldest.length;
+      textLinks.delete(oldest);
+    }
+    return links;
+  }
   function safeSources(answers) {
     const sources = new Map();
     for (const answer of answers || []) {
       const citations = [...(answer.sources || [])];
-      if (answer.text && window.marked?.parse && window.DOMPurify) {
-        const template = document.createElement('template');
-        template.innerHTML = window.DOMPurify.sanitize(window.marked.parse(answer.text));
-        for (const link of template.content.querySelectorAll('a[href]')) {
-          if (link.closest('code, pre') || link.querySelector('img, svg')) continue;
-          const preceding = link.previousSibling?.textContent || '';
-          const title = /^https?:\/\//i.test(link.textContent)
-            ? preceding.match(/(?:^|[.,;:\n])\s*([^()[\]\n,;:]{1,100}?)\s*\($/)?.[1]?.trim() || link.textContent
-            : link.textContent;
-          citations.push({ url: link.getAttribute('href'), title });
-        }
+      if (typeof answer.text === 'string' && answer.text && window.marked?.parse && window.DOMPurify) {
+        citations.push(...linksOf(answer.text));
       }
       for (const source of citations) {
         try {

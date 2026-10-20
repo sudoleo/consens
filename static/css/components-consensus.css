@@ -791,9 +791,11 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 /* Schwebende Ebene wie Menue, Modal und Claim-Popover: eine Flaeche (--raise),
    eine Haarlinie, ein Schatten (--lift) -- kein Farbverlauf, kein Glanz.
-   Innen genau eine Spalte mit gleichmaessigem Rhythmus. */
+   Innen genau eine Spalte mit gleichmaessigem Rhythmus. Absolut unter <body>:
+   die Karte scrollt mit der Seite, watch.js setzt sie nur an den Raendern
+   nach (Apple-Audit D8). */
 .watch-feature-nudge {
-  position: fixed;
+  position: absolute;
   z-index: 70;
   top: 0;
   left: 0;

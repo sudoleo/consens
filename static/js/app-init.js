@@ -1585,22 +1585,19 @@
           ));
           const diff = Math.max(0, resetTime - now);
 
-          // Berechne Stunden, Minuten und Sekunden
-          const hours = Math.floor(diff / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+          // Stunden und Minuten bis zum Reset. Der Zaehler ist unsichtbar
+          // (#usageOptions) und weckt ueber den MutationObserver in
+          // sidebar-quota.js das Kontingent-Panel, dessen "in 3 h 12 min"
+          // er damit frisch haelt. Jede Sekunde neu geschrieben, zog er das
+          // Panel auch beim Scrollen und Streamen jede Sekunde nach (Apple-
+          // Audit D10); einmal pro Minute reicht dem Panel.
+          const totalMinutes = Math.floor(diff / (1000 * 60));
+          const formattedHours = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
+          const formattedMinutes = (totalMinutes % 60).toString().padStart(2, "0");
+          const text = "Resets in: " + formattedHours + ":" + formattedMinutes;
 
-          // Formatieren mit führenden Nullen
-          const formattedHours = hours.toString().padStart(2, "0");
-          const formattedMinutes = minutes.toString().padStart(2, "0");
-          const formattedSeconds = seconds.toString().padStart(2, "0");
-
-          // Ausgabe im HTML-Element aktualisieren
           const countdown = document.getElementById('countdownDisplay');
-          if (countdown) {
-            countdown.textContent =
-              "Resets in: " + formattedHours + ":" + formattedMinutes + ":" + formattedSeconds;
-          }
+          if (countdown && countdown.textContent !== text) countdown.textContent = text;
         }
 
         // Countdown sofort starten und jede Sekunde aktualisieren - nur bei

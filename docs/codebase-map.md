@@ -1964,7 +1964,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   auf `body.class` und `.watch-page[hidden]`). Verlässt der Nutzer den Hero
   (erste Frage, Bookmark, Demo, Watches), bekommt die Ebene `.is-off`
   (ausblenden, dann `visibility: hidden`) und die Schleife (rAF und Timer) endet; im Chat
-  kostet sie nichts. Bauweise: ein Glyphen-Canvas (Atlas, fast nie neu
+  kostet sie nichts: Nach dem Ausblenden (`transitionend` der Deckkraft) gibt
+  sie ihre Leinwände frei (0×0, bei DPR 2 rund 30 MB), eine Größenänderung
+  merkt sie sich nur (`stale`) und misst beim nächsten Start neu (seit
+  2026-10-20, Apple-Audit D11). Ein neues Format übernimmt die Zeichen, die
+  schon dastehen; neu gewürfelt werden nur hinzugekommene Zellen (Tastatur,
+  Drehen). Bauweise: ein Glyphen-Canvas (Atlas, fast nie neu
   gemalt, Deckkraft 0.26) unter einem winzigen Nebel-Canvas in der
   berechneten Seitenfarbe (1 Punkt je 10 px, vom Browser weich hochskaliert);
   pro Bild ändert sich nur der Nebel. Wolken = zwei gedrehte Abtastungen
@@ -2702,7 +2707,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   erst nach einem bestätigten Refresh markiert; Fehler werden begrenzt erneut
   versucht, damit ein veraltetes `0 / Limit` den neuen Tag nicht blockiert. Der
   Sekundentakt ruht in einem versteckten Tab; `visibilitychange` rechnet beim
-  Zurückkommen sofort nach (auch einen inzwischen erreichten UTC-Tageswechsel). Läuft als letztes
+  Zurückkommen sofort nach (auch einen inzwischen erreichten UTC-Tageswechsel).
+  Der unsichtbare `#countdownDisplay` („Resets in: HH:MM“) ändert sich nur
+  einmal pro Minute: Über den MutationObserver auf `#usageDisplay` hält er
+  `sidebar-quota.js` („in 3 h 12 min“) frisch, und jede Sekunde neu geschrieben
+  zog er das Panel jede Sekunde nach. `sidebar-quota.js::sync` schreibt nur
+  geänderte Werte (seit 2026-10-20, Apple-Audit D10). Läuft als letztes
   Script, ruft `initApp()` direkt auf. `localStorage` nur über
   `readStored`/`writeStored` (try/catch plus Seiten-Ablage wie in
   `user-settings.js`): bei gesperrtem Speicher wirft schon der Zugriff, und ein
@@ -3848,7 +3858,12 @@ IDs; gespeicherte Zustände überschreiben passende Live-Einträge, ein unvollst
 Snapshot löscht keine vorher sichtbaren Fortschrittsmeldungen aus dem lokalen Turn.
 `agentReview.renderActivity` ergänzt im Disclosure die gespeicherten Vergleichsziele,
 Begründungen und Modellnamen sowie gebundene Prüfergebnisse und bis zu drei erkannte
-Unterschiede. Dieselbe Text-/Hash-/Basisbindung
+Unterschiede. Neu gebaut wird es nur, wenn sich Gezeigtes ändert: Die Signatur
+enthält statt der wachsenden Antwort nur, ob eine Prüfung an ihr hängt, und von
+Modelltexten nur, ob es sie gibt; vorher ersetzte jeder 100-ms-Takt die Karten,
+und Klicks auf ihre Schaltflächen gingen verloren (seit 2026-10-20, Apple-Audit D7).
+`safeSources` parst die Links eines Textes einmal und merkt sie sich (begrenzter
+Cache nach Text, Apple-Audit D5). Dieselbe Text-/Hash-/Basisbindung
 wie im Antwortleser verhindert Aussagen aus veralteten Prüfungen. Auch ohne
 `agent_activity` bleiben vorhandene `agent_review`-Details beim Wiederöffnen sichtbar.
 Schaltflächen öffnen die zugehörigen Originalantworten bzw. die vollständige Prüfung
@@ -8112,7 +8127,13 @@ ersten Check statt eines leeren Consensus-Panels.
   `question` (Anker `#agentWatchAnchor`; geeignet nur: erste Nachricht des Chats
   mit Quellen, weil eine Watch die nackte Frage neu stellt). Zähler (ab 3.
   Lauf) und „dismissed“ sind modusübergreifend;
-  `.resetAfterLogout()` leert und schließt die geladene Watch-Ansicht.
+  `.resetAfterLogout()` leert und schließt die geladene Watch-Ansicht. Die
+  Karte `#watchFeatureNudge` liegt als eigene Ebene direkt unter `<body>` (über
+  dem fixierten Composer, ohne die Antwort anzuheben), seit 2026-10-20
+  `position: absolute` in Seitenkoordinaten: Der Browser scrollt sie mit, und
+  `placeWatchFeatureNudge` schreibt nur dort, wo sie im Bild gehalten wird
+  (Oberkante, über dem Composer). Fixiert lief sie jedem Scroll ein Bild
+  hinterher (Apple-Audit D8).
 - **Settings, Help und Feedback sind native `<dialog>`s im Top-Layer.** Sie
   werden nur über `window.App.modalDialog.open/close` geschaltet, nie über
   `style.display` (`dialog.modal[open]` zeigt sie, `user-memory.js` prüft die

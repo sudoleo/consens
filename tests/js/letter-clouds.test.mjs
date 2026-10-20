@@ -4,9 +4,10 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 function fakeContext() {
   const ctx = {
     fillStyle: "#000", globalAlpha: 1, font: "", textBaseline: "", textAlign: "",
-    puts: 0, draws: 0,
+    puts: 0, draws: 0, cells: new Map(),
     clearRect() {}, fillText() {}, setTransform() {},
-    drawImage() { ctx.draws += 1; },
+    // The glyph a cell shows is its source offset in the glyph atlas.
+    drawImage(image, sx, sy, sw, sh, dx, dy) { ctx.draws += 1; if (dx !== undefined) ctx.cells.set(dx + "," + dy, sx); },
     putImageData() { ctx.puts += 1; },
     createImageData(w, h) { return { data: new Uint8ClampedArray(w * h * 4) }; },
   };
@@ -143,5 +144,69 @@ describe("letter clouds", () => {
     const app = boot({ canvas: false });
     expect(app.state().supported).toBe(false);
     expect(app.document.querySelector(".letter-clouds")).toBeNull();
+  });
+
+  // Apple audit D11: an Android keyboard or a turned phone shuffled every
+  // glyph at once, and the hidden layer kept repainting and its ~30 MB of
+  // canvas behind every chat.
+  function resizeTo(app, width, height) {
+    app.window.innerWidth = width;
+    app.window.innerHeight = height;
+    app.window.dispatchEvent(new app.window.Event("resize"));
+  }
+  const glyphs = app => app.document.querySelector(".letter-clouds-glyphs");
+
+  it("keeps the glyphs that are already there when the window changes size", () => {
+    const app = boot();
+    const before = new Map(glyphs(app).__ctx.cells);
+    resizeTo(app, 700, 500);
+    app.tick();
+    const after = glyphs(app).__ctx.cells;
+    const kept = [...before].filter(([cell]) => {
+      const [x, y] = cell.split(",").map(Number);
+      return x < glyphs(app).width && y < glyphs(app).height;
+    });
+    expect(kept.length).toBeGreaterThan(100);
+    for (const [cell, glyph] of kept) expect(after.get(cell)).toBe(glyph);
+  });
+
+  it("does nothing behind a chat when the window changes size and measures again on return", async () => {
+    const app = boot();
+    app.document.body.classList.remove("is-hero");
+    await app.settle();
+    const draws = glyphs(app).__ctx.draws;
+    resizeTo(app, 700, 500);
+    expect(app.timers.size).toBe(0);
+    expect(glyphs(app).__ctx.draws).toBe(draws);
+
+    app.document.body.classList.add("is-hero");
+    await app.settle();
+    expect(glyphs(app).width).toBe(700);
+    expect(app.state()).toMatchObject({ active: true, running: true });
+  });
+
+  it("frees its canvases once it has faded out behind a chat", async () => {
+    const app = boot();
+    const layer = app.document.querySelector(".letter-clouds");
+    const faded = () => {
+      const event = new app.window.Event("transitionend");
+      Object.defineProperty(event, "propertyName", { value: "opacity" });
+      layer.dispatchEvent(event);
+    };
+    // Fading in on the start screen keeps everything.
+    faded();
+    expect(glyphs(app).width).toBeGreaterThan(0);
+
+    app.document.body.classList.remove("is-hero");
+    await app.settle();
+    faded();
+    expect(glyphs(app).width).toBe(0);
+    expect(app.document.querySelector(".letter-clouds-fog").width).toBe(0);
+
+    app.document.body.classList.add("is-hero");
+    await app.settle();
+    expect(glyphs(app).width).toBeGreaterThan(0);
+    app.frame();
+    expect(app.fog().puts).toBeGreaterThan(1);
   });
 });

@@ -719,3 +719,54 @@ it('says calmly that the answer check is off and offers answers and sources, no 
   expect(w.App.agentReview.failureNote({error: 'failed'}, review, 'Exact answer.')).toBe('');
   dom.window.close();
 });
+it('keeps the comparison cards and their buttons while the answer streams and model answers grow', () => {
+  // Rebuilding them on every 100-ms tick swallowed clicks (Apple audit D7).
+  const {window: w, document: d, dom} = setup();
+  const details = d.createElement('div');
+  const review = snapshot();
+  w.App.agentReview.renderActivity(details, review, 'Exact');
+  const card = details.querySelector('.agent-activity-insight');
+  const button = details.querySelector('button');
+  const grown = structuredClone(review);
+  grown.comparisons[0].answers[0].text += ' And a few more words.';
+  grown.checks[0].differences_data.claims.push({ anchor: 'another claim' });
+  w.App.agentReview.renderActivity(details, grown, 'Exact answer');
+  expect(details.querySelector('.agent-activity-insight')).toBe(card);
+  expect(details.querySelector('button')).toBe(button);
+  // A click still opens the newest review's evidence.
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'Exact answer';
+  w.App.agentReview.render(body, grown);
+  button.click();
+  expect(w.App.answerReader.openContext).toHaveBeenLastCalledWith(expect.objectContaining({key:'agent-evidence:c1'}),
+    expect.objectContaining({section:'answers'}));
+  // What the cards say rebuilds them: the answer reaching its checked version,
+  // a comparison that runs again.
+  w.App.agentReview.renderActivity(details, grown, 'Exact answer.');
+  expect(details.querySelector('.agent-activity-insight')).not.toBe(card);
+  const running = structuredClone(grown);
+  running.comparisons[1].status = 'running';
+  w.App.agentReview.renderActivity(details, running, 'Exact answer.');
+  expect(details.textContent).toContain('Comparison 2 · Collecting answers…');
+  dom.window.close();
+});
+it('parses each answer text for its links once, not on every render', () => {
+  // Opening a chat ran marked and DOMPurify over every model answer again
+  // for each render and review update (Apple audit D5).
+  const {window: w, document: d, dom} = setup();
+  const parse = vi.fn(text => marked.parse(text));
+  w.marked = { parse };
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.comparisons[0].answers[0].text = 'See [the report](https://example.org/report).';
+  w.App.agentReview.render(body, review);
+  const texts = parse.mock.calls.map(([text]) => text);
+  expect(texts.length).toBe(new Set(texts).size);
+  w.App.agentReview.render(body, structuredClone(review));
+  expect(parse).toHaveBeenCalledTimes(texts.length);
+  // The cached links are the same sources as before.
+  const context = w.App.agentReview.contextFor(review, 'c1');
+  expect(context.answers[0].sources.map(s => s.url)).toContain('https://example.org/report');
+  dom.window.close();
+});

@@ -22,6 +22,20 @@
     return document.getElementById(id);
   }
 
+  // sync() runs on every account update and on each tick of the reset
+  // countdown. Writing a value that is already there still invalidates
+  // style and layout, so every write below only happens on a change
+  // (Apple audit D10).
+  function setText(node, text) {
+    if (node && node.textContent !== text) node.textContent = text;
+  }
+  function setHidden(node, hidden) {
+    if (node && node.hidden !== hidden) node.hidden = hidden;
+  }
+  function setAttr(node, name, value) {
+    if (node && node.getAttribute(name) !== value) node.setAttribute(name, value);
+  }
+
   function tokens() {
     return window.App && window.App.tokenBudget ? window.App.tokenBudget : null;
   }
@@ -67,48 +81,48 @@
     if (!trigger) return;
     // Guests and a still-loading account have no number: no ring at all.
     if (!view) {
-      trigger.hidden = true;
-      trigger.removeAttribute("data-state");
+      setHidden(trigger, true);
+      if (trigger.hasAttribute("data-state")) trigger.removeAttribute("data-state");
       return;
     }
-    trigger.hidden = false;
-    trigger.dataset.state = view.state;
+    setHidden(trigger, false);
+    setAttr(trigger, "data-state", view.state);
     if (arc) {
-      arc.setAttribute("stroke-dashoffset", String((100 * (1 - view.share)).toFixed(2)));
-      arc.setAttribute("stroke", STROKE[view.state] || STROKE.ok);
+      setAttr(arc, "stroke-dashoffset", String((100 * (1 - view.share)).toFixed(2)));
+      setAttr(arc, "stroke", STROKE[view.state] || STROKE.ok);
     }
     var label = view.percent + " of today’s allowance left · resets " + view.reset.clock;
     if (view.stale) label += " (last confirmed value)";
-    trigger.title = label;
-    trigger.setAttribute("aria-label", label);
+    setAttr(trigger, "title", label);
+    setAttr(trigger, "aria-label", label);
   }
 
   function renderPanel(view) {
     var primary = el("quotaPrimary");
-    if (primary) primary.hidden = !view;
+    setHidden(primary, !view);
     var detail = el("quotaDetail");
     var foot = el("quotaFoot");
     if (!view) {
-      if (detail) { detail.hidden = true; detail.textContent = ""; }
+      setHidden(detail, true);
+      setText(detail, "");
       if (foot) {
         var signedIn = !!(window.auth && window.auth.currentUser);
-        foot.textContent = signedIn ? "Loading your allowance…" : "";
-        foot.hidden = !signedIn;
+        setText(foot, signedIn ? "Loading your allowance…" : "");
+        setHidden(foot, !signedIn);
       }
       return;
     }
 
-    if (el("quotaPercent")) el("quotaPercent").textContent = view.percent;
+    setText(el("quotaPercent"), view.percent);
     var track = el("quotaTrack");
     if (track) {
-      track.dataset.state = view.state;
+      setAttr(track, "data-state", view.state);
       var fill = track.querySelector("i");
-      if (fill) fill.style.setProperty("--p", (view.share * 100).toFixed(1) + "%");
-      track.setAttribute("aria-valuenow", String(Math.round(view.share * 100)));
+      var share = (view.share * 100).toFixed(1) + "%";
+      if (fill && fill.style.getPropertyValue("--p") !== share) fill.style.setProperty("--p", share);
+      setAttr(track, "aria-valuenow", String(Math.round(view.share * 100)));
     }
-    if (el("quotaReset")) {
-      el("quotaReset").textContent = "Resets at " + view.reset.clock + " · in " + view.reset.relative;
-    }
+    setText(el("quotaReset"), "Resets at " + view.reset.clock + " · in " + view.reset.relative);
 
     if (detail) {
       var line = fmt(view.left) + " of " + fmt(view.limit) + " tokens";
@@ -116,8 +130,8 @@
       var share = mode !== "agent" && tokens() ? tokens().runShare(mode) : null;
       if (share) line += " · a " + MODE_NAMES[mode] + " uses about " + share;
       else if (mode === "agent") line += " · Agent books each model call";
-      detail.textContent = line;
-      detail.hidden = false;
+      setText(detail, line);
+      setHidden(detail, false);
     }
 
     if (foot) {
@@ -126,8 +140,8 @@
       if (view.estimated > 0) notes.push(fmt(view.estimated) + " estimated until the provider reports the exact usage.");
       if (view.state === "out") notes.push("Compare, Consensus and Agent share this allowance; it returns at the reset.");
       if (view.stale) notes.push("Last confirmed value; it refreshes when the connection is back.");
-      foot.textContent = notes.join(" ");
-      foot.hidden = notes.length === 0;
+      setText(foot, notes.join(" "));
+      setHidden(foot, notes.length === 0);
     }
   }
 
@@ -136,8 +150,8 @@
     var value = el("quotaWatchValue");
     var watches = parseWatches();
     if (!row) return;
-    row.hidden = !watches;
-    if (watches && value) value.textContent = watches.unlimited ? "Unlimited" : watches.value + " / " + watches.limit;
+    setHidden(row, !watches);
+    if (watches) setText(value, watches.unlimited ? "Unlimited" : watches.value + " / " + watches.limit);
   }
 
   function sync() {
@@ -152,8 +166,8 @@
     var planLabel = el("quotaPlanLabel");
     if (planLabel) {
       var tier = window.userTier || "free";
-      planLabel.textContent = "Free";
-      planLabel.hidden = tier !== "free";
+      setText(planLabel, "Free");
+      setHidden(planLabel, tier !== "free");
     }
   }
 

@@ -467,7 +467,11 @@ Schimmer.
 Während Differences und Coverage die feste Antwort prüfen, läuft ein leichter
 Lichtschimmer im Takt der Thinking-Überschrift über die Antwort (Overlay in
 Seitenfarbe, kein Textverlauf, damit Tabellen, Code und Links lesbar bleiben);
-er blendet aus, sobald die Prüfung endet. Schon unter dem Schimmer erscheinen
+er blendet aus, sobald die Prüfung endet. Seit 2026-10-20 ist er ein schmaler
+Streifen, der sich nur per `transform` innerhalb der Antwort bewegt: Der Browser
+schiebt ihn über einmal gemalten Text. Das frühere Overlay in Antwortgröße mit
+wanderndem Hintergrund malte die ganze Antwort in jedem Bild neu (gemessen
+126 Malvorgänge in 3 s, p95-Bildzeit 50 ms; jetzt keiner, 16,7 ms; Apple-Audit D1). Schon unter dem Schimmer erscheinen
 die vorläufigen Marken fertiger Coverage-Fenster (seit 2026-10-18): leise, jede
 neue Marke blendet einmal ein, ohne Textmarker-Strich und ohne Score.
 Mit der fertigen Prüfung erscheinen die endgültigen Markierungen sofort und

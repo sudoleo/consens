@@ -96,6 +96,46 @@ describe("watch feature nudge", () => {
     expect(nudge.style.left).not.toBe("");
   });
 
+  it("scrollt mit der Seite und setzt sich nur an den Raendern nach", () => {
+    // Fixiert und bei jedem Scroll-Event nachgesetzt, lief die Karte ihrem
+    // Platz ein Bild hinterher und zitterte (Apple-Audit D8).
+    const { window, document, show } = boot();
+    window.innerWidth = 1200;
+    window.innerHeight = 800;
+    let scrollY = 0;
+    const box = (top, height, left, width) => ({
+      top, bottom: top + height, left, right: left + width, width, height, x: left, y: top
+    });
+    show();
+    const nudge = document.getElementById("watchFeatureNudge");
+    const anchor = document.querySelector(".watch-feature-anchor");
+    anchor.getBoundingClientRect = () => box(900 - scrollY, 30, 900, 100);
+    anchor.getClientRects = () => [box(900 - scrollY, 30, 900, 100)];
+    nudge.getBoundingClientRect = () => box(0, 120, 0, 272);
+    document.body.getBoundingClientRect = () => box(-scrollY, 3000, 0, 1200);
+    document.querySelector(".input-section").getBoundingClientRect = () => box(700, 80, 300, 600);
+    const scrollTo = y => {
+      scrollY = y;
+      document.dispatchEvent(new window.Event("scroll"));
+    };
+
+    // Below the composer the card waits above it, in page coordinates.
+    scrollTo(0);
+    expect([nudge.style.top, nudge.style.left]).toEqual(["572px", "728px"]);
+    scrollTo(100);
+    expect(nudge.style.top).toBe("672px");
+    // Once it fits under its button, the page carries it: nothing to write.
+    scrollTo(400);
+    expect(nudge.style.top).toBe("940px");
+    const observer = new window.MutationObserver(() => {});
+    observer.observe(nudge, { attributes: true });
+    scrollTo(450);
+    scrollTo(500);
+    expect(observer.takeRecords()).toEqual([]);
+    expect(nudge.style.top).toBe("940px");
+    observer.disconnect();
+  });
+
   it("bietet im Agent-Modus eine Watch aus der Frage an", async () => {
     const { window, document, fire } = boot();
     const anchor = document.createElement("div");

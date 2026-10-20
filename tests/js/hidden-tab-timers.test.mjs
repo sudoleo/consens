@@ -164,8 +164,18 @@ describe("allowance countdown", () => {
     expect(display.textContent).toBe("");
 
     setHidden(window, state, false);
-    expect(display.textContent).toMatch(/^Resets in: \d\d:\d\d:\d\d$/);
+    expect(display.textContent).toMatch(/^Resets in: \d\d:\d\d$/);
     expect(countdownTimers(state)).toHaveLength(1);
+
+    // The hidden countdown wakes the allowance panel through a
+    // MutationObserver (sidebar-quota.js). It changes once a minute, so the
+    // ticks in between write nothing (Apple audit D10); a minute boundary
+    // may fall between these ticks once.
+    const observer = new window.MutationObserver(() => {});
+    observer.observe(display, { childList: true, characterData: true, subtree: true });
+    for (let tick = 0; tick < 5; tick += 1) countdownTimers(state)[0].fn();
+    expect(observer.takeRecords().length).toBeLessThanOrEqual(1);
+    observer.disconnect();
 
     setHidden(window, state, true);
     expect(countdownTimers(state)).toHaveLength(0);

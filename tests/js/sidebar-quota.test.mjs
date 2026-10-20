@@ -110,3 +110,25 @@ it('admits a run like the server: available tokens against the mode estimate', (
   expect(api.formatTokens(5000000)).toBe('5M');
   dom.window.close();
 });
+
+it('writes nothing when the account has not changed', () => {
+  // sync() follows every tick of the hidden reset countdown; rewriting the
+  // same values invalidated style and layout each time (Apple audit D10).
+  const { d, w, dom } = boot();
+  w.App.tokenBudget.apply({ limit: 660000, used: 250800, estimated: 10000, reserved: 55000, remaining: 344200,
+    revision: 3, day: '2026-10-01', run_estimates: estimates });
+  const observer = new w.MutationObserver(() => {});
+  for (const id of ['sidebarQuota', 'quotaTrigger']) {
+    observer.observe(d.getElementById(id), { attributes: true, childList: true, characterData: true, subtree: true });
+  }
+  w.App.sidebarQuota.sync();
+  w.App.sidebarQuota.sync();
+  expect(observer.takeRecords()).toEqual([]);
+  // A real change still lands.
+  w.App.tokenBudget.apply({ limit: 660000, used: 300000, estimated: 0, reserved: 0, remaining: 360000,
+    revision: 4, day: '2026-10-01', run_estimates: estimates });
+  expect(observer.takeRecords().length).toBeGreaterThan(0);
+  expect(d.getElementById('quotaPercent').textContent).toBe('54%');
+  observer.disconnect();
+  dom.window.close();
+});

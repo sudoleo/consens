@@ -46,7 +46,11 @@
   // Der Hinweis lebt direkt unter <body>, nicht im Consensus-Fuss. Nur so kann
   // er ueber dem fixierten Composer liegen, ohne dafuer die gesamte Antwort
   // anzuheben: Letzteres liess Antworttext und Footer ueber das Eingabefeld
-  // malen. Die Position folgt trotzdem dem Watch-Knopf.
+  // malen. Die Position folgt trotzdem dem Watch-Knopf: absolut in
+  // Seitenkoordinaten, so scrollt der Browser die Karte selbst mit. Fixiert
+  // und bei jedem Scroll-Event nachgesetzt, lief sie ihrem Platz ein Bild
+  // hinterher und zitterte (Apple-Audit D8). Geschrieben wird nur noch, wo
+  // sie im Bild gehalten werden muss: unter der Oberkante, ueber dem Composer.
   function placeWatchFeatureNudge(nudge, anchor) {
     if (!nudge || !anchor?.isConnected) return;
     const edge = 8;
@@ -59,7 +63,8 @@
       ? composerRect.top
       : window.innerHeight;
 
-    nudge.style.maxHeight = `${Math.max(80, Math.floor(limit - edge * 2))}px`;
+    const maxHeight = `${Math.max(80, Math.floor(limit - edge * 2))}px`;
+    if (nudge.style.maxHeight !== maxHeight) nudge.style.maxHeight = maxHeight;
     const nudgeRect = nudge.getBoundingClientRect();
     const width = nudgeRect.width;
     const height = nudgeRect.height;
@@ -75,11 +80,15 @@
     const maxLeft = Math.max(edge, window.innerWidth - edge - width);
     const left = Math.min(Math.max(edge, anchorRect.right - width), maxLeft);
 
-    nudge.classList.toggle("is-above", placeAbove);
-    nudge.style.left = `${Math.round(left)}px`;
-    nudge.style.top = `${Math.round(top)}px`;
+    if (nudge.classList.contains("is-above") !== placeAbove) nudge.classList.toggle("is-above", placeAbove);
+    const page = (nudge.offsetParent || document.body).getBoundingClientRect();
+    const pageLeft = `${Math.round(left - page.left)}px`;
+    const pageTop = `${Math.round(top - page.top)}px`;
+    if (nudge.style.left !== pageLeft) nudge.style.left = pageLeft;
+    if (nudge.style.top !== pageTop) nudge.style.top = pageTop;
     // An anchor in a hidden view (another mode took over) has no box.
-    nudge.style.visibility = anchor.getClientRects().length ? "visible" : "hidden";
+    const visibility = anchor.getClientRects().length ? "visible" : "hidden";
+    if (nudge.style.visibility !== visibility) nudge.style.visibility = visibility;
   }
 
   function stopWatchFeatureNudgePositioning() {
