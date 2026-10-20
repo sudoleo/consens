@@ -428,7 +428,7 @@ def test_logo_toggle_and_switch_move_with_the_sidebar():
     assert "transition: opacity var(--dur-state) var(--ease-out) calc(var(--dur-layer) / 2)" in layout
     shell = strip_comments(read("shell.css"))
     handover = [b for s, b in rules(shell) if s == "body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle"]
-    assert any("visibility 0s linear var(--dur-layer)" in body for body in handover)
+    assert any("visibility 0s var(--ease-linear) var(--dur-layer)" in body for body in handover)
 
 
 def test_the_phone_menu_mark_is_bare():
