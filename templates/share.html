@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include "partials/font_preload.html" %}
   <meta name="robots" content="{{ robots_meta }}">
   {% if is_private %}<meta name="referrer" content="no-referrer">{% endif %}
   <link rel="canonical" href="{{ canonical_url }}">
@@ -41,8 +42,6 @@
   <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->
 </head>
 <body>
-  {% set public_nav_cta_href = "/app" %}
-  {% set public_nav_cta_label = "Ask your own question" %}
   {% set public_nav_event = "share_page_cta" %}
   {% include "partials/public_nav.html" %}
 

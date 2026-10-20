@@ -1,0 +1,8 @@
+{#- Inter's Latin file, fetched with the HTML instead of after the stylesheet
+    chain, at the exact URL typography.css resolves to (assets.font_preload_urls).
+    Its name carries its content hash, so a returning visitor has it before the
+    first paint and the text never swaps (Apple-Audit B3). Every page includes
+    this first in <head>. -#}
+{% if font_preload_urls is defined %}{% for url in font_preload_urls() %}
+  <link rel="preload" href="{{ url }}" as="font" type="font/woff2" crossorigin>
+{% endfor %}{% endif %}

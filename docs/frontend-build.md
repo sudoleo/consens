@@ -223,6 +223,22 @@ Import-Kette die Einstiegs-URL ändert; `tests/test_static_delivery.py` prüft
 die Cache-Header. Die `?v=`-Marken in `static/style.css` waren ohnehin wirkungslos:
 der Build inlined die Imports in `dist/app.<hash>.css`.
 
+**Öffentliche Stylesheets als Bundle (seit 2026-10-20, Apple-Audit B3).**
+`landing.css` und `public-pages.css` holten `typography.css` über eine
+dreistufige `@import`-Kette (Einstieg → `public-tokens.css` →
+`typography.css`), jede verschachtelte Datei per 304 neu geprüft, bevor das
+erste Bild stehen konnte. `bundles.json` führt sie deshalb als weitere
+`styles` (`landing`, `public`); der Build inlined sie wie `style.css` und
+schreibt je Bundle in `manifest.style_sources` den Einstieg, die eingeflossenen
+Dateien und deren Digest. Die Templates bleiben bei
+`{{ asset_url('/static/css/landing.css') }}`: `asset_url` gibt im Built-Modus
+die Bundle-URL aus, **solange** die gelisteten Quellen noch diesen Digest
+haben – nach einer Änderung ohne `npm run build` liefert es die Quelldatei mit
+`?v=` (kein veraltetes CSS, auch nicht lokal). Mit `FRONTEND_DEV=1` immer die
+Quelldatei. Fonts tragen ihren Hash im Dateinamen
+(`scripts/subset_inter_font.py`) und werden `immutable` ausgeliefert; jede
+Seite lädt den Latein-Teil per `partials/font_preload.html` vor.
+
 ## Noch offen
 
 - Die verbleibenden Python-Quelltext-Verträge (`source_contract` und die

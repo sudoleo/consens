@@ -23,7 +23,12 @@
 *::before,
 *::after { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+/* Anchors land under the sticky bar, not behind it. Smooth scrolling is a
+   reply to a click on this page and starts only once the page has loaded
+   (public-nav.js sets the class): a visit to /#watch jumps straight to the
+   section instead of gliding through every scene above it (Apple-Audit L1). */
+html { scroll-padding-top: 54px; }
+html.is-scroll-smooth { scroll-behavior: smooth; }
 
 body {
   margin: 0;
@@ -277,14 +282,15 @@ img { display: block; max-width: 100%; }
    there the band simply grows instead of clipping. */
 .lp-section--hero {
   padding: clamp(16px, 2.5vw, 32px) 0 0;
-  /* Three units, on purpose. vh is the fallback for browsers without the new
-     ones. dvh is the live value: it shrinks when a phone shows its address
-     bar and grows when the bar slides away, so the band is always exactly the
-     screen you can see — which is the whole promise of a full-screen hero and
-     the reason svh alone was wrong here (it sizes to the *smallest* viewport,
-     so a retracted bar left a strip of the next section showing). */
+  /* svh, never dvh, for anything in the page flow (Apple-Audit F1). dvh is
+     live: Safari's bar slides in on the first swipe, every band grew with it
+     and the text slid away under the finger, and back on the way up --
+     Safari has no scroll anchoring to hide that. svh is the screen with the
+     bar showing, which is exactly the first screen a visitor sees; when the
+     bar retracts while scrolling, the next section simply shows a little
+     earlier. vh stays as the fallback for browsers without the new units. */
   min-height: calc(100vh - 54px);
-  min-height: calc(100dvh - 54px);
+  min-height: calc(100svh - 54px);
   display: flex;
   align-items: center;
 }
@@ -1224,11 +1230,12 @@ img { display: block; max-width: 100%; }
      play through than the two-column desktop version. */
   .lp-scroll-scene { min-height: 190vh; }
 
-  /* The one place that keeps svh: this stage is pinned while you scroll
-     through it, and dvh would resize it mid-scrub — the browser bar slides
-     away, the stage grows, and everything on it shifts under the thumb that
-     is moving it. svh is the smallest it can ever need to be, so it holds
-     still and the bar simply uncovers page below it. */
+  /* svh like every height in the page flow (see .lp-section--hero): this
+     stage is pinned while you scroll through it, and dvh would resize it
+     mid-scrub — the browser bar slides away, the stage grows, and everything
+     on it shifts under the thumb that is moving it. svh is the smallest it
+     can ever need to be, so it holds still and the bar simply uncovers page
+     below it. */
   .lp-scene-stage {
     position: sticky;
     top: 54px;
@@ -2413,7 +2420,7 @@ img { display: block; max-width: 100%; }
      flash stays put (the JS removes the class after 2s). */
   .cx-claim, .consensus-differences-summary::before { animation: none; transition: none; }
   .diff-card.is-focused { animation: none; background: var(--cx-flash); }
-  html { scroll-behavior: auto; }
+  html.is-scroll-smooth { scroll-behavior: auto; }
 }
 
 /* --------------------------------------------------------------------------
@@ -2544,7 +2551,7 @@ img { display: block; max-width: 100%; }
      to say than a screen holds still grows past it. */
   main > .lp-section:not(.lp-section--hero) {
     min-height: calc(100vh - 54px);
-    min-height: calc(100dvh - 54px);
+    min-height: calc(100svh - 54px);
     display: flex;
     flex-direction: column;
     justify-content: center;

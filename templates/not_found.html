@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include "partials/font_preload.html" %}
   <meta name="robots" content="noindex, noarchive">
   <title>Page not found | consens.io</title>
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
@@ -15,8 +16,6 @@
   <script src="{{ asset_url('/static/js/public-theme.js') }}"></script>
 </head>
 <body>
-  {% set public_nav_cta_href = "/app" %}
-  {% set public_nav_cta_label = "Ask your own question" %}
   {% include "partials/public_nav.html" %}
 
   <main class="page-shell">

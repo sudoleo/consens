@@ -194,9 +194,11 @@ def test_no_manual_version_marks_hide_inside_app_javascript_imports():
     # admin.js -> import ... from "/static/js/admin-api.js"
     ("/static/js/admin.js", "static/js/admin-api.js"),
 ])
-def test_nested_import_change_changes_the_entry_url(entry, nested):
+def test_nested_import_change_changes_the_entry_url(entry, nested, source_mode):
     """Nested @import/ESM URLs carry no version of their own, so the entry
-    URL must change when any file in its import closure changes."""
+    URL must change when any file in its import closure changes. (In built
+    mode a public stylesheet entry is served as its bundle instead, see
+    below.)"""
 
     target = assets.ROOT / nested
     original = target.read_bytes()
@@ -210,3 +212,35 @@ def test_nested_import_change_changes_the_entry_url(entry, nested):
     assert re.search(r"\?v=[0-9a-f]{12}$", before)
     assert before != after
     assert assets.asset_url(entry) == before
+
+
+def test_public_stylesheets_are_served_as_their_bundle_while_it_is_current(monkeypatch):
+    """B3: landing.css and public-pages.css reached typography.css through a
+    three-level @import chain, every nested file revalidated on each visit,
+    before the first paint could happen. In built mode asset_url hands out
+    the one inlined, hashed bundle -- but only while it still matches its
+    sources, so an edit without `npm run build` serves the live sheet rather
+    than stale CSS."""
+    monkeypatch.delenv("FRONTEND_DEV", raising=False)
+    if not assets.MANIFEST_FILE.exists():
+        pytest.skip("no build output; run npm run build")
+
+    for entry in ("/static/css/landing.css", "/static/css/public-pages.css"):
+        url = assets.asset_url(entry)
+        assert re.fullmatch(r"/static/dist/[a-z-]+\.[0-9a-f]{12}\.css", url), url
+        css = (assets.ROOT / url.lstrip("/")).read_text(encoding="utf-8")
+        assert "@import" not in css
+        assert "../fonts/inter/InterVariable-latin." in css
+
+    target = assets.ROOT / "static" / "css" / "foundation.css"
+    original = target.read_bytes()
+    try:
+        target.write_bytes(original + b"\n/* touched by the test */\n")
+        stale = assets.asset_url("/static/css/public-pages.css")
+    finally:
+        target.write_bytes(original)
+    assert re.fullmatch(r"/static/css/public-pages\.css\?v=[0-9a-f]{12}", stale)
+    assert assets.asset_url("/static/css/public-pages.css").startswith("/static/dist/")
+
+    monkeypatch.setenv("FRONTEND_DEV", "1")
+    assert assets.asset_url("/static/css/landing.css").startswith("/static/css/landing.css?v=")

@@ -557,9 +557,26 @@ Seite, die eines ihrer Zeichen enthält. Alle Teile behalten jedes
 OpenType-Feature und beide Achsen. Erzeugt und geprüft werden sie mit
 `scripts/subset_inter_font.py` (`--check`; braucht fonttools + brotli, keine
 App-Abhängigkeit) aus den unveränderten Quelldateien `InterVariable[-Italic].woff2`,
-die kein Stylesheet mehr lädt. `/app` lädt den normalen Latein-Teil per
-Preload vor. Ein Test verlangt, dass jedes Nicht-ASCII-Zeichen der Oberfläche
-(Templates, JS, CSS) im Latein-Teil liegt. Die Typografie-Grundlage
+die kein Stylesheet mehr lädt. Ein Test verlangt, dass jedes Nicht-ASCII-Zeichen der Oberfläche
+(Templates, JS, CSS) im Latein-Teil liegt.
+**Schriftladen ohne Tausch (seit 2026-10-20, Apple-Audit B3):** Jeder Teil trägt
+die ersten 12 Hex-Stellen seines SHA-256 im Namen
+(`InterVariable-latin.<hash>.woff2`; das Skript schreibt Namen und URL in
+`typography.css` mit, `--check` prüft sie), `StaticDeliveryMiddleware` liefert
+solche Fonts `immutable` (vorher `no-cache`: ein 304 bei jedem Besuch, die
+Schrift kam nach dem ersten Bild). JEDE Seite (`/app` und alle öffentlichen
+Templates) bindet als Erstes im `<head>` `partials/font_preload.html` ein; die
+URL liest `app/core/assets.font_preload_urls()` aus `typography.css`, damit
+Preload und `@font-face` nie auseinanderlaufen. Der aufrechte Latein-Teil hat
+`font-display: optional`: gezeichnet wird Inter, wenn sie zum ersten Bild da ist
+(Wiederbesuch immer, Erstbesuch fast immer), sonst für diesen Seitenaufruf die
+Ersatzschrift – nie beides nacheinander (mit `swap` lag die Landing bei CLS 0,06
+bei jedem Besuch). Kursiv, latin-ext und rest bleiben `swap`. `Inter Fallback`
+hat zwei Faces: 100–549 gegen Arial (size-adjust 107,06 %), 550–900 gegen Arial
+Bold (101,2 %, gemessen gegen Inter 600/700 bei 14–18 px); vorher machte der
+Browser fette Überschriften aus dem Normalschnitt breiter als Inter. Gemessen
+lokal (gedrosselt 120 ms/8 Mbit und 300 ms/1,6 Mbit, kalt/warm, 1440 und
+390 px): CLS beim Laden < 0,01 auf allen öffentlichen Seiten. Die Typografie-Grundlage
 definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-Tokens
 und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
 CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und

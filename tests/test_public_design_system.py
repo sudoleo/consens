@@ -74,11 +74,13 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     app_tokens = read("static/css/variables.css")
     public_tokens = read("static/css/public-tokens.css")
 
-    # Three Inter parts per style plus the metric-matched local fallback (no
-    # download). The full source files are no longer referenced.
-    assert typography.count('@font-face {') == 7
+    # Three Inter parts per style plus two metric-matched local fallbacks (no
+    # download): regular/medium against Arial, semibold/bold against Arial
+    # Bold. The full source files are no longer referenced.
+    assert typography.count('@font-face {') == 8
     assert typography.count("url(") == 6
-    assert 'font-family: "Inter Fallback";' in typography and "size-adjust:" in typography
+    assert typography.count('font-family: "Inter Fallback";') == 2 and "size-adjust:" in typography
+    assert 'local("Arial Bold")' in typography and "font-weight: 550 900;" in typography
     assert "InterVariable.woff2" not in typography and "InterVariable-Italic.woff2" not in typography
     for contract in (
         '--font-sans: "Inter Variable"',
@@ -99,9 +101,14 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
 
     for template_path in (ROOT / "templates").rglob("*.html"):
         assert "fonts.googleapis.com" not in template_path.read_text(encoding="utf-8")
-    # /app fetches Inter with the HTML, at the exact URL @font-face resolves to.
-    assert ('<link rel="preload" href="/static/fonts/inter/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin>'
-            in read("templates/index.html"))
+    # Every page fetches Inter with the HTML, at the exact URL @font-face
+    # resolves to (B3): /app and each public template include the partial.
+    assert '{% include "partials/font_preload.html" %}' in read("templates/index.html")
+    for template_name in PUBLIC_TEMPLATES + ("not_found.html", "questions.html", "watch_share.html"):
+        template = read(f"templates/{template_name}")
+        head = template.split("</head>", 1)[0]
+        assert '{% include "partials/font_preload.html" %}' in head, template_name
+        assert head.index("font_preload.html") < head.index('rel="stylesheet"'), template_name
 
     security = read("app/core/security.py")
     assert "fonts.googleapis.com" not in security
@@ -130,9 +137,38 @@ def test_inter_parts_have_disjoint_ranges_and_a_small_latin_file():
         assert all(subsets.part_of(codepoint) == "latin-ext" for codepoint in ranges["latin-ext"])
         assert all(subsets.part_of(codepoint) == "rest" for codepoint in ranges["rest"])
         # The part every page loads stays far below the 344/379 KB source.
-        assert 60_000 < (font_dir / f"{style}-latin.woff2").stat().st_size < 160_000
+        files = subsets.declared_files(read("static/css/typography.css"))
+        assert 60_000 < (font_dir / files[f"{style}-latin.woff2"]).stat().st_size < 160_000
         for part in ("latin-ext", "rest"):
-            assert (font_dir / f"{style}-{part}.woff2").stat().st_size > 60_000
+            assert (font_dir / files[f"{style}-{part}.woff2"]).stat().st_size > 60_000
+
+
+def test_font_files_are_named_by_their_content_and_cached_for_good():
+    """B3: the font used to be revalidated (no-cache, a 304) on every visit,
+    arrived after the first paint and swapped every headline. Its name now
+    carries its hash, so it can be immutable -- and a stale name is caught
+    here, without fonttools."""
+    import hashlib
+
+    from app.core import static_delivery
+    from app.core.assets import font_preload_urls
+
+    subsets = _inter_subsets()
+    typography = read("static/css/typography.css")
+    font_dir = ROOT / "static" / "fonts" / "inter"
+    for part, name in subsets.declared_files(typography).items():
+        data = (font_dir / name).read_bytes()
+        assert name == f"{part.removesuffix('.woff2')}.{hashlib.sha256(data).hexdigest()[:12]}.woff2"
+        assert static_delivery.static_cache_control(f"/static/fonts/inter/{name}") == static_delivery.IMMUTABLE_CACHE_CONTROL
+    # Unhashed files (the full sources) are still revalidated.
+    assert static_delivery.static_cache_control("/static/fonts/inter/InterVariable.woff2") == "no-cache"
+    latin = subsets.declared_files(typography)["InterVariable-latin.woff2"]
+    assert font_preload_urls() == [f"/static/fonts/inter/{latin}"]
+    # Upright Latin is drawn in Inter or in the fallback, never both: no swap
+    # after the first paint. The rarer parts may still swap in.
+    latin_face = typography.split(latin, 1)[1].split("}", 1)[0]
+    assert "font-display: optional;" in latin_face
+    assert typography.count("font-display: optional;") == 1
 
 
 def test_interface_text_never_needs_more_than_the_latin_font_file():
@@ -236,3 +272,28 @@ def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
     ):
         assert label in section, label
         assert label in source, f"{label!r} is no longer live wording"
+
+
+def test_landing_heights_in_the_page_flow_ignore_the_browser_bar():
+    """F1: dvh follows Safari's bar, so every band grew on the first swipe and
+    the text slid away under the finger. In-flow heights use svh."""
+    landing = read("static/css/landing.css")
+    assert "dvh" not in re.sub(r"/\*.*?\*/", "", landing, flags=re.S)
+    assert "min-height: calc(100svh - 54px);" in landing
+
+
+def test_smooth_scrolling_starts_only_after_the_page_has_arrived():
+    """L1: html { scroll-behavior: smooth } also animated the jump to /#watch
+    after loading a page: 8,000 px through every scene. The glide is switched
+    on by public-nav.js once the page has loaded; anchors land under the bar."""
+    nav = read("templates/partials/public_nav.html")
+    assert "asset_url('/static/js/public-nav.js')" in nav
+    assert "asset_url('/static/favicon.png')" in nav
+    for sheet in ("static/css/landing.css", "static/css/public-pages.css"):
+        css = re.sub(r"/\*.*?\*/", "", read(sheet), flags=re.S)
+        assert not re.search(r"(?m)^html\s*\{[^}]*scroll-behavior:\s*smooth", css), sheet
+        assert re.search(r"html\.is-scroll-smooth\s*\{\s*scroll-behavior:\s*smooth", css), sheet
+        assert re.search(r"html\s*\{\s*scroll-padding-top:\s*54px", css), sheet
+    script = read("static/js/public-nav.js")
+    assert 'classList.add("is-scroll-smooth")' in script
+    assert 'addEventListener("load", enableSmoothScroll)' in script

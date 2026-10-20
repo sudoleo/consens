@@ -11,7 +11,14 @@
   box-sizing: border-box;
 }
 
+/* Anchors land under the sticky bar; smooth scrolling only for clicks on a
+   loaded page (public-nav.js sets the class), never for the jump that opens
+   a /s/...#src-3 link (Apple-Audit L1). */
 html {
+  scroll-padding-top: 54px;
+}
+
+html.is-scroll-smooth {
   scroll-behavior: smooth;
 }
 
@@ -1835,7 +1842,7 @@ canvas {
 .wp-chart .watch-chart { max-width: 100%; min-width: 0; }
 .wp-chart figcaption { margin-top: 6px; color: var(--muted); font-size: var(--font-size-xs); }
 .wp-timeline { margin: 0; padding: 0; list-style: none; }
-.wp-event { position: relative; padding: 0 0 22px 26px; scroll-margin-top: 84px; }
+.wp-event { position: relative; padding: 0 0 22px 26px; scroll-margin-top: 30px; }
 .wp-event::before {
   content: "";
   position: absolute;
@@ -1881,7 +1888,7 @@ canvas {
 .wp-event.is-quiet details[open] summary::after { content: "Hide"; }
 .wp-event.is-quiet .wp-event-title { margin: 0; color: var(--muted); font-weight: var(--font-weight-medium); }
 .wp-quiet-list { margin: 8px 0 0; padding: 0; list-style: none; }
-.wp-quiet-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 0; color: var(--muted); font-size: var(--font-size-xs); scroll-margin-top: 84px; }
+.wp-quiet-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 0; color: var(--muted); font-size: var(--font-size-xs); scroll-margin-top: 30px; }
 .wp-quiet-list .wp-version { margin: 0 0 0 auto; }
 
 .wp-more { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border); }

@@ -189,7 +189,8 @@ async function inlineCss(relative, seen = new Set()) {
 }
 
 async function buildStyle(style) {
-  const source = await inlineCss(style.entry);
+  const seen = new Set();
+  const source = await inlineCss(style.entry, seen);
   if (IMPORT_RE.test(source)) {
     throw new Error(`unresolved @import left in ${style.entry}`);
   }
@@ -199,7 +200,27 @@ async function buildStyle(style) {
     target: TARGET,
     legalComments: "none",
   });
-  return result.code;
+  // The sheets folded into this file. app/core/assets.py re-hashes exactly
+  // these to tell whether the bundle still matches its sources; when it does
+  // not (an edit without a rebuild), a public page falls back to the source
+  // sheet instead of serving stale CSS.
+  return { code: result.code, inputs: [...seen].sort() };
+}
+
+/**
+ * Digest of a list of files, the way sourceFingerprint and
+ * app/core/assets.py:_inputs_digest compute it (LF-normalized text).
+ */
+async function inputsDigest(relatives) {
+  const digest = createHash("sha256");
+  for (const relative of relatives) {
+    digest.update(relative);
+    digest.update("\0");
+    const bytes = await readBytes(relative);
+    digest.update(relative.startsWith("static/vendor/") ? bytes : bytes.toString("utf8").replace(/\r\n/g, "\n"));
+    digest.update("\0");
+  }
+  return digest.digest("hex").slice(0, 12);
 }
 
 /**
@@ -248,6 +269,7 @@ async function build() {
     inputs: [],
     scripts: [],
     styles: {},
+    style_sources: {},
   };
   const sourceInputs = await vendorFrontend(ROOT, CHECK_ONLY);
 
@@ -269,12 +291,18 @@ async function build() {
     });
   }
 
+  manifest.style_sources = {};
   for (const style of config.styles) {
-    const code = await buildStyle(style);
+    const { code, inputs } = await buildStyle(style);
     sourceInputs.push(style.entry);
     const filename = `${style.name}.${hash(code)}.css`;
     outputs.set(filename, code);
     manifest.styles[style.name] = `/static/dist/${filename}`;
+    manifest.style_sources[style.name] = {
+      entry: style.entry,
+      hash: await inputsDigest(inputs),
+      inputs,
+    };
   }
 
   // Source mode hashes the complete CSS directory because style.css is an

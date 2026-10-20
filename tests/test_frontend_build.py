@@ -146,14 +146,20 @@ def test_css_bundle_keeps_relative_asset_paths_resolvable():
     point at the same files. If the output ever moves, the fonts vanish."""
 
     manifest = json.loads(assets.MANIFEST_FILE.read_text(encoding="utf-8"))
-    sheet = assets.ROOT / manifest["styles"]["app"].lstrip("/")
-    css = sheet.read_text(encoding="utf-8")
+    # Since B3 the public entry sheets are bundled the same way.
+    assert {"app", "landing", "public"} <= set(manifest["styles"])
+    fonts = re.findall(r"\.\./fonts/inter/InterVariable-(?:latin|Italic-rest)\.[0-9a-f]{12}\.woff2", (
+        assets.ROOT / "static/css/typography.css").read_text(encoding="utf-8"))
+    assert len(fonts) == 2
+    for name in ("app", "landing", "public"):
+        sheet = assets.ROOT / manifest["styles"][name].lstrip("/")
+        css = sheet.read_text(encoding="utf-8")
 
-    assert "@import" not in css, "imports must be inlined, not re-fetched"
-    assert "../fonts/inter/InterVariable-latin.woff2" in css
-    for relative in ("../fonts/inter/InterVariable-latin.woff2", "../fonts/inter/InterVariable-Italic-rest.woff2",
-                     "../icons/consensus.png"):
-        assert (sheet.parent / relative).resolve().is_file(), relative
+        assert "@import" not in css, "imports must be inlined, not re-fetched"
+        for relative in fonts:
+            assert relative in css
+            assert (sheet.parent / relative).resolve().is_file(), relative
+    assert (assets.ROOT / "static/dist/../icons/consensus.png").resolve().is_file()
 
 
 def test_app_vendor_assets_are_local_versioned_and_include_fonts_and_licenses():

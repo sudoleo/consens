@@ -12,13 +12,23 @@
    the whole font; a browser fetches latin-ext or rest only for a page that
    contains one of their characters. All files keep every OpenType feature
    and both axes, and the ranges are disjoint. Edit the ranges in the script,
-   never here: --check compares this file with them. */
+   never here: --check compares this file with them.
+
+   Each file name carries its content hash, so browsers keep it for a year
+   without asking again, and every page preloads the upright Latin file in
+   its <head> (partials/font_preload.html). That file is `optional`: the page
+   is drawn in Inter when it is there by the first paint (always on a return
+   visit, nearly always on a first one) and otherwise in the fallback below
+   for the rest of that page view -- never both. `swap` re-set every headline
+   a moment after the first paint, one line shorter, and pushed everything
+   under it (Apple-Audit B3, landing CLS 0.06 on every visit). The other
+   files only carry rarer letters and italics; they still swap in. */
 @font-face {
   font-family: "Inter Variable";
-  src: url('../fonts/inter/InterVariable-latin.woff2') format('woff2-variations');
+  src: url('../fonts/inter/InterVariable-latin.46c8bad697dd.woff2') format('woff2-variations');
   font-style: normal;
   font-weight: 100 900;
-  font-display: swap;
+  font-display: optional;
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
     U+0304, U+0308, U+0329, U+2000-206F, U+2070-209F, U+20A0-20CF,
     U+2100-214F, U+2150-218F, U+2190-21FF, U+2200-22FF, U+25A0-25FF,
@@ -27,7 +37,7 @@
 
 @font-face {
   font-family: "Inter Variable";
-  src: url('../fonts/inter/InterVariable-latin-ext.woff2') format('woff2-variations');
+  src: url('../fonts/inter/InterVariable-latin-ext.8e4b00e4bd41.woff2') format('woff2-variations');
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
@@ -41,7 +51,7 @@
 
 @font-face {
   font-family: "Inter Variable";
-  src: url('../fonts/inter/InterVariable-rest.woff2') format('woff2-variations');
+  src: url('../fonts/inter/InterVariable-rest.e933094dcc1a.woff2') format('woff2-variations');
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
@@ -66,7 +76,7 @@
 
 @font-face {
   font-family: "Inter Variable";
-  src: url('../fonts/inter/InterVariable-Italic-latin.woff2') format('woff2-variations');
+  src: url('../fonts/inter/InterVariable-Italic-latin.8f0808ac6b07.woff2') format('woff2-variations');
   font-style: italic;
   font-weight: 100 900;
   font-display: swap;
@@ -78,7 +88,7 @@
 
 @font-face {
   font-family: "Inter Variable";
-  src: url('../fonts/inter/InterVariable-Italic-latin-ext.woff2') format('woff2-variations');
+  src: url('../fonts/inter/InterVariable-Italic-latin-ext.4fc631240e4b.woff2') format('woff2-variations');
   font-style: italic;
   font-weight: 100 900;
   font-display: swap;
@@ -92,7 +102,7 @@
 
 @font-face {
   font-family: "Inter Variable";
-  src: url('../fonts/inter/InterVariable-Italic-rest.woff2') format('woff2-variations');
+  src: url('../fonts/inter/InterVariable-Italic-rest.32845b2485da.woff2') format('woff2-variations');
   font-style: italic;
   font-weight: 100 900;
   font-display: swap;
@@ -115,17 +125,33 @@
     U+EE87-EEE1, U+F6C3, U+1F12F-1F149, U+1F16A-1F16B, U+1F850, U+1F852;
 }
 
-/* Until Inter has loaded, text is set in Arial scaled to Inter's metrics, so
-   the swap (font-display: swap) changes the letter shapes but not the line
-   breaks: with Segoe UI as the stand-in every line grew a few pixels wider
-   and re-wrapped on Windows. Values as next/font derives them for Inter. */
+/* Where Inter is not there in time, text is set in Arial scaled to Inter's
+   metrics, so it wraps like Inter: with Segoe UI as the stand-in every line
+   grew a few pixels wider and re-wrapped on Windows. Values as next/font
+   derives them for Inter (ascent 0.96875 and descent 0.2415 em, divided by
+   size-adjust). Two faces: regular and medium text against Arial, semibold
+   and bold against Arial Bold -- one face for every weight made the browser
+   smear a fake bold out of the regular cut, wider than Inter's bold. The
+   bold factor is measured against Inter 600/700 at 14-18 px, where nearly
+   all text is set (Inter/Arial Bold 1.00-1.02). */
 @font-face {
   font-family: "Inter Fallback";
   src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("Arimo");
+  font-weight: 100 549;
   ascent-override: 90.49%;
   descent-override: 22.56%;
   line-gap-override: 0%;
   size-adjust: 107.06%;
+}
+
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Arimo Bold");
+  font-weight: 550 900;
+  ascent-override: 95.73%;
+  descent-override: 23.86%;
+  line-gap-override: 0%;
+  size-adjust: 101.2%;
 }
 
 :root {
