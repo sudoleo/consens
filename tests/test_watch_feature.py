@@ -153,13 +153,17 @@ class FakeTransaction:
         ref.set(data)
 
 
-def share(owner="u1", slug="question", score=60):
+def share(owner="u1", slug="question", score=60, question="Will this consensus change?"):
     return {
         "owner_uid": owner,
         "slug": slug,
         "status": "active",
-        "question": "Will this consensus change?",
-        "question_hash": "abc",
+        "question": question,
+        # One watch per question and owner: another question, another hash.
+        "question_hash": (
+            "abc" if question == "Will this consensus change?"
+            else share_snapshots.question_hash(question)
+        ),
         "differences_data": {"agreement": {"score": score}},
     }
 
@@ -390,7 +394,7 @@ class WatchCrudTests(unittest.TestCase):
         cfg.apply_limits({**self.old_limits, "watch_free_active_limit": 1, "watch_pro_active_limit": 2})
         first = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db)
         second_share_id = "B" * 16
-        self.db.stores["shares"][second_share_id] = share(slug="two")
+        self.db.stores["shares"][second_share_id] = share(slug="two", question="Will that one change?")
         with self.assertRaisesRegex(WatchError, "limit"):
             watch_service.create_watch("u1", share_id=second_share_id, interval="weekly", tier="free", db=self.db)
         second = watch_service.create_watch("u1", share_id=second_share_id, interval="daily", tier="pro", db=self.db)
@@ -398,7 +402,7 @@ class WatchCrudTests(unittest.TestCase):
 
     def test_pause_delete_and_resume_keep_owner_counter_consistent(self):
         second_share_id = "B" * 16
-        self.db.stores["shares"][second_share_id] = share(slug="two")
+        self.db.stores["shares"][second_share_id] = share(slug="two", question="Will that one change?")
         first = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", tier="pro", db=self.db
         )
@@ -481,7 +485,7 @@ class WatchCrudTests(unittest.TestCase):
             "u1", watch_id, {"status": "paused"}, True, db=self.db
         )
         second_share_id = "B" * 16
-        self.db.stores["shares"][second_share_id] = share(slug="two")
+        self.db.stores["shares"][second_share_id] = share(slug="two", question="Will that one change?")
         watch_service.create_watch(
             "u1", share_id=second_share_id, interval="weekly", tier="pro", db=self.db,
         )

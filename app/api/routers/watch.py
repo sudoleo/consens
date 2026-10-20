@@ -21,7 +21,8 @@ from app.services import (
 router = APIRouter()
 _STATUS_BY_CODE = {
     "not_found": 404, "forbidden": 403, "pro_required": 403,
-    "limit_reached": 429, "already_exists": 409, "invalid_token": 400,
+    "limit_reached": 429, "already_exists": 409, "already_watched": 409,
+    "invalid_token": 400,
     "expired_token": 410, "invalid_email": 400, "not_watched": 404,
     "telegram_not_configured": 503, "telegram_not_linked": 409,
     "telegram_already_linked": 409, "telegram_delivery_failed": 502,

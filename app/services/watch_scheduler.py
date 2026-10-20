@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 
 import app.core.config as cfg
 from app.core import security
@@ -25,6 +26,9 @@ from app.services.llm.mock_llm import mock_llm_enabled
 
 
 TICK_SECONDS = 30 * 60
+# The loop sleeps until the next watch is due, so a check set for 09:00 runs
+# at 09:00 and not up to a tick later (Audit J5) -- never more often than this.
+MIN_TICK_SECONDS = 30
 WATCH_LEASE_HEARTBEAT_SECONDS = 5 * 60
 # The global worker lease lasts WORKER_LEASE_MINUTES; renew well before that
 # between watches so a long tick keeps it, and stop when it was taken over.
@@ -625,6 +629,26 @@ async def run_notification_outbox_tick() -> dict:
         return {}
 
 
+def next_tick_seconds(*, now: datetime | None = None) -> float:
+    """Seconds until the next tick: the next due watch, at most TICK_SECONDS.
+
+    A watch still due after a tick (its lease is held elsewhere, the daily
+    budget is spent) waits for the normal rhythm instead of a busy loop."""
+    now = now or datetime.now(timezone.utc)
+    try:
+        due = watch_service.earliest_next_run_at()
+    except Exception as exc:
+        logging.warning("Next watch due time unavailable category=%s", safe_exception(exc))
+        return TICK_SECONDS
+    if not isinstance(due, datetime):
+        return TICK_SECONDS
+    wait = (due - now).total_seconds()
+    if wait <= 0:
+        return TICK_SECONDS
+    # A few seconds past the due time, so the scan finds it due.
+    return float(min(TICK_SECONDS, max(MIN_TICK_SECONDS, wait + 5)))
+
+
 def wake_watch_scheduler():
     """Wake the in-process scheduler so newly queued work starts promptly."""
     if _scheduler_wake_event is not None:
@@ -665,7 +689,9 @@ async def watch_scheduler_loop():
                 notifications=outbox_counts,
             )
             try:
-                await asyncio.wait_for(wake_event.wait(), timeout=TICK_SECONDS)
+                await asyncio.wait_for(
+                    wake_event.wait(), timeout=await asyncio.to_thread(next_tick_seconds),
+                )
             except asyncio.TimeoutError:
                 pass
     finally:
