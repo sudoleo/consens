@@ -1081,50 +1081,81 @@ async function runDemoFlow() {
   if (sendBtn) sendBtn.disabled = false;
 }
 
+// "Try the demo" stands in the template (index.html), hidden; app-bootstrap.js
+// shows it in the first frame unless this browser has used or typed past it
+// (demoChipDismissed), so the composer never swaps Send for it in front of
+// the reader. This wires it up once and keeps the offer in step with the
+// field. It stays a one-time offer: the first keystroke retires it for
+// good, and it fades out while Send fades in at the same end of the row
+// (Apple-Audit B13).
+const DEMO_SWAP_MS = 180;
+function demoMotionAllowed() {
+  return !window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+}
+
+// Whatever appears in the send slot fades in where the other one stood.
+function fadeInSlot(node) {
+  if (!node || !demoMotionAllowed() || typeof node.animate !== "function") return;
+  node.animate([{ opacity: 0, transform: "scale(.92)" }, { opacity: 1, transform: "none" }],
+    { duration: DEMO_SWAP_MS, easing: "cubic-bezier(.22, 1, .36, 1)" });
+}
+
+function retireDemoChip(btn, storage) {
+  storage?.setItem("demoChipDismissed", "1");
+  if (!btn.isConnected || btn.classList.contains("is-leaving")) return;
+  const sendBtn = document.getElementById("sendButton");
+  if (!demoMotionAllowed() || typeof btn.animate !== "function") {
+    btn.remove();
+    return;
+  }
+  // Out of the row while it fades (composer.css .demo-chip.is-leaving), so
+  // Send takes its place at once and nothing beside it moves.
+  btn.classList.add("is-leaving");
+  btn.tabIndex = -1;
+  fadeInSlot(sendBtn);
+  btn.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(.96)" }],
+    { duration: DEMO_SWAP_MS - 40, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" })
+    .finished.catch(() => {}).then(() => btn.remove());
+}
+
 function createStartDemoChip() {
   const storage = getDemoStorage();
-  if (storage?.getItem("demoChipDismissed")) return;
   const container = document.querySelector(".chat-input-container");
-  if (!container || container.querySelector(".demo-chip")) return;
+  const btn = container?.querySelector(".demo-chip");
+  if (!btn) return;
+  if (storage?.getItem("demoChipDismissed")) {
+    btn.remove();
+    return;
+  }
+  if (btn.dataset.wired) return;
+  btn.dataset.wired = "true";
+  btn.hidden = false;
   const questionInput = document.getElementById("questionInput");
 
-  const btn = document.createElement("button");
-  btn.className = "demo-chip demo-action send-glow";
-  btn.type = "button";
-  btn.setAttribute("aria-label", "Start interactive demo");
-  // Zwei Beschriftungen, immer genau eine sichtbar. Auf einem 375er Schirm
-  // teilen sich (+), Lauf-Schalter, dieser Knopf und Senden 315 px.
-  // "Try the demo" passt dort nicht in eine Zeile mit dem Senden-Knopf.
-  // Welche Beschriftung gilt, entscheidet
-  // components-misc.css; der aria-Name bleibt in beiden Faellen derselbe.
-  btn.innerHTML =
-    '<span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span>' +
-    '<span class="demo-chip-label demo-chip-label-full">Try the demo</span>' +
-    '<span class="demo-chip-label demo-chip-label-short">Demo</span>';
-
-  const inputActions = container.querySelector(".input-actions-container");
-  if (inputActions) {
-    inputActions.prepend(btn);
-  } else {
-    container.appendChild(btn);
-  }
-
+  let chipShown = null;
   const syncChipState = () => {
+    if (!btn.isConnected || btn.classList.contains("is-leaving")) return;
     const hasQuestionText = Boolean(questionInput?.value.length);
     container.classList.toggle("has-question-input", hasQuestionText);
-    btn.hidden = hasQuestionText;
     btn.tabIndex = hasQuestionText ? -1 : 0;
+    // A filled-in example or draft hands the slot to Send and back; only a
+    // change, never the first sync, moves anything.
+    if (chipShown !== null && chipShown === hasQuestionText) {
+      fadeInSlot(hasQuestionText ? document.getElementById("sendButton") : btn);
+    }
+    chipShown = !hasQuestionText;
   };
 
   window.syncDemoChipState = syncChipState;
 
   if (questionInput) {
     questionInput.addEventListener("input", event => {
-      syncChipState();
       if (questionInput.value.length && event.isTrusted) {
-        storage?.setItem("demoChipDismissed", "1");
-        btn.remove();
+        retireDemoChip(btn, storage);
+        container.classList.add("has-question-input");
+        return;
       }
+      syncChipState();
     });
     questionInput.addEventListener("change", syncChipState);
   }

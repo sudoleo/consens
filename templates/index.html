@@ -37,6 +37,7 @@
         data-default-consensus-preset="{{ default_consensus_preset | tojson | forceescape }}"
         data-model-families="{{ model_families | tojson | forceescape }}"
         data-max-run-families="{{ max_run_families }}"
+        data-agent-default-label="{{ agent_default_label | e }}"
         data-app-build="{{ app_commit | e }}">
   {#
     Scripts and stylesheet come from static/js/bundles.json via
@@ -56,8 +57,14 @@
      starts with the HTML instead of after the CSS, so first paint usually has
      Inter. latin-ext and rest load only when a page contains their letters. #}
   {% include "partials/font_preload.html" %}
+  {# The sign-in comes from Google's CDN (firebase.js imports it), and the
+     app group waits for that module: the connection and both files start
+     with the HTML instead of after the bundles (Apple-Audit B9). Same URLs
+     as the imports in static/firebase.js. #}
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js">
   <link rel="stylesheet" href="{{ frontend.style }}">
-  <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
@@ -67,9 +74,13 @@
        group below. -->
   <script defer src="{{ asset_url('/static/vendor/marked/12.0.2/marked.min.js') }}"></script>
   <script defer src="{{ asset_url('/static/vendor/dompurify/3.4.17/dist/purify.min.js') }}"></script>
-  <!-- KaTeX: mathematische Ausdruecke aus Modellantworten lesbar setzen. -->
-  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.js') }}"></script>
-  <script defer src="{{ asset_url('/static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js') }}"></script>
+  {# KaTeX sets formulas in model answers, which few answers have: about
+     100 KB that every start loaded before the app (Apple-Audit B12).
+     math-render.js loads these files the first time a formula streams in. #}
+  <meta name="katex-assets"
+        data-css="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}"
+        data-js="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.js') }}"
+        data-auto-render="{{ asset_url('/static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js') }}">
   {#
     Everything below the local vendor libraries: the auth watchdog, the two ES modules
     and the deferred app group. Notes on individual files (load-order
@@ -126,7 +137,7 @@
     </button>
   </nav>
   <div id="mobileConversationActions" class="mobile-conversation-actions" role="group" aria-label="Conversation actions">
-    <button type="button" id="mobileNewRunButton" class="mobile-new-run input-action-btn-subtle" aria-label="New chat" title="Start a new comparison">
+    <button type="button" id="mobileNewRunButton" class="mobile-new-run input-action-btn-subtle" aria-label="New chat" title="Start a new chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path>
         <path d="M17.4 3.6a1.8 1.8 0 0 1 2.6 2.6L11.6 14.6 8 16l1.4-3.6Z"></path>
@@ -149,12 +160,12 @@
     </div>
     <!-- Neuer Vergleich: eigenständiges Navigationselement; leert den Lauf
          und setzt den Hero-Zustand zurück. -->
-    <button type="button" id="newRunButton" class="sidebar-new-run" title="Start a new comparison">
+    <button type="button" id="newRunButton" class="sidebar-new-run" title="Start a new chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path>
         <path d="M17.4 3.6a1.8 1.8 0 0 1 2.6 2.6L11.6 14.6 8 16l1.4-3.6Z"></path>
       </svg>
-      <span>New comparison</span>
+      <span>New chat</span>
     </button>
     <!-- Pinned: model controls — does not scroll with bookmarks.
          Usage lebt jetzt im Kontingent-Panel über dem Account-Footer. -->
@@ -332,35 +343,6 @@
     </div>
   </div>
   <div class="container">
-    <!-- E-Mail-Bestaetigung. Der Zustand zwischen Registrierung und erstem
-         Lauf war frueher ein Rauswurf: unbestaetigt hiess sofort ausloggen,
-         und wer den Link nicht sofort fand, war weg. Jetzt bleibt die Session
-         stehen, die App ist sichtbar, das Fragefeld nimmt Text an — nur der
-         Lauf wartet. Gefuellt von static/js/email-verify.js (angesteuert aus
-         firebase.js, das die Firebase-Aufrufe kennt). -->
-    <section id="verifyBanner" class="verify-banner" role="status" aria-live="polite" hidden>
-      <span class="verify-banner-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-          stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-          <path d="m3.5 7 8.5 6 8.5-6"></path>
-        </svg>
-      </span>
-      <div class="verify-banner-copy">
-        <strong class="verify-banner-title">Confirm your e-mail to get started</strong>
-        <p class="verify-banner-body">
-          We sent a confirmation link to <span id="verifyBannerEmail" class="verify-banner-email"></span>.
-          Click it and you land right back here — your question stays in the field.
-        </p>
-        <p class="verify-banner-hint">No mail after a minute? Check your spam or promotions folder.</p>
-        <p id="verifyBannerStatus" class="verify-banner-status" hidden></p>
-      </div>
-      <div class="verify-banner-actions">
-        <button type="button" id="verifyBannerResend" class="verify-banner-btn">Resend the link</button>
-        <button type="button" id="verifyBannerRecheck" class="verify-banner-link">I&rsquo;ve confirmed it</button>
-        <button type="button" id="verifyBannerSignOut" class="verify-banner-link">Use a different address</button>
-      </div>
-    </section>
     <!-- Abgeschlossene Turns eines Follow-ups. Vor dem neuen aktiven Turn wird
          die bisherige Frage samt gerenderter Consensus-Antwort hier als
          schreibgeschuetzter Verlauf abgelegt. New comparison leert ihn wieder. -->
@@ -567,7 +549,7 @@
               </select>
             </div>
             <div class="select-wrapper agent-effort-control" title="Reasoning for your next message">
-              <select id="agentReasoningEffort" aria-label="Agent reasoning effort" disabled><option value="default">Default reasoning</option></select>
+              <select id="agentReasoningEffort" aria-label="Agent reasoning effort" disabled><option value="default">Auto</option></select>
             </div>
             <button id="agentModelsRetry" type="button" class="thread-ask-more" hidden>Reload models</button>
           </div>
@@ -585,9 +567,16 @@
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">
+          <!-- "Try the demo": an onboarding offer that takes Send's place
+               while the field is empty, once per browser (demo.js). In the
+               template, not added by the module, so the first frame already
+               decides between it and Send (app-bootstrap.js). -->
+          <button type="button" class="demo-chip demo-action send-glow" aria-label="Start interactive demo" hidden><span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span><span class="demo-chip-label demo-chip-label-full">Try the demo</span><span class="demo-chip-label demo-chip-label-short">Demo</span></button>
           <!-- Pfeil nach oben im gefuellten Kreis: der Senden-Knopf ist das
-               einzige massive Element im Composer (Stil in shell.css). -->
-          <button id="sendButton" class="input-action-btn-primary send-glow" data-icon="send" title="Send question" aria-label="Send question">
+               einzige massive Element im Composer (Stil in shell.css). Ein
+               leeres Feld sendet nichts: disabled ab dem ersten Bild, app-init.js
+               gibt ihn frei. -->
+          <button id="sendButton" class="input-action-btn-primary send-glow" data-icon="send" title="Write a message to send" aria-label="Write a message to send" aria-disabled="true" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </button>
         </div>
@@ -652,6 +641,38 @@
         </div>
       </footer>
     </div>
+    <!-- E-Mail-Bestaetigung. Der Zustand zwischen Registrierung und erstem
+         Lauf war frueher ein Rauswurf: unbestaetigt hiess sofort ausloggen,
+         und wer den Link nicht sofort fand, war weg. Jetzt bleibt die Session
+         stehen, die App ist sichtbar, das Fragefeld nimmt Text an — nur der
+         Lauf wartet. Gefuellt von static/js/email-verify.js (angesteuert aus
+         firebase.js, das die Firebase-Aufrufe kennt).
+         Nach dem Eingabebereich im DOM: auf dem Startbildschirm steht er unter
+         dem Feld und schiebt es nie (Apple-Audit B5); im Thread holt ihn
+         order: 0 (shell.css) nach oben. -->
+    <section id="verifyBanner" class="verify-banner" role="status" aria-live="polite" hidden>
+      <span class="verify-banner-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+          <path d="m3.5 7 8.5 6 8.5-6"></path>
+        </svg>
+      </span>
+      <div class="verify-banner-copy">
+        <strong class="verify-banner-title">Confirm your e-mail to get started</strong>
+        <p class="verify-banner-body">
+          We sent a confirmation link to <span id="verifyBannerEmail" class="verify-banner-email"></span>.
+          Click it and you land right back here — your question stays in the field.
+        </p>
+        <p class="verify-banner-hint">No mail after a minute? Check your spam or promotions folder.</p>
+        <p id="verifyBannerStatus" class="verify-banner-status" hidden></p>
+      </div>
+      <div class="verify-banner-actions">
+        <button type="button" id="verifyBannerResend" class="verify-banner-btn">Resend the link</button>
+        <button type="button" id="verifyBannerRecheck" class="verify-banner-link">I&rsquo;ve confirmed it</button>
+        <button type="button" id="verifyBannerSignOut" class="verify-banner-link">Use a different address</button>
+      </div>
+    </section>
 
     <!-- Konsens-Section: bewusst OBERHALB der Modellantworten (User-Vorgabe) —
          das Ergebnis (Konsens + Differences) ist die Hauptsache, die einzelnen

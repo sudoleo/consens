@@ -217,7 +217,9 @@
           if (window.auth?.currentUser) return false;
           if (document.documentElement.dataset.authUnavailable === "true") return false;
           const authState = window.__consensioAuthState;
-          return authState?.known ? !authState.uid : !readStored("id_token");
+          if (authState?.known) return !authState.uid;
+          // The session app-bootstrap.js expects before Firebase answers.
+          return !(window.App.expectedSession ? window.App.expectedSession().account : readStored("id_token"));
         }
         window.App.isGuestComposer = isGuestComposer;
 
@@ -273,7 +275,8 @@
           // was painted with (app-bootstrap.js); "Sign in" in between only
           // flickered past before the account arrived.
           const restoring = !canType && !window.__consensioAuthState?.known
-            && document.documentElement.dataset.authUnavailable !== "true" && Boolean(readStored("id_token"));
+            && document.documentElement.dataset.authUnavailable !== "true"
+            && Boolean(window.App.expectedSession ? window.App.expectedSession().account : readStored("id_token"));
           if (questionInput) {
             questionInput.disabled = !canType;
             if (!restoring) {
@@ -536,7 +539,8 @@
           if (stored !== null) return stored === "true";
           if (window.auth?.currentUser) return false;
           const authState = window.__consensioAuthState;
-          return authState?.known ? !authState.uid : !readStored("id_token");
+          if (authState?.known) return !authState.uid;
+          return !(window.App.expectedSession ? window.App.expectedSession().account : readStored("id_token"));
         }
 
         // Ohne Gleiten: Start und Anmeldung sind keine Geste des Lesers, die
@@ -549,19 +553,26 @@
           document.body.classList.remove("is-sidebar-settling");
         }
 
+        // The fixed phone composer's height, as room at the column's end
+        // (shell.css --thread-composer-height). Written on the column, which
+        // alone reads it: on <html> every change restyled the whole page.
+        // While the composer opens, closes or glides, its height changes each
+        // frame; the room follows once, with the height it ends at
+        // (Apple-Audit D9).
         const threadComposer = document.querySelector(".input-section");
+        const threadColumn = threadComposer?.closest(".container") || null;
+        const MOVING_COMPOSER = ["composer-animating", "composer-gliding"];
         function syncThreadComposerReserve() {
-          if (!threadComposer || !usesOverlaySidebar()) {
-            document.documentElement.style.removeProperty("--thread-composer-height");
+          if (!threadComposer || !threadColumn || !usesOverlaySidebar()) {
+            threadColumn?.style.removeProperty("--thread-composer-height");
             return;
           }
+          if (MOVING_COMPOSER.some(name => document.body.classList.contains(name))) return;
 
           const composerHeight = Math.ceil(threadComposer.getBoundingClientRect().height);
-          if (composerHeight > 0) {
-            document.documentElement.style.setProperty(
-              "--thread-composer-height",
-              `${composerHeight}px`
-            );
+          const value = `${composerHeight}px`;
+          if (composerHeight > 0 && threadColumn.style.getPropertyValue("--thread-composer-height") !== value) {
+            threadColumn.style.setProperty("--thread-composer-height", value);
           }
         }
 
@@ -569,6 +580,13 @@
           const threadComposerObserver = new ResizeObserver(syncThreadComposerReserve);
           threadComposerObserver.observe(threadComposer);
         }
+        // The end of a move: its final height (the observer kept quiet).
+        let composerWasMoving = false;
+        new MutationObserver(() => {
+          const moving = MOVING_COMPOSER.some(name => document.body.classList.contains(name));
+          if (composerWasMoving && !moving) requestAnimationFrame(syncThreadComposerReserve);
+          composerWasMoving = moving;
+        }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
         requestAnimationFrame(syncThreadComposerReserve);
 
         // On a phone or tablet the open sidebar is a drawer over the page
@@ -723,11 +741,13 @@
         window.validateInputText = validateInputText;
 
         // Event-Listener für Eingabefelder und Buttons
-        // Desktop: Enter sendet, Shift+Enter macht einen Absatz. Auf kleinen
-        // Handy-Layouts bleibt Enter immer die normale Absatz-Taste.
+        // Mit Tastatur sendet Enter, Shift+Enter macht einen Absatz; auf einem
+        // Touch-Geraet bleibt Enter die Absatz-Taste, und ein Enter, das ein
+        // Wort einer Eingabemethode bestaetigt, gehoert dem Wort
+        // (App.enterSends, app-core.js; Apple-Audit E7, E8).
         document.getElementById("questionInput").addEventListener("keydown", function (event) {
           if (event.key === "Enter" && !event.shiftKey) {
-            if (window.matchMedia("(max-width: 768px)").matches || event.isComposing) {
+            if (!window.App.enterSends(event)) {
               return;
             }
             if (window.isRunActive && window.isRunActive()) {

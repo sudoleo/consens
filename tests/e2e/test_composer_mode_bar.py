@@ -37,6 +37,11 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(bar).to_be_visible()
         expect(page.locator('#composerModeDescription')).to_contain_text('no consensus')
         expect(page.locator('#modeNotice')).to_have_count(0)
+        # On the start screen the bar is simply there: no rise on the first
+        # paint or a mode change (Apple-Audit B1) ...
+        assert bar.evaluate("el => getComputedStyle(el).animationName") == 'none'
+        # ... it rises in when it comes back (a new chat, the Compare start).
+        bar.evaluate("el => { el.hidden = true; App.renderComposerMode(); }")
         assert bar.evaluate("el => getComputedStyle(el).animationName") == 'composer-mode-reveal'
         page.emulate_media(reduced_motion='reduce')
         assert bar.evaluate("el => getComputedStyle(el).animationName") == 'none'
@@ -63,7 +68,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(page.locator('#attachTrigger')).to_be_visible()
         expect(page.locator('.composer-lead .model-picker-display')).to_have_count(0)
         # Collapsing can restart the reveal; measure its final position.
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         bar.evaluate("el => Promise.all(el.getAnimations().map(animation => animation.finished))")
         rect = bar.bounding_box()
         assert abs(rect['height'] - 36) <= 1

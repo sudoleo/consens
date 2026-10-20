@@ -89,18 +89,50 @@ describe("app update", () => {
     expect(app.state.reloads).toBe(1);
   });
 
-  it("reloads as the page comes back, but not once the first click landed", async () => {
-    const quick = boot({ hidden: true });
-    quick.come();
+  it("never reloads in front of the reader; a build learnt on the way back loads once the page is left (Apple-Audit B7)", async () => {
+    const app = boot({ hidden: true });
+    app.come();
     await settle();
-    expect(quick.state.reloads).toBe(1);
+    expect(app.state.fetches).toBe(1);
+    expect(app.state.reloads).toBe(0);
+    // Leaving again loads it at once, without asking the server again: a
+    // phone may freeze the hidden page before a request returns.
+    app.leave();
+    expect(app.state.reloads).toBe(1);
+    expect(app.state.fetches).toBe(1);
+  });
 
-    const busy = boot({ hidden: true, deferFetch: true });
-    busy.come();
-    busy.window.dispatchEvent(new busy.window.Event("pointerdown"));
-    busy.state.release();
+  it("remembers where in the open chat the reader is", async () => {
+    const app = boot({ before(window) {
+      window.document.body.insertAdjacentHTML("beforeend", '<div class="container"><div data-turn-key="t1"></div><div data-turn-key="t2"></div></div>');
+      const [first, second] = window.document.querySelectorAll("[data-turn-key]");
+      first.getClientRects = second.getClientRects = () => [1];
+      first.getBoundingClientRect = () => ({ top: -900, bottom: -40 });
+      second.getBoundingClientRect = () => ({ top: -40, bottom: 600 });
+      Object.defineProperty(window, "scrollY", { configurable: true, get: () => 1500 });
+    } });
+    app.window.document.body.classList.remove("is-hero");
+    app.state.identity = { bookmarkId: "b1" };
+    app.leave();
     await settle();
-    expect(busy.state.reloads).toBe(0);
+    expect(app.stored(RESTORE_KEY)).toMatchObject({ bookmarkId: "b1", place: { key: "t2", offset: -40, y: 1500 } });
+  });
+
+  it("returns to that place when it reopens the chat", () => {
+    const record = { from: "0000000", at: Date.now(), uid: "u1", bookmarkId: "b1", place: { key: "t2", offset: -40, y: 1500 } };
+    let place = null;
+    const app = boot({ session: { [RESTORE_KEY]: record }, before(window) {
+      window.document.body.insertAdjacentHTML("beforeend", '<div class="container"><div data-turn-key="t2"></div></div>');
+      const turn = window.document.querySelector("[data-turn-key]");
+      turn.getClientRects = () => [1];
+      turn.getBoundingClientRect = () => ({ top: 300 });
+      Object.defineProperty(window, "scrollY", { configurable: true, get: () => 900 });
+      window.App.chatScroll = { returnTo: where => { place = where; } };
+    } });
+    app.window.dispatchEvent(new app.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u1" } }));
+    expect(app.state.opened).toEqual(["b1"]);
+    // The turn stands 300px down now; it goes back to 40px above the top.
+    expect(place()).toBe(900 + 300 + 40);
   });
 
   it.each([

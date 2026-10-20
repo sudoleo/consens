@@ -106,7 +106,7 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         assert bounds[-1]['x']+bounds[-1]['width']<=width
         assert page.locator('.thread-history-turn').first.bounding_box()['y'] >= header.bounding_box()['height']
         # The collapsed composer is a pill of the same material.
-        page.wait_for_function("() => document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         composer = page.locator('.chat-input-container')
         expect(composer).to_have_css('border-top-left-radius', '25px')
         expect(composer).to_have_css('background-color', COMPOSER_SURFACE[theme])
@@ -321,7 +321,7 @@ def test_one_line_thread_composer_is_a_pill(browser, phase4_server, width):
         # The start screen keeps its box.
         expect(composer).to_have_css('border-top-left-radius', '20px')
         seed_long_answer(page)
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         expect(composer).to_have_css('border-top-left-radius', '25px')
         page.wait_for_function("() => !document.getAnimations().some(animation => animation.playState === 'running')")
         box = composer.bounding_box()
@@ -337,7 +337,7 @@ def test_one_line_thread_composer_is_a_pill(browser, phase4_server, width):
         else:
             page.locator('#questionInput').click()
             expect(page.locator('body')).not_to_have_class(re.compile(r'\bcomposer-collapsed\b'))
-            page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+            page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
             expect(composer).to_have_css('border-top-left-radius', '20px')
     finally:
         context.close()
@@ -444,7 +444,7 @@ def test_mobile_composer_hangs_from_the_keyboard_edge(browser, phase4_server):
     try:
         page.set_viewport_size({'width': 390, 'height': 820})
         seed_long_answer(page)
-        settle = "() => !document.body.classList.contains('composer-animating')"
+        settle = "() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')"
         page.wait_for_function(settle)
         page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 820) <= 1")
 
@@ -478,6 +478,47 @@ def test_mobile_composer_hangs_from_the_keyboard_edge(browser, phase4_server):
         page.wait_for_function(settle)
         page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 820) <= 1")
         assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--keyboard-edge')") == ''
+    finally:
+        context.close()
+
+
+def test_mobile_composer_rises_with_a_known_keyboard_before_safari_reports_it(browser, phase4_server):
+    """F9: Safari reports the keyboard once it stands. A height this device
+    reported before moves the composer up with the keyboard at the tap and
+    down with it when the field is left; the report only corrects."""
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True, init_script=FAKE_VISUAL_VIEWPORT)
+    try:
+        page.set_viewport_size({'width': 390, 'height': 820})
+        seed_long_answer(page)
+        settle = "() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')"
+        page.wait_for_function(settle)
+        bottom = "() => Math.round(document.querySelector('.input-section').getBoundingClientRect().bottom)"
+        # The first opening is measured (no prediction yet) and remembered.
+        page.locator('#questionInput').tap()
+        page.evaluate('() => window.__keyboard(420)')
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 420) <= 1")
+        page.evaluate('() => { document.activeElement.blur(); window.__keyboard(820, 0); }')
+        page.wait_for_function("() => !document.body.classList.contains('keyboard-open')")
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 820) <= 1")
+        # Second tap: up at once, gliding, before the viewport says anything.
+        page.locator('#questionInput').tap()
+        expect(page.locator('body')).to_have_class(re.compile(r'\bkeyboard-open\b'))
+        expect(page.locator('body')).to_have_class(re.compile(r'\bkeyboard-moving\b'))
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 420) <= 1")
+        assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--keyboard-lift')") == ''
+        # Safari's late report changes nothing that is already right.
+        page.evaluate('() => window.__keyboard(420)')
+        page.wait_for_timeout(100)
+        assert abs(page.evaluate(bottom) - 420) <= 1
+        # Leaving the field: down with the keyboard, not after its report.
+        page.evaluate('() => document.activeElement.blur()')
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bkeyboard-open\b'))
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 820) <= 1")
+        page.evaluate('() => window.__keyboard(820, 0)')
+        # A keyboard that never comes (hardware keyboard): back down after a moment.
+        page.locator('#questionInput').tap()
+        expect(page.locator('body')).to_have_class(re.compile(r'\bkeyboard-open\b'))
+        page.wait_for_function("() => !document.body.classList.contains('keyboard-open')", timeout=3000)
     finally:
         context.close()
 
@@ -551,7 +592,7 @@ def test_iphone_safari_finds_the_page_colour_at_both_bars(browser, phase4_server
         # Thread: the same strip on top, the fixed composer below.
         seed_long_answer(page)
         page.wait_for_function("() => document.body.classList.contains('composer-collapsed')"
-            " && !document.body.classList.contains('composer-animating')")
+            " && !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         bars = page.evaluate(SAFARI_BAR_COLOURS)
         assert bars['top'] == bars['page'] and bars['bottom'] == bars['page'], bars
     finally:

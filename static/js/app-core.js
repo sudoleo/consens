@@ -283,18 +283,28 @@
     // Der Clamp wird fuer die Messung kurz aufgehoben (innerhalb eines
     // Frames, es wird also nichts davon gezeichnet): an einem geklammerten
     // Block meldet scrollHeight je nach Zeitpunkt die geklammerte Hoehe.
-    const previous = text.style.webkitLineClamp;
-    text.style.webkitLineClamp = "unset";
-    const full = text.scrollHeight;
-    text.style.webkitLineClamp = previous;
+    // Only a folded question is clamped (shell.css .is-long); an unfolded
+    // one is measured as it stands, without the write that forced a second
+    // style pass inside every send (Apple-Audit D3).
+    let full;
+    if (wrap.classList.contains("is-long")) {
+      const previous = text.style.webkitLineClamp;
+      text.style.webkitLineClamp = "unset";
+      full = text.scrollHeight;
+      text.style.webkitLineClamp = previous;
+    } else full = text.scrollHeight;
     const line = parseFloat(getComputedStyle(text).lineHeight) || 24;
     wrap.classList.toggle("is-long", full > line * (FOLD_LINES + FOLD_MIN_HIDDEN_LINES) + 2);
   }
 
+  // The observer measures after layout, before the frame is painted (its
+  // first call comes with the first layout of the text); measuring here as
+  // well read the half-built thread in the middle of every send and of every
+  // streamed projection (Apple-Audit D3). Without an observer it measures now.
   function observeQuestionFold(wrap, text) {
     if (!wrap || !text) return;
-    syncQuestionFold(wrap, text);
-    if (typeof ResizeObserver !== "function" || threadAskResizeObservers.has(text)) return;
+    if (typeof ResizeObserver !== "function") { syncQuestionFold(wrap, text); return; }
+    if (threadAskResizeObservers.has(text)) return;
     const observer = new ResizeObserver(() => syncQuestionFold(wrap, text));
     observer.observe(text);
     threadAskResizeObservers.set(text, observer);
@@ -394,6 +404,26 @@
     );
   }
 
+  // An Enter that confirms a word an input method (Japanese, Chinese,
+  // Korean) is still composing belongs to that word, never to a send or
+  // save. Safari reports the confirming Enter with isComposing false but
+  // keyCode 229 (Apple-Audit E8). Every Enter handler of a text field asks
+  // this first.
+  function isComposingKey(event) {
+    return Boolean(event?.isComposing || event?.keyCode === 229);
+  }
+
+  // Enter in the composer: on a device whose keyboard is the touch screen it
+  // is a new paragraph (there is a Send button under the thumb); with a
+  // physical keyboard it sends, Shift+Enter breaks the line. Decided by the
+  // device, not the window's width: a narrow desktop window sends, an iPad's
+  // touch keyboard does not (Apple-Audit E7).
+  const touchKeyboard = window.matchMedia?.("(hover: none) and (pointer: coarse)");
+  function enterSends(event) {
+    if (event?.key !== "Enter" || event.shiftKey || isComposingKey(event)) return false;
+    return !touchKeyboard?.matches;
+  }
+
   // The short notice of ~100 callers: a thin forward to the one notice line
   // (App.toast, notices.js), which queues, reads out and stays as long as it
   // takes to read. `options` passes on tone, action, duration.
@@ -440,25 +470,102 @@
   // last drawn to where it now stands (FLIP). The new place is read just
   // before the next paint, after the rest of the task has built the thread
   // around it, so no frame shows the field at its end before it moves.
+  //
+  // It is one movement, also for the box's shape (Apple-Audit C2): the start
+  // box and the thread's pill differ in height, and the pill used to stand
+  // there at once, then glide. Now the box's height runs with the glide.
+  // Leaving the start screen the bottom edge travels (the thread composer
+  // stands on the bottom, the box shrinks onto its row of controls); coming
+  // back the top edge travels (the start field hangs from its top). The
+  // empty field's hint changes its place inside the box and shows again
+  // where it ends; the tool bar under the field fades in the first part of
+  // the way, out of the block's flow (.is-leaving, shell.css), and the
+  // greeting fades with it (components-input.css). Nothing in between is
+  // measured again: composer-collapse.js does not animate its own height
+  // while body.composer-gliding is set.
+  // The glide is a layer move (--dur-layer, --ease-out); the bar leaves at
+  // the press tempo (shell.css .is-leaving) and settles just after it.
+  const glideMs = () => window.App.motion?.ms("layer") ?? 320;
+  const glideEasing = () => window.App.motion?.ease("out") ?? "cubic-bezier(0.22, 1, 0.36, 1)";
+  const barFadeMs = () => (window.App.motion?.ms("press") ?? 120) + 20;
   let composerGlide = null;
+  let barSettle = null;
+  function settleLeavingBar(bar) {
+    clearTimeout(barSettle);
+    barSettle = null;
+    if (!bar?.classList.contains("is-leaving")) return;
+    bar.classList.remove("is-leaving");
+    window.App.renderComposerMode?.();
+  }
+  function endGlide(composer, box) {
+    composerGlide = null;
+    document.body.classList.remove("composer-gliding");
+    box?.classList.remove("is-morphing");
+  }
+  // The start place of the box, read where a gesture begins (query-send.js),
+  // before the gesture writes anything: read later in the same task, it
+  // forced the half-built thread's layout (Apple-Audit D3). Valid for the
+  // task that read it.
+  let anchoredBox = null;
+  function barShown(bar) {
+    return Boolean(bar && !bar.hidden && bar.getClientRects().length > 0);
+  }
+  function anchorGlide() {
+    const box = document.querySelector(".input-section .chat-input-container");
+    if (!box || anchoredBox) return;
+    anchoredBox = { rect: box.getBoundingClientRect(), bar: barShown(document.getElementById("composerModeBar")) };
+    setTimeout(() => { anchoredBox = null; }, 0);
+  }
   function glideComposer(change) {
+    const body = document.body;
     const composer = document.querySelector(".input-section");
-    const wasHero = document.body.classList.contains("is-hero");
-    const before = composer?.animate && !reducedMotion?.matches ? composer.getBoundingClientRect() : null;
+    const box = composer?.querySelector(".chat-input-container");
+    const wasHero = body.classList.contains("is-hero");
+    const animate = Boolean(composer?.animate && box && !reducedMotion?.matches);
+    const before = animate ? anchoredBox?.rect || box.getBoundingClientRect() : null;
+    const bar = document.getElementById("composerModeBar");
+    const fadeBar = animate && wasHero && (anchoredBox ? anchoredBox.bar : barShown(bar));
+    if (fadeBar) bar.classList.add("is-leaving");
     change();
-    if (!before || wasHero === document.body.classList.contains("is-hero")) return;
+    // A call that does not cross the start screen's edge (the run projecting
+    // its thread once more) leaves a running glide alone.
+    if (!animate || wasHero === body.classList.contains("is-hero")) {
+      if (fadeBar) settleLeavingBar(bar);
+      return;
+    }
+    // Crossing it again mid-way starts from where the box is drawn now.
+    if (composerGlide) composerGlide.forEach(animation => animation.cancel());
+    body.classList.add("composer-gliding");
+    if (fadeBar) barSettle = setTimeout(() => settleLeavingBar(bar), barFadeMs());
     requestAnimationFrame(() => {
-      composerGlide?.cancel();
-      composerGlide = null;
-      if (!composer.isConnected) return;
-      const after = composer.getBoundingClientRect();
+      if (!composer.isConnected) { endGlide(composer, box); return; }
+      // The field's height for its new state, written before the box is read.
+      window.App.resizeQuestionInput?.();
+      const leaving = wasHero && !body.classList.contains("is-hero");
+      const after = box.getBoundingClientRect();
       const dx = before.left - after.left;
-      const dy = before.top - after.top;
-      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-      composerGlide = composer.animate([
-        { translate: `${dx}px ${dy}px` },
-        { translate: "0px 0px" }
-      ], { duration: window.App.motion?.ms("layer") ?? 320, easing: window.App.motion?.ease("out") ?? "cubic-bezier(0.22, 1, 0.36, 1)" });
+      const dy = leaving ? before.bottom - after.bottom : before.top - after.top;
+      const morph = Math.abs(before.height - after.height) >= 1;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && !morph) { endGlide(composer, box); return; }
+      const timing = { duration: glideMs(), easing: glideEasing() };
+      const animations = [composer.animate([{ translate: `${dx}px ${dy}px` }, { translate: "0px 0px" }], timing)];
+      if (morph) {
+        // The row of controls stays on the box's bottom edge while it grows
+        // or shrinks (composer.css .is-morphing).
+        box.classList.add("is-morphing");
+        animations.push(box.animate([{ height: `${before.height}px` }, { height: `${after.height}px` }], timing));
+        const field = box.querySelector(".input-field");
+        if (field) animations.push(field.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }],
+          { duration: glideMs(), easing: window.App.motion?.ease("linear") ?? "linear" }));
+      }
+      // The note under the pill comes in once the bar above it has gone.
+      const note = leaving ? composer.querySelector(":scope > .app-footer") : null;
+      if (note?.getClientRects().length) animations.push(note.animate([{ opacity: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 1 }],
+        { duration: glideMs(), easing: window.App.motion?.ease("linear") ?? "linear" }));
+      composerGlide = animations;
+      Promise.all(animations.map(animation => animation.finished)).then(() => {
+        if (composerGlide === animations) endGlide(composer, box);
+      }, () => {});
     });
   }
 
@@ -537,9 +644,12 @@
     trackAsk,
     trackAnswer,
     showPopup,
+    isComposingKey,
+    enterSends,
     exitHeroMode,
     enterDirectComparisonView,
     glideComposer,
+    anchorGlide,
     syncHeroResponseAccess,
     renderUsageDisplay,
     usageRun

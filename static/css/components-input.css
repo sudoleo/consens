@@ -141,8 +141,43 @@ textarea:focus {
    an seinen Platz im Thread und der Antwortbereich blendet ein.
    68px = body padding-top (10px) + .container padding-top (58px).
    -------------------------------------------------------------------------- */
+/* The empty start screen does not move (Apple-Audit F10). base.css gives the
+   body 100vh, which on an iPhone is the tall viewport behind Safari's bars:
+   the screen scrolled by that difference, field and greeting slid while the
+   letter clouds stayed. The small viewport is what is always visible; and a
+   page with nothing to scroll does not rubber-band either. */
+body.is-hero { min-height: 100svh; }
+html:has(> body.is-hero) { overscroll-behavior-y: none; }
+
+/* The field, not the block under it, is what stands still (Apple-Audit B5).
+   The shift used to be half of the block's own height: every notice, file,
+   new example or line of text below the field moved the field itself, half
+   up and half down. It is now fixed for the start screen: half of the empty
+   start block (field, tool bar, examples, note), so the empty screen looks
+   as centred as before, and whatever appears later grows downward.
+   #verifyBanner follows under the block by the same shift (shell.css). */
+body.is-hero .container {
+  --hero-lift: 130px;
+  --hero-shift: max(0px, calc(50svh - var(--hero-lift) - 68px));
+}
 body.is-hero .input-section {
-  transform: translateY(max(0px, calc(50svh - 50% - 68px)));
+  transform: translateY(var(--hero-shift));
+}
+/* A new line of text lowers the field's bottom softly; its top stays. Only
+   typing glides (composer-autosize.js sets every other height at once). */
+body.is-hero .chat-input-container > .input-field {
+  transition: height var(--dur-press) var(--ease-out);
+}
+/* A composer notice ("Loading chat models…", an unreachable account) takes
+   the place of the examples instead of pushing them and the note down. */
+body.is-hero .input-section > .agent-composer-notice {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+}
+body.is-hero .input-section:has(> .agent-composer-notice:not([hidden])) > .composer-starters {
+  visibility: hidden;
 }
 
 /* Begrüßungszeile schwebt über dem Eingabefeld und nimmt keinen Platz im
@@ -165,7 +200,13 @@ body.is-hero .input-section {
   visibility: hidden;
   transform: translateY(6px);
   pointer-events: none;
-  transition: opacity var(--dur-layer) var(--ease-standard), transform var(--dur-layer) var(--ease-standard);
+  /* Leaving the start screen it fades in the first part of the composer's
+     glide (Apple-Audit C2); visibility runs with the fade instead of
+     cutting it off in the first frame. It comes back at the slower pace. */
+  transition: opacity var(--dur-press) var(--ease-in), transform var(--dur-press) var(--ease-in), visibility var(--dur-press) var(--ease-linear);
+}
+body.is-hero .hero-greeting {
+  transition: opacity var(--dur-layer) var(--ease-standard), transform var(--dur-layer) var(--ease-standard), visibility var(--dur-layer) var(--ease-linear);
 }
 
 /* Die Frage gehört ausschließlich zum zentrierten Agent-Mode-Leerzustand.
@@ -218,7 +259,8 @@ body.is-hero .consensus-section { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .input-section,
   .hero-greeting,
-  .response-section {
+  .response-section,
+  body.is-hero .chat-input-container > .input-field {
     transition: none;
   }
 }

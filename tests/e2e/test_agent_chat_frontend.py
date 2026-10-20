@@ -386,7 +386,9 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator('#runModeSelect option[value="consensus"]')).to_be_enabled()
         _choose_mode(page, "consensus")
         expect(page.locator("#agentAnswer")).not_to_be_visible()
-        expect(page.locator("#viewSwitchConsensus")).to_have_text("Consensus")
+        # One name in every mode (Apple-Audit H3/B10): the pill keeps its word.
+        expect(page.locator("#viewSwitchConsensus")).to_have_text("Chat")
+        expect(page.locator("#newRunButton")).to_have_text("New chat")
         assert not errors
     finally:
         context.close()

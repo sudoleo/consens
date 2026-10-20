@@ -27,6 +27,11 @@
   --dur-state: 200ms;
   --dur-layer: 320ms;
   --dur-light: 560ms;
+  /* The iOS keyboard's own motion. Only for what rides along with the
+     keyboard (composer-keyboard.js, Apple-Audit F9): it follows the
+     system, not our tempo. */
+  --dur-keyboard: 280ms;
+  --ease-keyboard: cubic-bezier(0.38, 0.7, 0.125, 1);
   /* What repeats has two tempos: the one spinner turns once per --dur-spin;
      a waiting placeholder shimmers and a working dot breathes once per
      --dur-beat. Nothing loops at a third speed. */

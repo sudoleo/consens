@@ -2018,7 +2018,9 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const { window: w, document: d, dom } = bootLinked({ initComparison: false });
     await selectAgent(w);
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
-    expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
+    // The count of the waiting link stands already (the first frame drew it,
+    // Apple-Audit B1); it does not leave until the link is made.
+    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+2');
     w.App.initCustomModelPicker(d.getElementById('consensusModelDropdown'), { presets: true });
     expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+2');
     trigger.click();

@@ -66,6 +66,18 @@ def _wait_for_all_final_answers(page):
     expect(page.locator("#openaiResponse")).to_contain_text("330 metres tall", timeout=15000)
 
 
+def _settle_field(page):
+    """The field is measured in the frame after typing and grows softly on
+    the start screen (composer-autosize.js): wait for its height to stand."""
+    page.evaluate("""async () => {
+      const el = document.getElementById('questionInput');
+      for (let i = 0; i < 90; i++) {
+        await new Promise(requestAnimationFrame);
+        if (!el.getAnimations().length) break;
+      }
+    }""")
+
+
 def _wait_for_composer_width(page):
     """Wait for the real responsive width transition, not an arbitrary delay."""
     page.evaluate("""async () => {
@@ -177,14 +189,17 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     input_box = app_page.locator("#questionInput")
 
     input_box.fill("")
+    _settle_field(app_page)
     base_height = input_box.bounding_box()["height"]
 
     input_box.fill("\n".join(f"Line {index}" for index in range(6)))
+    _settle_field(app_page)
     grown_height = input_box.bounding_box()["height"]
     assert grown_height > base_height
     assert grown_height < 220
 
     input_box.fill("\n".join(f"Line {index}" for index in range(40)))
+    _settle_field(app_page)
     desktop = input_box.evaluate(
         """el => ({
           height: el.getBoundingClientRect().height,
@@ -198,6 +213,7 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     assert desktop["overflowY"] == "auto"
 
     app_page.set_viewport_size({"width": 390, "height": 844})
+    _settle_field(app_page)
     mobile = input_box.evaluate(
         """el => ({
           height: el.getBoundingClientRect().height,
@@ -209,6 +225,7 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
 
     input_box.fill("")
     _wait_for_composer_width(app_page)
+    _settle_field(app_page)
     expect(input_box).to_have_css("height", f"{round(base_height)}px")
     reset = input_box.evaluate(
         """el => ({
@@ -222,8 +239,10 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     assert round(reset["height"]) == round(base_height), reset
     assert reset["overflowY"] == "hidden"
 
+    # A new line with a keyboard is Shift+Enter at every width; Enter alone
+    # sends (Apple-Audit E7: the device decides, not the window's width).
     input_box.fill("First line")
-    input_box.press("Enter")
+    input_box.press("Shift+Enter")
     expect(input_box).to_have_value("First line\n")
 
 
@@ -282,7 +301,7 @@ def _composer_state(page):
 def _settle_composer(page):
     """Auf- und Zuklappen ist eine Transition; erst danach steht die Hoehe."""
     page.wait_for_function(
-        "() => !document.body.classList.contains('composer-animating')"
+        "() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')"
     )
 
 
@@ -376,7 +395,9 @@ def test_desktop_composer_is_one_row_without_a_collapsed_state(app_page):
     (+) steht ganz links, vor dem Feld."""
     app_page.set_viewport_size({"width": 1440, "height": 900})
     app_page.evaluate("() => window.exitHeroMode()")
-    app_page.wait_for_timeout(200)
+    # The step out of the start screen glides box and shape together
+    # (app-core.js glideComposer); measured once it stands.
+    app_page.wait_for_function("() => !document.body.classList.contains('composer-gliding')")
     row = _desktop_row_geometry(app_page)
 
     # Der Klappzustand ist dem Desktop fremd — er gehoert composer-collapse.js,
@@ -636,13 +657,15 @@ def test_typing_into_the_collapsed_composer_keeps_the_cursor_in_the_field(app_pa
 
 def test_latex_is_typeset_after_markdown_rendering(app_page):
     result = app_page.evaluate(
-        r"""() => {
+        r"""async () => {
           const host = document.createElement("div");
           document.body.appendChild(host);
           window.injectMarkdown(
             host,
             String.raw`\[ \det(DF)\equiv -2 \] and \(F:\mathbb C^3\to\mathbb C^3\)`
           );
+          // KaTeX loads with the first formula (Apple-Audit B12), then typesets.
+          for (let i = 0; i < 300 && host.querySelectorAll(".katex").length < 2; i++) await new Promise(requestAnimationFrame);
           const result = {
             displays: host.querySelectorAll(".katex-display").length,
             expressions: host.querySelectorAll(".katex").length,
@@ -666,13 +689,14 @@ def test_dollar_math_is_typeset_without_losing_the_result(app_page):
     TeX-Kommentar den Rest der Zeile verschluckt haette), der Betrag als
     Text."""
     result = app_page.evaluate(
-        r"""() => {
+        r"""async () => {
           const host = document.createElement("div");
           document.body.appendChild(host);
           window.injectMarkdown(
             host,
             String.raw`Von 5,7 Mrd. $ in Q1 auf 6,7 Mrd. $ in Q2, also $6{,}7 / 5{,}7 - 1 \approx 17{,}5\%$.`
           );
+          for (let i = 0; i < 300 && !host.querySelector(".katex"); i++) await new Promise(requestAnimationFrame);
           const result = {
             expressions: host.querySelectorAll(".katex").length,
             errors: host.querySelectorAll(".katex-error").length,

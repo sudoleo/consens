@@ -840,7 +840,7 @@
     }
     goals.input.addEventListener("change", commitGoalText);
     goals.input.addEventListener("keydown", event => {
-      if (event.key !== "Enter" || event.isComposing) return;
+      if (event.key !== "Enter" || window.App.isComposingKey?.(event) || event.isComposing) return;
       event.preventDefault();
       commitGoalText();
     });
@@ -866,7 +866,7 @@
     }
     details.addEventListener("change", commitDetails);
     details.addEventListener("keydown", event => {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      if (event.key !== "Enter" || event.shiftKey || window.App.isComposingKey?.(event) || event.isComposing) return;
       event.preventDefault();
       commitDetails();
     });

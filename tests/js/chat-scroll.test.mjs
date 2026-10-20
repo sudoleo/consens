@@ -156,6 +156,25 @@ describe("conversation scroll", () => {
     app.dom.window.close();
   });
 
+  it("returns an opened chat to a given place once, held while it settles, with no ride (Apple-Audit B7)", () => {
+    const app = boot();
+    let place = 1234;
+    app.saved();
+    app.window.App.chatScroll.returnTo(() => place);
+    app.window.App.chatScroll.opened();
+    // At once, not glided there from the top.
+    expect(app.window.scrollY).toBe(1234);
+    expect(app.window.scrollTo.mock.calls.map(([options]) => options.top)).toEqual([1234]);
+    // Late layout moves the place: the next frames follow it.
+    place = 1300; app.tick(3);
+    expect(app.window.scrollY).toBe(1300);
+    app.tick();
+    // The next opened chat stands at its newest question again.
+    app.scroll(0); app.saved('other'); app.window.App.chatScroll.opened(); app.tick();
+    expect(app.window.scrollY).toBe(2000);
+    app.dom.window.close();
+  });
+
   it("offers a keyboard usable return to the latest message that jumps once", () => {
     const app = boot();
     app.window.App.revealSentMessage(); app.tick();

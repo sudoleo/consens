@@ -96,6 +96,12 @@ def test_mobile_enter_keeps_the_textarea_newline_behavior():
         'document.getElementById("questionInput").addEventListener("keydown"', 1
     )[1].split("// Es gibt genau EINEN sichtbaren Sidebar-Toggle", 1)[0]
 
-    assert 'window.matchMedia("(max-width: 768px)").matches' in keydown
-    assert "event.isComposing" in keydown
-    assert keydown.index("matchMedia") < keydown.index("event.preventDefault()")
+    # The device decides, not the window's width (Apple-Audit E7): a touch
+    # keyboard makes a paragraph, a real one sends; App.enterSends also
+    # leaves an Enter that an input method is still composing alone (E8).
+    assert "window.App.enterSends(event)" in keydown
+    assert keydown.index("enterSends") < keydown.index("event.preventDefault()")
+    assert "max-width: 768px" not in keydown
+    app_core = read("static/js/app-core.js")
+    assert 'matchMedia?.("(hover: none) and (pointer: coarse)")' in app_core
+    assert "event?.isComposing || event?.keyCode === 229" in app_core

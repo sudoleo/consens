@@ -492,6 +492,8 @@
   // --- CUSTOM MODEL PICKER (eigene Listbox ueber den nativen <select>) ---
 
   let expandedModelPicker = null;
+  // Links waiting for both pickers (linkModelPicker below).
+  const pendingLinks = new Map();
 
   function getModelPickerState(select) {
     return select?._customModelPicker || null;
@@ -549,6 +551,12 @@
     // whole while a long model name gives way.
     let countLabel = "";
     let ariaLabel = `${select.getAttribute("aria-label") || "Choose model"}: ${displayLabel}`;
+    // A companion still being enhanced is already this chip's count: its
+    // "+6" stands from the first frame (app-bootstrap.js) and must not go
+    // for the moment until the link is made.
+    if (!state.companion && pendingLinks.get(select)?.companion) {
+      countLabel = `+${window.App.getSelectedModelCount?.() || 0}`;
+    }
     if (state.companion) {
       const count = window.App.getSelectedModelCount?.() || 0;
       const models = `${count} ${count === 1 ? "model" : "models"}`;
@@ -1390,8 +1398,8 @@
 
   // Link `companion` into `primary`'s chip and menu, or unlink with null.
   // Either picker may not exist yet (the Agent picker is built once its
-  // catalog loads); the link waits and applies when both do.
-  const pendingLinks = new Map();
+  // catalog loads); the link waits and applies when both do (pendingLinks,
+  // declared above syncCustomModelPicker, which reads it).
   function linkModelPicker(primary, companion, { ownLabel = "Agent", companionLabel = "Compare with", ariaLabel = "Models" } = {}) {
     if (!primary) return;
     const state = getModelPickerState(primary);
@@ -1466,14 +1474,20 @@
 
     let displayButton = null;
     if (!options.externalTrigger) {
-      displayButton = document.createElement("button");
+      // app-bootstrap.js may have drawn this chip into the first frame with
+      // the words it will show; it becomes the picker's own (Apple-Audit B1).
+      displayButton = host.querySelector(":scope > .model-picker-display[data-seeded]");
+      if (displayButton) delete displayButton.dataset.seeded;
+      else {
+        displayButton = document.createElement("button");
+        displayButton.innerHTML = '<span class="model-picker-display-text"></span>';
+        host.appendChild(displayButton);
+      }
       displayButton.type = "button";
       displayButton.className = "model-picker-display";
       displayButton.setAttribute("aria-haspopup", "listbox");
       displayButton.setAttribute("aria-expanded", "false");
       displayButton.setAttribute("aria-controls", menu.id);
-      displayButton.innerHTML = '<span class="model-picker-display-text"></span>';
-      host.appendChild(displayButton);
       displayButton.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();

@@ -27,6 +27,10 @@
           "file": "static/js/composer-starters.js",
           "note": "App.composerStarters: example questions predicted from the newest chats. Must precede app-bootstrap.js, which paints the stored prediction; firebase.js calls refresh() and clear()."
         },
+        {
+          "file": "static/js/composer-autosize.js",
+          "note": "App.sizeQuestionInput / App.initComposerAutosize. Head bundle so app-bootstrap.js can size a question waiting in the field before the first paint; app-init.js installs the listeners."
+        },
         "static/js/app-bootstrap.js",
         "static/js/app-state.js",
         {
@@ -210,7 +214,6 @@
           "file": "static/js/composer-keyboard.js",
           "note": "iOS Safari keeps the layout viewport under the keyboard; hangs the fixed thread composer from the visual viewport's bottom edge (body.keyboard-open, --keyboard-edge)."
         },
-        "static/js/composer-autosize.js",
         {
           "file": "static/js/composer-invite.js",
           "note": "App.composerInvite: a guest's Send (query-send.js), the send after sign-in (app-init.js updateQuestionInputAccess), the example questions and the source of the ask event (app-core.js trackAsk). Called at runtime only."

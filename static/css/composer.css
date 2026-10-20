@@ -168,6 +168,11 @@
 /* An open menu must not be clipped by the row or covered by its neighbours. */
 .chat-input-container :is(.composer-lead, .composer-models):has(.model-picker-menu.is-open) { position: relative; z-index: 2; overflow: visible; }
 
+/* While the box changes between the start box and the thread's pill
+   (app-core.js glideComposer animates its height), its row of controls
+   stays on the bottom edge: (+) and Send do not move inside it. */
+.chat-input-container.is-morphing { align-content: flex-end; }
+
 /* A docked bar carries only the status of a comparison on screen. */
 .composer-mode-bar[data-docked="true"] .composer-mode-controls { display: none; }
 
@@ -492,6 +497,22 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
     overflow-x: auto;
     scrollbar-width: none;
     /* Room for the focus ring inside the scroller's clip. */
+    padding-block: 3px;
+  }
+  .composer-starters::-webkit-scrollbar { display: none; }
+  .composer-starter { flex: 0 0 auto; }
+}
+/* A phone on its side: one row that scrolls sideways, as on a narrow phone,
+   so the empty start screen fits its height and has nothing to scroll
+   (Apple-Audit F10). */
+@media (max-height: 500px) {
+  /* The block's own margin would be the last pixels to scroll into. */
+  body.is-hero .input-section { margin-bottom: 0; }
+  body.is-hero:not(.direct-comparison-active) .composer-starters {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
     padding-block: 3px;
   }
   .composer-starters::-webkit-scrollbar { display: none; }

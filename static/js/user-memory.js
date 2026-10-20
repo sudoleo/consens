@@ -474,7 +474,7 @@
         const syncSave = () => { save.disabled = !input.value.trim() || state.itemsBusy; };
         input.addEventListener("input", syncSave);
         input.addEventListener("keydown", event => {
-          if (event.key === "Enter") {
+          if (event.key === "Enter" && !window.App.isComposingKey?.(event)) {
             event.preventDefault();
             if (input.value.trim()) saveEdit(item, input.value);
           }

@@ -161,7 +161,7 @@
     const textarea = backdrop.querySelector("textarea");
     textarea.addEventListener("input", updateCounter);
     textarea.addEventListener("keydown", event => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") submitEdit();
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !window.App?.isComposingKey?.(event)) submitEdit();
     });
     backdrop.addEventListener("keydown", handleDialogKeys);
   }

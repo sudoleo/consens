@@ -11,6 +11,13 @@
   // "head": the current question to the top; "end": the end of the thread;
   // "latest": the end of the content as it was when "Latest message" was pressed.
   let jump = null, destination = null;
+  // A place to return to instead of the newest question (app-update.js,
+  // after loading a new build): read again in each frame of the settle.
+  let pendingPlace = null, place = null;
+  function placeTop() {
+    const top = place?.();
+    return Number.isFinite(top) ? Math.max(0, Math.round(top)) : null;
+  }
 
   function container() { return document.querySelector(".container"); }
   function maxTop() {
@@ -101,6 +108,7 @@
   }
   function pause() {
     jump = null;
+    place = null;
     cancelFrame();
     syncButton();
   }
@@ -127,7 +135,7 @@
     };
   }
   function finish() {
-    jump = null; started = null; syncButton();
+    jump = null; started = null; place = null; syncButton();
   }
   // How long an opened conversation keeps its newest question in place while
   // late layout settles (fonts, marks, the activity line, file rows).
@@ -139,7 +147,7 @@
     if (jump === "open") {
       // No ride: the position is written as it is, in every frame of the
       // short settle, and only when the question actually moved.
-      const target = Math.min(headTop() ?? maxTop(), maxTop());
+      const target = Math.min(placeTop() ?? headTop() ?? maxTop(), maxTop());
       if (Math.abs(target - window.scrollY) > .5) write(target);
       if (started === null) started = now;
       if (now - started < OPEN_SETTLE_MS) frame = window.requestAnimationFrame(step);
@@ -241,14 +249,18 @@
   // and on a phone the question is never left under the floating header,
   // as it was at the absolute end. Only "Latest message" and Send move.
   function opened() {
+    // A second call while a returned-to place still settles keeps it.
+    const held = jump === "open" ? place : null;
     closeMenu();
     project(App.runRegistry?.visible());
     if (!valid() || occupied()) return;
     cancelFrame();
     jump = "open";
     destination = null;
+    place = pendingPlace || held;
+    pendingPlace = null;
     updateReserve();
-    const target = Math.min(headTop() ?? maxTop(), maxTop());
+    const target = Math.min(placeTop() ?? headTop() ?? maxTop(), maxTop());
     if (Math.abs(target - window.scrollY) > .5) write(target);
     started = window.performance.now();
     syncButton();
@@ -268,5 +280,8 @@
   document.addEventListener("selectionchange", () => { if (!window.getSelection()?.isCollapsed) pause(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
   window.addEventListener("consensio:run-registry-change", () => { if (!valid()) project(null); else changed(); });
-  App.chatScroll = { project, changed, sent, opened, closeMenu, latest: () => start("latest"), preserveAbove };
+  // The next opened() returns to this place (a function giving the scroll
+  // offset) instead of the newest question; once, then as usual.
+  function returnTo(where) { pendingPlace = typeof where === "function" ? where : null; }
+  App.chatScroll = { project, changed, sent, opened, closeMenu, latest: () => start("latest"), preserveAbove, returnTo };
 })();

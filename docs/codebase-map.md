@@ -1835,7 +1835,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Meta-Tag `katex-assets` nennt die Dateien immer: Findet `render()` eine
   Formel ohne geladenes KaTeX, lädt es CSS + Skripte einmal nach
   (`async=false`, Reihenfolge wie `defer`) und setzt danach alle wartenden
-  Blöcke. `/app` hat kein Meta-Tag und lädt KaTeX weiter immer.
+  Blöcke. Seit 2026-10-20 auch `/app` (Apple-Audit B12): `index.html` trägt
+  nur das Meta-Tag, KaTeX lädt beim ersten Formel-Treffer im Stream oder in
+  einer gespeicherten Antwort, nicht mehr bei jedem Start.
   Innerhalb einer Formel ist Markdown Notation, kein Markup: Backslashes und
   alle ASCII-Satzzeichen werden geschützt; insbesondere bleibt ein einzelnes
   `=` in mehrzeiligen Formeln Formelinhalt statt Setext-Überschrift. Derselbe
@@ -2194,33 +2196,99 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   solange darunter noch nichts steht; vorher klappte sie ~0,7 s nach der
   fertigen Antwort zu und zog sie 100–130 px hoch. Der Lauf lebt in der
   Provenienzzeile weiter.
-- **Composer-Hoehe** — `composer-autosize.js` wird vor `app-init.js` geladen.
-  `App.initComposerAutosize` installiert dessen bisherige Input-/Viewport- und
-  Placeholder-Listener; `App.resizeQuestionInput()` bleibt der explizite Trigger.
+- **Composer-Hoehe** — `composer-autosize.js` liegt seit 2026-10-20 im
+  `head`-Bundle (vor `app-bootstrap.js`): `App.sizeQuestionInput(input,
+  {instant})` misst und setzt die Hoehe ohne Listener, damit
+  `app-bootstrap.js` einen wartenden Entwurf vor dem ersten Paint groessen kann.
+  `App.initComposerAutosize` (app-init.js) installiert die Input-/Viewport- und
+  Placeholder-Listener; `App.resizeQuestionInput()` bleibt der explizite,
+  synchrone Trigger. Tippen misst einmal pro Frame (rAF, nach allen
+  Schreibzugriffen des Tasks, Apple-Audit D3) und darf im Hero weich wachsen
+  (`transition: height` nur fuer `body.is-hero`); jede andere Hoehe wird ohne
+  Transition gesetzt.
   CSS-Min-/Maxhoehe bestimmen Wachstum und internen Scrollbereich. Mehrzeilige
   Eingaben behalten ihre Form bis zum Leeren. Ein ResizeObserver verfolgt zudem
   die tatsaechliche Feldbreite waehrend Sidebar-/Viewport-Transitionen und misst
   pro Animationsframe hoechstens einmal nach. Reine Hoehenmeldungen werden
   ignoriert, damit eigene Schreibzugriffe keine Schleife erzeugen. So bleibt
   nach einer schmalen Zwischenbreite kein ueberhohes leeres Feld stehen.
-  Gemessen wird bei Hoehe 0, aber der Elternblock haelt dabei seine Hoehe
-  (`min-height`, danach geloest): die Seite wird fuer die Messung nie kuerzer,
-  sonst zog die Scroll-Klammer des Browsers am Chatende den Text beim ersten
-  Tastendruck hoch (seit 2026-10-20, Apple-Audit A12).
+  Gemessen wird in einem versteckten Zwilling (`textarea.input-field-twin` am
+  Body-Ende, `aria-hidden`, `contain: layout style`) mit den Groessen-Styles
+  des Feldes: das Feld selbst schrumpft nie fuer die Messung, die Seite wird nie
+  kuerzer (Apple-Audit A12) und die Hoehe hat einen Startwert zum Gleiten (B5).
   `tests/js/composer-autosize.test.mjs` prueft diese Ereignisgrenzen; der Smoke-
   Browserfall prueft echtes Layout inklusive der abgeschlossenen Transition.
 - **Hero ↔ Thread gleitet (2026-10-03)** — `.input-section` hat keine
   `transform`-Transition mehr: die Hero-Zentrierung `translateY(… - 50%)` liess
   das Feld bei jeder Höhenänderung und beim Ausstieg von falscher Stelle
   gleiten (beim Ausstieg von unterhalb des Bildschirms herauf).
-  `App.glideComposer(change)` (app-core.js) misst das Feld vor dem
-  Klassenwechsel, liest die neue Lage im nächsten Frame und animiert die
-  Differenz per WAAPI-`translate` (420 ms); `exitHeroMode`,
-  `enterDirectComparisonView` und „New comparison“ nutzen es. Die Agent-Demo
+  `App.glideComposer(change)` (app-core.js) misst die Box vor dem
+  Klassenwechsel (beim Senden schon am Anfang des Klicks: `App.anchorGlide()`
+  aus `query-send.js`, D3), liest die neue Lage im nächsten Frame und animiert
+  die Differenz per WAAPI-`translate` (420 ms); `exitHeroMode`,
+  `enterDirectComparisonView` und „New chat“ nutzen es. Seit 2026-10-20 ist es
+  eine Bewegung auch für die Form (Apple-Audit C2): die Höhe der Box läuft mit
+  (`.chat-input-container.is-morphing`, Bedienzeile an der Unterkante); beim
+  Verlassen des Starts wandert die Unterkante (der Thread-Composer steht unten),
+  beim Zurückkehren die Oberkante. Die Werkzeugleiste blendet unter dem Feld
+  aus (`#composerModeBar.is-leaving`, aus dem Fluss, 150 ms), die Begrüßung
+  über `visibility` in der Transition, der Hinweis des leeren Feldes kommt am
+  Ende. `body.composer-gliding` hält dabei `composer-collapse.js` (keine eigene
+  Höhenanimation) und die Thread-Reserve still; ein zweiter Aufruf ohne
+  Grenzwechsel lässt eine laufende Bewegung in Ruhe. Die Agent-Demo
   tippt im Hero und verlässt ihn erst beim simulierten Absenden.
   `html { scrollbar-gutter: stable }` (shell.css) hält die Spalte beim
   Erscheinen der Scrollleiste still; die Agent-Spalte zentriert über `100%`
   statt `100vw` und steht damit exakt wie der normale Thread.
+- **Erstes Bild von `/app` = Endzustand (seit 2026-10-20, Apple-Audit B1, B2,
+  B4, B6, B10, B11, B13)** — `app-bootstrap.js` zeichnet vor dem ersten Paint,
+  was die Module später zeichnen, und die Module übernehmen es statt es zu
+  ersetzen. Gemeinsame Bausteine:
+  `App.expectedSession()` → `{known, account, verified, uid}` (vor Firebase aus
+  `id_token`, Firebases eigenem `localStorage`-Nutzer
+  `firebase:authUser:<apiKey>:[DEFAULT]` und `consensio.googleRedirectPending`;
+  danach die Antwort; `app-init.js` nutzt es für Gast-Composer und Sidebar);
+  `App.expectsAgent()`; `App.firstFrame` `{look(), remember(), agentModel(),
+  agentEffort(), forget()}` — bei `pagehide`/verborgen merkt es pro Konto, was
+  der Composer zeigte (`localStorage consensio.firstFrame.v1`: Agent-Modellname
+  und Reasoning-Stufe nur aus geladener Modellliste, `select.dataset.catalog ===
+  "ready"`, dazu der Consensus/Compare-Chip), Logout vergisst es; ohne Eintrag
+  gilt `data-agent-default-label` (pages.py, `agent_model_label()`). Gezeichnet
+  werden: Agent-Chip (ein Knopf `.model-picker-display[data-seeded]`, den
+  `model-picker.js::initCustomModelPicker` adoptiert; `agent-chat.js` zeigt
+  denselben Namen statt „Loading models…“, bis die Liste da ist, und die Zahl
+  `+N` steht schon, solange die Verknüpfung noch wartet), Consensus-Chip,
+  Reasoning-Wort (`data-seeded` bis `agent-chat.js` die Stufen gezeichnet hat),
+  die Anbieter-Marken der Werkzeugleiste (aus `MODEL_FAMILIES` und den
+  gespeicherten Familien, `#composerModelIcons[data-providers]`; `agent-mode.js`
+  behält dieselben Knoten), die Familien-Checkboxen, „Try the demo“ (steht jetzt
+  im Template, `hidden`; `demo.js` verdrahtet es nur), Senden (im Template
+  `disabled`), ein wartender Gast-Entwurf samt Höhe und `--starters-room`,
+  Skelette für Chatliste und Konto-Fuß bei wiederherzustellender Sitzung und auf
+  dem Handy der Watches-Punkt am Menü. Die Werkzeugleiste steigt nur beim
+  Wiederkommen ein (`.is-revealing`), nie beim ersten Paint. Der Umschalter heißt
+  immer „Chat“, der Sidebar-Knopf immer „New chat“ (Max, H3); im mobilen Kopf
+  wird der Umschalter nie gezeichnet (er lebt im Menü), die leere rechte Insel
+  eines Gasts ab dem ersten Bild nicht. `continueSignedIn()` speichert vor dem
+  Neuladen nach dem Login das `id_token`. Der Startbildschirm hält die Oberkante
+  des Feldes fest (`--hero-lift: 130px`, `--hero-shift` an `.container`):
+  Hinweise, Anhänge, neue Beispielfragen und Zeilen wachsen nach unten,
+  `#verifyBanner` steht im DOM nach dem Composer und folgt dessen Verschiebung,
+  ein Composer-Hinweis nimmt im Hero den Platz der Beispielfragen ein (B5). Der
+  leere Start ist nicht verschiebbar: `body.is-hero { min-height: 100svh }`,
+  `overscroll-behavior-y: none`, bei Höhe ≤ 500 px Beispielfragen einzeilig
+  (F10). `index.html` wärmt Googles CDN und die beiden Firebase-Module per
+  `preconnect`/`modulepreload` vor (B9). Enter: `App.enterSends(event)` / `App.isComposingKey(event)` (app-core.js)
+  — Touch-Tastatur macht Absätze, Tastatur sendet, Eingabemethoden
+  (`isComposing` oder `keyCode 229`) nie; alle Enter-Handler von Textfeldern
+  fragen das (E7, E8). Messung: `tests/e2e/test_first_frame.py` (Bild für Bild
+  ab dem Neuladen), `tests/js/first-frame.test.mjs`.
+- **Senden in einem Task, eine Projektion (seit 2026-10-20, Apple-Audit D3)** —
+  `App.runRegistry.batch(fn)` projiziert mehrere Änderungen (in
+  `agent-chat.js::send` Anlegen, Starten, Feld leeren) einmal am Ende; Ereignisse
+  gehen weiter einzeln raus. Dazu lesen die Module im Klick weniger Layout:
+  Fragen-Faltung nur noch im ResizeObserver, leere Aktivitätsvorschau und
+  leere Antwort ohne Messung, Sidebar-Zeile und Kopfkante im nächsten Frame.
 - **Buchstabenwolken im Hero (seit 2026-10-16)** — `static/js/letter-clouds.js`
   (App-Gruppe vor `app-init.js`, `App.letterClouds` `{state(), splash(x, y)}`)
   und `static/css/letter-clouds.css`. Das Modul hängt `.letter-clouds` als
@@ -2377,7 +2445,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   2026-10-02); nur der fixierte Composer ≤1099 px reicht über den Rand. Auf ≤1099 px ist er dagegen
   wirklich viewport-fixiert. `app-init.js::syncThreadComposerReserve()` misst
   seine aktuelle Höhe mit `ResizeObserver` (normaler Composer, kompaktes Gate
-  oder Login-Hinweis) und schreibt sie als `--thread-composer-height`; dieselbe
+  oder Login-Hinweis) und schreibt sie als `--thread-composer-height` an die
+  `.container` (nicht an `<html>`; während `composer-animating`/
+  `composer-gliding` erst einmal mit der Endhöhe, Apple-Audit D9); dieselbe
   Höhe wird als Bottom-Padding der Thread-`.container` reserviert. Dafür wird
   dort `container-type` aufgehoben, da es ein `position:fixed`-Containing-Block
   erzeugen würde. So endet der Ergebnis-Footer am vollständigen Scrollende
@@ -2934,17 +3004,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   ein offenes App-Fenster holt neue Deploys selbst. Es vergleicht seinen Build
   (`data-app-build`) mit `GET /api/build`: beim Verlassen (`visibilitychange`
   → hidden), beim Zurückkommen, bei `pageshow` aus dem bfcache und alle 15 min,
-  solange die Seite vorne ist (frühestens alle 60 s). Neu geladen wird nur
-  ungesehen — im Hintergrund oder direkt beim Zurückkommen vor dem ersten
-  Klick/Tastendruck (10-s-Fenster) — und nur im Leerlauf: kein Lauf/keine
+  solange die Seite vorne ist (frühestens alle 60 s). Neu geladen wird nur,
+  solange die Seite verborgen ist (seit 2026-10-20 nie mehr beim Zurückkommen,
+  Apple-Audit B7; ein vorne gelernter Build lädt beim nächsten Verlassen sofort,
+  ohne neue Anfrage) — und nur im Leerlauf: kein Lauf/keine
   Aktion (`runRegistry.activeCount()`), leerer Composer, kein Anhang/Import,
   kein Zitat, kein befülltes fokussiertes Textfeld, kein offenes `.modal` oder
   `dialog` (angedockter Leser zählt nicht) und nichts Ungespeichertes im Bild
   (Start, Watch-Seite oder gespeicherter Chat; ein Gast-Ergebnis oder ein
   fehlgeschlagener Lauf blockiert). Vor `location.reload()` merkt es sich in
-  `sessionStorage` (`consens.appUpdate.restore`) uid + `bookmarkId`; nach dem
-  Neuladen öffnet es beim ersten `consensio:auth-state` desselben Kontos
-  `window.openBookmark(id)`, solange der Nutzer noch auf dem leeren Start ist
+  `sessionStorage` (`consens.appUpdate.restore`) uid + `bookmarkId` und die
+  Lesestelle (`place`: der oberste sichtbare `[data-turn-key]` und sein Abstand
+  zur Oberkante, dazu `scrollY`); nach dem Neuladen öffnet es beim ersten
+  `consensio:auth-state` desselben Kontos `window.openBookmark(id)` mit
+  `App.chatScroll.returnTo(fn)` davor — das Öffnen steht dann ohne Fahrt an
+  genau dieser Stelle und hält sie, solange das Layout nachzieht —, solange der
+  Nutzer noch auf dem leeren Start ist
   (max. 5 min alt). War der Anmeldestand schon bekannt, bevor das deferred
   App-Bundle lief (das Firebase-Modul war fertig, das Bundle lud noch), ist das
   Ereignis vorbei: dann liest es nach `load` `window.__consensioAuthState`. `consens.appUpdate.attempt` verhindert eine Schleife, wenn
@@ -3043,10 +3118,18 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   hinter der Tastatur bzw. nach Safaris Scroll mitten im Bild. Solange ein
   Textfeld fokussiert ist und `visualViewport` mehr als 120 px kürzer als
   `documentElement.clientHeight` ist (ungezoomt), setzt das Modul
-  `body.keyboard-open` und `--keyboard-edge` = `offsetTop + height`;
-  `shell.css` (Abschnitt C) hängt den Composer per `top` +
-  `translate(-50%, -100%)` daran und blendet den Hinweissatz aus. Android
-  (Layout-Viewport schrumpft mit) und Desktop bleiben unberührt.
+  `body.keyboard-open` und schreibt `--keyboard-lift` (Abstand der sichtbaren
+  Unterkante über der Layout-Unterkante) an `.input-section` und
+  `--keyboard-edge` an `#shareModal` — nie an `<html>` (Apple-Audit D9);
+  `shell.css` (Abschnitt C) hebt den unten fixierten Composer per `transform`
+  an (kein Layout beim Mitscrollen) und blendet den Hinweissatz aus. Seit
+  2026-10-20 (F9) merkt es sich die Tastaturhöhe je Ausrichtung
+  (`localStorage consensio.keyboardLift.v1`): beim Fokus in ein Composer-Feld
+  fährt der Composer sofort mit der Tastatur hoch (`body.keyboard-moving`,
+  280 ms iOS-Kurve, Vorhersage hält höchstens 1 s ohne Meldung), beim Verlassen
+  mit ihr herunter; Safaris späte Meldung korrigiert nur. Android
+  (Layout-Viewport schrumpft mit, keine Meldung einer verdeckenden Tastatur)
+  und Desktop bleiben unberührt.
   Export `window.App.composerKeyboard.sync`.
 - **`composer-quote.js`** (seit 2026-08-17) — **„Ask about this"**: der in einer
   Antwort markierte Abschnitt wandert als sichtbares Zitat über das Eingabefeld
@@ -9067,11 +9150,22 @@ einer Tabelle endet, zeigt sie so schon während der Prüfung.
 Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
 (`LOADING_NOTICE_DELAY_MS`); vorher schob ihr kurzes Aufblitzen den zentrierten
 Composer beim Reload hoch und wieder runter. Erstes Zeichnen: Endete die letzte
-angemeldete Sitzung in Agent (`localStorage.agentShellExpected`, geschrieben in
-`renderShellNow`, sobald `App.agentAccess` bekannt ist), setzt
-`app-bootstrap.js` `html.agent-shell-expected` und blendet die Models-Zeile der
-Sidebar sofort aus, bis `renderShellNow` übernimmt (Notbremse 10 s) — sonst
-rutschte die Bookmark-Liste nach `/user_status` hoch.
+angemeldete Sitzung in Agent: seit 2026-10-20 erwartet `app-bootstrap.js`
+Agent für jede bestätigte Sitzung (`App.expectsAgent()`: Agent ist für jedes
+Konto offen und Standardmodus), außer das Konto wählte einen anderen Modus oder
+dieser Browser sah es ohne Agent-Zugang (`localStorage.agentShellExpected` =
+`"0"`, geschrieben in `renderShellNow` aus `App.agentAccess.allowed`). Dann
+setzt es `html.agent-shell-expected` und `body.single-agent-active`; bis der
+Zugang bekannt ist, hält `agent-chat.js` Agents Aussehen (`expectingAgent()`,
+exportiert `App.agentChat.looksAgent()`: Chip, Reasoning, keine Demo, Agent-Texte;
+gesendet wird erst mit bekanntem Zugang; eine Anmeldung ohne Neuladen setzt die
+Erwartung nach derselben Regel). Keine 10-s-Notbremse mehr; ein
+fehlgeschlagener `/user_status` (5xx/Netz) lässt den Zugang offen, fragt mit
+wachsender Pause erneut (`firebase.js` `STATUS_RETRY_MS`, sofort bei `online`,
+Rückkehr oder „Try now“ = `App.retryAccountStatus()`) und zeigt im Composer
+„Your account could not be reached. Trying again…“ (`App.agentAccessCheck`);
+nur eine Ablehnung (4xx) setzt `allowed: false` (Apple-Audit B8). `auth-unavailable`
+löst die Erwartung auf.
 Seit 2026-10-02 führt die Evidenzzeile `.agent-review` mit einem dezenten
 Agreement-Score (`.agent-agreement`, „72 /100 agreement“): Wert aus
 `check.differences_data.agreement` der gewählten Vergleichsbasis (wechselt mit
