@@ -5985,7 +5985,15 @@ die wiederverwendeten Live-Renderziele. Gespeicherte Antwort-Snapshots bleiben
 davon unabhaengig. `memory-edit.js` erkennt `.answer-reader-body` als
 Modellantwort, haengt das Auswahlmenue bei einem nativen Reader-Dialog in diesen
 Dialog und schliesst den Leser vor „Ask about this“ oder dem Memory-Dialog,
-damit Composer und Memory wieder fokussierbar sind.
+damit Composer und Memory wieder fokussierbar sind. Das Menü kommt mit der
+Maus auf `mouseup`, mit Shift auf `keyup`, und seit 2026-10-20 (Apple-Audit
+F7) nach einer Berührung über `selectionchange`: ein Finger wählt ohne
+`mouseup`. Solange die Griffe wandern, wartet es (unsichtbar), steht die
+Auswahl 350 ms still, erscheint es unter dem Griff (28 px unter der Auswahl,
+nie dort, wo das Kopieren-Menü des Systems sitzt; ohne Platz darunter 56 px
+darüber); verschwindet die Auswahl, geht das Menü mit (außer der Finger ist
+auf dem Menü). Auf Touch haben die Aktionen 44-px-Flächen.
+`tests/e2e/test_touch_selection.py` wählt ohne Maus-Ereignis.
 Die originalen `.response-box`-IDs bleiben versteckte Render-/Konfigurationsziele;
 im ungesendeten Hero bleiben sie verborgen und inert; die Modellauswahl erfolgt
 ueber Sidebar und Composer-Picker.
