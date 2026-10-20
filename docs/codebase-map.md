@@ -6162,6 +6162,12 @@ keinen Abgleich.
   bleibt der vollständige Kompatibilitätsread erhalten. Kein neuer Topic-Index
   oder Backfill nötig; der normale kurze Verlauf kostet N Dokumente plus
   die Count-Aggregation statt zweier Vollabfragen.
+- Gerenderte Topic-Seiten und der Hub liegen seit 2026-10-20 (Apple-Audit I12)
+  `TOPIC_PAGE_CACHE_SECONDS` = 120 s im Prozess (`routers/topics._topic_page_cache`,
+  Schlüssel Slug + `?version`, höchstens 200 Seiten, nur 200er); jede Admin-Änderung
+  (Topic anlegen/ändern, Run) leert ihn (`invalidate_topic_pages`), ein geplanter
+  Run erscheint spätestens nach 120 s. `tests/conftest.py` leert ihn vor und nach
+  jedem Test.
 - `/topics/{slug}` liest für Verlauf und aktuelle Ansicht die neuesten 100 Runs
   (`TOPIC_PAGE_RUNS`). Ein expliziter `?version=<run_id>` außerhalb dieses
   Fensters wird direkt per `topics.get_run` unter dem bereits aufgelösten Topic
@@ -6500,7 +6506,7 @@ app/services/
   notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus
   notification_delivery.py   Ein Zustellversuch je Outbox-Item mit Abmelde-/Pause-/Kanalprüfung + Retry-Pass run_outbox_tick
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
-  favicons.py                Begrenzter Favicon-Fetch, Singleflight, LRU-/Negativcache
+  favicons.py                Begrenzter Favicon-Fetch (sz=128, < 64 px = kein Icon), Singleflight, LRU-/Negativcache, cached_favicon ohne Abruf
   retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus)
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Zielregeln, Lauf-Abschluss (Signal, geltende Antwort, Abschluss), Unsubscribe-Tokens
   evidence_change.py         Change-Judge mit Quellen + serverseitige Belegprüfung (Ursache, tragende Quellen), geteilt von Watch und Topic

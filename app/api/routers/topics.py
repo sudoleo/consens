@@ -6,6 +6,9 @@ import html
 import json
 import logging
 import re
+import threading
+import time
+from collections import OrderedDict
 from datetime import datetime
 from typing import Optional
 from urllib.parse import quote, urlsplit
@@ -20,7 +23,9 @@ from app.core import seo_entity
 from app.core.notice_page import notice_page
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
-from app.core.rate_limit import limiter
+from app.core.rate_limit import (
+    ApiUidRateLimitExceeded, api_uid_limiter, client_ip_key, limiter,
+)
 from app.core.security import TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token
 from app.services import (
     check_page, drift_signal, favicons, mailer, og_image, source_links,
@@ -47,6 +52,51 @@ HUB_DESCRIPTION = (
 )
 templates = Jinja2Templates(directory="templates")
 register_asset_globals(templates)
+
+# Rendered public Topic pages are kept for a short while (Audit I12): a page
+# reads up to TOPIC_PAGE_RUNS runs, which made /topics/... the slowest public
+# page (400-700 ms server time) and cost Firestore reads on every view. The
+# admin routes below drop the cache on every change; a scheduled run shows
+# up after at most TOPIC_PAGE_CACHE_SECONDS, within the s-maxage the page
+# already allows shared caches.
+TOPIC_PAGE_CACHE_SECONDS = 120
+_TOPIC_PAGE_CACHE_MAX = 200
+_topic_page_cache: OrderedDict = OrderedDict()
+_topic_page_cache_lock = threading.Lock()
+
+
+def invalidate_topic_pages() -> None:
+    with _topic_page_cache_lock:
+        _topic_page_cache.clear()
+
+
+def _cached_topic_page(key):
+    with _topic_page_cache_lock:
+        entry = _topic_page_cache.get(key)
+        if not entry:
+            return None
+        if entry[0] <= time.monotonic():
+            _topic_page_cache.pop(key, None)
+            return None
+        _topic_page_cache.move_to_end(key)
+        _expires, status_code, body, headers = entry
+    return HTMLResponse(content=body, status_code=status_code, headers=headers)
+
+
+def _remember_topic_page(key, response):
+    headers = {
+        name: value for name, value in response.headers.items()
+        if name.lower() not in {"content-length", "content-type"}
+    }
+    with _topic_page_cache_lock:
+        _topic_page_cache[key] = (
+            time.monotonic() + TOPIC_PAGE_CACHE_SECONDS, response.status_code,
+            bytes(response.body), headers,
+        )
+        _topic_page_cache.move_to_end(key)
+        while len(_topic_page_cache) > _TOPIC_PAGE_CACHE_MAX:
+            _topic_page_cache.popitem(last=False)
+    return response
 
 
 def _favicon_concurrency() -> asyncio.Semaphore:
@@ -212,11 +262,16 @@ def _topic_name(topic_id: str) -> tuple[str, str]:
 
 @router.get("/topics", response_class=HTMLResponse)
 async def topics_hub(request: Request):
+    cached = _cached_topic_page(("hub",))
+    if cached is not None:
+        return cached
     try:
         entries = await asyncio.to_thread(topics.list_public_topics)
     except Exception as exc:
         logging.error("topics_hub failed category=%s", safe_exception(exc))
-        entries = []
+        entries = None
+    failed = entries is None
+    entries = entries or []
     for entry in entries:
         # A card says what a reader of the page would see first: the picture,
         # the opening of the answer, and whether the latest check moved it.
@@ -257,7 +312,8 @@ async def topics_hub(request: Request):
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
     })
     response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300"
-    return response
+    # A failed read is not kept: the next visitor tries again.
+    return response if failed else _remember_topic_page(("hub",), response)
 
 
 @router.get("/sitemap-topics.xml")
@@ -301,6 +357,10 @@ def _topic_not_found(request: Request):
 async def topic_page(
     request: Request, slug: str, version: str = Query(default="", max_length=40)
 ):
+    cache_key = ("topic", slug, version)
+    cached = _cached_topic_page(cache_key)
+    if cached is not None:
+        return cached
     try:
         topic, retired_slug = await asyncio.to_thread(
             topics.resolve_topic_by_slug, slug
@@ -504,7 +564,7 @@ async def topic_page(
     response.headers["Cache-Control"] = (
         "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
     )
-    return response
+    return _remember_topic_page(cache_key, response)
 
 
 @router.get("/topics/{slug}/og.png")
@@ -583,9 +643,42 @@ _GLOBE_SVG = (
 )
 
 
+# Only a lookup the cache cannot answer costs anything (one outbound call),
+# so only those count against a visitor. A cached icon is served without a
+# limit: one shared page shows ~13 domains, and a per-request limit left
+# visitors behind one IP without icons after a few pages (Audit I7).
+FAVICON_LOOKUPS_PER_MINUTE = 60
+
+
+def _favicon_response(data, content_type, *, transient=False) -> Response:
+    if not data:
+        return Response(
+            content=_GLOBE_SVG,
+            media_type="image/svg+xml",
+            # A capacity fallback is transient and must not be cached by a
+            # browser/CDN for a day.  Genuine negative favicon lookups remain
+            # safely cached to prevent retry amplification.
+            headers={"Cache-Control": "no-store" if transient else "public, max-age=86400"},
+        )
+    return Response(
+        content=data,
+        media_type=content_type or "image/png",
+        headers={"Cache-Control": "public, max-age=604800, immutable"},
+    )
+
+
 @router.get("/api/topics/favicon")
-@limiter.limit("30/minute")
 async def topic_favicon(request: Request, d: str = Query(default="", max_length=253)):
+    cached = favicons.cached_favicon(d)
+    if cached is not None:
+        return _favicon_response(*cached)
+    try:
+        api_uid_limiter.check(
+            "ip:" + client_ip_key(request), "favicon-lookup", FAVICON_LOOKUPS_PER_MINUTE,
+        )
+    except ApiUidRateLimitExceeded:
+        # The globe for now, never a 429: the page keeps its icon slot.
+        return _favicon_response(None, "", transient=True)
     acquired = False
     overloaded = False
     concurrency = _favicon_concurrency()
@@ -611,24 +704,7 @@ async def topic_favicon(request: Request, d: str = Query(default="", max_length=
     finally:
         if acquired:
             concurrency.release()
-    if not data:
-        return Response(
-            content=_GLOBE_SVG,
-            media_type="image/svg+xml",
-            # A capacity fallback is transient and must not be cached by a
-            # browser/CDN for a day.  Genuine negative favicon lookups remain
-            # safely cached to prevent retry amplification.
-            headers={
-                "Cache-Control": (
-                    "no-store" if overloaded else "public, max-age=86400"
-                )
-            },
-        )
-    return Response(
-        content=data,
-        media_type=content_type or "image/png",
-        headers={"Cache-Control": "public, max-age=604800, immutable"},
-    )
+    return _favicon_response(data, content_type, transient=overloaded)
 
 
 @router.post("/api/topics/{slug}/follow")
@@ -770,6 +846,7 @@ async def admin_create_topic(request: Request, data: dict = Body(...)):
         topic = await asyncio.to_thread(
             topics.create_topic, payload, actor_uid=actor_uid
         )
+        invalidate_topic_pages()
         return {"status": "success", "topic": _admin_topic_view(topic)}
     except topics.TopicError as exc:
         _raise_topic(exc)
@@ -805,6 +882,7 @@ async def admin_update_topic(
         topic = await asyncio.to_thread(
             topics.update_topic, topic_id, payload, actor_uid=actor_uid
         )
+        invalidate_topic_pages()
         return {"status": "success", "topic": _admin_topic_view(topic)}
     except topics.TopicError as exc:
         _raise_topic(exc)
@@ -848,6 +926,7 @@ async def admin_create_topic_run(
                     notifications=staged,
                 )
             )
+        invalidate_topic_pages()
         is_material = (run.get("outcome") or {}).get("signal") == drift_signal.SIGNAL_MOVED
         should_notify = is_material and mailer.is_configured()
         if staged.ids:
