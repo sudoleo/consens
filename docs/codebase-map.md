@@ -1608,7 +1608,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Läufen, in denen die Zeile *zwischen* den `$$` als eigener „Satz" landete:
   nur wenn außer LaTeX nichts im Anker steht, wird er nachträglich als Formel
   gesetzt — ein einziges Wort Text lässt ihn Text bleiben.
-- **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
+- **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`, `morphMarkdown`,
+  `renderMarkdownStream`, `keepTextSelection`, ein Parse je Render über
+  `renderMarkdownFragment`) + SSE-Helfer
   (`createStreamRenderer`, `streamSSERequest`; eine `id:`-Zeile wird als zweites
   Argument an `renderer.receive(data, id)` gereicht, nur wenn vorhanden); setzt LaTeX nach jedem
   gedrosselten Streaming-Render über `window.ConsensusMath`. Fehlt `marked`
@@ -3523,8 +3525,8 @@ tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Sta
 eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
 Laufs, sobald er `succeeded`/`partial` ist;
 davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
-`#agentAnswerBody`. `renderAnswer` zählt `_agentRenderSerial` hoch, damit ein
-neu injizierter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
+`#agentAnswerBody`. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
+neu gerenderter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
 beim ersten Auftreten je `answer_hash` (`evidence.reveal`). Veraltete
 Antwort-/Grundlagenbindungen werden nicht angezeigt.
 Seit 2026-10-18 legt der Handler `coverage_preview` das neueste Event je
@@ -8551,6 +8553,14 @@ gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
 dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
 Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18) zeichnet
 `project` schon, während die feste Antwort geprüft wird.
+Seit 2026-10-20 (Apple-Audit D4) malt `follow()` gestreamten Text einmal pro
+Frame (`schedulePaint` → `renderAnswerBody(..., 'stream')`, nur in eine Antwort,
+die dieser sichtbare Lauf schon streamt), getrennt vom 100-ms-Takt der übrigen
+Projektion; ein Frame über 8 ms rückt den nächsten um das Doppelte hinaus.
+Sobald die Review den gestreamten Text als Version hält („settled“), rendert
+`project` ihn vollständig (`morphMarkdown` mit `streamSourcePills`, in die
+gezeigten Knoten und mit `keepTextSelection`) – auch eine Antwort, die mit
+einer Tabelle endet, zeigt sie so schon während der Prüfung.
 Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
 (`LOADING_NOTICE_DELAY_MS`); vorher schob ihr kurzes Aufblitzen den zentrierten
 Composer beim Reload hoch und wieder runter. Erstes Zeichnen: Endete die letzte
@@ -8575,13 +8585,38 @@ offene neu. Listen/Zitate über Leerzeilen bleiben zusammen, eine Grenze gilt er
 mit vollständiger Folgezeile. Ein im offenen Block begonnenes, noch nicht
 geschlossenes `**` rendert `closeOpenStrong` schon fett statt mit rohen
 Sternchen (nicht in Code-Fences). Fremde Schreibzugriffe oder nicht nur wachsender
-Text starten neu. Die finale Antwort rendert einmal vollständig mit
-`injectMarkdown` (gleiche Sanitisierung). `resetMarkdownStream(el)` verwirft den
-Zustand. `injectMarkdown(el, md, [])` merkt sich, was es geschrieben hat
-(`el._plainMarkdown`); `window.isPlainMarkdown(el, md)` ist wahr, solange `el`
-genau das noch unmarkiert zeigt. `agent-review.js` `mark()` markiert dann
-direkt statt denselben Text ein zweites Mal zu rendern (Apple-Audit D5: jeder
-geöffnete Agent-Turn lief zweimal durch Markdown). Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
+Text starten neu. Seit 2026-10-20 (Apple-Audit D4/A5/A6) wird der offene Block
+nicht mehr ersetzt, sondern in die gezeigten Knoten **gemorpht**
+(`morphNodes`: gleiche Knotenart bleibt dasselbe Objekt, Text wächst per
+`appendData`, Attribute und `sourceData`/`sourceGroup` der Pills wandern mit;
+anderes wird aus dem neuen Render übernommen, das Ergebnis gleicht ihm Knoten für
+Knoten) – ein Link im entstehenden Absatz bleibt klickbar, eine Auswahl darin
+bleibt; wird der Block fertig, morpht sein endgültiger Render in dieselben Knoten.
+Eine noch einströmende Tabelle (Zeile mit führendem `|` außerhalb von Fences)
+steht als `.stream-table-pending` da: je angekommener Zeile ein leiser
+`.skeleton`-Balken in Zeilenhöhe (`aria-hidden`), die Tabelle erscheint erst
+vollständig – vorher rutschten die Spaltenköpfe mit jeder Zeile seitlich.
+Markdown wird einmal geparst: `renderMarkdownFragment(md)` lässt DOMPurify
+(`RETURN_DOM_FRAGMENT`) seinen eigenen DOM liefern, entschärft entfernte Bilder,
+solange die Knoten noch in DOMPurifys inertem Dokument stehen (ein `<img>` lädt
+ab der Übernahme ins Seitendokument), und übernimmt sie erst dann
+(`document.adoptNode`). `window.morphMarkdown(el, md, { decorate })` rendert den
+festen Text vollständig wie `injectMarkdown(el, md, [])`, aber in die gezeigten
+Knoten. `window.keepTextSelection(root, change)` hält eine Auswahl über `change`
+hinweg als Position im Fließtext (Claim-Badges und Pills zählen nicht) und
+setzt sie nur zurück, wenn sie verloren ging. Jeder Markdown-Schreibvorgang zählt
+`el._markdownWrites` hoch; Marken-Renderer erkennen daran (zusammen mit dem
+ersten Knoten) einen neuen Render, denn ein Morph behält den ersten Knoten.
+`resetMarkdownStream(el)` verwirft den Zustand. `injectMarkdown(el, md, [])`
+merkt sich, was es geschrieben hat (`el._plainMarkdown`);
+`window.isPlainMarkdown(el, md)` ist wahr, solange `el` genau das noch
+unmarkiert zeigt. `agent-review.js` `mark()` markiert dann direkt statt
+denselben Text ein zweites Mal zu rendern (Apple-Audit D5: jeder geöffnete
+Agent-Turn lief zweimal durch Markdown). Vorläufige und endgültige Marken
+(`preview()`, `mark()`) und das Abnehmen der Marken legen sich über den Text
+(`overText`): Rückmorph auf den schlichten Render, Marken, Pills, Auswahl
+zurück – vorher ersetzte jede Prüf-Aktualisierung die ganze Antwort (A6).
+Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
 gibt jedem Block vor dem Einhängen seine endgültige Inline-Form; Agent nutzt das
 für Quellen-Pills (`agent-chat.js::streamSourcePills` → `linkifyAgentSources`
 mit den Links des Blocks). Pills zeigen den Host, ihre Breite hängt also nicht

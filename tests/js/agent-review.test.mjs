@@ -536,6 +536,61 @@ it('strokes on only new or changed marks when the final review replaces provisio
   dom.window.close();
 });
 
+// Marks are laid over the text on screen (Apple audit A6): the real
+// Markdown renderer, and a marker that wraps its anchor where it stands.
+it('keeps the text, and a selection in it, while provisional and final marks arrive', () => {
+  const text = 'The first paragraph stays plain.\n\nThe tower is 330 m tall. A ticket costs 29 euros.';
+  const { window: w, document: d, dom } = loadScripts([
+    "static/vendor/marked/12.0.2/marked.min.js", "static/vendor/dompurify/3.4.17/dist/purify.min.js",
+    "static/js/markdown-stream.js", "static/js/agent-review.js"], { body: '<section><div id="answer"></div></section>', before(win) {
+    win.App = { answerReader: { openContext: vi.fn(), refreshContext: vi.fn() } };
+    win.renderStoredDifferenceCards = vi.fn();
+  }});
+  w.matchMedia = () => ({ matches: false });
+  w.renderStoredConsensusClaims = vi.fn((el, data) => {
+    for (const claim of data.claims) {
+      const walker = d.createTreeWalker(el, w.NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const at = node.nodeValue.indexOf(claim.anchor);
+        if (at < 0 || node.parentElement.closest('.cx-claim')) continue;
+        const words = node.splitText(at); words.splitText(claim.anchor.length);
+        const span = d.createElement('span'); span.className = 'cx-claim is-unanimous';
+        words.replaceWith(span); span.append(words);
+        const badge = d.createElement('button'); badge.className = 'claim-badge'; badge.textContent = '2/2'; span.after(badge);
+        break;
+      }
+    }
+  });
+  const body = d.getElementById('answer');
+  body.dataset.markdown = text;
+  w.renderMarkdownStream(body, text);
+  const [first, second] = body.querySelectorAll('p');
+  const plain = first.firstChild;
+  const selection = w.getSelection();
+  selection.setBaseAndExtent(second.firstChild, 4, second.firstChild, 16);
+  const chosen = selection.toString();
+  expect(chosen).toBe('tower is 330');
+  const version = { id: 1, text, hash: 'h' };
+  const running = { ...snapshot(), status: 'running', answer_hash: 'h', versions: [version] };
+  delete running.checks;
+  w.App.agentReview.preview(body, running, { c1: { answer_hash: 'h', comparison_id: 'c1',
+    claims: [claim('A ticket costs 29 euros.')], models_compared: ['GPT'] } });
+  expect(body.querySelectorAll('.cx-claim')).toHaveLength(1);
+  expect(body.querySelector('p')).toBe(first);
+  expect(plain.isConnected).toBe(true);
+  expect(selection.toString()).toBe(chosen);
+  // The final review replaces the provisional marks in the same text.
+  const review = { ...snapshot(), answer_hash: 'h', versions: [version] };
+  review.checks.forEach(check => { check.answer_hash = 'h'; check.differences_data.claims = [claim('The tower is 330 m tall.')]; });
+  w.App.agentReview.render(body, review);
+  expect([...body.querySelectorAll('.cx-claim')].map(el => el.textContent)).toEqual(['The tower is 330 m tall.']);
+  expect(body.querySelector('p')).toBe(first);
+  expect(plain.isConnected).toBe(true);
+  expect(selection.toString()).toBe(chosen);
+  dom.window.close();
+});
+
 it('leads the evidence row with a quiet agreement score of the comparison it shows', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer');

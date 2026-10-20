@@ -2,18 +2,15 @@
 // markdown-stream.js
 // Markdown-Rendering (sanitised) + SSE-Streaming-Helfer.
 // Extrahiert aus templates/index.html (initApp-Closure).
-// Exporte: window.injectMarkdown, window.createStreamRenderer,
-// window.streamSSERequest. (readSSEStream bleibt modul-privat.)
+// Exporte: window.injectMarkdown, window.morphMarkdown,
+// window.isPlainMarkdown, window.keepTextSelection,
+// window.renderMarkdownStream, window.resetMarkdownStream,
+// window.createStreamRenderer, window.streamSSERequest.
+// (readSSEStream bleibt modul-privat.)
 // Call-time-Abhaengigkeiten: DOMPurify, marked (CDN), window.ConsensusMath,
 // window.addCopyButtons, window.addNewTabToLinks, window.linkifySourceTags,
 // window.currentEvidenceSources.
 // =====================================================================
-
-function escapeHtml(value) {
-  const node = document.createElement("div");
-  node.textContent = value || "";
-  return node.innerHTML;
-}
 
 function reportMarkdownFallback(missingDependency) {
   window.App?.reportCriticalError?.({
@@ -38,28 +35,36 @@ function isInlineImageSource(src) {
   return /^data:image\//i.test(src) || (src.startsWith("/") && !src.startsWith("//"));
 }
 
-function neutralizeRemoteMedia(html) {
-  if (typeof document === "undefined") return html;
-  const template = document.createElement("template");
-  template.innerHTML = html;
-  template.content.querySelectorAll("img").forEach(img => {
+// Runs while the nodes still belong to DOMPurify's inert document: an <img>
+// starts loading as soon as it is adopted into the page, even detached.
+function neutralizeRemoteMedia(root) {
+  const doc = root.ownerDocument || document;
+  root.querySelectorAll("img").forEach(img => {
     const src = (img.getAttribute("src") || "").trim();
     if (isInlineImageSource(src)) return;
-    const note = document.createElement("span");
+    const note = doc.createElement("span");
     note.className = "blocked-remote-image";
     const alt = (img.getAttribute("alt") || "").trim();
     note.textContent = alt ? `[Image not loaded: ${alt}]` : "[External image not loaded]";
     img.replaceWith(note);
   });
-  template.content.querySelectorAll("[style]").forEach(el => {
+  root.querySelectorAll("[style]").forEach(el => {
     if (/[()\\]|url|image|@import|expression/i.test(el.getAttribute("style") || "")) {
       el.removeAttribute("style");
     }
   });
-  return template.innerHTML;
 }
 
-function renderMarkdownHtml(md) {
+function plainTextFragment(text) {
+  const fragment = document.createDocumentFragment();
+  if (text) fragment.append(document.createTextNode(text));
+  return fragment;
+}
+
+// Markdown -> sanitized nodes of this document, parsed once: DOMPurify hands
+// over its own DOM instead of a string that would be parsed again for the
+// media check and once more for the page (Apple audit D4).
+function renderMarkdownFragment(md) {
   const prepared = window.ConsensusMath
     ? window.ConsensusMath.prepareMarkdown(md)
     : (md || "");
@@ -72,13 +77,22 @@ function renderMarkdownHtml(md) {
     // an unhandled Promise rejection. Plain text is safe and keeps the run
     // readable until the dependency is available again.
     reportMarkdownFallback(missing.join(", "));
-    return escapeHtml(prepared);
+    return plainTextFragment(prepared);
   }
   try {
-    return neutralizeRemoteMedia(window.DOMPurify.sanitize(window.marked.parse(prepared), MODEL_HTML_CONFIG));
+    let fragment = window.DOMPurify.sanitize(window.marked.parse(prepared),
+      { ...MODEL_HTML_CONFIG, RETURN_DOM_FRAGMENT: true });
+    if (typeof fragment === "string") {
+      // A sanitizer that only returns markup: an inert template parses it.
+      const template = document.createElement("template");
+      template.innerHTML = fragment;
+      fragment = template.content;
+    }
+    neutralizeRemoteMedia(fragment);
+    return fragment.ownerDocument === document ? fragment : document.adoptNode(fragment);
   } catch (error) {
     reportMarkdownFallback("render error");
-    return escapeHtml(prepared);
+    return plainTextFragment(prepared);
   }
 }
 
@@ -141,7 +155,7 @@ function enhanceMarkdownTables(root) {
 
 // Utils: Markdown → HTML (sanitised) + deine Addons
 function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources) {
-  el.innerHTML = renderMarkdownHtml(md);
+  el.replaceChildren(renderMarkdownFragment(md));
 
   enhanceMarkdownTables(el);
 
@@ -152,33 +166,182 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   if (linked) window.linkifySourceTags(el, evidenceSources);
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);
+  noteMarkdownWrite(el, linked ? null : md);
+}
+
+// Every write of rendered Markdown into `el` counts up `el._markdownWrites`:
+// renderers that decorate the text (claim marks) tell from it whether their
+// decoration is still there. A morphed render keeps the first node, so the
+// node itself no longer says that the text was written again.
+function noteMarkdownWrite(el, plainMd) {
+  el._markdownWrites = (el._markdownWrites || 0) + 1;
   // What a plain render of `md` left in `el`: the review renderer can mark
   // it as it is instead of rendering the same text again (isPlainMarkdown).
-  el._plainMarkdown = linked ? null : { md, first: el.firstChild, last: el.lastChild, count: el.childNodes.length };
+  el._plainMarkdown = typeof plainMd === "string"
+    ? { md: plainMd, writes: el._markdownWrites, first: el.firstChild, last: el.lastChild, count: el.childNodes.length }
+    : null;
 }
 
 // True while `el` still holds exactly what injectMarkdown(el, md, []) wrote:
 // no other write since and nothing marked or turned into pills.
 function isPlainMarkdown(el, md) {
   const plain = el?._plainMarkdown;
-  return Boolean(plain) && plain.md === md && el.firstChild === plain.first && el.lastChild === plain.last
+  return Boolean(plain) && plain.md === md && plain.writes === el._markdownWrites
+    && el.firstChild === plain.first && el.lastChild === plain.last
     && el.childNodes.length === plain.count && !el.querySelector(".cx-claim, .claim-badge, .src-ref");
+}
+
+// --- Morphing a shown answer into its next render -----------------------
+// Replacing the nodes of an answer the reader is in dropped their selection,
+// the link under their finger and the hover of a source pill. A morph keeps
+// every node whose kind did not change: text that only grows is appended to
+// (a selection inside it stays), elements keep their identity and take the
+// new render's attributes. Nodes of another kind are taken from the new
+// render as they are, so the result equals it node for node.
+const CARRIED_PROPERTIES = ["sourceData", "sourceGroup"];
+// Claim marks carry their own listeners and state: they never become another
+// element, the new render's node takes their place.
+const MARK_NODES = ".cx-claim, .cx-spot, .claim-badge";
+
+function sameNodeKind(live, next) {
+  if (live.nodeType !== next.nodeType) return false;
+  if (live.nodeType !== Node.ELEMENT_NODE) return true;
+  return live.tagName === next.tagName && live.namespaceURI === next.namespaceURI
+    && !live.matches(MARK_NODES) && !next.matches(MARK_NODES);
+}
+
+function morphNode(live, next) {
+  if (live.nodeType !== Node.ELEMENT_NODE) {
+    const before = live.nodeValue || "";
+    const after = next.nodeValue || "";
+    if (before === after) return;
+    if (live.nodeType === Node.TEXT_NODE && after.startsWith(before)) live.appendData(after.slice(before.length));
+    else live.nodeValue = after;
+    return;
+  }
+  for (const attribute of Array.from(live.attributes)) {
+    if (!next.hasAttribute(attribute.name)) live.removeAttribute(attribute.name);
+  }
+  for (const attribute of Array.from(next.attributes)) {
+    if (live.getAttribute(attribute.name) !== attribute.value) live.setAttribute(attribute.name, attribute.value);
+  }
+  for (const key of CARRIED_PROPERTIES) {
+    if (key in next || key in live) live[key] = next[key];
+  }
+  morphNodes(live, Array.from(live.childNodes), Array.from(next.childNodes));
+}
+
+// Turns the run of `current` nodes in `parent` into `wanted` and returns the
+// nodes that stand there afterwards.
+function morphNodes(parent, current, wanted) {
+  const end = current.length ? current[current.length - 1].nextSibling : null;
+  const result = [];
+  let index = 0;
+  for (const next of wanted) {
+    const live = current[index];
+    if (live && sameNodeKind(live, next)) {
+      morphNode(live, next);
+      result.push(live);
+      index += 1;
+    } else {
+      parent.insertBefore(next, live || end);
+      result.push(next);
+    }
+  }
+  for (; index < current.length; index += 1) current[index].remove();
+  return result;
+}
+
+// Renders `md` in full like injectMarkdown(el, md, []), but into the nodes
+// `el` already shows. `decorate` gives the render its final inline form
+// before it is compared (source pills), as for streamed blocks.
+function morphMarkdown(el, md, { decorate } = {}) {
+  const next = document.createElement("div");
+  injectMarkdown(next, md, []);
+  decorate?.(next);
+  morphNodes(el, Array.from(el.childNodes), Array.from(next.childNodes));
+  delete el._markdownStream;
+  noteMarkdownWrite(el, decorate ? null : md);
+}
+
+// --- A selection that outlives a re-render ------------------------------
+// The reader's selection inside `root`, kept across `change` as positions in
+// its prose. Claim badges and source pills are drawn on top of the text and
+// may come and go with the change, so their text does not count.
+const SELECTION_SKIP = ".claim-badge, .src-ref, .src-ref-sep";
+
+function proseNodes(root) {
+  const nodes = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (!node.parentElement?.closest(SELECTION_SKIP)) nodes.push(node);
+  }
+  return nodes;
+}
+
+function proseOffset(root, container, offset) {
+  const range = document.createRange();
+  range.setStart(root, 0);
+  range.setEnd(container, offset);
+  let total = 0;
+  for (const node of proseNodes(root)) {
+    if (!range.intersectsNode(node)) continue;
+    total += node === range.endContainer ? range.endOffset : node.length;
+  }
+  return total;
+}
+
+function prosePoint(offset, nodes) {
+  let total = 0;
+  for (const node of nodes) {
+    if (offset <= total + node.length) return [node, Math.max(0, offset - total)];
+    total += node.length;
+  }
+  const last = nodes[nodes.length - 1];
+  return last ? [last, last.length] : null;
+}
+
+function keepTextSelection(root, change) {
+  const selection = typeof window.getSelection === "function" ? window.getSelection() : null;
+  const inside = node => Boolean(node) && root.contains(node);
+  if (!root || !selection || !selection.rangeCount || selection.isCollapsed
+      || !inside(selection.anchorNode) || !inside(selection.focusNode)) return change();
+  const anchor = proseOffset(root, selection.anchorNode, selection.anchorOffset);
+  const focus = proseOffset(root, selection.focusNode, selection.focusOffset);
+  const result = change();
+  try {
+    const kept = inside(selection.anchorNode) && inside(selection.focusNode)
+      && proseOffset(root, selection.anchorNode, selection.anchorOffset) === anchor
+      && proseOffset(root, selection.focusNode, selection.focusOffset) === focus;
+    if (!kept) {
+      const nodes = proseNodes(root);
+      const from = prosePoint(anchor, nodes);
+      const to = prosePoint(focus, nodes);
+      if (from && to) selection.setBaseAndExtent(from[0], from[1], to[0], to[1]);
+    }
+  } catch (_) { /* A selection the browser refuses stays as it is. */ }
+  return result;
 }
 
 window.injectMarkdown = injectMarkdown;
 window.isPlainMarkdown = isPlainMarkdown;
+window.morphMarkdown = morphMarkdown;
+window.keepTextSelection = keepTextSelection;
 
 // --- Incremental Markdown for a growing answer -------------------------
 // Re-parsing the whole answer on every streamed chunk makes the total work
 // quadratic in its length. A streamed answer only ever grows at its end, so
 // the text is cut into top-level blocks at blank lines outside code fences
 // and display math. Finished blocks are parsed exactly once; only the last,
-// still growing block is rendered again. A block boundary is committed only
-// once the line after the blank line is complete, so a list or paragraph that
-// continues across a blank line is never split early. Loose lists and
-// indented continuations stay in one block. The caller renders the complete
-// text once with injectMarkdown() when the stream ends, so constructs that
-// span blocks (reference links, footnotes) are exact in the final answer.
+// still growing block is rendered again, and morphed into the nodes shown
+// for it: a link in the paragraph that is being written stays clickable and
+// a selection in it stays. A block boundary is committed only once the line
+// after the blank line is complete, so a list or paragraph that continues
+// across a blank line is never split early. Loose lists and indented
+// continuations stay in one block. The caller renders the complete text once
+// (morphMarkdown) when it is fixed, so constructs that span blocks
+// (reference links, footnotes) are exact in the final answer.
 const LIST_OR_INDENT = /^(?:\s|[-*+]\s|\d{1,9}[.)]\s|>)/;
 const FENCE_LINE = /^\s{0,3}(```|~~~)/;
 
@@ -218,10 +381,8 @@ function nextStreamBlockEnd(text, from) {
 // `decorate` gives a block its final inline form before it is shown (for
 // example source pills): changing it afterwards re-wrapped lines under the eye.
 function renderStreamFragment(md, decorate) {
-  const template = document.createElement("template");
-  template.innerHTML = renderMarkdownHtml(md);
   const holder = document.createElement("div");
-  holder.append(template.content);
+  holder.append(renderMarkdownFragment(md));
   enhanceMarkdownTables(holder);
   if (window.ConsensusMath) window.ConsensusMath.render(holder);
   decorate?.(holder);
@@ -230,7 +391,7 @@ function renderStreamFragment(md, decorate) {
 
 // A bold span the stream has opened but not closed yet would show its raw
 // asterisks until the closing pair arrives. The unfinished tail is rendered
-// as if it were closed; the final injectMarkdown() renders the real text.
+// as if it were closed; the final render shows the real text.
 function closeOpenStrong(text) {
   if (/(^|\n)\s{0,3}(```|~~~)/.test(text)) return text;
   const marks = (text.replace(/`[^`\n]*`/g, "").match(/\*\*/g) || []).length;
@@ -240,14 +401,62 @@ function closeOpenStrong(text) {
   return `${trimmed}**${text.slice(trimmed.length)}`;
 }
 
+// A table that is still streaming stands as quiet rows in its place until it
+// is complete, then appears at once. Each new row changed the automatic
+// column widths, so the header the reader was on slid sideways, by up to 4 cm
+// for the first data row (Apple audit A5).
+const TABLE_ROW = /^\s{0,3}\|/;
+const TABLE_RULE = /^\s{0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-*:?\s*)*\|?\s*$/;
+
+function pendingTableStart(text) {
+  let fence = "";
+  let position = 0;
+  while (position < text.length) {
+    const newline = text.indexOf("\n", position);
+    const line = text.slice(position, newline === -1 ? text.length : newline);
+    const fenceMatch = line.match(FENCE_LINE);
+    if (fence) {
+      if (fenceMatch && fenceMatch[1] === fence) fence = "";
+    } else if (fenceMatch) {
+      fence = fenceMatch[1];
+    } else if (TABLE_ROW.test(line)) {
+      return position;
+    }
+    if (newline === -1) break;
+    position = newline + 1;
+  }
+  return -1;
+}
+
+function pendingTable(rows) {
+  const box = document.createElement("div");
+  box.className = "stream-table-pending";
+  box.setAttribute("aria-hidden", "true");
+  for (let row = 0; row < Math.max(1, rows); row += 1) {
+    const bar = document.createElement("span");
+    bar.className = "skeleton";
+    box.append(bar);
+  }
+  return box;
+}
+
+function renderStreamTail(text, decorate) {
+  const table = pendingTableStart(text);
+  if (table === -1) return renderStreamFragment(closeOpenStrong(text), decorate);
+  const before = text.slice(0, table);
+  const nodes = before.trim() ? renderStreamFragment(closeOpenStrong(before), decorate) : [];
+  const rows = text.slice(table).split("\n").filter(line => TABLE_ROW.test(line) && !TABLE_RULE.test(line)).length;
+  nodes.push(pendingTable(rows));
+  return nodes;
+}
+
 // Renders `md` into `el`, reusing the blocks of the previous call when `md`
 // only grew. Returns the number of characters that were parsed.
 function renderMarkdownStream(el, md, { decorate } = {}) {
   md = String(md || "");
-  el._plainMarkdown = null;
   let state = el._markdownStream;
-  // Anyone else writing into the element (a full injectMarkdown, a review
-  // re-render) invalidates the reuse; so does text that did not only grow.
+  // Anyone else writing into the element (a full render, a review re-render)
+  // invalidates the reuse; so does text that did not only grow.
   if (!state || !md.startsWith(state.committedText) || el.childNodes.length !== state.nodeCount) {
     el.replaceChildren();
     state = el._markdownStream = { committedText: "", committed: 0, tail: [], tailText: "", nodeCount: 0 };
@@ -256,20 +465,22 @@ function renderMarkdownStream(el, md, { decorate } = {}) {
   let end;
   while ((end = nextStreamBlockEnd(md, state.committed)) !== -1) {
     const block = md.slice(state.committed, end);
-    state.tail.forEach(node => node.remove());
+    // The block the reader saw growing becomes final in its own nodes.
+    morphNodes(el, state.tail, renderStreamFragment(block, decorate));
     state.tail = [];
-    el.append(...renderStreamFragment(block, decorate));
     parsed += block.length;
     state.committed = end;
     state.committedText = md.slice(0, end);
   }
   const tailText = md.slice(state.committed);
   if (tailText !== state.tailText) {
-    state.tail.forEach(node => node.remove());
-    state.tail = tailText.trim() ? renderStreamFragment(closeOpenStrong(tailText), decorate) : [];
-    el.append(...state.tail);
+    state.tail = morphNodes(el, state.tail, tailText.trim() ? renderStreamTail(tailText, decorate) : []);
     state.tailText = tailText;
     parsed += tailText.length;
+  }
+  if (parsed) {
+    el._markdownWrites = (el._markdownWrites || 0) + 1;
+    el._plainMarkdown = null;
   }
   state.nodeCount = el.childNodes.length;
   return parsed;
@@ -309,7 +520,7 @@ function createStreamRenderer(outputEl, isActiveFn) {
     renderTimer = null;
     if (isActiveFn && !isActiveFn()) return;
     lastRenderAt = Date.now();
-    outputEl.innerHTML = renderMarkdownHtml(text);
+    outputEl.replaceChildren(renderMarkdownFragment(text));
     enhanceMarkdownTables(outputEl);
     if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
   }

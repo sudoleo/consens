@@ -259,6 +259,17 @@
   .agent-answer-error-actions button, .agent-progress-review-jump, .agent-composer-notice.agent-review-notice button { min-height: 44px; }
 }
 #agentAnswerBody:empty { display: none; }
+/* A table still streaming (markdown-stream.js): one quiet bar per row that
+   has arrived, in the table's place and about its row height, until the
+   table is complete and appears at once. Rows streaming into a real table
+   slid its header sideways with every row (Apple audit A5). */
+.stream-table-pending { display: grid; margin: 1.4em 0; }
+.stream-table-pending > .skeleton { width: 100%; height: 10px; margin-block: calc(.92em * 1.55 / 2 + 5px); }
+.stream-table-pending > .skeleton:first-child { margin-top: calc(.92em * 1.55 / 2 - 5px); }
+.stream-table-pending > .skeleton:nth-child(even) { width: 94%; }
+@media (max-width: 640px) {
+  .stream-table-pending { margin-block: 1.2em; }
+}
 .agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-composer-notice[hidden], .agent-composer-notice [hidden] { display: none; }
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

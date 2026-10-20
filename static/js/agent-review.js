@@ -404,6 +404,20 @@
         : [a.sourceData || {url: a.getAttribute('href'), title: a.textContent}]) },
       ...(review?.comparisons || []).flatMap(c => c.answers || []), ...(review?.versions || [])]);
   }
+  // Marks are laid over the text the reader sees, never a new copy of it:
+  // the answer is morphed back to its plain render (markdown-stream.js),
+  // marked and turned into pills inside the nodes on screen, and a selection
+  // the reader holds comes back where it was. Each check update replaced the
+  // whole answer before, two to five times a run (Apple audit A6).
+  function overText(body, raw, change) {
+    const apply = () => {
+      if (typeof raw === 'string' && !window.isPlainMarkdown?.(body, raw)) {
+        if (window.morphMarkdown) window.morphMarkdown(body, raw); else window.injectMarkdown?.(body, raw, []);
+      }
+      change?.();
+    };
+    return window.keepTextSelection ? window.keepTextSelection(body, apply) : apply();
+  }
   // Provisional marks (since 2026-10-18): while the judges check the fixed
   // answer, the Coverage windows that are done send their verdicts
   // (coverage_preview, never saved). They appear quietly, without the stroke,
@@ -416,7 +430,9 @@
   function preview(body, review, previews, evidence = {}) {
     if (!body?.parentElement) return;
     const applied = body._previewMarks;
-    const intact = Boolean(applied) && body.firstChild === applied.first;
+    // A render since took the marks with it: a morphed one keeps the first
+    // node but counts as a write (markdown-stream.js), any other replaces it.
+    const intact = Boolean(applied) && applied.writes === body._markdownWrites && body.firstChild === applied.first;
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown;
     const comparisons = review?.comparisons || [];
@@ -430,8 +446,7 @@
     if (!usable) {
       if (intact) {
         const sources = sourcesOf(body, review, evidence, raw);
-        window.injectMarkdown?.(body, raw, []);
-        window.linkifyAgentSources?.(body, sources);
+        overText(body, raw, () => window.linkifyAgentSources?.(body, sources));
       }
       if (applied) { body._previewMarks = null; body.classList.remove('has-provisional-marks'); }
       return;
@@ -439,13 +454,14 @@
     const signature = JSON.stringify([review.answer_hash, comparison.id, claims, data.models_compared]);
     if (intact && applied.signature === signature) return;
     const sources = sourcesOf(body, review, evidence, raw);
-    window.injectMarkdown?.(body, raw, []);
-    // Coverage only: no contradictions and no score yet, and no "Key claims"
-    // list for sentences without an anchor while the check is incomplete.
-    window.renderStoredConsensusClaims?.(body, { claims, differences: [],
-      models_compared: Array.isArray(data.models_compared) ? data.models_compared : [] },
-    document.createElement('div'), sources, { answerNavigation: { canOpen: () => false, open() {} }, focusDifference() {} });
-    window.linkifyAgentSources?.(body, sources);
+    overText(body, raw, () => {
+      // Coverage only: no contradictions and no score yet, and no "Key claims"
+      // list for sentences without an anchor while the check is incomplete.
+      window.renderStoredConsensusClaims?.(body, { claims, differences: [],
+        models_compared: Array.isArray(data.models_compared) ? data.models_compared : [] },
+      document.createElement('div'), sources, { answerNavigation: { canOpen: () => false, open() {} }, focusDifference() {} });
+      window.linkifyAgentSources?.(body, sources);
+    });
     // What the reader has seen; a mark not seen before fades in, once.
     const shown = review.answer_hash && body._shownMarks?.hash === review.answer_hash ? body._shownMarks.keys : new Set();
     let arriving = false;
@@ -460,7 +476,7 @@
     body._shownMarks = { hash: review.answer_hash, keys: shown };
     // The final review draws its marks anew (context.mark).
     body._markSignature = null;
-    body._previewMarks = { signature, first: body.firstChild };
+    body._previewMarks = { signature, writes: body._markdownWrites, first: body.firstChild };
     body.classList.add('has-provisional-marks');
   }
   function render(body, review, evidence = {}) {
@@ -470,8 +486,8 @@
     const turnSources = sourcesOf(body, review, evidence, raw);
     let host = body._agentReview;
     if (!review?.comparisons?.length) {
-      if (host?._hasReview && typeof body.dataset.markdown === "string") window.injectMarkdown?.(body, body.dataset.markdown, []);
-      window.linkifyAgentSources?.(body, turnSources);
+      const unmark = host?._hasReview && typeof body.dataset.markdown === "string";
+      overText(body, unmark ? body.dataset.markdown : null, () => window.linkifyAgentSources?.(body, turnSources));
       body._agentModels?.remove(); body._agentModels = null;
       if (!turnSources.length) {
         host?.remove(); body._agentReview = null; return;
@@ -594,9 +610,9 @@
         const markSignature = JSON.stringify([raw, context.key, check?.differences_data || null, sources,
           body._agentRenderSerial || 0]);
         // Without claims to mark, the first node tells whether the body was
-        // redrawn since.
-        const intact = check?.differences_data?.claims?.length ? body.querySelector('.cx-claim')
-          : !!body.firstChild && body._markedFirst === body.firstChild;
+        // redrawn since; a morphed render keeps it but counts as a write.
+        const intact = body._markedWrites === body._markdownWrites && (check?.differences_data?.claims?.length
+          ? Boolean(body.querySelector('.cx-claim')) : !!body.firstChild && body._markedFirst === body.firstChild);
         if (body._markSignature === markSignature && intact) {
           // The evidence row was rebuilt: its key-claims list moves along.
           const previous = body._markFallback;
@@ -610,14 +626,16 @@
         // A body that already shows exactly this text, unmarked (a saved turn
         // just rendered), is marked as it is: rendering it a second time cost
         // every opened chat a second Markdown pass per turn (Apple audit D5).
-        if (typeof raw === "string" && !window.isPlainMarkdown?.(body, raw)) window.injectMarkdown?.(body, raw, []);
-        // Provisional marks went with the old DOM.
-        body._previewMarks = null; body.classList.remove('has-provisional-marks');
-        if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
-          answerNavigation: navigation,
-          focusDifference: differenceIndex => open("differences", { index: differenceIndex, trigger: document.activeElement })
+        overText(body, raw, () => {
+          if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
+            answerNavigation: navigation,
+            focusDifference: differenceIndex => open("differences", { index: differenceIndex, trigger: document.activeElement })
+          });
+          window.linkifyAgentSources?.(body, sources);
         });
-        window.linkifyAgentSources?.(body, sources);
+        // Provisional marks went with the old render.
+        body._previewMarks = null; body.classList.remove('has-provisional-marks');
+        body._markedWrites = body._markdownWrites;
         body._markedFirst = body.firstChild;
       };
       context.links = () => {

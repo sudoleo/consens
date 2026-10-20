@@ -515,36 +515,43 @@
     if (sources.length) window.linkifyAgentSources?.(holder, sources);
   }
   // While a run streams, only the growing last Markdown block is parsed again
-  // (markdown-stream.js). The final text is rendered once in full, like a
-  // saved answer, so review markers and cross-block Markdown are exact.
-  function renderAnswer(text, error, { streaming = false } = {}) {
-    const body = document.getElementById("agentAnswerBody");
-    const mode = streaming && window.renderMarkdownStream ? 'stream' : 'full';
+  // (markdown-stream.js). Once the text is fixed it is rendered in full, like
+  // a saved answer, so review markers and cross-block Markdown are exact.
+  // Both morph into the nodes on screen: a link in the answer stays the same
+  // link and a selection stays (Apple audit D4, A6).
+  function renderAnswerBody(body, text, mode) {
+    if (!body) return;
     // The run ends with the same text the review already rendered in full
     // with its claim marks: switching to 'full' must keep that DOM. Rendering
     // it again dropped every mark and rebuilt it, a visible flicker.
-    if (body && mode === 'full' && body.dataset.markdown === text && body.dataset.renderMode === 'stream'
+    if (mode === 'full' && body.dataset.markdown === text && body.dataset.renderMode === 'stream'
         && body._markSignature && body.querySelector('.cx-claim')) {
       body.dataset.renderMode = mode;
       window.resetMarkdownStream?.(body);
     }
-    if (body && (body.dataset.markdown !== text || body.dataset.renderMode !== mode)) {
-      const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
-      // Provisional marks the reader saw belong to one text (agent-review.js).
-      if (body.dataset.markdown !== text) body._shownMarks = null;
-      body.dataset.markdown = text;
-      body.dataset.renderMode = mode;
-      if (mode === 'stream') window.renderMarkdownStream(body, text, { decorate: streamSourcePills });
-      else {
-        window.resetMarkdownStream?.(body);
-        window.injectMarkdown?.(body, text, []);
-      }
-      // A fresh DOM has no claim marks; the review renderer re-applies them.
-      body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
-      // Animate the start of an answer once, never each streamed text chunk.
-      if (!text.trim()) body._agentReveal?.cancel();
-      else if (entering) body._agentReveal = App.agentActivity?.reveal(body, { lift: false });
+    if (body.dataset.markdown === text && body.dataset.renderMode === mode) return;
+    const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
+    // Provisional marks the reader saw belong to one text (agent-review.js).
+    if (body.dataset.markdown !== text) body._shownMarks = null;
+    body.dataset.markdown = text;
+    body.dataset.renderMode = mode;
+    if (mode === 'stream') window.renderMarkdownStream(body, text, { decorate: streamSourcePills });
+    else if (window.morphMarkdown) {
+      const morph = () => window.morphMarkdown(body, text, { decorate: streamSourcePills });
+      window.keepTextSelection ? window.keepTextSelection(body, morph) : morph();
+    } else {
+      window.resetMarkdownStream?.(body);
+      window.injectMarkdown?.(body, text, []);
     }
+    // A new render has no claim marks; the review renderer re-applies them.
+    body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
+    // Animate the start of an answer once, never each streamed text chunk.
+    if (!text.trim()) body._agentReveal?.cancel();
+    else if (entering) body._agentReveal = App.agentActivity?.reveal(body, { lift: false });
+  }
+  function renderAnswer(text, error, { streaming = false } = {}) {
+    renderAnswerBody(document.getElementById("agentAnswerBody"), text,
+      streaming && window.renderMarkdownStream ? 'stream' : 'full');
     renderError(typeof error === 'string' ? { text: error } : error);
   }
   // While the judges check the fixed answer a quiet sheen passes over it, so
@@ -720,9 +727,14 @@
     const failure = state.error || state.completedTurn?.agent_failure;
     // A message refused before it started is back in the composer instead.
     const retry = !running && context.metadata.requestSent && !context.metadata.restoreDraft;
+    // The streamed text is fixed once the review holds it as a version: from
+    // then on it is shown in full, so an answer that ends in a table shows
+    // the table while the judges still check it.
+    const settled = running && !state.text && Boolean(state.streamText)
+      && Boolean(context.metadata.agentReview?.versions?.some(version => version?.text === state.streamText));
     renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure,
       state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "", { retry }) : "",
-      { streaming: running && !state.text });
+      { streaming: running && !state.text && !settled });
     // A finished turn is what the next message continues (setCompletedBasis).
     markLiveTurn(running ? null : state.completedTurn);
     App.agentActivity?.render(activityHost(context.runId), {
@@ -1277,6 +1289,30 @@
   // turn that is already running (after a reload) without sending anything.
   async function follow(context, body, signal, { headers = null, post = true } = {}) {
     let timer = null, resumeTracked = false, lastByte = Date.now();
+    // Streamed text is painted once per frame, apart from the rest of the
+    // projection (every 100 ms): the answer flows instead of jumping on by a
+    // bundle of words ten times a second (Apple audit D4). A frame that took
+    // long (a long table or list still growing) spaces out the next ones.
+    let paintFrame = 0, paintTimer = 0, paintAfter = 0;
+    const paint = () => {
+      paintFrame = 0;
+      if (!registry.isExecuting(context.runId) || !registry.isVisible(context.runId)
+          || !registry.isAuthCurrent(context) || context.consensus.text) return;
+      const answer = document.getElementById("agentAnswerBody");
+      // Only into an answer this run already streams: its first text, errors
+      // and the activity line are projected (project()).
+      if (answer?.dataset.renderMode !== 'stream' || !answer.dataset.markdown) return;
+      const started = performance.now();
+      renderAnswerBody(answer, context.consensus.streamText || "", 'stream');
+      const cost = performance.now() - started;
+      paintAfter = cost > 8 ? performance.now() + cost * 2 : 0;
+    };
+    const schedulePaint = () => {
+      if (paintFrame || paintTimer || typeof requestAnimationFrame !== "function") return;
+      const wait = paintAfter - performance.now();
+      if (wait > 0) paintTimer = setTimeout(() => { paintTimer = 0; schedulePaint(); }, wait);
+      else paintFrame = requestAnimationFrame(paint) || 0;
+    };
     const authHeaders = async () => {
       const user = window.auth?.currentUser;
       if (!user || !registry.isAuthCurrent(context)) throw new DOMException("Account changed", "AbortError");
@@ -1359,6 +1395,7 @@
         const text = typeof event.text === "string" ? event.text : "";
         if (!text) return;
         context.consensus.streamText += text;
+        schedulePaint();
         if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
       } },
     };
@@ -1461,6 +1498,8 @@
       document.removeEventListener("visibilitychange", revive);
       window.removeEventListener("online", revive);
       clearTimeout(timer);
+      if (paintFrame) cancelAnimationFrame(paintFrame);
+      clearTimeout(paintTimer);
       context.metadata.reconnecting = false;
       context.metadata.offline = false;
     }
