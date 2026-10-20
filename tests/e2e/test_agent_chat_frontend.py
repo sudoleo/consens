@@ -873,8 +873,10 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         page.evaluate("turn => { App.agentActivity.renderTurn(document.getElementById('agentAnswerActivity'), turn); }", turn)
         expect(details.locator('.agent-activity-title')).to_have_text('Thought for 18s')
         expect(details.locator("a")).to_have_count(2)
-        expected_tokens = page.evaluate("() => (1400).toLocaleString() + ' tokens'")
-        expect(details.locator(".agent-usage")).to_contain_text(expected_tokens)
+        # One locale whatever the browser's (App.format, Apple-Audit H8); the
+        # figure is the operator's and hidden from a reader (H4).
+        expect(details.locator(".agent-usage")).to_contain_text("1,400 tokens")
+        expect(details.locator(".agent-usage")).to_be_hidden()
     finally:
         context.close()
 

@@ -146,13 +146,13 @@
         const note = document.createElement("p");
         note.className = "response-incomplete-notice";
         note.setAttribute("role", "note");
-        note.textContent = String(state.error.message || "The consensus is incomplete.");
+        note.textContent = String(state.error.message || "This answer is incomplete.");
         body.prepend(note);
       }
     } else if (["pending", "streaming"].includes(state.status)) {
       body.innerHTML = window.consensusSpinnerHTML || window.spinnerHTML || "";
     } else if (state.error) {
-      body.textContent = String(state.error.message || state.error || "The consensus could not be completed.");
+      body.textContent = String(state.error.message || state.error || "The answer couldn’t be completed. Try again.");
     } else {
       body.replaceChildren();
     }
@@ -287,7 +287,7 @@
     }
     if (!force && projectedPhase === context.phase && projectedStatus === context.status) return;
     if (context.status === "failed") {
-      window.setAgentModeStatus("error", context.error?.message || context.consensus?.error?.message || "The run failed.");
+      window.setAgentModeStatus("error", context.error?.message || context.consensus?.error?.message || "The answer couldn’t be completed. Try again.");
     } else if (context.status === "canceled") {
       window.setAgentModeStatus("canceled");
     } else if (context.status === "succeeded" || context.phase === "answers_ready") {

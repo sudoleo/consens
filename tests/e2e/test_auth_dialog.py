@@ -191,7 +191,7 @@ def test_closed_google_window_is_explained_next_to_the_google_button(browser, ph
         page.click("#authTopLoginBtn")
         expect(page.locator("#inAppBrowserNotice")).to_be_hidden()
         page.click("#googleLoginButton")
-        expect(page.locator("#googleError")).to_contain_text("The Google window closed before sign-in finished")
+        expect(page.locator("#googleError")).to_contain_text("The Google window closed before you were logged in")
         expect(page.locator("#googleLoginButton")).to_be_enabled()
         expect(page.locator("#googleLoginLabel")).to_have_text("Continue with Google")
         assert _calls(page) == [["popup"]]

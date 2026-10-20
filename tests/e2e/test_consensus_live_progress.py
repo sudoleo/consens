@@ -62,6 +62,8 @@ def progress_page(browser, request):
         box.querySelector('.collapsible-content').textContent = text;
       };
     }''')
+    # app-text.js leads the head group in /app (App.format, App.words).
+    page.add_script_tag(url=ORIGIN + "/static/js/app-text.js")
     page.add_script_tag(url=ORIGIN + "/static/js/consensus-progress.js")
     page.evaluate('''() => {
       App.consensusPipeline.onPrepare(Date.now() - 14000);

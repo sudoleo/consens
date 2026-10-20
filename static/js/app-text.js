@@ -277,7 +277,7 @@
   // ... for a body that was not the JSON it should have been.
   const UNREADABLE = /did not match the expected pattern|unexpected token|json\.parse|not valid json|unexpected end of (?:json|input|data)|json parse error|unexpected character|unexpected identifier|<!doctype|<html|<\/?body/i;
   // ... for a bug in the page, never a sentence for a reader.
-  const ENGINE = /cannot read propert|is not a function|is not defined|undefined is not an object|null is not an object|is not iterable|cannot set propert|maximum call stack|^script error|out of memory|quotaexceeded|the operation was aborted|the user aborted|signal is aborted|^firebase: |\(auth\/[a-z-]+\)|traceback|exception:|internal server error|^not found$|^method not allowed$|^request failed \(\d{3}\)\.?$|\bhttp ?\d{3}\b|request failed with http/i;
+  const ENGINE = /cannot read propert|is not a function|is not defined|undefined is not an object|null is not an object|is not iterable|cannot set propert|maximum call stack|^script error|out of memory|quotaexceeded|the operation was aborted|the user aborted|signal is aborted|^firebase: |\(auth\/[a-z-]+\)|traceback|exception:|internal server error|^not found$|^method not allowed$|^request failed \(\d+\)\.?$|\bhttp ?\d{3}\b|request failed with http/i;
   const ENGINE_NAMES = new Set(["TypeError", "SyntaxError", "ReferenceError", "RangeError", "EvalError", "URIError", "InternalError"]);
 
   const OFFLINE = "You’re offline.";
@@ -335,14 +335,14 @@
     }
   }
 
-  // What kind of failure this is: "aborted", "offline", "unreachable",
-  // "timeout", "rate_limited", "session", "server", "message" (a sentence
-  // of ours or the server's that can be shown as it is) or "unknown".
   // A status only written into a message ("Consensus HTTP 503").
   function statusOf(error) {
     return Number(error.status) || Number(String(error.message || "").match(/\bHTTP ?(\d{3})\b/i)?.[1]) || 0;
   }
 
+  // What kind of failure this is: "aborted", "offline", "unreachable",
+  // "timeout", "rate_limited", "session", "server", "status", "message" (a
+  // sentence of ours or the server's that can be shown as it is) or "unknown".
   function kind(input) {
     if (input === null || input === undefined || input === "") return "unknown";
     const error = asError(input);
