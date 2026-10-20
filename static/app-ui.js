@@ -127,6 +127,7 @@ function openSettingsModal(event) {
   if (!modal || !textarea || window.App.modalDialog.isOpen(modal)) return;
 
   textarea.value = getStoredSystemPrompt();
+  syncSettingsGuestNote();
   // Immer auf dem ersten Reiter oeffnen. Der zuletzt benutzte waere clever,
   // aber unvorhersehbar — man findet Einstellungen ueber einen festen Ort.
   // Reset before showing: focus lands on the tab that is then selected.
@@ -142,6 +143,19 @@ function closeSettingsModal() {
   window.App.modalDialog.close(document.getElementById("systemPromptModal"));
 }
 
+// A guest finds Memory and the key greyed out: the line under the header
+// says why and offers the way in (Apple-Audit H13).
+function syncSettingsGuestNote() {
+  const note = document.getElementById("settingsGuestNote");
+  if (note) note.hidden = Boolean(window.auth?.currentUser);
+}
+
+function logInFromSettings() {
+  closeSettingsModal();
+  window.App.askToLogIn?.("Log in to keep your memory and settings on your account.",
+    { trigger: document.getElementById("editSystemPromptBtn"), source: "settings" });
+}
+
 function saveSystemPrompt() {
   const textarea = document.getElementById("systemPromptInput");
   if (textarea) {
@@ -150,7 +164,7 @@ function saveSystemPrompt() {
     // characters) or with a broken character; the editor stays open with the
     // text instead of dropping it.
     if (!window.App.userSettings.accepts("system_prompt", text)) {
-      window.App.showPopup?.("This system prompt can't be saved: it is too long or contains an invalid character.");
+      window.App.showPopup?.("This system prompt can’t be saved: it is too long or contains an invalid character.");
       return;
     }
     window.App.userSettings.set("system_prompt", text);
@@ -187,6 +201,8 @@ function bindSettingsModalControls() {
   document.getElementById("closeSystemPromptModal")?.addEventListener("click", closeSettingsModal);
   document.getElementById("saveSystemPromptBtn")?.addEventListener("click", saveSystemPrompt);
   document.getElementById("helpButton")?.addEventListener("click", openHelpModal);
+  document.getElementById("settingsLoginButton")?.addEventListener("click", logInFromSettings);
+  window.addEventListener("consensio:auth-state", syncSettingsGuestNote);
   document.getElementById("closeHelpModal")?.addEventListener("click", closeHelpModal);
   // The account's prompt arrived (server, another tab, sign-out): an open
   // editor follows unless it holds an edit of its own.

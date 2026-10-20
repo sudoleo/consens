@@ -4,7 +4,7 @@
   const App = window.App = window.App || {};
   const views = new Map();
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
-    rework: "Rework", completed: "Completed", failed: "Not finished", stopped: "Stopped" };
+    rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
   // Judge calls are plumbing: retries and backup models are routine and say
   // nothing about the answer. The panel shows them as ONE row, "Answer check",
   // whose state is the outcome of the checks, not of individual attempts.
@@ -89,10 +89,10 @@
   }
   function tokens(usage, pending = false) {
     if (!measured(usage)) return pending ? 'Tokens pending' : 'Tokens unavailable';
-    return `${(usage.input_tokens + usage.output_tokens).toLocaleString()}${usage.complete === false ? '+' : ''} tokens`;
+    return `${App.format.number(usage.input_tokens + usage.output_tokens)}${usage.complete === false ? '+' : ''} tokens`;
   }
   function tokenDescription(usage) {
-    return measured(usage) ? `${usage.input_tokens.toLocaleString()} input + ${usage.output_tokens.toLocaleString()} output tokens. Reasoning is included in output; cache tokens are included in input.${usage.complete === false ? ' Measured usage so far; some calls did not report usage.' : ''}`
+    return measured(usage) ? `${App.format.number(usage.input_tokens)} input + ${App.format.number(usage.output_tokens)} output tokens. Reasoning is included in output; cache tokens are included in input.${usage.complete === false ? ' Measured usage so far; some calls did not report usage.' : ''}`
       : 'The provider has not reported token usage.';
   }
   function mark(agent) {
@@ -228,8 +228,8 @@
       if (!authorized() || signal.aborted) throw new Error("Account changed");
       const response = await fetch(`/agent/chats/${encodeURIComponent(view.chatId)}/turns/${encodeURIComponent(view.turnId)}/agents${suffix}`,
         { headers: { Authorization: `Bearer ${token}` }, signal });
-      if (!response.ok) throw new Error("Agent details could not be loaded.");
-      return response.json();
+      if (!response.ok) throw App.httpError(response, await App.readJson(response).catch(() => ({})));
+      return App.readJson(response);
     }, { signal: view.controller.signal });
     if (!authorized()) throw new Error("Account changed");
     App.agentChat?.receiveBudget(data.token_budget, view.uid);
@@ -249,7 +249,7 @@
       } else if (data.status) view.settling = !view.running;
       mergeUsage(view, data.usage);
       view.loaded = true; view.error = "";
-    } catch (error) { view.error = error.message; }
+    } catch (error) { view.error = App.userError(error, { fallback: "The activity couldn’t be loaded. Try again." }); }
     finally {
       view.loading = false;
       if (current === view && uid() === view.uid) {
@@ -280,7 +280,7 @@
       detail.hasMore = !!data.has_more;
       detail.loadedSeq = seq;
       detail.error = "";
-    } catch (error) { detail.error = error.message; }
+    } catch (error) { detail.error = App.userError(error, { fallback: "These details couldn’t be loaded. Try again." }); }
     finally { detail.loading = false; if (current === view && uid() === view.uid) render(); }
   }
   function ensure() {
@@ -312,11 +312,11 @@
             { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal });
         }, { signal: view.controller.signal });
         if (view.user !== window.auth?.currentUser || view.authGeneration !== App.authState?.generation) return;
-        if (!response.ok) throw new Error("The run could not be stopped. Try again.");
+        if (!response.ok) throw App.httpError(response, await App.readJson(response).catch(() => ({})), "The run couldn’t be stopped. Try again.");
         const run = App.runRegistry?.visible?.();
         if (run?.metadata.chatId === view.chatId && run.metadata.agentTurnId === view.turnId) App.runRegistry.cancel(run.runId);
         load(view);
-      } catch (error) { view.error = error.message; }
+      } catch (error) { view.error = App.userError(error, { fallback: "The run couldn’t be stopped. Try again." }); }
       finally { stop.disabled = false; if (current === view) render(); }
     });
     close.setAttribute("aria-label", "Close agents sidebar");
@@ -329,7 +329,8 @@
     const overview = node("div", "agent-sidebar-overview");
     const counts = node("div", "agent-sidebar-counts");
     const progress = node("span", "agent-sidebar-progress");
-    const usage = node("span", "agent-sidebar-usage");
+    // Token figures are the operator's (Apple-Audit H4): admins only.
+    const usage = node("span", "agent-sidebar-usage admin-only");
     counts.append(progress, usage);
     const segments = node("div", "agent-sidebar-segments"); segments.setAttribute("aria-hidden", "true");
     overview.append(counts, segments);
@@ -447,9 +448,9 @@
         : 'Checks which statements are supported by the comparison answers and where those answers disagree.'));
       if (agent.progress_text) row.body.append(node('p', 'agent-session-progress', agent.progress_text));
       if (measured(agent.usage)) {
-        const usage = node('dl', 'agent-token-breakdown'); usage.title = tokenDescription(agent.usage);
+        const usage = node('dl', 'agent-token-breakdown admin-only'); usage.title = tokenDescription(agent.usage);
         for (const [label, count] of [['Input', agent.usage.input_tokens], ['Output', agent.usage.output_tokens]]) {
-          const item = node('div'); item.append(node('dt', '', label), node('dd', '', count.toLocaleString())); usage.append(item);
+          const item = node('div'); item.append(node('dt', '', label), node('dd', '', App.format.number(count))); usage.append(item);
         }
         row.body.append(usage);
       }
@@ -672,7 +673,7 @@
         const meta = node("span", "agent-session-meta");
         const state = node('span', 'agent-session-state');
         state.id = `agent-session-state-${agent.id}`;
-        const usage = node('span', 'agent-session-tokens');
+        const usage = node('span', 'agent-session-tokens admin-only');
         heading.append(title, usage);
         meta.append(role, state);
         // The detail flows inside the one scrolling list; a second scroll
@@ -707,7 +708,7 @@
       setText(row.title, agent.model?.label || agent.title);
       setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
-      setText(row.state, `${stateLabel(agent)} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`);
+      setText(row.state, `${stateLabel(agent)} · ${agent.duration_incomplete ? '≥ ' : ''}${App.format.duration(elapsed(view, agent))}`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');
       const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
       const progress = pending ? view.progress.get(agent.id) : null;
@@ -717,7 +718,7 @@
       // A call that ended without a result and without reported usage has no
       // number worth showing; "Tokens unavailable" there only reads as a fault.
       const silent = ended.has(agent.status) && !measured(usage);
-      setText(row.usage, silent ? '' : chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading));
+      setText(row.usage, silent ? '' : chars ? `${App.format.number(progress.chars)} chars` : tokens(usage, loading));
       row.usage.hidden = silent;
       setTitle(row.usage, chars ? 'Received answer and visible reasoning characters. Token usage has not yet been reported for this call.' : tokenDescription(usage));
       // A live call shows itself in words ("Working · 14s") and a counting

@@ -33,7 +33,7 @@
             return;
           }
           controller.abort();
-          reject(new Error('The connection is taking too long. Please try again.'));
+          reject(Object.assign(new Error('The connection is taking too long. Try again.'), { name: 'TimeoutError' }));
         }, timeoutMs);
       };
       touch();

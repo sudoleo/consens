@@ -68,7 +68,7 @@ it('shows the live comparison purpose while its answers and checks are still pen
   expect(host.textContent).toContain('Collecting answers…');
   expect(host.textContent).toContain('Compare cost and flexibility');
   expect([...host.querySelectorAll('button')].every(b => b.disabled)).toBe(true);
-  expect(host.textContent).not.toContain('Comparison checked');
+  expect(host.textContent).not.toContain('Checked ·');
   dom.window.close();
 });
 it('keeps partial and stale reviews honest in activity insights and clears them for another turn', () => {
@@ -79,11 +79,11 @@ it('keeps partial and stale reviews honest in activity insights and clears them 
   review.checks[0].differences_data.differences = [{type:'contradiction',claim:'A recorded disagreement'}];
   w.App.agentReview.renderActivity(details, review, 'Exact answer.');
   expect(details.textContent).toContain('Partly checked');
-  expect(details.textContent).toContain('The coverage check could not run');
+  expect(details.textContent).toContain('The answer check couldn’t compare each sentence');
   w.App.agentReview.renderActivity(details, review, 'Changed answer.');
-  expect(details.textContent).toContain('Review pending');
+  expect(details.textContent).toContain('Answer check pending');
   expect(details.textContent).not.toContain('A recorded disagreement');
-  expect(details.textContent).not.toContain('Comparison checked');
+  expect(details.textContent).not.toContain('Checked ·');
   review.comparisons[0].basis_hash = 'changed';
   w.App.agentReview.renderActivity(details, review, 'Exact answer.');
   expect(details.querySelector('.agent-activity-insight').textContent).not.toContain('A recorded disagreement');
@@ -111,7 +111,7 @@ it("uses the shared markers only for the exact answer and selected comparison ba
   body.dataset.markdown = "Changed answer.";
   w.App.agentReview.render(body, snapshot());
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(2);
-  expect(d.querySelector(".agent-review-status").textContent).toContain("Review pending");
+  expect(d.querySelector(".agent-review-status").textContent).toContain("Answer check pending");
   expect(w.injectMarkdown).toHaveBeenLastCalledWith(body, "Changed answer.", []);
   dom.window.close();
 });
@@ -193,7 +193,7 @@ it("rejects stale comparison bindings and distinguishes incomplete results", () 
   const review = snapshot(); review.status = "partial"; review.checks[0].basis_hash = "stale";
   w.App.agentReview.render(body, review);
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
-  expect(d.body.textContent).toContain("Review pending");
+  expect(d.body.textContent).toContain("Answer check pending");
   const select = d.querySelector('[aria-label="Comparison basis"]');
   select.value = 'agent-evidence:c2'; select.dispatchEvent(new w.Event('change'));
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
@@ -203,7 +203,7 @@ it("rejects stale comparison bindings and distinguishes incomplete results", () 
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   review.status = "succeeded";
   w.App.agentReview.render(body, review);
-  expect(d.querySelector(".agent-review-status").textContent).toContain("Review pending");
+  expect(d.querySelector(".agent-review-status").textContent).toContain("Answer check pending");
   dom.window.close();
 });
 
@@ -242,13 +242,13 @@ it('explains a missing model without reporting a failed check, including older s
     expect(status.querySelector('.agent-evidence-status-detail').textContent).toBe('GPT Luna: no answer, the provider was busy.');
     expect(panel.firstElementChild).toBe(status);
     expect(panel.querySelectorAll(':scope > p.agent-review-note')).toHaveLength(0);
-    expect(panel.textContent).not.toContain('Comparison checked');
+    expect(panel.textContent).not.toContain('Checked ·');
     expect(context.answers.at(-1).error).toContain('the provider was busy');
   }
   dom.window.close();
 });
 it.each([
-  ['coverage', 'The coverage check could not run', 'Partly checked'],
+  ['coverage', 'The answer check couldn’t compare each sentence', 'Partly checked'],
   ['sentences', '2 sentences could not be checked', '']
 ])('keeps %s failures distinct from unavailable comparison models', (kind, reason, line) => {
   const {window: w, document: d, dom} = setup();
@@ -684,7 +684,7 @@ it('explains a comparison whose answer check was skipped because it checked a pa
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
   w.App.agentReview.render(body, review);
-  const note = 'This comparison checked your text sentence by sentence; the result is shown above the answer.';
+  const note = 'Your text was checked sentence by sentence; the result is shown above the answer.';
   expect(details.querySelector('.agent-activity-check').textContent).toBe(note);
   expect(details.textContent).not.toContain('Partly checked');
   const status = body._agentReview.querySelector('.agent-review-status');

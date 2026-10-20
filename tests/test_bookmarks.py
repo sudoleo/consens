@@ -1313,8 +1313,8 @@ def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     assert '"/conversation?limit=50"' in firebase
     # By bookmark ID, beside the detail request (Apple audit D2).
     assert "function loadBookmarkConversationOnce(bookmarkId)" in firebase
-    assert "Bookmark conversation was incomplete" in firebase
-    assert "Bookmark conversation pagination repeated a page" in firebase
+    assert "This chat’s conversation was incomplete." in firebase
+    assert "This chat’s conversation repeated a page." in firebase
     assert "function bookmarkFallbackTurn(bookmark)" in firebase
     assert "restoreCompletedChat?.(" in firebase
     assert "continuationTurn.turn_id" in firebase
@@ -1328,7 +1328,7 @@ def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     assert "previousQuestion: context.previousExchange?.question" in consensus_run
     assert "previousTurn: context.previousExchange?.turn" in consensus_run
     assert "buildStoredAgreement(differencesData)" in consensus_run
-    assert "Start a new comparison — saved context unavailable" in consensus_run
+    assert "Start a new chat — the saved context is unavailable" in consensus_run
 
 
 def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_state():

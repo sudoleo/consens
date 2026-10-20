@@ -106,7 +106,7 @@ describe('private Agent workspace', () => {
     await window.App.agentWorkspace.refresh(CHAT);
     expect(document.querySelector('img')).toBeNull();
     const notice = document.querySelector('#agentAnswerResources .agent-resource-notice');
-    expect(notice.textContent).toContain("couldn't be read");
+    expect(notice.textContent).toContain("couldn’t be read");
     expect(notice.textContent).toContain('Page 4 is a scanned image and was not read.');
     expect(notice.textContent).toContain('<img src=x onerror=alert(1)>.txt');
     dom.window.close();
@@ -175,7 +175,7 @@ describe('private Agent workspace', () => {
       ? { ok: false, json: async () => ({ detail: 'Page limit: 80 pages.' }) } : reply([]));
     const file = { name: 'big.pdf', mime: 'application/pdf', size: 10, data: 'eA==' };
     const context = { metadata: { chatId: CHAT }, consensus: {}, attachments: [file] };
-    await expect(window.App.agentWorkspace.upload(context, {}, new AbortController().signal)).rejects.toThrow("Couldn't upload big.pdf. Page limit: 80 pages.");
+    await expect(window.App.agentWorkspace.upload(context, {}, new AbortController().signal)).rejects.toThrow("Couldn’t upload big.pdf. Page limit: 80 pages.");
     expect(window.App.attachments.markError).toHaveBeenLastCalledWith(file, 'Page limit: 80 pages.');
     expect(context.attachments).toEqual([file]);
     expect(context.metadata.uploadFailed).toBe(true);

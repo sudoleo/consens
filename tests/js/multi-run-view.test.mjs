@@ -301,7 +301,7 @@ describe("selected RunContext projection", () => {
     registry.cancel(runB.runId, "user");
     expect(registry.visible().runId).toBe(runA.runId);
     expect(output.textContent).toBe("late answer A");
-    expect(document.querySelector(`[data-run-id="${runB.runId}"]`)?.textContent).toContain("Canceled");
+    expect(document.querySelector(`[data-run-id="${runB.runId}"]`)?.textContent).toContain("Stopped");
 
     document.querySelector(`[data-run-id="${runB.runId}"]`).click();
     expect(registry.visible().runId).toBe(runB.runId);

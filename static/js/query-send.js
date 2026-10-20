@@ -121,18 +121,10 @@
     return data || {};
   }
 
-  function apiErrorMessage(data, fallback = "Request failed.") {
-    const normalized = unwrapApiError(data);
-    const candidate = normalized.error || normalized.detail || normalized.message || fallback;
-    if (typeof candidate === "string") return candidate;
-    if (Array.isArray(candidate)) {
-      const messages = candidate.map(item => item?.msg || item?.message || item?.error).filter(Boolean);
-      if (messages.length) return messages.join(" ");
-    }
-    if (candidate && typeof candidate === "object") {
-      return String(candidate.error || candidate.message || candidate.detail || fallback);
-    }
-    return fallback;
+  // A refusal's own sentence, or `fallback`; never "HTTP 502" or the
+  // engine's words (App.userError, Apple-Audit H1).
+  function apiErrorMessage(data, fallback = "Something went wrong. Try again.") {
+    return window.App.userError(data && typeof data === "object" ? data : String(data || ""), { fallback });
   }
 
   function isUsageStorageBusy(data) {
@@ -188,10 +180,7 @@
         body: JSON.stringify(payload),
         signal
       });
-      let data = {};
-      try { data = await response.json(); } catch (_) {
-        data = { error: `Request failed with HTTP ${response.status}.` };
-      }
+      const data = await window.App.readJson(response);
       result = { response, data };
       if (response.ok || !isUsageStorageBusy(data) || attempt === 3) return result;
       await new Promise(resolve => window.setTimeout(resolve, attempt * 350));
@@ -299,9 +288,9 @@
       );
       if (!registry.isExecuting(context.runId) || !authIsCurrent(context) || result.status === "skipped") return;
       updateUsage(context, response.data || {});
-      if (!response.ok) throw new Error(apiErrorMessage(response.data, `${providerConfig.provider} HTTP ${response.status}`));
+      if (!response.ok) throw window.App.httpError(response, response.data || {}, "This model didn’t answer. Try again.");
       const data = response.data || {};
-      if (!data.response) throw new Error(apiErrorMessage(data, `${providerConfig.provider} returned an empty response.`));
+      if (!data.response) throw new Error(apiErrorMessage(data, "This model returned an empty answer."));
 
       const prepared = window.App.prepareResponseSourcesForEvidence
         ? window.App.prepareResponseSourcesForEvidence(data.response, data.sources || [], context.evidenceSources)
@@ -358,7 +347,8 @@
         return;
       }
       result.status = "error";
-      result.error = `${providerConfig.provider} error: ${error?.message || "Request failed."}`;
+      // The panel names the model; the line says what happened in plain words.
+      result.error = window.App.userError(error, { fallback: "This model didn’t answer. Try again." });
       context.progress.completedModels += 1;
       context.progress.failedModels += 1;
       registry.update(context.runId, () => {});
@@ -443,7 +433,7 @@
       try { idToken = await context.auth.user?.getIdToken?.(); } catch (_) {}
       if (!runIsCurrent(context)) return;
       if (!idToken) {
-        finishFailed(context, "Please log in before sending a question.");
+        finishFailed(context, "Your session has ended. Log in again to send your question.");
         return;
       }
 
@@ -469,13 +459,13 @@
       if (!runIsCurrent(context)) return;
       updateUsage(context, prepared.data || {});
       if (!prepared.response.ok && isUsageStorageBusy(prepared.data)) {
-        finishFailed(context, apiErrorMessage(prepared.data, "The usage service is busy right now. Please try again."), prepared.data);
+        finishFailed(context, apiErrorMessage(prepared.data, "The allowance service is busy right now. Try again in a moment."), prepared.data);
         if (registry.isVisible(context.runId)) window.App.usageLimit?.showTemporaryStorageBusy?.();
         return;
       }
       if (!prepared.response.ok && isUsageLimit(prepared.data)) {
         context.usage.status = prepared.data?.usage_run_status || context.usage.status;
-        finishFailed(context, apiErrorMessage(prepared.data, "Usage limit reached."), prepared.data);
+        finishFailed(context, apiErrorMessage(prepared.data, "You’ve used today’s allowance."), prepared.data);
         return;
       }
       const effectivePrompt = prepared.response.ok && prepared.data?.system_prompt
@@ -587,8 +577,12 @@
       if (context.chatSession?.pendingTurnId || context.chatSession?.hasUncertainTurn?.()) {
         context.keepConversationLock = true;
       }
-      finishFailed(context, error?.message || "The comparison could not be completed.");
-      if (registry.isVisible(context.runId)) window.App.showPopup?.(error?.message || "The comparison could not be completed.");
+      // Failed before the models were asked: the message went back into the
+      // box (restoreComposerAfterUnsentRun), and the sentence says so.
+      const message = window.App.userError(error, { context: context.phase === "prepare" ? "send" : undefined,
+        fallback: "The answers couldn’t be completed. Try again." });
+      finishFailed(context, message);
+      if (registry.isVisible(context.runId)) window.App.showPopup?.(message);
     }
   }
 
@@ -611,7 +605,7 @@
     const attachmentMeta = attachments.map(item => ({ name: item.name, mime: item.mime, size: item.size || 0 }));
     // Files are open to every account (2026-10-02); they only need one.
     if (attachments.length && !window.auth?.currentUser) {
-      window.App.showPopup?.("Sign in to send files. Remove the attachments to continue.");
+      window.App.askToLogIn?.("Log in to send files with your question.", { trigger: document.getElementById("sendButton"), source: "attachments" });
       return null;
     }
     const providers = selectedProviders(attachments.length);
@@ -635,7 +629,7 @@
 
     const authUser = window.auth?.currentUser || null;
     if (!authUser) {
-      window.App.showPopup?.("Please log in before sending a question.");
+      window.App.askToLogIn?.("Log in to send your question.", { trigger: document.getElementById("sendButton"), source: "send" });
       return null;
     }
 

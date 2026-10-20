@@ -60,7 +60,7 @@ describe("a guest's Send", () => {
     expect(Date.now() - pending.at).toBeLessThan(5000);
     const [mode, trigger, source, options] = calls.modals[0];
     expect([mode, trigger.id, source]).toEqual(["register", "sendButton", "composer"]);
-    expect(options.lead).toMatch(/runs as soon as you're signed in/);
+    expect(options.lead).toMatch(/runs as soon as you’re logged in/);
     expect(calls.events).toEqual([["app_guest_send", { source: "typed" }]]);
   });
 

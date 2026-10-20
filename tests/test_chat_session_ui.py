@@ -629,7 +629,10 @@ def test_agent_chat_creation_reports_the_chat_limit_like_consensus():
     agent = (ROOT / "static" / "js" / "agent-chat.js").read_text(encoding="utf-8")
     creation = agent.split('fetch("/chats", {', 1)[1].split("chatId = data.chat.id;", 1)[0]
 
-    assert "App.chatPersistenceErrorMessage?.(data) || apiError(data)" in creation
+    # The limit's own words win over the server's ("Delete one…"), carried
+    # as the refusal's sentence (App.httpError, Apple-Audit H1).
+    assert "const limit = App.chatPersistenceErrorMessage?.(data);" in creation
+    assert "if (limit) refusal.message = refusal.serverMessage = limit;" in creation
 
 
 def test_archived_turns_render_the_same_difference_cards_as_the_live_run():

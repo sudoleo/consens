@@ -353,7 +353,7 @@
             await window.App.agentWorkspace.removeFile(att.fileId);
             closeAttachmentViewer();
           } catch (failure) {
-            window.App?.showPopup?.(failure.message);
+            window.App?.showPopup?.(window.App.userError(failure, { context: "delete" }));
             confirm.disabled = cancel.disabled = false;
             confirm.textContent = "Remove";
           }
@@ -399,7 +399,7 @@
         if (token !== viewerToken) return;
         viewerBody.innerHTML = "";
         viewerBody.appendChild(viewerNotice(chipIconLabel(att.mime),
-          (failure && failure.message) || "This file could not be loaded. Please retry."));
+          window.App.userError(failure, { fallback: "This file couldn’t be loaded. Try again." })));
       });
     }
 
@@ -483,7 +483,7 @@
         window.App.modalDialog.open(modal, { focus: document.getElementById("loginEmail") });
         trackAppEvent("auth_modal_open", { source: "attachments" });
       } else {
-        window.App?.showPopup?.("Sign in to attach files. You can enter your question as text.");
+        window.App?.showPopup?.("Log in to attach files. You can type your question as text.");
       }
     }
 
@@ -601,7 +601,7 @@
         // Agent uploads keep a rejected file in the composer with the server's
         // reason, so the user can remove or replace it and send again.
         chip.classList.add("has-error");
-        sizeEl.textContent = "Couldn't upload · " + att.error;
+        sizeEl.textContent = "Couldn’t upload · " + att.error;
         sizeEl.title = att.error;
       } else if (readonly) {
         sizeEl.textContent = att.size ? formatFileSize(att.size) : "";
@@ -1072,7 +1072,7 @@
         if (owner !== window.auth?.currentUser?.uid) return;
         if (release()) addFiles([file], { source: source, origin: item.origin });
       }).catch(function (failure) {
-        if (release()) window.App?.showPopup?.(failure?.message || "The file could not be loaded. Please try again.");
+        if (release()) window.App?.showPopup?.(window.App.userError(failure, { fallback: "This file couldn’t be loaded. Try again." }));
       });
       return true;
     }

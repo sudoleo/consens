@@ -29,7 +29,9 @@ const SETTINGS = `
 `;
 
 async function settle() {
-  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  // A request reads its body through App.readJson (app-text.js): a few more
+  // microtasks per request than response.json() alone.
+  for (let i = 0; i < 60; i += 1) await Promise.resolve();
 }
 
 function bootSettings(scripts = ["static/js/user-memory.js"], extraBody = "") {

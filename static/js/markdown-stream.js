@@ -662,15 +662,16 @@ async function streamSSERequest(url, payload, signal, deltaRenderers, requestOpt
       try {
         data = rawBody ? JSON.parse(rawBody) : {};
       } catch (_) {
-        data = {
-          error: rawBody.trim() || `Request failed with HTTP ${response.status}.`,
-          error_code: "http_error"
-        };
+        // A proxy's or portal's HTML page is no sentence for the reader:
+        // only its status and that it was unreadable travel on (Apple-Audit H1).
+        data = { error_code: "http_error", unreadable: true };
       }
-      if (!response.ok && !data.error && !data.detail) {
-        data.error = `Request failed with HTTP ${response.status}.`;
+      if (!data || typeof data !== "object") data = {};
+      if (data.unreadable || (!response.ok && !data.error && !data.detail)) {
+        const failure = response.ok ? { message: "", unreadable: true } : window.App?.httpError?.(response, data);
+        data.error = window.App?.userError?.(failure) || "consens.io can’t be reached right now. Try again in a moment.";
       }
-      return { ok: response.ok, status: response.status, data, streamed: false };
+      return { ok: response.ok && !data.unreadable, status: response.status, data, streamed: false };
     }
 
     let finalData = null;

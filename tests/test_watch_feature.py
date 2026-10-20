@@ -2313,7 +2313,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         self.assertIn('id="watchDashLimit"', html_source)
         self.assertIn('id="watchDialogLimit"', source)
-        self.assertIn("Paused watches don't count.", source)
+        self.assertIn("Paused watches don’t count.", source)
         self.assertIn("limited during early access", source)
         self.assertIn('id="watchUsageDisplay"', html_source)
         self.assertIn('action.textContent = "All slots in use"', source)

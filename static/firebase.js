@@ -123,7 +123,7 @@ async function performLogout() {
     clearLocalProviderKeys();
   } catch (error) {
     console.error("Logout failed:", error);
-    window.App?.toast?.({ message: "Logout could not be completed. You are still signed in. Please try again.", tone: "error" });
+    window.App?.toast?.({ message: "You couldn’t be logged out. You’re still logged in. Try again.", tone: "error" });
   } finally {
     performLogout.inProgress = false;
   }
@@ -132,7 +132,7 @@ async function performLogout() {
 async function openLogoutConfirm() {
   const confirmed = await window.App.confirm({
     title: "Log out of consens.io?",
-    body: "You can log back in anytime. Your bookmarks stay saved to your account.",
+    body: "You can log back in any time. Your chats stay saved to your account.",
     confirmLabel: "Log out",
   });
   if (confirmed) performLogout();
@@ -245,7 +245,7 @@ function setBookmarksAccess(isLoggedIn) {
   if (toggle) {
     toggle.disabled = !isLoggedIn;
     toggle.setAttribute("aria-disabled", String(!isLoggedIn));
-    toggle.title = isLoggedIn ? "Open or close bookmarks" : "Log in to use bookmarks";
+    toggle.title = isLoggedIn ? "Show or hide your chats" : "Log in to keep your chats";
   }
   if (searchTrigger) {
     searchTrigger.disabled = !isLoggedIn;
@@ -387,6 +387,8 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       clearStatusRetry();
       // The operator's own browsers leave the Umami numbers (docs/analytics.md).
       if (data.is_admin === true) window.consensioAnalytics?.excludeOperator?.();
+      // Token and cost figures (.admin-only) are for the operator only (Apple-Audit H4).
+      document.body.classList.toggle("viewer-is-admin", data.is_admin === true);
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
       window.App.state.set("isUserPro", data.is_pro, "userTier");
       window.App.tokenBudget?.apply?.(data.token_budget, { uid: user.uid, authoritative: true });
@@ -869,6 +871,7 @@ onIdTokenChanged(auth, async (user) => {
             window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
         }
         window.App?.accountTier?.set?.("free");
+        document.body.classList.remove("viewer-is-admin");
         publishAuthState(null);
       }
     });
@@ -940,7 +943,7 @@ const GOOGLE_REDIRECT_KEY = "consensio.googleRedirectPending";
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const NETWORK_ERROR_MESSAGE = "Network error. Please check your internet connection and try again.";
 const WRONG_CREDENTIALS_MESSAGE =
-  "E-mail or password is not correct. Signed up with Google? Use “Continue with Google” above.";
+  "Email or password is not correct. Signed up with Google? Use “Continue with Google” above.";
 
 const AUTH_MODE_COPY = {
   login: { title: "Log in to consens.io", lead: "Pick up where you left off." },
@@ -965,18 +968,18 @@ function mapFirebaseLoginError(error) {
     case "auth/invalid-login-credentials":
       return WRONG_CREDENTIALS_MESSAGE;
     case "auth/invalid-email":
-      return "Please enter a valid e-mail address.";
+      return "Enter a valid email address.";
     case "auth/user-disabled":
       return "This account is blocked. Write to contact@consens.io if this is a mistake.";
     case "auth/too-many-requests":
-      return "Too many login attempts. Please wait a few minutes or reset your password.";
+      return "Too many attempts to log in. Wait a few minutes or reset your password.";
     case "auth/network-request-failed":
       return NETWORK_ERROR_MESSAGE;
     default:
       if (/INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND/.test(message)) {
         return WRONG_CREDENTIALS_MESSAGE;
       }
-      return "An error occurred while logging in. Please try again.";
+      return "Logging in didn’t work. Try again.";
   }
 }
 
@@ -984,13 +987,13 @@ function mapPasswordResetError(error) {
   switch (error?.code) {
     case "auth/invalid-email":
     case "auth/missing-email":
-      return "Please enter a valid e-mail address.";
+      return "Enter a valid email address.";
     case "auth/too-many-requests":
-      return "Too many requests. Please wait a few minutes and try again.";
+      return "Too many requests. Wait a few minutes and try again.";
     case "auth/network-request-failed":
       return NETWORK_ERROR_MESSAGE;
     default:
-      return "An error occurred while resetting the password. Please try again.";
+      return "The password couldn’t be reset. Try again.";
   }
 }
 
@@ -999,12 +1002,12 @@ function mapGoogleSignInError(error) {
     case "auth/popup-closed-by-user":
     case "auth/cancelled-popup-request":
     case "auth/user-cancelled":
-      return "The Google window closed before sign-in finished. Please try again, or use your e-mail below.";
+      return "The Google window closed before you were logged in. Try again, or use your email below.";
     case "auth/popup-blocked":
-      return "Your browser blocked the Google window. Allow pop-ups for consens.io and try again, or use your e-mail below.";
+      return "Your browser blocked the Google window. Allow pop-ups for consens.io and try again, or use your email below.";
     case "auth/web-storage-unsupported":
     case "auth/operation-not-supported-in-this-environment":
-      return "This browser blocks what Google sign-in needs. Open consens.io in Safari or Chrome, or use your e-mail below.";
+      return "This browser blocks what logging in with Google needs. Open consens.io in Safari or Chrome, or use your email below.";
     case "auth/user-disabled":
       return "This account is blocked. Write to contact@consens.io if this is a mistake.";
     case "auth/too-many-requests":
@@ -1012,7 +1015,7 @@ function mapGoogleSignInError(error) {
     case "auth/network-request-failed":
       return NETWORK_ERROR_MESSAGE;
     default:
-      return "Google sign-in didn’t work this time. Please try again, or use your e-mail below.";
+      return "Logging in with Google didn’t work this time. Try again, or use your email below.";
   }
 }
 
@@ -1266,20 +1269,20 @@ async function requestSetupLink(email) {
     const data = await response.json().catch(() => ({}));
     if (response.ok && data.status === "check_inbox") return { ok: true };
     if (response.status === 429) {
-      return { ok: false, message: "Too many attempts. Please wait a minute and try again." };
+      return { ok: false, message: "Too many attempts. Wait a minute and try again." };
     }
     if (response.status === 422) {
-      return { ok: false, message: "Please check the e-mail address. It looks incomplete." };
+      return { ok: false, message: "Check the email address. It looks incomplete." };
     }
     return {
       ok: false,
       message: typeof data.detail === "string"
         ? data.detail
-        : "We couldn't send the link right now. Please try again in a moment.",
+        : "We couldn’t send the link right now. Try again in a moment.",
     };
   } catch (error) {
     console.error("Registration request failed:", error);
-    return { ok: false, message: "We couldn't create your account. Check your connection and try again." };
+    return { ok: false, message: "We couldn’t create your account. Check your connection and try again." };
   }
 }
 
@@ -1288,11 +1291,11 @@ async function handleRegister() {
   clearAuthMessages();
   const email = (emailEl.value || "").trim();
   if (!email) {
-    showFieldError(registerErr, emailEl, "Please enter your e-mail address.");
+    showFieldError(registerErr, emailEl, "Enter your email address.");
     return;
   }
   if (!EMAIL_PATTERN.test(email)) {
-    showFieldError(registerErr, emailEl, "Please check the e-mail address. It looks incomplete.");
+    showFieldError(registerErr, emailEl, "Check the email address. It looks incomplete.");
     return;
   }
   trackAppEvent("auth_register_started");
@@ -1379,7 +1382,7 @@ function handleForgotPassword() {
   const email = (emailEl.value || "").trim();
   trackAppEvent("auth_password_reset_started");
   if (!EMAIL_PATTERN.test(email)) {
-    showFieldError(loginErr, emailEl, "Enter your e-mail address above, then tap “Forgot password?” again.");
+    showFieldError(loginErr, emailEl, "Enter your email address above, then tap “Forgot password?” again.");
     return;
   }
   const showSent = () => {
@@ -1418,7 +1421,7 @@ async function handleEmailLogin() {
   const email = (emailEl.value || "").trim();
   const password = passEl.value;
   if (!email) {
-    showFieldError(loginErr, emailEl, "Please enter your e-mail address.");
+    showFieldError(loginErr, emailEl, "Enter your email address.");
     return;
   }
   if (!password) {
@@ -1467,8 +1470,8 @@ function syncInAppBrowserNotice(emphasize = false) {
       + "#Intent;scheme=https;package=com.android.chrome;end";
   }
   inAppHintEl.textContent = android
-    ? "Open consens.io in Chrome, or use your e-mail below."
-    : "Use the app’s ••• menu and choose “Open in browser”, or use your e-mail below.";
+    ? "Open consens.io in Chrome, or use your email below."
+    : "Use the app’s ••• menu and choose “Open in browser”, or use your email below.";
   inAppNoticeEl.classList.toggle("is-emphasized", emphasize);
   return true;
 }
@@ -1711,20 +1714,20 @@ const ACCOUNT_DELETED_READ_MS = 2400;
 document.getElementById("deleteAccountBtn")?.addEventListener("click", async event => {
   const button = event.currentTarget;
   if (!auth.currentUser) {
-    window.App.toast({ message: "Please log in first.", tone: "error" });
+    window.App.toast({ message: "Log in first.", tone: "error" });
     return;
   }
   const confirmed = await window.App.confirm({
     title: "Delete your account permanently?",
-    body: "This removes your account, bookmarks, and all data stored about you. This cannot be undone.",
+    body: "This removes your account, your chats and all data stored about you. This can’t be undone.",
     confirmLabel: "Delete account",
     danger: true,
   });
   if (!confirmed || !auth.currentUser) return;
 
-  const failed = message => {
+  const failed = error => {
     trackAppEvent("auth_account_deletion_result", { status: "error" });
-    window.App.toast({ message: message || "Account deletion failed. Please try again or contact us.", tone: "error" });
+    window.App.toast({ message: window.App.userError(error, { fallback: "Your account couldn’t be deleted. Try again or write to contact@consens.io." }), tone: "error" });
   };
   const leave = () => window.setTimeout(() => { window.location.href = "/?landing=1"; }, ACCOUNT_DELETED_READ_MS);
   const label = button.textContent;
@@ -1738,7 +1741,7 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async eve
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_token: token })
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await window.App.readJson(res).catch(() => ({}));
     if (res.status === 202 && data.cleanup_pending === true) {
       trackAppEvent("auth_account_deletion_result", { status: "cleanup_pending" });
       try { localStorage.removeItem("id_token"); } catch {}
@@ -1755,11 +1758,11 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async eve
       signOut(auth).catch(() => {});
       leave();
     } else {
-      failed(data.detail || data.error);
+      failed(window.App.httpError(res, data));
     }
   } catch (err) {
     console.error("Account deletion failed:", err);
-    failed();
+    failed(err);
   } finally {
     if (button.isConnected) {
       button.disabled = false;
@@ -2156,15 +2159,15 @@ function enqueueBookmarkWrite(
 
 function showBookmarkSaveError(status, detail, scope = "") {
   const normalizedDetail = String(detail || "").trim();
-  let message = "This bookmark could not be saved.";
+  let message = "This chat couldn’t be saved.";
   if (normalizedDetail === "Bookmark limit reached.") {
-    message = "Bookmark limit reached. Delete an older bookmark before saving a new one.";
+    message = "Your saved chats are full. Delete an old chat to save new ones.";
   } else if (normalizedDetail === "Bookmark storage limit reached.") {
-    message = "Bookmark storage is full. Delete older bookmarks before saving a new one.";
+    message = "Your chat storage is full. Delete old chats to save new ones.";
   } else if (normalizedDetail === "Bookmark is too large.") {
-    message = "This result is too large to save as a bookmark.";
+    message = "This answer is too large to keep in your chats.";
   } else if (status === 429) {
-    message = "Bookmarks could not be saved right now. Please wait a minute and try again.";
+    message = "Chats can’t be saved right now. Wait a minute and try again.";
   }
 
   // Ein Lauf speichert bis zu sechs Modellantworten parallel. Derselbe Fehler
@@ -2229,7 +2232,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
         if (boundRunId) {
           window.App.runRegistry?.notePersistence?.(boundRunId, {
             status: "error",
-            error: { type: "model", status: res.status, detail: data.detail || "Bookmark save failed" }
+            error: { type: "model", status: res.status, detail: data.detail || "Chat save failed" }
           });
         }
         if (!boundRunId || window.App.runRegistry?.isVisible?.(boundRunId)) {
@@ -2256,7 +2259,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
       if (boundRunId) {
         window.App.runRegistry?.notePersistence?.(boundRunId, {
           status: "error",
-          error: { type: "model", detail: error?.message || "Bookmark save failed" }
+          error: { type: "model", detail: error?.message || "Chat save failed" }
         });
       }
     }
@@ -2341,7 +2344,7 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       }
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
       if (!res.ok) {
-        const errorDetail = data.detail || data.error || "Consensus bookmark save failed";
+        const errorDetail = data.detail || data.error || "Chat answer save failed";
         data.detail = errorDetail;
         console.error("Error saving consensus bookmark:", errorDetail, data.details || "");
         if (boundRunId) {
@@ -2379,7 +2382,7 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       if (boundRunId) {
         window.App.runRegistry?.notePersistence?.(boundRunId, {
           status: "error",
-          error: { type: "consensus", detail: error?.message || "Consensus bookmark save failed" }
+          error: { type: "consensus", detail: error?.message || "Chat answer save failed" }
         });
       }
     }
@@ -2482,7 +2485,7 @@ async function requestBookmarkShareResult() {
       });
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return null;
-      if (!response.ok) throw new Error(data.detail || "Could not prepare bookmark.");
+      if (!response.ok) throw new Error(data.detail || "This chat couldn’t be prepared.");
       if (version === bookmarkShareResultVersion) {
         window.App.state.set("lastShareResultId", data.result_id || null, "share");
       }
@@ -2542,7 +2545,7 @@ function applyBookmarkModelPresentation(bookmark) {
       labelEl.textContent = visibleLabel;
       labelEl.title = storedLabel
         ? `Model used for this saved answer: ${storedLabel}`
-        : "The exact model was not recorded for this older bookmark.";
+        : "The exact model wasn’t recorded for this older chat.";
     }
     citationModels.push(storedLabel ? `${citationLabel}: ${storedLabel}` : citationLabel);
   });
@@ -2662,7 +2665,7 @@ async function loadBookmarkConversationOnce(bookmarkId) {
   const requestGeneration = authState.generation;
   const idToken = await requestUser.getIdToken(false);
   if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
-    throw new Error("Authentication changed while loading bookmark");
+    throw new Error("The account changed while this chat was loading.");
   }
   const turns = [];
   const seenTurnIds = new Set();
@@ -2676,20 +2679,20 @@ async function loadBookmarkConversationOnce(bookmarkId) {
       headers: { "Authorization": "Bearer " + idToken }
     });
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
-      throw new Error("Authentication changed while loading bookmark");
+      throw new Error("The account changed while this chat was loading.");
     }
     const data = await response.json();
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
-      throw new Error("Authentication changed while loading bookmark");
+      throw new Error("The account changed while this chat was loading.");
     }
     if (!response.ok) {
-      const error = new Error(data.detail || "Could not load bookmark conversation");
+      const error = new Error(data.detail || "This chat couldn’t be loaded.");
       error.retryable = response.status === 429 || response.status >= 500;
       throw error;
     }
     const pageChat = String(data.chat_id || "");
     if (chatId !== null && pageChat !== chatId) {
-      throw new Error("Bookmark conversation did not match the saved chat");
+      throw new Error("This chat didn’t match its saved conversation.");
     }
     chatId = pageChat;
     (Array.isArray(data.turns) ? data.turns : []).forEach(turn => {
@@ -2700,10 +2703,10 @@ async function loadBookmarkConversationOnce(bookmarkId) {
     });
     const nextCursor = data.has_more ? String(data.next_cursor || "") : "";
     if (data.has_more && !nextCursor) {
-      throw new Error("Bookmark conversation was incomplete");
+      throw new Error("This chat’s conversation was incomplete.");
     }
     if (nextCursor && seenCursors.has(nextCursor)) {
-      throw new Error("Bookmark conversation pagination repeated a page");
+      throw new Error("This chat’s conversation repeated a page.");
     }
     if (nextCursor) seenCursors.add(nextCursor);
     cursor = nextCursor;
@@ -3016,7 +3019,7 @@ function renderBookmarksLoadError(container) {
   const state = document.createElement("div");
   state.className = "bookmarks-load-error";
   const message = document.createElement("p");
-  message.textContent = "Bookmarks could not be loaded.";
+  message.textContent = "Your chats couldn’t be loaded.";
   const retry = document.createElement("button");
   retry.type = "button";
   retry.className = "bookmarks-load-more";
@@ -3058,7 +3061,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
-      if (!response.ok) throw new Error(data.detail || `Could not load bookmarks (${response.status})`);
+      if (!response.ok) throw new Error(data.detail || `Your chats couldn’t be loaded (${response.status}).`);
       const skeleton = container?.querySelector(".bookmarks-skeleton");
       const shown = new Set(container?.children || []);
       (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false, nameIt: false }));
@@ -3077,7 +3080,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
     if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
       console.error("Error in loadBookmarks:", error);
       if (!append || !window.bookmarksData?.length) renderBookmarksLoadError(container);
-      else window.App?.showPopup?.("More bookmarks could not be loaded.");
+      else window.App?.showPopup?.("More chats couldn’t be loaded.");
     }
     return false;
   } finally {
@@ -3122,19 +3125,19 @@ async function loadBookmarkDetail(bookmarkId) {
   const requestGeneration = authState.generation;
   const idToken = await requestUser.getIdToken(false);
   if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
-    throw new Error("Authentication changed while loading bookmark");
+    throw new Error("The account changed while this chat was loading.");
   }
   const response = await fetch("/bookmarks/" + encodeURIComponent(bookmarkId), {
     headers: { "Authorization": "Bearer " + idToken }
   });
   if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
-    throw new Error("Authentication changed while loading bookmark");
+    throw new Error("The account changed while this chat was loading.");
   }
   const data = await response.json();
   if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
-    throw new Error("Authentication changed while loading bookmark");
+    throw new Error("The account changed while this chat was loading.");
   }
-  if (!response.ok) throw new Error(data.detail || "Could not load bookmark");
+  if (!response.ok) throw new Error(data.detail || "This chat couldn’t be loaded.");
   bookmarkDetailCache.clear();
   bookmarkDetailCache.set(bookmarkId, data.bookmark);
   return data.bookmark;
@@ -3222,7 +3225,7 @@ async function loadBookmarkView(bookmarkId) {
     if (result.error || String(result.chatId || "") !== String(bookmark.chat_id)) {
       conversationLoadFailed = true;
       console.warn("Could not load full bookmark conversation; using saved continuation data.",
-        result.error || new Error("Bookmark conversation did not match the saved chat"));
+        result.error || new Error("This chat didn’t match its saved conversation."));
     } else {
       turns = result.turns;
     }
@@ -3307,7 +3310,7 @@ window.openBookmark = async function (bookmarkId) {
     hideChatOpening(opening, { restore: true });
     syncActiveBookmark();
     console.error("Error opening bookmark:", error);
-    window.App?.showPopup?.("Could not load this bookmark.");
+    window.App?.showPopup?.("This chat couldn’t be opened. Try again.");
   } finally {
     row?.classList.remove("is-loading");
     // A newer choice took over the view: its own opening stays.
@@ -3378,7 +3381,7 @@ async function deleteBookmark(bookmarkId) {
         deletedBookmarkKeys.delete(mutationKey);
         window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
         restore();
-        if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('Could not delete this bookmark. Please try again.');
+        if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('This chat couldn’t be deleted. Try again.');
         return;
       }
       requestStarted = true;
@@ -3398,10 +3401,10 @@ async function deleteBookmark(bookmarkId) {
         if (res.status >= 400 && res.status < 500) {
           deletedBookmarkKeys.delete(mutationKey);
           window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
-          if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('Could not delete this bookmark. Please try again.');
+          if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('This chat couldn’t be deleted. Try again.');
         } else {
           if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.(
-            "The deletion outcome is uncertain. Retry the deletion or reload before continuing this bookmark."
+            "It’s not certain this chat was deleted. Delete it again or reload before you continue it."
           );
         }
         console.error("Error deleting bookmark:", data.detail);
@@ -3445,10 +3448,10 @@ async function deleteBookmark(bookmarkId) {
       if (!requestStarted) {
         deletedBookmarkKeys.delete(mutationKey);
         window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
-        if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('Could not delete this bookmark. Please try again.');
+        if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('This chat couldn’t be deleted. Try again.');
       } else {
         if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.(
-          "The deletion outcome is uncertain. Retry the deletion or reload before continuing this bookmark."
+          "It’s not certain this chat was deleted. Delete it again or reload before you continue it."
         );
       }
       console.error("Error in deleteBookmark:", error);
@@ -3677,7 +3680,7 @@ function startBookmarkRename(row) {
     }).catch(error => {
       console.warn("Bookmark rename failed:", error);
       if (label.isConnected && label.textContent === bookmarkLabelText(value)) label.textContent = previous;
-      window.App?.showPopup?.("Could not rename this chat. Please try again.");
+      window.App?.showPopup?.("This chat couldn’t be renamed. Try again.");
     });
   };
   input.addEventListener("keydown", event => {
@@ -3823,13 +3826,13 @@ function ensurePendingBookmarkDOM(pending) {
   row.setAttribute("aria-disabled", "true");
   row.setAttribute(
     "aria-label",
-    `Creating bookmark for ${pending.question || "this question"}. It will be available when the run is complete.`
+    `Saving the chat ${pending.question || "for this question"}. It opens once the answer is ready.`
   );
-  row.title = "Bookmark is being created and will be available when the run is complete.";
+  row.title = "This chat is being saved and opens once the answer is ready.";
   row.replaceChildren();
 
   const label = document.createElement("p");
-  label.textContent = bookmarkLabelText(pending.question || "New comparison");
+  label.textContent = bookmarkLabelText(pending.question || "New chat");
 
   const spinner = document.createElement("span");
   spinner.className = "bookmark-pending-spinner";

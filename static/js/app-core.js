@@ -432,6 +432,18 @@
     return null;
   }
 
+  // A guest at a door that needs an account: the login dialog, with one line
+  // that says what for, the same way everywhere (Apple-Audit H2). The notice
+  // line says it only when the dialog cannot open (Firebase unreachable).
+  function askToLogIn(lead, { trigger = null, source = "gate", mode = "login" } = {}) {
+    if (typeof window.App.openAuthModal === "function") {
+      window.App.openAuthModal(mode, trigger || document.activeElement, source, { lead });
+      return true;
+    }
+    showPopup(lead);
+    return false;
+  }
+
   // The centered hero hides answer targets. The direct-comparison preview
   // uses the accessible thread shell even before a question has started.
   function syncHeroResponseAccess() {
@@ -644,6 +656,7 @@
     trackAsk,
     trackAnswer,
     showPopup,
+    askToLogIn,
     isComposingKey,
     enterSends,
     exitHeroMode,

@@ -62,10 +62,10 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         page.click("#sendButton")
         expect(page.locator("#loginModal")).to_be_visible()
         expect(page.locator("#authLead")).to_have_text(
-            "Your question stays here and runs as soon as you're signed in.")
+            "Your question stays here and runs as soon as you’re logged in.")
         # The reason stays on the other tab, and leaves with the dialog.
         page.click("#authTabLogin")
-        expect(page.locator("#authLead")).to_contain_text("runs as soon as you're signed in")
+        expect(page.locator("#authLead")).to_contain_text("runs as soon as you’re logged in")
         page.click("#closeLoginModal")
         page.click("#authTopLoginBtn")
         expect(page.locator("#authLead")).to_have_text("Pick up where you left off.")

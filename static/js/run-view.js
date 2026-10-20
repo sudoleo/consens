@@ -413,17 +413,17 @@
     if (context.config?.executionMode === "agent") {
       if (context.status === "canceled") return "Stopped";
       const latest = context.metadata?.agentActivity?.filter(event => event.kind === 'status').at(-1);
-      if (latest?.status === 'waiting') return 'Waiting for tokens';
+      if (latest?.status === 'waiting') return 'Waiting for allowance';
       if (context.consensus?.streamText) return "Writing answer";
       if (context.metadata?.agentActivity?.some(event => event.kind === "reasoning")) return "Thinking";
       return "Working";
     }
-    if (context.status === "canceled") return "Canceled";
+    if (context.status === "canceled") return "Stopped";
     if (context.phase === "answers_ready") return "Answers ready";
     if (context.phase === "prepare") return "Preparing";
     if (context.phase === "answers") return "Models answering";
     if (context.phase === "consensus") return "Writing consensus";
-    if (context.phase === "differences") return "Checking differences";
+    if (context.phase === "differences") return "Checking the answer";
     if (context.phase === "finalizing") return "Saving result";
     return "Running";
   }
@@ -477,7 +477,7 @@
     setIfChanged(row, "title", `${statusLabel(context)} — open this run`);
     const label = row.querySelector(":scope > p");
     // The whole name; the row's own ellipsis cuts it where the space ends.
-    if (label) setIfChanged(label, "textContent", String(context.bookmark.title || context.question || "New comparison").replace(/\s+/g, " ").trim());
+    if (label) setIfChanged(label, "textContent", String(context.bookmark.title || context.question || "New chat").replace(/\s+/g, " ").trim());
     const status = row.querySelector(":scope > .run-entry-status");
     if (status) setIfChanged(status, "textContent", context.persistence?.errors?.length && context.status === "succeeded"
       ? `${statusLabel(context)} · not saved`

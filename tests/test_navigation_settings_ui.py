@@ -41,7 +41,7 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'class="sidebar-section bookmarks-section is-locked"' in template
     assert 'id="bookmarksToggle"' in template and 'aria-disabled="true" disabled' in template
     assert 'id="bookmarkSearchTrigger"' in template
-    assert 'aria-label="Search bookmarks"' in template
+    assert 'aria-label="Search chats"' in template
     assert 'aria-disabled="true" disabled' in template
     assert ".sidebar-bookmarks-head.is-searching .sidebar-search-box" in shell
     assert ".sidebar-bookmarks-head:hover .sidebar-search-box" not in shell
@@ -506,7 +506,7 @@ def test_memory_is_the_first_settings_category():
     assert memory_panel.count("<textarea") == 5
     assert 'id="memoryNotesInput" rows="12" maxlength="12000"' in memory_panel
     assert 'data-always-visible="true"' in memory_panel
-    assert "explicitly submit a Remember or Correct memory action" in memory_panel
+    assert "changes a passage only when you choose Remember or Correct memory" in memory_panel
     assert "this note is sent with your question" in memory_panel
 
 
@@ -538,7 +538,7 @@ def test_memory_selection_has_explicit_add_and_correct_flows():
     assert 'data-memory-intent="correct"' in memory_edit
     assert "Remember this" in memory_edit
     assert "Correct memory" in memory_edit
-    assert "updates one clearly matching saved passage" in memory_edit
+    assert "updates the one saved passage it clearly matches" in memory_edit
     # The request carries the dialog's intent, frozen at submit time so a
     # later dialog cannot change what an in-flight request claims.
     assert "const intent = state.intent;" in memory_edit

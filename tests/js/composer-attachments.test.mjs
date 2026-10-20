@@ -108,7 +108,7 @@ describe("composer attachment tray", () => {
     expect(window.App.attachments.markError({ ...FILE }, "Page limit: 80 pages.")).toBe(true);
     const chip = document.querySelector("#attachmentBar .attachment-chip");
     expect(chip.classList.contains("has-error")).toBe(true);
-    expect(chip.querySelector(".attachment-chip-size").textContent).toBe("Couldn't upload · Page limit: 80 pages.");
+    expect(chip.querySelector(".attachment-chip-size").textContent).toBe("Couldn’t upload · Page limit: 80 pages.");
     expect(window.getAttachmentsPayload()[0].data).toBe(FILE.data);
     window.App.attachments.markError({ ...FILE }, "");
     expect(document.querySelector("#attachmentBar .attachment-chip").classList.contains("has-error")).toBe(false);

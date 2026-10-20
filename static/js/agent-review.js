@@ -4,14 +4,17 @@
   const App = window.App = window.App || {};
   // "off": the user switched the answer check off (Settings › Agent · Beta),
   // so no judge ran; the line says why the answer has no marks.
-  const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
-    partial: "Partly checked", failed: "Check could not run", cancelled: "Check stopped", missing: "Answer not checked",
-    off: "Answer check off" };
+  // One word per state of the answer check, the same everywhere (App.words,
+  // Apple-Audit H9).
+  const W = App.words || {};
+  const states = { required: "Answer check pending", running: W.checking || "Checking the answer…", succeeded: W.checked || "Checked",
+    partial: W.partlyChecked || "Partly checked", failed: "Answer check failed", cancelled: "Answer check stopped", missing: "Not checked",
+    off: W.checkOff || "Answer check off" };
   // Turns saved between 7303e034 and the full answer check (both 2026-10-09) did not
   // check the answer of a comparison that checked a pasted text (`skipped`);
   // since then it is judged like any answer.
   const PASSAGE_CHECKED = "passage_checked";
-  const PASSAGE_NOTE = "This comparison checked your text sentence by sentence; the result is shown above the answer.";
+  const PASSAGE_NOTE = "Your text was checked sentence by sentence; the result is shown above the answer.";
   const OFF_NOTE = "The answer check is off in Settings › Agent · Beta, so this answer was not checked against the model answers.";
   // Short, calm reasons for one model call that ended without a result. The
   // provider's own error text never reaches the page (see provider_failure).
@@ -98,10 +101,10 @@
     const n = issue.count;
     return ({models_unavailable: `${n} comparison model${n === 1 ? '' : 's'} returned no usable answer; the check uses the remaining answers`,
       insufficient_answers: 'Fewer than two complete model answers arrived, so no comparison was possible',
-      differences_unavailable: 'The differences check could not run, so disagreements are not marked',
-      coverage_unavailable: 'The coverage check could not run, so sentences are not marked as supported',
+      differences_unavailable: 'The answer check couldn’t look for disagreements, so none are marked',
+      coverage_unavailable: 'The answer check couldn’t compare each sentence, so none is marked as supported',
       sentences_unchecked: `${n} sentence${n === 1 ? '' : 's'} could not be checked`,
-      unindexed_sentences: `${n} sentence${n === 1 ? '' : 's'} fell outside the coverage check`,
+      unindexed_sentences: `${n} sentence${n === 1 ? '' : 's'} fell outside the answer check`,
       truncated_answers: 'Some model answers were too long to check in full',
       incomplete: 'The saved check is incomplete'})[issue.code] || 'The check is incomplete';
   }
@@ -109,7 +112,7 @@
     if (!['succeeded', 'partial'].includes(state)) return states[state] || states.partial;
     if (issues.length && issues.every(i => i.code === 'models_unavailable')) {
       const n = issues.reduce((total, i) => total + i.count, 0);
-      return `Comparison checked · ${n} model${n === 1 ? '' : 's'} without an answer`;
+      return `${states.succeeded} · ${n} model${n === 1 ? '' : 's'} without an answer`;
     }
     return issues.length ? states.partial : states[state];
   }
@@ -583,8 +586,8 @@
         } else if (off) {
           panel.append(node("p", "agent-review-note", OFF_NOTE));
         } else if (!check || !check.differences_data) {
-          panel.append(node("p", "agent-review-note", exact ? "The answer has no completed check for this comparison yet."
-            : "The text changed. This version needs a new review."));
+          panel.append(node("p", "agent-review-note", exact ? "This answer has no finished answer check yet."
+            : "The text changed. This version needs a new answer check."));
         } else {
           const cards = node("div", "agent-evidence-differences");
           window.renderStoredDifferenceCards?.(cards, check.differences_data, {

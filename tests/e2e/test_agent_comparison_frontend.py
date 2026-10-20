@@ -538,7 +538,7 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         status = page.locator('#answerReaderInspector details.agent-evidence-status')
         expect(status.locator('summary')).to_have_text('4 of 6 models answered · Checked')
         expect(status.locator('.agent-evidence-status-detail')).to_be_hidden()
-        expect(page.locator('#answerReaderInspector')).not_to_contain_text('Comparison checked')
+        expect(page.locator('#answerReaderInspector')).not_to_contain_text('Checked ·')
         cards = page.locator('#answerReaderInspector .diff-card')
         expect(cards).to_have_count(3)
         expect(cards.locator('.diff-type-tag')).to_have_text(['Critical', 'Minor', 'Emphasis'])

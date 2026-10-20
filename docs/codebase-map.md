@@ -702,7 +702,8 @@ Policy während der weiteren Style-Migration.
 ## 3. Frontend-Architektur
 
 Geladen werden (Reihenfolge ist Vertrag, steht in `static/js/bundles.json`,
-siehe §8): zuerst die synchronen `app-bootstrap.js`, `app-state.js`,
+siehe §8): zuerst die synchronen `app-text.js` (Formatierer, Fehlertexte,
+Glossar; seit 2026-10-20), `app-bootstrap.js`, `app-state.js`,
 `auth-session-state.js`, `run-registry.js`, `watch-state.js` und
 `error-reporter.js` (Gruppe
 `head`, render-blockierend, weil sie den First Paint seeden), dann lokale Vendor-Libs
@@ -815,11 +816,61 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   altem `localStorage.id_token` und öffnet einen bedienbaren Fehlerdialog statt
   einer toten Login-Aktion. `consensio:auth-state` beendet den Watchdog;
   `consensio:auth-unavailable` informiert insbesondere den Watch-Deep-Link.
+- **`app-text.js`** (seit 2026-10-20, Apple-Audit H1, H8, H9; erstes Skript
+  der `head`-Gruppe, reine Funktionen, also auch für `firebase.js` und
+  `token-budget.js` jederzeit da) — wie die App schreibt, an einer Stelle:
+  - **`App.format`**: eine Locale (`en-US`, die der Oberfläche), nie die des
+    Browsers. `date(v, {year: "auto"|true|false, weekday, timeZone})` →
+    „Oct 19“ (anderes Jahr: „Oct 19, 2025“), `time(v, {timeZone})` → „14:03“
+    (24 h wie die Watch-Zeiten), `dateTime` → „Oct 19, 14:03“, `upcoming(v)` →
+    „today, 14:30“/„tomorrow, 09:00“/„Friday, 09:00“, `relative(v)` →
+    „just now“/„12m ago“/„3h ago“/„yesterday“/„4 days ago“/„on Oct 3“,
+    `duration(ms, {minutes})` → „23s“/„3m 7s“/„1h 2m 5s“ bzw. „5h 12m“ (die
+    eine Schreibweise für Zeitspannen: „Thought for“, Reset, Agent-Zeilen,
+    „Next check in 12m“), `number(n, {digits})` → „48,213“, `count(n, word)`.
+    `App.watchFields` (`scheduleText` ausgenommen) setzt darauf auf.
+    `tests/test_ui_copy.py` verbietet in `/app` `toLocale*String()` ohne Locale
+    und eigene `Intl.*Format` außerhalb von `app-text.js`.
+  - **`App.userError(error, {context, fallback})`**: jeder Fehler als Satz mit
+    nächstem Schritt, nie die Worte der Engine („Failed to fetch“, „Load
+    failed“, „The string did not match the expected pattern.“, „HTTP 503“).
+    Offline (`navigator.onLine === false` + Netzfehler) → „You’re offline. …“;
+    Netzfehler sonst, kein JSON (Proxy-/Portal-HTML) und nackte 502/503/504 →
+    „consens.io can’t be reached right now. …“; `rate_limited`/429 → der
+    Satz des Servers bzw. dieselbe Warte-Regel aus `retry_after`; 401 →
+    „Your session has ended. Log in again.“; ein Satz des Servers
+    (`{error|detail|message, code}`, auch `already_watched`, `limit_reached`)
+    oder unserer (`new Error("…")`) bleibt; Programmfehler (TypeError …) →
+    `fallback`; `AbortError` → „“. `context: "send"` endet mit „Your message
+    is back in the box.“ (die Nachricht ging zurück ins Feld), weitere
+    Kontexte `load|save|upload|delete` liefern den Fallback.
+    `App.userError.kind(error)` → `offline|unreachable|timeout|rate_limited|
+    session|message|server|status|unknown|aborted`.
+  - **`App.readJson(response)`**: Body als JSON ohne Parse-Fehler der Engine
+    (leer → `{}`; kein JSON bei 2xx → Fehler `unreadable`, bei 4xx/5xx → `{}`).
+    **`App.httpError(response, data, fallback)`**: Ablehnung als `Error`
+    (`name "HttpError"`, `status`, `code`, `retryAfter`, `data`,
+    `serverMessage`, `unreadable`). Muster: `const data = await
+    App.readJson(response); if (!response.ok) throw App.httpError(response,
+    data);` und beim Anzeigen `App.userError(error, {fallback})` über
+    `App.toast`/`App.composerNotice`/`App.watchFields.setError`.
+    `streamSSERequest` gibt keinen HTML-Body mehr als `data.error` weiter.
+    `request-deadline.js` wirft bei Zeitüberschreitung einen `TimeoutError`.
+  - **`App.words`**: das Glossar (Apple-Audit H9), ein Wort je Zustand:
+    die Prüfung heißt „Answer check“ (laufend „Checking the answer…“, fertig
+    „Checked“, teilweise „Partly checked“, sonst „Answer check pending|failed|
+    stopped|off“, „Not checked“), ein Lauf „Working“/„Failed“/„Stopped“
+    (auch Tab-Titel, Chatzeile, Stepper „Answer check“), Verbrauch heißt
+    „allowance“.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `modelAcceptsAttachments(pref, modelId)`
   (immer das gewaehlte Modell; der Reasoning-Schalter tauscht keins), gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
-  `trackAppEvent`, `exitHeroMode`, `scrollBehavior`) sowie den zentralen
+  `trackAppEvent`, `exitHeroMode`, `scrollBehavior`, seit 2026-10-20
+  `askToLogIn(lead, {trigger, source})`: ein Gast an einer Tür, die ein
+  Konto braucht, bekommt den Login-Dialog mit einer Zeile, wofür — Modellwahl,
+  Teilen, Resolve, Drive, Senden mit Dateien, Settings; ohne Firebase sagt es
+  die Hinweiszeile, Apple-Audit H2) sowie den zentralen
   `window.App.renderUsageDisplay(data, owner)`-Eingang: reicht das
   `token_budget` einer API-Antwort (auch aus Fehler-Details) an
   `App.tokenBudget` weiter; Antworten ohne das Feld (eigene Keys) ändern nichts.
@@ -8655,6 +8706,44 @@ Quellen-Bauteil, Schrift ≥ 12 px (Lint über alle App- und öffentlichen
 Stylesheets außer Admin), ein Chevron, ein Feld-Fokus, Umschalter ohne
 Fettsprung, eine Sidebar-Zeile, Gleiten mit der Leiste, bloßer Menüknopf am
 Handy.
+
+### Was die App sagt: Namen, Schreibstil, Admin-Zahlen (seit 2026-10-20, Apple-Audit H3–H5, H10)
+
+`tests/test_ui_copy.py` prüft jeden sichtbaren Text von `/app`
+(`tests/ui_text.py`: Text und lesbare Attribute von `templates/index.html`
+sowie die Prosa-Literale aller `/app`-Skripte über einen kleinen
+JS-Tokenizer; Konsole, Selektoren, Objekt-Schlüssel und `===`-Vergleiche
+zählen nicht):
+- **Ein Name: „Chat“** (New chat · Chats · Chat | Watches, auch für Gäste).
+  „bookmark“ bleibt interner Name (IDs, Klassen, API-Felder, Server-Schlüssel
+  wie „Bookmark limit reached.“, die `showBookmarkSaveError` übersetzt), nie
+  ein Wort auf der Seite; „comparison“ benennt nur die Vergleichsmodelle,
+  „Consensus“ den Modus, nie das Produkt.
+- **Schreibstil:** Sentence case für Titel, Knöpfe, Labels (Eigennamen und
+  Funktionsnamen wie Agent, Watch, Morning Brief behalten ihre Großbuchstaben;
+  „Privacy Policy“/„Terms of Use“ als Dokumenttitel); „Log in“ als Verb, nie
+  „login“/„logout“/„sign in“; „email“; typografisch ’ und ….
+- **Keine internen Namen:** kein „Luna“ (das Memory-Modell), keine „judges“,
+  „drawers“, kein Build-Hash in Settings (der steht nur im Tooltip des
+  GitHub-Zeichens). Die Titel „Differences judge“/„Coverage judge“ sind
+  Schlüssel, die `agent-delegation.js` zu „Answer check“ faltet.
+- **Tokens und Dollar nur für Admins:** `.admin-only` (Agent-Verbrauchszeile
+  `.agent-usage`, Sidebar-Summe, Token je Agent-Zeile, Token-Aufschlüsselung,
+  Token-Zahlen im Kontingent-Panel) blendet `style.css` aus, solange
+  `body.viewer-is-admin` fehlt; `firebase.js` setzt die Klasse aus
+  `/user_status` `is_admin` und nimmt sie beim Logout weg. Nutzertexte sprechen
+  von „allowance“ in Prozent („A Consensus run uses about 8%.“, „8% is held
+  for a message still running.“, Agent-Absagen „Not enough of today’s
+  allowance is left for this step.“).
+- **Hilfe** (`#helpModal`, „Help“): sechs Fragen zum heutigen Produkt (eine
+  Nachricht, die Marken, Watches, Kontingent, Gedächtnis, Daten).
+- **Gäste in Settings:** `#settingsGuestNote` unter dem Kopf (app-ui.js
+  `syncSettingsGuestNote`, beim Öffnen und bei `consensio:auth-state`) sagt,
+  warum Memory und Schlüssel ausgegraut sind; „Log in“ schließt Settings und
+  ruft `App.askToLogIn`. Der Watches-Hinweispunkt erscheint nur für Konten.
+- **API-Schlüssel-Test:** `#openrouterFeedback` zeigt ein gezeichnetes Häkchen
+  (`.is-valid`, `--agree`) bzw. Kreuz (`.is-invalid`, `--dispute`) mit
+  `aria-label`, nie einen Stern; Fehler über `App.userError`.
 
 ## 8. Kritische Verträge & Stolperfallen
 

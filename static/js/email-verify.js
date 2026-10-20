@@ -85,7 +85,7 @@ async function handleResend() {
     setStatus(
       tooMany
         ? "Too many attempts for now. The last link is still valid — try that one."
-        : "The e-mail could not be sent right now. Please try again in a moment.",
+        : "The email couldn’t be sent right now. Try again in a moment.",
       "error"
     );
   }
@@ -114,7 +114,7 @@ async function recheck(silent) {
     return true;
   }
   if (!silent) {
-    setStatus("Not confirmed yet. Open the link in the e-mail, then try again.", "error");
+    setStatus("Not confirmed yet. Open the link in the email, then try again.", "error");
   }
   return false;
 }

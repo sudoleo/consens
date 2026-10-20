@@ -23,6 +23,11 @@ const ROOT = path.resolve(
 
 const BLANK = "<!doctype html><html><head></head><body></body></html>";
 
+// The first script of the head group (bundles.json): App.format, App.userError
+// and App.words are there before any module of /app runs, so they are here
+// too. `base: false` loads only the files a test names.
+const BASE = ["static/js/app-text.js"];
+
 /**
  * @param {string[]} files      repo-relative paths, in load order
  * @param {object}   [options]
@@ -32,7 +37,7 @@ const BLANK = "<!doctype html><html><head></head><body></body></html>";
  *        jsdom does not perform ("Not implemented: navigation")
  * @returns {{ window: Window, document: Document, dom: JSDOM }}
  */
-export function loadScripts(files, { body, before, virtualConsole } = {}) {
+export function loadScripts(files, { body, before, virtualConsole, base = true } = {}) {
   const html = body
     ? `<!doctype html><html><head></head><body>${body}</body></html>`
     : BLANK;
@@ -55,7 +60,8 @@ export function loadScripts(files, { body, before, virtualConsole } = {}) {
 
   before?.(window);
 
-  for (const relative of files) {
+  const scripts = base ? [...BASE.filter((file) => !files.includes(file)), ...files] : files;
+  for (const relative of scripts) {
     const code = readFileSync(path.join(ROOT, relative), "utf8");
     const element = window.document.createElement("script");
     element.textContent = code;

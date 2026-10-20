@@ -517,17 +517,27 @@
   border-color: color-mix(in srgb, var(--dispute) 70%, transparent);
 }
 
-.settings-footer {
+/* A guest's line under the header: why controls are greyed out and the
+   way in (Apple-Audit H13). */
+.settings-guest-note {
+  display: flex;
   flex-shrink: 0;
-  padding: 8px 20px;
-  border-top: 1px solid var(--sidebar-border);
-  text-align: right;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
-.settings-version {
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-solid);
+.settings-guest-note[hidden] {
+  display: none;
+}
+
+.settings-guest-note p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
 /* Unter 700px hat eine Navigationsspalte neben dem Panel keinen Platz mehr: die
@@ -990,6 +1000,22 @@
   margin-left: 5px;
   font-weight: var(--font-weight-bold);
 }
+
+/* The key's verdict (app-init.js showKeyVerdict, Apple-Audit H12): a drawn
+   check or cross in the traffic-light colour of the answer marks. */
+.feedback svg {
+  width: 0.9em;
+  height: 0.9em;
+  vertical-align: -0.08em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.feedback.is-valid { color: var(--agree); }
+.feedback.is-invalid { color: var(--dispute); }
 
 .api-keys-status {
   margin-top: 10px;

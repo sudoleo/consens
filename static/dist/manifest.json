@@ -1,5 +1,5 @@
 {
-  "sources": "ebd4cb92b60b",
+  "sources": "d7fc4d79ade4",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -74,6 +74,7 @@
     "static/js/app-dom-events.js",
     "static/js/app-init.js",
     "static/js/app-state.js",
+    "static/js/app-text.js",
     "static/js/app-update.js",
     "static/js/attachments.js",
     "static/js/auth-bootstrap.js",
@@ -204,19 +205,19 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.f126878e224c.js",
+      "src": "/static/dist/head.f81afe3364c9.js",
       "module": false,
       "defer": false
     },
     {
       "name": "auth",
-      "src": "/static/dist/auth.e148c0e3b0c7.js",
+      "src": "/static/dist/auth.de775716be9e.js",
       "module": false,
       "defer": true
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.5169f411ba0a.js",
+      "src": "/static/dist/firebase.6be1b59a785c.js",
       "module": true,
       "defer": false
     },
@@ -228,20 +229,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.24e5516b1f18.js",
+      "src": "/static/dist/app.6c6272c0163b.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.743651f01d25.css",
+    "app": "/static/dist/app.41b09f8fb551.css",
     "landing": "/static/dist/landing.040dce50f343.css",
     "public": "/static/dist/public.6d35c0042f82.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "f4155cd995f5",
+      "hash": "9f92b5b7cab8",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -312,18 +313,18 @@
     }
   },
   "previous_assets": [
+    "app.743651f01d25.css",
     "app.1a87a8f263f3.css",
-    "app.f6234dd7f523.css",
-    "app.421787dddc97.js",
-    "app.ae03e6592487.js",
+    "app.aed8fcbe7706.js",
+    "app.24e5516b1f18.js",
+    "auth.e148c0e3b0c7.js",
     "auth.5c8ab3c866cb.js",
-    "auth.5e487d1e2570.js",
     "demo.1bcf3ec5aeb7.js",
     "demo.1a3421e3e4d2.js",
+    "firebase.5169f411ba0a.js",
     "firebase.95597ab5aac3.js",
-    "firebase.24deecbf6d78.js",
+    "head.f126878e224c.js",
     "head.bf63b5ef6543.js",
-    "head.66cfc7d3a03d.js",
     "landing.ac9d31c6eea6.css",
     "landing.9a57d392f317.css",
     "public.8b35048d50c7.css",

@@ -38,22 +38,22 @@
   const STEPS = {
     prepare: {
       compact: "Preparing",
-      next: "Next: answers, consensus, contradiction check"
+      next: "Next: answers, consensus, answer check"
     },
     answers: {
       compact: "Answering",
-      next: "Next: consensus, then contradiction check"
+      next: "Next: consensus, then answer check"
     },
     consensus: {
       compact: "Writing the consensus",
-      next: "Next: contradiction check"
+      next: "Next: answer check"
     },
     differences: {
-      compact: "Checking for contradictions",
+      compact: "Checking the answer",
       // Not a step list: at this point the useful thing to say is what the
       // check is. The judge can share a family with one of the answers
       // (OpenAI first since 2026-10-04), so the note claims no independence.
-      note: "A separate judge pass compares all answers. It adds no answer of its own."
+      note: "A separate check compares all answers. It adds no answer of its own."
     },
     done: { compact: "Done" }
   };
@@ -128,7 +128,8 @@
   const rowTimes = new Map();
   const rowProgress = new Map();
   const rowTextCounts = new Map();
-  const characterFormat = new Intl.NumberFormat(document.documentElement.lang || "en");
+  // One locale for numbers (App.format, Apple-Audit H8).
+  const characterFormat = { format: value => window.App.format.number(value) };
 
   // A model that is out of the run. Those rows sink to the bottom, so the
   // models still working stay together at the top.
@@ -140,7 +141,7 @@
     waiting: "Waiting",
     error: "No answer",
     skipped: "Skipped",
-    canceled: "Canceled"
+    canceled: "Stopped"
   };
 
   // One icon per row: a spinner while the model works, a check when it is
@@ -369,7 +370,7 @@
     if (rest < 1) return "";
     const failed = out.filter(box => rowState(box, true, 0) === "error").map(box => modelName(box));
     const parts = [];
-    if (failed.length) parts.push(listNames(failed) + " didn't answer.");
+    if (failed.length) parts.push(listNames(failed) + " didn’t answer.");
     parts.push(rest === 1
       ? "The consensus uses the one remaining answer."
       : "The consensus uses the other " + rest + " answers.");

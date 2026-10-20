@@ -173,7 +173,7 @@ describe("feedback dialog for members", () => {
     await settle(window);
     await settle(window);
     expect(document.getElementById("feedbackStatus").textContent)
-      .toBe("Your feedback could not be sent. Check your connection and try again.");
+      .toBe("consens.io can’t be reached right now. Try again in a moment.");
     window.close();
   });
 

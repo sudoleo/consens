@@ -8,7 +8,6 @@
   const App = window.App = window.App || {};
   const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
   const MINUTE = 60 * 1000;
-  const DAY = 24 * 60 * MINUTE;
 
   function capitalize(text) {
     const value = String(text || "");
@@ -54,74 +53,29 @@
     return capitalize(scheduleText(watch, options));
   }
 
-  function toDate(value) {
-    const date = value instanceof Date ? value : new Date(value);
-    return isNaN(date.getTime()) ? null : date;
-  }
+  // A watch's times are written by App.format (app-text.js), the one
+  // formatter of the app (Apple-Audit H8): the 24-hour clock, "Oct 21",
+  // the year only when it is not this one.
+  const format = () => App.format;
 
-  function clock(date) {
-    return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
-  }
-
-  // Tooltips: "Tue, Oct 21, 09:00" -- the 24-hour clock of the run times,
-  // never "09:00 AM".
+  // Tooltips: "Tue, Oct 21, 09:00".
   function dateTimeTitle(value) {
-    const date = toDate(value);
-    if (!date) return "";
-    try {
-      return new Intl.DateTimeFormat("en-US", {
-        weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-      }).format(date);
-    } catch (_) {
-      return date.toLocaleString();
-    }
+    return format().dateTime(value, { weekday: true });
   }
 
   function shortDay(value) {
-    const date = toDate(value);
-    if (!date) return "";
-    try {
-      return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
-    } catch (_) {
-      return date.toDateString();
-    }
+    return format().date(value);
   }
 
-  function startOfDay(date) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  }
-
-  // A time ahead, as a person says it: "today, 14:30", "tomorrow, 09:00",
-  // "Monday, 09:00", "Oct 30, 09:00". Rounded days ("in 2 days" for 36 h)
-  // said less than the clock does.
+  // A time ahead: "today, 14:30", "tomorrow, 09:00", "Monday, 09:00", "Oct 30, 09:00".
   function dayAndTime(value, now = Date.now()) {
-    const date = toDate(value);
-    if (!date) return "";
-    const days = Math.round((startOfDay(date) - startOfDay(new Date(now))) / DAY);
-    const time = clock(date);
-    if (days === 0) return "today, " + time;
-    if (days === 1) return "tomorrow, " + time;
-    if (days > 1 && days < 7) {
-      try {
-        return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(date) + ", " + time;
-      } catch (_) { /* below */ }
-    }
-    return shortDay(date) + ", " + time;
+    return format().upcoming(value, now);
   }
 
-  // A time behind: "just now", "12 min ago", "3 h ago", "2 days ago", then
-  // the date. Re-read every minute by the page (watch-dashboard.js).
+  // A time behind: "just now", "12m ago", "3h ago", "yesterday", then the
+  // date. Re-read every minute by the page (watch-dashboard.js).
   function relativePast(value, now = Date.now()) {
-    const date = toDate(value);
-    if (!date) return "";
-    const minutes = Math.max(0, Math.round((now - date.getTime()) / MINUTE));
-    if (minutes < 1) return "just now";
-    if (minutes < 60) return minutes + " min ago";
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return hours + " h ago";
-    const days = Math.round(hours / 24);
-    if (days < 7) return days + (days === 1 ? " day ago" : " days ago");
-    return "on " + shortDay(date);
+    return format().relative(value, now);
   }
 
   // When the next check is, honestly: a check that runs says so, a time
@@ -130,13 +84,13 @@
   // (_serialize_watch); without them the time alone decides.
   function nextCheck(watch, now = Date.now()) {
     if (watch?.checking === true) return { state: "checking", text: "Checking now…" };
-    const date = toDate(watch?.next_run_at);
+    const date = format().toDate(watch?.next_run_at);
     if (!date) return { state: "none", text: "" };
     const ahead = date.getTime() - now;
     if (watch?.due === true || ahead <= 0) return { state: "due", text: "Check due now" };
     const minutes = Math.round(ahead / MINUTE);
     if (minutes < 1) return { state: "soon", text: "Next check in under a minute" };
-    if (minutes < 60) return { state: "soon", text: `Next check in ${minutes} min` };
+    if (minutes < 60) return { state: "soon", text: `Next check in ${format().duration(minutes * MINUTE, { minutes: true })}` };
     return { state: "scheduled", text: "Next check " + dayAndTime(date, now) };
   }
 

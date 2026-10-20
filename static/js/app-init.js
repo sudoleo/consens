@@ -189,7 +189,7 @@
 
         const questionInput = document.getElementById("questionInput");
         const defaultQuestionPlaceholder = "Enter your question";
-        const lockedQuestionPlaceholder = "Sign in to start asking questions for free.";
+        const lockedQuestionPlaceholder = "Log in to start asking questions for free.";
 
         const resizeQuestionInput = window.App.initComposerAutosize(questionInput);
         window.App.resizeQuestionInput = resizeQuestionInput;
@@ -233,7 +233,7 @@
         };
 
         const unverifiedQuestionPlaceholder =
-          "Type your question — confirm your e-mail to run it";
+          "Type your question — confirm your email to run it";
 
         // Landing field -> /app?focus=1: arrive with the caret in the composer.
         // The parameter goes again at once, so a reload or bookmark is plain.
@@ -304,10 +304,10 @@
             sendButton.disabled = !canStartRun && !guestCanSend;
             sendButton.title = !canAsk
               ? unverified
-                ? "Confirm your e-mail address to start this run"
+                ? "Confirm your email address to start this run"
                 : guest
-                  ? "Sign in to send your question. It's free."
-                  : "Sign in to ask questions or use your own API keys"
+                  ? "Log in to send your question. It’s free."
+                  : "Log in to ask questions or use your own API keys"
               : agent
                 ? agentBlocker?.message || (hasMessage ? "Send message" : "Write a message to send")
               : hasMinimumModels
@@ -715,8 +715,8 @@
             // Said under the field it is about, not in a browser window
             // (Apple audit E1); typing again takes it away.
             if (length > maxChars) {
-              window.App.composerNotice.show(`Your message is longer than ${maxChars.toLocaleString("en-US")} characters `
-                + `(it has ${length.toLocaleString("en-US")}). `
+              window.App.composerNotice.show(`Your message is longer than ${window.App.format.number(maxChars)} characters `
+                + `(it has ${window.App.format.number(length)}). `
                 + "Shorten it, or paste only the part you want checked.");
               return false;
             }
@@ -1111,7 +1111,7 @@
             event.preventDefault();
             event.stopPropagation();
             if (!window.auth?.currentUser) {
-              showPopup("Please log in to configure your models.");
+              window.App.askToLogIn("Log in to choose your models.", { trigger, source: "models" });
               return;
             }
             // Kein Choice-State mehr, den die Modellwahl stoeren koennte: eine
@@ -1465,20 +1465,45 @@
           el.classList.toggle("is-success", tone === "success");
         }
 
+        // The verdict beside the key's label (Apple-Audit H12): a check in the
+        // agreement colour for a valid key, a cross in the dispute colour for
+        // one OpenRouter refused, nothing while unknown. Never a star.
+        function showKeyVerdict(valid) {
+          const feedback = document.getElementById("openrouterFeedback");
+          if (!feedback) return;
+          feedback.classList.toggle("is-valid", valid === true);
+          feedback.classList.toggle("is-invalid", valid === false);
+          if (valid === null || valid === undefined) {
+            feedback.replaceChildren();
+            feedback.removeAttribute("role");
+            feedback.removeAttribute("aria-label");
+            return;
+          }
+          const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          svg.setAttribute("viewBox", "0 0 16 16");
+          svg.setAttribute("aria-hidden", "true");
+          const path = document.createElementNS(svg.namespaceURI, "path");
+          path.setAttribute("d", valid ? "M3.5 8.5l3 3 6-7" : "M4.5 4.5l7 7M11.5 4.5l-7 7");
+          svg.append(path);
+          feedback.replaceChildren(svg);
+          feedback.setAttribute("role", "img");
+          feedback.setAttribute("aria-label", valid ? "Key verified" : "Key not accepted");
+        }
+
         // Testet die API Keys und aktualisiert das Feedback
         window.testAllKeys = async function () {
           trackAppEvent("app_api_keys_test_started");
           setApiKeysStatus("");
           const currentUser = window.auth?.currentUser;
           if (!currentUser || !currentUser.emailVerified) {
-            setApiKeysStatus("Please log in with a verified account before saving or testing your own API keys.", "error");
+            setApiKeysStatus("Log in with a confirmed account to save or test your own API key.", "error");
             trackAppEvent("app_api_keys_test_result", { status: "auth_required" });
             return;
           }
 
           const openrouterKey = document.getElementById("openrouterKey").value;
           if (!openrouterKey.trim()) {
-            setApiKeysStatus("Enter an OpenRouter API key to test.", "error");
+            setApiKeysStatus("Enter an OpenRouter API key to test it.", "error");
             trackAppEvent("app_api_keys_test_result", { status: "no_keys" });
             return;
           }
@@ -1487,7 +1512,7 @@
           try {
             idToken = await currentUser.getIdToken();
           } catch (error) {
-            setApiKeysStatus("Your login session could not be verified. Please log in again.", "error");
+            setApiKeysStatus("Your session couldn’t be verified. Log in again.", "error");
             trackAppEvent("app_api_keys_test_result", { status: "auth_error" });
             return;
           }
@@ -1510,32 +1535,21 @@
                 openrouter_key: openrouterKey
               })
             });
-            if (!response.ok) {
-              let errorMessage = "API key check failed.";
-              try {
-                const errorData = await response.json();
-                errorMessage = errorData.detail || errorData.error || errorMessage;
-              } catch (_) {}
-              throw new Error(errorMessage);
-            }
-            const data = await response.json();
-            if (!data || !data.results) {
-              throw new Error("The response does not contain a 'results' object. Response: " + JSON.stringify(data));
-            }
-            const openrouterResult = data.results["OpenRouter"];
-            const valid = openrouterResult === "valid";
-            const feedback = document.getElementById("openrouterFeedback");
-            feedback.innerHTML = valid ? "&#9734;" : "&#10007;";
-            feedback.style.color = valid ? "green" : "red";
+            const data = await window.App.readJson(response);
+            if (!response.ok) throw window.App.httpError(response, data);
+            if (!data || !data.results) throw Object.assign(new Error(""), { unreadable: true });
+            const valid = data.results["OpenRouter"] === "valid";
+            showKeyVerdict(valid);
             trackAppEvent("app_api_keys_test_result", { status: "success", valid_count: valid ? 1 : 0 });
             setApiKeysStatus(
-              valid ? "OpenRouter key saved and verified successfully." : "OpenRouter key saved, but could not be verified. Please check it.",
+              valid ? "Key saved and verified." : "Key saved, but OpenRouter didn’t accept it. Check the key and try again.",
               valid ? "success" : "error"
             );
           } catch (error) {
             console.error("Error while testing API keys:", error);
             trackAppEvent("app_api_keys_test_result", { status: "error" });
-            setApiKeysStatus("Could not test the API keys: " + error.message, "error");
+            showKeyVerdict(null);
+            setApiKeysStatus("The key couldn’t be tested. " + window.App.userError(error, { fallback: "Try again." }), "error");
           } finally {
             spinner.style.display = "none";
           }

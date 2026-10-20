@@ -87,7 +87,7 @@
     if (!status) return;
     const uid = state.uid;
     const latest = error.revision;
-    status.textContent = (error.message || "Memory changed elsewhere.") + " ";
+    status.textContent = window.App.userError(error, { fallback: "Memory changed elsewhere." }) + " ";
     status.dataset.tone = "error";
     const reload = document.createElement("button");
     reload.type = "button";
@@ -114,7 +114,7 @@
 
   async function api(method, body, path) {
     const user = currentUser();
-    if (!user) throw new Error("Please log in first.");
+    if (!user) throw new Error("Log in first.");
     const uid = user.uid;
     const token = await user.getIdToken();
     if (window.auth?.currentUser?.uid !== uid) throw new Error("Authentication changed.");
@@ -123,8 +123,7 @@
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: body ? JSON.stringify(body) : undefined
     });
-    let data = {};
-    try { data = await response.json(); } catch (_) { /* empty body */ }
+    const data = await window.App.readJson(response);
     if (window.auth?.currentUser?.uid !== uid) throw new Error("Authentication changed.");
     if (!response.ok) {
       // FastAPI meldet Schema-Fehler als Liste von Objekten. Als Fehlertext
@@ -135,9 +134,9 @@
       const structured = isObject(data.detail) ? data.detail : (isObject(data.error) ? data.error : null);
       const detail = [data.detail, structured?.message, data.error]
         .find(value => typeof value === "string" && value.trim());
-      const error = new Error(detail || ("HTTP " + response.status));
-      error.status = response.status;
-      error.code = structured?.error_code || "";
+      const error = window.App.httpError(response, data);
+      if (detail) error.message = error.serverMessage = detail;
+      error.code = structured?.error_code || error.code || "";
       error.revision = Number.isInteger(structured?.revision) ? structured.revision : null;
       throw error;
     }
@@ -204,7 +203,7 @@
       const used = (input.value || "").length;
       const always = node.dataset.alwaysVisible === "true";
       const near = always || (max > 0 && used >= max * COUNT_VISIBLE_RATIO);
-      node.textContent = near ? `${used.toLocaleString()}/${max.toLocaleString()}` : "";
+      node.textContent = near ? `${window.App.format.number(used)}/${window.App.format.number(max)}` : "";
       node.dataset.near = near ? "true" : "";
       node.dataset.full = max && used >= max ? "true" : "";
     });
@@ -281,7 +280,7 @@
       setStatus("", "");
       return true;
     } catch (error) {
-      setStatus(error.message || "Memory could not be loaded.", "error");
+      setStatus(window.App.userError(error, { fallback: "Memory couldn’t be loaded. Try again." }), "error");
       return false;
     } finally {
       state.loading = false;
@@ -320,7 +319,7 @@
         // Felder bleiben unveraendert: der Entwurf gehoert dem Nutzer.
         showConflict(error);
       } else {
-        setStatus(error.message || "Memory could not be saved.", "error");
+        setStatus(window.App.userError(error, { fallback: "Memory couldn’t be saved. Try again." }), "error");
       }
       return false;
     } finally {
@@ -331,7 +330,7 @@
 
   async function save() {
     if (!currentUser()) {
-      setStatus("Please log in first.", "error");
+      setStatus("Log in to keep a memory.", "error");
       return;
     }
     const profile = readForm();
@@ -344,7 +343,7 @@
     if (!enabled) return;
     if (!currentUser()) {
       enabled.checked = !enabled.checked;
-      setStatus("Please log in first.", "error");
+      setStatus("Log in to keep a memory.", "error");
       return;
     }
     // Der Schalter schreibt den gespeicherten Textstand mit. Ist der (noch)
@@ -372,7 +371,7 @@
     if (!auto) return;
     if (!currentUser()) {
       auto.checked = !auto.checked;
-      setStatus("Please log in first.", "error");
+      setStatus("Log in to keep a memory.", "error");
       return;
     }
     const wanted = auto.checked;
@@ -439,9 +438,7 @@
 
   function itemDate(item) {
     const stamp = Date.parse(item.updated_at || item.created_at || "");
-    return Number.isFinite(stamp)
-      ? new Date(stamp).toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" })
-      : "";
+    return Number.isFinite(stamp) ? window.App.format.date(stamp, { year: true }) : "";
   }
 
   function itemButton(label, handler, ariaLabel) {
@@ -542,7 +539,7 @@
         await reloadItems();
         setItemsStatus("Memory changed in the meantime. The list was reloaded; please try again.", "error");
       } else {
-        setItemsStatus(error.message || "Memory could not be saved.", "error");
+        setItemsStatus(window.App.userError(error, { fallback: "Memory couldn’t be saved. Try again." }), "error");
       }
       return false;
     } finally {
@@ -573,7 +570,7 @@
       await acceptItems(restored);
       handle.update({ message: "Memory restored", action: null });
     } catch (error) {
-      handle.update({ message: error.message || "The memory could not be restored.", tone: "error", action: null });
+      handle.update({ message: window.App.userError(error, { fallback: "Memory couldn’t be restored. Try again." }), tone: "error", action: null });
     }
   }
 
@@ -611,7 +608,7 @@
       await acceptItems(await api("DELETE", null, "/api/my/memory/items"));
       setItemsStatus("All saved memories deleted.", "ok");
     } catch (error) {
-      setItemsStatus(error.message || "Memory could not be deleted.", "error");
+      setItemsStatus(window.App.userError(error, { fallback: "Memory couldn’t be deleted. Try again." }), "error");
     } finally {
       state.itemsBusy = false;
       syncItemControls();
@@ -622,7 +619,7 @@
     try {
       receiveItems(await api("GET"));
     } catch (error) {
-      setItemsStatus(error.message || "Memory could not be loaded.", "error");
+      setItemsStatus(window.App.userError(error, { fallback: "Memory couldn’t be loaded. Try again." }), "error");
     }
   }
 

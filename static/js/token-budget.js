@@ -117,14 +117,11 @@
     var date = now ? new Date(now) : new Date();
     var next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
     var ms = next - date;
-    var hours = Math.floor(ms / 3600000);
-    var minutes = Math.floor((ms % 3600000) / 60000);
-    var clock;
-    try { clock = next.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
-    catch (_) { clock = "00:00 UTC"; }
+    // App.format (app-text.js): the 24-hour clock and one way to write a span.
+    var format = window.App && window.App.format;
     return {
-      clock: clock,
-      relative: hours > 0 ? hours + " h " + minutes + " min" : Math.max(1, minutes) + " min",
+      clock: format ? format.time(next) : "00:00 UTC",
+      relative: format ? format.duration(ms, { minutes: true }) : "",
       ms: ms
     };
   }

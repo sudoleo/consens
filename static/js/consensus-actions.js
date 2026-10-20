@@ -210,7 +210,7 @@
 
       if (!mainText) {
         closeConsensusActionsMenu();
-        showPopup("No consensus available yet.");
+        showPopup("No answer to share yet.");
         return;
       }
 
@@ -297,7 +297,7 @@
     shareTopBtn.id = "consensusShareButton";
     shareTopBtn.className = "consensus-share-pill";
     shareTopBtn.title = "Share this consensus as a public page";
-    shareTopBtn.setAttribute("aria-label", "Share this consensus publicly");
+    shareTopBtn.setAttribute("aria-label", "Share this answer publicly");
     shareTopBtn.innerHTML = `
       <svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 15V4"></path>
@@ -308,7 +308,7 @@
     `;
     shareTopBtn.addEventListener("click", () => {
       if (!window.auth?.currentUser) {
-        showPopup("Please log in to share a consensus publicly.");
+        window.App.askToLogIn("Log in to share this answer.", { trigger: shareTopBtn, source: "share" });
         return;
       }
       window.openShareDialog("confirm");

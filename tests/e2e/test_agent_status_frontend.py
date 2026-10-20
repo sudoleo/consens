@@ -131,7 +131,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(details.locator('.agent-activity-run-details')).to_contain_text('Checking the answer…')
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
         expect(details.locator('.agent-activity-tool strong')).to_have_text([
-            'Model comparison · Completed', 'Answer review · Working…'])
+            'Model comparison · Completed', 'Answer check · Working…'])
         _snapshot(page, f'agent-live-expanded-{snapshot_variant}')
         if quiet != 'colors':
             assert details.locator('.agent-activity-update').first.evaluate('el => getComputedStyle(el).color') == trace_color

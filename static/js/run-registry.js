@@ -170,7 +170,7 @@
     if (basis?.bookmarkId && blockedBookmarkIds.has(basis.bookmarkId)) {
       throw new RunRegistryError(
         "bookmark_deleting",
-        "This bookmark is being deleted. Wait for that action to finish before starting a follow-up."
+        "This chat is being deleted. Wait for that to finish before you continue it."
       );
     }
     const conversationLockKey = spec.followup === true ? basis?.key || "" : "";
@@ -449,7 +449,7 @@
     const identity = `${ownerKey}:${key}`;
     if (!key) throw new RunRegistryError("invalid_action", "This action could not be started.");
     if (bookmarkId && blockedBookmarkIds.has(bookmarkId)) {
-      throw new RunRegistryError("bookmark_deleting", "This bookmark is being deleted.");
+      throw new RunRegistryError("bookmark_deleting", "This chat is being deleted.");
     }
     if (Array.from(actions.values()).some(action => action.identity === identity)) {
       throw new RunRegistryError("action_busy", "This action is already running.");

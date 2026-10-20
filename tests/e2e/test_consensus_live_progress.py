@@ -101,11 +101,11 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     if width <= 640:
         expect(page.locator(".run-compact")).to_be_visible()
         expect(page.locator("#runCompactLabel")).to_have_text("Answering")
-        expect(page.locator("#runMetaNext")).to_have_text("Next: consensus, then contradiction check")
+        expect(page.locator("#runMetaNext")).to_have_text("Next: consensus, then answer check")
         expect(page.locator(".run-step-label").first).not_to_be_visible()
     else:
         expect(page.locator(".run-compact")).not_to_be_visible()
-        expect(page.locator(".run-step-label")).to_have_text(["Prepared", "Answers", "Consensus", "Contradiction check"])
+        expect(page.locator(".run-step-label")).to_have_text(["Prepared", "Answers", "Consensus", "Answer check"])
         expect(page.locator("#runMetaNext")).not_to_be_visible()
     head = page.locator(".run-head").bounding_box()
     assert head["y"] + head["height"] <= page.locator("#runDetail").bounding_box()["y"]
@@ -144,8 +144,8 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     expect(page.locator("#runTrack")).to_be_visible()
     page.evaluate("() => App.consensusPipeline.onDifferencesStart()")
     expect(page.locator('.run-step[data-step="differences"]')).to_have_attribute("data-status", "active")
-    expect(page.locator("#runCompactLabel")).to_have_text("Checking for contradictions")
-    expect(page.locator("#runNoteText")).to_have_text("A separate judge pass compares all answers. It adds no answer of its own.")
+    expect(page.locator("#runCompactLabel")).to_have_text("Checking the answer")
+    expect(page.locator("#runNoteText")).to_have_text("A separate check compares all answers. It adds no answer of its own.")
     page.evaluate("() => App.consensusPipeline.dismiss()")
     expect(page.locator("#consensusRun")).not_to_be_visible()
 
@@ -173,7 +173,7 @@ def test_a_dropped_model_sinks_and_is_explained_once(progress_page, width):
     row = page.locator('[data-box="model-1"]')
     expect(row).to_have_attribute("data-state", "error")
     expect(row.locator(".run-model-time")).to_have_text("No answer")
-    expect(page.locator("#runNoteText")).to_have_text("Claude didn't answer. The consensus uses the other 5 answers.")
+    expect(page.locator("#runNoteText")).to_have_text("Claude didn’t answer. The consensus uses the other 5 answers.")
     rows = page.locator(".run-model").all()
     assert max(r.bounding_box()["y"] for r in rows) == row.bounding_box()["y"]
     # A dropped model counts as finished, it just has nothing to add.

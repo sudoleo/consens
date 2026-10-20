@@ -81,7 +81,7 @@ def test_enter_submits_the_login_and_wrong_credentials_read_as_such(browser, pha
 
         # Empty fields are caught here, not by a Firebase round trip.
         page.press("#loginEmail", "Enter")
-        expect(page.locator("#loginError")).to_have_text("Please enter your e-mail address.")
+        expect(page.locator("#loginError")).to_have_text("Enter your email address.")
         assert _calls(page) == []
 
         page.fill("#loginEmail", "someone@example.test")
@@ -92,7 +92,7 @@ def test_enter_submits_the_login_and_wrong_credentials_read_as_such(browser, pha
 
         # SDK 9.22 reports enumeration-protected wrong passwords as
         # auth/internal-error; the user must still read "wrong password".
-        expect(page.locator("#loginError")).to_contain_text("E-mail or password is not correct")
+        expect(page.locator("#loginError")).to_contain_text("Email or password is not correct")
         expect(page.locator("#loginButton")).to_be_enabled()
         expect(page.locator("#loginButton")).to_have_text("Log in")
         assert _calls(page) == [["password", "someone@example.test"]]
@@ -157,7 +157,7 @@ def test_forgot_password_answers_neutrally_and_leads_back_into_the_app(browser, 
     try:
         page.click("#authTopLoginBtn")
         page.click("#forgotPasswordButton")
-        expect(page.locator("#loginError")).to_contain_text("Enter your e-mail address above")
+        expect(page.locator("#loginError")).to_contain_text("Enter your email address above")
         assert _calls(page) == []
 
         page.fill("#loginEmail", "maybe@example.test")

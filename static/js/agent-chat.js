@@ -616,27 +616,22 @@
     }
     actionsEl.hidden = !actions.length;
   }
-  // Local reset time for the UTC-day Agent allowance, e.g. "02:00".
+  // Local reset time for the UTC-day allowance, e.g. "02:00".
   function resetTime() {
     const next = new Date(); next.setUTCHours(24, 0, 0, 0);
-    return next.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-  function compactTokens(value) {
-    if (!Number.isFinite(value)) return '';
-    return value >= 10000 ? `${Math.round(value / 1000)}k` : value >= 1000 ? `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`
-      : value.toLocaleString();
+    return App.format.time(next);
   }
   const BOOKMARK_FAILURES = new Set(['bookmark_count_limit', 'bookmark_storage_limit', 'bookmark_too_large', 'bookmark_unavailable']);
-  // Budget refusals carry a stable code; show a plain next step, not ledger terms.
+  // Budget refusals carry a stable code; show a plain next step in the
+  // reader's unit, the allowance, never ledger terms (Apple-Audit H4).
   function failureNotice(failure, review, text, { retry = true } = {}) {
     const code = failure?.code || failure?.error_code;
     if (code === 'agent_token_reservation') {
-      const needs = compactTokens(failure.required_tokens), left = compactTokens(failure.available_tokens);
-      return { text: `Not enough Agent tokens left for this step${needs ? ` (needs about ${needs}, ${left || 0} left)` : ''}. `
+      return { text: 'Not enough of today’s allowance is left for this step. '
         + `Try a smaller model or fewer comparison models, or wait for the reset at ${resetTime()}.`,
       actions: [['choose-model', 'Try a smaller model'], ['compare', 'Choose models']] };
     }
-    if (code === 'agent_tokens_exhausted') return { text: `You've used today's Agent tokens. They reset at ${resetTime()}.` };
+    if (code === 'agent_tokens_exhausted') return { text: `You’ve used today’s allowance. It resets at ${resetTime()}.` };
     // The answer is complete; only its sidebar entry was not saved. Said even
     // under a checked answer, which failureNote treats as settled: the
     // reader must know to free space and recover it (2026-10-19).
@@ -843,9 +838,11 @@
       usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running }
       : running ? { chatId: context.metadata.chatId || context.basis?.chatId, running: true } : null);
   }
+  // A refusal's sentence (the server's {error, code}), or one of ours; never
+  // the engine's words (App.userError, app-text.js).
   function apiError(data) {
-    const error = data?.error || data?.detail;
-    return typeof error === "string" ? error : error?.error || error?.message || "The agent request failed.";
+    return App.userError(data && typeof data === "object" ? data : String(data || ""),
+      { fallback: "The answer couldn’t be completed. Try again." });
   }
   function acceptAnswer(context, data) {
     const turn = { ...data.turn, turn_id: data.turn_id };
@@ -926,7 +923,7 @@
       acceptAnswer(context, result.data);
     } catch (error) {
       if (action?.controller.signal.aborted || !registry.isAuthCurrent(context)) return;
-      App.showPopup?.(error.message);
+      App.showPopup?.(App.userError(error, { fallback: "The saved answer couldn’t be loaded. Try again." }));
     } finally {
       context.metadata.recovering = false;
       if (action) registry.finishAction(action.actionId);
@@ -944,7 +941,7 @@
     return models.length >= 2 && models.length <= limit && models.every(id => typeof id === 'string' && id.trim());
   }
   function sendBlocker() {
-    if (!canUse()) return { message: 'Sign in to use Agent.' };
+    if (!canUse()) return { message: 'Log in to use Agent.' };
     if (catalogStatus === 'failed') return { message: 'Chat models could not be loaded. Retry to continue.' };
     if (catalogStatus !== 'ready') return { message: 'Loading chat models… You can already write your message.', loading: true };
     if (!catalog.models.some(model => model.available !== false)) {
@@ -1065,7 +1062,7 @@
     } catch (_) { /* counted below */ }
     if (result?.data?.turn) return result;
     if (result?.data?.recovery_state === 'running') { stall.misses = 0; return undefined; }
-    if (++stall.misses >= 2) throw new Error('The connection is taking too long. Please try again.');
+    if (++stall.misses >= 2) throw Object.assign(new Error('The connection is taking too long. Try again.'), { name: 'TimeoutError' });
     return undefined;
   }
   function syncComposer() {
@@ -1563,17 +1560,24 @@
       const data = result.data || {};
       const refused = result.streamed === false && result.status >= 400 && result.status < 500
         && !context.metadata.agentTurnId && data.recoverable !== true && !data.recovery_state;
-      throw Object.assign(new Error(apiError(data)), { failure: data, notDispatched: refused });
+      throw Object.assign(App.httpError(result, data, apiError(data)), { failure: data, notDispatched: refused });
     }
     acceptAnswer(context, result.data);
     App.trackAnswer?.(context, "ok");
     if (offer) offerWatch(context);
   }
+  // The words of a failed run: a refusal's own sentence, otherwise what
+  // happened in plain words (offline, unreachable, too slow), never the
+  // engine's ("Failed to fetch", "Load failed", Apple-Audit H1).
+  const NOT_SENT_ALREADY_SAYS = new Set(["offline", "unreachable", "timeout", "unknown"]);
   function failRun(context, error) {
     const failure = error.failure || {};
     const code = failure.code || failure.error_code || failure.detail?.code;
+    const notSent = Boolean(error.notDispatched || !context.metadata.requestSent);
+    const reason = App.userError(error, { context: notSent ? "send" : undefined,
+      fallback: notSent ? undefined : "The answer couldn’t be completed. Try again." });
     context.consensus.status = "error";
-    context.consensus.error = { message: error.message, code,
+    context.consensus.error = { message: reason, code,
       required_tokens: failure.required_tokens, available_tokens: failure.available_tokens };
     // "ask" went out with the POST; a refusal still ends that run as
     // failed, like a refused pipeline run (query-send.js finishFailed).
@@ -1583,7 +1587,8 @@
       // message that the server refused before starting it.
       context.metadata.requestSent = false;
       context.metadata.recoverable = false;
-      context.consensus.error.message = `Message not sent. ${error.message}`;
+      // "You’re offline. Your message is back in the box." says it already.
+      context.consensus.error.message = NOT_SENT_ALREADY_SAYS.has(App.userError.kind(error)) ? reason : `Message not sent. ${reason}`;
       releaseRunRow(context);
     } else if (['agent_token_reservation', 'agent_tokens_exhausted'].includes(code) && !context.consensus.streamText) {
       // An admission refusal produced no answer: offer the question again.
@@ -1592,12 +1597,18 @@
     }
     context.bookmark.status = "failed";
     if (asked) App.trackAnswer?.(context, "failed");
-    registry.setStatus(context.runId, "failed", { message: error.message });
+    registry.setStatus(context.runId, "failed", { message: context.consensus.error.message });
     if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
   }
   async function send(recovery = null, { retry = null } = {}) {
     if (recovery) return recoverAnswer(recovery);
-    if (!canUse()) { App.showPopup?.("Sign in to use Agent."); return; }
+    if (!canUse()) {
+      // A guest is asked in the login dialog (Apple-Audit H2); an account
+      // without Agent hears why.
+      if (!window.auth?.currentUser) App.askToLogIn?.("Log in to use Agent.", { trigger: document.getElementById("sendButton"), source: "agent" });
+      else App.showPopup?.("Agent isn’t available on your account yet.");
+      return;
+    }
     const input = document.getElementById("questionInput");
     const draft = retry ? retry.question : input?.value || "";
     const question = retry ? String(retry.question || "").trim() : String(App.quote?.compose?.(draft) ?? draft).trim();
@@ -1658,7 +1669,7 @@
       registry.setStatus(context.runId, "running");
     };
     if (registry.batch) registry.batch(begin); else begin();
-    if (refused) { App.showPopup?.(refused.message); return; }
+    if (refused) { App.showPopup?.(App.userError(refused, { context: "send" })); return; }
     // Emptied once the run is on screen: Send is already the stop button
     // then, and the field's listeners leave it alone.
     if (!recovery && !retry) {
@@ -1679,10 +1690,15 @@
             method: "POST", headers: { ...headers, "Content-Type": "application/json" }, signal: requestSignal,
             body: JSON.stringify({ title: question.slice(0, 120), execution_mode: "agent" }),
           });
-          return { response, data: await response.json() };
+          return { response, data: await App.readJson(response) };
         }, { signal });
         // The chat limit says what to do ("Delete one…"), not the raw server text.
-        if (!response.ok) throw new Error(App.chatPersistenceErrorMessage?.(data) || apiError(data));
+        if (!response.ok) {
+          const refusal = App.httpError(response, data);
+          const limit = App.chatPersistenceErrorMessage?.(data);
+          if (limit) refusal.message = refusal.serverMessage = limit;
+          throw refusal;
+        }
         chatId = data.chat.id;
       }
       if (!registry.isAuthCurrent(context) || signal.aborted) return;

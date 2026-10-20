@@ -55,11 +55,12 @@
     return dot;
   }
 
-  function errorText(error, fallback = "That did not work.") {
+  // A failed change in plain words (App.userError): the server's sentence,
+  // or what happened; a full plan is a 429 without "rate_limited".
+  function errorText(error, fallback = "That didn’t work. Try again.") {
     if (!error) return fallback;
-    if (error.code === "rate_limited") return error.message || "Too many changes at once. Try again in a moment.";
-    if (error.status === 429) return "All slots are in use. Pause another watch first.";
-    return error.message || fallback;
+    if (error.status === 429 && error.code !== "rate_limited") return "All slots are in use. Pause another watch first.";
+    return window.App.userError(error, { fallback });
   }
 
   // ------------------------------------------------------------------
@@ -726,7 +727,7 @@
         updateCard(entry.id, saved);
         fieldsNow.forEach(node => {
           if (ignored.length && node.dataset.field && ignored.includes(node.dataset.field)) {
-            F().setError(node, "This can't be changed here yet.");
+            F().setError(node, "This can’t be changed here yet.");
           } else {
             F().markSaved(node);
           }
@@ -736,7 +737,7 @@
         // A server that does not know a field yet refuses the change with
         // its list of fields; at the field that reads as "not here yet".
         const message = error?.status === 400 && "visibility" in changes
-          ? "This can't be changed here yet." : errorText(error, "Could not save.");
+          ? "This can’t be changed here yet." : errorText(error, "Couldn’t save. Try again.");
         fieldsNow.forEach(node => F().setError(node, message));
         entry.panel.sync(entry.watch, { force: true });
       }).finally(() => {
@@ -1030,7 +1031,7 @@
           const data = await patchWatch(entry.watch, { status: "active", reject_match: true, requirements: text });
           window.App?.trackAppEvent?.("app_watch_match_rejected", { with_details: Boolean(text) });
           updateCard(entry.id, data.watch);
-          cardNote(entry, "Watching again. That match won't count again.");
+          cardNote(entry, "Watching again. That match won’t count again.");
         } catch (error) {
           keep.disabled = false;
           fields.setError(reject, errorText(error));
@@ -1163,7 +1164,7 @@
           : "Listing request withdrawn.");
       } catch (error) {
         button.disabled = false;
-        cardNote(entry, "Request failed: " + errorText(error), "error");
+        cardNote(entry, errorText(error), "error");
       }
     }
     if (watch.indexed) {
@@ -1368,7 +1369,7 @@
   const DIFFERENCES = [
     {
       title: "Several model families, cross-checked",
-      body: "Each check asks independent AI model families and cross-checks their answers. One model's slip is not your alert."
+      body: "Each check asks independent AI model families and cross-checks their answers. One model’s slip is not your alert."
     },
     {
       title: "Only evidence moves it",
@@ -1594,7 +1595,7 @@
   const SECTION_META = {
     active: { title: "Watching" },
     paused: { title: "Paused" },
-    resolved: { title: "Reached", note: "Reached on evidence. These don't use a slot." }
+    resolved: { title: "Reached", note: "Reached on evidence. These don’t use a slot." }
   };
 
   function sectionOf(watch) {
@@ -1643,7 +1644,7 @@
           <span class="switch wd-switch"><input type="checkbox" id="watchBriefToggle"><span class="slider"></span></span>
           Morning Brief
         </label>
-        <p class="wd-field-hint">One daily e-mail across all watches: what moved, what was reached, what runs next. No extra model runs.</p>
+        <p class="wd-field-hint">One daily email across all watches: what moved, what was reached, what runs next. No extra model runs.</p>
         <p class="watch-field-error" id="watchBriefError" role="alert" hidden></p>
       </div>
       <div class="wd-delivery-controls watch-field" id="watchBriefControls" hidden>
@@ -1799,7 +1800,7 @@
           error.hidden = false;
         }
         if (status === "failed") {
-          error.textContent = "Telegram could not be connected: " + errorText(detail);
+          error.textContent = "Telegram couldn’t be connected. " + errorText(detail, "Try again.");
           error.hidden = false;
         }
       };
@@ -1991,7 +1992,7 @@
       if (!isCurrentRender(token, epoch, uid)) return;
       body.removeAttribute("aria-busy");
       body.querySelector(".wd-alert")?.remove();
-      const bar = alertBar("Couldn't load your watches. Check your connection.", () => render());
+      const bar = alertBar("Couldn’t load your watches. Check your connection.", () => render());
       if (page.built) body.prepend(bar);
       else body.replaceChildren(bar);
       return;

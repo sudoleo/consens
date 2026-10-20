@@ -55,7 +55,7 @@
           });
           if ([401, 403, 404].includes(response.status)) break;
           if (!response.ok) continue;
-          const { turn } = await response.json();
+          const { turn } = await window.App.readJson(response);
           if (!current() || recovery.signal.aborted) break;
           if (turn?.status === 'failed') {
             // The owner-bound read is an authoritative terminal disposition.
@@ -135,7 +135,7 @@
   // jede andere Frage gegen das Tagesbudget — mehr kostet es niemanden.
   const DEFAULT_INPUT_PLACEHOLDER = "Enter your question";
   const FOLLOWUP_INPUT_PLACEHOLDER = "Ask a follow-up question";
-  const UNAVAILABLE_INPUT_PLACEHOLDER = "Start a new comparison — saved context unavailable";
+  const UNAVAILABLE_INPUT_PLACEHOLDER = "Start a new chat — the saved context is unavailable";
 
   // Jede archivierte Schublade braucht eine eigene ID fuer aria-controls.
   // Der Verlauf lebt im selben Dokument wie der Live-Renderbaum, dessen IDs
@@ -340,7 +340,7 @@
       if (!agentTurn) {
         const answerLabel = document.createElement("div");
         answerLabel.className = "thread-history-answer-label";
-        answerLabel.textContent = "Consensus Answer";
+        answerLabel.textContent = "Consensus answer";
         answer.append(answerLabel);
       }
       const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
@@ -858,12 +858,11 @@
     };
   }
 
+  // The server's sentence for a refused synthesis, or ours for a bare
+  // status ("Consensus HTTP 503" never reaches the reader, Apple-Audit H1).
   function consensusErrorMessage(result, data) {
-    const detail = data?.detail;
-    if (detail && typeof detail === "object") {
-      return String(detail.error || detail.message || `Consensus HTTP ${result.status}`);
-    }
-    return String(data?.error || detail || `Consensus HTTP ${result.status}`);
+    return window.App.userError(window.App.httpError(result, data || {}),
+      { fallback: "The answer couldn’t be completed. Try again." });
   }
 
   window.App.executeConsensusRun = async function (context, options = {}) {
@@ -1165,7 +1164,7 @@
       context.chatSession?.markPendingUncertain?.();
       if (context.chatSession?.pendingTurnId) context.keepConversationLock = true;
       context.consensus.status = "error";
-      context.consensus.error = { message: error?.message || "The consensus request failed." };
+      context.consensus.error = { message: window.App.userError(error, { fallback: "The answer couldn’t be completed. Try again." }) };
       context.consensus.text = context.consensus.text || context.consensus.streamText;
       context.phase = "failed";
       context.bookmark.status = "failed";

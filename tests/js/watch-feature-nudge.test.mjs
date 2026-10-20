@@ -14,7 +14,7 @@ const BODY = `
       <div id="consensusOutput" class="consensus-output">
         <div class="consensus-box" id="consensusResponse">
           <div class="consensus-main">
-            <h2>Consensus Answer</h2>
+            <h2>Consensus answer</h2>
             <div id="consensusAnswerBody" class="consensus-answer-body"></div>
             <div id="runProvenance" class="run-provenance consensus-footer">
               <span class="consensus-footer-actions" id="consensusFooterActions">

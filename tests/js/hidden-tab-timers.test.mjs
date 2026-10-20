@@ -132,7 +132,7 @@ describe("guided run ticker", () => {
     document.getElementById("claudeResponse").dataset.responseError = "true";
     await microtask();
     expect(document.getElementById("runNote").hidden).toBe(false);
-    expect(document.getElementById("runNoteText").textContent).toContain("Claude didn't answer.");
+    expect(document.getElementById("runNoteText").textContent).toContain("Claude didn’t answer.");
     window.close();
   });
 });

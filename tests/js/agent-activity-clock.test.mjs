@@ -29,7 +29,7 @@ describe("activity clock", () => {
     expect(title.textContent).toBe("Thought for 1m 12s");
     expect(verb.dataset.ghost).toBe("Working for");
     activity.render(host, { running: false, elapsedMs: 72000, status: "failed", events: [] });
-    expect(title.textContent).toBe("Response failed after 1m 12s");
+    expect(title.textContent).toBe("Failed after 1m 12s");
     expect(verb.dataset.ghost).toBeUndefined();
     activity.dispose(host);
     // A saved turn that never ticked here sizes the slot by its own value.

@@ -63,7 +63,7 @@
   }
 
   function sourceLabel(selection) {
-    if (selection?.kind === "consensus") return "Consensus";
+    if (selection?.kind === "consensus") return "Answer";
     if (selection?.kind === "model_answer") return "Model answer";
     return "Your question";
   }
@@ -243,22 +243,22 @@
         title: "Remember this",
         description: "Save a lasting fact or preference and keep related Memory consistent.",
         label: "What should consens.io remember?",
-        helper: "Luna adds it or updates one clearly matching saved passage. Unrelated details stay unchanged.",
+        helper: "consens.io adds it, or updates the one saved passage it clearly matches. Nothing else changes.",
         placeholder: "For example: I live in Hanover.",
         submit: "Save to Memory",
         busy: "Saving…",
-        progress: "Luna is checking for one related saved passage…"
+        progress: "Looking for a related saved passage…"
       };
     }
     return {
       title: "Correct memory",
       description: "Update one outdated or incorrect passage in your Memory.",
       label: "What should consens.io remember instead?",
-      helper: "Luna changes one matching passage. If none exists, your correction can be added as a new entry.",
+      helper: "consens.io changes the one passage it matches. If none does, your correction is added as a new one.",
       placeholder: "For example: I now work in Hanover.",
       submit: "Update Memory",
       busy: "Updating…",
-      progress: "Luna is locating one matching Memory passage…"
+      progress: "Looking for the matching passage…"
     };
   }
 
@@ -364,15 +364,6 @@
     textarea.focus();
   }
 
-  function errorMessage(data, fallback) {
-    // main.py rewrites HTTPException.detail to {"error": ...}; accept both.
-    for (const value of [data?.detail, data?.error]) {
-      if (typeof value === "string" && value.trim()) return value;
-      if (typeof value?.message === "string" && value.message.trim()) return value.message;
-    }
-    return fallback;
-  }
-
   // Every request is bound to the account that made the selection. The token
   // must belong to that account, and the answer is used only while it is
   // still the signed-in account (checked after token, fetch and JSON).
@@ -397,10 +388,9 @@
     } finally {
       if (state.controller === controller) state.controller = null;
     }
-    let data = {};
-    try { data = await response.json(); } catch (_) { /* empty response */ }
+    const data = await window.App.readJson(response).catch(() => ({}));
     if (!bindingIsCurrent(binding)) throw staleError();
-    if (!response.ok) throw new Error(errorMessage(data, "Memory could not be updated."));
+    if (!response.ok) throw window.App.httpError(response, data);
     return data;
   }
 
@@ -478,7 +468,7 @@
         if (epoch === state.epoch) resetForAuthChange();
         return;
       }
-      showFieldError(error.message || "Memory could not be updated.");
+      showFieldError(window.App.userError(error, { fallback: "Memory couldn’t be updated. Try again." }));
     } finally {
       if (epoch === state.epoch) setBusy(false);
     }
@@ -516,7 +506,7 @@
         if (epoch === state.epoch) resetForAuthChange();
         return;
       }
-      handle.update({ message: error.message || "Memory could not be restored.", tone: "error", action: null, duration: 4000 });
+      handle.update({ message: window.App.userError(error, { fallback: "Memory couldn’t be restored. Try again." }), tone: "error", action: null, duration: 4000 });
     }
   }
 
