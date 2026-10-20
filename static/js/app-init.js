@@ -584,14 +584,18 @@
           drawerOpen = open;
           DRAWER_BACKDROP.forEach(function (selector) {
             document.querySelectorAll(selector).forEach(function (element) {
-              if (element.contains(sidebar)) return;
+              // What the phone layout moved into the drawer (the Chat |
+              // Watches switch) belongs to it, not to the page behind.
+              if (element.contains(sidebar) || sidebar.contains(element)) return;
               element.inert = open;
             });
           });
+          const active = document.activeElement;
           if (open) {
             const target = sidebar.querySelector("#sidebarToggleInner") || sidebar.querySelector("button:not([disabled])");
-            if (target && !sidebar.contains(document.activeElement)) target.focus({ preventScroll: true });
-          } else if (!document.activeElement || document.activeElement === document.body) {
+            if (target && !sidebar.contains(active)) target.focus({ preventScroll: true });
+          } else if (!active || active === document.body || sidebar.contains(active)) {
+            // The menu button was inert a moment ago; now it takes focus back.
             document.getElementById("toggleSidebarButton")?.focus({ preventScroll: true });
           }
         }
