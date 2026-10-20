@@ -2574,7 +2574,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Seit 2026-10-20 (J2) ist der Dialog oben verankert
   (`#shareModal.is-watch-dialog`, `--watch-dialog-top`), am Handy ab dem
   ersten Schritt ein volles Sheet, dessen Aktionsleiste mit offener Tastatur
-  an `--keyboard-edge` endet (F8); die Aktionsleiste ist Dialogfläche mit
+  an der Tastaturkante endet (F8, wie jede Ebene mit Feldern:
+  `--keyboard-top`/`--keyboard-height`); die Aktionsleiste ist Dialogfläche mit
   Haarlinie, ohne Blur und Tönung (G14). Drei Vorschlagszeilen sind vom
   ersten Bild an reserviert, Höhenänderungen gleiten (`smoothHeight`), und
   während jemand in „Something else…“ tippt, hält die Liste ihre Höhe, bis
@@ -3134,8 +3135,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Textfeld fokussiert ist und `visualViewport` mehr als 120 px kürzer als
   `documentElement.clientHeight` ist (ungezoomt), setzt das Modul
   `body.keyboard-open` und schreibt `--keyboard-lift` (Abstand der sichtbaren
-  Unterkante über der Layout-Unterkante) an `.input-section` und
-  `--keyboard-edge` an `#shareModal` — nie an `<html>` (Apple-Audit D9);
+  Unterkante über der Layout-Unterkante) an `.input-section` und den
+  sichtbaren Bereich als `--keyboard-top` (Safaris Verschiebung) und
+  `--keyboard-height` an jede offene Ebene mit Feldern (`dialog[open]`,
+  Memory- und Gmail-&-Calendar-Sheet) — nie an `<html>` (Apple-Audit D9).
+  `overlays.css` lässt diese Ebenen dann genau den sichtbaren Bereich decken
+  (seit 2026-10-20, Apple-Audit F8: Login, Feedback, Settings, Teilen/Watch,
+  Memory …), Sheets mit eigenem Scrollbereich nehmen `max-height: 100%`;
+  `#shareModal` und `#systemPromptModal` (eigene `100dvh`) haben dafür eine
+  Zeile. `tests/e2e/test_keyboard_dialogs.py`;
   `shell.css` (Abschnitt C) hebt den unten fixierten Composer per `transform`
   an (kein Layout beim Mitscrollen) und blendet den Hinweissatz aus. Seit
   2026-10-20 (F9) merkt es sich die Tastaturhöhe je Ausrichtung

@@ -547,6 +547,13 @@
   line-height: var(--line-height-solid);
 }
 
+/* With the keyboard up the settings end at it, like every layer with fields
+   (overlays.css, Apple-Audit F8); the panel scrolls inside. */
+@media (max-width: 1099px) {
+  body.keyboard-open #systemPromptModal { height: var(--keyboard-height, 100dvh); }
+  body.keyboard-open .settings-modal-content { margin-top: 0; }
+}
+
 /* Unter 700px hat eine Navigationsspalte neben dem Panel keinen Platz mehr: die
    Reiter kippen ueber das Panel und scrollen waagerecht. */
 @media (max-width: 699px) {
@@ -1492,9 +1499,13 @@ dialog#shareModal[open] { display: flex; }
   #shareModal.is-watch-dialog .watch-dialog-error { grid-column: 1 / -1; }
   /* On a phone the sheet has its full height from the first step, so no
      step makes it grow; with the keyboard up it ends at the keyboard and
-     the action bar stays reachable (F8, composer-keyboard.js sets the edge). */
+     the action bar stays reachable (F8: overlays.css, composer-keyboard.js). */
   #shareModal.is-watch-dialog .share-modal-content { height: 100%; }
-  body.keyboard-open #shareModal.is-watch-dialog { height: var(--keyboard-edge, 100dvh); }
+  body.keyboard-open #shareModal { height: var(--keyboard-height, 100dvh); }
+}
+@media (max-width: 1099px) {
+  /* It scrolls inside its body, so the sheet itself fits what is visible. */
+  body.keyboard-open #shareModal .share-modal-content { max-height: 100%; }
   #shareModal.is-watch-dialog .watch-goal-hint { min-height: 3em; }
 }
 /* Die Watch-Liste lebt jetzt im Dashboard-Overlay (components-watch.css). */

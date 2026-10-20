@@ -117,6 +117,23 @@ dialog.modal[open] > .modal-content {
   dialog.modal[open] > .modal-content { translate: 0 8px; scale: 0.98; }
 }
 
+/* The keyboard's edge (Apple audit F8). On a phone with the keyboard up,
+   every layer with fields covers only what is visible: composer-keyboard.js
+   writes the visible area on the open layer (--keyboard-top, Safari's
+   panned offset, and --keyboard-height). A dialog then centres or scrolls
+   inside it, and the button under the field is not behind the keyboard. */
+@media (max-width: 1099px) {
+  body.keyboard-open :is(dialog.modal[open], .memory-edit-backdrop, .agent-google-overlay) {
+    top: var(--keyboard-top, 0px);
+    bottom: auto;
+    height: var(--keyboard-height, 100%);
+  }
+  /* The sheets that scroll inside themselves fit what is left. */
+  body.keyboard-open :is(.memory-edit-backdrop > .memory-edit-dialog, .agent-google-overlay > .agent-google-sheet) {
+    max-height: 100%;
+  }
+}
+
 /* The close cross (foundation.css .close-button) sits in the same corner of
    every dialog that has no header row for it. */
 dialog.modal > .modal-content { position: relative; }

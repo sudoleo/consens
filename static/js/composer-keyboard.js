@@ -17,8 +17,11 @@
 // (nicht an <html>: eine Variable am Wurzelelement liess bei jedem Scroll
 // die Styles der ganzen Seite neu rechnen, Apple-Audit D9). shell.css hebt
 // den unten fixierten Composer per transform um diesen Betrag an, ohne
-// Layout. Der Watch-Dialog (#shareModal) bekommt die Kante als
-// --keyboard-edge. Ohne Tastatur bleibt es bei bottom: 0, das der Browser
+// Layout. Jede offene Ebene mit Feldern (jeder modale Dialog, das Memory-
+// und das Gmail-&-Calendar-Sheet) bekommt den sichtbaren Bereich als
+// --keyboard-top/--keyboard-height und endet damit an der Tastatur
+// (overlays.css, Apple-Audit F8): was man tippt und die Knoepfe darunter
+// bleiben erreichbar. Ohne Tastatur bleibt es bei bottom: 0, das der Browser
 // beim Scrollen ohne Verzug nachfuehrt.
 //
 // iOS meldet die neue Groesse erst, wenn die Tastatur schon steht; der
@@ -59,7 +62,10 @@
   let predictedUntil = 0;
 
   function composer() { return document.querySelector(".input-section"); }
-  function watchDialog() { return document.getElementById("shareModal"); }
+  // The layers that cover the page and hold fields; the open ones follow the
+  // keyboard. Variables on the layer itself, never on <html> (D9).
+  const LAYERS = "dialog[open], .memory-edit-backdrop:not([hidden]), .agent-google-overlay:not([hidden])";
+  let layers = [];
 
   function typing() {
     const el = document.activeElement;
@@ -88,16 +94,22 @@
     } catch (_) { /* private mode: the next opening is measured again */ }
   }
 
-  function write(open, lift, edge) {
+  function write(open, lift, edge, top = 0) {
     document.body.classList.toggle(OPEN_CLASS, open);
     const section = composer();
-    const dialog = watchDialog();
+    for (const layer of layers) {
+      layer.style.removeProperty("--keyboard-top");
+      layer.style.removeProperty("--keyboard-height");
+    }
+    layers = open ? Array.from(document.querySelectorAll(LAYERS)) : [];
     if (open) {
       section?.style.setProperty("--keyboard-lift", `${Math.round(lift)}px`);
-      dialog?.style.setProperty("--keyboard-edge", `${Math.round(edge)}px`);
+      for (const layer of layers) {
+        layer.style.setProperty("--keyboard-top", `${Math.round(top)}px`);
+        layer.style.setProperty("--keyboard-height", `${Math.round(edge - top)}px`);
+      }
     } else {
       section?.style.removeProperty("--keyboard-lift");
-      dialog?.style.removeProperty("--keyboard-edge");
     }
   }
 
@@ -121,7 +133,7 @@
     predictedUntil = 0;
     const edge = viewport.offsetTop + viewport.height;
     if (open) rememberLift(layoutHeight - viewport.height);
-    write(open, Math.max(0, layoutHeight - edge), edge);
+    write(open, Math.max(0, layoutHeight - edge), edge, viewport.offsetTop);
   }
 
   function schedule() {
