@@ -128,17 +128,19 @@
 .agent-source { display: block; color: var(--ink-2); font-size: var(--font-size-xs); margin: 6px 0; }
 .agent-inline-models { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; vertical-align: top; }
 .agent-inline-models button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; font-size: var(--font-size-xs); }
-.agent-sidebar .agent-sidebar-close, #agentAnswerActivity .agent-inline-models button {
+/* .agent-answer-activity: the live turn's activity and every Agent turn in
+   the history (the live one moves up unchanged when a follow-up starts). */
+.agent-sidebar .agent-sidebar-close, .agent-answer-activity .agent-inline-models button {
   background: none; box-shadow: none; border: none; color: var(--ink-2); padding: 4px 8px; font-size: var(--font-size-xs); font-weight: 500; min-height: 32px;
 }
 /* Same footprint and voice as the app sidebar's own toggle. */
 .agent-sidebar .agent-sidebar-close { display: grid; place-items: center; width: 34px; height: 34px; min-height: 34px; flex: 0 0 34px; padding: 0; border-radius: var(--radius-sm); }
 .agent-sidebar-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
 .agent-model-stack { display: inline-flex; align-items: center; padding-left: 2px; }
-#agentAnswerActivity .agent-inline-models .agent-sidebar-toggle { width: 28px; min-height: 28px; padding: 0; color: var(--ink-3); }
+.agent-answer-activity .agent-inline-models .agent-sidebar-toggle { width: 28px; min-height: 28px; padding: 0; color: var(--ink-3); }
 .agent-sidebar-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
 .agent-sidebar-toggle[aria-expanded="true"] { color: var(--ink); }
-.agent-model-stack .agent-inline-model, #agentAnswerActivity .agent-model-stack .agent-inline-model {
+.agent-model-stack .agent-inline-model, .agent-answer-activity .agent-model-stack .agent-inline-model {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
   width: 25px; height: 25px; min-height: 25px; padding: 3px; margin-left: -6px;
   background: var(--ground); border: 2px solid var(--ground); border-radius: 50%;
@@ -148,9 +150,13 @@
    button, not the image: dark mode inverts the black logos on the image
    itself (components-model-picker.css). */
 .agent-model-stack .agent-inline-model {
-  animation: agent-icon-enter .24s cubic-bezier(.2, .7, .2, 1) var(--agent-icon-delay, 0ms) both;
   filter: grayscale(1);
   transition: background-color var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard);
+}
+/* Only a model that joins a live run settles in (agent-delegation.js);
+   saved and earlier turns show their icons at once (Apple audit A10). */
+.agent-model-stack .agent-inline-model.is-arriving {
+  animation: agent-icon-enter .24s cubic-bezier(.2, .7, .2, 1) var(--agent-icon-delay, 0ms) both;
 }
 @keyframes agent-icon-enter {
   from { opacity: 0; transform: translateY(4px); }
@@ -199,7 +205,8 @@
   @keyframes agent-scrim-enter { from { opacity: 0; } }
 }
 @media (prefers-reduced-motion: reduce) {
-  .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model, .agent-detail-skeleton span,
+  .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model,
+  .agent-model-stack .agent-inline-model.is-arriving, .agent-detail-skeleton span,
   .agent-session[open] .agent-session-detail { animation: none; transition: none; scroll-behavior: auto; }
   body.single-agent-active:not(.answer-reader-docked) .container, .agent-session > summary, .agent-session > summary::after, .agent-sidebar-segments i { transition: none; }
 }
@@ -545,7 +552,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    composer): dark mode inverts the black logos on the image itself
    (components-model-picker.css), and a filter there would replace that and
    leave them black on the dark ground. */
-#agentAnswerActivity .agent-model-stack .agent-inline-model {
+.agent-answer-activity .agent-model-stack .agent-inline-model {
   transition: background-color var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard);
 }
 .agent-model-stack .agent-inline-model > * { transition: opacity var(--dur-state) var(--ease-standard); }

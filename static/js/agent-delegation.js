@@ -566,7 +566,14 @@
         let button = inline._buttons.get(key);
         if (!button) {
           button = node("button", "agent-inline-model"); button.type = "button";
-          button.style.setProperty('--agent-icon-delay', `${Math.min(added++, 4) * 24}ms`);
+          // Only a model joining a live run settles in; a saved turn's
+          // icons are simply there (Apple audit A10). The class goes once the
+          // entry ran, so moving the turn into the history replays nothing.
+          if (view.running) {
+            button.classList.add("is-arriving");
+            button.style.setProperty('--agent-icon-delay', `${Math.min(added++, 4) * 24}ms`);
+            button.addEventListener("animationend", () => button.classList.remove("is-arriving"), { once: true });
+          }
           button.append(mark(agent));
           button.addEventListener("click", () => show(button.dataset.agentId, button));
           inline._buttons.set(key, button); inline._stack.append(button);
@@ -669,6 +676,22 @@
       if (row.root.open) { if (agent.kind !== "check") loadDetail(view, agent.id); renderDetail(row, view, agent); }
     }
   }
+  // A follow-up moves the live turn into the history (agent-chat.js
+  // liveTurn.take): its icons go with it as they are and from then on open
+  // that turn's answers in the reader, like the icons of any earlier turn.
+  // The panel glyph stays with the live turn, which gets new icons.
+  function release() {
+    if (!inline) return;
+    const view = current, old = inline;
+    inline = null;
+    old._toggle?.remove();
+    old.addEventListener("click", event => {
+      const button = event.target.closest?.(".agent-inline-model");
+      event.preventDefault(); event.stopPropagation();
+      const agent = button && view?.agents.get(button.dataset.agentId);
+      if (agent) openInReader(view, agent);
+    }, true);
+  }
   function project(spec) {
     resetOwner();
     if (!spec?.chatId || !spec?.turnId || !owner) { current = null; inline?.remove(); inline = null; hide(); syncTimer(); return; }
@@ -765,5 +788,5 @@
       .filter(Boolean).at(-1);
     return text ? { id: latest.id, label: latest.model?.label || "", text } : null;
   }
-  App.agentDelegation = { receive, receiveProgress, project, demo, tokens, liveHighlight, isTicking: () => Boolean(timer) };
+  App.agentDelegation = { receive, receiveProgress, project, release, demo, tokens, liveHighlight, isTicking: () => Boolean(timer) };
 })();

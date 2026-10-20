@@ -148,14 +148,25 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   if (window.addCopyButtons) window.addCopyButtons(el);
   if (window.addNewTabToLinks) window.addNewTabToLinks(el);
 
-  if (Array.isArray(evidenceSources) && evidenceSources.length && window.linkifySourceTags) {
-    window.linkifySourceTags(el, evidenceSources);
-  }
+  const linked = Array.isArray(evidenceSources) && evidenceSources.length && window.linkifySourceTags;
+  if (linked) window.linkifySourceTags(el, evidenceSources);
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);
+  // What a plain render of `md` left in `el`: the review renderer can mark
+  // it as it is instead of rendering the same text again (isPlainMarkdown).
+  el._plainMarkdown = linked ? null : { md, first: el.firstChild, last: el.lastChild, count: el.childNodes.length };
+}
+
+// True while `el` still holds exactly what injectMarkdown(el, md, []) wrote:
+// no other write since and nothing marked or turned into pills.
+function isPlainMarkdown(el, md) {
+  const plain = el?._plainMarkdown;
+  return Boolean(plain) && plain.md === md && el.firstChild === plain.first && el.lastChild === plain.last
+    && el.childNodes.length === plain.count && !el.querySelector(".cx-claim, .claim-badge, .src-ref");
 }
 
 window.injectMarkdown = injectMarkdown;
+window.isPlainMarkdown = isPlainMarkdown;
 
 // --- Incremental Markdown for a growing answer -------------------------
 // Re-parsing the whole answer on every streamed chunk makes the total work
@@ -233,6 +244,7 @@ function closeOpenStrong(text) {
 // only grew. Returns the number of characters that were parsed.
 function renderMarkdownStream(el, md, { decorate } = {}) {
   md = String(md || "");
+  el._plainMarkdown = null;
   let state = el._markdownStream;
   // Anyone else writing into the element (a full injectMarkdown, a review
   // re-render) invalidates the reuse; so does text that did not only grow.

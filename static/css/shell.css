@@ -3034,6 +3034,24 @@ body:not(.is-hero) .consensus-section::before {
   margin: 0 6px;
 }
 
+/* An Agent turn in the history keeps the live turn's boxes to the pixel:
+   when a follow-up starts, the live question and answer move up into the
+   history as they are (agent-chat.js liveTurn), and a reopened chat builds
+   the same boxes. The question keeps .thread-ask's margins; the answer keeps
+   .agent-answer's padding, and its 16px top margin stands in for the empty
+   .consensus-section (order 3) that separates them in the live turn. */
+.thread-history-turn.is-agent-turn {
+  gap: 0;
+}
+
+.thread-history-turn.is-agent-turn > .thread-history-question {
+  margin: 10px 6px 18px;
+}
+
+.thread-history-turn.is-agent-turn > .thread-history-answer {
+  margin: 16px 0 0;
+}
+
 .thread-history-answer-label {
   margin-bottom: 9px;
   font-size: var(--font-size-micro);

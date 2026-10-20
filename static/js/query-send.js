@@ -657,6 +657,15 @@
       systemPrompt: currentSystemPrompt()
     };
 
+    // The continued turn belongs to the history from the run's first
+    // projection on (run-registry.js create).
+    const historyTurns = [...(basis?.historyTurns || [])];
+    if (followup && basis?.currentTurn) {
+      const turnId = String(basis.currentTurn.turn_id || basis.currentTurn.id || "");
+      const alreadyStored = historyTurns.some(turn => String(turn?.turn_id || turn?.id || "") === turnId && turnId);
+      if (!alreadyStored) historyTurns.push(basis.currentTurn);
+    }
+
     let context;
     try {
       context = registry.create({
@@ -665,6 +674,7 @@
         config,
         basis,
         followup,
+        historyTurns,
         bookmarkId: followup ? basis.bookmarkId : "",
         bookmarkTitle: followup ? basis.title : question,
         chatSession,
@@ -702,11 +712,6 @@
     });
     context.progress.totalModels = config.providers.length;
     context.controllers.query = new AbortController();
-    if (followup && basis?.currentTurn) {
-      const turnId = String(basis.currentTurn.turn_id || basis.currentTurn.id || "");
-      const alreadyStored = context.historyTurns.some(turn => String(turn?.turn_id || turn?.id || "") === turnId && turnId);
-      if (!alreadyStored) context.historyTurns.push(basis.currentTurn);
-    }
     context.cancelHook = (reason) => {
       Object.values(context.modelResults).forEach(result => {
         if (["pending", "reasoning", "streaming"].includes(result.status)) {

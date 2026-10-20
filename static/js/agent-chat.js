@@ -461,6 +461,7 @@
       setAnswerChecking(document.getElementById("agentAnswerBody"), false, { fade: false });
       renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure, basis.currentTurn?.agent_review, basis.consensus || "")
         : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
+      markLiveTurn(basis.currentTurn);
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
@@ -479,6 +480,7 @@
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
     }
     if (!agent || (!context && !basis)) {
+      markLiveTurn(null);
       App.agentDelegation?.project(null);
       // A saved Consensus turn or a new chat: no check of a pasted text.
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
@@ -615,6 +617,17 @@
     document.body.classList.remove("direct-comparison-active", "thread-message-pending");
     App.consensusPipeline?.dismiss?.();
     window.projectAgentModeRun?.(null);
+    // First the history, while the live surface still shows the turn this
+    // run continues: that turn moves up into the history as it is.
+    const history = document.getElementById("threadHistory");
+    // Agent history is fixed for a run after its initial previous-turn append.
+    // Avoid serializing and duplicating all saved reasoning in a DOM attribute
+    // on every streamed activity update.
+    const signature = `${context.runId}:${context.historyTurns.length}`;
+    if (history && history.dataset.agentHistory !== signature) {
+      App.followup?.renderStoredTurns?.(context.historyTurns, { adopt: liveTurn });
+      history.dataset.agentHistory = signature;
+    }
     App.setAppTitle?.(context.question);
     App.setThreadQuestion?.(context.question);
     App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
@@ -629,17 +642,62 @@
     App.state?.set?.("consensusCitationMeta", null, "consensus");
     App.state?.set?.("currentEvidenceSources", [], "evidence");
     window.lastConsensusBookmarkPayload = null;
-    const history = document.getElementById("threadHistory");
-    // Agent history is fixed for a run after its initial previous-turn append.
-    // Avoid serializing and duplicating all saved reasoning in a DOM attribute
-    // on every streamed activity update.
-    const signature = `${context.runId}:${context.historyTurns.length}`;
-    if (history && history.dataset.agentHistory !== signature) {
-      App.followup?.renderStoredTurns?.(context.historyTurns);
-      history.dataset.agentHistory = signature;
-    }
     return true;
   }
+  // The live surface as the page first had it (#threadAsk, #agentAnswer and
+  // their IDs, a JS contract). When a follow-up starts, the turn on screen
+  // moves into the history as it is: the same nodes, with what the reader
+  // opened, the cards under it and its marks (Apple audit A4); a fresh copy
+  // of the live surface takes its place for the new message. Rebuilding the
+  // turn instead shifted it sideways, closed "Thought for …" and let its
+  // logos fly in again.
+  const pristine = { ask: null, answer: null };
+  function capturePristine() {
+    pristine.ask ||= document.getElementById("threadAsk")?.cloneNode(true) || null;
+    pristine.answer ||= document.getElementById("agentAnswer")?.cloneNode(true) || null;
+  }
+  capturePristine();
+  // Which turn the live surface shows, in the history's own key
+  // (consensus-run.js turnKey); only that turn can move up.
+  function markLiveTurn(turn) {
+    const panel = document.getElementById("agentAnswer");
+    if (!panel) return;
+    const key = turn && App.followup?.turnKey?.(turn);
+    if (key) panel.dataset.turnKey = key;
+    else delete panel.dataset.turnKey;
+  }
+  const liveTurn = {
+    owns(turn) {
+      const panel = document.getElementById("agentAnswer"), ask = document.getElementById("threadAsk");
+      return Boolean(pristine.ask && pristine.answer && panel && ask && !panel.hidden && !ask.hidden
+        && panel.dataset.turnKey && panel.dataset.turnKey === App.followup?.turnKey?.(turn));
+    },
+    take(turn) {
+      const panel = document.getElementById("agentAnswer"), ask = document.getElementById("threadAsk");
+      const contract = new Set([pristine.ask, pristine.answer].flatMap(root => [root, ...root.querySelectorAll("[id]")]).map(el => el.id));
+      // Its model icons stay with it (agent-delegation.js) and open its answers.
+      App.agentDelegation?.release?.();
+      const freshAsk = pristine.ask.cloneNode(true), freshPanel = pristine.answer.cloneNode(true);
+      freshPanel.hidden = false;
+      ask.replaceWith(freshAsk);
+      panel.replaceWith(freshPanel);
+      for (const el of [ask, ...ask.querySelectorAll("[id]"), panel, ...panel.querySelectorAll("[id]")]) {
+        if (contract.has(el.id)) el.removeAttribute("id");
+      }
+      ask.classList.add("thread-history-question");
+      ask.querySelector(".thread-ask-text")?.classList.add("thread-history-question-text");
+      panel.classList.add("thread-history-answer");
+      panel.removeAttribute("aria-label");
+      delete panel.dataset.turnKey;
+      const node = document.createElement("article");
+      node.className = "thread-history-turn is-agent-turn";
+      const turnId = String(turn.turn_id || turn.id || "").trim();
+      if (turnId) node.dataset.turnId = turnId;
+      node.dataset.turnKey = App.followup.turnKey(turn);
+      node.append(ask, panel);
+      return node;
+    },
+  };
   function project(context) {
     renderShell();
     const framed = projectFrame(context);
@@ -651,6 +709,8 @@
     renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure,
       state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "", { retry }) : "",
       { streaming: running && !state.text });
+    // A finished turn is what the next message continues (setCompletedBasis).
+    markLiveTurn(running ? null : state.completedTurn);
     App.agentActivity?.render(activityHost(context.runId), {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
         ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
@@ -1466,6 +1526,7 @@
     try {
       context = registry.create({
         question, mode: "Agent", basis, followup: Boolean(basis),
+        historyTurns: [...(basis?.historyTurns || []), ...(basis?.currentTurn ? [basis.currentTurn] : [])],
         attachments: retry ? [] : window.getAttachmentsPayload?.() || [],
         attachmentMeta: retry ? retry.attachmentMeta : App.attachments?.messageMeta?.() || [],
         requestIdentity: recovery?.requestIdentity,
@@ -1489,7 +1550,6 @@
       document.querySelector(`.bookmark.run-entry[data-run-id="${cssId(retry.runId)}"]`)?.remove();
     }
     if (context.config.googleDataConsent) App.agentGoogle?.resetConsent();
-    if (basis?.currentTurn) context.historyTurns.push(basis.currentTurn);
     context.controllers.query = new AbortController();
     const signal = context.controllers.query.signal;
     context.consensus.status = "pending";

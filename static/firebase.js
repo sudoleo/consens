@@ -2662,13 +2662,12 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     }
     window.App?.followup?.reset?.();
     window.App?.chatSession?.reset?.();
-    window.App?.followup?.clearHistory?.();
     window.App?.bookmarkSession?.restore?.(sourceBookmark?.id);
-    if (materialized.historyTurns.length) {
-        window.App?.followup?.renderStoredTurns?.(materialized.historyTurns);
-    } else if (bookmark?.previous_turn) {
-        window.App?.followup?.renderStoredTurn?.(bookmark.previous_turn);
-    }
+    // One step, never emptied first: turns already on the page stay
+    // (consensus-run.js renderStoredTurns).
+    window.App?.followup?.renderStoredTurns?.(materialized.historyTurns.length
+        ? materialized.historyTurns
+        : (bookmark?.previous_turn ? [bookmark.previous_turn] : []));
     const continuationTurn = materialized.currentTurn;
     const authoritativeChatRestored = continuationTurn && bookmark.chat_id
       ? window.App?.chatSession?.restoreCompletedChat?.(

@@ -243,10 +243,26 @@
       return verdict;
     },
 
+    // Which turn a history node shows: its ID and its question. A node kept
+    // under the same key is never rebuilt (renderStoredTurns).
+    turnKey(turnData) {
+      const turnId = String(turnData?.turn_id || turnData?.id || "").trim();
+      const question = window.App.normalizeQuestionText?.(turnData?.question)
+        ?? String(turnData?.question || "").replace(/\s+/g, " ").trim();
+      // A turn whose saved state moved on (its check finished later) is
+      // built again when the chat is opened anew.
+      return JSON.stringify([turnId, question, turnData?.status || "", turnData?.agent_review?.status || "",
+        String(turnData?.consensus || "").length]);
+    },
+
+    isStorableTurn(turnData) {
+      return Boolean(turnData?.question && (turnData.consensus
+        || (turnData.execution_mode === 'agent' && turnData.status === 'failed')));
+    },
+
     appendHistoryTurn(turnData, liveBody = null, liveVerdict = null) {
       const history = document.getElementById("threadHistory");
-      if (!history || !turnData?.question || (!turnData?.consensus
-          && !(turnData.execution_mode === 'agent' && turnData.status === 'failed'))) return false;
+      if (!history || !this.isStorableTurn(turnData)) return false;
       const turnId = String(turnData.turn_id || "").trim();
       const normalizedQuestion = window.App.normalizeQuestionText?.(turnData.question)
         ?? String(turnData.question).replace(/\s+/g, " ").trim();
@@ -260,10 +276,27 @@
       })) {
         return false;
       }
+      const built = this.buildHistoryTurn(turnData, liveVerdict);
+      history.appendChild(built.node);
+      history.hidden = false;
+      built.attached();
+      return true;
+    },
 
+    // One archived turn, built off the page. `attached()` runs what needs the
+    // node in the document (its file row, the fold measurement).
+    buildHistoryTurn(turnData, liveVerdict = null) {
+      const turnId = String(turnData.turn_id || "").trim();
+      const normalizedQuestion = window.App.normalizeQuestionText?.(turnData.question)
+        ?? String(turnData.question).replace(/\s+/g, " ").trim();
+      const agentTurn = turnData.execution_mode === "agent" || turnData.mode === "Agent";
       const turn = document.createElement("article");
-      turn.className = "thread-history-turn";
+      // An Agent turn keeps the live turn's boxes (shell.css .is-agent-turn):
+      // the live turn moves up into the history unchanged when a follow-up
+      // starts (agent-chat.js), and a reopened chat must look the same.
+      turn.className = agentTurn ? "thread-history-turn is-agent-turn" : "thread-history-turn";
       if (turnId) turn.dataset.turnId = turnId;
+      turn.dataset.turnKey = this.turnKey(turnData);
 
       const question = document.createElement("div");
       question.className = "thread-history-question";
@@ -302,16 +335,15 @@
       questionBubble.appendChild(questionMore);
 
       const answer = document.createElement("div");
-      answer.className = "thread-history-answer";
+      answer.className = agentTurn ? "thread-history-answer agent-answer" : "thread-history-answer";
       let agentResources = null;
-      if (turnData.execution_mode !== "agent" && turnData.mode !== "Agent") {
+      if (!agentTurn) {
         const answerLabel = document.createElement("div");
         answerLabel.className = "thread-history-answer-label";
         answerLabel.textContent = "Consensus Answer";
         answer.append(answerLabel);
       }
       const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
-      const agentTurn = turnData.execution_mode === "agent" || turnData.mode === "Agent";
       const answerBody = document.createElement("div");
       answerBody.className = "consensus-answer-body";
       answerBody.dataset.markdown = turnData.consensus;
@@ -339,8 +371,9 @@
         || this.buildStoredAgreement(turnData.differences_data);
       if (verdict) verdict.classList.add("thread-history-verdict");
       answer.append(answerBody, claimsFallback);
-      if (turnData.execution_mode === "agent" || turnData.mode === "Agent") {
+      if (agentTurn) {
         const activity = document.createElement("div");
+        activity.className = "agent-answer-activity";
         window.App.agentActivity?.renderTurn(activity, turnData);
         answer.insertBefore(activity, answerBody);
         const failureText = turnData.agent_failure?.error && (window.App.agentReview?.failureNote?.(
@@ -530,13 +563,15 @@
         });
       }
       turn.append(question, answer);
-      history.appendChild(turn);
-      history.hidden = false;
-      if (agentResources) window.App.agentWorkspace?.renderTurnResources?.(agentResources, turnId);
-      // Erst im DOM laesst sich messen, ob der Clamp ueberhaupt greift; nur
-      // dann bekommt der Turn seinen Aufklapp-Link.
-      window.App.observeQuestionFold?.(question, questionText);
-      return true;
+      return {
+        node: turn,
+        attached() {
+          if (agentResources) window.App.agentWorkspace?.renderTurnResources?.(agentResources, turnId);
+          // Erst im DOM laesst sich messen, ob der Clamp ueberhaupt greift; nur
+          // dann bekommt der Turn seinen Aufklapp-Link.
+          window.App.observeQuestionFold?.(question, questionText);
+        }
+      };
     },
 
     // Der Live-Consensus wird fuer den naechsten Lauf wiederverwendet. Bevor
@@ -568,17 +603,42 @@
     },
 
     renderStoredTurn(turnData) {
-      this.clearHistory();
-      return this.appendHistoryTurn(turnData);
+      return this.renderStoredTurns(turnData ? [turnData] : []);
     },
 
-    renderStoredTurns(turns) {
-      this.clearHistory();
-      let rendered = 0;
-      (Array.isArray(turns) ? turns : []).forEach(turn => {
-        if (this.appendHistoryTurn(turn)) rendered += 1;
-      });
-      return rendered;
+    // The history never shrinks under the reader (Apple audit A1): turns
+    // already on the page under the same key stay as they are, only what is
+    // missing is appended. Emptying the history first left the page shorter
+    // for a moment; the browser cut the scroll position to fit, and a
+    // follow-up jumped to the top of the chat and rode back down. Another
+    // chat replaces the history in one step, built off the page.
+    // `options.adopt` ({owns(turn), take(turn)}) may hand over a ready node,
+    // e.g. the live Agent turn that moves up when its follow-up starts. It is
+    // taken only after everything else is built, right before the insert, so
+    // no layout read can see the page without it.
+    renderStoredTurns(turns, options = {}) {
+      const history = document.getElementById("threadHistory");
+      if (!history) return 0;
+      const wanted = (Array.isArray(turns) ? turns : []).filter(turn => this.isStorableTurn(turn));
+      const shown = Array.from(history.children).filter(node => node.classList?.contains("thread-history-turn"));
+      let kept = 0;
+      while (kept < shown.length && kept < wanted.length
+          && shown[kept].dataset.turnKey === this.turnKey(wanted[kept])) kept += 1;
+      const plan = wanted.slice(kept).map(turnData => options.adopt?.owns?.(turnData)
+        ? { turnData, adopt: true } : { turnData, built: this.buildHistoryTurn(turnData) });
+      const nodes = plan.map(item => item.adopt ? options.adopt.take(item.turnData) : item.built.node);
+      const hooks = plan.filter(item => item.built).map(item => item.built.attached);
+      if (kept || !shown.length) {
+        // Same conversation: drop only what no longer belongs (a turn that
+        // went back to the live answer), append the rest.
+        shown.slice(kept).forEach(node => node.remove());
+        history.append(...nodes);
+      } else {
+        history.replaceChildren(...nodes);
+      }
+      history.hidden = !history.children.length;
+      hooks.forEach(attached => attached());
+      return nodes.length;
     },
 
     clearHistory() {

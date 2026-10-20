@@ -4494,8 +4494,8 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   davon einen Snapshot und eine eigene `ChatSession`. `window.App.followup`
   (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
   sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
-  `run-view.js` baut ihn bei jedem Sichtwechsel aus `historyTurns` und der
-  completed Basis des gewählten Contexts neu auf. **Seit 2026-08-07 hat der
+  `run-view.js` gleicht ihn bei jedem Sichtwechsel mit `historyTurns` und der
+  completed Basis des gewählten Contexts ab (Verlauf: nur anhängen, siehe unten). **Seit 2026-08-07 hat der
   Composer überhaupt keine
   Follow-up-Affordance mehr** (User-Vorgabe: „Das Follow-up-Feature ist
   überflüssig, Chats sollten standardmäßig fortführbar sein"): der frühere
@@ -4526,10 +4526,30 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   `{chat_id, turn_id, context_version_id}` an alle sechs `/ask_*` sowie später
   an `/consensus`. `ready` und `degraded` sind gleichermaßen verwendbare,
   autoritative Versionen; `202 building` wird begrenzt wiederholt.
-  Der Context übernimmt den vorherigen completed Turn in `historyTurns`; der
-  Projektor rendert ihn als statischen Turn in `#threadHistory` und die neue
-  Frage in `#threadAsk`. Sichtwechsel bauen beide Bereiche vollständig aus dem
-  gewählten Context neu auf; der alte Live-Renderbaum ist nie die Datenquelle.
+  Der Context übernimmt den vorherigen completed Turn in `historyTurns` schon
+  bei `registry.create({historyTurns})` (Agent und Consensus), damit seine
+  erste Projektion den Turn bereits im Verlauf zeigt; der Projektor rendert ihn
+  in `#threadHistory` und die neue Frage in `#threadAsk`.
+  **Verlauf wird nie verkürzt (seit 2026-10-20, Apple-Audit A1/A4):**
+  `followup.renderStoredTurns(turns, {adopt})` vergleicht die Turns auf der
+  Seite per `turnKey` (Turn-ID, Frage, Status, Review-Status, Textlänge), lässt
+  den passenden Anfang stehen, entfernt nur Nachfolgendes, das nicht mehr
+  dazugehört, und hängt Fehlendes an; ein anderer Chat ersetzt den Verlauf in
+  einem Schritt (`replaceChildren`, außerhalb der Seite gebaut,
+  `buildHistoryTurn` → `{node, attached}`). Vorher leerte jeder Lauf/Chatwechsel
+  den Verlauf zuerst: die Seite war kurz zu kurz, der Browser kappte scrollY,
+  und eine Folgefrage sprang nach oben und fuhr zurück. Im Agent-Modus wandert
+  der Live-Turn beim Start der Folgefrage **als DOM-Knoten** in den Verlauf
+  (`agent-chat.js` `liveTurn.owns/take`, nur wenn `#agentAnswer[data-turn-key]`
+  genau den fortgesetzten Turn zeigt): `#threadAsk` und `#agentAnswer` samt
+  Aufgeklapptem, Karten, Marken und Logos ziehen um, ihre Vertrags-IDs werden
+  entfernt, und frische Kopien des Seiten-Originals (`pristine`, beim Laden
+  geklont) übernehmen die IDs. `agentDelegation.release()` lässt die Logos am
+  umgezogenen Turn (Klick öffnet dann dessen Antworten im Leser). Agent-Turns
+  im Verlauf (`.thread-history-turn.is-agent-turn`, Antwort zusätzlich
+  `.agent-answer`, Aktivität `.agent-answer-activity`) haben exakt die Boxen
+  des Live-Turns; frisch gebaute ebenso. Consensus-Turns werden weiter frisch
+  gebaut (kein Umzug des Live-Consensus), aber nur angehängt.
   Interaktive Marker der Archivkopie werden zu reinen Anzeigeelementen. Das
   archivierte Agreement
   nutzt mit einem wachsenden `.verdict-main` die volle Threadbreite; die
@@ -8070,7 +8090,9 @@ ersten Check statt eines leeren Consensus-Panels.
   Follow-up-Kompatibilitäts- und Verlauf-State der sichtbaren Projektion
   (`offer/consume/reset/render`,
   `isArmed/hasContinuableExchange/markContinuationUnavailable/
-  archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory`).
+  archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory/
+  turnKey/buildHistoryTurn`; `renderStoredTurns` hängt nur an, siehe
+  „Follow-up-Fragen“).
   `run-view.js` speist ihn aus dem gewählten Context; `query-send.js` darf ihn
   nicht als Fortsetzungsquelle verwenden. `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
@@ -8491,7 +8513,11 @@ geschlossenes `**` rendert `closeOpenStrong` schon fett statt mit rohen
 Sternchen (nicht in Code-Fences). Fremde Schreibzugriffe oder nicht nur wachsender
 Text starten neu. Die finale Antwort rendert einmal vollständig mit
 `injectMarkdown` (gleiche Sanitisierung). `resetMarkdownStream(el)` verwirft den
-Zustand. Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
+Zustand. `injectMarkdown(el, md, [])` merkt sich, was es geschrieben hat
+(`el._plainMarkdown`); `window.isPlainMarkdown(el, md)` ist wahr, solange `el`
+genau das noch unmarkiert zeigt. `agent-review.js` `mark()` markiert dann
+direkt statt denselben Text ein zweites Mal zu rendern (Apple-Audit D5: jeder
+geöffnete Agent-Turn lief zweimal durch Markdown). Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
 gibt jedem Block vor dem Einhängen seine endgültige Inline-Form; Agent nutzt das
 für Quellen-Pills (`agent-chat.js::streamSourcePills` → `linkifyAgentSources`
 mit den Links des Blocks). Pills zeigen den Host, ihre Breite hängt also nicht

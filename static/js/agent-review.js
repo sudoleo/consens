@@ -607,7 +607,10 @@
         body._markSignature = markSignature;
         body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
-        if (typeof raw === "string") window.injectMarkdown?.(body, raw, []);
+        // A body that already shows exactly this text, unmarked (a saved turn
+        // just rendered), is marked as it is: rendering it a second time cost
+        // every opened chat a second Markdown pass per turn (Apple audit D5).
+        if (typeof raw === "string" && !window.isPlainMarkdown?.(body, raw)) window.injectMarkdown?.(body, raw, []);
         // Provisional marks went with the old DOM.
         body._previewMarks = null; body.classList.remove('has-provisional-marks');
         if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
