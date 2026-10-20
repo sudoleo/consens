@@ -242,6 +242,17 @@ am Router VOR `include_router`: Seit FastAPI 0.14x landen eingebundene Router
 nicht mehr als Kopie in `app.routes`, ein nachträgliches Ändern wirkt nicht.
 Ausgenommen bleiben die dokumentierte `/api/v1` (sonst wüchse das
 OpenAPI-Schema) und der Auth-Proxy `/__/*`.
+**Fehlerformat und Drosselung (seit 2026-10-20, Apple-Audit H6):** Der Handler
+für FastAPIs `HTTPException` liefert `{"error": <Satz>}` plus die Felder aus
+`exc.error_fields` (z. B. `code`, `watch_id` der Watch-Routen). Jede
+slowapi-Grenze (`RateLimitExceeded`, alle Routen inkl. `/api/v1`) antwortet mit
+429 `{"error": "Too many requests in a short time. …", "code": "rate_limited",
+"retry_after": <s>}` und `Retry-After` (`rate_limit.retry_after_seconds` aus dem
+Fenster des getroffenen Limits, `rate_limit_message`), nie mit „10 per 1
+minute“; ein Browser, der ein Seitenformular abschickt (`Accept: text/html`),
+bekommt dieselbe Aussage als `templates/notice.html`. Clients unterscheiden so
+Drosselung (`rate_limited`, nie ein Upgrade-Angebot) von der Plan-Grenze
+(`limit_reached`).
 Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
 content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
 `asset_url()`-URLs mit `?v=<12 hex>` erhalten
@@ -6427,8 +6438,9 @@ app/core/
   site.py                    Validierte kanonische PUBLIC_SITE_URL ohne Router-Abhängigkeit
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
-  rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt) + prozesslokale UID-Budgets
+  rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
   not_found.py               HTML-404 für Seiten-Navigationen (wants_html_page, not_found_page)
+  notice_page.py             Eine öffentliche Hinweisseite (templates/notice.html): Seiten hinter Mail-Links, HTML-429
   observability.py           PII-freie Correlation-IDs (auch im ASGI-Scope), strukturierte Logs + Prozessmetriken
   error_context.py           Inhaltsfreier Alert-Fundort: Repo-Frames, Commit, Instanz, Programmierfehler-Filter
   sourcemaps.py              VLQ-Decoder: Browser-Bundle-Koordinate -> static/js/<datei>.js:<zeile>:<spalte>

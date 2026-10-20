@@ -40,7 +40,13 @@ def _uid(request: Request, data: dict) -> str:
 
 
 def _raise(exc: watch_service.WatchError):
-    raise HTTPException(status_code=_STATUS_BY_CODE.get(exc.code, 400), detail=exc.message)
+    """The JSON error carries the reason as ``code`` (and its details, e.g.
+    the ``watch_id`` of ``already_watched``) next to the sentence: the app
+    opens the watch instead of showing an error, and only ``limit_reached``
+    offers more watches -- never a ``rate_limited`` (main.py)."""
+    error = HTTPException(status_code=_STATUS_BY_CODE.get(exc.code, 400), detail=exc.message)
+    error.error_fields = {"code": exc.code, **exc.details}
+    raise error
 
 
 @router.post("/api/watch")

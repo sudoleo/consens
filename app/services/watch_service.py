@@ -107,10 +107,14 @@ def _safe_count(value) -> int:
 
 
 class WatchError(Exception):
-    def __init__(self, code: str, message: str):
+    """``details`` are extra fields of the JSON error (e.g. the ``watch_id``
+    of the watch that already asks a question)."""
+
+    def __init__(self, code: str, message: str, *, details: dict | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.details = dict(details or {})
 
 
 def utcnow() -> datetime:
