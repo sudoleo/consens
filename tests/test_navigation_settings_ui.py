@@ -101,14 +101,21 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     # Zwei Beschriftungen, eine sichtbar: in der Knopfzeile des Composers ist
     # auf dem Handy kein Platz fuer den ganzen Satz, sonst faellt der
     # Senden-Knopf in eine zweite Zeile.
-    assert '<span class="demo-chip-label demo-chip-label-full">Try the demo</span>' in demo
-    assert '<span class="demo-chip-label demo-chip-label-short">Demo</span>' in demo
-    assert 'btn.setAttribute("aria-label", "Start interactive demo")' in demo
-    assert "inputActions.prepend(btn)" in demo
+    # The chip stands in the template, before Send, so the first frame
+    # already decides between the two (app-bootstrap.js, Apple-Audit B1/B2).
+    template = read("templates/index.html")
+    assert '<span class="demo-chip-label demo-chip-label-full">Try the demo</span>' in template
+    assert '<span class="demo-chip-label demo-chip-label-short">Demo</span>' in template
+    assert 'class="demo-chip demo-action send-glow" aria-label="Start interactive demo" hidden>' in template
+    assert template.index('class="demo-chip demo-action') < template.index('id="sendButton"')
+    assert 'container?.querySelector(".demo-chip")' in demo
     # The demo takes the send slot while it is offered (one filled control),
-    # and leaves the flow entirely once the guest types.
-    assert "> .demo-chip:not([hidden])) > #sendButton[data-icon=\"send\"]" in misc_css
-    assert ".chat-input-container.has-question-input .demo-chip" in misc_css
+    # and leaves the flow entirely once the guest types: it fades out where it
+    # stood while Send fades in (Apple-Audit B13).
+    assert "> .demo-chip:not([hidden], .is-leaving)) > #sendButton[data-icon=\"send\"]" in misc_css
+    assert ".chat-input-container.has-question-input .demo-chip:not(.is-leaving)" in misc_css
+    assert ".demo-chip.is-leaving {" in misc_css
+    assert "retireDemoChip(btn, storage)" in demo
     narrow_rule = misc_css.split("@media (max-width: 640px) {", 1)[1]
     assert ".demo-chip-label-full" in narrow_rule
     assert ".demo-chip-label-short" in narrow_rule
@@ -333,7 +340,10 @@ def test_hero_greeting_requires_agent_mode_and_available_space():
         in input_css
     )
     assert "@media (min-width: 680px) and (min-height: 620px)" in input_css
-    assert "body.is-hero .hero-greeting" not in input_css
+    # The start screen alone never shows it; a rule for every hero only
+    # paces its fade back in (Apple-Audit C2).
+    for rule in re.findall(r"body\.is-hero \.hero-greeting\s*\{([^}]*)\}", input_css):
+        assert [line.split(":")[0].strip() for line in rule.split(";") if line.strip()] == ["transition"], rule
     assert "body.is-hero:not(.agent-mode-enabled) .hero-greeting" not in input_css
 
 

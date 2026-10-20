@@ -337,12 +337,57 @@ function clearAuthenticatedUiState() {
   bookmarkViewCache.clear();
   window.bookmarksData = [];
   window.App?.composerStarters?.clear?.();
+  // The composer words remembered for the next first frame were this
+  // account's (app-bootstrap.js), as is a status check still waiting.
+  window.App?.firstFrame?.forget?.();
+  clearStatusRetry();
   setBookmarksAccess(false);
 }
 
-async function checkUserStatusOnLoad(user, token, generation) {
+// A status check that fails for a moment (network, a deploy, the tier
+// service) must not swap Agent for Consensus under the reader for the rest of
+// the session (Apple-Audit B8). The account then stays "being checked": Agent's
+// composer stands (agent-chat.js expectingAgent), nothing is sent, the composer
+// says so once a check has failed, and the check runs again by itself with a
+// growing pause, at once when the browser is back online or the tab returns,
+// or on "Try now". Only a refusal (4xx) settles it as no Agent.
+const STATUS_RETRY_MS = [2000, 5000, 15000, 30000, 60000];
+let statusRetry = null;
+
+function clearStatusRetry() {
+  if (statusRetry) window.clearTimeout(statusRetry.timer);
+  statusRetry = null;
+  if (window.App) window.App.agentAccessCheck = null;
+}
+
+function scheduleStatusRetry(user, generation, attempt) {
+  if (statusRetry) window.clearTimeout(statusRetry.timer);
+  const delay = STATUS_RETRY_MS[Math.min(attempt, STATUS_RETRY_MS.length - 1)];
+  const run = async () => {
+    if (statusRetry?.run !== run) return;
+    window.clearTimeout(statusRetry.timer);
+    if (!isCurrentAuthenticatedUser(user.uid, generation)) { clearStatusRetry(); return; }
+    let token = null;
+    try { token = await user.getIdToken(); } catch (_) { /* counted as a failed check below */ }
+    if (statusRetry?.run !== run) return;
+    if (!isCurrentAuthenticatedUser(user.uid, generation)) { clearStatusRetry(); return; }
+    if (!token) { scheduleStatusRetry(user, generation, attempt + 1); return; }
+    await checkUserStatusOnLoad(user, token, generation, attempt + 1);
+  };
+  statusRetry = { uid: user.uid, run, timer: window.setTimeout(run, delay) };
+  window.App.agentAccessCheck = { uid: user.uid, failed: true, attempt };
+  window.App.agentChat?.render?.();
+  window.updateQuestionInputAccess?.();
+}
+
+window.App.retryAccountStatus = () => statusRetry?.run();
+window.addEventListener("online", () => statusRetry?.run());
+document.addEventListener("visibilitychange", () => { if (!document.hidden) statusRetry?.run(); });
+
+async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
   if (!user || !token) return false;
   let loaded = false;
+  let refused = false;
 
   try {
     const response = await fetch("/user_status", {
@@ -354,11 +399,14 @@ async function checkUserStatusOnLoad(user, token, generation) {
     });
     if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
+    // A refusal is an answer; a server or network error is not.
+    refused = response.status >= 400 && response.status < 500;
     if (response.ok) {
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
       loaded = true;
+      clearStatusRetry();
       // The operator's own browsers leave the Umami numbers (docs/analytics.md).
       if (data.is_admin === true) window.consensioAnalytics?.excludeOperator?.();
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
@@ -407,13 +455,17 @@ async function checkUserStatusOnLoad(user, token, generation) {
   } catch (error) {
     console.error("Fehler beim User-Status Check:", error);
   }
-  // A failed status check must not leave Agent access "pending": the send
-  // guard for a stored Agent choice would block this account for the whole
-  // session. Without a verified answer Agent is unavailable; the mode
-  // selector then shows Consensus, so nothing is sent differently unseen.
+  // Not answered: asked again (see STATUS_RETRY_MS). Refused: no Agent for
+  // this session; the mode selector then shows Consensus, so nothing is sent
+  // differently unseen.
   if (isCurrentAuthenticatedUser(user.uid, generation) && window.App?.agentAccess?.uid !== user.uid) {
-    window.App.agentAccess = { uid: user.uid, allowed: false };
-    window.App.agentChat?.render?.();
+    if (!loaded && !refused) {
+      scheduleStatusRetry(user, generation, attempt);
+    } else {
+      clearStatusRetry();
+      window.App.agentAccess = { uid: user.uid, allowed: false };
+      window.App.agentChat?.render?.();
+    }
   }
   return loaded;
 }
@@ -1037,10 +1089,18 @@ function forgetRememberedEmail() {
 
 // A fresh page starts the signed-in app from a clean slate (a guest's demo
 // run does not belong to the account) and keeps the page the user was on.
-function continueSignedIn() {
+async function continueSignedIn() {
   // A guest's question waiting for this sign-in goes out on the fresh page,
   // not in this one while it unloads (composer-invite.js).
   window.App.reloadingAfterSignIn = true;
+  // The fresh page paints the account from its first frame
+  // (app-bootstrap.js reads the stored token): without it the Google sign-in
+  // came back as a guest page that turned into the app a second later
+  // (Apple-Audit B4).
+  try {
+    const user = auth.currentUser;
+    if (user?.emailVerified) localStorage.setItem("id_token", await user.getIdToken());
+  } catch (_) { /* the fresh page still finds the session, one frame later */ }
   const url = new URL(window.location.href);
   url.searchParams.delete("setup");
   window.location.replace(url.pathname + url.search);
@@ -3622,7 +3682,8 @@ function startBookmarkRename(row) {
   };
   input.addEventListener("keydown", event => {
     event.stopPropagation();
-    if (event.key === "Enter") { event.preventDefault(); finish(true); }
+    // An Enter confirming an input method's word stays the word's (E8).
+    if (event.key === "Enter" && !(event.isComposing || event.keyCode === 229)) { event.preventDefault(); finish(true); }
     else if (event.key === "Escape") { event.preventDefault(); finish(false); }
   });
   input.addEventListener("blur", () => finish(true));
@@ -3682,14 +3743,20 @@ function expandBookmarkRow(row) {
 // A row that joins the list opens its place instead of pushing the rows
 // below by a whole row in one frame (Apple audit A11, C12).
 function insertBookmarkRowSoftly(row) {
-  if (!row.animate || matchMedia("(prefers-reduced-motion: reduce)").matches || !row.isConnected || !row.getClientRects().length) return;
-  const height = row.getBoundingClientRect().height;
-  if (!height) return;
-  const style = getComputedStyle(row);
-  row.animate([
-    { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", overflow: "hidden" },
-    { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, overflow: "hidden" }
-  ], { duration: 200, easing: "cubic-bezier(.22, 1, .36, 1)" });
+  if (!row.animate || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  // Measured in the frame the row first shows in, after everything else the
+  // send wrote: read at once, it forced the half-built thread's layout in
+  // the middle of the click (Apple-Audit D3).
+  requestAnimationFrame(() => {
+    if (!row.isConnected || !row.getClientRects().length) return;
+    const height = row.getBoundingClientRect().height;
+    if (!height) return;
+    const style = getComputedStyle(row);
+    row.animate([
+      { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", overflow: "hidden" },
+      { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, overflow: "hidden" }
+    ], { duration: 200, easing: "cubic-bezier(.22, 1, .36, 1)" });
+  });
 }
 function leaveDeletedChat() {
   window.App.runRegistry?.clearVisible?.();

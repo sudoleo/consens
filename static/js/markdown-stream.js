@@ -303,6 +303,9 @@ function prosePoint(offset, nodes) {
 }
 
 function keepTextSelection(root, change) {
+  // Nothing in it, nothing selected in it: asking the selection forced a
+  // style pass inside the click on Send for the new, empty answer (D3).
+  if (!root?.firstChild) return change();
   const selection = typeof window.getSelection === "function" ? window.getSelection() : null;
   const inside = node => Boolean(node) && root.contains(node);
   if (!root || !selection || !selection.rangeCount || selection.isCollapsed

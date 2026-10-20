@@ -49,7 +49,13 @@
     const movedViews = place(views, mobile ? sidebarViews : homes.get(views).parentElement);
     if (movedViews && focusedView && mobile) document.getElementById('toggleSidebarButton')?.focus({preventScroll:true});
     else if ((movedActions && focusedAction && !actions.hidden) || (movedViews && focusedView)) focused.focus({preventScroll:true});
-    syncEdge();
+    scheduleEdge();
+  }
+  // Reading the scroll position right after a class change forced the new
+  // layout in the middle of a send (Apple-Audit D3); in the frame it is free.
+  let edgeFrame = 0;
+  function scheduleEdge() {
+    if (!edgeFrame) edgeFrame = requestAnimationFrame(() => { edgeFrame = 0; syncEdge(); });
   }
 
   document.getElementById('mobileNewRunButton')?.addEventListener('click', () => {

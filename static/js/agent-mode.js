@@ -17,7 +17,15 @@
 // =====================================================================
 
 (function () {
-  const isBeta = () => window.App.agentChat?.isSelected?.() === true;
+  // Agent's composer is on screen: chosen, or expected while its access
+  // loads (agent-chat.js looksAgent). The bar and the (+) menu follow it.
+  const isBeta = () => {
+    const chat = window.App.agentChat;
+    // Before agent-chat.js has run (a render from an earlier module), the
+    // first frame's expectation stands (app-bootstrap.js).
+    if (!chat) return document.documentElement.classList.contains("agent-shell-expected");
+    return (chat.looksAgent?.() ?? chat.isSelected?.()) === true;
+  };
   const runMode = () => window.App.runMode.effective();
   // The consensus pipeline runs unless the next message is a Compare.
   const pipelineEnabled = () => window.App.runMode.pipeline();
@@ -334,8 +342,14 @@
     // on screen, never tools.
     const start = window.App.composer?.isStartScreen?.() ?? document.body.classList.contains("is-hero");
     const summary = beta ? null : window.App.answerReader?.directSummary?.();
-    bar.hidden = !start && !summary;
-    bar.dataset.docked = String(!start);
+    const wasHidden = bar.hidden;
+    // A bar fading out of the start screen stays until app-core.js lets it go.
+    const leaving = bar.classList.contains("is-leaving");
+    bar.hidden = !start && !summary && !leaving;
+    // The bar rises in when it comes back (a new chat, the Compare start),
+    // never on the first paint, where it is simply there (Apple-Audit B1).
+    if (wasHidden && !bar.hidden) revealBar(bar);
+    bar.dataset.docked = String(!start && !leaving);
     window.App.attachments?.syncComposerPlacement?.();
     bar.dataset.runMode = mode;
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
@@ -348,16 +362,26 @@
       const reasoningButton = document.getElementById(buttonId);
       if (!reasoningButton) continue;
       const effort = document.getElementById("agentReasoningEffort");
-      reasoningButton.disabled = beta && (!effort || effort.disabled || effort.dataset.available !== "true");
+      // While the model list loads, Reasoning keeps its look and opens the
+      // chip's menu; it is dimmed only for a model without it or a run.
+      const loading = !["ready", "failed"].includes(document.getElementById("agentModelDropdown")?.dataset.catalog);
+      reasoningButton.disabled = beta && !loading && (!effort || effort.disabled || effort.dataset.available !== "true");
       reasoningButton.setAttribute("role", beta ? "button" : "switch");
       reasoningButton.setAttribute("aria-checked", String(reasoningOn));
       reasoningButton.title = `Reasoning ${reasoningOn ? "on" : "off"} · Models think longer before they answer`;
-      document.getElementById(stateId).textContent = reasoningOn ? "On" : "Off";
+      // One write, and only of a change: the label is in the first frame
+      // already (app-bootstrap.js).
+      const state = document.getElementById(stateId);
+      // Until agent-chat.js has drawn the levels, the first frame's word
+      // (app-bootstrap.js, data-seeded) stays.
+      if (effort?.dataset.options) delete state.dataset.seeded;
+      const level = state.dataset.seeded ? state.textContent : effort?.selectedOptions[0]?.textContent;
+      const word = beta ? level || "Auto" : reasoningOn ? "On" : "Off";
+      if (state.textContent !== word) state.textContent = word;
       if (beta) {
         reasoningButton.removeAttribute("aria-checked");
         reasoningButton.setAttribute("aria-haspopup", "listbox");
         reasoningButton.title = reasoningButton.disabled ? "Reasoning is unavailable or locked during this run" : "Choose reasoning for your next chat message";
-        document.getElementById(stateId).textContent = effort?.selectedOptions[0]?.textContent || "Auto";
       } else reasoningButton.removeAttribute("aria-haspopup");
     }
     const attachButton = document.getElementById("composerAttachButton");
@@ -370,10 +394,22 @@
       return window.App.getModelOptionLabel(select?.selectedOptions[0]) || pref.label;
     });
     const key = JSON.stringify(models.map((pref, i) => [pref.key, labels[i]]));
+    const providers = models.map(pref => pref.provider || pref.key).join(",");
+    // The same families keep their marks (the first frame drew them,
+    // app-bootstrap.js); only a model's name in the tooltip changes.
+    if (icons.dataset.models !== key && icons.dataset.providers === providers
+      && icons.children.length === models.length) {
+      icons.querySelectorAll(".composer-model-icon").forEach((mark, i) => {
+        mark.title = `${models[i].label} · ${labels[i]}`;
+        mark.setAttribute("aria-label", mark.title);
+      });
+      icons.dataset.models = key;
+    }
     if (icons.dataset.models !== key) {
       icons.replaceChildren(...models.map((pref, i) => {
         const mark = document.createElement("span");
         mark.className = "composer-model-icon";
+        mark.dataset.provider = pref.provider;
         mark.title = `${pref.label} · ${labels[i]}`;
         mark.setAttribute("role", "img");
         mark.setAttribute("aria-label", mark.title);
@@ -390,6 +426,7 @@
         return mark;
       }));
       icons.dataset.models = key;
+      icons.dataset.providers = providers;
     }
     const status = document.getElementById("composerComparisonStatus");
     status.hidden = !summary;
@@ -400,6 +437,12 @@
       : "";
     status.title = status.textContent;
     status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";
+  }
+
+  function revealBar(bar) {
+    // display:none until now, so the animation starts with the class.
+    bar.classList.add("is-revealing");
+    bar.addEventListener("animationend", () => bar.classList.remove("is-revealing"), { once: true });
   }
 
   function updateAgentModeUI() {

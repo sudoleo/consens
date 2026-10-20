@@ -47,12 +47,20 @@ describe("first paint", () => {
     expect(document.getElementById("questionInput").placeholder).toBe("Ask anything, or paste an AI answer to check it");
   });
 
+  it("starts a restored session in Agent even before this browser saw its access (Apple-Audit B4)", () => {
+    // Agent is open to every account and the default mode.
+    const { document } = paint({ storage: { id_token: "cached-token" } });
+    expect(document.getElementById("questionInput").placeholder).toBe("Ask anything, or paste an AI answer to check it");
+    expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
+  });
+
   it("starts a guest with the words of a new chat and a restoring Consensus session with the template's", () => {
     // Guests type and sign in when they send (composer-invite.js).
     const guest = paint().document;
     expect(guest.getElementById("questionInput").placeholder).toBe("Ask anything, or paste an AI answer to check it");
     expect(guest.body.classList.contains("is-guest")).toBe(true);
-    const restoring = paint({ storage: { id_token: "cached-token" } }).document;
+    // An account this browser saw without Agent access.
+    const restoring = paint({ storage: { id_token: "cached-token", agentShellExpected: "0" } }).document;
     expect(restoring.getElementById("questionInput").placeholder).toBe("Enter your question");
     expect(restoring.body.classList.contains("is-guest")).toBe(false);
   });

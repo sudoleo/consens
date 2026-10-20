@@ -131,6 +131,14 @@
 
   function animateToggle(applyState, collapsing) {
     const box = composerBox();
+    // The step out of (or back to) the start screen animates the box itself
+    // (app-core.js glideComposer); a second height animation here would pull
+    // against it.
+    if (document.body.classList.contains("composer-gliding")) {
+      // The glide measures the field itself, once, before its first frame.
+      applyState();
+      return;
+    }
     if (!box || reducedMotion.matches) {
       applyState();
       syncFieldHeight();
@@ -325,6 +333,9 @@
     wasStart = nowStart;
     if (nowStart) expand();
     else collapse();
+    // The glide between both (app-core.js) sizes the field before its first
+    // frame; measuring here as well forced the new layout twice.
+    if (document.body.classList.contains("composer-gliding")) return;
     // Die Hero-Grenze ist zugleich eine Feldhoehen-Grenze: auf dem Desktop
     // faellt die min-height des Feldes hier von 52 auf 34 px, ohne dass eine
     // der beiden Bewegungen oben laeuft. Der Autosizer haelt sonst die
@@ -347,9 +358,11 @@
     isStartScreen: isStartScreen
   };
 
-  // "New comparison" und der Hero-Zustand starten immer offen.
+  // Der Hero-Zustand startet immer offen. "New chat" kommt ueber den
+  // Beobachter oben an (die Klasse is-hero), waehrend app-core.js den Weg
+  // zurueck gleiten laesst; ein eigener Klick-Listener lief vorher und
+  // animierte die Hoehe gegen dieses Gleiten (Apple-Audit C2).
   window.addEventListener("pageshow", function () {
     if (isStartScreen()) expand();
   });
-  document.getElementById("newRunButton")?.addEventListener("click", expand);
 })();

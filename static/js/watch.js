@@ -981,7 +981,7 @@
     });
     // A question is one line; Enter moves on, Shift+Enter still breaks.
     input.addEventListener("keydown", event => {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      if (event.key !== "Enter" || event.shiftKey || window.App.isComposingKey?.(event) || event.isComposing) return;
       event.preventDefault();
       if (!next.disabled) next.click();
     });

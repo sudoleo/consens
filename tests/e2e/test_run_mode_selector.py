@@ -106,7 +106,7 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         page.evaluate("App.composer.collapse({force: true})")
         expect(page.locator("#attachTrigger")).to_be_visible()
         page.evaluate("App.composer.expand()")
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
 
         # (+) keeps its place whichever mode is chosen.
         def lead():
@@ -208,15 +208,30 @@ def test_stored_agent_choice_waits_for_access_instead_of_sending_consensus(brows
         context.close()
 
 
-def test_failed_status_check_releases_the_agent_wait(browser, phase4_server):
+def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser, phase4_server):
+    """Apple-Audit B8: a status check that fails for a moment (5xx, network)
+    does not swap Agent for Consensus; it is said in the composer and asked
+    again. Only a refusal (4xx) settles the account without Agent."""
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
         init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
     try:
-        page.route("**/user_status", lambda route: route.fulfill(status=503, body="{}"))
+        answers = [503]
+        page.route("**/user_status", lambda route: route.fulfill(status=answers[0], body="{}"))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.wait_for_function("() => window.App.agentAccessCheck?.failed === true")
+        assert page.evaluate("App.agentChat.modeState().pending") is True
+        assert page.evaluate("App.agentChat.looksAgent()") is True
+        expect(page.locator("#agentComposerMessage")).to_have_text("Your account could not be reached. Trying again…")
+        # The send waits: nothing goes out as Consensus unseen.
+        page.locator("#questionInput").fill("A question")
+        expect(page.locator("#sendButton")).to_be_disabled()
+        # A refusal is an answer: Agent is not available for this session.
+        answers[0] = 403
+        page.locator("#agentComposerAction").click()
         page.wait_for_function("() => window.App.agentAccess?.uid === window.auth?.currentUser?.uid")
         assert page.evaluate("App.agentChat.modeState().pending") is False
         assert page.evaluate("App.runMode.effective()") == "consensus"
         expect(page.locator("#runModeSelect")).to_have_value("consensus")
+        expect(page.locator("#agentComposerNotice")).to_be_hidden()
     finally:
         context.close()

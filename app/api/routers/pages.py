@@ -556,7 +556,17 @@ def read_root(request: Request):
         for model in cfg.ALLOWED_CONSENSUS_MODELS
     ]
 
+    # The chat model's name for the composer's first frame, before the
+    # model list (/agent/models) has loaded (Apple-Audit B1). The same name
+    # rule as the catalog's default, without reading it.
+    try:
+        from app.services.llm.agent_client import agent_model_label
+        agent_default_label = agent_model_label()
+    except Exception:
+        agent_default_label = ""
+
     response = templates.TemplateResponse(request=request, name="index.html", context={
+        "agent_default_label": agent_default_label,
         "limits": cfg.get_limits_config(),
         "models": models,
         "model_families": model_families,

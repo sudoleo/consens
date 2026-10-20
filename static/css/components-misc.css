@@ -302,17 +302,31 @@
    control in the composer and the (disabled) send circle steps aside. Once
    the guest types, the demo leaves the slot and Send is back where it always
    is. Taken out of the flow (not just faded) so nothing holds empty space. */
-.chat-input-container.has-question-input .demo-chip,
+.chat-input-container.has-question-input .demo-chip:not(.is-leaving),
+.chat-input-container:has(> #questionInput:not(:placeholder-shown)) .demo-chip:not(.is-leaving),
 .demo-chip[hidden] {
   display: none;
 }
 
 /* Every state that hides the chip is listed here, so Send only steps aside
    while the chip is really on screen: Agent hides it (agent-chat.css) and so
-   does the collapsed phone composer in a thread (composer.css). */
+   does the collapsed phone composer in a thread (composer.css). A question
+   already in the field (a draft from before the sign-in) keeps Send from the
+   first frame. */
 body:not(.single-agent-active):is(:not(.composer-collapsed), .is-hero, .direct-comparison-preview)
-  .chat-input-container:not(.has-question-input) .input-actions-container:has(> .demo-chip:not([hidden])) > #sendButton[data-icon="send"] {
+  .chat-input-container:not(.has-question-input):has(> #questionInput:placeholder-shown) .input-actions-container:has(> .demo-chip:not([hidden], .is-leaving)) > #sendButton[data-icon="send"] {
   display: none;
+}
+
+/* Retired by the first keystroke (demo.js): out of the row, it fades where
+   it stood while Send fades in at the same end. */
+.chat-input-container > .input-actions-container:has(> .demo-chip.is-leaving) { position: relative; }
+.demo-chip.is-leaving {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  translate: 0 -50%;
+  pointer-events: none;
 }
 
 /* Der Knopf steht in derselben Zeile wie (+), Lauf-Schalter und Senden. Auf

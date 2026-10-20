@@ -189,7 +189,9 @@
       if (generation === loadGeneration && catalog) App.tokenBudget?.markStale?.();
     } finally { if (budgetRefresh === pending) budgetRefresh = null; }
   }
-  function renderControls(agent) {
+  // look: Agent's chip is on screen, also while access is still loading for
+  // a session expected to land in Agent (expectingAgent below).
+  function renderControls(look) {
     const uid = canUse() ? window.auth.currentUser.uid : "";
     if (uid !== catalogOwner || catalogUser !== window.auth?.currentUser || catalogAuthGeneration !== App.authState?.generation) {
       catalogOwner = uid;
@@ -204,9 +206,9 @@
     const host = document.getElementById("agentModelControls");
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
-    if (host) host.hidden = !agent;
+    if (host) host.hidden = !look;
     App.sidebarQuota?.sync();
-    if (!agent || !select || !effort) {
+    if (!look || !select || !effort) {
       // Outside Agent the comparison chip is the Consensus/Compare chip again.
       App.linkModelPicker?.(select, null);
       if (select) App.collapseExpandedModelPicker?.(select);
@@ -222,7 +224,12 @@
       // Historical settings stay frozen; only the next message changes.
       repairSelection(previous, source, current);
     }
-    const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : "Loading models…" }];
+    // While the list loads, the chip keeps the name it had when the page was
+    // left, else the default model's (app-bootstrap.js App.firstFrame): a
+    // "Loading models…" in between was one of five faces of the composer in
+    // its first second (Apple-Audit B1).
+    const waiting = App.firstFrame?.agentModel?.() || "Loading models…";
+    const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : waiting }];
     const signature = JSON.stringify([options, options.map(locked)]);
     if (select.dataset.options !== signature) {
       const groups = new Map();
@@ -257,14 +264,20 @@
     }
     select.value = ready ? current.model_id || catalog.default_model_id : "";
     select.disabled = !ready || running || !catalog.models.some(selectable);
+    // Whether the chip's words come from the model list (app-bootstrap.js
+    // remembers only those for the next first frame; agent-mode.js does not
+    // dim Reasoning while they load).
+    select.dataset.catalog = ready ? "ready" : catalogStatus;
     const model = catalog?.models.find(item => item.id === select.value);
     const efforts = visibleEfforts(model);
-    const effortSignature = JSON.stringify([model?.id, efforts, efforts.map(effortLocked)]);
+    const waitingEffort = ready ? "" : App.firstFrame?.agentEffort?.() || "";
+    const effortSignature = JSON.stringify([model?.id, efforts, efforts.map(effortLocked), waitingEffort]);
     if (effort.dataset.options !== effortSignature) {
       effort.replaceChildren(...efforts.map(value => {
         const option = document.createElement("option");
         option.value = value;
-        const [label, description] = effortCopy[value] || [value, "Reasoning effort"];
+        const [copyLabel, description] = effortCopy[value] || [value, "Reasoning effort"];
+        const label = waitingEffort || copyLabel;
         option.textContent = label;
         option.dataset.modelLabel = label;
         option.dataset.description = description;
@@ -352,6 +365,23 @@
   function modeState() {
     return { family: chatFamily(), canUse: canUse(), pending: accessPending() };
   }
+  // Agent's look before its access is known (Apple-Audit B1, B4): a session
+  // app-bootstrap.js expects in Agent (html.agent-shell-expected) keeps
+  // Agent's composer in a new chat instead of Consensus's for a moment. A
+  // look only: nothing is sent until access is known (app-init.js waits).
+  function expectingAgent() {
+    return !chatFamily() && document.documentElement.classList.contains("agent-shell-expected");
+  }
+  function looksAgent() {
+    return selectedMode() === "agent" || expectingAgent();
+  }
+  // While access is unknown only a failed status check speaks (firebase.js
+  // asks again by itself, Apple-Audit B8); a short wait stays quiet.
+  function accessBlocker() {
+    const check = App.agentAccessCheck;
+    if (!check?.failed || check.uid !== window.auth?.currentUser?.uid) return null;
+    return { message: "Your account could not be reached. Trying again…", action: "status-retry", label: "Try now" };
+  }
   function selectedMode() {
     return (App.runMode?.effective?.() === "agent") ? "agent" : (chatFamily() || "consensus");
   }
@@ -360,6 +390,7 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const picked = catalogStatus === 'ready' ? selection() : null;
     return JSON.stringify([selectedMode(), App.runMode?.preference?.(), canUse(), window.auth?.currentUser?.uid || '', App.authState?.generation,
+      expectingAgent(), App.agentAccessCheck?.attempt,
       catalogStatus, catalogOwner, loadGeneration, catalog?.models?.length, picked?.model_id, picked?.reasoning_effort,
       context?.runId, context?.status, registry.isExecuting(context?.runId),
       context?.metadata.recovering, context?.metadata.recoveryState, context?.metadata.recoverable, context?.metadata.requestSent,
@@ -394,39 +425,39 @@
     // However the demo ends, its model icons and panel go with it.
     if (!demoView) App.agentDelegation?.demo?.(null);
     const agent = selectedMode() === "agent";
-    const comparisonPicker = document.getElementById("consensusModelDropdown");
-    if (comparisonPicker) {
-      comparisonPicker.dataset.comparisonOnly = String(agent);
-      comparisonPicker.setAttribute("aria-label", agent ? "Comparison models" : "Models and consensus engine");
-      // Agent shows one chip: the comparison models live in the Agent menu.
-      const chip = comparisonPicker.closest(".consensus-model");
-      if (chip) chip.hidden = agent;
-    }
-    renderControls(agent);
-    if (agent) resumePending();
-    const modeChanged = document.body.classList.contains("single-agent-active") !== (agent || demoView);
-    document.body.classList.toggle("single-agent-active", agent || demoView);
-    document.body.classList.toggle("agent-demo-active", demoView);
-    // First-paint hint for app-bootstrap.js, written once access is known.
+    // First-paint hint for app-bootstrap.js, written once access is known:
+    // whether this browser's account may use Agent at all (the mode of a new
+    // chat follows from it and the account's choice).
     const authState = window.__consensioAuthState;
     const accessKnown = Boolean(App.agentAccess?.uid && App.agentAccess.uid === window.auth?.currentUser?.uid);
-    if (accessKnown) { try { localStorage.setItem("agentShellExpected", agent ? "1" : "0"); } catch (_) {} }
+    if (accessKnown) { try { localStorage.setItem("agentShellExpected", App.agentAccess.allowed ? "1" : "0"); } catch (_) {} }
     if (agent || accessKnown || (authState?.known && !authState.uid)) document.documentElement.classList.remove("agent-shell-expected");
-    // Until access is known, a reload that ended in Agent keeps Agent's words
-    // (seeded before the first paint in app-bootstrap.js).
-    const wording = agent || document.documentElement.classList.contains("agent-shell-expected");
+    // A sign-in on this page (no reload in between) expects Agent the same
+    // way until its access is known (app-bootstrap.js App.expectsAgent).
+    else if (accessPending() && App.expectsAgent?.()) document.documentElement.classList.add("agent-shell-expected");
+    // Agent's look (chip, Reasoning, no demo, its words) stands from the first
+    // frame for a session expected in Agent and stays until access is known.
+    const look = agent || expectingAgent();
+    const comparisonPicker = document.getElementById("consensusModelDropdown");
+    if (comparisonPicker) {
+      comparisonPicker.dataset.comparisonOnly = String(look);
+      comparisonPicker.setAttribute("aria-label", look ? "Comparison models" : "Models and consensus engine");
+      // Agent shows one chip: the comparison models live in the Agent menu.
+      const chip = comparisonPicker.closest(".consensus-model");
+      if (chip) chip.hidden = look;
+    }
+    renderControls(look);
+    if (agent) resumePending();
+    const modeChanged = document.body.classList.contains("single-agent-active") !== (look || demoView);
+    document.body.classList.toggle("single-agent-active", look || demoView);
+    document.body.classList.toggle("agent-demo-active", demoView);
+    const wording = look;
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
-    // Only the label follows the mode; the icon and the switch's thumb stay.
-    const chatTabLabel = document.querySelector("#viewSwitchConsensus > span");
-    if (chatTabLabel) chatTabLabel.textContent = wording ? "Chat" : "Consensus";
+    // The switch says "Chat" and the sidebar "New chat" in every mode and for
+    // guests (Max, Apple-Audit H3): the words no longer change once the mode
+    // is known, so the pill keeps its width (B10).
     const greeting = document.querySelector(".hero-greeting");
-    const newChat = document.getElementById("newRunButton");
-    if (newChat) {
-      const text = newChat.querySelector("span");
-      if (text) text.textContent = wording ? "New chat" : "New comparison";
-      newChat.title = wording ? "Start a new chat" : "Start a new comparison";
-    }
     if (greeting) {
       if (!greeting.dataset.consensusGreeting) greeting.dataset.consensusGreeting = greeting.textContent;
       greeting.textContent = wording ? "What can I help you with?" : greeting.dataset.consensusGreeting;
@@ -993,6 +1024,7 @@
     else if (action === 'google-open') App.agentGoogle?.open?.();
     else if (action === 'reload') { catalogStatus = 'idle'; render(); }
     else if (action === 'retry') retryFailed();
+    else if (action === 'status-retry') App.retryAccountStatus?.();
     window.updateQuestionInputAccess?.();
   }
   // Retry sends the failed message again, as a new turn in the same chat,
@@ -1039,7 +1071,7 @@
   function syncComposer() {
     const agent = selectedMode() === 'agent';
     const running = registry.isExecuting(registry.visible()?.runId);
-    const blocker = agent && !running ? sendBlocker() : null;
+    const blocker = running ? null : agent ? sendBlocker() : expectingAgent() ? accessBlocker() : null;
     const notice = document.getElementById('agentComposerNotice');
     const message = document.getElementById('agentComposerMessage');
     const action = document.getElementById('agentComposerAction');
@@ -1064,10 +1096,9 @@
     if (blocker) descriptions.add('agentComposerMessage');
     if (descriptions.size) input.setAttribute('aria-describedby', [...descriptions].join(' '));
     else input.removeAttribute('aria-describedby');
-    // Until access is known, a reload that ended in Agent keeps Agent's words
+    // Until access is known, a session expected in Agent keeps Agent's words
     // (seeded before the first paint in app-bootstrap.js), as the greeting does.
-    const wording = agent || document.documentElement.classList.contains('agent-shell-expected');
-    if (!wording || window.userCanAskQuestions?.() === false) return;
+    if (!looksAgent() || window.userCanAskQuestions?.() === false) return;
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     // A new chat names the one thing nobody would guess: a pasted AI answer
     // gets checked (the Agent decides; there is no extra mode or button).
@@ -1586,39 +1617,50 @@
     if (basis && (!basis.chatId || basis.continuationUnavailable)) {
       App.showPopup?.("Reopen this saved chat before continuing."); return;
     }
-    let context;
-    try {
-      context = registry.create({
-        question, mode: "Agent", basis, followup: Boolean(basis),
-        historyTurns: [...(basis?.historyTurns || []), ...(basis?.currentTurn ? [basis.currentTurn] : [])],
-        attachments: retry ? [] : window.getAttachmentsPayload?.() || [],
-        attachmentMeta: retry ? retry.attachmentMeta : App.attachments?.messageMeta?.() || [],
-        requestIdentity: recovery?.requestIdentity,
-        bookmarkId: retry?.bookmarkId || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
-        bookmarkTitle: basis?.title || question,
-        config: { executionMode: "agent", agentMode: true, autoConsensus: false,
-          deepSearch: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
-          agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
-          googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
-          googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
-        metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
-          ...(retry ? { fileIds: retry.fileIds } : {}),
-          agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
-        usage: { status: "simulation", key: null },
-      });
-    } catch (error) { App.showPopup?.(error.message); return; }
-    if (retry?.runId) {
-      // The new run takes over the failed run's sidebar row.
-      const failed = registry.get(retry.runId);
-      if (failed) failed.bookmark.uiReady = true;
-      document.querySelector(`.bookmark.run-entry[data-run-id="${cssId(retry.runId)}"]`)?.remove();
-    }
-    if (context.config.googleDataConsent) App.agentGoogle?.resetConsent();
-    context.controllers.query = new AbortController();
-    const signal = context.controllers.query.signal;
-    context.consensus.status = "pending";
-    context.cancelHook = reason => cancelRun(context, reason);
-    registry.setStatus(context.runId, "running");
+    let context, signal;
+    let refused = null;
+    // The run is created and started as one change: the registry projects it
+    // once (run-registry.js batch). Two projections in this click read each
+    // other's half-written layout and held the first frame back
+    // (Apple-Audit D3).
+    const begin = () => {
+      try {
+        context = registry.create({
+          question, mode: "Agent", basis, followup: Boolean(basis),
+          historyTurns: [...(basis?.historyTurns || []), ...(basis?.currentTurn ? [basis.currentTurn] : [])],
+          attachments: retry ? [] : window.getAttachmentsPayload?.() || [],
+          attachmentMeta: retry ? retry.attachmentMeta : App.attachments?.messageMeta?.() || [],
+          requestIdentity: recovery?.requestIdentity,
+          bookmarkId: retry?.bookmarkId || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
+          bookmarkTitle: basis?.title || question,
+          config: { executionMode: "agent", agentMode: true, autoConsensus: false,
+            deepSearch: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
+            agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
+            googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
+            googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
+          metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
+            ...(retry ? { fileIds: retry.fileIds } : {}),
+            agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
+          usage: { status: "simulation", key: null },
+        });
+      } catch (error) { refused = error; return; }
+      if (retry?.runId) {
+        // The new run takes over the failed run's sidebar row.
+        const failed = registry.get(retry.runId);
+        if (failed) failed.bookmark.uiReady = true;
+        document.querySelector(`.bookmark.run-entry[data-run-id="${cssId(retry.runId)}"]`)?.remove();
+      }
+      if (context.config.googleDataConsent) App.agentGoogle?.resetConsent();
+      context.controllers.query = new AbortController();
+      signal = context.controllers.query.signal;
+      context.consensus.status = "pending";
+      context.cancelHook = reason => cancelRun(context, reason);
+      registry.setStatus(context.runId, "running");
+    };
+    if (registry.batch) registry.batch(begin); else begin();
+    if (refused) { App.showPopup?.(refused.message); return; }
+    // Emptied once the run is on screen: Send is already the stop button
+    // then, and the field's listeners leave it alone.
     if (!recovery && !retry) {
       App.clearQuestionDraft?.();
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
@@ -1683,6 +1725,8 @@
     }
   }
   App.agentChat = { canUse, modeState, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
+    // Agent's composer is on screen (also while its access is still loading).
+    looksAgent,
     // The settings card (agent-settings.js): the next message's pick, its labels, and applying one.
     pick: () => selection(), modelLabel, applyPick,
     render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,

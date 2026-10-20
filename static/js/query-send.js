@@ -759,6 +759,9 @@
   }
 
   window.sendQuestion = async function () {
+    // Where the composer stands, read before the send writes anything
+    // (app-core.js glideComposer).
+    window.App.anchorGlide?.();
     const visible = registry.visible();
     if (visible && registry.isExecuting(visible.runId)) {
       // The first rapid repeat is a duplicate gesture, not an intentional stop.
@@ -877,8 +880,12 @@
     if (button.dataset.icon !== state) {
       if (running && button.dataset.icon === "send") {
         // The question fans out: three arcs leave the button (shell.css).
-        button.classList.remove("is-launching");
-        void button.offsetWidth;
+        // A launch still on screen restarts (a reflow between); the usual
+        // first send needs none, so the click forces no style pass.
+        if (button.classList.contains("is-launching")) {
+          button.classList.remove("is-launching");
+          void button.offsetWidth;
+        }
         button.classList.add("is-launching");
         clearTimeout(button._launchTimer);
         button._launchTimer = setTimeout(() => button.classList.remove("is-launching"), 800);
@@ -894,6 +901,7 @@
       button.innerHTML = running ? STOP_ICON : SEND_ICON;
     }
     button.disabled = false;
+    button.setAttribute("aria-disabled", "false");
     button.classList.toggle("is-cancel-action", running);
     button.title = running ? "Cancel this run" : "Send question";
     button.setAttribute("aria-label", button.title);

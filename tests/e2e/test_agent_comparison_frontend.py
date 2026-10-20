@@ -40,8 +40,9 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         page.locator('#questionInput').click()
         page.locator('#questionInput').press('Control+End')
         page.locator('#questionInput').press('Enter')
-        # Mobile Enter remains the normal paragraph key.
-        draft = 'Keep this draft while I choose the models.' + ('\n' if width == 390 else '')
+        # With a keyboard Enter sends at every width (Apple-Audit E7); the send
+        # is blocked here, so the draft stays as it was.
+        draft = 'Keep this draft while I choose the models.'
         expect(page.locator('#questionInput')).to_have_value(draft)
         # Also guard direct callers, independent of the disabled button.
         page.evaluate('() => App.agentChat.send()')
@@ -77,7 +78,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         _choose_mode(page, 'agent')
         page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
         page.evaluate('() => { window.exitHeroMode(); App.composer.collapse({force:true}); }')
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         expect(page.locator('#composerModeBar')).not_to_be_visible()
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         _snapshot(page, f'agent-single-line-{width}')
@@ -87,7 +88,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         # with a keyboard-sized viewport.
         page.set_viewport_size({"width": width, "height": 450})
         page.locator('#questionInput').tap()
-        page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         def box(selector):
             return page.locator(selector).evaluate('el => el.getBoundingClientRect().toJSON()')
         # One models chip (the chat model and how many it is compared with),
@@ -110,7 +111,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         _snapshot(page, f'agent-expanded-keyboard-{width}')
         page.set_viewport_size({"width": width, "height": 844})
         page.evaluate('() => App.composer.collapse({force:true})')
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         page.locator('#attachTrigger').tap()
         expect(page.locator('#attachMenu')).to_be_visible()
         assert page.evaluate("document.body.classList.contains('composer-collapsed')")
@@ -125,7 +126,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.locator('#agentComparisonMenuOption').tap()
         expect(page.locator('#attachMenu')).not_to_be_visible()
         expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         page.locator('.agent-model-picker .model-picker-custom-option').tap()
         expect(page.locator('.agent-model-picker .model-picker-menu')).to_contain_text('Comparison models')
         _snapshot(page, f'agent-toolbar-models-touch-{width}')
@@ -134,7 +135,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
             selected.first.tap()
         page.keyboard.press('Escape')
         page.evaluate('() => App.composer.collapse({force:true})')
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         expect(page.locator('#agentComposerNotice')).to_be_visible()
         expect(page.locator('#composerModeBar')).not_to_be_visible()
         _snapshot(page, f'agent-followup-selection-hint-{width}')
@@ -144,12 +145,12 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('#agentComposerNotice')).not_to_be_visible()
         page.keyboard.press('Escape')
         page.evaluate('() => App.composer.collapse({force:true})')
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         page.locator('#attachTrigger').tap()
         page.locator('#agentReasoningMenuOption').tap()
         menu = page.locator('.agent-model-picker .model-picker-menu')
         expect(menu).to_be_visible()
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         bounds = menu.bounding_box()
         assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
         assert bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= 844
@@ -273,7 +274,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.locator("#sendButton").click()
         expect(page.locator(".agent-review-status")).to_be_hidden()
         expect(page.locator('#composerModeBar')).not_to_be_visible()
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         expect(page.locator('#attachTrigger')).to_be_visible()
         assert 'check_sources' not in requests[0]

@@ -428,7 +428,10 @@
         text: highlight.label ? `${highlight.label}: ${highlight.text}` : highlight.text });
     }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
-    const previewHeight = view.preview.getBoundingClientRect().height;
+    // A hidden or still empty preview is 0 tall without asking the layout (a
+    // new run's first render happens inside the click on Send, Apple-Audit D3).
+    const previewHeight = view.preview.hidden || !view.preview.childElementCount
+      ? 0 : view.preview.getBoundingClientRect().height;
     // Like ChatGPT/Claude, the progress lines give way the moment the answer
     // starts: at that point nothing stands below them yet. Kept until the
     // run ended, their collapse pulled the finished answer up under the eye.

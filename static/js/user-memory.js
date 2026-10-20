@@ -469,7 +469,7 @@
         input.maxLength = itemInput?.maxLength > 0 ? itemInput.maxLength : 300;
         input.setAttribute("aria-label", "Edit memory");
         input.addEventListener("keydown", event => {
-          if (event.key === "Enter") { event.preventDefault(); saveEdit(item, input.value); }
+          if (event.key === "Enter" && !window.App.isComposingKey?.(event)) { event.preventDefault(); saveEdit(item, input.value); }
           if (event.key === "Escape") { event.preventDefault(); state.editingId = null; renderItems(); }
         });
         row.append(input,

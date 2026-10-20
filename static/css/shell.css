@@ -1811,6 +1811,13 @@ body:not(.is-hero) #verifyBanner {
   order: 0;
 }
 
+/* On the start screen it stands under the composer (it follows it in the
+   DOM) and moves with the composer's shift (components-input.css), so the
+   field never moves when it appears (Apple-Audit B5). */
+body.is-hero #verifyBanner {
+  transform: translateY(var(--hero-shift, 0px));
+}
+
 .verify-banner-icon {
   display: inline-flex;
   flex: none;
@@ -2754,17 +2761,18 @@ body:not(.is-hero) .input-section::before {
 /* ---- C) Handy mit offener Tastatur ----------------------------------------
    Safari auf iOS laesst das Layout-Viewport unter der Tastatur stehen; ein
    bottom: 0 meint dort den Rand HINTER der Tastatur. composer-keyboard.js
-   misst die Unterkante des sichtbaren Bereichs (--keyboard-edge), und der
-   Composer haengt mit seiner Unterkante daran — wie hoch er gerade ist
-   (eingeklappt, aufgeklappt, mehrzeilig), regelt translateY(-100%) ohne
-   eigene Messung. Der Hinweissatz weicht, solange getippt wird: jede Zeile
-   ueber der Tastatur gehoert der Antwort. */
+   misst, wie weit die Unterkante des sichtbaren Bereichs darueber liegt
+   (--keyboard-lift am Composer), und der Composer wird um genau so viel
+   angehoben — wie hoch er gerade ist (eingeklappt, aufgeklappt,
+   mehrzeilig), spielt dabei keine Rolle. Der Hinweissatz weicht, solange
+   getippt wird: jede Zeile ueber der Tastatur gehoert der Antwort. */
 @media (max-width: 1099px) {
+  /* Still on the layout viewport's bottom, raised to the keyboard's edge by
+     a transform (composer-keyboard.js writes --keyboard-lift on this box):
+     Safari panning the page moves only this, no layout (Apple-Audit D9). */
   body.keyboard-open:not(.is-hero) .input-section {
-    top: var(--keyboard-edge, auto);
-    bottom: auto;
     padding-bottom: 6px;
-    transform: translate(-50%, -100%);
+    transform: translate(-50%, calc(-1 * var(--keyboard-lift, 0px)));
   }
 
   body.keyboard-open:not(.is-hero) .app-footer {
@@ -2775,6 +2783,18 @@ body:not(.is-hero) .input-section::before {
      Tastaturkante darf nicht als Gleiten mitlaufen. */
   body.keyboard-open.composer-animating:not(.is-hero) .input-section {
     transition:
+      height var(--dur-state) var(--ease-out),
+      padding-top var(--dur-state) var(--ease-out),
+      padding-bottom var(--dur-state) var(--ease-out);
+  }
+  /* Up and down with the keyboard itself, on iOS's keyboard curve, when the
+     module moves it ahead of Safari's late report (Apple-Audit F9). Only
+     then: following Safari's panning stays immediate. */
+  body.keyboard-moving:not(.is-hero) .input-section,
+  body.keyboard-moving.composer-animating:not(.is-hero) .input-section,
+  body.keyboard-moving.keyboard-open.composer-animating:not(.is-hero) .input-section {
+    transition:
+      transform 280ms cubic-bezier(.38, .7, .125, 1),
       height var(--dur-state) var(--ease-out),
       padding-top var(--dur-state) var(--ease-out),
       padding-bottom var(--dur-state) var(--ease-out);
@@ -4306,7 +4326,9 @@ body .theme-toggle:is(:hover, :focus-visible) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.composer-mode-bar:not([hidden]) {
+/* Rises in when it comes back (agent-mode.js revealBar: a new chat, the
+   Compare start); on the first paint it is simply there (Apple-Audit B1). */
+.composer-mode-bar.is-revealing:not([hidden]) {
   animation: composer-mode-reveal 260ms cubic-bezier(.22, 1, .36, 1) both;
 }
 @keyframes composer-mode-reveal {
@@ -4314,9 +4336,20 @@ body .theme-toggle:is(:hover, :focus-visible) {
   to { opacity: 1; transform: translateY(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .composer-mode-bar:not([hidden]) { animation: none; }
+  .composer-mode-bar.is-revealing:not([hidden]) { animation: none; }
 }
 .composer-mode-bar[hidden], .composer-mode-bar [hidden], .answer-reader-header[hidden] { display: none; }
+/* Leaving the start screen (app-core.js glideComposer): the bar fades under
+   the field for a moment, out of the block's flow, so the block takes its
+   thread height at once and the field's way is one movement (Apple-Audit C2). */
+.input-section > .composer-mode-bar.is-leaving {
+  position: absolute;
+  pointer-events: none;
+  animation: composer-mode-leave 150ms var(--ease-in) forwards;
+}
+@keyframes composer-mode-leave {
+  to { opacity: 0; transform: translateY(-4px); }
+}
 @media (max-width: 480px) {
   .composer-mode-bar { padding: 0 8px; gap: 8px; font-size: var(--font-size-xs); }
   .composer-mode-controls { gap: 6px; }
@@ -4480,13 +4513,11 @@ body .theme-toggle:is(:hover, :focus-visible) {
     pointer-events: none;
   }
 
-  .app-mobile-header .view-switch {
-    position: static;
-    order: 2;
-    margin-inline: auto;
-    transform: none;
-    transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-  }
+  /* On a phone the switch lives in the menu (mobile-header.js moves it
+     there). Until that module has run it is never drawn in the bar, where
+     it did not fit and showed a cut "Chat | Watche…" for the first second
+     (Apple-Audit B2). */
+  .app-mobile-header .view-switch { display: none; }
 
   .app-mobile-header .auth-top-actions {
     position: static;
@@ -4546,8 +4577,11 @@ body .theme-toggle:is(:hover, :focus-visible) {
   }
   .app-mobile-header .auth-top-actions { margin-inline-start: auto; }
   .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions { margin-inline-start: 0; }
+  /* Without an answer's actions a guest's right island is empty: gone from
+     the first frame, before mobile-header.js has moved the (hidden) actions
+     in, so the auth buttons never step aside by its gap (Apple-Audit B2). */
   .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions .mobile-new-run,
-  .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions:has(.consensus-footer-actions[hidden]) { display: none; }
+  .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions:not(:has(.consensus-footer-actions:not([hidden]))) { display: none; }
   .app-mobile-header .consensus-footer-actions { display: inline-flex; margin: 0; }
   .app-mobile-header .consensus-footer-actions[hidden] { display: none; }
   .app-mobile-header .consensus-copy-inline { gap: 0; flex-wrap: nowrap; }

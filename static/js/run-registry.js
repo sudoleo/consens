@@ -122,7 +122,27 @@
     window.dispatchEvent(new CustomEvent("consensio:run-registry-change", { detail }));
   }
 
+  // Several changes made together (a run created and started in one click)
+  // are projected once, at the end: each projection reads the layout its
+  // predecessor just wrote, and two of them in the click on Send held the
+  // first frame back (Apple-Audit D3). Events are still sent per change.
+  let batchDepth = 0;
+  let batchedRender = false;
+  function batch(changes) {
+    batchDepth += 1;
+    try {
+      return changes();
+    } finally {
+      batchDepth -= 1;
+      if (!batchDepth && batchedRender) {
+        batchedRender = false;
+        renderVisible();
+      }
+    }
+  }
+
   function renderVisible() {
+    if (batchDepth) { batchedRender = true; return; }
     if (typeof projector !== "function") return;
     projector(visibleRunId ? runs.get(visibleRunId) || null : null, {
       visibleRunId,
@@ -610,6 +630,7 @@
     claimStartAction,
     setProjector,
     renderVisible,
+    batch,
     snapshot
   });
 })();
