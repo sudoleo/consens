@@ -8,8 +8,10 @@
 .nav-menu { display: none; position: relative; }
 
 /* One breakpoint for both page families: where the menu mark appears, the
-   text links go. The mark sits at the outer edge, after the CTA. */
+   text links go. The mark sits at the outer edge, after the CTA. The page
+   grid narrows its gutter at the same width (public-tokens.css). */
 @media (max-width: 700px) {
+  :root { --page-gutter: 16px; }
   .nav-menu { display: block; order: 1; }
   .site-nav .nav-links { gap: 6px; }
   .site-nav .nav-links > a:not(.nav-cta) { display: none; }
@@ -67,10 +69,18 @@
 .nav-links .nav-menu .nav-menu-panel a:hover,
 .nav-links .nav-menu .nav-menu-panel a[aria-current="page"] { background: var(--raise); }
 
+/* In and out with the same short movement: public-nav.js holds the menu open
+   for the exit (.is-closing) and closes it on animationend. */
 @media (prefers-reduced-motion: no-preference) {
   .nav-menu[open] .nav-menu-panel { animation: nav-menu-in var(--dur-state) var(--ease-out); }
+  .nav-menu.is-closing .nav-menu-panel { animation: nav-menu-out var(--dur-state) var(--ease-in) forwards; }
+  .nav-menu[open].is-closing > summary line:nth-child(n) { transform: none; }
 }
 @keyframes nav-menu-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }
+}
+@keyframes nav-menu-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-4px); }
 }

@@ -35,6 +35,9 @@
   background: #fff;
 }
 .topics-row-image.is-article { object-fit: cover; }
+/* No white tile flashing in the dark theme while a picture loads, and a
+   picture on white a step softer once it is there (Apple-Audit I8). */
+.dark-mode .topics-row-image:not(.is-logo):not(.is-symbol) { background: var(--raise); filter: brightness(0.9); }
 .topics-row-image.is-logo { width: auto; max-width: 132px; height: 48px; background: none; border-radius: 0; }
 .topics-row-image.is-symbol {
   display: grid;

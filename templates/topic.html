@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include "partials/font_preload.html" %}
   <meta name="description" content="{{ meta_description }}">
   <meta name="robots" content="{{ robots_meta }}">
   <link rel="canonical" href="{{ canonical_url }}">
@@ -26,8 +27,6 @@
   {% include "partials/analytics.html" %}
 </head>
 <body>
-  {% set public_nav_cta_href = "/app" %}
-  {% set public_nav_cta_label = "Ask your own question" %}
   {% include "partials/public_nav.html" %}
 
   {#

@@ -206,17 +206,68 @@ def source_fingerprint() -> str:
             for sheet in sorted((STATIC_DIR / "css").glob("*.css"))
         )
         relatives = sorted(set(relatives))
+    return _inputs_digest(relatives)
+
+
+def _inputs_digest(relatives) -> str:
+    """``inputsDigest``/``sourceFingerprint`` of scripts/build_frontend.mjs:
+    path, NUL, LF-normalized text (vendor files byte for byte), NUL, per file."""
 
     digest = hashlib.sha256()
     for relative in relatives:
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
-        content = (ROOT / relative).read_bytes()
+        try:
+            content = (ROOT / relative).read_bytes()
+        except OSError:
+            content = b"\0missing\0"
         if not relative.startswith("static/vendor/"):
             content = content.replace(b"\r\n", b"\n")
         digest.update(content)
         digest.update(b"\0")
     return digest.hexdigest()[:_HASH_LENGTH]
+
+
+def _built_style_url(path: str) -> "str | None":
+    """The built bundle for a public stylesheet entry, while it is current.
+
+    landing.css and public-pages.css pull in public-tokens.css, which pulls in
+    typography.css: three round trips before the first paint, the last one
+    revalidated on every visit. ``npm run build`` folds each chain into one
+    hashed file (bundles.json ``styles``). The bundle is handed out only while
+    the sheets it was made from still hash to what the manifest recorded, so
+    an edit without a rebuild serves the live source instead of stale CSS.
+    """
+
+    if dev_mode() or not MANIFEST_FILE.exists():
+        return None
+    entry = path.lstrip("/")
+    name = next(
+        (style.get("name") for style in _load_bundles().get("styles", []) if style.get("entry") == entry),
+        None,
+    )
+    if not name:
+        return None
+    manifest = _memoize(
+        "manifest",
+        [MANIFEST_FILE],
+        lambda: json.loads(MANIFEST_FILE.read_text(encoding="utf-8")),
+    )
+    url = (manifest.get("styles") or {}).get(name)
+    record = (manifest.get("style_sources") or {}).get(name)
+    if not url or not isinstance(record, dict) or record.get("entry") != entry:
+        return None
+    inputs = record.get("inputs")
+    if not isinstance(inputs, list) or not all(isinstance(item, str) for item in inputs):
+        return None
+    digest = _memoize(
+        f"style-inputs:{name}",
+        [ROOT / item for item in inputs],
+        lambda: _inputs_digest(inputs),
+    )
+    if digest != record.get("hash") or not (ROOT / url.lstrip("/")).is_file():
+        return None
+    return url
 
 
 def build_is_stale() -> bool:
@@ -228,11 +279,39 @@ def build_is_stale() -> bool:
     return manifest.get("sources") != source_fingerprint()
 
 
+TYPOGRAPHY_FILE = STATIC_DIR / "css" / "typography.css"
+# The upright Latin part of Inter: every page sets its text in it. The name
+# carries the file's content hash (scripts/subset_inter_font.py).
+_LATIN_FONT = re.compile(
+    r"""url\(\s*['"]?\.\./(fonts/inter/InterVariable-latin\.[0-9a-f]{12}\.woff2)['"]?\s*\)"""
+)
+
+
+def font_preload_urls() -> list[str]:
+    """Fonts every page preloads in its ``<head>``, at the exact URL
+    typography.css resolves to (a different URL would download it twice).
+
+    Without the preload the request starts only after the stylesheet chain
+    has arrived and been parsed, so the first paint used the fallback face and
+    the headline re-wrapped when Inter came in (Apple-Audit B3).
+    """
+
+    def read() -> list[str]:
+        try:
+            css = TYPOGRAPHY_FILE.read_text(encoding="utf-8")
+        except OSError:
+            return []
+        return [f"/static/{match}" for match in dict.fromkeys(_LATIN_FONT.findall(css))]
+
+    return _memoize("font-preloads", [TYPOGRAPHY_FILE], read)
+
+
 def register_asset_globals(templates) -> None:
     """Expose the /app asset helpers to its Jinja2Templates instance."""
 
     templates.env.globals["asset_url"] = asset_url
     templates.env.globals["frontend_assets"] = frontend_assets
+    templates.env.globals["font_preload_urls"] = font_preload_urls
     from app.core.math_assets import register_math_globals
 
     register_math_globals(templates)
@@ -308,6 +387,10 @@ def asset_url(path: str) -> str:
     clean = path.split("?", 1)[0]
     if not clean.startswith("/static/"):
         return path
+    if clean.endswith(".css"):
+        built = _built_style_url(clean)
+        if built:
+            return built
     target = ROOT / clean.lstrip("/")
     if not target.is_file():
         return clean

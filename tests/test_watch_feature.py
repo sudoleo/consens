@@ -2364,12 +2364,18 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="shareQuestionMore"', share_html)
         self.assertIn('aria-controls="shareQuestion"', share_html)
         # Der Link startet versteckt und erscheint erst, wenn wirklich etwas
-        # abgeschnitten ist; ohne JS bleibt die Frage vollstaendig.
+        # abgeschnitten ist; ohne JS bleibt die Frage vollstaendig. Seit dem
+        # Apple-Audit (I2) kommt die Klammer schon vom Server, damit nichts
+        # nach dem ersten Bild zusammenklappt; die Klammer selbst gilt nur
+        # mit Skript, das gemeinsame Skript ist check-page.js.
+        check_js = Path("static/js/check-page.js").read_text(encoding="utf-8")
         self.assertIn('class="share-question-more" aria-expanded="false"', share_html)
-        self.assertIn('question.classList.add("is-clamped")', share_html)
-        self.assertIn("Collapse question", share_html)
+        self.assertIn('class="share-question is-clamped', share_html)
+        self.assertIn("asset_url('/static/js/check-page.js')", share_html)
+        self.assertIn("Collapse question", check_js)
         self.assertIn(".share-question.is-clamped", public_css)
         self.assertIn("-webkit-line-clamp: 3", public_css)
+        self.assertRegex(public_css, r"@media \(scripting: enabled\) \{\s*\.share-question\.is-clamped")
         self.assertIn(".wd-question a", watch_css)
         self.assertIn("-webkit-line-clamp: 3", watch_css.split(".wd-question a {", 1)[1].split("}", 1)[0])
 

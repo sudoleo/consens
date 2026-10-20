@@ -1249,6 +1249,48 @@ class ModerationAndCleanupTests(unittest.TestCase):
         self.assertFalse(second["is_watch"])
         self.assertEqual(second["sort_date"], "2026-06-01")
 
+    def test_hub_watch_rows_carry_the_state_their_page_leads_with(self):
+        """/questions said "39/100 · 5 models · Tracked" for Watches whose
+        pages said "Unchanged since ..." -- and all of them were paused
+        (Apple-Audit L2, L3). A Watch row now carries its page's headline."""
+        def point(day, score, run_id, **extra):
+            return {"run_id": run_id, "ts": datetime(2026, 9, day, tzinfo=timezone.utc),
+                    "agreement_score": score, "changed": False, "severity": "", **extra}
+
+        paused = self._make_share(
+            indexed=True, question="Paused watch?",
+            differences_data={"agreement": {"score": 39}, "models_compared": ["a"] * 5},
+            last_watch_run_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+        active = self._make_share(
+            indexed=True, question="Active watch?",
+            differences_data={"agreement": {"score": 64}},
+            last_watch_run_at=datetime(2026, 10, 15, tzinfo=timezone.utc),
+        )
+        watches = self.db.stores[snapshots.WATCHES_COLLECTION]
+        watches["w-paused"] = {
+            "share_id": paused, "status": "paused",
+            "created_at": datetime(2026, 9, 1, tzinfo=timezone.utc),
+            "last_run_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+            "history_points": [point(1, 70, "r1"), point(8, 71, "r2")],
+        }
+        watches["w-active"] = {
+            "share_id": active, "status": "active",
+            "created_at": datetime(2026, 9, 1, tzinfo=timezone.utc),
+            "last_run_at": datetime(2026, 10, 15, tzinfo=timezone.utc),
+            "history_points": [point(24, 64, "r3"), point(29, 66, "r4")],
+        }
+
+        rows = {entry["question"]: entry for entry in snapshots.list_hub_shares(db=self.db)}
+        self.assertEqual(rows["Paused watch?"]["watch"],
+                         {"tone": "paused", "headline": "Paused · last checked Oct 1", "active": False})
+        self.assertEqual(rows["Active watch?"]["watch"],
+                         {"tone": "steady", "headline": "Unchanged since Sep 24", "active": True})
+        # No score or model count from the first answer next to the state.
+        for row in rows.values():
+            self.assertIsNone(row["score"])
+            self.assertEqual((row["model_count"], row["contradiction_count"]), (0, 0))
+
     def test_list_related_shares_only_indexed_active_and_excludes_self(self):
         current = self._make_share(indexed=True,
                                    question="Wie funktioniert Photosynthese in Pflanzen?")
@@ -2008,12 +2050,33 @@ class SharePageRouteTests(unittest.TestCase):
         entries = [{
             "path": "/s/frage-eins-abc",
             "question": "Frage eins?",
+            "score": None,
+            "model_count": 0,
+            "contradiction_count": 0,
+            "is_watch": True,
+            "watch": {"tone": "steady", "headline": "Unchanged since Sep 24", "active": True},
+            "date_display": "Jul 2026",
+            "sort_date": "2026-07-02",
+        }, {
+            "path": "/s/frage-zwei-def",
+            "question": "Frage zwei?",
+            "score": None,
+            "model_count": 0,
+            "contradiction_count": 0,
+            "is_watch": True,
+            "watch": {"tone": "paused", "headline": "Paused · last checked Oct 1", "active": False},
+            "date_display": "Oct 2026",
+            "sort_date": "2026-10-01",
+        }, {
+            "path": "/s/frage-drei-ghi",
+            "question": "Frage drei?",
             "score": 82,
             "model_count": 5,
             "contradiction_count": 1,
-            "is_watch": True,
-            "date_display": "Jul 2026",
-            "sort_date": "2026-07-02",
+            "is_watch": False,
+            "watch": None,
+            "date_display": "Jun 2026",
+            "sort_date": "2026-06-02",
         }]
         with patch.object(share_router.snapshots, "list_hub_shares", return_value=entries):
             response = self.client.get("/questions")
@@ -2024,7 +2087,16 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn('content="index, follow"', body)
         self.assertIn('rel="canonical" href="https://www.consens.io/questions"', body)
         self.assertIn('"@type": "CollectionPage"', body)
+        # Only a Watch that is still checked counts as tracked, and a Watch
+        # row says what its page leads with instead of an old score
+        # (Apple-Audit L2, L3).
         self.assertIn("1 tracked over time", body)
+        self.assertNotIn("Tracked<", body)
+        self.assertIn("Unchanged since Sep 24", body)
+        self.assertIn("Paused · last checked Oct 1", body)
+        self.assertEqual(body.count('class="hub-score is-watch'), 2)
+        self.assertEqual(body.count('class="hub-score is-watch is-active"'), 1)
+        self.assertIn("82<small>/100</small>", body)
 
     def test_questions_hub_survives_backend_failure(self):
         with patch.object(share_router.snapshots, "list_hub_shares",

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include "partials/font_preload.html" %}
   <meta name="description" content="A reproducible MMLU-Pro snapshot: consens.io's consensus answer compared against six leading AI models on 314 expert-level, closed-book questions.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/benchmark">
@@ -110,7 +111,7 @@
               <span><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt="DeepSeek"></span>
               <span><img src="{{ asset_url('/static/icons/chat_icons/mistral.png') }}" alt="Mistral"></span>
             </div>
-            <p class="bench-mini-foot">The blue bar is the <b>consens.io consensus</b>, first on the questions where the models can't agree.</p>
+            <p class="bench-mini-foot">The highlighted bar is the <b>consens.io consensus</b>, first on the questions where the models can't agree.</p>
           </div>
         </div>
       </div>

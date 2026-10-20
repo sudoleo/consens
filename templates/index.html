@@ -55,7 +55,7 @@
   {# Same URL the stylesheet's Latin @font-face resolves to: the download
      starts with the HTML instead of after the CSS, so first paint usually has
      Inter. latin-ext and rest load only when a page contains their letters. #}
-  <link rel="preload" href="/static/fonts/inter/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin>
+  {% include "partials/font_preload.html" %}
   <link rel="stylesheet" href="{{ frontend.style }}">
   <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">

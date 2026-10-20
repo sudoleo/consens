@@ -120,13 +120,23 @@ body {
    Everything that used to be a bordered, gradient-filled, drop-shadowed card
    keeps its padding and radius and gives up its frame.
    -------------------------------------------------------------------------- */
-.legal-panel,
 .share-scoreboard,
 .share-related-item,
-.watch-history-latest,
-.hub-cta {
+.watch-history-latest {
   border: 0;
   background: var(--surface);
+}
+
+/* One material on every public page (Apple-Audit I14): a panel is a section
+   of the document, set apart by a hairline above it -- as on the Watch and
+   Topic pages -- not a grey box. About and the model guide stacked eight of
+   them, some with a dark rail, while the pages beside them were flat. */
+.legal-panel {
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  padding: 24px 0 26px;
 }
 
 /* --------------------------------------------------------------------------
@@ -141,7 +151,6 @@ body {
    same left edge as the question. Fills stay only where something really is
    an object: chips, toggles, buttons, inputs and the amber teaser rail.
    -------------------------------------------------------------------------- */
-.share-shell .legal-panel,
 .share-shell .share-scoreboard,
 .share-shell .watch-chart-scroll,
 .share-shell .watch-trajectory-scroll,
@@ -149,13 +158,6 @@ body {
   border: 0;
   border-radius: 0;
   background: transparent;
-}
-
-.share-shell .legal-panel {
-  /* Luft ueber und unter dem Inhalt, die Haarlinie sitzt in der Mitte des
-     Abstands zwischen zwei Abschnitten. */
-  padding: 24px 0 26px;
-  border-top: 1px solid var(--line-soft);
 }
 
 /* Die Positionskarte ist hier keine Karte in der Karte mehr: sie erbt die
@@ -180,13 +182,12 @@ body {
    also die Seitenfarbe statt eines eigenen Tons. */
 .share-shell .watch-trajectory th:first-child { background: var(--ground); }
 
-/* A notice is still a notice: it keeps a rail on its leading edge, which is
-   how this system flags something without drawing a coloured box. */
+/* A notice reads like every other section now: its heading says what it
+   is; the dark rail made it a box of its own kind (I14). */
 .notice {
-  border: 0;
-  border-left: 2px solid var(--ink-3);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  background: var(--surface);
+  border-left: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 /* Cards in a grid read as a flat list: a hairline above each entry instead of

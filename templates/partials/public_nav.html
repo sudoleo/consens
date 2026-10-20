@@ -1,7 +1,11 @@
 {% set public_path = request.url.path %}
+{#- One bar for every public page: the same links, the same single CTA
+    ("Open app" everywhere since 2026-10-20, Apple-Audit I14; a page may only
+    name its analytics event), and public-nav.js for the menu, the section you
+    are in and smooth scrolling that starts after arrival (I3, L1). -#}
 <nav class="site-nav lp-nav" aria-label="Primary">
   <a href="/" class="brand lp-brand" aria-label="consens.io home">
-    <img src="/static/favicon.png" alt="">
+    <img src="{{ asset_url('/static/favicon.png') }}" alt="" width="24" height="17">
     <span>consens.io</span>
   </a>
   <div class="nav-links lp-nav-links">
@@ -23,7 +27,8 @@
         <a href="/benchmark"{% if public_path == '/benchmark' %} aria-current="page"{% endif %}>Benchmark</a>
       </div>
     </details>
-    <a id="navCtaButton" href="{{ public_nav_cta_href | default('/app') }}"
-       class="nav-cta lp-nav-cta"{% if public_nav_event %} data-umami-event="{{ public_nav_event }}"{% endif %}>{{ public_nav_cta_label | default('Open app') }}</a>
+    <a id="navCtaButton" href="/app"
+       class="nav-cta lp-nav-cta"{% if public_nav_event %} data-umami-event="{{ public_nav_event }}"{% endif %}>Open app</a>
   </div>
 </nav>
+<script defer src="{{ asset_url('/static/js/public-nav.js') }}"></script>

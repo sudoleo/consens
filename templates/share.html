@@ -3,22 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include "partials/font_preload.html" %}
   <meta name="robots" content="{{ robots_meta }}">
   {% if is_private %}<meta name="referrer" content="no-referrer">{% endif %}
   <link rel="canonical" href="{{ canonical_url }}">
   <!-- Die Frage ist das Keyword und steht vorn: ein Präfix wie "Consensus
        Watch:" schiebt sie im SERP hinter den abgeschnittenen Rand. Dass die
        Seite nachgeprüft wird, trägt die Meta-Description. -->
-  <title>{{ question[:70] }} | consens.io</title>
+  <title>{{ question | clip_words(70) }} | consens.io</title>
   <meta name="description" content="{{ meta_description }}">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="{{ question[:70] }}">
+  <meta property="og:title" content="{{ question | clip_words(110) }}">
   <meta property="og:description" content="{{ meta_description }}">
   <meta property="og:url" content="{{ canonical_url }}">
-  {% set og_card_image = og_image if og_is_card else "" %}{% set og_card_alt = question[:120] %}
+  {% set og_card_image = og_image if og_is_card else "" %}{% set og_card_alt = question | clip_words(120) %}
   {% include "partials/og_card.html" %}
-  <meta name="twitter:title" content="{{ question[:70] }}">
+  <meta name="twitter:title" content="{{ question | clip_words(110) }}">
   <meta name="twitter:description" content="{{ meta_description }}">
   <script type="application/ld+json">{{ jsonld | safe }}</script>
 <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
@@ -41,19 +42,20 @@
   <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->
 </head>
 <body>
-  {% set public_nav_cta_href = "/app" %}
-  {% set public_nav_cta_label = "Ask your own question" %}
   {% set public_nav_event = "share_page_cta" %}
   {% include "partials/public_nav.html" %}
 
   <main class="page-shell share-shell" data-math-render>
     <header class="page-header share-header">
       <p class="eyebrow">Shared consensus{% if is_private %} · Private{% endif %}</p>
-      <!-- Lange Fragen klappen wie in /app (#threadAsk) auf drei Zeilen ein.
-           Ohne JS bleibt der volle Text sichtbar: die Klammer setzt erst das
-           Skript unten, das auch prüft, ob überhaupt etwas abgeschnitten ist. -->
-      <h1 id="shareQuestion" class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
-      <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
+      <!-- Lange Fragen kommen schon auf drei Zeilen eingeklappt an (nur mit
+           Skript, @media (scripting: enabled)); check-page.js zeigt den Link
+           auf der dritten Zeile, wenn wirklich etwas abgeschnitten ist. So
+           klappt nichts nach dem ersten Bild zusammen (Apple-Audit I2). -->
+      <div class="wp-question-wrap">
+        <h1 id="shareQuestion" class="share-question is-clamped{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
+        <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
+      </div>
       <div class="share-meta">
         {% if date_display %}<span>{{ date_display }}</span>{% endif %}
       </div>
@@ -170,11 +172,13 @@
       {% if sources %}
       <section class="legal-panel">
         <h2>Sources</h2>
-        <ol id="shareSources" class="share-sources">
+        {#- Long lists arrive folded, so the way back lands where the reader
+            was (Apple-Audit L11); one disclosure for every fold (L14). -#}
+        <ol id="shareSources" class="share-sources{% if sources | length > 8 %} is-collapsed{% endif %}">
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
             <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
-            {% if source.domain %}<img class="share-source-favicon" src="/api/topics/favicon?d={{ source.domain | urlencode }}" alt="" loading="lazy" width="18" height="18" referrerpolicy="no-referrer">{% endif %}
+            {% if source.domain %}<img class="share-source-favicon site-icon" src="/api/topics/favicon?d={{ source.domain | urlencode }}" alt="" loading="lazy" width="18" height="18" referrerpolicy="no-referrer">{% endif %}
             <span class="share-source-body">
               <a class="share-source-title" href="{{ source.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ source.title }}</a>
               {% if source.domain and source.domain != source.title %}<span class="share-source-domain">{{ source.domain }}</span>{% endif %}
@@ -183,7 +187,7 @@
           {% endfor %}
         </ol>
         {% if sources | length > 8 %}
-        <button type="button" id="shareSourcesToggle" class="share-sources-toggle" hidden>Show all {{ sources | length }} sources</button>
+        <button type="button" id="shareSourcesToggle" class="wp-disclosure-toggle share-sources-toggle" aria-expanded="false" aria-controls="shareSources">Show all {{ sources | length }} sources<svg class="wp-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg></button>
         {% endif %}
       </section>
       {% endif %}
@@ -254,6 +258,7 @@
 
   {% include "partials/public_footer.html" %}
 
+  <script defer src="{{ asset_url('/static/js/check-page.js') }}"></script>
   <script>
     // Consensus/Differences-Toggle: reine Client-Anzeige auf den Snapshot-
     // Daten im HTML – verursacht keinerlei Server- oder LLM-Calls.
@@ -289,97 +294,8 @@
       }
     })();
 
-    // Lange Fragen: auf drei Zeilen einklappen, wie #threadAsk in /app.
-    // Erst klammern, dann messen – ist nichts abgeschnitten, bleibt der
-    // Link versteckt und die Klammer wird wieder entfernt.
-    (function () {
-      const question = document.getElementById("shareQuestion");
-      const more = document.getElementById("shareQuestionMore");
-      if (!question || !more) return;
-
-      question.classList.add("is-clamped");
-      // Beide Hoehen vergleichen statt scrollHeight zu trauen: bei
-      // -webkit-line-clamp meldet scrollHeight auch dann ein paar Pixel
-      // mehr, wenn gar nichts abgeschnitten ist.
-      function measure() {
-        const clamped = question.getBoundingClientRect().height;
-        question.classList.remove("is-clamped");
-        const full = question.getBoundingClientRect().height;
-        const clipped = full - clamped > 4;
-        if (clipped) question.classList.add("is-clamped");
-        more.hidden = !clipped;
-      }
-      requestAnimationFrame(measure);
-      window.addEventListener("resize", function () {
-        if (more.getAttribute("aria-expanded") === "true") return;
-        question.classList.add("is-clamped");
-        requestAnimationFrame(measure);
-      });
-
-      more.addEventListener("click", function () {
-        const open = question.classList.toggle("is-clamped") === false;
-        more.setAttribute("aria-expanded", String(open));
-        more.textContent = open ? "Collapse question" : "Show full question";
-      });
-    })();
-
-    // Lange Quellenlisten: eingeklappt starten, "Show all" klappt auf.
-    // Anker-Sprünge aus Inline-Citations (#src-N) klappen automatisch auf.
-    (function () {
-      const list = document.getElementById("shareSources");
-      const toggle = document.getElementById("shareSourcesToggle");
-      if (!list || !toggle) return;
-      list.classList.add("is-collapsed");
-      toggle.hidden = false;
-
-      function expand() {
-        list.classList.remove("is-collapsed");
-        toggle.hidden = true;
-      }
-      toggle.addEventListener("click", expand);
-
-      function expandForHash() {
-        const hash = window.location.hash || "";
-        if (hash.indexOf("#src-") !== 0) return;
-        expand();
-        // Das Ziel war beim Klick evtl. noch versteckt – Scroll nachholen.
-        const target = document.getElementById(hash.slice(1));
-        if (target) target.scrollIntoView({ block: "center" });
-      }
-      window.addEventListener("hashchange", expandForHash);
-      expandForHash();
-    })();
-
-    // Favicons, die nicht laden, ausblenden – die Zeile sieht dann aus wie zuvor.
-    (function () {
-      document.querySelectorAll(".share-source-favicon").forEach(function (img) {
-        function fail() { img.remove(); }
-        img.addEventListener("error", fail);
-        if (img.complete && img.naturalWidth === 0) fail();
-      });
-    })();
-
-    // Inline-Citations bekommen das Favicon ihrer Quelle (gleiche URL = kein Extra-Request).
-    (function () {
-      document.querySelectorAll('.share-md a[href^="#src-"]').forEach(function (link) {
-        var target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
-        if (!target) return;
-        var srcImg = target.querySelector(".share-source-favicon");
-        var url = srcImg && srcImg.getAttribute("src");
-        if (!url) return;
-        var fav = document.createElement("img");
-        fav.className = "cite-favicon";
-        fav.setAttribute("src", url);
-        fav.setAttribute("alt", "");
-        fav.setAttribute("aria-hidden", "true");
-        fav.addEventListener("error", function () {
-          fav.remove();
-          link.classList.remove("has-favicon");
-        });
-        link.insertBefore(fav, link.firstChild);
-        link.classList.add("has-favicon");
-      });
-    })();
+    // Frage einklappen, Quellen falten, Favicons und #src-N-Sprünge: dasselbe
+    // Skript wie auf Watch- und Topic-Seiten (static/js/check-page.js).
 
     (function () {
       const toggle = document.getElementById("shareReportToggle");

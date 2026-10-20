@@ -33,8 +33,11 @@ _LINK_REL = "nofollow noopener noreferrer"
 
 # Läufe wie "[S1]", "[S1, S2]" oder "[1, 3]" (gleiches Muster wie im Frontend).
 SOURCE_RUN_RE = re.compile(r"\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\]", re.IGNORECASE)
+# The whole group of markers before the sentence end moves behind the point,
+# not only the last one: "Claim [S1][S2]." became "Claim [1].[2]" with the
+# point between the two (2026-10-20).
 _TERMINAL_SOURCE_ORDER_RE = re.compile(
-    r"[ \t]*(\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\])"
+    r"[ \t]*((?:\[(?:S?\d+)(?:\s*,\s*S?\d+)*\][ \t]*)*\[(?:S?\d+)(?:\s*,\s*S?\d+)*\])"
     r"([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$)",
     re.IGNORECASE,
 )
@@ -133,7 +136,10 @@ def _link_source_tags(md_text, labels, dropped=frozenset()):
 
     def replace_outside_code(segment):
         # Fussnoten am Satzende folgen dem Satzzeichen: `Aussage.[S1]`.
-        segment = _TERMINAL_SOURCE_ORDER_RE.sub(r"\3\1", segment)
+        # A "!" right before a link would turn it into Markdown image syntax.
+        segment = _TERMINAL_SOURCE_ORDER_RE.sub(
+            lambda match: re.sub(r"!$", r"\\!", match[2]) + match[1], segment
+        )
         return SOURCE_RUN_RE.sub(
             lambda match: match[0] if segment[match.end():match.end() + 1] == "("
             else replace_run(match), segment,

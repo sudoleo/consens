@@ -208,6 +208,16 @@
       "name": "app",
       "entry": "static/style.css",
       "note": "@import aggregator. The build inlines the imports in cascade order into one hashed file; static/dist/ is a sibling of static/css/, so every relative url(../fonts/...) still resolves."
+    },
+    {
+      "name": "landing",
+      "entry": "static/css/landing.css",
+      "note": "Public pages: the landing page, /benchmark, /consensus-engine, /model-pulse. Templates keep asset_url('/static/css/landing.css'); asset_url hands out this bundle while it matches its sources (manifest style_sources), so the page loads one file instead of a three-level @import chain before its first paint."
+    },
+    {
+      "name": "public",
+      "entry": "static/css/public-pages.css",
+      "note": "Public pages: shares, watches, topics, /questions, legal pages. Same contract as landing."
     }
   ]
 }

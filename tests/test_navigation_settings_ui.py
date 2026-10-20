@@ -84,7 +84,10 @@ def test_public_navigation_is_compact_and_learning_links_live_in_footer():
     assert 'href="/ai-model-comparison">Model guide</a>' in footer
     assert 'href="/model-pulse">Model pulse</a>' in footer
     assert 'href="/about">About</a>' in footer
-    assert '{% set public_nav_cta_href = "/app" %}' in read("templates/share.html")
+    # One CTA in the bar on every public page (Apple-Audit I14); the share
+    # page keeps its own, contextual one in the content.
+    assert ">Open app</a>" in nav and "public_nav_cta_label" not in nav
+    assert "public_nav_cta" not in read("templates/share.html")
     assert '<a href="/app" class="button-primary">Ask your own question</a>' in read("templates/share.html")
 
 

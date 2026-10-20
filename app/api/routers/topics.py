@@ -169,7 +169,8 @@ def _sources_view(evidence, preferred_domains):
             title=str(item.get("title") or ""),
             publisher=str(item.get("publisher") or ""),
         )
-        if classification["is_indirect"]:
+        # A link back to consens.io is no source either (Apple-Audit L4).
+        if classification["is_indirect"] or source_links.is_own_page(classification["url"]):
             hidden.append(item)
             continue
         source = {**item, "url": classification["url"]}

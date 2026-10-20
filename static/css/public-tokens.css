@@ -89,6 +89,11 @@
   --hairline-soft: var(--line-soft);
 
   --maxw: 1120px;
+  /* One page grid for every public page (Apple-Audit I14): the same left
+     edge and gutter on the landing page, the legal pages, /questions and
+     the Watch and Topic pages. 16 px gutter on phones. */
+  --page-gutter: 20px;
+  --page-width: min(var(--maxw), calc(100% - 2 * var(--page-gutter)));
   --section-pad: clamp(76px, 11vw, 150px);
   --agent-pulse-duration: 1.15s;
   --agent-sweep-duration: 2.8s;
@@ -170,6 +175,11 @@
   outline-offset: 3px;
   box-shadow: var(--liquid-focus-ring);
 }
+
+/* A net under every public page: nothing that reaches past the edge (a long
+   token, a light, a mark) may let the page pan sideways on a 320 px phone
+   (Apple-Audit I4). clip, not hidden: no scroll container, sticky bars stay. */
+body { overflow-x: clip; }
 
 :where(.site-nav, .lp-nav) a[aria-current="page"]:not(.nav-cta):not(.lp-nav-cta) {
   color: var(--heading, var(--text-primary));

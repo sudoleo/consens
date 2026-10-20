@@ -3,21 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include "partials/font_preload.html" %}
   <meta name="robots" content="{{ robots_meta }}">
   {% if is_private %}<meta name="referrer" content="no-referrer">{% endif %}
   <link rel="canonical" href="{{ canonical_url }}">
   <!-- Die Frage ist das Keyword und steht vorn; dass die Seite nachgeprüft
        wird, trägt die Meta-Description. -->
-  <title>{{ question[:70] }} | consens.io</title>
+  <title>{{ question | clip_words(70) }} | consens.io</title>
   <meta name="description" content="{{ meta_description }}">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="{{ question[:70] }}">
+  <meta property="og:title" content="{{ question | clip_words(110) }}">
   <meta property="og:description" content="{{ meta_description }}">
   <meta property="og:url" content="{{ canonical_url }}">
-  {% set og_card_image = og_image if og_is_card else "" %}{% set og_card_alt = question[:120] %}
+  {% set og_card_image = og_image if og_is_card else "" %}{% set og_card_alt = question | clip_words(120) %}
   {% include "partials/og_card.html" %}
-  <meta name="twitter:title" content="{{ question[:70] }}">
+  <meta name="twitter:title" content="{{ question | clip_words(110) }}">
   <meta name="twitter:description" content="{{ meta_description }}">
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
@@ -39,8 +40,6 @@
   {% if not is_private %}{% include "partials/analytics.html" %}{% endif %}
 </head>
 <body>
-  {% set public_nav_cta_href = "/app" %}
-  {% set public_nav_cta_label = "Ask your own question" %}
   {% set public_nav_event = "share_page_cta" %}
   {% include "partials/public_nav.html" %}
 
@@ -56,7 +55,9 @@
   <main class="page-shell wp-shell" data-math-render>
     {# Das Bild ist consens.io-eigen ausgeliefert, verlinkt auf seine Quelle;
        nie in og:image/JSON-LD (services/watch_images.py). #}
-    {% call check.head(watch_page.status, question, watch_page.image) %}Watch{% if watch_page.interval %} · checked {{ watch_page.interval }}{% endif %}{% if is_private %} · private{% endif %}{% endcall %}
+    {#- The kicker says whether anyone is still looking: a paused Watch is not
+        "checked weekly" (Apple-Audit L2). -#}
+    {% call check.head(watch_page.status, question, watch_page.image) %}Watch{% if watch_page.is_active and watch_page.interval %} · checked {{ watch_page.interval }}{% elif watch_page.status in ('paused', 'paused_error') %} · paused{% elif watch_page.status == 'resolved' %} · resolved{% endif %}{% if is_private %} · private{% endif %}{% endcall %}
 
     {{ check.state(watch_state, watch_selected_version.current_url, "What this Watch found", watch_page.goal if watch_page.goal and not watch_page.resolution else "") }}
 
@@ -81,7 +82,7 @@
     </section>
     {% endif %}
 
-    {{ check.history(watch_history, watch_selected_version, "Watch started", "The first answer. Every later check is compared with it.") }}
+    {{ check.history(watch_history, watch_selected_version, "Watch started", "The first answer. Every later check is compared with it.", shown_text=watch_state.text) }}
 
     {% if has_differences_view and not watch_awaiting_first_run %}
     {{ check.models_compared(model_count, contradiction_count, consulted_models, differences, differences_fallback_html) }}

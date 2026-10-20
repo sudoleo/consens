@@ -23,7 +23,12 @@
 *::before,
 *::after { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+/* Anchors land under the sticky bar, not behind it. Smooth scrolling is a
+   reply to a click on this page and starts only once the page has loaded
+   (public-nav.js sets the class): a visit to /#watch jumps straight to the
+   section instead of gliding through every scene above it (Apple-Audit L1). */
+html { scroll-padding-top: 54px; }
+html.is-scroll-smooth { scroll-behavior: smooth; }
 
 body {
   margin: 0;
@@ -112,8 +117,9 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    Layout primitives
    -------------------------------------------------------------------------- */
+/* The shared page grid (public-tokens.css --page-width, Apple-Audit I14). */
 .lp-shell {
-  width: min(var(--maxw), calc(100% - 44px));
+  width: var(--page-width);
   margin: 0 auto;
 }
 
@@ -277,20 +283,21 @@ img { display: block; max-width: 100%; }
    there the band simply grows instead of clipping. */
 .lp-section--hero {
   padding: clamp(16px, 2.5vw, 32px) 0 0;
-  /* Three units, on purpose. vh is the fallback for browsers without the new
-     ones. dvh is the live value: it shrinks when a phone shows its address
-     bar and grows when the bar slides away, so the band is always exactly the
-     screen you can see — which is the whole promise of a full-screen hero and
-     the reason svh alone was wrong here (it sizes to the *smallest* viewport,
-     so a retracted bar left a strip of the next section showing). */
+  /* svh, never dvh, for anything in the page flow (Apple-Audit F1). dvh is
+     live: Safari's bar slides in on the first swipe, every band grew with it
+     and the text slid away under the finger, and back on the way up --
+     Safari has no scroll anchoring to hide that. svh is the screen with the
+     bar showing, which is exactly the first screen a visitor sees; when the
+     bar retracts while scrolling, the next section simply shows a little
+     earlier. vh stays as the fallback for browsers without the new units. */
   min-height: calc(100vh - 54px);
-  min-height: calc(100dvh - 54px);
+  min-height: calc(100svh - 54px);
   display: flex;
   align-items: center;
 }
 
 /* A flex child does not get .lp-shell's auto margins, so it repeats them. */
-.lp-section--hero > .lp-hero { width: min(var(--maxw), calc(100% - 44px)); }
+.lp-section--hero > .lp-hero { width: var(--page-width); }
 
 .lp-hero {
   display: grid;
@@ -1018,8 +1025,23 @@ img { display: block; max-width: 100%; }
   opacity: 0.6;
 }
 
-.lp-agent-log { display: grid; gap: 12px; margin: 8px 0 20px; }
-.lp-agent-log[hidden], .lp-agent-log > [hidden] { display: none; }
+/* Once the check is back the log folds into the clock line (Apple-Audit I1):
+   a height transition over the one wrapper inside it (grid rows 1fr -> 0fr),
+   so the answer below rises with it instead of dropping 200 px in a frame.
+   landing-scenes.js toggles .is-folded and measures with .is-measuring. */
+.lp-agent-log {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin: 8px 0 20px;
+  /* Longer than a layer: the fold carries 200-290 px, and at 320 ms its middle
+     frames moved 40-55 px each. */
+  transition: grid-template-rows calc(var(--dur-layer) * 1.6) var(--ease-standard), margin calc(var(--dur-layer) * 1.6) var(--ease-standard), opacity var(--dur-layer) var(--ease-standard);
+}
+.lp-agent-log-items { display: grid; gap: 12px; min-height: 0; overflow: hidden; }
+.lp-agent-log.is-folded { grid-template-rows: 0fr; margin-block: 0; opacity: 0; }
+.lp-agent-log [hidden] { display: none; }
+.lp-agent.is-measuring,
+.lp-agent.is-measuring * { transition: none !important; animation: none !important; }
 
 .lp-agent-note {
   margin: 0;
@@ -1224,11 +1246,12 @@ img { display: block; max-width: 100%; }
      play through than the two-column desktop version. */
   .lp-scroll-scene { min-height: 190vh; }
 
-  /* The one place that keeps svh: this stage is pinned while you scroll
-     through it, and dvh would resize it mid-scrub — the browser bar slides
-     away, the stage grows, and everything on it shifts under the thumb that
-     is moving it. svh is the smallest it can ever need to be, so it holds
-     still and the bar simply uncovers page below it. */
+  /* svh like every height in the page flow (see .lp-section--hero): this
+     stage is pinned while you scroll through it, and dvh would resize it
+     mid-scrub — the browser bar slides away, the stage grows, and everything
+     on it shifts under the thumb that is moving it. svh is the smallest it
+     can ever need to be, so it holds still and the bar simply uncovers page
+     below it. */
   .lp-scene-stage {
     position: sticky;
     top: 54px;
@@ -1301,6 +1324,7 @@ img { display: block; max-width: 100%; }
   .lp-agent-answer.is-checking,
   .lp-prompt-text.is-typing::after,
   .lp-composer-text.is-typing::after { animation: none; }
+  .lp-agent-log { transition: none; }
 }
 
 /* --------------------------------------------------------------------------
@@ -1336,9 +1360,17 @@ img { display: block; max-width: 100%; }
 .lp-watch-card-head > span:first-child { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
 .lp-watch-card-head img { width: 18px; filter: invert(1); }
 .dark-mode .lp-watch-card-head img { filter: none; }
-.lp-watch-active { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: var(--agree-bg); color: var(--agree); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); }
-.lp-watch-active i { width: 6px; height: 6px; border-radius: 50%; background: var(--agree); }
+/* "Moved" in the amber the dashboard gives a moved watch (.wd-item.is-moved). */
+.lp-watch-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: var(--partial-bg); color: var(--partial); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); }
+.lp-watch-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--partial); }
 .lp-watch-card h3 { max-width: 32ch; margin: 20px 0 0; color: var(--text-primary); font-size: var(--font-size-lg); line-height: var(--line-height-ui); }
+/* The goal line reads like the dashboard's .wd-goal: running text, so a
+   narrow card wraps it like a sentence. */
+.lp-watch-goal { margin: 10px 0 0; color: var(--text-primary); font-size: var(--font-size-sm); line-height: 1.5; }
+.lp-watch-goal-label,
+.lp-watch-goal-status { color: var(--ink-3); font-size: var(--font-size-xs); }
+.lp-watch-goal-text { font-weight: var(--font-weight-medium); }
+.lp-watch-goal-status { font-weight: var(--font-weight-medium); white-space: nowrap; }
 .lp-watch-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
 .lp-watch-meta span { padding: 4px 8px; border-radius: 999px; background: var(--surface); color: var(--ink-3); font-size: var(--font-size-micro); font-weight: var(--font-weight-medium); }
 .lp-watch-timeline { position: relative; display: grid; gap: 0; margin-top: 22px; }
@@ -1352,7 +1384,8 @@ img { display: block; max-width: 100%; }
 .lp-watch-point strong, .lp-watch-point small { display: block; }
 .lp-watch-point strong { color: var(--text-primary); font-size: var(--font-size-xs); }
 .lp-watch-point small { margin-top: 2px; color: var(--text-secondary); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
-.lp-watch-movement { color: var(--partial); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); white-space: nowrap; }
+/* A move names the page that carries it, as a source chip like .wd-sources. */
+.lp-watch-source { padding: 3px 8px; border-radius: var(--radius-xs); background: var(--well); box-shadow: inset 0 0 0 1px var(--line-soft); color: var(--text-primary); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); white-space: nowrap; }
 .lp-watch-notification {
   padding: 18px;
   border: 0;
@@ -1367,10 +1400,17 @@ img { display: block; max-width: 100%; }
 .lp-watch-notification-head strong, .lp-watch-notification-head small { display: block; }
 .lp-watch-notification-head strong { font-size: var(--font-size-sm); }
 .lp-watch-notification-head small { margin-top: 2px; color: var(--text-secondary); font-size: var(--font-size-micro); }
-.lp-watch-notification p { margin: 15px 0 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+/* The message's blocks in the order Telegram gets them: what changed, why,
+   what you're waiting for. */
+.lp-watch-message { margin: 15px 0 0; font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+.lp-watch-message dt { margin-top: 10px; color: var(--text-primary); font-weight: var(--font-weight-semibold); }
+.lp-watch-message dt:first-child { margin-top: 0; }
+.lp-watch-message dd { margin: 2px 0 0; color: var(--text-secondary); }
 .lp-watch-notification a { display: inline-flex; align-items: center; gap: 5px; margin-top: 16px; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 .lp-watch-notification a span { font-size: var(--font-size-lg); transition: transform var(--dur-state) var(--ease-standard); }
 .lp-watch-notification a:hover span { transform: translateX(3px); }
+/* The second, quieter way: a real Watch, only while one is still checked. */
+.lp-watch-notification a.lp-watch-live { margin-left: 18px; color: var(--ink-2); }
 
 /* Public mockups share the app component and only override their context. */
 .consensus-verdict,
@@ -2375,7 +2415,7 @@ img { display: block; max-width: 100%; }
   border-top: 1px solid var(--hairline-soft);
 }
 .lp-footer-inner {
-  width: min(var(--maxw), calc(100% - 44px));
+  width: var(--page-width);
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -2399,7 +2439,7 @@ img { display: block; max-width: 100%; }
      flash stays put (the JS removes the class after 2s). */
   .cx-claim, .consensus-differences-summary::before { animation: none; transition: none; }
   .diff-card.is-focused { animation: none; background: var(--cx-flash); }
-  html { scroll-behavior: auto; }
+  html.is-scroll-smooth { scroll-behavior: auto; }
 }
 
 /* --------------------------------------------------------------------------
@@ -2442,7 +2482,6 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 600px) {
   body { font-size: var(--font-size-base); }
-  .lp-shell { width: calc(100% - 32px); }
   .lp-nav-links a:not(.lp-nav-cta) { display: none; }
   .lp-window-body { padding: 16px 14px 14px; gap: 12px; }
   .consensus-main { padding: 10px 16px 12px; }
@@ -2454,7 +2493,7 @@ img { display: block; max-width: 100%; }
   .lp-watch-card { padding: 15px; }
   .lp-watch-point { grid-template-columns: 46px 12px minmax(0, 1fr); gap: 7px; }
   .lp-watch-timeline::before { left: 58px; }
-  .lp-watch-movement { grid-column: 3; margin-top: -5px; }
+  .lp-watch-source { grid-column: 3; justify-self: start; margin: -5px 0 8px; }
   .lp-watch-notification { width: 100%; margin-top: 0; }
 
   /* Composer on a phone: the field keeps its height, the row below it stays
@@ -2530,7 +2569,7 @@ img { display: block; max-width: 100%; }
      to say than a screen holds still grows past it. */
   main > .lp-section:not(.lp-section--hero) {
     min-height: calc(100vh - 54px);
-    min-height: calc(100dvh - 54px);
+    min-height: calc(100svh - 54px);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -2716,7 +2755,7 @@ main > .lp-section + .lp-section::before {
   position: absolute;
   top: 0;
   left: 50%;
-  width: min(var(--maxw), calc(100% - 44px));
+  width: var(--page-width);
   height: 1px;
   transform: translateX(-50%);
   background: var(--line-soft);
