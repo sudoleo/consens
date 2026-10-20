@@ -34,6 +34,8 @@
       -webkit-line-clamp: 4;
     }
     .notice-subject + .links { margin-top: 22px; }
+    /* Without a subject the buttons are the panel's first line. */
+    .legal-panel > .links:first-child { margin-top: 0; }
     .notice-actions button {
       font: inherit;
       font-weight: var(--font-weight-medium);
