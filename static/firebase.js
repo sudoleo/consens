@@ -619,7 +619,7 @@ onIdTokenChanged(auth, async (user) => {
               <span id="accountTierLabel" class="pro-badge account-tier-label" hidden></span>
             </span>
             <button type="button" id="sharedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Shared links</button>
-            <button type="button" id="watchedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Watched</button>
+            <button type="button" id="watchedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Watches</button>
             <button type="button" id="logoutButton" class="top-bar-about" role="menuitem" tabindex="-1">Logout</button>
           </div>
         </div>

@@ -114,6 +114,10 @@
         "static/js/share-dialog.js",
         "static/js/consensus-actions.js",
         {
+          "file": "static/js/watch-fields.js",
+          "note": "App.watchFields: the fields and time wording the New watch dialog (watch.js) and the card settings (watch-dashboard.js) share. Before both."
+        },
+        {
           "file": "static/js/watch.js",
           "note": "Needs consensus-actions.js and the share modal. Publishes window.App.watchUi."
         },

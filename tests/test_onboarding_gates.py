@@ -150,7 +150,8 @@ def test_watch_nudge_starts_a_watch_directly_and_says_when_it_writes():
     # Button-Stil ist opt-in (`.btn`), es gibt keine globale Kette mehr.
     assert "button:not(" not in read("static/css/components-input.css")
     assert "btn" not in nudge[nudge.index("watch-feature-nudge-close"):][:80]
-    assert "Watch this question" in nudge
+    # One name for the action everywhere (Apple-Audit J18).
+    assert "Start watching" in nudge
     # Der Knopf verspricht Stille, solange sich nichts aendert.
     assert "write only when a source moves the answer" in nudge
     assert "only on evidence" in nudge

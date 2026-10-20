@@ -3,16 +3,20 @@
    that live inside the shared modal, and the segmented view switch.
    Surfaces follow the five-value scale (ground/raise/well/ink/line); the
    only colours are the shared traffic light: gold = moved, green = calm or
-   resolved, rose = needs attention. The dashboard uses the `wd-` prefix.
+   reached, rose = needs attention. The dashboard uses the `wd-` prefix, the
+   parts it shares with the dialog (watch-fields.js) `watch-field`.
    ========================================================================== */
 
 /* --- View switch: Chat | Watches, fixed top centre. One thumb slides under
        the active option, so the control reads as one object rather than two
-       buttons. Clicks and the active state: watch.js setViewSwitchState. --- */
+       buttons. It stands in the same place in both views (layout.css), and
+       while the content behind it fades through, it stays (Apple-Audit J4,
+       C6). Clicks and the active state: watch.js setViewSwitchState. --- */
 .view-switch {
   position: fixed;
   top: 14px;
-  left: 50%;
+  /* vw, not %: a page that brings a scrollbar (Watches) must not move it. */
+  left: 50vw;
   transform: translateX(-50%);
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -48,7 +52,8 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-width: 108px;
+  /* Wide enough for the bold label: picking a side never resizes it. */
+  min-width: 118px;
   height: 32px;
   border: 0;
   padding: 0 16px;
@@ -99,27 +104,65 @@
 }
 #mobileSidebarViews .view-switch-thumb { display: none; }
 
-/* --- Page shell --- */
+/* --- Page shell. The page scrolls the document like every page (F14:
+       Safari's bar folds away, a tap on the status bar goes to the top);
+       the chat column steps aside while it is open and returns where it
+       was (watch.js). The page cancels the body's 10px padding so its box
+       is the viewport's. --- */
 .watch-page {
-  position: fixed;
-  top: 0; /* kopflose App: Seite füllt den Viewport, View-Switch schwebt darüber */
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1400; /* über Sidebar/Sidebar-Toggle (1100/1200), unter View-Switch (1500) */
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  position: relative;
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: -10px;
   background: var(--ground);
   color: var(--ink);
 }
 .watch-page[hidden] { display: none; }
+body.is-watch-view .container { display: none; }
 .watch-page-inner {
-  max-width: 920px;
-  margin: 0 auto;
+  position: relative;
   box-sizing: border-box;
+  width: min(920px, calc(100% - 2 * clamp(16px, 3.4vw, 32px)));
+  margin: 0 auto;
   /* Platz für den fixierten View-Switch. */
-  padding: clamp(76px, 11vh, 96px) clamp(16px, 3.4vw, 32px) 72px;
+  padding: clamp(76px, 11vh, 96px) 0 72px;
 }
+/* Beside the open sidebar the page starts where the chat column does, so
+   the switch above both stands still (J4); it follows the sidebar like the
+   chat column (layout.css .container). */
+@media (min-width: 1100px) {
+  .watch-page-inner {
+    width: min(920px, calc(100% - var(--app-sidebar-offset) - 2 * clamp(16px, 3.4vw, 32px)));
+    left: calc(var(--app-sidebar-offset) / 2);
+    transition: width var(--dur-layer) var(--ease-standard), left var(--dur-layer) var(--ease-standard);
+  }
+}
+
+/* Chat and Watches fade through each other (C6): the old view fades out
+   quickly, the new one fades in with a small rise. watch.js setWatchView
+   sets the phases; the switch never moves, into or out of a chat it fades
+   along (desktop; on phones it lives in the sidebar). */
+body.is-view-out:not(.is-watch-view) .container {
+  opacity: 0;
+  transition: opacity var(--dur-press) var(--ease-in);
+}
+body.is-view-out.is-watch-view .watch-page {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--dur-press) var(--ease-in), transform var(--dur-press) var(--ease-in);
+}
+body.is-view-in:not(.is-watch-view) .container { opacity: 0; transition: none; }
+body.is-view-in.is-watch-view .watch-page { opacity: 0; transform: translateY(8px); transition: none; }
+body.is-view-settle:not(.is-watch-view) .container { transition: opacity var(--dur-state) var(--ease-out); }
+body.is-view-settle.is-watch-view .watch-page {
+  transition: opacity var(--dur-state) var(--ease-out), transform var(--dur-state) var(--ease-out);
+}
+@media (min-width: 1100px) {
+  body:is(.is-switch-out, .is-switch-in) .view-switch { opacity: 0; }
+  body.is-switch-in .view-switch { transition: none; }
+}
+
 .watch-sr-only {
   position: absolute;
   width: 1px;
@@ -145,10 +188,7 @@
 .watch-limit-main strong { color: var(--text-color); font-size: var(--font-size-micro); }
 .watch-limit-plan {
   padding: 2px 6px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--sidebar-border));
   border-radius: 999px;
-  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
   font-weight: var(--font-weight-bold);
 }
 .watch-limit-meter {
@@ -158,49 +198,136 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--sidebar-border) 78%, transparent);
 }
-.watch-limit-meter i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.watch-limit-meter i { display: block; height: 100%; border-radius: inherit; background: var(--ink-2); }
 .watch-limit-detail { margin-top: 4px; opacity: .9; }
 .watch-limit-detail span + span::before { content: "·"; margin-right: 8px; }
+.watch-limit-sep { color: var(--ink-3); }
 .watch-limit-upgrade {
   min-height: 0;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--ink-2);
   font: inherit;
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
-}
-.watch-limit-summary.is-full .watch-limit-plan {
-  border-color: color-mix(in srgb, var(--partial) 35%, var(--sidebar-border));
-  color: color-mix(in srgb, var(--partial) 78%, var(--text-color));
-  background: color-mix(in srgb, var(--partial) 9%, transparent);
 }
 .watch-limit-summary.is-full .watch-limit-meter i { background: var(--partial); }
 .watch-limit-summary.is-dialog {
   max-width: none;
   margin: -2px 0 13px;
   padding: 9px 10px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
   border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--container-bg) 72%, transparent);
 }
-/* --- Delivery channels in the dialog --- */
-.watch-channel-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 7px; }
-.watch-channel-options.is-compact { margin-top: 0; min-height: 34px; }
+
+/* ==========================================================================
+   Shared fields (watch-fields.js): the dialog and the card settings use the
+   same label, control and message. Labels in sentence case, small and calm
+   -- no caps (J12).
+   ========================================================================== */
+.watch-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin-top: 14px; }
+.watch-field[hidden] { display: none; }
+.watch-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 18px; }
+.watch-field-label {
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+}
+/* "Saved" beside the label once a change has landed; it fades by itself. */
+.watch-field-status {
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
+  opacity: 0;
+  transition: opacity var(--dur-state) var(--ease-standard);
+  white-space: nowrap;
+}
+.watch-field-status:not(:empty)::before { content: "✓ "; color: var(--agree); }
+.watch-field-status.is-shown { opacity: 1; }
+.watch-field.is-saving .watch-field-status { opacity: 0; }
+.watch-field-hint,
+.watch-data-note { margin: 0 !important; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.45; }
+.watch-field-hint[hidden] { display: none; }
+.watch-field-error {
+  margin: 0 !important;
+  color: var(--dispute);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+}
+.watch-field-error[hidden] { display: none; }
+
+.watch-select,
+.watch-input,
+.wd-select,
+.wd-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+/* One line in every column; the narrowest settings column ends in "…"
+   rather than breaking a choice in two (J28). */
+.watch-select,
+.wd-select { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.watch-time { color-scheme: light dark; }
+.watch-details-input,
+.wd-goal-input { min-height: 64px; padding: 9px 11px; line-height: 1.45; resize: vertical; }
+.watch-select:focus-visible,
+.watch-input:focus-visible,
+.wd-select:focus-visible,
+.wd-input:focus-visible,
+.wd-goal-input:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.watch-select[aria-invalid="true"],
+.watch-input[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--dispute); }
+.watch-config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 0 12px; }
+.watch-config-grid > .watch-field { margin-top: 14px; }
+
+/* --- Delivery channels: one group of boxes, never one label around both --- */
+.watch-channel-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 38px; }
 .watch-channel-option {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: var(--text-color);
+  gap: 6px;
+  color: var(--ink);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
-.watch-channel-option:has(input:disabled) { color: var(--sidebar-text-muted); cursor: not-allowed; }
-.watch-channel-option input { accent-color: var(--accent); }
+.watch-channel-option[hidden],
+.watch-channel-options [hidden] { display: none; }
+.watch-channel-option:has(input:disabled) { color: var(--ink-3); cursor: not-allowed; }
+.watch-channel-option input { accent-color: var(--ink); }
+
+/* Quiet text actions: "Connect Telegram", "Edit", "Open Watches". */
+.wd-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.wd-link:hover:not(:disabled) { color: var(--ink); }
+.wd-link:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
+.wd-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+.wd-link[hidden] { display: none; }
 
 /* ==========================================================================
    Create / confirm dialog (inside the shared modal)
@@ -216,14 +343,19 @@
   border-radius: var(--radius-sm);
   background: var(--raise);
 }
+/* A long question ends in "…" after four lines; a pasted link wraps (J33). */
 .watch-question-preview strong {
   flex: 1 1 auto;
   min-width: 0;
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--ink);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-ui);
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 .watch-question-edit {
   flex: none;
@@ -268,19 +400,21 @@
 }
 .watch-settings[open] > summary { border-bottom: 1px solid var(--line-soft); }
 .watch-settings-body { padding: 0 12px 14px; }
-.watch-settings .watch-config-grid { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
-.watch-channel-options [hidden] { display: none; }
 .watch-success-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border-radius: var(--radius-md); background: var(--raise); }
 .watch-success-card > div { min-width: 0; }
 .watch-success-icon { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--agree) 17%, transparent); color: var(--agree); font-weight: var(--font-weight-bold); }
-.watch-success-card strong { display: block; font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-.watch-success-card p { margin: 5px 0 0; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+.watch-success-card strong { display: block; font-size: var(--font-size-sm); line-height: var(--line-height-ui); overflow-wrap: anywhere; }
+.watch-success-card p { margin: 5px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+.watch-success-card p:empty { display: none; }
+/* All slots in use: the sentence and the way out, no form (J25). */
+.watch-limit-step { display: grid; gap: 8px; justify-items: start; padding: 4px 0 2px; }
+.watch-limit-step > p:first-child { margin: 0; color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); line-height: 1.4; }
 
 /* ==========================================================================
    Dashboard (watch-dashboard.js)
    ========================================================================== */
 
-/* --- Shared controls --- */
+/* --- Shared controls: one primary button for the whole feature (J18) --- */
 .wd-button {
   display: inline-flex;
   align-items: center;
@@ -301,7 +435,7 @@
   cursor: pointer;
   transition: background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard), opacity var(--dur-press) var(--ease-standard);
 }
-.wd-button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--line); }
+.wd-button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--line); opacity: 1; }
 .wd-button:focus-visible,
 .wd-action:focus-visible,
 .wd-example:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
@@ -312,34 +446,6 @@
 .wd-button.is-danger { color: var(--dispute); }
 .wd-button.is-large { height: 42px; padding: 0 20px; font-size: var(--font-size-base); }
 
-.wd-select,
-.wd-input,
-.wd-goal-input {
-  box-sizing: border-box;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--font-size-sm);
-}
-.wd-goal-input { width: 100%; padding: 9px 11px; line-height: 1.45; resize: vertical; }
-.wd-select:focus-visible,
-.wd-input:focus-visible,
-.wd-goal-input:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--ink); }
-
-.wd-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.wd-field[hidden] { display: none; }
-.wd-field-label {
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
 .wd-field-hint { margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.45; }
 .wd-loading { padding: 32px 0; color: var(--ink-3); font-size: var(--font-size-sm); }
 
@@ -364,15 +470,17 @@
 .wd-head-lead { margin: 10px 0 0; color: var(--ink-2); font-size: var(--font-size-base); line-height: 1.5; }
 .wd-head-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
-/* The plan limit, reduced to one quiet line next to the button. */
-.watch-limit-summary.is-compact { max-width: none; margin: 10px 0 0; padding: 0; background: transparent; }
+/* The plan limit, reduced to one quiet line next to the button. Its line
+   is held from the first frame, so nothing below moves when it arrives (J6). */
+.watch-limit-summary.is-compact { max-width: none; min-height: calc(var(--font-size-xs) * 1.5); margin: 10px 0 0; padding: 0; background: transparent; }
+.watch-limit-summary.is-compact[hidden] { display: block; visibility: hidden; }
 .watch-limit-summary.is-compact .watch-limit-detail,
 .watch-limit-summary.is-compact .watch-limit-plan,
 .watch-limit-summary.is-compact .watch-limit-meter { display: none; }
-.watch-limit-summary.is-compact .watch-limit-main { gap: 4px 8px; font-size: var(--font-size-xs); color: var(--ink-3); }
+.watch-limit-summary.is-compact .watch-limit-main { gap: 4px 6px; font-size: var(--font-size-xs); color: var(--ink-3); }
 .watch-limit-summary.is-compact .watch-limit-main strong { font-size: var(--font-size-xs); color: var(--ink-2); }
 
-/* --- Summary line --- */
+/* --- Summary line: only counts that are not zero (J29) --- */
 .wd-summary {
   display: flex;
   flex-wrap: wrap;
@@ -390,10 +498,10 @@
   letter-spacing: -0.01em;
 }
 .wd-summary-item.is-next { margin-left: auto; }
-.wd-summary-item.is-next strong { font-size: var(--font-size-base); }
+.wd-summary-item.is-next strong { color: var(--ink-2); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); letter-spacing: 0; }
 
-/* --- "Why a Watch" explainer --- */
-.wd-explainer { margin-top: 18px; border-radius: var(--radius-md); background: var(--raise); }
+/* --- "Why a watch" explainer, at the end of the page --- */
+.wd-explainer { margin-top: 34px; border-radius: var(--radius-md); background: var(--raise); }
 .wd-explainer > summary {
   display: flex;
   align-items: center;
@@ -448,27 +556,59 @@
 .wd-compare th {
   padding: 0 12px 8px 0;
   color: var(--ink-3);
-  font-size: var(--font-size-micro);
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: .06em;
   text-align: left;
-  text-transform: uppercase;
 }
 .wd-compare td { width: 50%; padding: 10px 12px 10px 0; border-top: 1px solid var(--line-soft); vertical-align: top; line-height: 1.45; }
 .wd-compare td:first-child { color: var(--ink-3); }
 .wd-compare td:last-child { color: var(--ink); }
 .wd-compare td:last-child::before { content: "✓"; margin-right: 8px; color: var(--agree); font-weight: var(--font-weight-bold); }
 
+/* --- A load that failed keeps what is there and offers another try (J6) --- */
+.wd-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 24px 0 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+}
+
+/* --- The skeleton: the shapes of the summary line and three cards (J6) --- */
+.wd-skeleton { margin-top: 32px; }
+.wd-skeleton-summary { padding: 0 0 18px; border-bottom: 1px solid var(--line-soft); }
+.wd-skeleton-summary .skeleton { width: 46%; height: 22px; }
+.wd-skeleton-list { display: grid; gap: 10px; margin-top: 46px; }
+.wd-skeleton-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px 22px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--raise);
+}
+.wd-skeleton-card .skeleton.is-status { width: 120px; height: 10px; }
+.wd-skeleton-card .skeleton.is-title { width: 72%; height: 16px; }
+.wd-skeleton-card .skeleton.is-line { width: 88%; height: 10px; }
+.wd-skeleton-card .skeleton.is-short { width: 54%; }
+.wd-skeleton-card .skeleton.is-foot { width: 38%; height: 10px; margin-top: 10px; }
+/* The list arrives in one soft step, not a hard swap. */
+#watchDashBody.is-arriving > * { animation: wdArrive var(--dur-state) var(--ease-out) both; }
+@keyframes wdArrive { from { opacity: 0; } to { opacity: 1; } }
+
 /* --- Sections and the watch list --- */
 .wd-section { margin-top: 34px; }
 .wd-section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 12px; }
 .wd-section-head h2 {
   margin: 0;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: .07em;
-  text-transform: uppercase;
+  text-align: left;
 }
 .wd-count {
   min-width: 20px;
@@ -487,19 +627,28 @@
    the actions instead of taking a column of its own. */
 .wd-item {
   --wd-tone: var(--ink-3);
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "main main" "actions side" "settings settings";
+  grid-template-areas: "main main" "actions side" "note note" "settings settings";
   gap: 0 24px;
   padding: 20px 22px 14px;
   border-radius: var(--radius-lg);
   background: var(--raise);
+  transition: background-color var(--dur-light) var(--ease-standard);
 }
+.wd-item[hidden] { display: none; }
 .wd-item.is-moved { --wd-tone: var(--partial); }
 .wd-item.is-watching,
 .wd-item.is-resolved { --wd-tone: var(--agree); }
 .wd-item.is-error { --wd-tone: var(--dispute); }
 .wd-item.is-rechecking { --wd-tone: var(--ink-2); }
+/* What was just created or asked for is marked for a moment (J15). */
+.wd-item.is-highlight { animation: wdHighlight 2.2s var(--ease-standard) both; }
+@keyframes wdHighlight {
+  0%, 35% { background-color: color-mix(in srgb, var(--ink) 9%, var(--raise)); }
+  100% { background-color: var(--raise); }
+}
 /* A hairline parts what the watch says from how it runs (actions, schedule);
    flow-root keeps the floated picture inside, above the line. */
 .wd-item-main {
@@ -546,8 +695,8 @@
    right; status, question and goal flow around it, so the card grows no
    taller. Every kind stands at the same height (--wd-anchor), so the cards
    line up: a product shot whole on white, an article photo filling its 3:2
-   tile, logos and the symbol as square tiles. The × shows on hover/focus,
-   always on touch. */
+   tile, logos and the symbol as square tiles. It leads to the watch's own
+   page; removing it is a setting with Undo (J23). */
 .wd-item { --wd-anchor: 60px; }
 .wd-image { position: relative; float: right; width: calc(var(--wd-anchor) * 1.5); margin: 2px 0 10px 22px; }
 .wd-image-frame {
@@ -578,6 +727,12 @@
   height: var(--wd-anchor);
   filter: drop-shadow(0 0 .5px rgba(0, 0, 0, .35)) drop-shadow(0 1px 2px rgba(0, 0, 0, .08));
 }
+/* Dark mode: a white product tile was the brightest thing on the page; it
+   is dimmed with its photo, and dark logos get a light hairline (J31). */
+.dark-mode .wd-image.is-item .wd-image-frame { background: #d9d9d9; outline-color: color-mix(in srgb, var(--ink) 14%, transparent); }
+.dark-mode .wd-image.is-item img { filter: brightness(.85); }
+.dark-mode .wd-image.is-article img { filter: brightness(.9); }
+.dark-mode .wd-image.is-logo img { filter: drop-shadow(0 0 .6px rgba(255, 255, 255, .5)) drop-shadow(0 1px 2px rgba(0, 0, 0, .3)); }
 .wd-symbol {
   display: grid;
   place-items: center;
@@ -592,31 +747,6 @@
 .is-error .wd-image-frame,
 .is-paused .wd-symbol,
 .is-error .wd-symbol { opacity: .72; }
-.wd-image-remove {
-  position: absolute;
-  top: -7px;
-  right: -7px;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--raise);
-  box-shadow: 0 0 0 1px var(--line);
-  color: var(--ink-2);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--dur-state) var(--ease-standard);
-}
-.wd-image-remove svg { width: 12px; height: 12px; }
-.wd-image:hover .wd-image-remove,
-.wd-image:focus-within .wd-image-remove { opacity: 1; }
-.wd-image-remove:hover { color: var(--ink); }
-@media (hover: none) {
-  .wd-image-remove { opacity: 1; }
-}
 
 /* Running text, not flex: label, goal and standing wrap like a sentence, so
    a narrow card never leaves "· Not yet" alone on a line. */
@@ -628,18 +758,18 @@
 /* One label voice per card: sentence case, small, muted -- no caps. The goal's
    standing is a word after a dot, coloured only when it means something. */
 .wd-goal-label { color: var(--ink-3); font-size: var(--font-size-xs); }
-.wd-goal-text { min-width: 0; color: var(--ink); font-weight: var(--font-weight-medium); }
+.wd-goal-text { min-width: 0; color: var(--ink); font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
 .wd-goal-status { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); white-space: nowrap; }
 .wd-goal-status.is-reached { color: var(--agree); }
 .wd-goal-status.is-reported { color: var(--partial); }
 /* What a match must fit sits right under the goal it belongs to. */
 .wd-goal.wd-details { margin-top: 2px; }
-.wd-details-text { color: var(--ink-2); }
+.wd-details-text { color: var(--ink-2); overflow-wrap: anywhere; }
 
-.wd-headline { margin: 10px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.55; }
+.wd-headline { margin: 10px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.55; overflow-wrap: anywhere; }
 .is-moved .wd-headline,
 .is-resolved .wd-headline { color: var(--ink); }
-.wd-held { margin: 4px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
+.wd-held { margin: 4px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; overflow-wrap: anywhere; }
 
 .wd-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
 .wd-sources li { min-width: 0; max-width: 100%; }
@@ -651,6 +781,7 @@
   gap: 7px;
   max-width: 100%;
   box-sizing: border-box;
+  min-height: 28px;
   padding: 5px 10px;
   border-radius: var(--radius-xs);
   background: var(--well);
@@ -661,11 +792,15 @@
 }
 .wd-sources a:hover { box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
 .wd-source-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-right: -2px; border-radius: 3px; }
+.wd-source-icon.is-missing { visibility: hidden; }
 .wd-source-host { flex: 0 0 auto; color: var(--ink); font-weight: var(--font-weight-semibold); }
 .wd-source-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30ch; }
 
-/* The record: one tick per check, newest right. Shape first, details on hover. */
-.wd-record { display: flex; align-items: center; gap: 3px; margin: 14px 0 0; }
+/* The record: one tick per check, newest right, with what it means in words
+   beside it (J26). */
+.wd-record-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 14px 0 0; }
+.wd-record { display: flex; align-items: center; gap: 3px; }
+.wd-record-caption { color: var(--ink-3); font-size: var(--font-size-xs); }
 .wd-tick { width: 6px; height: 16px; border-radius: 3px; background: var(--line); }
 .wd-tick.is-moved { background: var(--partial); }
 .wd-tick.is-preliminary { background: color-mix(in srgb, var(--partial) 45%, transparent); }
@@ -674,8 +809,8 @@
 .wd-tick.is-reverted { background: color-mix(in srgb, var(--ink-3) 35%, transparent); height: 8px; }
 .wd-tick.is-resolved { background: var(--agree); }
 
-/* The footer reads as one quiet line: "Next check in 21 h · Weekly on … ·
-   Public page". Only the time itself is in ink. */
+/* The footer reads as one quiet line: "Next check tomorrow, 09:00 · Weekly
+   on … · Public page". Only the time itself is in ink. */
 .wd-item-side {
   grid-area: side;
   align-self: center;
@@ -687,6 +822,8 @@
   text-align: right;
 }
 .wd-side-part { white-space: nowrap; }
+/* A schedule with a far time zone may wrap inside itself (J33). */
+.wd-side-part:has(.wd-side-note) { white-space: normal; overflow-wrap: anywhere; }
 .wd-side-value { color: var(--ink); font-weight: var(--font-weight-medium); }
 .wd-sep { margin: 0 2px; color: var(--ink-3); }
 
@@ -713,7 +850,7 @@
   text-decoration: none;
   cursor: pointer;
 }
-.wd-action:hover { background: var(--well); color: var(--ink); }
+.wd-action:hover { background: var(--well); color: var(--ink); opacity: 1; }
 .wd-action.is-strong { background: var(--ink); color: var(--ground); }
 .wd-action.is-strong:hover { background: color-mix(in srgb, var(--ink) 86%, var(--ground)); color: var(--ground); }
 .wd-action-toggle::after {
@@ -724,51 +861,56 @@
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translateY(-2px) rotate(45deg);
-  transition: transform var(--dur-state) var(--ease-standard);
+  transition: transform var(--dur-layer) var(--ease-standard);
 }
 .wd-action-toggle[aria-expanded="true"]::after { transform: translateY(1px) rotate(225deg); }
 
+/* What an action on this card just did, said on the card. */
+.wd-card-note { grid-area: note; margin: 8px 0 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.45; }
+.wd-card-note.is-error { color: var(--dispute); font-weight: var(--font-weight-semibold); }
+.wd-card-note[hidden] { display: none; }
+
+/* Settings open with their content: the row grows from nothing to its
+   height while the chevron turns, and closes the same way (J13). Closed,
+   the panel is inert. */
 .wd-settings {
   grid-area: settings;
   display: grid;
-  gap: 18px;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-layer) var(--ease-standard);
+}
+.wd-item.is-open .wd-settings { grid-template-rows: 1fr; }
+.wd-item.is-instant .wd-settings { transition: none; }
+/* Four pixels of room on each side keep focus rings unclipped. */
+.wd-settings-inner { min-height: 0; overflow: hidden; margin: 0 -4px; padding: 0 4px; }
+.wd-settings-content {
+  display: grid;
+  gap: 4px;
   margin-top: 8px;
-  padding: 18px 0 6px;
+  padding: 4px 0 6px;
   border-top: 1px solid var(--line-soft);
+  opacity: 0;
+  transition: opacity var(--dur-state) var(--ease-standard);
 }
-.wd-settings[hidden] { display: none; }
-.wd-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px 18px; }
-.wd-goal-editor { display: grid; gap: 7px; }
+.wd-item.is-open .wd-settings-content { opacity: 1; }
+.wd-settings-content > .watch-goal { margin: 14px 0 0; }
+.wd-settings-grid { gap: 0 18px; }
+/* "Notify me" spans two columns: its choices stay on one line (J28). */
+.wd-settings-content > .watch-field.is-wide,
+.wd-settings-content > .watch-field.is-medium { max-width: 420px; }
+.wd-goal-editor { display: grid; gap: 7px; margin-top: 14px; }
 .wd-goal-editor[hidden] { display: none; }
-.wd-goal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
-.wd-channels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 36px; }
-.wd-check { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); font-size: var(--font-size-sm); cursor: pointer; }
-.wd-check:has(input:disabled) { color: var(--ink-3); cursor: not-allowed; }
-.wd-check input { accent-color: var(--ink); }
-.wd-listing { display: grid; gap: 6px; justify-items: start; }
-.wd-settings-footer { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
+.wd-goal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.wd-reject .watch-goal-label { margin: 0; font-size: var(--font-size-sm); }
+.wd-listing { display: grid; gap: 6px; justify-items: start; margin-top: 14px; }
+.wd-listing-slot:empty,
+.wd-picture-slot:empty { display: none; }
+.wd-picture-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 14px; }
+.wd-settings-footer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 
-/* --- Empty state --- */
-.wd-empty { margin: 40px auto 0; max-width: 680px; text-align: center; }
-.wd-eyebrow {
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.wd-empty-title {
-  margin: 10px 0 0;
-  color: var(--ink);
-  font-size: clamp(1.6rem, 3.4vw, 2.1rem);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-.wd-empty-lead { margin: 14px auto 0; max-width: 560px; color: var(--ink-2); font-size: var(--font-size-base); line-height: 1.6; }
-.wd-empty-actions { display: flex; justify-content: center; margin-top: 24px; }
-.wd-examples { margin-top: 36px; text-align: left; }
-.wd-example-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+/* --- Empty state: no second heading or button, one left edge (J24) --- */
+.wd-empty { margin: 36px 0 0; }
+.wd-example-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .wd-example {
   display: flex;
   flex-direction: column;
@@ -785,10 +927,25 @@
   cursor: pointer;
   transition: box-shadow var(--dur-press) var(--ease-standard);
 }
-.wd-example:hover { box-shadow: inset 0 0 0 1px var(--line); }
+.wd-example:hover { box-shadow: inset 0 0 0 1px var(--line); opacity: 1; }
 .wd-example strong { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: 1.4; }
 .wd-example span { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.4; }
-.wd-empty + .wd-explainer { margin-top: 32px; }
+
+/* --- A guest sees one example card (J3) --- */
+.wd-guest { margin-top: 36px; }
+.wd-guest .wd-explainer-grid { margin-top: 18px; padding: 0; }
+.wd-item.is-example { padding-bottom: 18px; }
+.wd-item.is-example .wd-question a { cursor: default; text-decoration: none; }
+.wd-example-badge {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+}
 
 /* --- Delivery --- */
 .wd-delivery-box { border-radius: var(--radius-lg); background: var(--raise); }
@@ -804,8 +961,63 @@
 .wd-delivery-copy { flex: 1 1 320px; min-width: 0; display: grid; gap: 4px; }
 .wd-delivery-title { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); cursor: pointer; }
 .wd-delivery-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wd-delivery-controls.watch-field { margin-top: 0; gap: 2px; }
 .wd-delivery-controls[hidden] { display: none; }
+.wd-brief-inputs { display: flex; flex-wrap: wrap; gap: 8px; }
+.wd-brief-inputs .watch-input { width: auto; }
+.wd-brief-inputs .watch-select { width: auto; max-width: 260px; }
 .wd-switch { flex: 0 0 auto; }
+
+/* --- Undo notice (watch-dashboard.js showUndoToast) --- */
+.wd-toast {
+  position: fixed;
+  z-index: var(--z-feedback);
+  left: 50%;
+  width: max-content;
+  bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 10px 10px 10px 18px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--ground);
+  font-size: var(--font-size-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity var(--dur-state) var(--ease-out), transform var(--dur-state) var(--ease-out);
+}
+.wd-toast[hidden] { display: none; }
+.wd-toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
+.wd-toast-undo {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ground) 16%, var(--ink));
+  color: var(--ground);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+.wd-toast-undo:hover { background: color-mix(in srgb, var(--ground) 24%, var(--ink)); opacity: 1; }
+.wd-toast-undo:focus-visible { outline: 2px solid var(--ground); outline-offset: 2px; }
+.wd-toast-undo[hidden] { display: none; }
+
+/* --- The Watch pill under an Agent answer (J20), same as under Consensus --- */
+.agent-review > .watch-consensus-pill.agent-watch-pill { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.agent-watch-pill-row { display: flex; margin: 10px 0 0 -8px; }
+.agent-watch-pill-row .agent-watch-pill { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.agent-watch-pill .share-pill-icon { width: 15px; height: 15px; flex: none; }
+.watch-consensus-pill.is-watching { color: var(--ink); }
+/* Phones: the evidence links fill their row; the pill starts the next,
+   on the answer's left edge, with a full touch target. */
+@media (max-width: 540px) {
+  .agent-review > .watch-consensus-pill.agent-watch-pill { min-height: 44px; margin-left: -8px; }
+}
 
 /* ==========================================================================
    Dialog: "What are you waiting for?"
@@ -813,18 +1025,20 @@
    checked row carries the ink ring, so a picked suggestion reads as picked.
    ========================================================================== */
 .watch-goal { min-width: 0; margin: 0 0 16px; padding: 0; border: 0; }
-.watch-goal-label { display: block; margin: 0 0 8px; padding: 0; color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.watch-goal-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; margin: 0 0 8px; padding: 0; color: var(--ink); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.wd-settings .watch-goal-label { font-size: var(--font-size-sm); }
 .watch-goal-hint { margin: 8px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
 .watch-goal-hint:empty { display: none; }
 .watch-goal-options,
 .watch-goal-suggestions,
 .watch-goal-loading { display: grid; gap: 6px; }
-.watch-goal-suggestions:empty { display: none; }
+.watch-goal-suggestions.is-empty { display: none; }
 .watch-goal-option {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: 42px;
+  box-sizing: border-box;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   background: var(--well);
@@ -863,6 +1077,7 @@
   color: var(--ink);
   font: inherit;
   font-weight: var(--font-weight-regular);
+  resize: none;
 }
 .watch-goal-option input.watch-goal-input::placeholder { color: var(--ink-3); }
 .watch-goal-option.is-custom:has(.watch-goal-input[aria-invalid="true"]) { box-shadow: inset 0 0 0 1.5px var(--dispute); }
@@ -881,7 +1096,7 @@
 @media (max-width: 760px) {
   .wd-item {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "main" "side" "actions" "settings";
+    grid-template-areas: "main" "side" "actions" "note" "settings";
     padding: 18px 16px 12px;
   }
   .wd-item { --wd-anchor: 44px; }
@@ -900,10 +1115,33 @@
   .wd-head-actions { width: 100%; }
 }
 
+/* Touch: 44-point targets on the page (J26) and the goal rows set like the
+   16px field inside them (J32). */
+@media (pointer: coarse) {
+  .wd-action { height: auto; min-height: 44px; }
+  .wd-sources a { min-height: 44px; }
+  .wd-link { min-height: 44px; }
+  .wd-button { height: auto; min-height: 44px; }
+  .watch-select,
+  .watch-input,
+  .wd-select,
+  .wd-input { min-height: 44px; }
+}
+@media (hover: none) and (pointer: coarse) {
+  .watch-goal-option { font-size: 16px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #viewSwitchWatches.has-watch-pulse::after { animation: none; }
   .view-switch-thumb { transition: none; }
   .is-rechecking .wd-dot,
   .wd-tick.is-confirming,
-  .watch-goal-option.is-loading { animation: none; }
+  .watch-goal-option.is-loading,
+  .wd-item.is-highlight,
+  #watchDashBody.is-arriving > * { animation: none; }
+  .wd-settings,
+  .wd-settings-content,
+  .wd-toast,
+  .watch-page,
+  body:is(.is-view-out, .is-view-in, .is-view-settle) .container { transition: none !important; }
 }

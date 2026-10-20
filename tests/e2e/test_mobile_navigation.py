@@ -212,10 +212,11 @@ def test_watch_navigation_uses_the_same_mobile_surface(browser, phase4_server, n
         page.evaluate("""() => {
           const text=document.createElement('p'); text.textContent='A watched question. '.repeat(300);
           document.getElementById('watchDashBody').append(text);
-          document.getElementById('watchDashboard').scrollTop=500;
+          window.scrollTo(0, 500);
         }""")
+        # Watches scroll the document like every page (F14).
         expect(header).to_be_hidden()
-        page.locator('#watchDashboard').evaluate('el => el.scrollTop -= 80')
+        page.evaluate('window.scrollBy(0, -80)')
         expect(header).to_be_visible()
         if new_chat:
             page.locator('#mobileNewRunButton').click()

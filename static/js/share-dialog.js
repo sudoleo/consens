@@ -200,7 +200,7 @@
         <button type="button" id="shareConfirmBtn" class="share-primary-btn">Create public link</button>
         <button type="button" id="shareCancelBtn" class="share-secondary-btn">Cancel</button>
         <button type="button" id="shareListLink" class="share-link-btn">My shared links</button>
-        <button type="button" id="watchListLink" class="share-link-btn">Watched</button>
+        <button type="button" id="watchListLink" class="share-link-btn">Watches</button>
       </div>
     `;
     document.getElementById("shareCancelBtn").addEventListener("click", closeShareDialog);
@@ -257,7 +257,7 @@
       <div class="share-modal-actions">
         <a id="shareOpenLink" target="_blank" rel="noopener" class="share-secondary-btn">Open page</a>
         <button type="button" id="shareListLink" class="share-link-btn">My shared links</button>
-        <button type="button" id="watchListLink" class="share-link-btn">Watched</button>
+        <button type="button" id="watchListLink" class="share-link-btn">Watches</button>
       </div>
     `;
     const input = document.getElementById("shareUrlInput");
@@ -378,10 +378,14 @@
         closeShareDialog();
       }
     });
+    // Esc closes this layer and only this one: the page beneath (Watches,
+    // with what is typed there) never hears it (Apple-Audit J1).
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && modal.style.display === "flex") {
-        closeShareDialog();
-      }
+      if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return;
+      if (modal.style.display !== "flex") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeShareDialog();
     });
   })();
 })();

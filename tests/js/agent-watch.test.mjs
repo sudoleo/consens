@@ -17,7 +17,7 @@ async function settle() {
 function boot({ watches = [], limits = { plan: "free", active_count: 0, active_limit: 3 }, create = null } = {}) {
   const server = { watches, limits, calls: [] };
   const harness = loadScripts(
-    ["static/js/watch-state.js", "static/js/watch.js", "static/js/agent-watch.js"],
+    ["static/js/watch-state.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/agent-watch.js"],
     {
       body: '<div id="agentAnswer"><div id="agentAnswerBody">The answer.</div></div>',
       before(window) {
@@ -100,7 +100,7 @@ describe("Agent Watch card", () => {
     await settle();
     expect(card().dataset.state).toBe("watching");
     expect(card().querySelector(".agent-watch-title").textContent).toBe("Watch paused");
-    expect(card().querySelector(".agent-watch-status").textContent).toBe("You already watch this question. The Watch is paused.");
+    expect(card().querySelector(".agent-watch-status").textContent).toBe("You already watch this question. The watch is paused.");
     expect(card().querySelector(".agent-watch-start").hidden).toBe(true);
   });
 
@@ -141,7 +141,7 @@ describe("Agent Watch card", () => {
     expect(card().dataset.state).toBe("full");
     expect(card().querySelector(".agent-watch-start").disabled).toBe(true);
     expect(card().querySelector(".agent-watch-status").textContent).toBe(
-      "Your Watch slot is in use. Pause that Watch to start a new one.");
+      "Your watch slot is in use. Pause that watch to start another.");
     expect(card().querySelector(".agent-watch-link:not([hidden])")).not.toBeNull();
   });
 

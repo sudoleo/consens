@@ -703,6 +703,13 @@
     // A Watch the Agent prepared: its card under the completed answer that points to it.
     App.agentWatch?.render(answerBody, { key: context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null });
+    // The same Watch pill as under a Consensus answer, on every finished
+    // answer (watch.js; Apple-Audit J20). It is not the Agent offering one:
+    // a prepared Watch has its card instead, and a follow-up opens at its
+    // question so the watched question stands on its own.
+    App.watch?.answerButton?.(answerBody, { question: context.question,
+      eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch,
+      followUp: context.historyTurns.length > 0 });
     // A settings change the Agent prepared: its card, applied with one click.
     // Keyed like the saved chat's view (chat:turn), so applying or dismissing
     // holds when the chat is opened again.
@@ -751,7 +758,7 @@
       currentTurn: turn, historyTurns: context.historyTurns, title: context.bookmark.title,
     });
   }
-  // Agent has no Watch button: a finished answer may offer to keep itself
+  // Besides its Watch pill, a finished answer may offer to keep itself
   // current (watch.js owns the card, the counter and "dismissed"). Only a
   // first message qualifies, because a watch re-asks the bare question, and
   // only one built on sources, because those are what can change. A turn

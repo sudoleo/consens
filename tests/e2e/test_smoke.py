@@ -1749,7 +1749,8 @@ def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
     app_page.click("#consensusWatchButton")
     app_page.locator("#shareModal").click(position={"x": 2, "y": 2})
     expect(app_page.locator("#watchConfirmBtn")).to_be_visible()
-    expect(app_page.locator("#shareModalTitle")).to_have_text("Watch this answer")
+    # One name for the dialog wherever it opens (Apple-Audit J18).
+    expect(app_page.locator("#shareModalTitle")).to_have_text("New watch")
 
     # Suggestions are options, and the first one is already picked.
     suggestions = app_page.locator("#watchGoalSuggestions input[type=radio]")
@@ -1757,7 +1758,7 @@ def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
     expect(app_page.locator("#watchGoalSuggestions label").first).to_have_text(
         "It is officially announced"
     )
-    expect(app_page.locator("#watchGoalHint")).to_contain_text("the Watch ends")
+    expect(app_page.locator("#watchGoalHint")).to_contain_text("the watch ends")
     expect(app_page.locator("#watchGoal")).to_have_attribute("maxlength", "500")
     goal_box = app_page.locator(".watch-goal").bounding_box()
     settings_box = app_page.locator("#watchAdvancedSettings").bounding_box()
@@ -1796,7 +1797,6 @@ def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
     app_page.select_option("#watchInterval", "weekly")
     expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
     expect(app_page.locator("#watchWeekday")).to_have_value("friday")
-    assert app_page.locator("#watchTimezoneLabel").text_content()
 
     app_page.select_option("#watchVisibility", "public")
     expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Public")
@@ -1821,7 +1821,7 @@ def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
     app_page.fill("#watchGoal", "An official date is announced")
     expect(app_page.locator("#watchGoalCustomChoice")).to_be_checked()
     expect(app_page.locator("#watchGoalError")).to_be_hidden()
-    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Only when it resolves")
+    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Only when it is reached")
 
     # The custom row answers a click on its padding like the label rows.
     app_page.click("#watchGoalNone")
@@ -1859,20 +1859,15 @@ def test_query_first_watch_guides_question_then_configuration(app_page):
     expect(app_page.locator("#watchDashCreate")).to_be_visible()
     expect(app_page.locator("#watchDashLimit")).to_contain_text("Standard access")
     expect(app_page.locator("#watchDashLimit")).to_contain_text("0 of 1 active")
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused Watches do not count")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused watches don't count")
 
-    expect(app_page.locator(".wd-empty")).to_contain_text("Tell us what you are waiting for.")
-    expect(app_page.locator(".wd-explainer")).to_contain_text("Why a Watch, not a scheduled prompt")
-    expect(app_page.locator(".wd-compare")).to_be_visible()
-    empty_box = app_page.locator(".wd-empty").bounding_box()
-    empty_copy_box = app_page.locator(".wd-empty-lead").bounding_box()
-    empty_cta_box = app_page.locator(".wd-empty-actions > .wd-button").bounding_box()
-    assert empty_box is not None and empty_copy_box is not None and empty_cta_box is not None
-    assert empty_cta_box["y"] >= empty_copy_box["y"] + empty_copy_box["height"] + 8
-    assert abs(
-        (empty_cta_box["x"] + empty_cta_box["width"] / 2)
-        - (empty_box["x"] + empty_box["width"] / 2)
-    ) < 2
+    # An empty page has one heading and one action, the head's; below it, on
+    # the same left edge, only the ways to start (Apple-Audit J24).
+    expect(app_page.locator(".wd-empty")).to_contain_text("Start from an example")
+    expect(app_page.locator(".wd-explainer")).to_contain_text("Why a watch, not a scheduled prompt")
+    expect(app_page.locator(".wd-empty .wd-button")).to_have_count(0)
+    title_x = app_page.locator("#watchDashTitle").bounding_box()["x"]
+    assert abs(app_page.locator(".wd-empty").bounding_box()["x"] - title_x) < 1
     assert app_page.locator(".wd-example").count() == 3
 
     app_page.set_viewport_size({"width": 390, "height": 844})
@@ -1934,15 +1929,16 @@ def test_watch_limit_is_explained_before_creation(app_page):
 
     app_page.click("#viewSwitchWatches")
     expect(app_page.locator("#watchDashLimit")).to_contain_text("1 of 1 active")
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("Limit reached")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("All slots in use")
 
     app_page.click("#watchDashCreate")
+    # No form to fill at the limit: the sentence and the way out (J25).
     expect(app_page.locator("#watchDialogLimit")).to_contain_text(
-        "Your Watch slot is in use"
+        "Your watch slot is in use"
     )
     expect(app_page.locator("#watchDialogLimit")).to_contain_text("About early access")
-    expect(app_page.locator("#watchQuestionNext")).to_be_disabled()
-    expect(app_page.locator("#watchQuestionNext")).to_have_text("Watch limit reached")
+    expect(app_page.locator("#watchQuestion")).to_have_count(0)
+    expect(app_page.locator("#watchShowList")).to_be_focused()
 
 
 def test_exclude_model_toggles_excluded_class(app_page):

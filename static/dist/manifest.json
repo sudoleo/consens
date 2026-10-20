@@ -1,5 +1,5 @@
 {
-  "sources": "4b705e1e375d",
+  "sources": "86a67b75a492",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -119,6 +119,7 @@
     "static/js/user-settings.js",
     "static/js/user-tier.js",
     "static/js/watch-dashboard.js",
+    "static/js/watch-fields.js",
     "static/js/watch-state.js",
     "static/js/watch.js",
     "static/style.css",
@@ -194,7 +195,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.9076e14a6904.js",
+      "src": "/static/dist/head.4d50a0d52b68.js",
       "module": false,
       "defer": false
     },
@@ -206,7 +207,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.02d5cd4749ea.js",
+      "src": "/static/dist/firebase.0a46d0f4756b.js",
       "module": true,
       "defer": false
     },
@@ -218,20 +219,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.4f741ddb98e5.js",
+      "src": "/static/dist/app.1a0a96c00b97.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.74495e3f7918.css",
+    "app": "/static/dist/app.778da87e40d9.css",
     "landing": "/static/dist/landing.44d4411e76b0.css",
     "public": "/static/dist/public.7adfd7c44c2d.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "8ca07a24431d",
+      "hash": "717792ea7aa2",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -298,17 +299,17 @@
     }
   },
   "previous_assets": [
+    "app.74495e3f7918.css",
     "app.fc2a55cdac17.css",
-    "app.c3ab78d0a724.css",
+    "app.4f741ddb98e5.js",
     "app.06a65bcaa6a4.js",
-    "app.4cc60c64c33e.js",
     "auth.5e487d1e2570.js",
     "demo.9cb7e261a771.js",
     "demo.f96893d39783.js",
+    "firebase.02d5cd4749ea.js",
     "firebase.7bbd8d7ca369.js",
-    "firebase.18a32034292d.js",
+    "head.9076e14a6904.js",
     "head.b8a4fe4a421c.js",
-    "head.c6a6511091d4.js",
     "landing.272588d29602.css",
     "landing.a49e221e792e.css",
     "public.a64e7193f6a4.css",

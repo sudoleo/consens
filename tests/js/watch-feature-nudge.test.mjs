@@ -32,7 +32,7 @@ const BODY = `
 function boot() {
   let queued = null;
   const harness = loadScripts(
-    ["static/js/watch-state.js", "static/js/watch.js"],
+    ["static/js/watch-state.js", "static/js/watch-fields.js", "static/js/watch.js"],
     {
       body: BODY,
       before(window) {

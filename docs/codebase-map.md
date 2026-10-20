@@ -899,7 +899,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   haben eigene `--app-surface-hover`/`--app-surface-selected`-Toene.
   Der Consensus-/Watches-Umschalter ist in Threads und Direktvergleichen
   ausgeblendet; auf Start- und Watch-Ansicht bleibt er sichtbar. Sein aktives
-  Segment ist in Light weiss mit dezenter Kontur.
+  Segment ist in Light weiss mit dezenter Kontur. Seit 2026-10-20 steht er in
+  beiden Ansichten an derselben Stelle (`layout.css`: `left: calc(50% +
+  --app-sidebar-offset / 2)` ohne Ausnahme für Watches, Apple-Audit J4), weil
+  auch die Watch-Seite rechts der Seitenleiste beginnt; das Gleiten beim
+  Ein-/Ausklappen der Leiste (C3) baut darauf auf.
   Die Thread-Container starten deshalb mit 30 px oberem Padding (46 px bis
   1099 px fuer die verbleibende Float-Navigation, vorher 58 px).
   Light-Highlights nutzen produktweit Jade/Bernstein/Rosenrot und Schiefergrau.
@@ -1001,9 +1005,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Gleiten (`body.is-sidebar-settling` schaltet die Transitions kurz ab) und
   ohne etwas zu speichern. Die Overlay-Sidebar (≤1099px) startet immer zu und
   öffnet sich beim Login nicht.
-- **Reading Chrome** — `app-init.js` beobachtet beim lesbaren Consensus den
-  Window-Scroll und im geöffneten Watch-Dashboard dessen eigenen
-  Scroll-Container. Nach deutlichem Abwärtsscrollen fahren der fixierte
+- **Reading Chrome** — `app-init.js` beobachtet beim lesbaren Consensus und
+  auf der geöffneten Watch-Seite den Window-Scroll (die Watch-Seite scrollt
+  seit 2026-10-20 im Dokument, F14; der alte Listener auf ihren eigenen
+  Scroll-Container ist harmlos übrig). Nach deutlichem Abwärtsscrollen fahren der fixierte
   `#viewSwitch` und der schwebende `.app-nav-float` aus dem Lesebereich;
   Aufwärtsscrollen, Seitenanfang und Tastatur-Navigation blenden sie wieder ein.
   Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
@@ -1024,8 +1029,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Log in/Sign up nur das Logo), im Thread gehört der Platz den Aktionen; ein
   mittlerer Titel entfällt. Der Kopf ist 56 px hoch mit Safe-Area-Zuschlag,
   selbst transparent und `pointer-events: none` (nur die Inseln nehmen Taps);
-  sobald darunter gescrollt ist (`.is-scrolled` aus `mobile-header.js`, Window-
-  oder Watch-Scroll), löst ein `--ground`-Verlauf (`::before`, 28 px unter die
+  sobald darunter gescrollt ist (`.is-scrolled` aus `mobile-header.js`,
+  Window-Scroll, auch auf der Watch-Seite), löst ein `--ground`-Verlauf (`::before`, 28 px unter die
   Inseln) den Text auf, ohne Blur. **Safari-Leisten (seit 2026-10-18):**
   iPhone-Safari (iOS 26, kein `theme-color` mehr) färbt die Streifen hinter
   Statusleiste und unterer Leiste nach dem fixierten Kasten an der Kante
@@ -1033,8 +1038,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `pointer-events`, aufwärts bis zur ersten fixed/sticky-Box mit ≥ 90 %
   Viewport-Breite; ist sie nicht auch fast viewporthoch, gilt der deckende
   Hintergrund auf dem Weg). Fehlt er, misst Safari Pixel und behält das
-  Ergebnis; viewportgroße Ebenen (Buchstabenwolken, Watches-Seite, Dialoge,
-  Dimmer) und die Sidebar behalten die vorige Farbe — so blieben weiße
+  Ergebnis; viewportgroße Ebenen (Buchstabenwolken, Dialoge, Dimmer; bis
+  2026-10-20 auch die fixierte Watches-Seite) und die Sidebar behalten die
+  vorige Farbe — so blieben weiße
   Leisten stehen, sporadisch und zuverlässig nach einem Theme-Wechsel. Jede
   Kante hat deshalb einen flachen, vollbreiten Kasten in Seitenfarbe:
   oben `.app-mobile-header-edge` (Span im Kopf, 24 px, `--ground`, nach 8 px
@@ -2194,21 +2200,68 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
 - **`share-dialog.js`** — `window.openShareDialog`, Share-Liste und die gemeinsame
   `window.App.sharedModal.*`-Steuerung für den Share-/Watch-Dialog (einziger
-  innerer Scrollbereich, Background-Scroll-Lock, Escape/Focus-Restore). Der
+  innerer Scrollbereich, Background-Scroll-Lock, Escape/Focus-Restore). Esc
+  schließt nur diese Ebene (`preventDefault` + `stopPropagation`, nichts bei
+  `isComposing`); die Watch-Seite darunter hat seit 2026-10-20 gar keinen
+  Esc-Handler mehr (J1: eine Seite ist keine Ebene). Der
   normale Share-Dialog schließt weiterhin über den Backdrop; im Watch-Modus
   verhindern unbeabsichtigte Außenklicks das Schließen. Jeder Share-Request ist
   an UID/Auth-Generation und eine Modal-/View-Epoch gebunden; Ansichtswechsel,
   Logout und Schließen aborten laufende Fetches, späte Antworten dürfen den
   gemeinsam mit Watch genutzten DOM-Knoten nicht mehr überschreiben.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
+- **`watch-fields.js`** (seit 2026-10-20, vor `watch.js`) —
+  `window.App.watchFields`: die Bausteine, aus denen der „New watch“-Dialog
+  und die Karten-Einstellungen gebaut sind (Apple-Audit J7): `goalList`
+  (Radioliste „What are you waiting for?“ mit angebotenen Zielen, „Something
+  else…“, „Any change to the answer“), `intervalSelect`/`weekdaySelect`/
+  `timeInput`, `alertSelect` (+ `relabelAlerts`), `visibilitySelect`,
+  `detailsInput` und `field()` (Label + Steuerelement + Hinweis + Fehler;
+  Gruppen wie die Kanäle als `div[role=group][aria-labelledby]`, nie als
+  `<label>`, J10) samt `markSaved()` („✓ Saved“ am Label) und `setError()`.
+  Dieselben Labels an beiden Stellen: How often · Day · Time · Notify me ·
+  Send to · Watch page · Details that matter. Außerdem die eine Schreibweise
+  für Zeiten (J5, J30): `scheduleText`/`scheduleLabel` („weekly on Tuesday at
+  09:00“, Zeitzone nur bei Abweichung und als Stadt: „(New York time)“),
+  `nextCheck(watch, now)` („Checking now…“ bei `checking`, „Check due now“
+  bei `due` oder vergangenem `next_run_at`, „Next check in 12 min“, „Next
+  check tomorrow, 09:00“), `relativePast`, `dateTimeTitle` (24 h).
 - **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal),
-  `window.openWatchDashboard` und das Routing der eigenen Seite `/app/watches`
-  (Vollbild-View `#watchDashboard` unter dem fixen View-Switch, URL-Sync via
-  pushState/popstate, Deep-Link wartet auf den asynchronen Firebase-Auth-Status).
-  Gerendert wird das Dashboard von `watch-dashboard.js`; `watch.js` stellt dafür
-  `window.App.watchUi` bereit (API-Helfer mit Session-Epoch, Popup, Schedule-/
-  Intervall-/Alert-Optionen, Telegram-Connect, Limit-Rendering) und ruft
-  `window.App.watchDashboard.render()`. Der View-Switch `#viewSwitch`
+  `window.openWatchDashboard(options)` und das Routing der eigenen Seite
+  `/app/watches` (URL-Sync via pushState/popstate, Deep-Link wartet auf den
+  asynchronen Firebase-Auth-Status). **Seit 2026-10-20 (Apple-Audit F14, C6,
+  J4, J6) scrollt die Seite im Dokument** statt als fixierte Ebene: offen ist
+  `body.is-watch-view`, der Chat (`.container`) tritt per `display: none` zur
+  Seite und bekommt beim Zurück seinen Scrollstand wieder (`setWatchView`);
+  `.watch-page-inner` beginnt am Desktop rechts der Seitenleiste wie die
+  Chat-Spalte. Der Wechsel blendet durch (`is-view-out` 120 ms → Tausch →
+  `is-view-in`/`is-view-settle` 200 ms mit 8 px Anstieg), der Umschalter
+  bleibt stehen; aus einem Thread heraus blendet er mit (`is-switch-out/in`,
+  nur Desktop). Ein Chat aus der Seitenleiste schließt Watches ohne
+  Scroll-Rücksprung. Gäste sehen die Seite auch (J3): ein Beispiel-Kartenbild
+  (`renderGuest`) und im Kopf „Log in to start watching“; jede Einladung
+  (Kopfknopf, Watch-Knopf, Nudge) öffnet `App.openAuthModal("login", …,
+  "watch")` und merkt sich die Frage in `consensio.watchAfterLogin.v1`
+  (1 h), nach dem Reload öffnet der Dialog damit von selbst.
+  `/app/watches?create=1` (CTA der öffentlichen Watch-Seite) öffnet den Dialog
+  nach bekanntem Login bzw. den Login. Gerendert wird das Dashboard von
+  `watch-dashboard.js`; `watch.js` stellt dafür `window.App.watchUi` bereit
+  (API-Helfer mit Session-Epoch; Fehler tragen `status`, `code`, `watchId`,
+  `retryAfter` aus `{error, code}` oder FastAPI-`detail`; `buildChannels`,
+  Telegram-Kopplung, Limit-Rendering, `smoothHeight`, `requireAccount`) und ruft
+  `window.App.watchDashboard.render()`. **Telegram-Kopplung** (J19): eine
+  Kopplung pro Seite (`connectTelegram`, `onTelegramStatus`,
+  `cancelTelegramPairing`), „Waiting for Telegram…“ + Cancel, prüft bis zum
+  Ablauf des Links (10 min, mit wachsenden Pausen) und sofort bei Rückkehr in
+  den Tab, nie mit „refresh this page“; nur die Stelle, von der aus verbunden
+  wurde, hakt Telegram danach an. **Watch-Knöpfe** (J15, J17, J20): dieselbe
+  Pille unter Consensus (`#consensusWatchButton`) und Agent
+  (`#agentAnswerWatchButton` in `nav.agent-evidence-links`, sonst eigene Zeile
+  `.agent-watch-pill-row`; `App.watch.answerButton(body, {question, eligible,
+  followUp})` aus `agent-chat.js` für jede fertige Antwort ohne eigene
+  Agent-Watch-Karte, Folgefragen öffnen beim Fragefeld). Eine schon
+  beobachtete Frage (`watchedFor`) heißt dort „Watching“ und öffnet ihre
+  Watch auf der Seite (`openWatchDashboard({focus: id})`). Der View-Switch `#viewSwitch`
   (Chat/Consensus | Watches) ist ein Segment mit gleitendem Thumb
   (`.view-switch-thumb`, `data-active="chat|watches"` aus `setViewSwitchState`);
   `agent-chat.js` setzt nur das Label im ersten Segment (Agent = „Chat“,
@@ -2219,6 +2272,23 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   das Fragefeld („What should we keep checking?“, Enter = Continue); eine
   bekannte Frage (Dashboard-Beispiel, Nudge „customize“, fertiger Consensus)
   springt direkt zum Ziel, die Frage steht oben mit `#watchQuestionEdit`.
+  Seit 2026-10-20 (J2) ist der Dialog oben verankert
+  (`#shareModal.is-watch-dialog`, `--watch-dialog-top`), am Handy ab dem
+  ersten Schritt ein volles Sheet, dessen Aktionsleiste mit offener Tastatur
+  an `--keyboard-edge` endet (F8); die Aktionsleiste ist Dialogfläche mit
+  Haarlinie, ohne Blur und Tönung (G14). Drei Vorschlagszeilen sind vom
+  ersten Bild an reserviert, Höhenänderungen gleiten (`smoothHeight`), und
+  während jemand in „Something else…“ tippt, hält die Liste ihre Höhe, bis
+  das Feld verlassen wird. „Any change to the answer“ ist von Anfang an
+  gewählt (J16), der erste Vorschlag übernimmt, solange niemand gewählt hat;
+  der Fokus landet im neuen Schritt auf der gewählten Zeile (J27). Eine schon
+  beobachtete Frage öffnet statt des Formulars „Watching“ mit „Open watch“
+  (J17, auch bei `code: "already_watched"`); ohne freien Platz steht vor
+  jeder Eingabe der Limit-Schritt mit „Show my watches“ (J25). „Details that
+  matter“ stehen jetzt auch im Dialog (unter „Change“; nach dem POST per
+  PATCH `requirements` gespeichert). Wörter (J18): „New watch“, „Start
+  watching“, „Watching“, Seite „Watches“, erreicht = „Reached“, „watch“ im
+  Satz klein; ein Primärknopf `.wd-button.is-primary` für alle Stellen.
   Kern ist **„What are you waiting for?“** als Radioliste
   (`name="watchGoalChoice"`): bis zu drei Vorschläge von `POST
   /api/watch/goal-suggestions` (pro Frage im Dialog gecacht; ein Fehler lässt
@@ -2254,22 +2324,62 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   eigener Viewport-Layer unter `<body>` und übermalt nie den Composer.
   `window.App.watch.resetAfterLogout()` leert das Dashboard beim Session-Ende;
   auf einem direkten `/app/watches`-Deep-Link wechselt die Seite deterministisch
-  zum Login-Hinweis, `consensio:auth-state` rendert nach späterem Login neu.
+  zur Gast-Ansicht, `consensio:auth-state` rendert nach späterem Login neu.
+  Das erste Bild von `/app/watches` malt `app-bootstrap.js` (J6):
+  `body.is-watch-view`, sichtbare Seite, Umschalter auf Watches und das
+  Kartenskelett (`App.watchSkeleton()`), bevor überhaupt ein Chat gemalt
+  wird; die Limitzeile im Kopf ist von Anfang an reserviert.
 - **`watch-dashboard.js`** — rendert `/app/watches` in `#watchDashBody`
-  (`window.App.watchDashboard.{render, cardState}`, Styles mit `wd-`-Präfix in
-  `static/css/components-watch.css`). Es präsentiert nur das Server-Signal aus
+  (`window.App.watchDashboard.{render, refresh, cardState, renderGuest,
+  renderSkeleton, focusWatch, addCreated, showUndoToast, commitPending,
+  reset}`, Styles mit `wd-`-Präfix in `static/css/components-watch.css`).
+  **Seit 2026-10-20 (D6, J8, J13, J14) wird die Seite einmal pro Besuch
+  gebaut und danach Karte für Karte geändert**: jede Karte ist ein Eintrag
+  (`page.cards`), `updateCard(id, watch)` setzt die Serverantwort ein und
+  baut nur ihren Inhalt, ihre Fußzeile und ihre Aktionen neu — offene
+  Einstellungen bleiben offen, der Fokus bleibt auf seinem Knopf. Ein
+  späteres Laden (`refresh`, Rückkehr in den Tab nach > 60 s, fälliger Check
+  mit Pausen 1/2/5/10 min) gleicht nur ab; neu sortiert wird beim nächsten
+  Besuch. Pause/Resume ändern die Karte am Platz und sagen „Watch paused ·
+  Undo“; Delete faltet die Karte weich weg und schickt den DELETE erst, wenn
+  das Undo (6 s) verstrichen ist (oder beim Verlassen der Seite/des Tabs).
+  `showUndoToast(message, {undo, commit, timeout})` ist der kleine, eigene
+  Hinweis dafür (unten mittig, einer zur Zeit, pausiert bei Hover/Fokus) —
+  ein Baustein zum Überführen in ein gemeinsames Hinweis-System (Welle 2).
+  Einstellungen klappen über `grid-template-rows` 0fr→1fr in `--dur-layer`
+  auf (geschlossen `inert`). **Speichermodell** (J7, J9, J11): jede Änderung
+  landet sofort und sagt „Saved“ am Feld — Auswahl nach 350 ms (mehrere
+  schnelle Änderungen = ein PATCH), Texte und Uhrzeiten erst beim Verlassen
+  des Feldes oder Enter, nie während des Tippens, Felder werden nie gesperrt;
+  beim Zuklappen wird Getipptes gespeichert. Begründung: die Karte ist die
+  laufende Watch, es gibt keinen Entwurf, und kein zweiter Knopf kann Text
+  zurücklassen. Die Felder sind die des Dialogs (`watch-fields.js`), dazu
+  „Watch page“ (PATCH `visibility`, ignoriert ein älterer Server das Feld,
+  steht der Fehler am Feld) und „Remove picture“ mit Undo statt des × auf dem
+  Bild (J23; das Bild führt wie die Frage zur eigenen Watch-Seite). Sektionen:
+  Watching · Paused (Fehler zuerst) · Reached (J22); pausierte Karten haben
+  „Resume“ neben „Open page“, erreichte einen Fuß mit Delete (J21). Der
+  Kopf bleibt in jedem Zustand gleich (eine Überschrift, „New watch“; am
+  Limit als einfacher Knopf), der Leerzustand zeigt darunter auf derselben
+  Kante nur „Start from an example“ (J24); die Kennzahlenzeile lässt Nullen
+  weg, „Why a watch, not a scheduled prompt“ steht zugeklappt am Seitenende
+  (J29). Zeiten werden alle 30 s neu gelesen (J5). Ein Ladefehler lässt die
+  Liste stehen und zeigt „Try again“ (`.wd-alert`, J6). Eine neue Watch steht
+  nach „Done“ oben in „Watching“ und ist kurz markiert (`addCreated`, J15). Es präsentiert nur das Server-Signal aus
   `drift_signal` (siehe `docs/watch-evidence-model.md`), leitet nichts selbst ab:
   `cardState` liefert pro Watch Ton/Label/Satz/Quellen — *Moved* (mit
   `evidence_sources` und „Held: …“), *Re-checking* (`confirming`), *Answer
   stands* (`held`), *Watching* (letzte Bewegung oder „No change on evidence in
   N checks“), *Resolved* (Grund + Quellen aus `resolution`), *Paused*, *First
-  check pending*. Aufbau: ruhige Kennzahlenzeile (watching / moved / resolved
-  this week / next check), einklappbares „Why a Watch, not a scheduled prompt“
-  (`.wd-explainer`, Offen-Zustand in `consensio.watchExplainer.open.v1`; im
-  Leerzustand offen mit Vergleichstabelle `.wd-compare`), Abschnitte
-  *Watching* (Moved → Re-checking → Held → Watching → Pending, dann nach nächstem
-  Check) / *Resolved* / *Paused*, am Ende *Delivery* (Telegram-Verbindung und
-  Morning Brief im `.switch`/`.slider`-Stil des Input-Felds). Jede Karte zeigt
+  check pending*. Aufbau: ruhige Kennzahlenzeile (watching / moved / reached
+  this week / next check, Nullen weggelassen), Abschnitte *Watching* (neu
+  angelegte zuerst, dann Moved → Re-checking → Held → Watching → Pending,
+  dann nach nächstem Check) / *Paused* / *Reached*, *Delivery*
+  (Telegram-Verbindung und Morning Brief im `.switch`/`.slider`-Stil des
+  Input-Felds, Brief-Uhrzeit beim Verlassen des Feldes gespeichert) und am
+  Ende das einklappbare „Why a watch, not a scheduled prompt“
+  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, Offen-Zustand in
+  `consensio.watchExplainer.open.v1`, standardmäßig zu). Jede Karte zeigt
   eine Textspalte über die ganze Breite: Status (Zeit als „checked 3 h ago“ bzw.
   „last check …“; bei „First check pending“ ohne Zeit, die steht im Fuß), Frage
   (3 Zeilen geklemmt), „Waiting for“ + Ziel + Zielstand, darunter „Details“
@@ -2277,7 +2387,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   („The answer has held through N checks.“), bis zu drei Link-Chips (Favicon,
   Site, Titel; bei einer Bewegung ihre Belege, sonst `watch.key_links`) und ab drei
   Checks eine Check-Leiste (ein Strich je Check, Form nach Signal; ein, zwei
-  Striche sahen wie ein Darstellungsfehler aus). Den Zielstand liefert der
+  Striche sahen wie ein Darstellungsfehler aus) mit sichtbarer Beschriftung
+  daneben („Last 6 checks · 2 moved“, J26). Den Zielstand liefert der
   Server (`watch_service.goal_state`: reached | confirming | not_met | unclear |
   pending) — ein Check, der das aktuelle Ziel bewertet, aber keine Antwort
   gefunden hat (`unknown`), heißt „No clear answer yet“, nie „Not checked yet“;
@@ -2291,20 +2402,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `.has-image`), alle Arten auf derselben Höhe `--wd-anchor` (60 px, mobil
   44 px), der Text fließt herum; mobil darf die Frage daneben vier Zeilen haben.
   Hat die Watch ein Bild (`watch.image`), ist es eine 3:2-Kachel (`is-item` ganz
-  auf Weiß, `is-article` füllend) oder bei `is-logo` die abgerundeten
+  auf Weiß, im Dunkelmodus mitsamt Foto gedämpft, J31; `is-article` füllend) oder bei `is-logo` die abgerundeten
   App-Icon-Kacheln ohne Rahmen (Haarlinien-Schatten per `drop-shadow`). Sonst — und sobald ein
   Bild entfernt wird oder nicht lädt — steht das Symbol der Watch
   (`watch.symbol`, `.wd-image.is-symbol` > `.wd-symbol`, Strichzeichnung aus
   `SYMBOL_ICONS`, unbekannte Namen → `eye`). Nur Pfade
-  `/api/watch/{id}/image/{token}` werden gerendert, das × ruft
-  `DELETE /api/watch/{id}/image`. Im Fuß stehen links „Open page“/„Settings“,
-  rechts eine leise Zeile „Next check in 21 h · Zeitplan (Zeitzone nur, wenn sie
-  nicht die eigene ist) · Tages-Scan (`last_probe`) · Public page · Telegram“,
+  `/api/watch/{id}/image/{token}` werden gerendert, „Remove picture“ in den
+  Einstellungen ruft nach dem Undo `DELETE /api/watch/{id}/image`. Im Fuß
+  stehen links „Open page“/(„Resume“)/„Settings“, rechts eine leise Zeile
+  „Next check tomorrow, 09:00 · Zeitplan (Zeitzone nur, wenn sie nicht die
+  eigene ist, als Stadt) · Tages-Scan (`last_probe`) · Public page · Telegram“,
   nur die Zeit in `--ink` (mobil darüber, linksbündig); eine eigene rechte
   Spalte gibt es nicht mehr. „Settings“
-  klappt in der Karte Ziel-Editor, Details-Editor („Details that matter“, PATCH
+  klappt in der Karte die Zielliste, „Details that matter“ (PATCH
   `requirements`, mit „Ruled out: …“ aus `rejected_sources`),
-  Intervall/Tag/Uhrzeit, Alerts, Kanäle, Google-Listing, Pause/Delete auf; eine
+  How often/Day/Time, Notify me, Send to, Watch page, Google-Listing,
+  Bild und Pause/Delete auf; eine
   abgeschlossene Watch bietet „Not what I wanted“ (PATCH `status=active`,
   `reject_match: true`, optional `requirements`; Ziel bleibt, der Treffer zählt
   nie wieder) und „Watch for something new“ (PATCH `status=active` + neues oder

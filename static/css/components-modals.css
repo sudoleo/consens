@@ -1710,41 +1710,47 @@ html.share-modal-open body {
 .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: var(--font-size-sm); }
 .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: var(--font-size-xs); }
-.watch-config-field { min-width: 0; margin-top: 14px; }
-.watch-config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-.watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
-.watch-interval-select, .watch-time-input {
-  width: 100%; min-height: 38px; box-sizing: border-box; padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-  border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color);
-  font: inherit; font-size: var(--font-size-sm);
+/* The question field of the Watch dialog (the other watch fields come from
+   components-watch.css, shared with the card settings). */
+.watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 0; border-radius: var(--radius-sm); background: var(--well); box-shadow: inset 0 0 0 1px var(--line-soft); color: var(--ink); font: inherit; font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
+.watch-condition-input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.watch-condition-input[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--dispute); }
+.watch-condition-input + .watch-field-error { margin-top: 6px !important; }
+
+/* The Watch dialog is a sheet anchored at the top: every step (question,
+   goals loading, goals, "Change", done) starts at the same edge and grows
+   or shrinks downward, softly (watch.js smoothHeight), instead of being
+   re-centred with every height (Apple-Audit J2). */
+@media (min-width: 601px) {
+  #shareModal.is-watch-dialog {
+    --watch-dialog-top: clamp(16px, 9vh, 88px);
+    align-items: flex-start;
+    padding-top: var(--watch-dialog-top);
+  }
+  #shareModal.is-watch-dialog .share-modal-content { max-height: calc(100dvh - var(--watch-dialog-top) - 16px); }
 }
-.watch-time-input { color-scheme: light dark; }
-.watch-interval-select:focus, .watch-time-input:focus {
-  outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
-  box-shadow: var(--liquid-focus-ring);
-}
-.watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-.watch-condition-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
-.watch-interval-select[aria-invalid="true"], .watch-time-input[aria-invalid="true"], .watch-condition-input[aria-invalid="true"] {
-  border-color: var(--dispute); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dispute) 16%, transparent);
-}
-.watch-field-error { margin: 6px 0 0 !important; color: var(--dispute); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
-.dark-mode .watch-field-error { color: var(--dispute); }
-.watch-field-error[hidden] { display: none; }
-.watch-data-note { margin: 6px 0 0 !important; color: var(--sidebar-text-muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
+#shareModal.is-watch-dialog #shareModalBody { display: flex; flex-direction: column; flex: 1 1 auto; }
+#shareModal.is-watch-dialog #shareModalBody > * { flex: none; }
+/* A flex column keeps every margin: the goal list and the settings line
+   keep the rhythm they had in the old block flow. */
+#shareModal.is-watch-dialog .watch-goal { margin-bottom: 14px; }
+#shareModal.is-watch-dialog .watch-goal-hint,
+#shareModal.is-watch-dialog .watch-field-hint { margin: 8px 0 0; }
+#shareModal.is-watch-dialog .watch-field-hint { margin-top: 0; }
+#shareModal.is-watch-dialog .watch-settings { margin-top: 0; }
+/* The action bar belongs to the dialog's surface: the same fill, one
+   hairline above, no blur and no tint (G14). It sits at the bottom of a
+   full-height sheet and sticks there while the steps scroll. */
 #shareModal.is-watch-dialog .share-modal-actions {
-  position: sticky; z-index: 2; bottom: -20px; margin: 18px -20px -20px;
+  position: sticky; z-index: 2; bottom: -20px; margin: auto -20px -20px;
   padding: 12px 20px 14px;
-  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 58%, transparent);
-  background: color-mix(in srgb, var(--bg-color) 12%, #ffffff);
-  box-shadow: 0 -8px 18px color-mix(in srgb, var(--bg-color) 34%, transparent);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--line-soft);
+  background: var(--app-surface, var(--raise));
+  box-shadow: none;
 }
-.dark-mode #shareModal.is-watch-dialog .share-modal-actions {
-  background: color-mix(in srgb, var(--bg-color) 86%, #202b36);
-  box-shadow: 0 -8px 20px rgba(0, 0, 0, .18);
-}
+#shareModal.is-watch-dialog .share-modal-actions .wd-link { margin-left: auto; }
+#shareModal.is-watch-dialog #shareModalBody > :nth-last-child(2) { margin-bottom: 18px; }
+#shareModal.is-watch-dialog .watch-dialog-error { flex: 1 0 100%; order: -1; }
 @media (max-width: 600px) {
   #shareModal {
     height: 100dvh;
@@ -1760,9 +1766,16 @@ html.share-modal-open body {
   .watch-config-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
   #shareModal.is-watch-dialog .share-modal-actions {
     display: grid; grid-template-columns: minmax(0, 1fr) auto;
-    bottom: -16px; margin: 18px -16px -16px; padding: 12px 16px;
+    bottom: -16px; margin: auto -16px -16px; padding: 12px 16px max(12px, env(safe-area-inset-bottom));
   }
-  #shareModal.is-watch-dialog .share-primary-btn { width: 100%; }
-  #shareModal.is-watch-dialog .share-link-btn { grid-column: 1 / -1; justify-self: center; margin-left: 0; min-height: 28px; }
+  #shareModal.is-watch-dialog .wd-button.is-primary { width: 100%; }
+  #shareModal.is-watch-dialog .share-modal-actions .wd-link { grid-column: 1 / -1; justify-self: center; margin-left: 0; }
+  #shareModal.is-watch-dialog .watch-dialog-error { grid-column: 1 / -1; }
+  /* On a phone the sheet has its full height from the first step, so no
+     step makes it grow; with the keyboard up it ends at the keyboard and
+     the action bar stays reachable (F8, composer-keyboard.js sets the edge). */
+  #shareModal.is-watch-dialog .share-modal-content { height: 100%; }
+  body.keyboard-open #shareModal.is-watch-dialog { height: var(--keyboard-edge, 100dvh); }
+  #shareModal.is-watch-dialog .watch-goal-hint { min-height: 3em; }
 }
 /* Die Watch-Liste lebt jetzt im Dashboard-Overlay (components-watch.css). */

@@ -2208,21 +2208,26 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('window.openWatchDialog("list")', source)
 
     def test_watch_ui_exposes_every_run_email_mode(self):
-        source = Path("static/js/watch.js").read_text(encoding="utf-8") + Path(
-            "static/js/watch-dashboard.js"
-        ).read_text(encoding="utf-8")
-        self.assertIn('value="every_run"', source)
-        self.assertIn("After every check", source)
-        self.assertIn("Only when it resolves", source)
-        self.assertIn('value="condition"', source)
-        self.assertIn('id="watchVisibility"', source)
-        self.assertIn('id="watchRunTime"', source)
-        self.assertIn('id="watchWeekday"', source)
+        # The dialog and the card settings build their fields from one module
+        # (watch-fields.js, Apple-Audit J7).
+        fields = Path("static/js/watch-fields.js").read_text(encoding="utf-8")
+        watch = Path("static/js/watch.js").read_text(encoding="utf-8")
+        dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
+        source = watch + dashboard
+        self.assertIn('every_run: "After every check"', fields)
+        self.assertIn('condition: "Only when it is reached"', fields)
+        self.assertIn("resolvedOptions().timeZone", fields)
+        self.assertIn('F.visibilitySelect("watchVisibility"', source)
+        self.assertIn('F.timeInput("watchRunTime"', source)
+        self.assertIn('F.weekdaySelect("watchWeekday"', source)
         self.assertIn("run_weekday", source)
-        self.assertIn("resolvedOptions().timeZone", source)
-        self.assertIn('id="watchTelegramEnabled"', source)
+        self.assertIn('idPrefix ? idPrefix + "TelegramEnabled"', source)
         self.assertIn('"/api/my/telegram/link"', source)
         self.assertIn('"telegram_enabled"', source)
+        # Both places ask the same questions under the same names.
+        for label in ("How often", "Notify me", "Send to", "Watch page", "Details that matter"):
+            self.assertIn(f'label: "{label}"', watch)
+            self.assertIn(f'label: "{label}"', dashboard + watch)
 
     def test_watch_dashboard_supports_query_first_creation(self):
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
@@ -2238,14 +2243,16 @@ class WatchFrontendContractTests(unittest.TestCase):
     def test_watch_empty_state_explains_the_difference_to_a_scheduled_prompt(self):
         """The empty page is where the mental model is set: a Watch waits for
         something, moves only on evidence and closes when it happens."""
+        # One heading and one action (the page head's), no second hero (J24).
         source = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
-        self.assertIn("Tell us what you are waiting for.", source)
-        self.assertIn("Why a Watch, not a scheduled prompt", source)
+        self.assertIn("Start from an example", source)
+        self.assertIn("Why a watch, not a scheduled prompt", source)
         self.assertIn("A scheduled prompt", source)
         self.assertIn('"wd-example"', source)
         self.assertIn("goal: example.goal", source)
-        self.assertIn(".wd-empty-actions", css)
+        self.assertNotIn("Create your first Watch", source)
+        self.assertNotIn(".wd-empty-actions", css)
         self.assertIn(".wd-compare", css)
 
     def test_watch_setup_is_a_goal_choice_and_one_settings_line(self):
@@ -2256,30 +2263,35 @@ class WatchFrontendContractTests(unittest.TestCase):
         und man sah nicht, dass man sie anklicken muss — jetzt sind sie
         Optionen, und die erste ist vorausgewaehlt."""
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        fields = Path("static/js/watch-fields.js").read_text(encoding="utf-8")
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
         # Ziel vor den Einstellungen, Einstellungen zugeklappt in einer Zeile.
-        self.assertLess(source.index('id="watchGoal"'), source.index('id="watchAdvancedSettings"'))
-        self.assertIn('<details id="watchAdvancedSettings" class="watch-settings">', source)
+        self.assertLess(source.index('F.goalList({ prefix: "watchGoal"'),
+                        source.index('advanced.id = "watchAdvancedSettings"'))
+        self.assertIn('advanced.className = "watch-settings"', source)
         self.assertIn('id="watchSettingsSummary"', source)
         self.assertLess(
-            source.index('id="watchAdvancedSettings"'),
-            source.index('id="watchTelegramEnabled"'),
+            source.index('advanced.id = "watchAdvancedSettings"'),
+            source.index('buildChannels({ idPrefix: "watch"'),
         )
         # Vorschlaege sind Radio-Optionen mit "Something else" und "Any change".
         self.assertIn('"/api/watch/goal-suggestions"', source)
-        self.assertIn('name="watchGoalChoice"', source)
-        self.assertIn('id="watchGoalCustomChoice"', source)
-        self.assertIn('id="watchGoalNone"', source)
-        self.assertIn("Any change to the answer", source)
-        self.assertIn("if (radios[0]) radios[0].checked = true;", source)
+        self.assertIn('name: "watchGoalChoice"', source)
+        self.assertIn('customChoice.id = prefix + "CustomChoice"', fields)
+        self.assertIn('anyChoice.id = prefix + "None"', fields)
+        self.assertIn("Any change to the answer", fields)
+        # "Any change" is picked from the first frame (J16); the first
+        # suggestion takes over while the reader has not chosen.
+        self.assertIn("if (!goalTouched && radios[0]) radios[0].checked = true;", source)
+        self.assertIn("else noneChoice.checked = true;", source)
         self.assertIn("condition: goal", source)
         self.assertIn('.watch-goal-option:has(input[type="radio"]:checked)', css)
         # Weg sind Step-Label, Guidance-Aufklapper und Defaults-Chips.
         for gone in ("Step 1 of 2", "watch-question-guidance", "watch-setup-chip",
                      "watch-goal-chip", "watch-config-assurance"):
             self.assertNotIn(gone, source)
-        self.assertIn('<option value="private" selected>', source)
-        self.assertIn('weekdayOptions(browserTomorrowWeekday())', source)
+        self.assertIn('option("private", "Private, only you", { selected: value !== "public" })', fields)
+        self.assertIn('F.weekdaySelect("watchWeekday", browserTomorrowWeekday())', source)
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         # The agreement score is not what a watch reports.
         self.assertNotIn("/100", dashboard)
@@ -2299,10 +2311,12 @@ class WatchFrontendContractTests(unittest.TestCase):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         self.assertIn('id="watchDashLimit"', html_source)
         self.assertIn('id="watchDialogLimit"', source)
-        self.assertIn("Paused Watches do not count.", source)
+        self.assertIn("Paused watches don't count.", source)
         self.assertIn("limited during early access", source)
         self.assertIn('id="watchUsageDisplay"', html_source)
-        self.assertIn('action.textContent = "Watch limit reached"', source)
+        self.assertIn('action.textContent = "All slots in use"', source)
+        # At the limit the dialog says so before any typing (J25).
+        self.assertIn("function renderLimitStep(modalIntent)", source)
 
     def test_watch_modal_has_one_scroll_area_and_locks_background(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
@@ -2382,7 +2396,7 @@ class WatchFrontendContractTests(unittest.TestCase):
     def test_watch_cards_open_their_settings_in_place_and_keep_their_styles(self):
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         input_css = Path("static/css/components-input.css").read_text(encoding="utf-8")
-        self.assertIn('"wd-action wd-action-toggle"', dashboard)
+        self.assertIn('"wd-action-toggle"', dashboard)
         self.assertIn('toggle.setAttribute("aria-expanded"', dashboard)
         self.assertIn("Watch for something new", dashboard)
         # No global button rule may repaint any button on the page: the solid

@@ -117,7 +117,7 @@
       <span>Chat</span>
     </button>
     <button type="button" id="viewSwitchWatches" class="view-switch-btn" aria-pressed="false"
-      title="Consensus Watch: questions you are waiting on">
+      title="Watches: questions you are waiting on">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
         <circle cx="12" cy="12" r="2.5"></circle>
@@ -919,8 +919,10 @@
     </div>
   </div>
 
-  <!-- Consensus-Watch-Seite (/app/watches): Vollbild-View unter dem View-Switch,
-       Übersicht aller Watches + Morning Brief. URL-Sync in watch.js. -->
+  <!-- Watches-Seite (/app/watches): scrollt im Dokument rechts der Seitenleiste,
+       der Chat tritt solange zur Seite (body.is-watch-view). app-bootstrap.js
+       malt sie bei direktem Aufruf ab dem ersten Bild mit Kartenskelett,
+       watch.js hält URL und Umschalter synchron, watch-dashboard.js rendert. -->
   <div id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
       <header class="wd-head">
@@ -932,7 +934,7 @@
         <div class="wd-head-actions">
           <button type="button" id="watchDashCreate" class="wd-button is-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-            New watch
+            <span class="wd-button-label">New watch</span>
           </button>
         </div>
       </header>
