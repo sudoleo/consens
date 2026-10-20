@@ -6,6 +6,9 @@ import html
 import json
 import logging
 import re
+import threading
+import time
+from collections import OrderedDict
 from datetime import datetime
 from typing import Optional
 from urllib.parse import quote, urlsplit
@@ -17,9 +20,12 @@ from fastapi.templating import Jinja2Templates
 from app.core.assets import register_asset_globals
 from app.core import not_found
 from app.core import seo_entity
+from app.core.notice_page import notice_page
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
-from app.core.rate_limit import limiter
+from app.core.rate_limit import (
+    ApiUidRateLimitExceeded, api_uid_limiter, client_ip_key, limiter,
+)
 from app.core.security import TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token
 from app.services import (
     check_page, drift_signal, favicons, mailer, og_image, source_links,
@@ -46,6 +52,51 @@ HUB_DESCRIPTION = (
 )
 templates = Jinja2Templates(directory="templates")
 register_asset_globals(templates)
+
+# Rendered public Topic pages are kept for a short while (Audit I12): a page
+# reads up to TOPIC_PAGE_RUNS runs, which made /topics/... the slowest public
+# page (400-700 ms server time) and cost Firestore reads on every view. The
+# admin routes below drop the cache on every change; a scheduled run shows
+# up after at most TOPIC_PAGE_CACHE_SECONDS, within the s-maxage the page
+# already allows shared caches.
+TOPIC_PAGE_CACHE_SECONDS = 120
+_TOPIC_PAGE_CACHE_MAX = 200
+_topic_page_cache: OrderedDict = OrderedDict()
+_topic_page_cache_lock = threading.Lock()
+
+
+def invalidate_topic_pages() -> None:
+    with _topic_page_cache_lock:
+        _topic_page_cache.clear()
+
+
+def _cached_topic_page(key):
+    with _topic_page_cache_lock:
+        entry = _topic_page_cache.get(key)
+        if not entry:
+            return None
+        if entry[0] <= time.monotonic():
+            _topic_page_cache.pop(key, None)
+            return None
+        _topic_page_cache.move_to_end(key)
+        _expires, status_code, body, headers = entry
+    return HTMLResponse(content=body, status_code=status_code, headers=headers)
+
+
+def _remember_topic_page(key, response):
+    headers = {
+        name: value for name, value in response.headers.items()
+        if name.lower() not in {"content-length", "content-type"}
+    }
+    with _topic_page_cache_lock:
+        _topic_page_cache[key] = (
+            time.monotonic() + TOPIC_PAGE_CACHE_SECONDS, response.status_code,
+            bytes(response.body), headers,
+        )
+        _topic_page_cache.move_to_end(key)
+        while len(_topic_page_cache) > _TOPIC_PAGE_CACHE_MAX:
+            _topic_page_cache.popitem(last=False)
+    return response
 
 
 def _favicon_concurrency() -> asyncio.Semaphore:
@@ -185,42 +236,42 @@ def _admin_topic_view(topic: dict) -> dict:
     return result
 
 
-def _message_page(
-    heading: str, message: str, status_code: int, *, href: str = "/topics",
-    action: str = "", button: str = "",
-) -> HTMLResponse:
-    # With ``action`` the page is a confirmation step: its button posts there
-    # and is the only thing on the page that changes anything.
-    form = (
-        f"<form method='post' action='{html.escape(action)}'>"
-        "<button type='submit' style='font:inherit;padding:10px 18px;cursor:pointer'>"
-        f"{html.escape(button)}</button></form>"
-        if action else ""
+_TOPIC_EYEBROW = "Topic you follow"
+_TOPICS_LINK = {"href": "/topics", "label": "Open Topics"}
+
+
+def _topic_link_error(request: Request, exc: Exception, fallback: str):
+    return notice_page(
+        request, status_code=_STATUS_BY_CODE.get(getattr(exc, "code", ""), 400),
+        eyebrow=_TOPIC_EYEBROW, heading="This link no longer works",
+        message=getattr(exc, "message", fallback), links=[_TOPICS_LINK],
     )
-    content = (
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<meta name='robots' content='noindex'><title>Topics | consens.io</title>"
-        "<style>body{font-family:Inter,system-ui,sans-serif;max-width:680px;margin:12vh auto;"
-        "padding:24px;color:#172033}a{color:#335cff}</style></head><body>"
-        f"<p style='color:#335cff;font-weight:700'>consens.io Topics</p>"
-        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>{form}"
-        f"<p><a href='{html.escape(href)}'>Open Topics</a></p></body></html>"
-    )
-    return HTMLResponse(
-        content,
-        status_code=status_code,
-        headers={"X-Robots-Tag": "noindex, noarchive"},
-    )
+
+
+def _topic_name(topic_id: str) -> tuple[str, str]:
+    """(title, page path) of a public topic for a mail-link page."""
+    try:
+        topic = topics.get_topic(topic_id) or {}
+    except Exception as exc:
+        logging.warning("topic link lookup failed category=%s", safe_exception(exc))
+        return "", ""
+    if topic.get("status") not in {"active", "paused"} or not topic.get("slug"):
+        return "", ""
+    return " ".join(str(topic.get("title") or "").split()), f"/topics/{topic['slug']}"
 
 
 @router.get("/topics", response_class=HTMLResponse)
 async def topics_hub(request: Request):
+    cached = _cached_topic_page(("hub",))
+    if cached is not None:
+        return cached
     try:
         entries = await asyncio.to_thread(topics.list_public_topics)
     except Exception as exc:
         logging.error("topics_hub failed category=%s", safe_exception(exc))
-        entries = []
+        entries = None
+    failed = entries is None
+    entries = entries or []
     for entry in entries:
         # A card says what a reader of the page would see first: the picture,
         # the opening of the answer, and whether the latest check moved it.
@@ -261,7 +312,8 @@ async def topics_hub(request: Request):
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
     })
     response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300"
-    return response
+    # A failed read is not kept: the next visitor tries again.
+    return response if failed else _remember_topic_page(("hub",), response)
 
 
 @router.get("/sitemap-topics.xml")
@@ -305,6 +357,10 @@ def _topic_not_found(request: Request):
 async def topic_page(
     request: Request, slug: str, version: str = Query(default="", max_length=40)
 ):
+    cache_key = ("topic", slug, version)
+    cached = _cached_topic_page(cache_key)
+    if cached is not None:
+        return cached
     try:
         topic, retired_slug = await asyncio.to_thread(
             topics.resolve_topic_by_slug, slug
@@ -508,7 +564,7 @@ async def topic_page(
     response.headers["Cache-Control"] = (
         "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
     )
-    return response
+    return _remember_topic_page(cache_key, response)
 
 
 @router.get("/topics/{slug}/og.png")
@@ -587,9 +643,42 @@ _GLOBE_SVG = (
 )
 
 
+# Only a lookup the cache cannot answer costs anything (one outbound call),
+# so only those count against a visitor. A cached icon is served without a
+# limit: one shared page shows ~13 domains, and a per-request limit left
+# visitors behind one IP without icons after a few pages (Audit I7).
+FAVICON_LOOKUPS_PER_MINUTE = 60
+
+
+def _favicon_response(data, content_type, *, transient=False) -> Response:
+    if not data:
+        return Response(
+            content=_GLOBE_SVG,
+            media_type="image/svg+xml",
+            # A capacity fallback is transient and must not be cached by a
+            # browser/CDN for a day.  Genuine negative favicon lookups remain
+            # safely cached to prevent retry amplification.
+            headers={"Cache-Control": "no-store" if transient else "public, max-age=86400"},
+        )
+    return Response(
+        content=data,
+        media_type=content_type or "image/png",
+        headers={"Cache-Control": "public, max-age=604800, immutable"},
+    )
+
+
 @router.get("/api/topics/favicon")
-@limiter.limit("30/minute")
 async def topic_favicon(request: Request, d: str = Query(default="", max_length=253)):
+    cached = favicons.cached_favicon(d)
+    if cached is not None:
+        return _favicon_response(*cached)
+    try:
+        api_uid_limiter.check(
+            "ip:" + client_ip_key(request), "favicon-lookup", FAVICON_LOOKUPS_PER_MINUTE,
+        )
+    except ApiUidRateLimitExceeded:
+        # The globe for now, never a 429: the page keeps its icon slot.
+        return _favicon_response(None, "", transient=True)
     acquired = False
     overloaded = False
     concurrency = _favicon_concurrency()
@@ -615,24 +704,7 @@ async def topic_favicon(request: Request, d: str = Query(default="", max_length=
     finally:
         if acquired:
             concurrency.release()
-    if not data:
-        return Response(
-            content=_GLOBE_SVG,
-            media_type="image/svg+xml",
-            # A capacity fallback is transient and must not be cached by a
-            # browser/CDN for a day.  Genuine negative favicon lookups remain
-            # safely cached to prevent retry amplification.
-            headers={
-                "Cache-Control": (
-                    "no-store" if overloaded else "public, max-age=86400"
-                )
-            },
-        )
-    return Response(
-        content=data,
-        media_type=content_type or "image/png",
-        headers={"Cache-Control": "public, max-age=604800, immutable"},
-    )
+    return _favicon_response(data, content_type, transient=overloaded)
 
 
 @router.post("/api/topics/{slug}/follow")
@@ -672,30 +744,33 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
     }
 
 
-def _follow_link_step(path: str, token: str, *, unsubscribe: bool, heading: str,
-                      message: str, button: str, error_heading: str) -> HTMLResponse:
+def _follow_link_step(request: Request, path: str, token: str, *, unsubscribe: bool,
+                      heading: str, message: str, button: str):
     """GET of a link from a follow mail: checks the token and asks for the
     click that acts. Mail scanners and link previews open every link in a
     message; only the POST changes anything (it is also the one-click
     unsubscribe a mail client sends for the List-Unsubscribe header)."""
     try:
-        topics.parse_follow_token(token, unsubscribe=unsubscribe)
+        topic_id, _email = topics.parse_follow_token(token, unsubscribe=unsubscribe)
     except Exception as exc:
-        error = getattr(exc, "message", "This link is invalid or expired.")
-        code = _STATUS_BY_CODE.get(getattr(exc, "code", ""), 400)
-        return _message_page(error_heading, error, code)
-    return _message_page(heading, message, 200,
-                         action=f"{path}?token={quote(token, safe='')}", button=button)
+        return _topic_link_error(request, exc, "This link is invalid or expired.")
+    title, topic_path = _topic_name(topic_id)
+    return notice_page(
+        request, eyebrow=_TOPIC_EYEBROW, heading=heading, message=message,
+        subject_label="Topic", subject=title,
+        action=f"{path}?token={quote(token, safe='')}", button=button,
+        links=[{"href": topic_path, "label": "Open the topic"}] if topic_path else [_TOPICS_LINK],
+    )
 
 
 @router.get("/topic-follow/confirm", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def topic_follow_confirm_page(request: Request, token: str = ""):
     return _follow_link_step(
-        "/topic-follow/confirm", token, unsubscribe=False,
-        heading="Confirm your follow",
-        message="Confirm to get an e-mail when the curated consensus on this topic changes materially.",
-        button="Confirm and follow", error_heading="Unable to confirm",
+        request, "/topic-follow/confirm", token, unsubscribe=False,
+        heading="Follow this topic?",
+        message="You get an e-mail when the curated consensus on it changes materially.",
+        button="Confirm and follow",
     )
 
 
@@ -704,26 +779,24 @@ def topic_follow_confirm_page(request: Request, token: str = ""):
 async def topic_follow_confirm(request: Request, token: str = ""):
     try:
         result = await asyncio.to_thread(topics.confirm_follow, token)
-        return _message_page(
-            "You're following this topic",
-            f"We will e-mail you when the curated consensus on “{result['title']}” changes materially.",
-            200,
-            href=f"/topics/{result['slug']}",
-        )
     except Exception as exc:
-        message = getattr(exc, "message", "This confirmation link is invalid or expired.")
-        code = _STATUS_BY_CODE.get(getattr(exc, "code", ""), 400)
-        return _message_page("Unable to confirm", message, code)
+        return _topic_link_error(request, exc, "This confirmation link is invalid or expired.")
+    return notice_page(
+        request, eyebrow=_TOPIC_EYEBROW, heading="You're following this topic",
+        message="We e-mail you when the curated consensus on it changes materially.",
+        subject_label="Topic", subject=result.get("title") or "",
+        links=[{"href": f"/topics/{result['slug']}", "label": "Open the topic"}],
+    )
 
 
 @router.get("/topic-follow/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def topic_follow_unsubscribe_page(request: Request, token: str = ""):
     return _follow_link_step(
-        "/topic-follow/unsubscribe", token, unsubscribe=True,
+        request, "/topic-follow/unsubscribe", token, unsubscribe=True,
         heading="Unfollow this topic?",
-        message="You will no longer receive curated consensus updates for this topic.",
-        button="Unfollow", error_heading="Unable to unfollow",
+        message="You will no longer get curated consensus updates for it.",
+        button="Unfollow",
     )
 
 
@@ -731,16 +804,16 @@ def topic_follow_unsubscribe_page(request: Request, token: str = ""):
 @limiter.limit("20/minute")
 async def topic_follow_unsubscribe(request: Request, token: str = ""):
     try:
-        await asyncio.to_thread(topics.unsubscribe_follow, token)
-        return _message_page(
-            "Topic unfollowed",
-            "You will no longer receive curated consensus updates for this topic.",
-            200,
-        )
+        result = await asyncio.to_thread(topics.unsubscribe_follow, token)
     except Exception as exc:
-        message = getattr(exc, "message", "This unsubscribe link is invalid or expired.")
-        code = _STATUS_BY_CODE.get(getattr(exc, "code", ""), 400)
-        return _message_page("Unable to unfollow", message, code)
+        return _topic_link_error(request, exc, "This unsubscribe link is invalid or expired.")
+    title, topic_path = await asyncio.to_thread(_topic_name, result.get("topic_id") or "")
+    return notice_page(
+        request, eyebrow=_TOPIC_EYEBROW, heading="Topic unfollowed",
+        message="You will no longer get curated consensus updates for it. You can follow it again on its page.",
+        subject_label="Topic", subject=title,
+        links=[{"href": topic_path, "label": "Open the topic"}] if topic_path else [_TOPICS_LINK],
+    )
 
 
 async def _deliver_topic_notifications(item_ids) -> None:
@@ -773,6 +846,7 @@ async def admin_create_topic(request: Request, data: dict = Body(...)):
         topic = await asyncio.to_thread(
             topics.create_topic, payload, actor_uid=actor_uid
         )
+        invalidate_topic_pages()
         return {"status": "success", "topic": _admin_topic_view(topic)}
     except topics.TopicError as exc:
         _raise_topic(exc)
@@ -808,6 +882,7 @@ async def admin_update_topic(
         topic = await asyncio.to_thread(
             topics.update_topic, topic_id, payload, actor_uid=actor_uid
         )
+        invalidate_topic_pages()
         return {"status": "success", "topic": _admin_topic_view(topic)}
     except topics.TopicError as exc:
         _raise_topic(exc)
@@ -851,6 +926,7 @@ async def admin_create_topic_run(
                     notifications=staged,
                 )
             )
+        invalidate_topic_pages()
         is_material = (run.get("outcome") or {}).get("signal") == drift_signal.SIGNAL_MOVED
         should_notify = is_material and mailer.is_configured()
         if staged.ids:

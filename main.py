@@ -13,6 +13,7 @@ from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
+from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
@@ -44,7 +45,10 @@ from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.static_delivery import StaticDeliveryMiddleware
 from app.core.e2e_profile import e2e_test_mode_enabled
 from app.core.not_found import not_found_page, wants_html_page
-from app.core.rate_limit import limiter
+from app.core.notice_page import notice_page
+from app.core.rate_limit import (
+    RATE_LIMITED_CODE, limiter, rate_limit_message, retry_after_seconds,
+)
 from app.services.agent_background import agent_background
 
 # Import routers
@@ -303,10 +307,35 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def handle_http_exception(request, exc: HTTPException):
     # Routen setzen bewusst Header (Retry-After bei 429/503, WWW-Authenticate
     # bei 401); das JSON-Fehlerformat darf sie nicht verschlucken.
+    # ``error_fields`` (z. B. ``code``, ``watch_id``) stehen neben dem Satz.
+    content = {"error": exc.detail}
+    content.update(getattr(exc, "error_fields", None) or {})
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.detail},
+        content=content,
         headers=dict(exc.headers) if exc.headers else None,
+    )
+
+
+@app.exception_handler(RateLimitExceeded)
+async def handle_rate_limit(request, exc: RateLimitExceeded):
+    """Every slowapi limit: an everyday sentence, ``code: "rate_limited"``
+    and ``retry_after`` seconds (also as Retry-After). A browser that
+    submitted a page form (mail links) gets the same as a page."""
+    retry_after = retry_after_seconds(request, exc)
+    message = rate_limit_message(retry_after)
+    headers = {"Retry-After": str(retry_after)}
+    if "text/html" in request.headers.get("accept", "").lower():
+        response = notice_page(
+            request, status_code=429, heading="One moment, please", message=message,
+            links=[{"href": "/", "label": "Open consens.io"}],
+        )
+        response.headers.update(headers)
+        return response
+    return JSONResponse(
+        status_code=429,
+        content={"error": message, "code": RATE_LIMITED_CODE, "retry_after": retry_after},
+        headers=headers,
     )
 
 

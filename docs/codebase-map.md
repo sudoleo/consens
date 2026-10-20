@@ -242,6 +242,17 @@ am Router VOR `include_router`: Seit FastAPI 0.14x landen eingebundene Router
 nicht mehr als Kopie in `app.routes`, ein nachträgliches Ändern wirkt nicht.
 Ausgenommen bleiben die dokumentierte `/api/v1` (sonst wüchse das
 OpenAPI-Schema) und der Auth-Proxy `/__/*`.
+**Fehlerformat und Drosselung (seit 2026-10-20, Apple-Audit H6):** Der Handler
+für FastAPIs `HTTPException` liefert `{"error": <Satz>}` plus die Felder aus
+`exc.error_fields` (z. B. `code`, `watch_id` der Watch-Routen). Jede
+slowapi-Grenze (`RateLimitExceeded`, alle Routen inkl. `/api/v1`) antwortet mit
+429 `{"error": "Too many requests in a short time. …", "code": "rate_limited",
+"retry_after": <s>}` und `Retry-After` (`rate_limit.retry_after_seconds` aus dem
+Fenster des getroffenen Limits, `rate_limit_message`), nie mit „10 per 1
+minute“; ein Browser, der ein Seitenformular abschickt (`Accept: text/html`),
+bekommt dieselbe Aussage als `templates/notice.html`. Clients unterscheiden so
+Drosselung (`rate_limited`, nie ein Upgrade-Angebot) von der Plan-Grenze
+(`limit_reached`).
 Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
 content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
 `asset_url()`-URLs mit `?v=<12 hex>` erhalten
@@ -322,8 +333,8 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `POST`/`DELETE /api/my/memory/items` und `POST /api/my/memory/changes/{change_id}/undo` (gespeicherte Einzel-Erinnerungen, siehe §3 „Agent-Memory“), `GET`/`PATCH /api/my/settings` (Kontoeinstellungen, siehe §4 „Kontoeinstellungen“), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; seit 2026-10-16 liest die Liste per Projektions-Query nur `query`, `title`, `title_source`, `mode`, `timestamp` und `list_summary` (statt ganzer Dokumente mit allen Antworten, bis 750 kB, Audit C4). `list_summary` (`has_consensus`, `model_count`, `source_count`, `attachment_count`) schreibt `persistence_guard.write_bookmark` bei JEDEM Save neu aus dem zusammengeführten Dokument; ältere Bookmarks ohne gültige Summary liest die Liste weiterhin voll (`get_all`, nur diese Zeilen), bis `scripts/backfill_bookmark_list_summary.py --apply` sie nachträgt. Neue Listenfelder brauchen deshalb einen Eintrag in `_BOOKMARK_LIST_FIELDS`; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`; höchstens `BOOKMARK_TITLES_PER_HOUR` = 30 Modellaufrufe pro Konto und Stunde, darüber `skipped`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Auf dieselbe Art sagt seit 2026-10-16 `POST /api/my/starter-questions` die Beispielfragen eines leeren neuen Chats voraus (`app/services/starter_questions.py`): Projektions-Query `select(["title", "query"])` der neuesten 12 Bookmarks (nie die Antworten), ab 3 Chats ein strukturierter Call mit demselben Modell wie die Titel (Namen + letzte Frage als Daten, Datum im Prompt), Rückgabe höchstens drei `{label, question}` (Wiederholungen schon gestellter Fragen, Labels über 40 Zeichen und weniger als zwei brauchbare verworfen); `STARTER_PREDICTIONS_PER_HOUR` = 12 pro Konto und Stunde, geprüft vor dem Read; jedes Scheitern ist `status: "skipped"`. MOCK_LLM liefert `More on …?`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft; seit 2026-10-16 holt `_page_model_answers` die Modellantworten aller completed Turns der Seite gesammelt per `get_all` über die aus `included_models` bekannten Dokument-IDs, je 100 Dokumente ein Aufruf, Audit C6; pending/failed Turns lesen keine Antworten, nur completed Turns ohne `included_models` behalten die Query pro Turn) und benötigt damit meist 3 SDK-Aufrufe pro Seite statt `2 + N`. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; ein neuer Share-Snapshot eines Bookmarks entsteht ausschließlich aus dessen completed Turn (`_completed_turn_payload`, Abschnitt „Sharing“), weil `POST /bookmark` `query` und `sources` weiterhin überschreiben darf; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 500 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. Die Bookmark-Grenze ist nur Netz unter dem Chat-Limit (`MAX_CHATS_PER_OWNER`, vor dem Lauf): sie greift erst nach dem bezahlten Lauf und liegt deshalb mindestens beim Doppelten (Test). Lehnt sie den Agent-Abschluss ab, meldet `/agent` „Your saved chats are full …“ (Code `bookmark_count_limit`/`bookmark_storage_limit`, `recoverable`, Recover → 409 statt 500); nach dem Freiräumen holt „Recover saved answer“ den Eintrag nach. Die App zeigt die `bookmark_*`-Codes (auch `bookmark_unavailable`) immer, selbst unter einer geprüften Antwort (`agent-chat.js` failureNotice); das Chat-Limit erscheint vor dem Lauf als „Message not sent. You've reached the maximum number of saved chats …“, der Entwurf bleibt im Feld. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}` mit Vorschaukarte `/s/{slug_id}/og.png` (Frage, Agreement, Modell-/Widerspruchszahl, Antwortdatum), `sitemap-shares.xml`. |
-| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call auf Betreiberkosten, 6/min pro IP und `GOAL_SUGGESTIONS_PER_HOUR` = 20 pro Konto und Stunde, darüber `{"status": "limited", "goals": []}`; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; PATCH auch `requirements` = „Details that matter“ und `reject_match`; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel, neue Details oder `reject_match: true` = „Not what I wanted“, siehe [watch-evidence-model.md](watch-evidence-model.md) „Details und abgelehnte Treffer“), `/api/watch/{id}/image/{token}` (GET ohne Login, 60/min: die gespeicherte Watch-Vorschau aus `watch_images`, nur mit passendem Inhalts-Token, `Cache-Control: private` 30 Tage; siehe §4 „Watch-Bild“), `/api/watch/{id}/image` (DELETE, Owner: Bild entfernen, danach wird nie wieder eins gesucht), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte Mail-Links `/watch/unsubscribe`, `/watch/brief/unsubscribe` und `/watch/follow/confirm|unsubscribe` (GET prüft nur den Token und fragt per Button, erst der POST auf dieselbe URL handelt, siehe §4 „Links in Mails“). |
-| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (unbekannter Slug: HTML-404 für Browser, JSON für Skripte; `?version=<run_id>`; seit 2026-10-15 aus denselben Teilen wie die Watch-Seiten gebaut, siehe §4 „Kuratierte Topics“), `/api/topics/{topic_id}/image/{token}` (GET ohne Login, 60/min: das Topic-Bild aus `topic_images`, nur mit passendem Inhalts-Token, öffentlich 30 Tage cachebar), `/topics/{slug}/og.png` (GET ohne Login, 60/min: Vorschaukarte mit Seitentitel, Modellzahl und letzter Prüfung aus `og_image.card_png`; 404 wie die Seite für archivierte, unveröffentlichte und unbekannte Topics; eine Stunde cachebar, steht auch als `image` im Article-JSON-LD), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe` (GET fragt, POST handelt wie bei den Watch-Links); der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
+| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call auf Betreiberkosten, 6/min pro IP und `GOAL_SUGGESTIONS_PER_HOUR` = 20 pro Konto und Stunde, darüber `{"status": "limited", "goals": []}`; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; PATCH auch `requirements` = „Details that matter“ und `reject_match`; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel, neue Details oder `reject_match: true` = „Not what I wanted“, siehe [watch-evidence-model.md](watch-evidence-model.md) „Details und abgelehnte Treffer“), `/api/watch/{id}/image/{token}` (GET ohne Login, 60/min: die gespeicherte Watch-Vorschau aus `watch_images`, nur mit passendem Inhalts-Token, `Cache-Control: private` 30 Tage; siehe §4 „Watch-Bild“), `/api/watch/{id}/image` (DELETE, Owner: Bild entfernen, danach wird nie wieder eins gesucht), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte Mail-Links `/watch/unsubscribe`, `/watch/resume`, `/watch/brief/unsubscribe` und `/watch/follow/confirm|unsubscribe` (GET prüft nur den Token und fragt per Button, erst der POST auf dieselbe URL handelt; Seiten aus `templates/notice.html`, siehe §4 „Links in Mails“). Fehler kommen als `{error, code, …details}` (`WatchError.details`, z. B. `already_watched` mit `watch_id`; `limit_reached` ist die Plan-Grenze, eine Drosselung ist immer `rate_limited`). PATCH nimmt auch `visibility` (`private`/`public`, gleiche Prüfung wie beim Anlegen; ändert Seite und Watch in einer Transaktion, privat heißt raus aus dem Google-Index samt Anfrage; Follower-Mails ruhen, solange die Seite privat ist). `/api/my/watches` liefert je Watch die volle `question` sowie `checking` (Check läuft, Lease aktiv) und `due` (aktiv, `next_run_at` erreicht). |
+| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (unbekannter Slug: HTML-404 für Browser, JSON für Skripte; `?version=<run_id>`; seit 2026-10-15 aus denselben Teilen wie die Watch-Seiten gebaut, siehe §4 „Kuratierte Topics“), `/api/topics/{topic_id}/image/{token}` (GET ohne Login, 60/min: das Topic-Bild aus `topic_images`, nur mit passendem Inhalts-Token, öffentlich 30 Tage cachebar), `/topics/{slug}/og.png` (GET ohne Login, 60/min: Vorschaukarte mit Seitentitel, Modellzahl und letzter Prüfung aus `og_image.card_png`; 404 wie die Seite für archivierte, unveröffentlichte und unbekannte Topics; eine Stunde cachebar, steht auch als `image` im Article-JSON-LD), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe` (GET fragt, POST handelt wie bei den Watch-Links); der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy beantwortet Cache-Treffer ohne Limit (eine geteilte Seite braucht ~13 Domains, Apple-Audit I7); nur ein Abruf bei Google zählt, `FAVICON_LOOKUPS_PER_MINUTE` = 60 je IP (prozesslokal über `api_uid_limiter`), darüber kommt der Globus mit `no-store` statt eines 429. Dazu acht parallele Requests, ein eigener Vierer-Executor, zwei Sekunden Upstream-Zeit sowie ein 2.000-Einträge-LRU einschließlich 24-h-Negativcache. Angefragt wird `sz=128`; ein Icon unter `favicons.MIN_ICON_PX` = 64 px gilt als keins (Globus statt eines unscharfen Logos bei 20 px × DPR 3, Apple-Audit I13). Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der frühere Scheduled Publisher (`GET /api/v1/publisher/config`, Header `X-Consensus-Publisher`, `POST /api/v1/shares/{share_id}/watch`) ist seit 2026-10-04 entfernt (siehe §4 „SEO-Puls“). Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Gemeinsame OpenRouter-URLs/Headers liegen dependency-frei in
@@ -344,7 +355,7 @@ Script-/Style-Tags rendert `app/core/assets.py` aus `static/js/bundles.json`),
 `admin.html`, `admin_benchmark.html` (Admin-Benchmark-Visualisierung, eigenes
 Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
 Consensus-Seite), `watch_share.html` (dieselbe Route `/s/…`, sobald die Seite
-Watch-Metadaten oder -History hat), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
+Watch-Metadaten oder -History hat), `share_unavailable.html`, `notice.html` (Hinweisseite hinter Mail-Links und für ein HTML-429, `app/core/notice_page.py`), plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
 `topics.html` und `topic.html` bilden den öffentlichen Topics-Hub bzw. die
 Detailseite; `topic.html` und `watch_share.html` setzen sich seit 2026-10-15 aus
@@ -6151,6 +6162,12 @@ keinen Abgleich.
   bleibt der vollständige Kompatibilitätsread erhalten. Kein neuer Topic-Index
   oder Backfill nötig; der normale kurze Verlauf kostet N Dokumente plus
   die Count-Aggregation statt zweier Vollabfragen.
+- Gerenderte Topic-Seiten und der Hub liegen seit 2026-10-20 (Apple-Audit I12)
+  `TOPIC_PAGE_CACHE_SECONDS` = 120 s im Prozess (`routers/topics._topic_page_cache`,
+  Schlüssel Slug + `?version`, höchstens 200 Seiten, nur 200er); jede Admin-Änderung
+  (Topic anlegen/ändern, Run) leert ihn (`invalidate_topic_pages`), ein geplanter
+  Run erscheint spätestens nach 120 s. `tests/conftest.py` leert ihn vor und nach
+  jedem Test.
 - `/topics/{slug}` liest für Verlauf und aktuelle Ansicht die neuesten 100 Runs
   (`TOPIC_PAGE_RUNS`). Ein expliziter `?version=<run_id>` außerhalb dieses
   Fensters wird direkt per `topics.get_run` unter dem bereits aufgelösten Topic
@@ -6427,8 +6444,9 @@ app/core/
   site.py                    Validierte kanonische PUBLIC_SITE_URL ohne Router-Abhängigkeit
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
-  rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt) + prozesslokale UID-Budgets
+  rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
   not_found.py               HTML-404 für Seiten-Navigationen (wants_html_page, not_found_page)
+  notice_page.py             Eine öffentliche Hinweisseite (templates/notice.html): Seiten hinter Mail-Links, HTML-429
   observability.py           PII-freie Correlation-IDs (auch im ASGI-Scope), strukturierte Logs + Prozessmetriken
   error_context.py           Inhaltsfreier Alert-Fundort: Repo-Frames, Commit, Instanz, Programmierfehler-Filter
   sourcemaps.py              VLQ-Decoder: Browser-Bundle-Koordinate -> static/js/<datei>.js:<zeile>:<spalte>
@@ -6483,11 +6501,12 @@ app/services/
   seo_pulse.py              Wöchentlicher deterministischer SEO-Puls (Lease, Bericht, Dormant-Noindex, Telegram-Notiz)
   telegram_notifier.py      Gemeinsamer Bot-API-Client, Critical-Alerts (Fingerprint, Budgets, fix-context) + Admin-Notiz (send_admin_note)
   error_alerts.py           report_server_exception: abgefangene Programmierfehler in Streams als Alert
-  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + ein Watch-Nachrichtenversuch (send_watch_message)
+  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen (Bestätigung per editMessage* in der Meldung) + ein Watch-Nachrichtenversuch (send_watch_message)
+  notification_markdown.py  Antwort-Markdown aus der Public-Pipeline neu geschrieben: Mail-HTML mit Inline-Stilen, Klartext, Telegram-Subset
   notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus
   notification_delivery.py   Ein Zustellversuch je Outbox-Item mit Abmelde-/Pause-/Kanalprüfung + Retry-Pass run_outbox_tick
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
-  favicons.py                Begrenzter Favicon-Fetch, Singleflight, LRU-/Negativcache
+  favicons.py                Begrenzter Favicon-Fetch (sz=128, < 64 px = kein Icon), Singleflight, LRU-/Negativcache, cached_favicon ohne Abruf
   retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus)
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Zielregeln, Lauf-Abschluss (Signal, geltende Antwort, Abschluss), Unsubscribe-Tokens
   evidence_change.py         Change-Judge mit Quellen + serverseitige Belegprüfung (Ursache, tragende Quellen), geteilt von Watch und Topic
@@ -7604,7 +7623,12 @@ schreibt Bericht, nächsten Termin und gibt den Lease frei, auch bei
 Search-Console-Fehlern. Die synchrone Arbeit läuft per `asyncio.to_thread`
 außerhalb des Event-Loops. Details §4 „SEO-Puls“.
 
-**Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
+**Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten;
+seit 2026-10-20 (Apple-Audit J5) schläft er nur bis zur nächsten fälligen
+Watch (`watch_scheduler.next_tick_seconds`: ein Read über
+`watch_service.earliest_next_run_at`, mindestens `MIN_TICK_SECONDS` = 30 s,
+höchstens 30 min; eine nach dem Tick noch fällige Watch wartet den normalen
+Takt ab statt einer Dauerschleife), damit „Next check 09:00“ um 09:00 läuft.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen
 Watch-Lease und das globale Tagesbudget; innerhalb eines Workers laufen Watches
 strikt sequenziell. Der globale Lease trägt ein Owner-Token: der Tick erneuert
@@ -7804,26 +7828,83 @@ Button. Es gibt bewusst keine Agreement-Zeile mehr. Die Outbox trägt dafür
 sources, goal, goal_status, goal_reason); Items ohne `delta` (vor 2026-10-01
 eingereiht, durch `deliver_until` begrenzt) rendern nur den Summary. Bausteine
 liegen zentral in `mailer.py` (`_delta_parts`, `_change_block_html`,
-`_why_html`, `_question_html`, `_shell_html` inkl. Preheader für die
-Inbox-Vorschau); eine abgeschlossene Watch schickt genau eine „Resolved“-Mail
-(sie passiert das Pause-Gate der Zustellung als einzige); lange Fragen werden auf ~200 Zeichen gekürzt und verlinken auf
-die Seite. Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
+`_why_html`, `_question_html`, `_answer_html`, `_button_html`, `_shell_html`
+inkl. Preheader für die Inbox-Vorschau); eine abgeschlossene Watch schickt
+genau eine Ziel-erreicht-Mail (sie passiert das Pause-Gate der Zustellung als
+einzige; Betreff „Reached: <Ziel> · <Frage>“, ein „Why“ mit Grund und Quellen,
+Label „You were waiting for“); lange Fragen werden auf ~200 Zeichen am Wortende
+gekürzt und verlinken auf die Seite, Betreffe enden ebenfalls an einem Wort.
+Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
 komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
-Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
-Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
-(HTTP 400), geht dieselbe Nachricht als Klartext raus.
+**Aussehen der Mails (seit 2026-10-20, Apple-Audit K2/K8):** Jede Mail sieht aus
+wie die App: die Tokens aus `public-tokens.css` als feste Farben
+(`mailer.GROUND/INK/INK_SOFT/MUTED/BORDER/RAISE`, `MAIL_PALETTE`), Wortmarke
+„consens.io“ oben, Labels in Satzschreibung, ein schwarzer Pill-Knopf als
+Tabellen-Button (Outlook), keine farbigen Randstriche, Footer-Links mit eigener
+Farbe. `<head>` trägt `lang`, `viewport`, `color-scheme`/`supported-color-schemes`,
+`<title>` und `MAIL_DARK_CSS`: ein `@media (prefers-color-scheme: dark)`-Block
+(plus `[data-ogsc]`/`[data-ogsb]` für Outlook.com), der über die Rollen-Klassen
+`cx-bg|ink|soft|muted|raise|line|line-soft|btn|btn-label` die dunklen App-Tokens
+setzt. Neue Elemente bekommen Inline-Stil UND die passende `cx-*`-Klasse. Der
+Preheader endet in unsichtbaren Füllzeichen (`_PREHEADER_FILL`), damit die
+Inbox-Vorschau nicht die ersten Zeilen der Mail wiederholt.
+**Die Antwort in Benachrichtigungen (Apple-Audit K1):** Every-run- und
+Ziel-erreicht-Mail sowie Telegram (every_run und condition) zeigen die Antwort
+gerendert, nie als escaptes Markdown. `app/services/notification_markdown.py`
+nimmt dafür das HTML der öffentlichen Seiten (`public_markdown.render_public_markdown`,
+markdown-it ohne HTML + nh3, vorher `strip_chat_framing`) und schreibt es neu:
+`answer_mail_html(md, palette=mailer.MAIL_PALETTE, sources=…)` mit Inline-Stilen
+(Überschriften, Listen, Tabellen in einer Scrollbox, Links, Code) und
+`cx-*`-Klassen; `answer_plain` für den Textteil (Absätze, `- `-Listen,
+`a | b`-Zeilen, „Text (URL)“); `answer_telegram(md, limit=…)` im erlaubten
+Telegram-Subset (b, i, s, code, a; Listen als „•“-Zeilen), innerhalb eines
+Markup-Budgets, das nie in einem Tag schneidet. `[S1]`-Verweise werden in der
+Mail zu kleinen Links auf die Quelle der Version (`get_watch_version(...).sources`,
+`notification_delivery._watch_version_answer`), in Text und Telegram entfallen sie;
+Bilder aus Antworten werden nie übernommen (eine Modell-URL lädt nie im Mailprogramm).
+Telegram sendet dieselbe Struktur und dieselben Wörter als HTML
+(`parse_mode=HTML`, keine Emojis); Frage und Antwort stehen in
+`<blockquote expandable>`; wird die Auszeichnung abgelehnt (HTTP 400), geht
+dieselbe Nachricht als Klartext raus. Knöpfe je Art: „Open watch“ (private
+Watches über `mailer.owner_page_path`, also `/app?next=/s/<id>`) plus
+„Mute 24h“/„Pause“; eine pausierte Watch bekommt „Resume watch“ (`wr:`), eine
+erreichte nur „Open watch“. **Bestätigung am Ort der Aktion (K7):** „Pause“
+ersetzt per `editMessageReplyMarkup` die Knöpfe der Meldung durch
+„Confirm pause“/„Cancel“; „Confirm pause“ pausiert und schreibt per
+`editMessageText` (Text + `entities` der Meldung, neue Statuszeile
+`STATUS_PAUSED`) und „Resume watch“ an dieselbe Meldung; „Resume watch“ setzt
+`STATUS_RESUMED`. Lehnt Telegram die Textänderung ab, werden nur die Knöpfe
+getauscht; ohne zugängliche Meldung kommt wie früher eine Rückfrage, jetzt mit
+der Frage der Watch. `/start` ohne Token verweist auf „Watches → Connect
+Telegram“.
 **Links in Mails (seit 2026-10-19):** Ein Link aus einer Mail fragt nur, der
 Button auf der geöffneten Seite handelt. Mail-Scanner, Linkvorschauen und
 Link-Checker öffnen jeden Link einer Nachricht (auch per HEAD); vorher
 pausierte schon das bloße Öffnen von `/watch/unsubscribe` die Watch und
 bestätigte `/watch/follow/confirm` einen Double-Opt-in ohne den Empfänger.
-Betroffen sind alle sechs Mail-Links: `/watch/unsubscribe`,
-`/watch/brief/unsubscribe`, `/watch/follow/confirm|unsubscribe` und
-`/topic-follow/confirm|unsubscribe`. GET (und HEAD) prüft nur den Token
-(`parse_unsubscribe_token`, `parse_brief_unsubscribe_token`,
+Betroffen sind alle Mail-Links: `/watch/unsubscribe`, `/watch/resume`
+(seit 2026-10-20), `/watch/brief/unsubscribe`, `/watch/follow/confirm|unsubscribe`
+und `/topic-follow/confirm|unsubscribe`. GET (und HEAD) prüft nur den Token
+(`parse_unsubscribe_token`, `parse_resume_token`, `parse_brief_unsubscribe_token`,
 `watch_followers.parse_follow_confirm_token|parse_follow_unsubscribe_token`,
 `topics.parse_follow_token`), zeigt Fehler sofort und sonst ein Formular,
 das per POST auf dieselbe URL samt Token geht; nur der POST schreibt.
+**Die Seiten dahinter (Apple-Audit K3)** sind eine Jinja-Vorlage im Stil der
+öffentlichen Seiten: `templates/notice.html` über `app/core/notice_page.notice_page(...)`
+(public-pages/public-shell-CSS, Navigation, Footer, `no-store`, noindex). Sie
+nennen, worum es geht (Frage der Watch über `watch_service.watch_link_view`,
+Frage der Seite, Topic-Titel) und bieten den nächsten Schritt: nach dem
+Pausieren „Resume watch“ (eigener Token `make_resume_token`, Payload `rs: 1`;
+ein Pause-Link setzt nie fort, ein Resume-Link pausiert nie) und „Open Watches“.
+Eine schon pausierte Watch zeigt beim Öffnen des Pause-Links ihren Zustand mit
+„Resume watch“; eine erreichte Watch bleibt „resolved“ (der Pause-Link setzt
+sie nicht mehr auf „paused“). `POST /watch/resume` (`watch_service.resume_from_token`)
+setzt unter den Grenzen des Owners fort (`update_watch` mit seiner Stufe; voll →
+„No free watch slot“, erreichtes Ziel → nur in der App). Die „Paused“-Mail nach
+drei Fehlern (K6) hat „Resume watch“ als Hauptknopf und keinen Pausier-Link
+mehr; ihr List-Unsubscribe-Header bleibt. Der Morning Brief (K5) führt auf
+`/app/watches`, erreichte Ziele stehen als eigene Zeile „Reached. …“, Zeiten in
+der Zeitzone des Briefs ohne Namen, andere als Stadt („Los Angeles time“).
 Jede Mail, deren Text einen Abmeldelink zeigt (Change, Every-run, Pause,
 Follower, Topic, Morning Brief), trägt dazu `List-Unsubscribe: <URL>` und
 `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 2369/8058): Gmail,

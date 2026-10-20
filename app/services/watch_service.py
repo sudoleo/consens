@@ -107,10 +107,14 @@ def _safe_count(value) -> int:
 
 
 class WatchError(Exception):
-    def __init__(self, code: str, message: str):
+    """``details`` are extra fields of the JSON error (e.g. the ``watch_id``
+    of the watch that already asks a question)."""
+
+    def __init__(self, code: str, message: str, *, details: dict | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.details = dict(details or {})
 
 
 def utcnow() -> datetime:
@@ -344,10 +348,15 @@ def goal_state(data: dict) -> str:
     return "pending"
 
 
-def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> dict:
+def _serialize_watch(watch_id: str, data: dict, share: dict | None = None, *,
+                     now: datetime | None = None) -> dict:
     def iso(value):
         return value.isoformat() if isinstance(value, datetime) else ""
 
+    now = now or utcnow()
+    active = (data.get("status") or "paused") == "active"
+    claimed_until = data.get("claimed_until")
+    next_run_at = data.get("next_run_at")
     share_id = str(data.get("share_id") or "")
     share = share or {}
     slug = str(share.get("slug") or data.get("share_slug") or "")
@@ -362,7 +371,9 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "id": watch_id,
         "share_id": share_id,
         "share_path": share_snapshots.share_path("" if visibility == "private" else slug, share_id),
-        "question": str(share.get("question") or data.get("question") or "")[:200],
+        # The whole question: the page clamps it, so a cut never ends inside
+        # a word (creation bounds it to share_snapshots.MAX_QUESTION_CHARS).
+        "question": str(share.get("question") or data.get("question") or ""),
         "interval": data.get("interval") or "weekly",
         "model_tier": "free" if data.get("model_tier") == "free" else "account",
         "run_weekday": str(data.get("run_weekday") or ""),
@@ -382,6 +393,13 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "visibility": visibility,
         "status": data.get("status") or "paused",
         "next_run_at": iso(data.get("next_run_at")),
+        # A check holds its lease while it runs; the dashboard says "Checking
+        # now" instead of a next check in the past. "due": the time has come
+        # and the scheduler will pick it up.
+        "checking": bool(
+            active and isinstance(claimed_until, datetime) and claimed_until > now
+        ),
+        "due": bool(active and isinstance(next_run_at, datetime) and next_run_at <= now),
         "last_run_at": iso(data.get("last_run_at")),
         "last_agreement_score": data.get("last_agreement_score"),
         "baseline_agreement_score": (
@@ -447,12 +465,13 @@ def _ensure_watch_indexes(uid: str, uniqueness_key: str, *, db):
         if (snapshot.to_dict() or {}).get("status") == "active"
     )
     if uniqueness_key.startswith("question:"):
+        # One question, one watch: started from an answer or from the
+        # question alone (J17). Watches from before that rule seed the key.
         expected = uniqueness_key.removeprefix("question:")
         existing = next(
             (
                 snapshot for snapshot in owner_watches
-                if (snapshot.to_dict() or {}).get("query_first") is True
-                and str((snapshot.to_dict() or {}).get("question_hash") or "")
+                if str((snapshot.to_dict() or {}).get("question_hash") or "")
                 == expected
             ),
             None,
@@ -488,6 +507,30 @@ def _ensure_watch_indexes(uid: str, uniqueness_key: str, *, db):
             })
 
     _run_transaction(db, initialize)
+
+
+def _question_hash_of(source: dict) -> str:
+    """The question identity of a share or pending result ("" without one)."""
+    if source.get("question_hash"):
+        return str(source["question_hash"])
+    question = str(source.get("question") or "").strip()
+    return share_snapshots.question_hash(question) if question else ""
+
+
+def _already_watched(watch_id: str) -> WatchError:
+    return WatchError(
+        "already_watched", "This question is already watched.",
+        details={"watch_id": str(watch_id or "")},
+    )
+
+
+def _raise_if_watched(uid: str, question_hash_value: str, db) -> None:
+    """Reads only; create_watch decides again in its transaction."""
+    if not question_hash_value:
+        return
+    for snapshot in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
+        if str((snapshot.to_dict() or {}).get("question_hash") or "") == question_hash_value:
+            raise _already_watched(snapshot.id)
 
 
 def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
@@ -537,6 +580,11 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
             raise WatchError(exc.code, exc.message) from exc
         created_query_share = True
     if result_id:
+        # Ask before the page exists: a page made for a question that is
+        # already watched would cost a share of the daily quota for nothing.
+        pending = share_snapshots.get_pending_result(uid, str(result_id), db=db)
+        if pending:
+            _raise_if_watched(uid, _question_hash_of(pending), db)
         try:
             created = share_snapshots.create_share_from_pending(
                 uid, str(result_id), db=db, visibility=visibility,
@@ -557,7 +605,7 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
     doc = {
         "owner_uid": uid,
         "share_id": share_id,
-        "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
+        "question_hash": _question_hash_of(share),
         "interval": interval,
         # Only the retired Publisher pinned "free"; it stays readable on those
         # legacy watches, new ones always run on the owner's tier.
@@ -594,10 +642,7 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
     from app.services import watch_probe
 
     doc["next_probe_at"] = watch_probe.next_probe_after(doc, now)
-    question_hash = str(doc.get("question_hash") or "")
-    uniqueness_key = (
-        f"question:{question_hash}" if created_query_share else f"share:{share_id}"
-    )
+    uniqueness_key = _watch_uniqueness_key(doc)
     _ensure_watch_indexes(uid, uniqueness_key, db=db)
     watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)
     owner_ref = _owner_state_ref(db, uid)
@@ -622,7 +667,7 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
             ).get(transaction=transaction)
 
         if existing_snapshot is not None and existing_snapshot.exists:
-            raise WatchError("already_exists", "This question is already watched.")
+            raise _already_watched(existing_id)
 
         owner_state = owner_snapshot.to_dict() if owner_snapshot.exists else {}
         active_count = _safe_count((owner_state or {}).get("active_count"))
@@ -911,8 +956,11 @@ def _owned_watch(uid: str, watch_id: str, db):
 
 
 def _watch_uniqueness_key(data: dict) -> str:
-    if data.get("query_first") is True:
-        return f"question:{str(data.get('question_hash') or '')}"
+    """One watch per question and owner, however it was started. Only a
+    watch without a question identity falls back to its page."""
+    question_hash_value = str(data.get("question_hash") or "")
+    if question_hash_value:
+        return f"question:{question_hash_value}"
     return f"share:{str(data.get('share_id') or '')}"
 
 
@@ -923,11 +971,18 @@ def _apply_watch_updates(
     *,
     tier,
     bypass_active_limit: bool = False,
+    share_updates: dict | None = None,
     db,
 ) -> dict:
+    """``share_updates`` change the watch's page in the same transaction
+    (its visibility): a watch and its page never disagree."""
     initial_ref, initial = _owned_watch(uid, watch_id, db)
     _ensure_watch_indexes(uid, _watch_uniqueness_key(initial), db=db)
     owner_ref = _owner_state_ref(db, uid)
+    share_ref = (
+        db.collection(share_snapshots.SHARES_COLLECTION).document(str(initial.get("share_id") or ""))
+        if share_updates else None
+    )
 
     def mutate(transaction):
         persistence_guard.ensure_account_write_allowed(
@@ -935,9 +990,14 @@ def _apply_watch_updates(
         )
         watch_snapshot = initial_ref.get(transaction=transaction)
         owner_snapshot = owner_ref.get(transaction=transaction)
+        share_snapshot = share_ref.get(transaction=transaction) if share_ref is not None else None
         current = watch_snapshot.to_dict() if watch_snapshot.exists else None
         if not current or current.get("owner_uid") != uid:
             raise WatchError("not_found", "Watch not found.")
+        if share_snapshot is not None:
+            page = share_snapshot.to_dict() if share_snapshot.exists else None
+            if not page or page.get("owner_uid") != uid or page.get("status") != "active":
+                raise WatchError("not_found", "The page of this watch is no longer available.")
         old_active = current.get("status") == "active"
         new_active = updates.get("status", current.get("status")) == "active"
         owner_state = owner_snapshot.to_dict() if owner_snapshot.exists else {}
@@ -965,6 +1025,8 @@ def _apply_watch_updates(
             committed["claimed_until"] = None
             committed["current_run_id"] = None
         transaction.update(initial_ref, committed)
+        if share_ref is not None:
+            transaction.update(share_ref, dict(share_updates))
         if delta:
             transaction.set(owner_ref, {
                 "schema_version": 1,
@@ -973,7 +1035,30 @@ def _apply_watch_updates(
             })
         return {**current, **committed}
 
-    return _run_transaction(db, mutate)
+    stored = _run_transaction(db, mutate)
+    if share_ref is not None:
+        share_snapshots.invalidate_share_cache(str(initial.get("share_id") or ""))
+    return stored
+
+
+def _visibility_change(uid: str, data: dict, requested, db) -> tuple[dict, dict]:
+    """(watch updates, page updates) for a new page visibility; same check
+    as creating a watch. A private page leaves Google's index and its
+    request for it; follower mails stop by themselves (they need a public
+    page) and start again if it turns public again."""
+    try:
+        visibility = share_snapshots.validate_share_visibility(requested)
+    except share_snapshots.ShareError as exc:
+        raise WatchError(exc.code, exc.message) from exc
+    share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db)
+    if not share or share.get("owner_uid") != uid or share.get("status") != "active":
+        raise WatchError("not_found", "The page of this watch is no longer available.")
+    if str(share.get("visibility") or "public") == visibility:
+        return {}, {}
+    page = {"visibility": visibility}
+    if visibility == "private":
+        page.update(indexed=False, index_requested=False)
+    return {"visibility": visibility}, page
 
 
 def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
@@ -982,11 +1067,13 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
     allowed_changes = {
         "interval", "status", "email_mode", "email_enabled", "telegram_enabled",
         "condition", "requirements", "run_weekday", "run_time", "timezone", "reject_match",
+        "visibility",
     }
     if not changes or any(key not in allowed_changes for key in changes):
         raise WatchError(
             "invalid_request",
-            "Only interval, status, alert rule, channels, condition, details, run day, run time, and timezone can be changed.",
+            "Only interval, status, alert rule, channels, condition, details, run day, run time, "
+            "timezone, and page visibility can be changed.",
         )
     reject_match = changes.get("reject_match", False)
     if not isinstance(reject_match, bool):
@@ -1000,6 +1087,10 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
             "Only a reached goal can be marked as not what you wanted, and the watch then runs again.",
         )
     updates = {}
+    share_updates = {}
+    if "visibility" in changes:
+        visibility_updates, share_updates = _visibility_change(uid, data, changes["visibility"], db)
+        updates.update(visibility_updates)
     now = utcnow()
     effective_interval = data.get("interval") or "weekly"
     if "interval" in changes:
@@ -1115,6 +1206,7 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
         updates,
         tier=tier,
         bypass_active_limit=data.get("model_tier") == "free",
+        share_updates=share_updates or None,
         db=db,
     )
     share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
@@ -1147,6 +1239,11 @@ def _delete_watch_record(
     owner_ref = _owner_state_ref(db, uid)
     unique_ref = _unique_ref(db, uid, uniqueness_key)
     share_id = str(initial.get("share_id") or "")
+    # Watches from before the one-question rule hold their page's key.
+    legacy_unique_ref = (
+        _unique_ref(db, uid, f"share:{share_id}")
+        if share_id and uniqueness_key != f"share:{share_id}" else None
+    )
     share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
     image_ref = db.collection(watch_images.WATCH_IMAGES_COLLECTION).document(watch_id)
 
@@ -1158,6 +1255,10 @@ def _delete_watch_record(
         watch_snapshot = watch_ref.get(transaction=transaction)
         owner_snapshot = owner_ref.get(transaction=transaction)
         unique_snapshot = unique_ref.get(transaction=transaction)
+        legacy_snapshot = (
+            legacy_unique_ref.get(transaction=transaction)
+            if legacy_unique_ref is not None else None
+        )
         current = watch_snapshot.to_dict() if watch_snapshot.exists else None
         if not current:
             return False, False
@@ -1178,6 +1279,10 @@ def _delete_watch_record(
         unique_data = unique_snapshot.to_dict() if unique_snapshot.exists else {}
         if str((unique_data or {}).get("watch_id") or "") == watch_id:
             transaction.delete(unique_ref)
+        if legacy_snapshot is not None and legacy_snapshot.exists and str(
+            (legacy_snapshot.to_dict() or {}).get("watch_id") or ""
+        ) == watch_id:
+            transaction.delete(legacy_unique_ref)
         if was_active and owner_snapshot.exists:
             transaction.set(owner_ref, {
                 "schema_version": 1,
@@ -1284,9 +1389,41 @@ def parse_unsubscribe_token(token: str, *, now=None) -> str:
     payload = parse_token_payload(token, now=now)
     watch_id = payload.get("wid")
     if (not isinstance(watch_id, str) or not watch_id
+            or any(key in payload for key in ("tt", "sid", "tid", "em", "un", "rs"))):
+        raise WatchError("invalid_token", "This link is invalid.")
+    return watch_id
+
+
+def make_resume_token(watch_id: str, *, now=None, max_age_days=UNSUBSCRIBE_MAX_AGE_DAYS) -> str:
+    """The "Resume watch" link of the paused mail and the pause page. Its own
+    kind: a pause link never resumes and a resume link never pauses."""
+    return sign_token_payload({"wid": watch_id, "rs": 1}, now=now, max_age_days=max_age_days)
+
+
+def parse_resume_token(token: str, *, now=None) -> str:
+    payload = parse_token_payload(token, now=now)
+    watch_id = payload.get("wid")
+    if (type(payload.get("rs")) is not int or payload["rs"] != 1
+            or not isinstance(watch_id, str) or not watch_id
             or any(key in payload for key in ("tt", "sid", "tid", "em", "un"))):
         raise WatchError("invalid_token", "This link is invalid.")
     return watch_id
+
+
+def watch_link_view(watch_id: str, db=None) -> dict:
+    """What a page behind a mail link names: the question and the state of
+    the watch. Reads only; {} when the watch is gone."""
+    db = db if db is not None else db_firestore
+    snap = db.collection(WATCHES_COLLECTION).document(str(watch_id or "")).get()
+    data = snap.to_dict() if snap.exists else None
+    if not data:
+        return {}
+    share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+    return {
+        "watch_id": str(watch_id),
+        "question": " ".join(str(share.get("question") or data.get("question") or "").split()),
+        "status": str(data.get("status") or "paused"),
+    }
 
 
 def unsubscribe(token: str, db=None) -> dict:
@@ -1297,14 +1434,41 @@ def unsubscribe(token: str, db=None) -> dict:
     data = snap.to_dict() if snap.exists else None
     if not data:
         raise WatchError("not_found", "This watch no longer exists.")
-    data = _apply_watch_updates(
-        str(data.get("owner_uid") or ""),
-        watch_id,
-        {"status": "paused", "claimed_until": None, "current_run_id": None},
-        tier=TIER_PRO,
-        db=db,
-    )
-    return {"watch_id": watch_id, "question": str(data.get("question") or "")[:200]}
+    if data.get("status") != WATCH_STATUS_RESOLVED:
+        # A reached goal already stopped the watch; "paused" would hide that.
+        _apply_watch_updates(
+            str(data.get("owner_uid") or ""),
+            watch_id,
+            {"status": "paused", "claimed_until": None, "current_run_id": None},
+            tier=TIER_PRO,
+            db=db,
+        )
+    return {"watch_id": watch_id}
+
+
+def resume_from_token(token: str, tier_for, db=None) -> dict:
+    """Resume a paused watch from its mail link, under the owner's limits.
+
+    ``tier_for(uid)`` returns the owner's tier: the active-watch limit and
+    the allowed intervals apply as in the app. A reached goal is not resumed
+    here -- it needs a new goal, which only the app can ask for."""
+    db = db if db is not None else db_firestore
+    watch_id = parse_resume_token(token)
+    snap = db.collection(WATCHES_COLLECTION).document(watch_id).get()
+    data = snap.to_dict() if snap.exists else None
+    if not data:
+        raise WatchError("not_found", "This watch no longer exists.")
+    status = data.get("status")
+    if status == "active":
+        return {"watch_id": watch_id, "status": "active"}
+    if status == WATCH_STATUS_RESOLVED:
+        raise WatchError(
+            "goal_reached",
+            "This watch reached its goal. Open it to watch for something new.",
+        )
+    uid = str(data.get("owner_uid") or "")
+    watch = update_watch(uid, watch_id, {"status": "active"}, tier_for(uid), db=db)
+    return {"watch_id": watch_id, "status": watch["status"]}
 
 
 def delete_watches_for_share(
@@ -1483,6 +1647,22 @@ def list_due_watch_ids(*, now=None, db=None, max_items=200) -> list[str]:
         return [doc.id for doc in docs[:max_items]]
     query = query.order_by("next_run_at").limit(max(1, min(500, int(max_items))))
     return [doc.id for doc in query.stream()]
+
+
+def earliest_next_run_at(*, db=None) -> datetime | None:
+    """When the next active watch is due, or None. One read on the index of
+    list_due_watch_ids; the scheduler sleeps until then (Audit J5)."""
+    db = db if db is not None else db_firestore
+    query = (
+        db.collection(WATCHES_COLLECTION)
+        .where(filter=FieldFilter("status", "==", "active"))
+        .order_by("next_run_at")
+        .limit(1)
+    )
+    for doc in query.stream():
+        value = (doc.to_dict() or {}).get("next_run_at")
+        return value if isinstance(value, datetime) else None
+    return None
 
 
 def _worker_lease_ref(db):

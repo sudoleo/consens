@@ -1,4 +1,5 @@
 import hashlib
+import math
 import os
 import threading
 import time
@@ -95,3 +96,32 @@ api_uid_limiter = ApiUidRateLimiter(enabled=_rate_limits_enabled)
 # mehrere /ask_*- und /consensus-Requests pro Minute von derselben IP und
 # wuerden sonst in 429er laufen. In Produktion nie setzen.
 limiter = Limiter(key_func=client_ip_key, enabled=_rate_limits_enabled)
+
+
+# What a person reads when a limit holds them back (Audit H6): no "10 per 1
+# minute", no status code, and never an upgrade offer -- the clients tell a
+# throttle (code "rate_limited") apart from a plan limit ("limit_reached").
+RATE_LIMITED_CODE = "rate_limited"
+
+
+def retry_after_seconds(request, exc) -> int:
+    """Seconds until the limit that was hit lets this caller through again."""
+    try:
+        item, keys = request.state.view_rate_limit
+        reset_at, _remaining = limiter.limiter.get_window_stats(item, *keys)
+        return max(1, min(int(math.ceil(reset_at - time.time())), int(item.get_expiry())))
+    except Exception:
+        try:
+            return max(1, int(exc.limit.limit.get_expiry()))
+        except Exception:
+            return 60
+
+
+def rate_limit_message(retry_after: int) -> str:
+    if retry_after <= 90:
+        wait = "Please wait a moment and try again."
+    elif retry_after <= 90 * 60:
+        wait = f"Please try again in {max(2, round(retry_after / 60))} minutes."
+    else:
+        wait = "Please try again later."
+    return "Too many requests in a short time. " + wait

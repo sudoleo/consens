@@ -171,3 +171,14 @@ def _clear_resolved_chat_context_cache():
     chat_router.resolved_context_cache.clear()
     yield
     chat_router.resolved_context_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_rendered_topic_pages():
+    """Gerenderte Topic-Seiten und der Hub leben 120 s im Prozess (Audit I12)
+    -- ohne Reset saehe ein Test die Seite aus dem Speicher des vorigen."""
+    from app.api.routers import topics as topics_router
+
+    topics_router.invalidate_topic_pages()
+    yield
+    topics_router.invalidate_topic_pages()
