@@ -400,7 +400,9 @@ def change_memory_items(request: Request, payload: MemoryItemsRequest):
         changes = [agent_memory.normalize_change(change.model_dump(), origin="user") for change in payload.changes]
         result = agent_memory_repository.apply(
             uid, changes, origin="user", expected_revision=payload.expected_revision)
-        return {"result": result.get("status")}
+        # The id lets Settings offer Undo for a change made by hand, the way
+        # it does for Agent's (Apple audit E9): a deleted memory comes back.
+        return {"result": result.get("status"), "change_id": result.get("change_id")}
 
     return _items_write(uid, operation)
 
