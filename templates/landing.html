@@ -557,6 +557,9 @@
               <dd>The AI Office can fine model providers</dd>
             </dl>
             <a href="/app/watches" data-umami-event="landing_watch_create">Create a Watch <span aria-hidden="true">›</span></a>
+            {#- Only a public Watch that is still checked, never a paused one or a
+                stand-in (share_snapshots.live_watch_path). -#}
+            {% if live_watch_path %}<a class="lp-watch-live" href="{{ live_watch_path }}" data-umami-event="landing_watch_live">See a live watch <span aria-hidden="true">›</span></a>{% endif %}
           </div>
         </div>
       </div>

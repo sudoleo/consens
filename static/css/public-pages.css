@@ -172,7 +172,7 @@ a:hover {
 }
 
 .page-shell {
-  width: min(var(--maxw), calc(100% - 40px));
+  width: var(--page-width);
   margin: 0 auto;
 }
 
@@ -403,7 +403,7 @@ canvas {
 }
 
 .footer-inner {
-  width: min(var(--maxw), calc(100% - 40px));
+  width: var(--page-width);
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -1632,7 +1632,10 @@ canvas {
    Watch page (/s/... mit Watch, templates/watch_share.html): eine Spalte,
    drei Aussagen -- der Stand, die Antwort, die Aenderungen ueber die Zeit.
    ========================================================================== */
-.wp-shell { width: min(860px, calc(100% - 48px)); padding: 44px 0 8px; }
+/* On the shared page grid (I14): the same left edge as every other public
+   page, the column itself 860 px. */
+.wp-shell { width: var(--page-width); padding: 44px 0 8px; }
+.wp-shell > * { max-width: 860px; }
 
 .wp-kicker {
   display: flex;
@@ -1936,7 +1939,7 @@ canvas {
 .wp-foot .wp-cta { color: var(--heading); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); text-decoration: none; }
 
 @media (max-width: 700px) {
-  .wp-shell { width: calc(100% - 32px); padding-top: 26px; }
+  .wp-shell { padding-top: 26px; }
   /* Schmal: das Bild steht neben der Kicker-Zeile, die Frage behält die volle
      Breite (sonst klappt sie wegen des Bildes früher auf drei Zeilen ein). */
   .wp-head.has-image { column-gap: 14px; row-gap: 0; }

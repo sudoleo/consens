@@ -117,8 +117,9 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    Layout primitives
    -------------------------------------------------------------------------- */
+/* The shared page grid (public-tokens.css --page-width, Apple-Audit I14). */
 .lp-shell {
-  width: min(var(--maxw), calc(100% - 44px));
+  width: var(--page-width);
   margin: 0 auto;
 }
 
@@ -296,7 +297,7 @@ img { display: block; max-width: 100%; }
 }
 
 /* A flex child does not get .lp-shell's auto margins, so it repeats them. */
-.lp-section--hero > .lp-hero { width: min(var(--maxw), calc(100% - 44px)); }
+.lp-section--hero > .lp-hero { width: var(--page-width); }
 
 .lp-hero {
   display: grid;
@@ -1408,6 +1409,8 @@ img { display: block; max-width: 100%; }
 .lp-watch-notification a { display: inline-flex; align-items: center; gap: 5px; margin-top: 16px; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 .lp-watch-notification a span { font-size: var(--font-size-lg); transition: transform var(--dur-state) var(--ease-standard); }
 .lp-watch-notification a:hover span { transform: translateX(3px); }
+/* The second, quieter way: a real Watch, only while one is still checked. */
+.lp-watch-notification a.lp-watch-live { margin-left: 18px; color: var(--ink-2); }
 
 /* Public mockups share the app component and only override their context. */
 .consensus-verdict,
@@ -2412,7 +2415,7 @@ img { display: block; max-width: 100%; }
   border-top: 1px solid var(--hairline-soft);
 }
 .lp-footer-inner {
-  width: min(var(--maxw), calc(100% - 44px));
+  width: var(--page-width);
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -2479,7 +2482,6 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 600px) {
   body { font-size: var(--font-size-base); }
-  .lp-shell { width: calc(100% - 32px); }
   .lp-nav-links a:not(.lp-nav-cta) { display: none; }
   .lp-window-body { padding: 16px 14px 14px; gap: 12px; }
   .consensus-main { padding: 10px 16px 12px; }
@@ -2753,7 +2755,7 @@ main > .lp-section + .lp-section::before {
   position: absolute;
   top: 0;
   left: 50%;
-  width: min(var(--maxw), calc(100% - 44px));
+  width: var(--page-width);
   height: 1px;
   transform: translateX(-50%);
   background: var(--line-soft);

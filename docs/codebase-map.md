@@ -399,7 +399,13 @@ eine Live-Statuszeile (Writing answer… / Checking the answer…), gestreamte
 Antwort, danach Markierungen und Evidenzzeile („43/100 agreement ·
 Contradictions 2 · Answers 6“); keine Ladebalken mehr. Treiber
 `landing-scenes.js` (`buildRunScene`, Standbild bei reduced motion = fertiger
-Turn über `render.still`). Szene 03 und Watch sprechen von „answer“ statt
+Turn über `render.still`). Seit 2026-10-20 (Apple-Audit I1) faltet sich der Log
+zum Abschluss in die Uhrzeile (`.lp-agent-log.is-folded`, Höhenübergang über
+`.lp-agent-log-items`, statt `hidden`), der Platz für den höchsten Zustand ist am
+Platzhalter um die Karte reserviert (nicht in der Karte), das Vergleichs-Label
+hat die Breite seiner längeren Fassung; gemessen wird mit `.is-measuring`
+(Übergänge aus). In `/app` faltet der Aktivitätslog vermutlich genauso hart
+(gemeldet, nicht geändert). Szene 03 und Watch sprechen von „answer“ statt
 „consensus“. Seit dem Feinschliff (2026-10-02) ist die H1 `.lp-hero-claim` die lauteste
 Zeile der Seite (Display-Größe, zweiter Satz in `--ink-3`), die ganze Landing
 steht auf EINEM Grund (`--ground`; Abschnitte trennt eine auslaufende
@@ -414,6 +420,22 @@ von `landing.css` und `public-pages.css`); ab derselben Breite verschwinden
 die Textlinks (eine Grenze für beide Seitenfamilien). Das Menü ist ein
 rahmenloses Zwei-Strich-Zeichen rechts außen hinter dem CTA (`order: 1`),
 offen kreuzen sich die Striche zum X; der CTA bleibt die einzige Fläche.
+Seit 2026-10-20 trägt die Leiste auf allen öffentlichen Seiten denselben CTA
+„Open app“ (keine Seitenvarianten mehr, nur `public_nav_event`) und lädt
+`static/js/public-nav.js`: Das Menü schließt bei Tipp daneben, Link, Escape
+und echtem Scrollen und geht mit derselben Bewegung, mit der es kommt
+(`.is-closing`); `html.is-scroll-smooth` (sanftes Scrollen) wird erst nach
+`load` gesetzt, damit `/#watch` von einer anderen Seite direkt springt statt
+8.000 px zu gleiten; Anker landen unter der Leiste (`scroll-padding-top:
+54px`), eine späte Verschiebung bis zum ersten Eingriff wird ausgeglichen; auf
+der Landing markiert die Leiste „Watches“, solange `#watch` die Mitte des
+Bildschirms hält. Alle öffentlichen Seiten stehen auf EINEM Raster
+(`--page-width`/`--page-gutter` in `public-tokens.css`, 20 px, unter 700 px
+16 px; Watch-/Topic-Spalte 860 px auf derselben linken Kante) und einem
+Material: Panels (`.legal-panel`, `.notice`) sind Abschnitte mit Haarlinie, keine
+grauen Kästen mit Schiene; `body { overflow-x: clip }` als Netz gegen
+seitliches Schwimmen bei 320 px. Höhen im Seitenfluss der Landing sind `svh`,
+nie `dvh` (Safari-Leiste).
 Der Landing-Hero
 zeigt ein klickbares Input-Feld (Look des /app-Inputs, "Try the demo"-Button,
 Provider-Chips darunter). Seit 2026-10-04 öffnet ein Klick ins Feld die App
@@ -501,7 +523,14 @@ damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
 Produktgeschichte führt danach über Ask/Run/Decide zum vierten
 Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisierung
 erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
-ist in der öffentlichen Navigation erreichbar. Direkt davor steht seit
+ist in der öffentlichen Navigation erreichbar. Seit 2026-10-20 spricht das
+Beispiel die Sprache der echten Watches (Ziel „Waiting for“, Bewegung mit
+Quelle, Telegram-Gliederung, kein Score) und darunter steht „See a live
+watch“ – nur, wenn es eine laufende öffentliche Watch gibt
+(`share_snapshots.live_watch_path`: aktive, öffentliche Watch, neuester Check,
+indexierte Seite zuerst; 15-min-Cache, eine Minute Pause nach einem
+Lesefehler, `stream(retry=None, timeout=3)`, damit die Landing nie auf
+Firestore wartet; `pages.landing_live_watch`). Direkt davor steht seit
 03.10.2026 der Benchmark-Abschnitt mit dem Live-Streifen aus dem Model Pulse
 („No model wins every time.“), der auf `/model-pulse` verlinkt. Die Seite
 zeigt Best-answer-Raten pro Lauf, in dem eine Familie war (siehe oben), und

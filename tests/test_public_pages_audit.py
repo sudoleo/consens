@@ -270,3 +270,80 @@ def test_the_phone_layout_puts_direct_links_in_a_row_and_targets_at_44px():
     assert ".wp-shell .wp-links-list {\n    display: flex;" in phone
     assert "min-height: 44px;" in phone
     assert ".topic-shell .wp-links-list" not in css
+
+
+# --- L17: a live Watch from the landing, only if there is one ----------------------
+
+class _Snap:
+    def __init__(self, data):
+        self._data, self.exists = data, data is not None
+
+    def to_dict(self):
+        return dict(self._data or {})
+
+
+class _Query:
+    def __init__(self, rows, filters=()):
+        self.rows, self.filters = rows, filters
+
+    def where(self, field, op, value):
+        return _Query(self.rows, self.filters + ((field, value),))
+
+    def limit(self, _n):
+        return self
+
+    def stream(self):
+        return [_Snap(row) for row in self.rows if all(row.get(f) == v for f, v in self.filters)]
+
+    def document(self, doc_id):
+        rows = {row.get("_id"): row for row in self.rows}
+        return type("Ref", (), {"get": lambda _self: _Snap(rows.get(doc_id))})()
+
+
+class _Db:
+    def __init__(self, watches, shares):
+        self.tables = {snapshots.WATCHES_COLLECTION: watches, snapshots.SHARES_COLLECTION: shares}
+
+    def collection(self, name):
+        return _Query(self.tables[name])
+
+
+def test_the_landing_links_a_live_watch_and_never_a_paused_one():
+    live, paused = snapshots.generate_share_id(), snapshots.generate_share_id()
+    shares = [
+        {"_id": live, "status": "active", "visibility": "public", "slug": "live-question", "indexed": True},
+        {"_id": paused, "status": "active", "visibility": "public", "slug": "paused-question", "indexed": True},
+    ]
+    watches = [
+        {"share_id": paused, "status": "paused", "visibility": "public",
+         "last_run_at": datetime(2026, 10, 19, tzinfo=UTC)},
+        {"share_id": live, "status": "active", "visibility": "public",
+         "last_run_at": datetime(2026, 10, 15, tzinfo=UTC)},
+    ]
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == snapshots.share_path("live-question", live)
+    # All paused, as right now: no link at all, no stand-in.
+    watches[1]["status"] = "paused"
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
+
+    landing = read("templates/landing.html")
+    assert '{% if live_watch_path %}<a class="lp-watch-live" href="{{ live_watch_path }}"' in landing
+
+
+# --- I14, I4: one grid, one material, no sideways panning ---------------------------
+
+def test_every_public_page_sits_on_one_grid_of_one_material():
+    tokens = read("static/css/public-tokens.css")
+    assert "--page-width: min(var(--maxw), calc(100% - 2 * var(--page-gutter)));" in tokens
+    assert ":root { --page-gutter: 16px; }" in read("static/css/public-nav.css")
+    pages, landing = read("static/css/public-pages.css"), read("static/css/landing.css")
+    for rule in (".page-shell {\n  width: var(--page-width);", ".footer-inner {\n  width: var(--page-width);",
+                 ".wp-shell { width: var(--page-width);"):
+        assert rule in pages, rule
+    assert ".lp-shell {\n  width: var(--page-width);" in landing
+    assert "calc(100% - 44px)" not in landing and "min(860px, calc(100% - 48px))" not in pages
+    shell = read("static/css/public-shell.css")
+    flat = shell.split(".legal-panel {\n  border: 0;\n  border-top: 1px solid var(--line-soft);", 1)
+    assert len(flat) == 2 and "background: transparent;" in flat[1].split("}", 1)[0]
+    notice = shell.split(".notice {", 1)[1].split("}", 1)[0]
+    assert "border-left: 0;" in notice and "background: transparent;" in notice
+    assert "body { overflow-x: clip; }" in tokens

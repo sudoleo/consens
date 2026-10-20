@@ -1,5 +1,5 @@
 {
-  "sources": "b0ce3a205682",
+  "sources": "4b705e1e375d",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -225,8 +225,8 @@
   ],
   "styles": {
     "app": "/static/dist/app.74495e3f7918.css",
-    "landing": "/static/dist/landing.272588d29602.css",
-    "public": "/static/dist/public.a64e7193f6a4.css"
+    "landing": "/static/dist/landing.44d4411e76b0.css",
+    "public": "/static/dist/public.7adfd7c44c2d.css"
   },
   "style_sources": {
     "app": {
@@ -270,7 +270,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "7f472e95a3fa",
+      "hash": "4e2c69746666",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -286,7 +286,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "83349668a3d0",
+      "hash": "9ca606ab39fd",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -309,7 +309,9 @@
     "firebase.18a32034292d.js",
     "head.b8a4fe4a421c.js",
     "head.c6a6511091d4.js",
+    "landing.272588d29602.css",
     "landing.a49e221e792e.css",
+    "public.a64e7193f6a4.css",
     "public.b31e93bd51de.css"
   ]
 }

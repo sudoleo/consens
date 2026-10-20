@@ -222,7 +222,7 @@ def test_share_page_loads_the_common_math_renderer():
 def test_watch_page_leads_with_one_state_line_and_keeps_the_curve_off_phones():
     template = read("templates/watch_share.html")
     public_css = read("static/css/public-pages.css")
-    phone_rules = public_css.split(".wp-shell { width: calc(100% - 32px)", 1)[1].split("}\n}", 1)[0]
+    phone_rules = public_css.split(".wp-shell { padding-top: 26px; }", 1)[1].split("}\n}", 1)[0]
 
     parts = read("templates/partials/check_page.html")
     assert 'class="wp-state is-{{ page_state.tone }}"' in parts

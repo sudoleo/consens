@@ -178,7 +178,8 @@ def landing(request: Request):
         agent_label = ""
     response = templates.TemplateResponse(request=request, name="landing.html",
                                           context={"agent_label": agent_label or "Agent",
-                                                   "pulse": landing_pulse_preview()})
+                                                   "pulse": landing_pulse_preview(),
+                                                   "live_watch_path": landing_live_watch()})
     # The same URL answers signed-in entries with a redirect.
     response.headers["Vary"] = "Cookie, Sec-Fetch-Site"
     return response
@@ -244,6 +245,18 @@ def _pulse_view(params) -> dict | None:
     except Exception as exc:
         logging.error("model pulse read failed category=%s", safe_exception(exc))
         return None
+
+
+def landing_live_watch() -> str:
+    """The page of a public Watch that is still checked, for "See a live
+    watch" under the Watch example, or "" -- then the link stays away
+    (Apple-Audit L17; all public Watches are paused right now)."""
+    try:
+        from app.services import share_snapshots
+        return share_snapshots.live_watch_path()
+    except Exception as exc:
+        logging.warning("landing live watch unavailable category=%s", safe_exception(exc))
+        return ""
 
 
 def landing_pulse_preview() -> dict | None:
