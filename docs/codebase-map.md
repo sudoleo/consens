@@ -2798,17 +2798,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   ein offenes App-Fenster holt neue Deploys selbst. Es vergleicht seinen Build
   (`data-app-build`) mit `GET /api/build`: beim Verlassen (`visibilitychange`
   → hidden), beim Zurückkommen, bei `pageshow` aus dem bfcache und alle 15 min,
-  solange die Seite vorne ist (frühestens alle 60 s). Neu geladen wird nur
-  ungesehen — im Hintergrund oder direkt beim Zurückkommen vor dem ersten
-  Klick/Tastendruck (10-s-Fenster) — und nur im Leerlauf: kein Lauf/keine
+  solange die Seite vorne ist (frühestens alle 60 s). Neu geladen wird nur,
+  solange die Seite verborgen ist (seit 2026-10-20 nie mehr beim Zurückkommen,
+  Apple-Audit B7; ein vorne gelernter Build lädt beim nächsten Verlassen sofort,
+  ohne neue Anfrage) — und nur im Leerlauf: kein Lauf/keine
   Aktion (`runRegistry.activeCount()`), leerer Composer, kein Anhang/Import,
   kein Zitat, kein befülltes fokussiertes Textfeld, kein offenes `.modal` oder
   `dialog` (angedockter Leser zählt nicht) und nichts Ungespeichertes im Bild
   (Start, Watch-Seite oder gespeicherter Chat; ein Gast-Ergebnis oder ein
   fehlgeschlagener Lauf blockiert). Vor `location.reload()` merkt es sich in
-  `sessionStorage` (`consens.appUpdate.restore`) uid + `bookmarkId`; nach dem
-  Neuladen öffnet es beim ersten `consensio:auth-state` desselben Kontos
-  `window.openBookmark(id)`, solange der Nutzer noch auf dem leeren Start ist
+  `sessionStorage` (`consens.appUpdate.restore`) uid + `bookmarkId` und die
+  Lesestelle (`place`: der oberste sichtbare `[data-turn-key]` und sein Abstand
+  zur Oberkante, dazu `scrollY`); nach dem Neuladen öffnet es beim ersten
+  `consensio:auth-state` desselben Kontos `window.openBookmark(id)` mit
+  `App.chatScroll.returnTo(fn)` davor — das Öffnen steht dann ohne Fahrt an
+  genau dieser Stelle und hält sie, solange das Layout nachzieht —, solange der
+  Nutzer noch auf dem leeren Start ist
   (max. 5 min alt). War der Anmeldestand schon bekannt, bevor das deferred
   App-Bundle lief (das Firebase-Modul war fertig, das Bundle lud noch), ist das
   Ereignis vorbei: dann liest es nach `load` `window.__consensioAuthState`. `consens.appUpdate.attempt` verhindert eine Schleife, wenn
