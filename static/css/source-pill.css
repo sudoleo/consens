@@ -199,6 +199,14 @@
   }
 }
 
+/* 44px to the finger (Apple-Audit F5): the pill stays a 19px mark in the
+   line and reaches over half a line above and below it. The label clips
+   its own text (ellipsis), so the pill itself may let the area out. */
+@media (pointer: coarse) {
+  .src-ref { overflow: visible; }
+  .src-ref::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
+
 /* The domain is already in the sentence: favicon only (plus "+N"). */
 .src-ref.is-compact {
   /* Without a label there is no text baseline to sit on; centre the icon

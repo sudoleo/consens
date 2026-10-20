@@ -8953,6 +8953,24 @@ Handy.
   Tap-/Textgrößen-Regeln; der CSS-Leser dafür ist
   `tests/js/helpers/css-rules.mjs` (`parseCss`, `walkRules`, `ancestors`,
   `splitSelectors`).
+  **44-px-Trefferflächen (F5):** Unter `@media (pointer: coarse)` bekommt jedes
+  kleinere Bedienelement eine unsichtbare Trefferfläche aus einem eigenen
+  Pseudo-Element: `.x { position: relative } .x::after { content: ""; position:
+  absolute; inset: var(--hit-slop) }`. `--hit-slop` (`foundation.css`) ist
+  `min(0px, calc(50% - 22px))`: jede Seite wächst nur so weit, wie das Element
+  kleiner als 44 px ist. Gezeichnet bleibt alles gleich groß. Ausnahmen mit
+  Begründung im CSS: Senden (beide Pseudos belegt) wird ein 44-px-Kasten mit
+  `padding: 4px; margin: -4px; background-clip: content-box`; die Adresse im
+  Seitenmenü clippt ihren Text, ihre Fläche ist Padding mit Gegenmargin (die
+  Tarifzeile darunter lässt Taps durch); Pillen/Picker mit eigenem
+  Ellipsis-Label setzen auf Touch `overflow: visible`; die Beispielfragen in
+  der seitwärts scrollenden Zeile holen sich 6 px Innenraum und geben ihn per
+  Margin zurück (`--starters-room` misst deshalb die Margin-Box); Reasoning/
+  Anhang stehen auf dem Handy 16 px auseinander. Wo zwei Flächen kollidieren,
+  behält ein Feld oder ein Knopf seine Taps („Forgot password?“ nimmt die 39 px
+  zwischen Passwortfeld und Knopf). Fließtext-Links (Rechtliches im
+  Login-Text) und volle Listenzeilen (Chats 40 px) bleiben bewusst so.
+  `tests/e2e/test_touch_targets.py` misst mit `elementFromPoint` bei 320/390 px.
 
 ---
 

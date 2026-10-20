@@ -212,6 +212,20 @@
   cursor: default;
 }
 
+/* Touch targets (Apple audit F5). A finger needs 44 x 44 px; what is drawn
+   keeps its size. A smaller control gets an invisible hit area from one of
+   its own pseudo-elements:
+     @media (pointer: coarse) {
+       .control { position: relative; }
+       .control::after { content: ""; position: absolute; inset: var(--hit-slop); }
+     }
+   --hit-slop reaches out on each side only as far as the control is smaller
+   than 44 px; a larger side keeps its own edge. tests/e2e/
+   test_touch_targets.py measures the result with elementFromPoint. */
+:root {
+  --hit-slop: min(0px, calc(50% - 22px));
+}
+
 /* 44px to the finger without growing the drawn field. */
 @media (pointer: coarse) {
   .close-button::after {

@@ -392,6 +392,11 @@ body.is-view-settle.is-watch-view .watch-page {
   .watch-question-edit:hover { color: var(--ink); }
 }
 .watch-question-edit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* 44px to the finger (Apple-Audit F5); the word stays as it is. */
+@media (pointer: coarse) {
+  .watch-question-edit { position: relative; }
+  .watch-question-edit::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
 
 /* Schedule, alerts, channels and page: one line until "Change". */
 .watch-settings { margin-top: 4px; border-radius: var(--radius-sm); background: var(--raise); }

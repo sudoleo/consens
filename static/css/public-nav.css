@@ -38,6 +38,15 @@
 }
 .nav-menu > summary:focus-visible { outline: var(--focus-ring); outline-offset: -4px; border-radius: var(--radius-sm); }
 .nav-menu > summary svg { width: 22px; height: 22px; }
+/* 44px to the finger (Apple-Audit F5): the bare mark keeps its place (its
+   middle stays 12px in from the edge of the bar), only the empty box grows;
+   the brand and "Open app" keep their drawing and reach out to 44px. */
+@media (pointer: coarse) {
+  .nav-menu > summary { width: 44px; height: 44px; margin-right: -10px; }
+  .nav-menu > summary:focus-visible { outline-offset: -6px; }
+  .site-nav :is(.brand, .nav-cta) { position: relative; }
+  .site-nav :is(.brand, .nav-cta)::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
 .nav-menu > summary line {
   transform-box: view-box;
   transform-origin: 12px 12px;

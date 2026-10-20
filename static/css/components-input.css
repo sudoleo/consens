@@ -1002,6 +1002,14 @@ body:not(.dark-mode) .chat-input-container::before {
   }
 }
 
+/* 44px to the finger (Apple-Audit F5); the cross stays 22px. */
+@media (pointer: coarse) {
+  .composer-quote-remove,
+  .attachment-chip-remove { position: relative; }
+  .composer-quote-remove::after,
+  .attachment-chip-remove::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
+
 /* The drawn cross of the close component (foundation.css .close-icon), a
    size down for the fields of a chip and a quote. */
 :is(.composer-quote-remove, .attachment-chip-remove, .exclude-btn) .close-icon {

@@ -263,6 +263,12 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-inspector .consensus-source-body { min-width: 0; flex: 1; }
 .answer-reader-inspector .consensus-source-title { font-size: var(--font-size-sm); font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
 .answer-reader-inspector .consensus-source-host { display: block; font-size: var(--font-size-xs); color: var(--ink-2); margin-top: 5px; }
+/* 44px to the finger (Apple-Audit F5): a one-line title reaches over the
+   domain under it; the excerpt toggle below keeps its own row. */
+@media (pointer: coarse) {
+  .answer-reader-inspector a.consensus-source-title { position: relative; }
+  .answer-reader-inspector a.consensus-source-title::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
 .answer-reader-source-excerpt { margin-top: 10px; font-size: var(--font-size-xs); color: var(--ink-2); }
 .answer-reader-source-excerpt summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; }
 .answer-reader-source-excerpt summary::after { content: ''; width: 1em; height: 1em; background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; }

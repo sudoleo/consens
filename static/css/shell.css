@@ -4381,6 +4381,23 @@ body .theme-toggle:focus-visible {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
 }
+/* 44px to the finger (Apple-Audit F5): Reasoning, Attach and the models keep
+   their drawing; on touch each reaches out to 44px, and on a phone the
+   icons stand 16px apart so neighbouring hit areas do not eat each other.
+   Above the bar the field takes the taps (it lies over the bar), so the
+   area reaches further down, into the free room under the bar. */
+@media (pointer: coarse) {
+  .composer-agent-toggle { position: relative; }
+  .composer-agent-toggle::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+    bottom: calc(var(--hit-slop) - 6px);
+  }
+}
+@media (pointer: coarse) and (max-width: 480px) {
+  .composer-mode-controls { gap: 16px; }
+}
 
 /* Mobile navigation: no bar, two groups of bare glyphs. The menu mark on the
    left, the thread's actions on the right; since 2026-10-20 neither sits in
@@ -4883,4 +4900,31 @@ body .theme-toggle:focus-visible {
   .sidebar-settings .settings-icon svg { width: 20px; height: 20px; }
   .sidebar-footer-row .quota-trigger { width: 44px; height: 44px; }
   .sidebar-footer-meta { padding-left: 10px; }
+}
+
+/* 44px to the finger (Apple-Audit F5) for what is smaller in the sidebar,
+   in the drawer and beside the page (a tablet on its side): the brand, the
+   Chats heading, the search glyph, the initial and the address under it.
+   The rows keep their drawing. */
+@media (pointer: coarse) {
+  #logoLink.sidebar-brand-link,
+  .sidebar-bookmarks-head .sidebar-toggle-btn,
+  .sidebar .email-icon { position: relative; }
+  #logoLink.sidebar-brand-link::after,
+  .sidebar-bookmarks-head .sidebar-toggle-btn::after,
+  .sidebar-search-trigger::after,
+  .sidebar .email-icon::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+  }
+  /* The first chat starts 2px under the heading and takes its own taps;
+     the heading reaches into the free room above it instead. */
+  .sidebar-bookmarks-head .sidebar-toggle-btn::after { top: calc(2 * var(--hit-slop)); }
+  /* The address clips its own text (ellipsis), so its hit area is its
+     padding, handed back by the margin: the line stays where it was. The
+     plan under it lets those taps through (its link keeps its own). */
+  .sidebar #accountIdentity.account-identity { padding-block: 12px; margin-block: -12px; }
+  .sidebar .account-plan-line { pointer-events: none; }
+  .sidebar .account-plan-line a { pointer-events: auto; }
 }

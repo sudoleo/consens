@@ -482,6 +482,21 @@
   #loginModal .auth-secondary-action:hover { background: var(--hover); }
 }
 
+/* 44px to the finger (Apple-Audit F5) for the dialog's smaller controls:
+   the two tabs, Show, Forgot password? and the links under the form. */
+@media (pointer: coarse) {
+  #loginModal :is(.auth-link, .auth-footer-links a) { position: relative; }
+  #loginModal :is(.auth-tab, .auth-reveal, .auth-link, .auth-footer-links a)::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+  }
+  /* Between the password field and the button there are 39px: the link
+     takes all of them, the field (and Show in it) and the button keep
+     their own taps. */
+  #loginModal .auth-forgot-row .auth-link::after { inset: -6px var(--hit-slop) -14px; }
+}
+
 @media (max-width: 480px) {
   #loginModal .auth-modal { margin-top: 12px; }
   #loginModal .auth-head { padding: 24px 20px 0; }
