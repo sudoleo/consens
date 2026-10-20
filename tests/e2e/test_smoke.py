@@ -145,7 +145,9 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
     )
     assert abs(metrics["brandCenter"] - metrics["toggleCenter"]) <= 1
     assert metrics["newRunTop"] >= metrics["headerBottom"]
-    assert abs(metrics["newRunWidth"] - metrics["sidebarInnerWidth"]) <= 1
+    # New chat, Models and the chats are one row part (Apple-Audit G2): the
+    # row sits 4px in on both sides like the chat rows, not a full-width box.
+    assert abs(metrics["newRunWidth"] - (metrics["sidebarInnerWidth"] - 8)) <= 1
 
     search = app_page.locator(".sidebar-search-box")
     search_trigger = app_page.locator("#bookmarkSearchTrigger")
@@ -503,7 +505,12 @@ def test_desktop_composer_does_not_flip_forms_while_editing(app_page):
           observer.observe(container, { attributes: true, attributeFilter: ["class"] });
           const q = document.getElementById("questionInput");
           const step = () => {
-            if (!q.value.length) { observer.disconnect(); resolve(flips); return; }
+            // The field measures once per frame (Apple-Audit D3): the last
+            // change lands in the frame after the last key press.
+            if (!q.value.length) {
+              requestAnimationFrame(() => requestAnimationFrame(() => { observer.disconnect(); resolve(flips); }));
+              return;
+            }
             q.value = q.value.slice(0, -1);
             q.dispatchEvent(new Event("input", { bubbles: true }));
             setTimeout(step, 0);

@@ -9,7 +9,9 @@ from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
 def open_google(page):
     """Gmail & Calendar live in the (+) menu only; the row appears once the
     installation reports them configured (the menu's opening asks)."""
-    if page.locator('#attachMenu').is_hidden():
+    # The menu's state, not its paint: a closed menu fades out for a moment
+    # (App.popover leave) and still has a box while it does.
+    if page.locator('#attachTrigger').get_attribute('aria-expanded') != 'true':
         page.locator('#attachTrigger').click()
     page.locator('#agentGoogleMenuOption').click()
     sheet=page.get_by_role('dialog',name='Gmail & Calendar')
