@@ -121,13 +121,15 @@
   // their room (composer.css moves .app-footer by --starters-room). The row
   // wraps differently per width and per set (predicted labels are longer),
   // so its height is measured, not assumed; display: none outside the hero
-  // measures 0.
+  // measures 0. The room is the row's margin box: on touch the scrolling row
+  // pads itself for the 44px hit areas and gives that back with its margins.
   function trackStartersRoom() {
     const row = document.getElementById("composerStarters");
     const section = row?.closest(".input-section");
     if (!row || !section) return;
     const measure = () => {
-      const room = row.offsetHeight ? row.offsetHeight + (parseFloat(getComputedStyle(row).marginTop) || 0) : 0;
+      const style = getComputedStyle(row);
+      const room = row.offsetHeight ? row.offsetHeight + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0) : 0;
       section.style.setProperty("--starters-room", room + "px");
     };
     if (typeof ResizeObserver === "function") new ResizeObserver(measure).observe(row);

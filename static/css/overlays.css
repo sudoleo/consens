@@ -33,6 +33,17 @@ dialog.modal::backdrop {
   background: transparent;
 }
 
+/* A dim with nothing to scroll takes no pan, and a card's own scroll ends
+   at its edge: the page behind stays where it is (Apple audit F2, with the
+   one scroll lock in foundation.css). */
+.claim-sheet-backdrop {
+  touch-action: none;
+}
+
+.claim-popover {
+  overscroll-behavior: contain;
+}
+
 .answer-reader-dialog::backdrop {
   background: var(--scrim, rgba(18, 19, 21, 0.32));
 }
@@ -104,6 +115,23 @@ dialog.modal[open] > .modal-content {
 @starting-style {
   dialog.modal[open] { opacity: 0; }
   dialog.modal[open] > .modal-content { translate: 0 8px; scale: 0.98; }
+}
+
+/* The keyboard's edge (Apple audit F8). On a phone with the keyboard up,
+   every layer with fields covers only what is visible: composer-keyboard.js
+   writes the visible area on the open layer (--keyboard-top, Safari's
+   panned offset, and --keyboard-height). A dialog then centres or scrolls
+   inside it, and the button under the field is not behind the keyboard. */
+@media (max-width: 1099px) {
+  body.keyboard-open :is(dialog.modal[open], .memory-edit-backdrop, .agent-google-overlay) {
+    top: var(--keyboard-top, 0px);
+    bottom: auto;
+    height: var(--keyboard-height, 100%);
+  }
+  /* The sheets that scroll inside themselves fit what is left. */
+  body.keyboard-open :is(.memory-edit-backdrop > .memory-edit-dialog, .agent-google-overlay > .agent-google-sheet) {
+    max-height: 100%;
+  }
 }
 
 /* The close cross (foundation.css .close-button) sits in the same corner of
@@ -214,7 +242,7 @@ dialog.modal > .modal-content > .close-button {
    -------------------------------------------------------------------------- */
 :is(.attach-menu, .email-popup, .model-picker-menu, .sidebar-quota,
   .consensus-actions-menu, .claim-popover, .bookmark-menu, .agent-files-menu,
-  .memory-selection-menu) {
+  .memory-selection-menu, .source-sheet) {
   transform-origin: var(--popover-origin-x, 50%) var(--popover-origin-y, 0%);
   transition-property: opacity, translate, scale, display, overlay;
   transition-duration: var(--dur-state);
@@ -225,7 +253,7 @@ dialog.modal > .modal-content > .close-button {
 :is(.attach-menu[hidden], .email-popup[hidden], .model-picker-menu:not(.is-open),
   .sidebar-quota:not(.is-open), .consensus-actions-menu:not(.open),
   .claim-popover[hidden], .agent-files-menu[hidden], .memory-selection-menu[hidden],
-  [data-popover].is-leaving) {
+  .source-sheet[hidden], [data-popover].is-leaving) {
   opacity: 0;
   translate: 0 var(--popover-shift, -4px);
   scale: 0.98;
@@ -237,16 +265,17 @@ dialog.modal > .modal-content > .close-button {
 @starting-style {
   :is(.attach-menu:not([hidden]), .email-popup:not([hidden]), .model-picker-menu.is-open,
     .sidebar-quota.is-open, .consensus-actions-menu.open, .claim-popover:not([hidden]),
-    .bookmark-menu, .agent-files-menu:not([hidden]), .memory-selection-menu:not([hidden])) {
+    .bookmark-menu, .agent-files-menu:not([hidden]), .memory-selection-menu:not([hidden]),
+    .source-sheet:not([hidden])) {
     opacity: 0;
     translate: 0 var(--popover-shift, -4px);
     scale: 0.98;
   }
 }
 
-/* On a phone the sentence card is a sheet in the middle of the screen; it
-   rises like a dialog. */
-.claim-popover.is-modal {
+/* On a phone the sentence card (and the sources of a pill) is a sheet in
+   the middle of the screen; it rises like a dialog. */
+:is(.claim-popover, .source-sheet).is-modal {
   --popover-shift: 8px;
   --popover-origin-y: 50%;
 }
@@ -349,7 +378,7 @@ dialog.modal > .modal-content > .close-button {
   color: color-mix(in srgb, var(--ground) 72%, transparent);
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .toast-action:hover:not(:disabled),
   .toast .close-button:hover {
     background: color-mix(in srgb, var(--ground) 14%, transparent);
@@ -408,7 +437,7 @@ dialog.modal > .modal-content > .close-button {
   .toast,
   :is(.attach-menu, .email-popup, .model-picker-menu, .sidebar-quota,
     .consensus-actions-menu, .claim-popover, .bookmark-menu, .agent-files-menu,
-    .memory-selection-menu) {
+    .memory-selection-menu, .source-sheet) {
     translate: none !important;
     scale: none !important;
   }

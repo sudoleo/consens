@@ -50,8 +50,10 @@ a {
   text-decoration: none;
 }
 
-a:hover {
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  a:hover {
+    color: var(--accent);
+  }
 }
 
 /* Inline-Links im Fliesstext der Legal-/Info-Panels (z. B. die Kontaktadresse
@@ -120,8 +122,10 @@ a:hover {
   transition: color var(--dur-press) var(--ease-standard);
 }
 
-.nav-links a:not(.nav-cta):hover {
-  color: var(--heading);
+@media (hover: hover) and (pointer: fine) {
+  .nav-links a:not(.nav-cta):hover {
+    color: var(--heading);
+  }
 }
 
 .nav-cta,
@@ -154,10 +158,12 @@ a:hover {
 }
 
 /* Hover is a tone step, never a lift (Apple-Audit G4). */
-.nav-cta:hover,
-.button-primary:hover {
-  background: var(--button-bg-hover);
-  color: var(--button-text);
+@media (hover: hover) and (pointer: fine) {
+  .nav-cta:hover,
+  .button-primary:hover {
+    background: var(--button-bg-hover);
+    color: var(--button-text);
+  }
 }
 
 .button-secondary {
@@ -166,9 +172,11 @@ a:hover {
   color: var(--heading);
 }
 
-.button-secondary:hover {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .button-secondary:hover {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    color: var(--accent);
+  }
 }
 
 .page-shell {
@@ -275,10 +283,12 @@ a:hover {
   transition: transform var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
 }
 
-.model-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--glass-border));
-  box-shadow: var(--card-shadow-hover);
+@media (hover: hover) and (pointer: fine) {
+  .model-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--glass-border));
+    box-shadow: var(--card-shadow-hover);
+  }
 }
 
 .model-card {
@@ -661,9 +671,11 @@ canvas {
   inset: -6px 0;
 }
 
-.share-question-more:hover {
-  color: var(--text-color);
-  text-decoration-color: var(--muted);
+@media (hover: hover) and (pointer: fine) {
+  .share-question-more:hover {
+    color: var(--text-color);
+    text-decoration-color: var(--muted);
+  }
 }
 
 .share-meta {
@@ -792,9 +804,11 @@ canvas {
   transition: background var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
-.share-diff-teaser:hover {
-  background: rgba(220, 60, 60, 0.14);
-  border-color: rgba(220, 60, 60, 0.5);
+@media (hover: hover) and (pointer: fine) {
+  .share-diff-teaser:hover {
+    background: rgba(220, 60, 60, 0.14);
+    border-color: rgba(220, 60, 60, 0.5);
+  }
 }
 
 .share-diff-teaser b { font-weight: var(--font-weight-bold); }
@@ -1110,8 +1124,10 @@ canvas {
   line-height: var(--line-height-ui);
 }
 
-.share-source-title:hover {
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .share-source-title:hover {
+    color: var(--accent);
+  }
 }
 
 .share-source-domain {
@@ -1143,10 +1159,12 @@ canvas {
   transition: color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
-.share-sources-toggle:hover {
-  color: var(--heading);
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  background: var(--hover);
+@media (hover: hover) and (pointer: fine) {
+  .share-sources-toggle:hover {
+    color: var(--heading);
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+    background: var(--hover);
+  }
 }
 
 .share-citation-text {
@@ -1297,11 +1315,17 @@ canvas {
   transition: border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard), transform var(--dur-state) var(--ease-standard);
 }
 
-.share-related-item:hover,
 .share-related-item:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
   background: var(--raise-hover);
   color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .share-related-item:hover {
+    border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+    background: var(--raise-hover);
+    color: var(--text);
+  }
 }
 
 .share-related-q {
@@ -1316,8 +1340,10 @@ canvas {
   overflow: hidden;
 }
 
-.share-related-item:hover .share-related-q {
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .share-related-item:hover .share-related-q {
+    color: var(--accent);
+  }
 }
 
 .share-related-meta {
@@ -1341,7 +1367,9 @@ canvas {
 .share-scoreboard.is-facts-only .share-scoreboard-score { display: none; }
 
 .watch-version-link { color: var(--accent); font-weight: var(--font-weight-semibold); text-decoration: none; }
-.watch-version-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  .watch-version-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+}
 
 .watch-history-latest {
   flex: 0 0 auto;
@@ -1424,8 +1452,10 @@ canvas {
 .watch-chart-point.is-change { fill: var(--accent-secondary); stroke: var(--panel-bg); stroke-width: 2; }
 .watch-chart-target { cursor: pointer; outline: none; }
 .watch-chart-target .watch-chart-point { transform-box: fill-box; transform-origin: center; transition: transform var(--dur-press) var(--ease-standard), filter var(--dur-press) var(--ease-standard); }
-.watch-chart-target:hover .watch-chart-point,
 .watch-chart-target:focus .watch-chart-point { transform: scale(1.35); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 48%, transparent)); }
+@media (hover: hover) and (pointer: fine) {
+  .watch-chart-target:hover .watch-chart-point { transform: scale(1.35); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 48%, transparent)); }
+}
 
 /* Herkunftsangabe: eine benannte Sektion, kein Kleingedrucktes. Ruhig genug,
    dass sie den Fuss nicht dominiert, gross genug, dass man sie liest. */
@@ -1492,8 +1522,10 @@ canvas {
   transition: color var(--dur-press) var(--ease-standard);
 }
 
-.share-report-toggle:hover {
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .share-report-toggle:hover {
+    color: var(--text);
+  }
 }
 
 .share-report-form {
@@ -1527,9 +1559,11 @@ canvas {
   transition: border-color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
-.share-report-form button:hover {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
-  background: var(--raise-hover);
+@media (hover: hover) and (pointer: fine) {
+  .share-report-form button:hover {
+    border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+    background: var(--raise-hover);
+  }
 }
 
 @media (max-width: 700px) {
@@ -1619,7 +1653,9 @@ canvas {
   line-height: var(--line-height-reading);
 }
 .wp-kicker a { color: inherit; text-decoration: none; }
-.wp-kicker a:hover { color: var(--heading); }
+@media (hover: hover) and (pointer: fine) {
+  .wp-kicker a:hover { color: var(--heading); }
+}
 
 /* Kompakte Zustandszeile (Topic-Seiten): eine ruhige Zeile ohne Fläche statt
    eines Kastens mit dem Satz des Judges; der steht im Verlauf. */
@@ -1637,7 +1673,9 @@ canvas {
 .wp-state-line strong { color: var(--heading); font-weight: var(--font-weight-semibold); }
 .wp-state-sep { margin: 0 8px; }
 .wp-state-more { color: var(--heading); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
-.wp-state-more:hover { text-decoration-color: currentColor; }
+@media (hover: hover) and (pointer: fine) {
+  .wp-state-more:hover { text-decoration-color: currentColor; }
+}
 
 /* Die Leitfrage führt die Antwort an, statt den Titel im Kopf zu wiederholen. */
 .wp-answer-question {
@@ -1764,8 +1802,10 @@ canvas {
   text-decoration: none;
   transition: background-color .15s ease;
 }
-.wp-link:hover,
 .wp-link:focus-visible { background: var(--raise-hover); box-shadow: inset 0 0 0 1px var(--line-soft); }
+@media (hover: hover) and (pointer: fine) {
+  .wp-link:hover { background: var(--raise-hover); box-shadow: inset 0 0 0 1px var(--line-soft); }
+}
 .wp-link-body { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
 .wp-link-title {
   display: -webkit-box;
@@ -1779,8 +1819,10 @@ canvas {
 }
 .wp-link-domain { overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 .wp-link-arrow { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted); transition: transform .15s ease, color .15s ease; }
-.wp-link:hover .wp-link-arrow,
 .wp-link:focus-visible .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
+@media (hover: hover) and (pointer: fine) {
+  .wp-link:hover .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
+}
 
 /* Namen der Quellen im Text (source_links.site_mentions): das Wort bleibt,
    davor das Favicon, darunter eine leise Linie -- sichtbar als Weg zur
@@ -1794,8 +1836,10 @@ canvas {
   text-underline-offset: 3px;
   white-space: nowrap;
 }
-.share-md a.wp-ref:hover,
 .share-md a.wp-ref:focus-visible { text-decoration-color: currentColor; }
+@media (hover: hover) and (pointer: fine) {
+  .share-md a.wp-ref:hover { text-decoration-color: currentColor; }
+}
 .share-md .wp-ref-icon {
   display: inline-block;
   margin: 0 4px 0 1px;
@@ -1857,7 +1901,9 @@ canvas {
 .wp-event-title { margin: 2px 0 0; color: var(--heading); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
 .wp-event-text { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--font-size-sm); line-height: var(--line-height-reading); }
 .wp-version { display: inline-block; margin-top: 6px; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); text-decoration: none; }
-.wp-version:hover, .wp-back:hover { text-decoration: underline; text-underline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  .wp-version:hover, .wp-back:hover { text-decoration: underline; text-underline-offset: 3px; }
+}
 .wp-version.is-current { color: var(--muted); }
 .wp-event.is-quiet summary {
   display: flex;
@@ -1979,8 +2025,10 @@ button.wp-disclosure-toggle {
   cursor: pointer;
 }
 button.wp-disclosure-toggle { margin-top: 10px; }
-button.wp-disclosure-toggle:hover,
-.wp-disclosure > summary:hover .wp-disclosure-toggle { color: var(--accent); background: none; }
+@media (hover: hover) and (pointer: fine) {
+  button.wp-disclosure-toggle:hover,
+  .wp-disclosure > summary:hover .wp-disclosure-toggle { color: var(--accent); background: none; }
+}
 .wp-chevron {
   flex: none;
   width: 16px;
@@ -2262,10 +2310,15 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
   transition: background-color var(--dur-press) var(--ease-standard);
 }
 
-.hub-row:hover,
 .hub-row:focus-visible {
   background: var(--hover);
   color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .hub-row:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
 }
 
 /* Agreement-Score als Ampel-Badge: der schnellste Scan-Anker der Zeile. */
@@ -2326,8 +2379,10 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
   overflow: hidden;
 }
 
-.hub-row:hover .hub-question {
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .hub-row:hover .hub-question {
+    color: var(--accent);
+  }
 }
 
 .hub-meta {
@@ -2382,9 +2437,11 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
   transition: transform var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.hub-row:hover .hub-arrow {
-  color: var(--accent);
-  transform: translateX(3px);
+@media (hover: hover) and (pointer: fine) {
+  .hub-row:hover .hub-arrow {
+    color: var(--accent);
+    transform: translateX(3px);
+  }
 }
 
 .hub-empty {

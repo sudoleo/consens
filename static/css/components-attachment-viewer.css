@@ -99,11 +99,13 @@ dialog.attachment-viewer-dialog[open] {
   padding: 6px;
 }
 
-.input-action-btn-subtle:hover {
-  background: var(--hover);
-  color: var(--text-color);
-  border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+@media (hover: hover) and (pointer: fine) {
+  .input-action-btn-subtle:hover {
+    background: var(--hover);
+    color: var(--text-color);
+    border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+  }
 }
 
 /* Nur-Icon: runder Button; Farben und Zustaende stehen in shell.css. */
@@ -158,8 +160,10 @@ dialog.attachment-viewer-dialog[open] {
   cursor: pointer;
 }
 
-.attachment-viewer-action:hover:not(:disabled) {
-  background: var(--raise-hover);
+@media (hover: hover) and (pointer: fine) {
+  .attachment-viewer-action:hover:not(:disabled) {
+    background: var(--raise-hover);
+  }
 }
 
 .attachment-viewer-action.is-quiet {

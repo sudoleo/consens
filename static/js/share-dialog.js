@@ -42,7 +42,6 @@
   function settleSharedModalClose() {
     invalidateSharedModalRequests();
     sharedModalMode = null;
-    document.documentElement.classList.remove("share-modal-open");
   }
 
   function bindSharedModal(modal) {
@@ -112,7 +111,6 @@
       // while it fades out, and the next open sets them again.
       modal.classList.toggle("is-watch-dialog", mode === "watch");
       modal.classList.toggle("is-share-dialog", mode !== "watch");
-      document.documentElement.classList.add("share-modal-open");
       if (!dialogIsOpen(modal)) {
         if (window.App?.modalDialog) window.App.modalDialog.open(modal);
         else modal.setAttribute("open", "");

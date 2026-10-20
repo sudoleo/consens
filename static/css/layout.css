@@ -270,11 +270,17 @@ body:has(.sidebar.active) .brand-float {
   color: var(--sidebar-text-muted);
 }
 
-#upgradeLink:hover,
 #upgradeLink:focus-visible {
   color: var(--text-color);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  #upgradeLink:hover {
+    color: var(--text-color);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 
 /* Ehemalige Topbar-Link-Optik; lebt weiter in den Links des Account-Popups
@@ -287,8 +293,10 @@ body:has(.sidebar.active) .brand-float {
   transition: color var(--dur-press) var(--ease-standard);
 }
 
-.top-bar-about:hover {
-  color: var(--text-color);
+@media (hover: hover) and (pointer: fine) {
+  .top-bar-about:hover {
+    color: var(--text-color);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -334,11 +342,13 @@ body:has(.sidebar.active) .brand-float {
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 3px rgba(20, 21, 23, 0.05);
 }
 
-.auth-top-login:hover {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
-    color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+@media (hover: hover) and (pointer: fine) {
+  .auth-top-login:hover {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
+      color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+  }
 }
 
 /* .auth-top-signup wears the .btn material (components-input.css). */
@@ -383,14 +393,16 @@ body:has(.sidebar.active) .brand-float {
   transition: color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
 }
 
-.login-text:hover {
-  color: var(--text-color);
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
-    color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px color-mix(in srgb, var(--accent) 10%, transparent);
-  text-decoration: none;
+@media (hover: hover) and (pointer: fine) {
+  .login-text:hover {
+    color: var(--text-color);
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
+      color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+    box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px color-mix(in srgb, var(--accent) 10%, transparent);
+    text-decoration: none;
+  }
 }
 
 .login-text[hidden] {
@@ -400,14 +412,22 @@ body:has(.sidebar.active) .brand-float {
 /* Eingeloggt zeigt der Container nur das runde Initial-Symbol –
    die Pill-Optik (Padding/Rahmen) entfaellt, sonst entsteht ein breites Oval. */
 .login-text:has(.email-container),
-.login-text:has(.email-container):hover,
-.login-text:has(.login-skeleton),
-.login-text:has(.login-skeleton):hover {
+.login-text:has(.login-skeleton) {
   min-height: 0;
   padding: 0;
   border: 0;
   background: none;
   box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .login-text:has(.email-container):hover,
+  .login-text:has(.login-skeleton):hover {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
 }
 
 .login-text:has(.login-skeleton) {
@@ -433,6 +453,9 @@ body:has(.sidebar.active) .brand-float {
   transition: transform var(--dur-layer) var(--ease-standard), background-color var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard);
   overflow-y: auto;
   overflow-x: hidden;
+  /* The end of the chat list is the end: the thread beside it or behind
+     the phone menu does not take over the scroll (Apple-Audit F2). */
+  overscroll-behavior: contain;
   flex-direction: column;
   display: flex;
 }
@@ -473,10 +496,14 @@ body:has(.sidebar.active) .brand-float {
     transition: opacity var(--dur-state) var(--ease-standard);
   }
 
-  .sidebar-resizer:hover::after,
   .sidebar-resizer:focus-visible::after,
   body.is-resizing-sidebar .sidebar-resizer::after {
     opacity: 0.45;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar-resizer:hover::after {
+      opacity: 0.45;
+    }
   }
 
   /* While dragging everything follows the pointer at once. */
@@ -516,6 +543,7 @@ body:has(.sidebar.active) .brand-float {
   margin-bottom: 80px;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 /* Bündig mit der Bookmarks-Liste: kein Extra-Margin (die Section bringt
@@ -547,8 +575,10 @@ body:has(.sidebar.active) .brand-float {
   color: var(--sidebar-text-muted);
 }
 
-.sidebar-search-box input:hover {
-  background: var(--hover);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-search-box input:hover {
+    background: var(--hover);
+  }
 }
 
 .sidebar-search-box input:focus {
@@ -560,9 +590,11 @@ body:has(.sidebar.active) .brand-float {
   scrollbar-color: transparent transparent;
 }
 
-.sidebar:hover,
-.sidebar:hover .sidebar-content {
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+@media (hover: hover) and (pointer: fine) {
+  .sidebar:hover,
+  .sidebar:hover .sidebar-content {
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
 }
 
 .sidebar::-webkit-scrollbar-thumb,
@@ -571,15 +603,17 @@ body:has(.sidebar.active) .brand-float {
   box-shadow: none;
 }
 
-.sidebar:hover::-webkit-scrollbar-thumb,
-.sidebar:hover .sidebar-content::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar:hover::-webkit-scrollbar-thumb,
+  .sidebar:hover .sidebar-content::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  }
 
-.sidebar:hover::-webkit-scrollbar-thumb:hover,
-.sidebar:hover .sidebar-content::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-thumb-hover);
+  .sidebar:hover::-webkit-scrollbar-thumb:hover,
+  .sidebar:hover .sidebar-content::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
 }
 
 /* .app-nav-float-Präfix: gewinnt gegen die generische .collapse-btn-Regel
@@ -601,10 +635,12 @@ body:has(.sidebar.active) .brand-float {
 }
 
 /* Flat like the in-sidebar toggle: a tone on hover, no lifted glass. */
-.app-nav-float .sidebar-toggle:hover {
-  background-color: var(--hover);
-  box-shadow: none;
-  transform: none;
+@media (hover: hover) and (pointer: fine) {
+  .app-nav-float .sidebar-toggle:hover {
+    background-color: var(--hover);
+    box-shadow: none;
+    transform: none;
+  }
 }
 
 /* Sidebar mark: a panel with its left rail, not a burger. Open and closed
@@ -703,9 +739,11 @@ body:has(.sidebar.active) .brand-float {
   display: none;
 }
 
-#accountIdentity.account-identity:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+@media (hover: hover) and (pointer: fine) {
+  #accountIdentity.account-identity:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 
 #accountIdentity.account-identity:focus-visible {
@@ -751,10 +789,12 @@ body:has(.sidebar.active) .brand-float {
   transition: color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-footer-link:hover {
-  color: var(--text-color);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-footer-link:hover {
+    color: var(--text-color);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 
 /* Settings als reines Icon rechts in der Fußzeile. Als ID-Selektor,
@@ -790,13 +830,15 @@ body:has(.sidebar.active) .brand-float {
   display: block;
 }
 
-#editSystemPromptBtn:hover {
-  background-color: var(--hover);
-  color: var(--text-color);
-}
+@media (hover: hover) and (pointer: fine) {
+  #editSystemPromptBtn:hover {
+    background-color: var(--hover);
+    color: var(--text-color);
+  }
 
-#editSystemPromptBtn:hover .settings-icon {
-  transform: rotate(20deg);
+  #editSystemPromptBtn:hover .settings-icon {
+    transform: rotate(20deg);
+  }
 }
 
 .sidebar-section h2 {
@@ -863,9 +905,13 @@ body:has(.sidebar.active) .brand-float {
   transition: transform var(--dur-state) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-toggle-btn:hover .sidebar-toggle-arrow,
 .sidebar-toggle-btn:focus-visible .sidebar-toggle-arrow {
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-toggle-btn:hover .sidebar-toggle-arrow {
+    color: var(--ink);
+  }
 }
 
 /* Collapsed state */
@@ -892,12 +938,14 @@ body:has(.sidebar.active) .brand-float {
   transition: opacity var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-footer-repo:hover {
-  color: var(--text-color);
-}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-footer-repo:hover {
+    color: var(--text-color);
+  }
 
-.sidebar-footer-repo:hover .sidebar-footer-repo-icon {
-  opacity: 1;
+  .sidebar-footer-repo:hover .sidebar-footer-repo-icon {
+    opacity: 1;
+  }
 }
 
 /* Account-Avatar in der Fußzeile: leicht getönter Initial-Kreis (Teal).
@@ -929,8 +977,10 @@ body:has(.sidebar.active) .brand-float {
 
 /* Der Kreis sah bisher wie ein Etikett aus. Ein kleiner Hub plus ein
    deutlicherer Rand sagt beim Hovern, dass hier etwas aufgeht. */
-.email-icon:hover {
-  border-color: color-mix(in srgb, var(--text-color) 30%, var(--sidebar-border));
+@media (hover: hover) and (pointer: fine) {
+  .email-icon:hover {
+    border-color: color-mix(in srgb, var(--text-color) 30%, var(--sidebar-border));
+  }
 }
 
 .email-icon:active {
@@ -939,10 +989,15 @@ body:has(.sidebar.active) .brand-float {
 
 @media (prefers-reduced-motion: reduce) {
   .email-icon,
-  .email-icon:hover,
   .email-icon:active {
     transform: none;
     transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .email-icon:hover {
+      transform: none;
+      transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
+    }
   }
 }
 
@@ -1027,9 +1082,13 @@ body:has(.sidebar.active) .brand-float {
   text-decoration: none;
 }
 
-.email-popup .top-bar-about:hover,
 .email-popup .top-bar-about:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .email-popup .top-bar-about:hover {
+    background: var(--hover);
+  }
 }
 
 .dark-mode .email-icon {
@@ -1047,9 +1106,13 @@ body:has(.sidebar.active) .brand-float {
   border-bottom-color: rgba(255, 255, 255, 0.1);
 }
 
-.dark-mode .email-popup .top-bar-about:hover,
 .dark-mode .email-popup .top-bar-about:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dark-mode .email-popup .top-bar-about:hover {
+    background: var(--hover);
+  }
 }
 
 /* --- Die Kontostufe am Kuerzel -------------------------------------------
@@ -1065,9 +1128,11 @@ body:has(.sidebar.active) .brand-float {
   color: color-mix(in srgb, #8a6b1a 80%, var(--text-color));
 }
 
-.email-icon.is-pro:hover {
-  background-color: color-mix(in srgb, #c9a232 28%, var(--sidebar-bg));
-  border-color: color-mix(in srgb, #d4af37 76%, var(--sidebar-border));
+@media (hover: hover) and (pointer: fine) {
+  .email-icon.is-pro:hover {
+    background-color: color-mix(in srgb, #c9a232 28%, var(--sidebar-bg));
+    border-color: color-mix(in srgb, #d4af37 76%, var(--sidebar-border));
+  }
 }
 
 /* Plus bleibt in der Farbe des Hauses -- Gold gehoert zu den teuren Modellen,
@@ -1079,9 +1144,11 @@ body:has(.sidebar.active) .brand-float {
   color: color-mix(in srgb, #0f6e56 72%, var(--text-color));
 }
 
-.email-icon.is-plus:hover {
-  background-color: color-mix(in srgb, #1d9e75 46%, var(--sidebar-bg));
-  border-color: color-mix(in srgb, #1d9e75 84%, var(--sidebar-border));
+@media (hover: hover) and (pointer: fine) {
+  .email-icon.is-plus:hover {
+    background-color: color-mix(in srgb, #1d9e75 46%, var(--sidebar-bg));
+    border-color: color-mix(in srgb, #1d9e75 84%, var(--sidebar-border));
+  }
 }
 
 .dark-mode .email-icon.is-plus {
@@ -1094,8 +1161,10 @@ body:has(.sidebar.active) .brand-float {
   color: color-mix(in srgb, #e8c76a 82%, var(--text-color));
 }
 
-.dark-mode .email-icon.is-pro:hover {
-  background-color: color-mix(in srgb, #c9a232 32%, var(--sidebar-bg));
+@media (hover: hover) and (pointer: fine) {
+  .dark-mode .email-icon.is-pro:hover {
+    background-color: color-mix(in srgb, #c9a232 32%, var(--sidebar-bg));
+  }
 }
 
 
@@ -1143,7 +1212,9 @@ body:has(.sidebar.active) .brand-float {
   background: transparent; color: var(--sidebar-text-muted); font: inherit;
   font-size: var(--font-size-xs); cursor: pointer;
 }
-.bookmarks-load-more:hover { color: var(--sidebar-text); border-color: var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .bookmarks-load-more:hover { color: var(--sidebar-text); border-color: var(--accent); }
+}
 .bookmark.is-loading { opacity: .58; pointer-events: none; }
 .bookmark.is-deleting { pointer-events: none; overflow: hidden; }
 /* Deleted, its Undo still offered (firebase.js deleteBookmarkWithUndo). */
@@ -1184,9 +1255,13 @@ body:has(.sidebar.active) .brand-float {
   cursor: pointer;
   pointer-events: auto;
 }
-.sidebar .bookmark.run-entry:hover,
 .sidebar .bookmark.run-entry:focus-visible {
   background-color: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar .bookmark.run-entry:hover {
+    background-color: var(--hover);
+  }
 }
 .run-entry-status {
   position: absolute;
@@ -1249,7 +1324,6 @@ body:has(.sidebar.active) .brand-float {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
-  -webkit-tap-highlight-color: transparent;
 }
 .bookmark p {
   display: block;
@@ -1265,8 +1339,10 @@ body:has(.sidebar.active) .brand-float {
 .bookmark > p:focus-visible { outline: none; }
 .sidebar .bookmark:has(> p:focus-visible),
 .sidebar .bookmark.run-entry:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
-.sidebar .bookmark:hover {
-  background-color: var(--hover);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar .bookmark:hover {
+    background-color: var(--hover);
+  }
 }
 /* A row answers a press the way a list does: it darkens a step while held,
    it does not shrink (Apple audit E11). */
@@ -1296,17 +1372,26 @@ body:has(.sidebar.active) .brand-float {
   transition: opacity var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 .bookmark-menu-button svg { display: block; }
-.bookmark:hover .bookmark-menu-button,
 .bookmark:focus-within .bookmark-menu-button,
 .bookmark.has-menu .bookmark-menu-button,
 .bookmark.is-active .bookmark-menu-button {
   opacity: 1;
 }
-.bookmark-menu-button:hover,
+@media (hover: hover) and (pointer: fine) {
+  .bookmark:hover .bookmark-menu-button {
+    opacity: 1;
+  }
+}
 .bookmark-menu-button:focus-visible,
 .bookmark-menu-button[aria-expanded="true"] {
   background: var(--hover);
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bookmark-menu-button:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 .bookmark-menu-button:focus-visible { outline: var(--focus-ring); }
 /* The row whose menu is open keeps its tint. */
@@ -1376,7 +1461,10 @@ body:has(.sidebar.active) .brand-float {
   text-align: left;
   cursor: pointer;
 }
-.bookmark-menu-item:is(:hover, :focus-visible) { background: var(--hover); }
+.bookmark-menu-item:focus-visible { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .bookmark-menu-item:hover { background: var(--hover); }
+}
 .bookmark-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .bookmark-menu-item svg {
   width: 16px;
@@ -1405,8 +1493,6 @@ body:has(.sidebar.active) .brand-float {
     opacity: 1;
     color: color-mix(in srgb, var(--sidebar-text-muted) 72%, var(--ground, transparent));
   }
-  /* A tap leaves :hover stuck on touch; only the closed menu ignores it. */
-  .bookmark-menu-button:not([aria-expanded="true"]):hover { background: transparent; color: color-mix(in srgb, var(--sidebar-text-muted) 72%, var(--ground, transparent)); }
 }
 
 @media (max-width: 1099px) {
@@ -1471,7 +1557,7 @@ body:has(.sidebar.active) .brand-float {
 
 @media (max-width: 640px) {
   body {
-    padding-inline: 6px;
+    padding-inline: max(6px, env(safe-area-inset-left, 0px)) max(6px, env(safe-area-inset-right, 0px));
   }
 
   .brand-float-title {

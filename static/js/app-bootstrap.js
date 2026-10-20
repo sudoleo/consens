@@ -364,7 +364,8 @@
           // holds text (composer.css); its distance is theirs, measured as
           // composer-invite.js measures it, so it does not glide up later.
           const row = document.getElementById("composerStarters");
-          const room = row?.offsetHeight ? row.offsetHeight + (parseFloat(getComputedStyle(row).marginTop) || 0) : 0;
+          const style = row && getComputedStyle(row);
+          const room = row?.offsetHeight ? row.offsetHeight + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0) : 0;
           row?.closest(".input-section")?.style.setProperty("--starters-room", room + "px");
         });
       }

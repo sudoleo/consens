@@ -148,16 +148,23 @@
   padding-inline: 7px;
 }
 
-.src-ref:hover,
 .src-ref:focus-visible,
-.source-link:hover,
 .source-link:focus-visible,
-.share-md a[href^="#src-"]:hover,
 .share-md a[href^="#src-"]:focus-visible {
   --src-ref-bg: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix, 6%));
   color: var(--ink);
   text-decoration: none;
   box-shadow: inset 0 0 0 1px var(--line);
+}
+@media (hover: hover) and (pointer: fine) {
+  .src-ref:hover,
+  .source-link:hover,
+  .share-md a[href^="#src-"]:hover {
+    --src-ref-bg: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix, 6%));
+    color: var(--ink);
+    text-decoration: none;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
 }
 
 .src-ref:focus-visible,
@@ -183,8 +190,21 @@
   color: var(--ink-3);
 }
 
-.src-ref:is(:hover, :focus-visible) .src-ref-more {
+.src-ref:focus-visible .src-ref-more {
   color: var(--ink-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .src-ref:hover .src-ref-more {
+    color: var(--ink-2);
+  }
+}
+
+/* 44px to the finger (Apple-Audit F5): the pill stays a 19px mark in the
+   line and reaches over half a line above and below it. The label clips
+   its own text (ellipsis), so the pill itself may let the area out. */
+@media (pointer: coarse) {
+  .src-ref { overflow: visible; }
+  .src-ref::after { content: ""; position: absolute; inset: var(--hit-slop); }
 }
 
 /* The domain is already in the sentence: favicon only (plus "+N"). */

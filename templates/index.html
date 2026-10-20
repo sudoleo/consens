@@ -7,8 +7,11 @@
        beim Oeffnen der Tastatur unveraendert, und der unten FIXIERTE Composer
        steht hinter der Tastatur statt darueber — man tippt in ein Feld, das
        man nicht sieht. Mit resizes-content schrumpft das Viewport, der
-       Composer sitzt auf der Tastaturkante und der Thread darueber. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+       Composer sitzt auf der Tastaturkante und der Thread darueber.
+       viewport-fit=cover (Apple-Audit F12): die Seite reicht unter Notch und
+       Home-Balken, damit env(safe-area-inset-*) wirkt; Kopf, Composer,
+       Hinweise, Menue und Sheets halten diese Raender selbst frei. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="description" content="consens.io is an AI agent that checks its answer against six leading models, marks where they disagree, and watches for changes.">
   <meta name="robots" content="noindex, follow">
   <link rel="canonical" href="https://www.consens.io/app">

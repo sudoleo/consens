@@ -24,6 +24,13 @@
 .memory-selection-action[hidden],
 .memory-selection-divider[hidden] { display: none; }
 
+/* 44px to the finger (Apple-Audit F5): on touch the menu comes from a
+   finger's selection (memory-edit.js, F7); the bar keeps its drawing. */
+@media (pointer: coarse) {
+  .memory-selection-action { position: relative; }
+  .memory-selection-action::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
+
 .memory-selection-action {
   display: inline-flex;
   align-items: center;
@@ -44,9 +51,13 @@
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.memory-selection-action:hover,
 .memory-selection-action:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .memory-selection-action:hover {
+    background: var(--hover);
+  }
 }
 
 .memory-selection-action svg,
@@ -65,12 +76,6 @@
   width: 1px;
   height: 20px;
   background: var(--line);
-}
-
-html.memory-edit-open,
-html.memory-edit-open body {
-  overflow: hidden;
-  overscroll-behavior: none;
 }
 
 .memory-edit-backdrop {
@@ -275,9 +280,13 @@ html.memory-edit-open body {
   color: var(--text-color);
 }
 
-.memory-edit-cancel:hover,
 .memory-edit-cancel:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .memory-edit-cancel:hover {
+    background: var(--hover);
+  }
 }
 
 /* Material from .btn (components-input.css). */

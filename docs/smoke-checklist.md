@@ -712,6 +712,23 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Farbe — Safari-Absicht). Automatisiert ist nur, dass Safari an beiden
       Kanten einen flachen Kasten mit deckender Seitenfarbe findet
       (`SAFARI_BAR_COLOURS` in `test_mobile_navigation.py`).
+- [ ] iPhone (echtes Safari) unter dem Finger (Apple-Audit F2–F15, nur am
+      Gerät ganz prüfbar): ein Tipp auf Knöpfe, Links und Chatzeilen zeigt
+      keinen grauen Blitz, und nichts bleibt danach grau stehen (Reasoning
+      sieht nach dem Antippen nicht eingeschaltet aus); bei offenem Menü,
+      Aktivitäts-Sheet, Satzkarte oder Quellenkarte bewegt Wischen den Chat
+      dahinter nicht; das Menü folgt einem Wisch nach links und schließt ab
+      einem Drittel, sonst gleitet es zurück; mit eingeklappter Safari-Leiste
+      liegt das Eingabefeld über dem Home-Balken, quer liegt nichts unter der
+      Notch; beim Lesen läuft zwischen den Kopfknöpfen kein Text durch; Text
+      in einer Antwort markieren: „Ask about this“ erscheint unter dem Griff,
+      nicht unter Safaris Menü; ein Tipp auf „uci.org +2“ zeigt alle drei
+      Quellen; im Login-Dialog mit offener Tastatur ist „Log in“ erreichbar;
+      Drehen ins Querformat lässt die Schrift gleich groß. Automatisiert mit
+      Chromium-Ersatz: `test_touch_targets.py`, `test_touch_layers.py`,
+      `test_safe_areas.py`, `test_keyboard_dialogs.py`,
+      `test_source_sheet.py`, `test_touch_selection.py`,
+      `tests/js/touch-contract.test.mjs`.
 - [ ] Landing auf dem Handy (375 px) bis ganz unten scrollen: die Seite
       verschiebt sich nie seitlich (`test_public_composer_mockups.py`).
 - [ ] Quellen-Pillen im Consensus stehen hinter Punkt, Frage- oder

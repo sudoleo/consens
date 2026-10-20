@@ -33,7 +33,9 @@
 .agent-sidebar button, .agent-inline-models button {
   border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; min-height: 36px;
 }
-.agent-sidebar button:hover, .agent-inline-models button:hover { background: var(--hover); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-sidebar button:hover, .agent-inline-models button:hover { background: var(--hover); color: var(--ink); }
+}
 .agent-sidebar :is(button, summary, a, [tabindex]):focus-visible, .agent-inline-models button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-sidebar .agent-sidebar-stop:not([hidden]) {
   display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 4px 10px;
@@ -79,7 +81,9 @@
   padding: 9px 10px; border-radius: var(--radius-sm); background: var(--agent-panel-bg);
   transition: background-color var(--dur-press) var(--ease-standard);
 }
-.agent-session > summary:hover { background-color: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-session > summary:hover { background-color: var(--hover); }
+}
 /* A model icon names its row with a short tone that fades (agent-delegation.js point). */
 .agent-session > summary.is-pointed { animation: agent-session-point var(--dur-beat) var(--ease-standard) both; }
 @keyframes agent-session-point { 0%, 40% { background-color: var(--raise); } }
@@ -91,13 +95,18 @@
   background-image: linear-gradient(90deg, transparent, var(--line-soft) 12%, var(--line-soft) 88%, transparent);
   background-size: 100% 1px; background-position: center bottom; background-repeat: no-repeat;
 }
-.agent-session[open] > summary:hover { background-color: var(--agent-panel-bg); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-session[open] > summary:hover { background-color: var(--agent-panel-bg); }
+}
 .agent-session > summary::-webkit-details-marker { display: none; }
 /* The fold mark shows where it can act: on hover, focus, or an open row. */
 .agent-session > summary::after { content: ''; width: 1em; height: 1em; flex: 0 0 1em; color: var(--ink-3); margin: 2px 0 0;
   background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; opacity: 0;
   transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-press) var(--ease-standard); }
-.agent-session > summary:is(:hover, :focus-visible)::after, .agent-session[open] > summary::after { opacity: 1; }
+.agent-session > summary:focus-visible::after, .agent-session[open] > summary::after { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-session > summary:hover::after { opacity: 1; }
+}
 .agent-session[open] > summary::after { transform: rotate(180deg); }
 @media (hover: none) { .agent-session > summary::after { opacity: 1; } }
 .agent-session > summary > :is(img, .model-mark-fallback) { margin-top: 2px; }
@@ -170,7 +179,10 @@
   to { opacity: 1; transform: translateY(0); }
 }
 .agent-model-stack .agent-inline-model:first-child { margin-left: 0; }
-.agent-model-stack .agent-inline-model:is(:hover, :focus-visible) { z-index: 2; background: var(--hover); filter: none; }
+.agent-model-stack .agent-inline-model:focus-visible { z-index: 2; background: var(--hover); filter: none; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-model-stack .agent-inline-model:hover { z-index: 2; background: var(--hover); filter: none; }
+}
 .agent-history-models { margin: 2px 0 12px; }
 /* An earlier turn shows its marks beside "Thought for …", like the live one. */
 .agent-activity > summary > .agent-history-models { margin: 0; }
@@ -200,11 +212,13 @@
     margin-left: calc((var(--app-sidebar-offset) + 100% - 346px - var(--agent-chat-width)) / 2);
   }
 }
-.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); }
+.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); touch-action: none; }
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
   /* A sheet over the chat is a floating layer: the one place it lifts. */
-  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto; right: 12px; left: 12px; bottom: 12px; width: auto; max-height: min(80dvh, 720px); z-index: 1300;
+  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto;
+    right: max(12px, env(safe-area-inset-right, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: min(80dvh, 720px); z-index: 1300;
     border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -239,7 +253,9 @@
 /* Retry is the one filled button (.btn material, components-input.css); the
    other choices beside it share its height, corners and type size. */
 .agent-answer-error-actions button { padding: 0 14px; border-radius: var(--radius-sm); font-size: var(--font-size-sm); }
-.agent-answer-error-actions button:hover, .agent-review-notice button:hover, .agent-progress-review-jump:hover { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-answer-error-actions button:hover, .agent-review-notice button:hover, .agent-progress-review-jump:hover { background: var(--hover); }
+}
 .agent-answer-error-actions button:focus-visible, .agent-progress-review-jump:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 #agentAnswerResources:empty { display: none; }
 /* The one "waiting on you" signal: a compact notice above the composer. */
@@ -250,7 +266,9 @@
 .agent-review-notice #agentReviewMessage { flex: 1 1 auto; min-width: 0; font-weight: 500; }
 .agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; border: 1px solid color-mix(in srgb, var(--partial) 45%, var(--line));
   border-radius: var(--radius-xs); background: var(--ground); color: var(--ink); font-weight: 500; }
-.agent-composer-notice.agent-review-notice button:hover { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-composer-notice.agent-review-notice button:hover { background: var(--hover); }
+}
 .agent-progress-review { margin: -6px 0 16px; }
 .agent-progress-review-jump { gap: 7px; color: var(--agent-ink, var(--ink)); border-color: color-mix(in srgb, var(--partial) 45%, var(--line)); background: var(--partial-bg); }
 .agent-progress-review-jump::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--partial); flex: none; }
@@ -276,7 +294,9 @@
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
-.agent-evidence-links .agent-evidence-link:hover { background: var(--hover); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-evidence-links .agent-evidence-link:hover { background: var(--hover); color: var(--ink); }
+}
 .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (pointer: coarse) {
@@ -389,7 +409,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 .agent-activity > summary::-webkit-details-marker { display: none; }
 .agent-activity > summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
-.agent-activity > summary:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-activity > summary:hover { color: var(--ink); }
+}
 .agent-activity-title { font-weight: 500; font-variant-numeric: tabular-nums; }
 /* A field of fixed width for the clock (agent-activity.js setTitle): the
    verb is as wide as the wider of "Working for" and "Thought for" (the
@@ -460,7 +482,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-tool strong { display: block; font-size: var(--font-size-xs); font-weight: 500; }
 .agent-activity-tool p { white-space: pre-wrap; margin: 6px 0; font-size: var(--font-size-xs); }
 .agent-activity-tool a { display: block; width: fit-content; max-width: 100%; margin-top: 5px; color: var(--ink-2); font-size: var(--font-size-xs); text-decoration: underline; text-underline-offset: 3px; }
-.agent-activity-tool a:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-activity-tool a:hover { color: var(--ink); }
+}
 .agent-activity-tool a:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .agent-activity-note, .agent-usage { margin: 8px 0 4px; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
 .agent-usage { font-variant-numeric: tabular-nums; }
@@ -477,7 +501,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-findings li + li { margin-top: 5px; }
 .agent-activity-insight-actions { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; }
 .agent-activity-insight-actions button { color: var(--ink-2); background: none; border: 0; padding: 7px 0; font: inherit; font-size: var(--font-size-xs); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.agent-activity-insight-actions button:hover { color: var(--agent-ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-activity-insight-actions button:hover { color: var(--agent-ink); }
+}
 .agent-activity-insight-actions button:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
 .agent-activity-insight-actions button:focus-visible { outline: var(--focus-ring); outline-offset: 3px; border-radius: 2px; }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
@@ -623,7 +649,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-memory-head svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .agent-memory-title { color: var(--ink-2); font-weight: 500; }
 .agent-memory-head button { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.agent-memory-head button:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-memory-head button:hover { color: var(--ink); }
+}
 .agent-memory-head button:disabled { cursor: default; opacity: .6; }
 .agent-memory-head button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-memory-status { color: var(--ink-3); }
@@ -662,7 +690,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
 .agent-watch-start { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 .agent-watch-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.agent-watch-link:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-watch-link:hover { color: var(--ink); }
+}
 .agent-watch-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (pointer: coarse) {
   .agent-watch-link { min-height: 44px; }
@@ -691,7 +721,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-settings-card :is(.agent-settings-note, .agent-settings-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
 .agent-settings-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.agent-settings-link:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-settings-link:hover { color: var(--ink); }
+}
 .agent-settings-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-settings-card[data-state="applied"] .agent-settings-actions { display: none; }
 @media (max-width: 480px) {
@@ -813,7 +845,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .passage-check-count.is-disputed::before { background: var(--dispute); }
 .passage-check-count.is-split::before { background: var(--partial); }
 .passage-check-count.is-holds::before { background: var(--pc-holds); }
-.passage-check-count:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .passage-check-count:hover { color: var(--ink); }
+}
 .passage-check-num {
   color: var(--ink);
   font-weight: var(--font-weight-semibold);
@@ -845,7 +879,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   cursor: pointer;
 }
 .passage-check-who { color: var(--ink); font-weight: var(--font-weight-semibold); }
-.passage-check-verdict:hover .passage-check-who { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+@media (hover: hover) and (pointer: fine) {
+  .passage-check-verdict:hover .passage-check-who { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+}
 .passage-check-text { white-space: pre-line; overflow-wrap: anywhere; }
 .passage-check-foot { margin-top: 14px; }
 .passage-check[data-state="running"] .passage-check-foot { margin-top: 4px; }
@@ -861,7 +897,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   text-underline-offset: 3px;
   text-decoration-color: var(--line);
 }
-.passage-check-toggle:hover { text-decoration-color: var(--ink-3); }
+@media (hover: hover) and (pointer: fine) {
+  .passage-check-toggle:hover { text-decoration-color: var(--ink-3); }
+}
 /* More disputed sentences than the card quotes: the way to the rest. */
 .passage-check-more {
   align-self: flex-start;
@@ -871,20 +909,34 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   text-underline-offset: 3px;
   text-decoration-color: var(--line);
 }
-.passage-check-more:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .passage-check-more:hover { color: var(--ink); }
+}
 .pc-claim { cursor: pointer; }
 /* Unpainted by the Highlights setting (by default green and grey): plain
    text that still opens its card. Under pointer and focus it shows that it
    is a sentence, in neutral grey: its verdict colour stays the setting's. */
 .cx-claim.pc-claim.is-quiet { --cx-paint: transparent; }
 .cx-claim.pc-claim.is-quiet .cx-spot { --cx-spot-paint: transparent; }
-.cx-claim.pc-claim:not(.is-quiet):is(:hover, :focus-visible) { --cx-paint: var(--cx-mark-strong); }
+.cx-claim.pc-claim:not(.is-quiet):focus-visible { --cx-paint: var(--cx-mark-strong); }
+@media (hover: hover) and (pointer: fine) {
+  .cx-claim.pc-claim:not(.is-quiet):hover { --cx-paint: var(--cx-mark-strong); }
+}
 /* With its disputed words named, the sentence only takes a hint of its
    colour under pointer and focus; the words deepen (wrapSpots). */
 .cx-claim.pc-claim.has-spot:not(.is-quiet) { --cx-paint: transparent; }
-.cx-claim.pc-claim.has-spot:not(.is-quiet):is(:hover, :focus-visible) { --cx-paint: color-mix(in srgb, var(--cx-mark) 45%, transparent); }
-.cx-claim.pc-claim.has-spot:not(.is-quiet):is(:hover, :focus-visible) .cx-spot { --cx-spot-paint: var(--cx-mark-strong); }
-.cx-claim.pc-claim.is-quiet:is(:hover, :focus-visible) { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
+.cx-claim.pc-claim.has-spot:not(.is-quiet):focus-visible { --cx-paint: color-mix(in srgb, var(--cx-mark) 45%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .cx-claim.pc-claim.has-spot:not(.is-quiet):hover { --cx-paint: color-mix(in srgb, var(--cx-mark) 45%, transparent); }
+}
+.cx-claim.pc-claim.has-spot:not(.is-quiet):focus-visible .cx-spot { --cx-spot-paint: var(--cx-mark-strong); }
+@media (hover: hover) and (pointer: fine) {
+  .cx-claim.pc-claim.has-spot:not(.is-quiet):hover .cx-spot { --cx-spot-paint: var(--cx-mark-strong); }
+}
+.cx-claim.pc-claim.is-quiet:focus-visible { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .cx-claim.pc-claim.is-quiet:hover { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
+}
 @media (prefers-reduced-motion: no-preference) {
   .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe var(--dur-beat) var(--ease-standard) infinite; }
 }

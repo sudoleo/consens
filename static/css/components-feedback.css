@@ -206,8 +206,10 @@
   line-height: var(--line-height-heading);
 }
 
-#emailPopup .top-bar-about:hover,
-#logoutButton:hover {
-  color: var(--button-bg) !important;
+@media (hover: hover) and (pointer: fine) {
+  #emailPopup .top-bar-about:hover,
+  #logoutButton:hover {
+    color: var(--button-bg) !important;
+  }
 }
 

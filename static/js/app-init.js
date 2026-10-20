@@ -656,6 +656,100 @@
           }
         });
 
+        // The phone menu follows the finger (Apple audit F11): a swipe to the
+        // left takes it along, the dim fades with it, and it closes once it
+        // is a third of the way out or was flicked; let go earlier and it
+        // settles back. Up and down stay the list's own scroll (shell.css
+        // gives the open menu touch-action: pan-y). From the menu or the
+        // dimmed page; focus goes back to the menu button as on every close.
+        (function bindDrawerSwipe() {
+          const sidebar = document.querySelector(".sidebar");
+          if (!sidebar || typeof window.PointerEvent !== "function") return;
+          const SLOP = 10;
+          let drag = null;
+
+          // The dim goes on from where the finger left it, to the state the
+          // class change gives it, in the menu's own time; the page's CSS
+          // takes over when it ends (a cancelled script animation does not
+          // hand its value to a CSS transition).
+          function settleDim(dim, to) {
+            if (!dim) return;
+            const from = Number(getComputedStyle(document.body, "::after").opacity);
+            dim.cancel();
+            if (window.App.motion?.reduced?.() || !Number.isFinite(from)) return;
+            try {
+              document.body.animate([{ opacity: from, visibility: "visible" }, { opacity: to, visibility: "visible" }],
+                { pseudoElement: "::after", duration: window.App.motion?.ms?.("layer") || 320,
+                  easing: window.App.motion?.ease?.("standard") || "ease" });
+            } catch (_) { /* the dim simply takes its state */ }
+          }
+          // A finger that moved makes no tap; should a browser still send the
+          // click of this gesture, it lands nowhere. The next real tap counts.
+          function swallowNextClick() {
+            const swallow = event => { event.preventDefault(); event.stopPropagation(); };
+            window.addEventListener("click", swallow, { capture: true, once: true });
+            setTimeout(() => window.removeEventListener("click", swallow, true), 80);
+          }
+          document.addEventListener("pointerdown", function (event) {
+            drag = null;
+            if (event.pointerType !== "touch" || !event.isPrimary) return;
+            if (!usesOverlaySidebar() || !sidebar.classList.contains("active")) return;
+            const onDim = event.target === document.body;
+            if (!onDim && !sidebar.contains(event.target)) return;
+            // A field keeps its own drag (selecting text), a chat being renamed too.
+            if (event.target.closest?.("input, textarea, select, [contenteditable='true'], .bookmark.is-renaming")) return;
+            drag = { id: event.pointerId, x: event.clientX, y: event.clientY, width: sidebar.getBoundingClientRect().width || 1,
+              moving: false, offset: 0, lastX: event.clientX, lastT: event.timeStamp, velocity: 0, dim: null };
+          }, true);
+          document.addEventListener("pointermove", function (event) {
+            if (!drag || event.pointerId !== drag.id) return;
+            const dx = event.clientX - drag.x;
+            const dy = event.clientY - drag.y;
+            if (!drag.moving) {
+              if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
+              // Up, down or to the right: not a close.
+              if (dx > -SLOP || Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
+              drag.moving = true;
+              try { sidebar.setPointerCapture(drag.id); } catch (_) { /* captured by the browser */ }
+              // "Reduce motion": the menu does not travel (it fades, motion.css);
+              // the swipe still closes it.
+              drag.follow = !window.App.motion?.reduced?.();
+              if (!drag.follow) return;
+              sidebar.classList.add("is-dragging");
+              try {
+                drag.dim = document.body.animate([{ opacity: 1 }, { opacity: 0 }],
+                  { pseudoElement: "::after", duration: 1000, fill: "both", easing: "linear" });
+                drag.dim.pause();
+              } catch (_) { drag.dim = null; }
+            }
+            drag.offset = Math.min(0, dx + SLOP);
+            if (event.timeStamp > drag.lastT) {
+              drag.velocity = (event.clientX - drag.lastX) / (event.timeStamp - drag.lastT);
+              drag.lastX = event.clientX;
+              drag.lastT = event.timeStamp;
+            }
+            if (!drag.follow) return;
+            sidebar.style.transform = `translateX(${drag.offset}px)`;
+            if (drag.dim) drag.dim.currentTime = Math.min(1, -drag.offset / drag.width) * 1000;
+          }, true);
+          function release(event) {
+            if (!drag || event.pointerId !== drag.id) return;
+            const ended = drag;
+            drag = null;
+            if (!ended.moving) return;
+            const travelled = -ended.offset / ended.width;
+            const close = event.type === "pointerup"
+              && (travelled > 1 / 3 || (ended.velocity < -0.5 && travelled > 0.05));
+            sidebar.classList.remove("is-dragging");
+            sidebar.style.removeProperty("transform");
+            settleDim(ended.dim, close ? 0 : 1);
+            swallowNextClick();
+            if (close) closeOverlaySidebar();
+          }
+          document.addEventListener("pointerup", release, true);
+          document.addEventListener("pointercancel", release, true);
+        })();
+
         const consensusDropdown = document.getElementById("consensusModelDropdown");
 
         // Mapping: Response-Box → zugehörige Sidebar-Checkbox

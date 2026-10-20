@@ -49,9 +49,11 @@ button.demo-action {
   transform: translateX(.5px);
 }
 
-.demo-action:hover,
-a.lp-hero-prompt:hover .demo-action {
-  background: var(--button-bg-hover);
+@media (hover: hover) and (pointer: fine) {
+  .demo-action:hover,
+  a.lp-hero-prompt:hover .demo-action {
+    background: var(--button-bg-hover);
+  }
 }
 
 /* A press gives way instead of moving: the control sinks into the field. */
@@ -70,7 +72,7 @@ a.lp-hero-prompt:focus-visible .demo-action {
 /* Touch keeps a 44px target by growing the hit area, not the drawing. */
 @media (pointer: coarse) {
   .demo-action::after,
-  button.demo-action::after { content: ""; position: absolute; inset: -4px 0; }
+  button.demo-action::after { content: ""; position: absolute; inset: var(--hit-slop); }
 }
 
 @media (prefers-reduced-motion: reduce) {

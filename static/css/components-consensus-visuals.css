@@ -251,11 +251,16 @@
 }
 
 /* .is-linked-hover: die zugehoerige Passage wird gehovert (siehe .cx-claim). */
-.claim-badge:hover,
 .claim-badge:focus-visible,
 .claim-badge.is-linked-hover {
   background: var(--hover);
   color: var(--text-color);
+}
+@media (hover: hover) and (pointer: fine) {
+  .claim-badge:hover {
+    background: var(--hover);
+    color: var(--text-color);
+  }
 }
 
 .claim-badge:focus-visible {
@@ -271,11 +276,16 @@
   color: var(--ink-2);
 }
 
-.claim-badge.has-dissent:hover,
 .claim-badge.has-dissent:focus-visible,
 .claim-badge.has-dissent.is-linked-hover {
   background: var(--hover);
   color: var(--text-color);
+}
+@media (hover: hover) and (pointer: fine) {
+  .claim-badge.has-dissent:hover {
+    background: var(--hover);
+    color: var(--text-color);
+  }
 }
 
 /* Duenn belegte Aussage: bewusst noch leiser als die uebrigen Quoten. Sie
@@ -286,10 +296,14 @@
   color: var(--ink-3);
 }
 
-.claim-badge.is-thin:hover,
 .claim-badge.is-thin:focus-visible,
 .claim-badge.is-thin.is-linked-hover {
   color: var(--ink-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .claim-badge.is-thin:hover {
+    color: var(--ink-2);
+  }
 }
 
 .claim-ratio {

@@ -41,9 +41,13 @@
   cursor: pointer;
 }
 
-.model-picker-wrapper:hover,
 .model-picker-wrapper:focus-within {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-wrapper:hover {
+    background: var(--hover);
+  }
 }
 
 .model-picker-wrapper:active {
@@ -61,10 +65,15 @@
   transition: border-color var(--dur-state) var(--ease-standard), transform var(--dur-state) var(--ease-standard);
 }
 
-.model-picker-wrapper:hover::after,
 .model-picker-wrapper:focus-within::after {
   border-top-color: var(--accent);
   transform: translateY(0.5px);
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-wrapper:hover::after {
+    border-top-color: var(--accent);
+    transform: translateY(0.5px);
+  }
 }
 
 .model-picker-wrapper.is-expanded {
@@ -169,8 +178,10 @@
   padding-right: 30px;
 }
 
-.model-picker-option:hover {
-  background: var(--hover);
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-option:hover {
+    background: var(--hover);
+  }
 }
 
 .model-picker-option:focus-visible {
@@ -202,10 +213,15 @@
   opacity: 0.72;
 }
 
-.model-picker-option:disabled:hover,
 .model-picker-option:disabled:focus-visible {
   background: transparent;
   opacity: 0.72;
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-option:disabled:hover {
+    background: transparent;
+    opacity: 0.72;
+  }
 }
 
 .model-picker-option-label {
@@ -332,13 +348,24 @@
   font-size: var(--font-size-xs);
 }
 
-.model-picker-preset-option:is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]):not(.is-selected) .model-picker-preset-mark {
+.model-picker-preset-option:focus-visible:not(:disabled):not([aria-disabled="true"]):not(.is-selected) .model-picker-preset-mark {
   --mark-ring: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix));
 }
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-preset-option:hover:not(:disabled):not([aria-disabled="true"]):not(.is-selected) .model-picker-preset-mark {
+    --mark-ring: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix));
+  }
+}
 
-.model-picker-preset-option:is(:hover, :focus-visible):not(:disabled) .model-picker-preset-mark {
+.model-picker-preset-option:focus-visible:not(:disabled) .model-picker-preset-mark {
   filter: none;
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-preset-option:hover:not(:disabled) .model-picker-preset-mark {
+    filter: none;
+    opacity: 1;
+  }
 }
 
 .model-picker-preset-option.is-locked {
@@ -346,9 +373,13 @@
   opacity: 0.7;
 }
 
-.model-picker-preset-option.is-locked:hover,
 .model-picker-preset-option.is-locked:focus-visible {
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-preset-option.is-locked:hover {
+    opacity: 1;
+  }
 }
 
 /* High Quality: the row keeps its own stacking for the selected mark. */
@@ -419,9 +450,13 @@
   margin-right: 0;
 }
 
-.model-picker-back-option:hover .model-picker-option-chevron,
 .model-picker-back-option:focus-visible .model-picker-option-chevron {
   color: currentColor;
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-back-option:hover .model-picker-option-chevron {
+    color: currentColor;
+  }
 }
 
 .dark-mode .model-picker-custom-option,
@@ -482,8 +517,10 @@
   padding: 0;
 }
 
-.model-picker-row-toggle:hover {
-  background: var(--hover);
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-row-toggle:hover {
+    background: var(--hover);
+  }
 }
 
 .model-picker-row-toggle:focus-visible {
@@ -549,9 +586,13 @@
   -webkit-backdrop-filter: none;
 }
 
-.dark-mode .model-picker-option:hover,
 .dark-mode .model-picker-option:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dark-mode .model-picker-option:hover {
+    background: var(--hover);
+  }
 }
 
 .model-name-trigger {
@@ -578,12 +619,19 @@
   }
 }
 
-.model-name-trigger:hover,
 .model-name-trigger:focus-visible {
   color: var(--accent);
   background: var(--hover);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
   outline: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-name-trigger:hover {
+    color: var(--accent);
+    background: var(--hover);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+    outline: none;
+  }
 }
 
 .search-mode-label {
@@ -700,12 +748,12 @@
   .model-picker-menu,
   .consensus-model .select-wrapper .model-picker-menu {
     position: fixed;
-    top: 64px;
-    right: 12px;
-    left: 12px;
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
     width: auto;
     max-width: none;
-    max-height: calc(100dvh - 88px);
+    max-height: calc(100dvh - 88px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     z-index: 1500;
     overscroll-behavior: contain;
   }

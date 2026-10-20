@@ -176,7 +176,14 @@
     if (menu) menu.hidden = true;
   }
 
-  function showSelection(text, kind, rect, sourceNode = null) {
+  // Where a finger selected, the system's own menu (Copy, Look Up …) sits
+  // over the selection and its handles hang below the last line. Ours goes
+  // under the handle there, never under the system menu; with a mouse it
+  // stays right below the selection.
+  const TOUCH_HANDLE_PX = 28;
+  const SYSTEM_MENU_PX = 56;
+
+  function showSelection(text, kind, rect, sourceNode = null, { touch = lastPointer === "touch" || lastPointer === "pen" } = {}) {
     if (!text || text.length > 2000 || !rect) return hideMenu();
     const sourceElement = sourceNode?.nodeType === Node.ELEMENT_NODE ? sourceNode : sourceNode?.parentElement;
     const readerDialog = sourceElement?.closest('.answer-reader-dialog[open]');
@@ -207,17 +214,17 @@
       const menuHeight = menu.offsetHeight;
       const center = rect.left + (rect.width / 2);
       const left = Math.max(10, Math.min(window.innerWidth - menuWidth - 10, center - (menuWidth / 2)));
-      const below = rect.bottom + 10;
+      const below = rect.bottom + (touch ? TOUCH_HANDLE_PX : 10);
       const top = below + menuHeight <= window.innerHeight - 10
         ? below
-        : Math.max(10, rect.top - menuHeight - 10);
+        : Math.max(10, rect.top - menuHeight - (touch ? SYSTEM_MENU_PX : 10));
       menu.style.left = `${left}px`;
       menu.style.top = `${top}px`;
       menu.style.visibility = "visible";
     });
   }
 
-  function captureSelection(event) {
+  function captureSelection(event, { touch = lastPointer === "touch" || lastPointer === "pen" } = {}) {
     if (state.busy || !document.getElementById("memoryEditBackdrop")?.hidden) return;
     if (event?.target?.closest?.(".memory-selection-menu, .toast-region")) return;
     const input = event?.target?.closest?.("#questionInput");
@@ -234,7 +241,30 @@
     const range = selection.getRangeAt(0);
     const kind = sourceForNode(range.commonAncestorContainer);
     if (!kind) return hideMenu();
-    showSelection(text, kind, range.getBoundingClientRect(), range.commonAncestorContainer);
+    showSelection(text, kind, range.getBoundingClientRect(), range.commonAncestorContainer, { touch });
+  }
+
+  // A finger selects without a mouseup (Apple audit F7): on a phone "Ask
+  // about this", "Remember" and "Correct memory" never appeared. After a
+  // touch the selection itself is watched: while the handles move the menu
+  // waits, once the selection has stood still for a moment it shows; a
+  // selection that is gone takes the menu with it (unless the finger is on
+  // the menu, whose tap ends the selection).
+  const SELECTION_SETTLE_MS = 350;
+  let lastPointer = "";
+  let selectionTimer = 0;
+
+  function onSelectionChange() {
+    if (lastPointer !== "touch" && lastPointer !== "pen") return;
+    clearTimeout(selectionTimer);
+    const menu = document.getElementById("memorySelectionMenu");
+    if (menu && !menu.hidden && window.getSelection()?.toString().trim()) menu.style.visibility = "hidden";
+    selectionTimer = setTimeout(() => {
+      if (document.activeElement?.closest?.(".memory-selection-menu")) return;
+      const text = window.getSelection()?.toString().trim();
+      if (!text) { hideMenu(); return; }
+      captureSelection(null, { touch: true });
+    }, SELECTION_SETTLE_MS);
   }
 
   function dialogCopy(intent) {
@@ -290,7 +320,6 @@
     state.requestId = makeRequestId();
     state.requestFeedback = textarea.value.trim();
     backdrop.hidden = false;
-    document.documentElement.classList.add("memory-edit-open");
     updateCounter();
     requestAnimationFrame(() => {
       textarea.focus();
@@ -301,7 +330,6 @@
   function closeDialog() {
     if (state.busy) return;
     document.getElementById("memoryEditBackdrop").hidden = true;
-    document.documentElement.classList.remove("memory-edit-open");
     state.returnFocus?.focus?.();
   }
 
@@ -416,7 +444,6 @@
       const selection = document.getElementById("memoryEditSelection");
       if (selection) selection.textContent = "";
     }
-    document.documentElement.classList.remove("memory-edit-open");
     state.toast?.cancel();
     state.toast = null;
   }
@@ -458,7 +485,6 @@
       if (epoch !== state.epoch) return;
       if (result.status === "processing") throw new Error("This Memory action is already processing.");
       document.getElementById("memoryEditBackdrop").hidden = true;
-      document.documentElement.classList.remove("memory-edit-open");
       await window.App?.userMemory?.load?.(true, { keepDraft: true });
       if (epoch !== state.epoch || !bindingIsCurrent(binding)) return;
       showUndo(result, intent, binding);
@@ -512,6 +538,11 @@
 
   function bind() {
     ensureUi();
+    document.addEventListener("pointerdown", event => {
+      if (event.target?.closest?.(".memory-selection-menu")) return;
+      lastPointer = event.pointerType || "";
+    }, true);
+    document.addEventListener("selectionchange", onSelectionChange);
     document.addEventListener("mouseup", event => setTimeout(() => captureSelection(event), 0));
     document.addEventListener("keyup", event => {
       if (event.key === "Shift" || event.shiftKey) captureSelection(event);

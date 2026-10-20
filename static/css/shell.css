@@ -158,8 +158,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   color: var(--ink);
 }
 
-.sidebar-brand-link:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-brand-link:hover {
+    color: var(--ink);
+  }
 }
 
 .sidebar-brand-link .sidebar-brand-title {
@@ -198,9 +200,11 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   transition: color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-footer-meta > .sidebar-footer-link:hover {
-  color: var(--ink);
-  text-decoration: none;
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-footer-meta > .sidebar-footer-link:hover {
+    color: var(--ink);
+    text-decoration: none;
+  }
 }
 
 .sidebar-footer-icons {
@@ -224,9 +228,11 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-footer-meta .sidebar-footer-icon:hover {
-  background: var(--hover);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-footer-meta .sidebar-footer-icon:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .sidebar-footer-meta .sidebar-footer-icon:focus-visible {
@@ -279,9 +285,11 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-toggle-square:hover {
-  background: var(--hover);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-toggle-square:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .sidebar-toggle-square svg {
@@ -324,9 +332,13 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   transition: background-color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-new-run:hover,
 .sidebar-new-run:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-new-run:hover {
+    background: var(--hover);
+  }
 }
 
 /* Where you are: the empty start screen is the new comparison. */
@@ -400,10 +412,15 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   pointer-events: auto;
 }
 
-.sidebar-bookmarks-head .sidebar-toggle-btn:hover,
 .sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible {
   background: var(--hover);
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-bookmarks-head .sidebar-toggle-btn:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .bookmarks-section.is-locked .sidebar-toggle-btn {
@@ -442,16 +459,26 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   height: 14px;
 }
 
-.bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-bookmarks-head:hover .sidebar-search-trigger,
 .bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }
+@media (hover: hover) and (pointer: fine) {
+  .bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-bookmarks-head:hover .sidebar-search-trigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 
-.sidebar-search-trigger:hover,
 .sidebar-search-trigger:focus-visible {
   background: var(--hover);
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-search-trigger:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .sidebar-bookmarks-head.is-searching .sidebar-search-trigger {
@@ -499,8 +526,10 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   color: var(--ink-3);
 }
 
-.sidebar-search-box input:hover {
-  background: var(--raise-hover);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-search-box input:hover {
+    background: var(--raise-hover);
+  }
 }
 
 .sidebar-search-box input:focus {
@@ -559,10 +588,15 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-model-entry:hover,
 .sidebar-model-entry:focus-visible {
   background: var(--hover);
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-model-entry:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .sidebar-model-entry > svg {
@@ -608,10 +642,15 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   transition: transform var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.sidebar-model-entry:hover .sidebar-model-chevron,
 .sidebar-model-entry:focus-visible .sidebar-model-chevron {
   color: currentColor;
   transform: translateX(2px) rotate(var(--chevron-turn));
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-model-entry:hover .sidebar-model-chevron {
+    color: currentColor;
+    transform: translateX(2px) rotate(var(--chevron-turn));
+  }
 }
 
 /* Bookmarks read as a flat list: hover is a tint, the active row a tint that
@@ -630,9 +669,11 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   .sidebar .bookmark { padding-right: 44px; }
 }
 
-.sidebar .bookmark:hover {
-  background: var(--hover);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar .bookmark:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .sidebar .bookmark.is-active {
@@ -836,9 +877,13 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   display: none;
 }
 
-.quota-trigger:hover,
 .quota-trigger[aria-expanded="true"] {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .quota-trigger:hover {
+    background: var(--hover);
+  }
 }
 
 .quota-trigger:focus-visible {
@@ -952,9 +997,11 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   color: var(--ink-2);
 }
 
-.attach-trigger:hover,
-.model-picker-display:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .attach-trigger:hover,
+  .model-picker-display:hover {
+    color: var(--ink);
+  }
 }
 
 .model-picker-display {
@@ -995,8 +1042,10 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   cursor: default;
 }
 
-.input-action-btn-primary:not(:disabled):not(.is-cancel-action):hover svg {
-  transform: translateY(-2px);
+@media (hover: hover) and (pointer: fine) {
+  .input-action-btn-primary:not(:disabled):not(.is-cancel-action):hover svg {
+    transform: translateY(-2px);
+  }
 }
 
 .input-action-btn-primary:not(:disabled):active {
@@ -1013,8 +1062,10 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   color: var(--ink);
 }
 
-.input-action-btn-primary.is-cancel-action:hover {
-  background: color-mix(in srgb, var(--ink) 15%, var(--bg-color));
+@media (hover: hover) and (pointer: fine) {
+  .input-action-btn-primary.is-cancel-action:hover {
+    background: color-mix(in srgb, var(--ink) 15%, var(--bg-color));
+  }
 }
 
 .input-action-btn-primary.is-cancel-action svg {
@@ -1473,9 +1524,11 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   outline-offset: 2px;
 }
 
-.run-model-skip-btn:hover {
-  background: var(--hover);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .run-model-skip-btn:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .run-model-skip-btn:disabled {
@@ -1784,9 +1837,11 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   transition: background-color var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
 }
 
-.run-blocked-btn:hover {
-  color: var(--ink);
-  border-color: var(--ink-3);
+@media (hover: hover) and (pointer: fine) {
+  .run-blocked-btn:hover {
+    color: var(--ink);
+    border-color: var(--ink-3);
+  }
 }
 
 /* .run-blocked-btn.is-primary wears the .btn material (components-input.css). */
@@ -1921,8 +1976,10 @@ body.is-hero #verifyBanner {
   cursor: pointer;
 }
 
-.verify-banner-link:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .verify-banner-link:hover {
+    color: var(--ink);
+  }
 }
 
 @media (max-width: 700px) {
@@ -2180,10 +2237,12 @@ body:not(.is-hero) .consensus-output {
   display: none;
 }
 
-.consensus-tab:hover {
-  background: transparent;
-  color: var(--ink);
-  text-decoration-color: var(--line);
+@media (hover: hover) and (pointer: fine) {
+  .consensus-tab:hover {
+    background: transparent;
+    color: var(--ink);
+    text-decoration-color: var(--line);
+  }
 }
 
 .consensus-tab:focus-visible {
@@ -2231,10 +2290,15 @@ body:not(.is-hero) .consensus-output {
 
 .consensus-footer-tabs .consensus-tab.consensus-evidence-action[hidden] { display: none; }
 
-.consensus-footer-tabs .consensus-evidence-action:hover,
 .consensus-footer-tabs .consensus-evidence-action[aria-expanded="true"] {
   background: var(--hover);
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .consensus-footer-tabs .consensus-evidence-action:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 .consensus-footer-tabs .consensus-evidence-action:focus-visible {
@@ -2298,14 +2362,22 @@ body:not(.is-hero) .consensus-output {
   text-decoration-color: var(--line);
 }
 
-.run-replay-btn:hover,
 .run-replay-btn:focus-visible {
   color: var(--ink);
 }
+@media (hover: hover) and (pointer: fine) {
+  .run-replay-btn:hover {
+    color: var(--ink);
+  }
+}
 
-.run-replay-btn:hover .run-replay-label,
 .run-replay-btn:focus-visible .run-replay-label {
   text-decoration-color: var(--ink-3);
+}
+@media (hover: hover) and (pointer: fine) {
+  .run-replay-btn:hover .run-replay-label {
+    text-decoration-color: var(--ink-3);
+  }
 }
 
 /* Der Preis haengt am Label, ist aber nicht das Label: nicht unterstrichen,
@@ -2360,11 +2432,13 @@ body.dark-mode .run-provenance {
     color: var(--ink-3);
     font-weight: var(--font-weight-medium);
   }
-  .run-model-skip-btn:hover {
-    background: transparent;
-    color: var(--ink);
-    text-decoration: underline;
-    text-underline-offset: 3px;
+  @media (hover: hover) and (pointer: fine) {
+    .run-model-skip-btn:hover {
+      background: transparent;
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
   }
   .run-model-time { grid-column: 3; }
   .run-model-track { grid-column: 1 / -1; grid-row: 2; }
@@ -2468,9 +2542,11 @@ body.dark-mode .run-provenance {
     text-decoration: none;
   }
 
-  .consensus-tab:hover {
-    background: var(--hover);
-    text-decoration: none;
+  @media (hover: hover) and (pointer: fine) {
+    .consensus-tab:hover {
+      background: var(--hover);
+      text-decoration: none;
+    }
   }
 
   .consensus-tab[aria-expanded="true"] {
@@ -2628,9 +2704,12 @@ body:not(.is-hero) .input-section {
     left: 50%;
     right: auto;
     bottom: 0;
-    width: min(var(--app-container-width), calc(100vw - 40px));
+    width: min(var(--app-container-width), calc(100vw - 40px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
     box-sizing: border-box;
     margin: 0;
+    /* The field stands above the home indicator (Apple-Audit F12); the
+       composer's ground still reaches the screen's edge under it. */
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
     /* iPhone Safari colours the strip behind its bottom bar after this box
        (see .app-mobile-header-edge); transparent, it measured pixels and kept
@@ -2642,7 +2721,7 @@ body:not(.is-hero) .input-section {
 
 @media (max-width: 640px) {
   body:not(.is-hero) .input-section {
-    width: calc(100vw - 32px);
+    width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
   }
 }
 
@@ -2681,7 +2760,7 @@ body:not(.is-hero) .input-section {
 
   body.composer-collapsed:not(.is-hero) .input-section {
     padding-top: 8px;
-    padding-bottom: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Auf- und Zuklappen ist eine Bewegung, kein Sprung. Zwischen den beiden
@@ -2949,8 +3028,10 @@ body:not(.is-hero) .consensus-section::before {
   width: 96px;
 }
 
-.message-attachments .is-image-tile .attachment-chip-preview:hover .attachment-chip-thumb {
-  filter: brightness(.92);
+@media (hover: hover) and (pointer: fine) {
+  .message-attachments .is-image-tile .attachment-chip-preview:hover .attachment-chip-thumb {
+    filter: brightness(.92);
+  }
 }
 
 .thread-ask-more {
@@ -2968,9 +3049,11 @@ body:not(.is-hero) .consensus-section::before {
   text-decoration-color: var(--line);
 }
 
-.thread-ask-more:hover {
-  color: var(--ink);
-  text-decoration-color: var(--ink-3);
+@media (hover: hover) and (pointer: fine) {
+  .thread-ask-more:hover {
+    color: var(--ink);
+    text-decoration-color: var(--ink-3);
+  }
 }
 
 /* In der Blase: "Show more" mit Winkel, ohne Unterstrich. */
@@ -3421,10 +3504,15 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
   display: none;
 }
 
-.response-answer-more:hover,
 .response-answer-more:focus-visible {
   color: var(--ink);
   text-decoration-color: var(--ink-3);
+}
+@media (hover: hover) and (pointer: fine) {
+  .response-answer-more:hover {
+    color: var(--ink);
+    text-decoration-color: var(--ink-3);
+  }
 }
 
 .response-answer-more:focus-visible {
@@ -3671,6 +3759,136 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
   }
 }
 
+/* ---- Every source behind a pill (sources.js sourceSheet, Apple-Audit F6) --
+   A popover at the pill, or on a phone a card in the middle of the screen
+   over the scrim, like the sentence card. Each source is one row to tap:
+   site, title, and for a single source its excerpt. Motion: overlays.css. */
+.source-sheet {
+  position: absolute;
+  z-index: var(--z-modal);
+  box-sizing: border-box;
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  box-shadow: var(--lift);
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+  text-align: left;
+}
+
+.source-sheet[hidden] {
+  display: none;
+}
+
+.source-sheet.is-modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 420px);
+  max-height: min(72vh, calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+  border-radius: var(--radius-xl);
+}
+
+.source-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 4px 8px;
+}
+
+.source-sheet-heading {
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.source-sheet-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-sheet-link,
+.source-sheet-entry {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+}
+
+.source-sheet-link {
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .source-sheet-link:hover {
+    background: var(--hover);
+  }
+}
+
+.source-sheet-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.source-sheet-link:active {
+  background: var(--selected);
+}
+
+.source-sheet-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+}
+
+.source-sheet-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.source-sheet-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-sheet-name {
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.source-sheet-snippet {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
 /* ---- Sources drawer ------------------------------------------------------ */
 .consensus-sources-panel {
   margin-top: 10px;
@@ -3718,9 +3936,11 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
   overflow-wrap: anywhere;
 }
 
-a.consensus-source-title:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+@media (hover: hover) and (pointer: fine) {
+  a.consensus-source-title:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 
 .consensus-source-host {
@@ -4063,8 +4283,13 @@ body:not(.dark-mode) #proFeatureModal .btn-free {
   box-shadow: none;
 }
 
-body:not(.dark-mode) #proFeatureModal .btn-free:is(:hover, :focus-visible) {
+body:not(.dark-mode) #proFeatureModal .btn-free:focus-visible {
   background: var(--raise-selected);
+}
+@media (hover: hover) and (pointer: fine) {
+  body:not(.dark-mode) #proFeatureModal .btn-free:hover {
+    background: var(--raise-selected);
+  }
 }
 
 @media (max-width: 620px) {
@@ -4079,15 +4304,24 @@ body :is(.attach-trigger, .model-picker-display, .auth-top-login,
   background: var(--app-surface);
 }
 
-body :is(.attach-trigger, .model-picker-display, .auth-top-login,
-  .claim-jump-link, .diff-resolve-btn, .share-secondary-btn,
-  .memory-edit-cancel):is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]) {
+body :is(.attach-trigger, .model-picker-display, .auth-top-login, .claim-jump-link, .diff-resolve-btn, .share-secondary-btn, .memory-edit-cancel):focus-visible:not(:disabled):not([aria-disabled="true"]) {
   background: var(--raise-hover);
 }
+@media (hover: hover) and (pointer: fine) {
+  body :is(.attach-trigger, .model-picker-display, .auth-top-login, .claim-jump-link, .diff-resolve-btn, .share-secondary-btn, .memory-edit-cancel):hover:not(:disabled):not([aria-disabled="true"]) {
+    background: var(--raise-hover);
+  }
+}
 
-body .model-picker-option:is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]),
-body.dark-mode .model-picker-option:is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]) {
+body .model-picker-option:focus-visible:not(:disabled):not([aria-disabled="true"]),
+body.dark-mode .model-picker-option:focus-visible:not(:disabled):not([aria-disabled="true"]) {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  body .model-picker-option:hover:not(:disabled):not([aria-disabled="true"]),
+  body.dark-mode .model-picker-option:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: var(--hover);
+  }
 }
 
 /* The current choice reads as chosen, not as unavailable (Apple-Audit G6):
@@ -4100,9 +4334,15 @@ body.dark-mode .model-picker-option.is-selected {
   color: var(--ink);
 }
 
-body .model-picker-option.is-selected:is(:hover, :focus-visible),
-body.dark-mode .model-picker-option.is-selected:is(:hover, :focus-visible) {
+body .model-picker-option.is-selected:focus-visible,
+body.dark-mode .model-picker-option.is-selected:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  body .model-picker-option.is-selected:hover,
+  body.dark-mode .model-picker-option.is-selected:hover {
+    background: var(--hover);
+  }
 }
 
 /* Match controls nested inside the new opaque panels. */
@@ -4114,8 +4354,13 @@ body .theme-toggle.is-dark {
   box-shadow: none !important;
 }
 
-body .theme-toggle:is(:hover, :focus-visible) {
+body .theme-toggle:focus-visible {
   background: var(--app-surface-hover) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  body .theme-toggle:hover {
+    background: var(--app-surface-hover) !important;
+  }
 }
 
 /* The mode belongs to the composer, including its compact mobile state. */
@@ -4168,7 +4413,9 @@ body .theme-toggle:is(:hover, :focus-visible) {
   font-weight: 600;
   cursor: pointer;
 }
-.composer-agent-toggle:hover { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .composer-agent-toggle:hover { background: var(--hover); }
+}
 .composer-agent-toggle:disabled { opacity: .45; cursor: default; background: transparent; }
 .composer-agent-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .composer-tool { margin-left: 0; font-weight: 500; }
@@ -4200,7 +4447,10 @@ body .theme-toggle:is(:hover, :focus-visible) {
 .composer-model-icon img { width: 14px; height: 14px; object-fit: contain; }
 .composer-model-icon { filter: grayscale(1); opacity: .8;
   transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard); }
-.composer-mode-models:is(:hover, :focus-visible) .composer-model-icon { filter: none; opacity: 1; }
+.composer-mode-models:focus-visible .composer-model-icon { filter: none; opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .composer-mode-models:hover .composer-model-icon { filter: none; opacity: 1; }
+}
 /* Keep the explanation accessible without adding another visual row. */
 .composer-mode-description {
   position: absolute;
@@ -4263,6 +4513,23 @@ body .theme-toggle:is(:hover, :focus-visible) {
 @container composer-options (max-width: 700px) {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
+}
+/* 44px to the finger (Apple-Audit F5): Reasoning, Attach and the models keep
+   their drawing; on touch each reaches out to 44px, and on a phone the
+   icons stand 16px apart so neighbouring hit areas do not eat each other.
+   Above the bar the field takes the taps (it lies over the bar), so the
+   area reaches further down, into the free room under the bar. */
+@media (pointer: coarse) {
+  .composer-agent-toggle { position: relative; }
+  .composer-agent-toggle::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+    bottom: calc(var(--hit-slop) - 6px);
+  }
+}
+@media (pointer: coarse) and (max-width: 480px) {
+  .composer-mode-controls { gap: 16px; }
 }
 
 /* Mobile navigation: no bar, two groups of bare glyphs. The menu mark on the
@@ -4341,17 +4608,19 @@ body .theme-toggle:is(:hover, :focus-visible) {
 
   /* The fade appears only once something scrolls beneath it
      (mobile-header.js sets .is-scrolled); on an empty start screen it would
-     dissolve nothing into nothing. Solid under the status bar, then gone
-     28px below the islands. */
+     dissolve nothing into nothing. Solid ground behind the whole bar, so no
+     line of the answer reads between the buttons (Apple-Audit F13: a half
+     transparent band looked washed out, neither surface nor free text),
+     then a short fade, gone 20px below it. */
   .app-mobile-header::before {
     content: "";
     position: absolute;
-    inset: 0 0 -28px;
+    inset: 0 0 -20px;
     z-index: -1;
     pointer-events: none;
     background: var(--ground);
-    -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(env(safe-area-inset-top, 0px) + 24px), transparent 100%);
-    mask-image: linear-gradient(180deg, #000 0, #000 calc(env(safe-area-inset-top, 0px) + 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 24px), transparent 100%);
     opacity: 0;
     transition: opacity var(--dur-state) var(--ease-standard);
   }
@@ -4390,9 +4659,11 @@ body .theme-toggle:is(:hover, :focus-visible) {
 
   /* Every icon in the bar is one kind of control: the same ink, the same
      22px glyph, the same tone on hover. */
-  .app-mobile-header .sidebar-toggle:hover {
-    background: var(--hover);
-    box-shadow: none;
+  @media (hover: hover) and (pointer: fine) {
+    .app-mobile-header .sidebar-toggle:hover {
+      background: var(--hover);
+      box-shadow: none;
+    }
   }
 
   /* Watches lives in the menu on a phone. Until it has been opened once, the
@@ -4441,9 +4712,11 @@ body .theme-toggle:is(:hover, :focus-visible) {
   .app-mobile-header #authTopActions .auth-top-signup::before {
     background: var(--button-bg); border-color: var(--button-bg);
   }
-  .app-mobile-header #authTopActions .auth-top-login:hover::before { background: var(--raise); }
-  .app-mobile-header #authTopActions .auth-top-signup:hover::before {
-    background: var(--button-bg-hover);
+  @media (hover: hover) and (pointer: fine) {
+    .app-mobile-header #authTopActions .auth-top-login:hover::before { background: var(--raise); }
+    .app-mobile-header #authTopActions .auth-top-signup:hover::before {
+      background: var(--button-bg-hover);
+    }
   }
   .app-mobile-header #authTopActions button:focus-visible {
     outline: var(--focus-ring); outline-offset: -3px;
@@ -4491,7 +4764,9 @@ body .theme-toggle:is(:hover, :focus-visible) {
     width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0;
     border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer;
   }
-  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--hover); }
+  @media (hover: hover) and (pointer: fine) {
+    .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--hover); }
+  }
   .app-mobile-header .consensus-actions-wrapper.open .consensus-actions-toggle { background: var(--selected); }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 22px; height: 22px; flex: 0 0 22px; }
@@ -4499,14 +4774,6 @@ body .theme-toggle:is(:hover, :focus-visible) {
   /* In the island the toggle opens more than citations: three dots. */
   .app-mobile-header .consensus-actions-toggle .quote-toggle-icon { display: none; }
   .app-mobile-header .consensus-actions-toggle .more-toggle-icon { display: block; }
-  /* A tap leaves :hover behind on touch screens; no fill may stick to it.
-     The menu island keeps its own surface. */
-  @media (hover: none) {
-    .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover {
-      background: transparent;
-    }
-    .app-mobile-header .sidebar-toggle:hover { background: transparent; }
-  }
 
   .consensus-actions-menu .consensus-copy-icon-btn.consensus-menu-share { display: flex; }
 
@@ -4541,7 +4808,9 @@ body .theme-toggle:is(:hover, :focus-visible) {
     background: transparent; box-shadow: none; color: var(--ink);
   }
   #mobileSidebarViews .view-switch-btn.is-active::before { background: currentColor; }
-  #mobileSidebarViews .view-switch-btn:hover { background: var(--hover); color: var(--ink); }
+  @media (hover: hover) and (pointer: fine) {
+    #mobileSidebarViews .view-switch-btn:hover { background: var(--hover); color: var(--ink); }
+  }
   #mobileSidebarViews .view-switch-btn:focus-visible {
     outline: var(--focus-ring); outline-offset: -3px;
   }
@@ -4613,6 +4882,16 @@ body .theme-toggle:is(:hover, :focus-visible) {
     pointer-events: auto;
     transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s;
   }
+  /* Nothing behind the dim pans (Apple-Audit F2): a swipe on it belongs to
+     the menu (app-init.js, F11). The dim is body's ::after, and a pseudo
+     element's own touch-action is not asked, so the body carries it; the
+     menu and every dialog are scroll containers with their own. */
+  body:has(.sidebar.active) { touch-action: pinch-zoom; }
+  /* The menu follows a finger to the left (app-init.js, Apple-Audit F11);
+     up and down stay the list's own scroll, a pinch still zooms. While the
+     finger holds it, it moves with the finger and nothing else. */
+  .sidebar.active { touch-action: pan-y pinch-zoom; }
+  .sidebar.is-dragging { transition: none; }
   #sidebarToggleInner svg line {
     transform-box: view-box;
     transform-origin: 12px 12px;
@@ -4650,7 +4929,7 @@ body .theme-toggle:is(:hover, :focus-visible) {
     --drawer-tint: color-mix(in srgb, var(--ink) 5%, transparent);
     --drawer-tint-strong: color-mix(in srgb, var(--ink) 7.5%, transparent);
     gap: 0;
-    padding: max(6px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px));
+    padding: max(6px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
   }
 
   /* Head: the mark and the panel glyph, nothing else. */
@@ -4674,9 +4953,11 @@ body .theme-toggle:is(:hover, :focus-visible) {
   .sidebar .sidebar-new-run svg,
   #mobileSidebarViews #viewSwitchWatches > svg,
   .sidebar .sidebar-model-entry > svg { display: block; width: 20px; height: 20px; flex: 0 0 20px; }
-  .sidebar .sidebar-new-run:hover,
-  #mobileSidebarViews #viewSwitchWatches:hover,
-  .sidebar .sidebar-model-entry:hover { background: var(--drawer-tint); border-color: transparent; color: var(--ink); }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar .sidebar-new-run:hover,
+    #mobileSidebarViews #viewSwitchWatches:hover,
+    .sidebar .sidebar-model-entry:hover { background: var(--drawer-tint); border-color: transparent; color: var(--ink); }
+  }
   /* Where you are: New chat on the empty start screen, Watches while open. */
   body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar .sidebar-new-run,
   #mobileSidebarViews #viewSwitchWatches.is-active { background: var(--drawer-tint-strong); }
@@ -4714,8 +4995,10 @@ body .theme-toggle:is(:hover, :focus-visible) {
     min-height: 36px; padding: 0 10px; background: transparent;
     color: var(--ink-3); font-size: var(--font-size-ui); font-weight: var(--font-weight-medium);
   }
-  .sidebar-bookmarks-head .sidebar-toggle-btn:hover,
   .sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible { background: transparent; color: var(--ink-2); }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar-bookmarks-head .sidebar-toggle-btn:hover { background: transparent; color: var(--ink-2); }
+  }
   .sidebar-bookmarks-head .sidebar-heading-label { display: block; text-align: left; }
   .sidebar-bookmarks-head .sidebar-heading-label span { color: inherit; }
   .sidebar-bookmarks-head .sidebar-heading-label svg { display: none; }
@@ -4735,13 +5018,18 @@ body .theme-toggle:is(:hover, :focus-visible) {
      them block layout and their own padding). */
   .sidebar .bookmark.is-pending { display: flex; padding-top: 0; padding-bottom: 0; padding-left: 10px; }
   .sidebar .bookmark p { flex: 1; min-width: 0; line-height: var(--line-height-tight); }
-  .sidebar .bookmark:hover { background: var(--drawer-tint); }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar .bookmark:hover { background: var(--drawer-tint); }
+  }
   .sidebar .bookmark.is-active { background: var(--drawer-tint-strong); }
   .sidebar .bookmark .bookmark-menu-button {
     right: 2px !important; min-width: 40px; height: 40px; max-height: none;
     border-radius: var(--radius-xs); opacity: 1; color: var(--ink-3);
   }
-  .sidebar .bookmark .bookmark-menu-button:is(:hover, [aria-expanded="true"]) { background: transparent; color: var(--ink); }
+  .sidebar .bookmark .bookmark-menu-button[aria-expanded="true"] { background: transparent; color: var(--ink); }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar .bookmark .bookmark-menu-button:hover { background: transparent; color: var(--ink); }
+  }
   .sidebar .bookmark.has-menu { background: var(--drawer-tint); }
 
   /* Account: one row, no rule above it; the list simply ends. */
@@ -4757,4 +5045,31 @@ body .theme-toggle:is(:hover, :focus-visible) {
   .sidebar-settings .settings-icon svg { width: 20px; height: 20px; }
   .sidebar-footer-row .quota-trigger { width: 44px; height: 44px; }
   .sidebar-footer-meta { padding-left: 10px; }
+}
+
+/* 44px to the finger (Apple-Audit F5) for what is smaller in the sidebar,
+   in the drawer and beside the page (a tablet on its side): the brand, the
+   Chats heading, the search glyph, the initial and the address under it.
+   The rows keep their drawing. */
+@media (pointer: coarse) {
+  #logoLink.sidebar-brand-link,
+  .sidebar-bookmarks-head .sidebar-toggle-btn,
+  .sidebar .email-icon { position: relative; }
+  #logoLink.sidebar-brand-link::after,
+  .sidebar-bookmarks-head .sidebar-toggle-btn::after,
+  .sidebar-search-trigger::after,
+  .sidebar .email-icon::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+  }
+  /* The first chat starts 2px under the heading and takes its own taps;
+     the heading reaches into the free room above it instead. */
+  .sidebar-bookmarks-head .sidebar-toggle-btn::after { top: calc(2 * var(--hit-slop)); }
+  /* The address clips its own text (ellipsis), so its hit area is its
+     padding, handed back by the margin: the line stays where it was. The
+     plan under it lets those taps through (its link keeps its own). */
+  .sidebar #accountIdentity.account-identity { padding-block: 12px; margin-block: -12px; }
+  .sidebar .account-plan-line { pointer-events: none; }
+  .sidebar .account-plan-line a { pointer-events: auto; }
 }

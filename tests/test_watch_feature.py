@@ -2324,7 +2324,9 @@ class WatchFrontendContractTests(unittest.TestCase):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         modal_css = Path("static/css/components-modals.css").read_text(encoding="utf-8")
         self.assertIn("max-height: calc(100dvh - 32px)", modal_css)
-        self.assertIn("html.share-modal-open", modal_css)
+        # The page behind stays still through the one scroll lock (F2).
+        foundation_css = Path("static/css/foundation.css").read_text(encoding="utf-8")
+        self.assertIn("html:has(:is(dialog:modal,", foundation_css)
         self.assertIn("#shareModalBody", modal_css)
         self.assertIn("overflow-y: auto", modal_css)
         self.assertIn("height: 100dvh", modal_css)
@@ -2334,7 +2336,6 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertNotIn("<style", html_source)
 
         share_source = Path("static/js/share-dialog.js").read_text(encoding="utf-8")
-        self.assertIn('document.documentElement.classList.add("share-modal-open")', share_source)
         self.assertIn("window.App.modalDialog.open(modal)", share_source)
         self.assertIn("dialog#shareModal[open] { display: flex; }", modal_css)
         self.assertIn('window.App.sharedModal', share_source)

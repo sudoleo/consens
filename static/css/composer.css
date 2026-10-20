@@ -123,9 +123,13 @@
   content: ''; flex: 0 0 1em; width: 1em; height: 1em; color: var(--ink-3);
   background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
 }
-.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:hover:not(:disabled),
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display[aria-expanded="true"] {
   background: var(--hover); color: var(--ink); border-color: transparent; box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:hover:not(:disabled) {
+    background: var(--hover); color: var(--ink); border-color: transparent; box-shadow: none;
+  }
 }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:disabled { opacity: .6; cursor: default; }
@@ -133,10 +137,41 @@
 /* (+) and Send are the two round ends of the row, as tall as a picker. */
 .chat-input-container .attach-trigger,
 .chat-input-container .input-action-btn-primary { width: 36px; height: 36px; min-width: 36px; min-height: 36px; border-radius: 50%; }
+/* 44px to the finger, the drawing stays 36px (Apple-Audit F5). Send has no
+   pseudo-element to spare (::before is the house light, ::after the launch
+   ring), so its box grows by the hit area and draws its circle in the
+   middle: the padding is the hit area, the margin gives the room back. */
+@media (pointer: coarse) {
+  .chat-input-container .attach-trigger,
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { position: relative; }
+  /* The picker's label clips itself (ellipsis); the chip may let its hit
+     area out. */
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { overflow: visible; }
+  .chat-input-container .attach-trigger::after,
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::before {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+  }
+  .chat-input-container .input-action-btn-primary {
+    box-sizing: border-box;
+    width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+    margin: -4px;
+    padding: 4px;
+    background-clip: content-box;
+  }
+  .chat-input-container .input-action-btn-primary::before { inset: 4px; }
+  .chat-input-container .input-action-btn-primary::after { inset: 3px; }
+  /* The ring keeps its place around the circle (3px out, shell.css). */
+  .chat-input-container .input-action-btn-primary:focus-visible { outline-offset: -1px; }
+}
 /* (+) is built like the picker beside it and answers like it: no fill at
    rest, one tone step on hover and while its menu is open (Apple-Audit G5). */
 .chat-input-container .attach-trigger { background: transparent; }
-.chat-input-container .attach-trigger:is(:hover, :focus-visible, .is-open) { background: var(--hover); }
+.chat-input-container .attach-trigger:is(:focus-visible, .is-open) { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .chat-input-container .attach-trigger:hover { background: var(--hover); }
+}
 
 /* The Agent menus: a short list, one line of help per choice. The models
    menu keeps its own panel (model rows, presets). */
@@ -148,7 +183,9 @@
   display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
   color: var(--ink); font-size: var(--font-size-ui); line-height: 1.4; border-radius: var(--radius-xs);
 }
-.chat-input-container .agent-model-controls .model-picker-option:hover { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .chat-input-container .agent-model-controls .model-picker-option:hover { background: var(--hover); }
+}
 .chat-input-container .agent-model-controls .model-picker-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--hover); }
 .chat-input-container .agent-model-controls .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
 .model-picker-option-description { flex-basis: 100%; font-size: var(--font-size-xs); color: var(--ink-3); font-weight: 400; line-height: 1.5; }
@@ -315,9 +352,15 @@
 }
 /* The grid above must not bring back a row the mode has hidden. */
 .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle)[hidden] { display: none; }
-.chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle):is(:hover, :focus-visible, :focus-within) {
+.chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle):is(:focus-visible, :focus-within) {
   background: var(--hover);
   border-color: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle):hover {
+    background: var(--hover);
+    border-color: transparent;
+  }
 }
 .chat-input-container .attach-menu .attach-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle) > :is(svg, .attach-menu-toggle-icon) {
@@ -381,7 +424,9 @@
 .chat-input-container .attach-menu .attach-menu-mode[aria-pressed="true"] > svg { color: var(--ink); }
 .chat-input-container .attach-menu .attach-menu-mode:disabled { cursor: default; }
 .chat-input-container .attach-menu .attach-menu-mode:disabled :is(.attach-menu-label, svg) { color: var(--ink-3); }
-.chat-input-container .attach-menu .attach-menu-mode:disabled:hover { background: transparent; }
+@media (hover: hover) and (pointer: fine) {
+  .chat-input-container .attach-menu .attach-menu-mode:disabled:hover { background: transparent; }
+}
 .chat-input-container .attach-menu .attach-menu-badge {
   margin-left: 6px; color: var(--ink-3); font-size: var(--font-size-micro, 11px); font-weight: 500;
   letter-spacing: var(--tracking-wide, .02em); text-transform: uppercase;
@@ -488,7 +533,9 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
 /* Curated questions wait here while predicted ones (composer-starters.js)
    stand in for them. */
 .composer-starter[hidden] { display: none; }
-.composer-starter:hover { background: var(--raise-hover); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .composer-starter:hover { background: var(--raise-hover); color: var(--ink); }
+}
 .composer-starter:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 640px) {
   body.is-hero:not(.direct-comparison-active) .composer-starters {
@@ -517,4 +564,19 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
   }
   .composer-starters::-webkit-scrollbar { display: none; }
   .composer-starter { flex: 0 0 auto; }
+}
+/* 44px to the finger (Apple-Audit F5): each example reaches 6px beyond its
+   32px pill. Where the row scrolls sideways it clips, so there it gives
+   itself that room inside and takes it back outside: the pills, the row's
+   measured room (--starters-room) and the note below stay where they were. */
+@media (pointer: coarse) {
+  .composer-starter { position: relative; }
+  .composer-starter::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
+@media (pointer: coarse) and (max-width: 640px), (pointer: coarse) and (max-height: 500px) {
+  body.is-hero:not(.direct-comparison-active) .composer-starters {
+    padding-block: 9px;
+    margin-top: 12px;
+    margin-bottom: -6px;
+  }
 }

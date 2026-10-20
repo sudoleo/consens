@@ -648,7 +648,8 @@ unten; drehen mit `--chevron-turn`: -90deg rechts, 90deg links, 180deg oben)
 und `--file-mask` (Dokument-Glyphe für Dateityp-Plaketten). Dazu die Utility
 `.chevron` (1em-Box, `currentColor`, `--chevron-size`); Pseudo-Element-Chevrons
 nutzen dieselben drei Zeilen (`background: currentColor` + `mask`). Hover-Regeln
-neu immer in `@media (hover: hover)` schreiben. Gemessen vorher/nachher
+stehen immer in `@media (hover: hover) and (pointer: fine)` (Touch-Vertrag,
+§8). Gemessen vorher/nachher
 (App + öffentliche CSS ohne Admin): Hover-Hintergründe 67 → 35 verschiedene
 Werte (88 × `var(--hover)`), `opacity: 1`-Gegenregeln 41 → 9 (übrig nur
 echtes Aufdecken), Hover-Ausblendungen 11 → 3, Schriftgrößen < 12 px 12 → 0,
@@ -996,6 +997,18 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
   sie (Capture: ein offener Dialog oder ein Popover bekommt Escape zuerst).
+  Seit 2026-10-20 (Apple-Audit F11, `bindDrawerSwipe`) folgt sie einem
+  Finger nach links (Pointer-Events `pointerType: "touch"`, auf der Leiste
+  oder dem abgedunkelten Rest): die Leiste per Inline-`transform`
+  (`.sidebar.is-dragging` ohne Transition), das Dimm (`body::after`) per
+  pausierter Web Animation; ab einem Drittel Weg oder einem Wisch schließt sie
+  (`closeOverlaySidebar`, Fokus zurück an den Menüknopf), sonst gleitet sie
+  zurück; Leiste und Dimm laufen von der Fingerstelle weiter (für das Dimm
+  eine eigene Animation, weil eine abgebrochene Script-Animation ihren Wert
+  keiner CSS-Transition übergibt). `touch-action: pan-y pinch-zoom` an der
+  offenen Leiste, `pinch-zoom` am `body` (das Pseudo-Element fragt der
+  Browser nicht); mit „Reduce motion“ wandert nichts mit, der Wisch schließt
+  trotzdem.
 - **`feedback-dialog.js`** (`window.App.feedback`, seit 2026-10-15) — der
   Feedback-Dialog `#feedbackModal`; vorher teils in `app-init.js`, teils als
   `window.sendFeedback` in `firebase.js`. Gäste sehen statt des Formulars einen
@@ -1260,8 +1273,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   mittlerer Titel entfällt. Der Kopf ist 56 px hoch mit Safe-Area-Zuschlag,
   selbst transparent und `pointer-events: none` (nur die Inseln nehmen Taps);
   sobald darunter gescrollt ist (`.is-scrolled` aus `mobile-header.js`,
-  Window-Scroll, auch auf der Watch-Seite), löst ein `--ground`-Verlauf (`::before`, 28 px unter die
-  Inseln) den Text auf, ohne Blur. **Safari-Leisten (seit 2026-10-18):**
+  Window-Scroll, auch auf der Watch-Seite), liegt `--ground` deckend hinter
+  dem ganzen Kopf und läuft 20 px darunter aus (`::before`, ohne Blur; seit
+  2026-10-20, Apple-Audit F13: vorher war der Grund schon 24 px unter der
+  Oberkante halb durchsichtig, und die Zeile zwischen den Knöpfen blieb lesbar). **Safari-Leisten (seit 2026-10-18):**
   iPhone-Safari (iOS 26, kein `theme-color` mehr) färbt die Streifen hinter
   Statusleiste und unterer Leiste nach dem fixierten Kasten an der Kante
   (WebKit `fixedContainerEdges`: Mitte der Kante 4 px innen treffen, ohne
@@ -1967,8 +1982,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nur den DOM, nicht Markdown oder Review-Hash; `agent-review.js` liest die
   Quellen einer Pille über `sourceGroup` zurück.
   Hover/Fokus auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
-  Snippet); bei einer Gruppen-Pille eine Zeile je Quelle. Klick öffnet die
-  (erste) Quelle. Copy consensus/Copy citation lesen Pillen über
+  Snippet); bei einer Gruppen-Pille eine Zeile je Quelle. Der Teaser ist ein
+  Tooltip; zum Öffnen gibt es seit 2026-10-20 (Apple-Audit F6)
+  `window.App.sourceSheet` (`sources.js`, `#sourceSheet`, `{open(pill,
+  {asModal}), close, isOpen}`): auf Touch öffnet schon der erste Tipp auf
+  jede Pille die Liste aller Quellen dahinter (eine einzelne mit Auszug),
+  jede Zeile ein Link in neuem Tab, 44 px hoch; am Handy (≤ 768 px) als Karte
+  in der Bildmitte über dem Scrim (Backdrop mit `.claim-sheet-backdrop`, also
+  dieselbe Bewegung, Scroll-Sperre und `touch-action`), sonst als Popover an
+  der Pille. Mit Maus oder Tastatur öffnet eine Gruppen-Pille dieselbe Liste
+  an der Pille (erste Quelle fokussiert, Pfeile, Escape gibt den Fokus an die
+  Pille zurück); eine einzelne Pille öffnet ihre Quelle wie bisher. Teil von
+  `App.popover` (ein offener Layer), Bewegung aus `overlays.css`.
+  Copy consensus/Copy citation lesen Pillen über
   `window.App.sourceRefs.plainText/urls` („ (uci.org, pcs.com)“). Share- und
   Topic-Seiten rendern serverseitig aus Markdown und sind nicht betroffen.
   `normalizeTerminalSourceTagOrder` korrigiert Modell-Output der Form
@@ -2610,7 +2636,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Seit 2026-10-20 (J2) ist der Dialog oben verankert
   (`#shareModal.is-watch-dialog`, `--watch-dialog-top`), am Handy ab dem
   ersten Schritt ein volles Sheet, dessen Aktionsleiste mit offener Tastatur
-  an `--keyboard-edge` endet (F8); die Aktionsleiste ist Dialogfläche mit
+  an der Tastaturkante endet (F8, wie jede Ebene mit Feldern:
+  `--keyboard-top`/`--keyboard-height`); die Aktionsleiste ist Dialogfläche mit
   Haarlinie, ohne Blur und Tönung (G14). Drei Vorschlagszeilen sind vom
   ersten Bild an reserviert, Höhenänderungen gleiten (`smoothHeight`), und
   während jemand in „Something else…“ tippt, hält die Liste ihre Höhe, bis
@@ -3170,8 +3197,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Textfeld fokussiert ist und `visualViewport` mehr als 120 px kürzer als
   `documentElement.clientHeight` ist (ungezoomt), setzt das Modul
   `body.keyboard-open` und schreibt `--keyboard-lift` (Abstand der sichtbaren
-  Unterkante über der Layout-Unterkante) an `.input-section` und
-  `--keyboard-edge` an `#shareModal` — nie an `<html>` (Apple-Audit D9);
+  Unterkante über der Layout-Unterkante) an `.input-section` und den
+  sichtbaren Bereich als `--keyboard-top` (Safaris Verschiebung) und
+  `--keyboard-height` an jede offene Ebene mit Feldern (`dialog[open]`,
+  Memory- und Gmail-&-Calendar-Sheet) — nie an `<html>` (Apple-Audit D9).
+  `overlays.css` lässt diese Ebenen dann genau den sichtbaren Bereich decken
+  (seit 2026-10-20, Apple-Audit F8: Login, Feedback, Settings, Teilen/Watch,
+  Memory …), Sheets mit eigenem Scrollbereich nehmen `max-height: 100%`;
+  `#shareModal` und `#systemPromptModal` (eigene `100dvh`) haben dafür eine
+  Zeile. `tests/e2e/test_keyboard_dialogs.py`;
   `shell.css` (Abschnitt C) hebt den unten fixierten Composer per `transform`
   an (kein Layout beim Mitscrollen) und blendet den Hinweissatz aus. Seit
   2026-10-20 (F9) merkt es sich die Tastaturhöhe je Ausrichtung
@@ -6002,7 +6036,15 @@ die wiederverwendeten Live-Renderziele. Gespeicherte Antwort-Snapshots bleiben
 davon unabhaengig. `memory-edit.js` erkennt `.answer-reader-body` als
 Modellantwort, haengt das Auswahlmenue bei einem nativen Reader-Dialog in diesen
 Dialog und schliesst den Leser vor „Ask about this“ oder dem Memory-Dialog,
-damit Composer und Memory wieder fokussierbar sind.
+damit Composer und Memory wieder fokussierbar sind. Das Menü kommt mit der
+Maus auf `mouseup`, mit Shift auf `keyup`, und seit 2026-10-20 (Apple-Audit
+F7) nach einer Berührung über `selectionchange`: ein Finger wählt ohne
+`mouseup`. Solange die Griffe wandern, wartet es (unsichtbar), steht die
+Auswahl 350 ms still, erscheint es unter dem Griff (28 px unter der Auswahl,
+nie dort, wo das Kopieren-Menü des Systems sitzt; ohne Platz darunter 56 px
+darüber); verschwindet die Auswahl, geht das Menü mit (außer der Finger ist
+auf dem Menü). Auf Touch haben die Aktionen 44-px-Flächen.
+`tests/e2e/test_touch_selection.py` wählt ohne Maus-Ereignis.
 Die originalen `.response-box`-IDs bleiben versteckte Render-/Konfigurationsziele;
 im ungesendeten Hero bleiben sie verborgen und inert; die Modellauswahl erfolgt
 ueber Sidebar und Composer-Picker.
@@ -9021,6 +9063,69 @@ zählen nicht):
   bleiben unverändert.
 - **Datenminimierung ist Designentscheidung**: keine IP-/User-Agent-Speicherung,
   keine Datei-Bytes in Firestore. Nicht „aus Versehen" mitloggen.
+- **Touch ist keine Maus (seit 2026-10-20, Apple-Audit F3, F4, F15).** Ein Tipp
+  lässt `:hover` auf Touch-Geräten stehen, bis man woanders tippt (der
+  Reasoning-Schalter sah danach eingeschaltet aus). Deshalb steht JEDE Regel mit
+  `:hover` in `static/css/*.css` (außer `admin*.css`) in genau dieser Kapsel:
+  `@media (hover: hover) and (pointer: fine) { … }`. `:focus-visible`,
+  `[aria-expanded="true"]`, `.is-open` usw. stehen daneben außerhalb (eine
+  gemischte Regel wird geteilt, Werte identisch), damit Tastatur- und
+  Offen-Zustände überall gleich aussehen. Gegenregeln „A tap leaves :hover
+  stuck“ unter `(hover: none)` gibt es nicht mehr. Was auf Touch sichtbar sein
+  muss (Chat-Menü „…“, Suche, Faltzeichen), zeigt ein eigener
+  `@media (hover: none)`-Block, nie ein Hover. `foundation.css` setzt am
+  `:root` `-webkit-tap-highlight-color: transparent` (kein grauer/blauer
+  Browser-Blitz; das Drücken ist `--press-scale` aus `base.css`) und
+  `text-size-adjust: 100%` (Safari vergrößert im Querformat keine Schrift);
+  `variables.css` und `public-tokens.css` importieren es, also gilt es für `/app`
+  und jede öffentliche Seite. `tests/js/touch-contract.test.mjs` verbietet
+  ungeschützte Hover-Regeln, eine zweite Schreibweise der Kapsel und lokale
+  Tap-/Textgrößen-Regeln; der CSS-Leser dafür ist
+  `tests/js/helpers/css-rules.mjs` (`parseCss`, `walkRules`, `ancestors`,
+  `splitSelectors`).
+  **44-px-Trefferflächen (F5):** Unter `@media (pointer: coarse)` bekommt jedes
+  kleinere Bedienelement eine unsichtbare Trefferfläche aus einem eigenen
+  Pseudo-Element: `.x { position: relative } .x::after { content: ""; position:
+  absolute; inset: var(--hit-slop) }`. `--hit-slop` (`foundation.css`) ist
+  `min(0px, calc(50% - 22px))`: jede Seite wächst nur so weit, wie das Element
+  kleiner als 44 px ist. Gezeichnet bleibt alles gleich groß. Ausnahmen mit
+  Begründung im CSS: Senden (beide Pseudos belegt) wird ein 44-px-Kasten mit
+  `padding: 4px; margin: -4px; background-clip: content-box`; die Adresse im
+  Seitenmenü clippt ihren Text, ihre Fläche ist Padding mit Gegenmargin (die
+  Tarifzeile darunter lässt Taps durch); Pillen/Picker mit eigenem
+  Ellipsis-Label setzen auf Touch `overflow: visible`; die Beispielfragen in
+  der seitwärts scrollenden Zeile holen sich 6 px Innenraum und geben ihn per
+  Margin zurück (`--starters-room` misst deshalb die Margin-Box); Reasoning/
+  Anhang stehen auf dem Handy 16 px auseinander. Wo zwei Flächen kollidieren,
+  behält ein Feld oder ein Knopf seine Taps („Forgot password?“ nimmt die 39 px
+  zwischen Passwortfeld und Knopf). Fließtext-Links (Rechtliches im
+  Login-Text) und volle Listenzeilen (Chats 40 px) bleiben bewusst so.
+  `tests/e2e/test_touch_targets.py` misst mit `elementFromPoint` bei 320/390 px.
+  **Eine Scroll-Sperre (F2):** `foundation.css` hält `html` und `body` auf
+  `overflow: hidden; overscroll-behavior: none`, solange eine deckende Ebene
+  offen ist – erkannt am Zustand der Ebene selbst, per
+  `html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet,
+  .claim-sheet-backdrop:not([hidden]), .memory-edit-backdrop:not([hidden]),
+  .agent-google-overlay:not([hidden]), …))`; es gibt nichts zu halten oder zu
+  vergessen. Die früheren Einzelsperren (`html.share-modal-open`,
+  `html.memory-edit-open`, `body.agent-google-sheet-open`) sind entfallen. Eine
+  neue deckende Ebene kommt in diese eine Liste. Scrollende Ebenen enden an
+  ihrem Rand (`overscroll-behavior: contain` an Seitenleiste, Chatliste,
+  Satzkarte, Dialog), Dimmflächen ohne Inhalt nehmen keinen Pan
+  (`touch-action: none`). `tests/e2e/test_touch_layers.py` prüft Sperre und
+  Wischen mit CDP-Touch-Events.
+  **Notch und Home-Balken (F12):** `/app` hat `viewport-fit=cover`
+  (`templates/index.html`), damit `env(safe-area-inset-*)` überhaupt wirkt
+  (vorher rechneten alle Abstände mit 0). Die Ränder halten frei: der Kopf
+  (`--app-mobile-header-height` + Padding), der fixierte Composer
+  (`padding-bottom: calc(10px | 8px + inset)`, Breite minus linke/rechte
+  Insets; sein Grund reicht weiter bis an die Kante), der `body`-Rand im
+  Querformat (`max(10px | 6px, inset)` links/rechts), die Schublade (oben,
+  unten, links), das Aktivitäts-Sheet, das Modellmenü am Handy, Hinweise
+  (`overlays.css`), Antwortleser und Dialoge. Öffentliche Seiten bleiben ohne
+  `cover` (Safari rahmt sie im Querformat in der Seitenfarbe).
+  `tests/e2e/test_safe_areas.py` simuliert die iPhone-Insets per CDP
+  (`Emulation.setSafeAreaInsetsOverride`), hoch- und querformatig.
 
 ---
 

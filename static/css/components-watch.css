@@ -81,7 +81,9 @@
   cursor: pointer;
   transition: color var(--dur-state) var(--ease-standard);
 }
-.view-switch-btn:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .view-switch-btn:hover { color: var(--ink); }
+}
 .view-switch-btn.is-active { color: var(--ink); cursor: default; }
 .view-switch-btn:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .view-switch-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
@@ -337,7 +339,9 @@ body.is-view-settle.is-watch-view .watch-page {
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.wd-link:hover:not(:disabled) { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .wd-link:hover:not(:disabled) { color: var(--ink); }
+}
 .wd-link:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
 .wd-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
 .wd-link[hidden] { display: none; }
@@ -384,8 +388,15 @@ body.is-view-settle.is-watch-view .watch-page {
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.watch-question-edit:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .watch-question-edit:hover { color: var(--ink); }
+}
 .watch-question-edit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* 44px to the finger (Apple-Audit F5); the word stays as it is. */
+@media (pointer: coarse) {
+  .watch-question-edit { position: relative; }
+  .watch-question-edit::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
 
 /* Schedule, alerts, channels and page: one line until "Change". */
 .watch-settings { margin-top: 4px; border-radius: var(--radius-sm); background: var(--raise); }
@@ -448,7 +459,9 @@ body.is-view-settle.is-watch-view .watch-page {
   cursor: pointer;
   transition: background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard), opacity var(--dur-press) var(--ease-standard);
 }
-.wd-button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--line); }
+@media (hover: hover) and (pointer: fine) {
+  .wd-button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--line); }
+}
 .wd-button:focus-visible,
 .wd-action:focus-visible,
 .wd-example:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
@@ -699,7 +712,9 @@ body.is-view-settle.is-watch-view .watch-page {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
-.wd-question a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  .wd-question a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+}
 .is-paused .wd-question a,
 .is-error .wd-question a { color: var(--ink-2); }
 
@@ -802,7 +817,9 @@ body.is-view-settle.is-watch-view .watch-page {
   font-size: var(--font-size-xs);
   text-decoration: none;
 }
-.wd-sources a:hover { box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .wd-sources a:hover { box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
+}
 .wd-source-icon { margin-right: -2px; }
 .wd-source-icon.is-missing { visibility: hidden; }
 .wd-source-host { flex: 0 0 auto; color: var(--ink); font-weight: var(--font-weight-semibold); }
@@ -862,7 +879,9 @@ body.is-view-settle.is-watch-view .watch-page {
   text-decoration: none;
   cursor: pointer;
 }
-.wd-action:hover { background: var(--hover); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .wd-action:hover { background: var(--hover); color: var(--ink); }
+}
 /* .wd-action.is-strong wears the .btn material (components-input.css). */
 .wd-action-toggle::after {
   content: "";
@@ -938,7 +957,9 @@ body.is-view-settle.is-watch-view .watch-page {
   cursor: pointer;
   transition: box-shadow var(--dur-press) var(--ease-standard);
 }
-.wd-example:hover { box-shadow: inset 0 0 0 1px var(--line); }
+@media (hover: hover) and (pointer: fine) {
+  .wd-example:hover { box-shadow: inset 0 0 0 1px var(--line); }
+}
 .wd-example strong { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: 1.4; }
 .wd-example span { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.4; }
 
@@ -1019,7 +1040,9 @@ body.is-view-settle.is-watch-view .watch-page {
   line-height: 1.35;
   cursor: pointer;
 }
-.watch-goal-option:hover { box-shadow: inset 0 0 0 1px var(--line); }
+@media (hover: hover) and (pointer: fine) {
+  .watch-goal-option:hover { box-shadow: inset 0 0 0 1px var(--line); }
+}
 .watch-goal-option:has(input[type="radio"]:checked) {
   box-shadow: inset 0 0 0 1.5px var(--ink);
   font-weight: var(--font-weight-semibold);
@@ -1059,7 +1082,9 @@ body.is-view-settle.is-watch-view .watch-page {
   animation: wdShimmer var(--dur-beat) var(--ease-standard) infinite;
   cursor: default;
 }
-.watch-goal-option.is-loading:hover { box-shadow: none; }
+@media (hover: hover) and (pointer: fine) {
+  .watch-goal-option.is-loading:hover { box-shadow: none; }
+}
 @keyframes wdShimmer { to { background-position: -200% 0; } }
 
 /* ==========================================================================
