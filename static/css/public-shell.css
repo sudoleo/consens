@@ -106,7 +106,9 @@ body {
 .footer::before { top: 0; }
 
 .nav-links a:not(.nav-cta) { color: var(--ink-3); }
-.nav-links a:not(.nav-cta):hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .nav-links a:not(.nav-cta):hover { color: var(--ink); }
+}
 
 /* The one filled control in the chrome keeps its fill and loses its glow. */
 .button-primary,
@@ -216,8 +218,10 @@ body {
 }
 
 .model-card { transition: background-color var(--dur-state) var(--ease-standard); }
-.model-card:hover { transform: none; background: var(--hover); }
-.hub-item:hover { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .model-card:hover { transform: none; background: var(--hover); }
+  .hub-item:hover { background: var(--hover); }
+}
 
 /* --------------------------------------------------------------------------
    4. Chips, toggles and pills
@@ -236,12 +240,14 @@ body {
   color: var(--ink-2);
 }
 
-.share-sources-toggle:hover,
-.share-citation-toggle:hover,
-.share-report-toggle:hover {
-  border: 0;
-  background: var(--surface);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .share-sources-toggle:hover,
+  .share-citation-toggle:hover,
+  .share-report-toggle:hover {
+    border: 0;
+    background: var(--surface);
+    color: var(--ink);
+  }
 }
 
 .share-toggle {
@@ -388,9 +394,11 @@ body {
   transition: background-color var(--dur-state) var(--ease-standard);
 }
 
-.topic-card:hover {
-  transform: none;
-  background: var(--raise-hover);
+@media (hover: hover) and (pointer: fine) {
+  .topic-card:hover {
+    transform: none;
+    background: var(--raise-hover);
+  }
 }
 
 .src-embed {

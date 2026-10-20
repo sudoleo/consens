@@ -138,6 +138,18 @@
   :root { --press-scale: 1; }
 }
 
+/* Touch (Apple audit F3, F15). A tap answers only with the product's own
+   press (--press-scale), never with the browser's grey (iOS) or blue
+   (Android) flash; and Safari may not inflate the type when the phone turns
+   to landscape. Both inherit from the root: one place for /app and every
+   public page. Hover lives only in @media (hover: hover) and (pointer: fine)
+   (F4, tests/js/touch-contract.test.mjs). */
+:root {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 /* --------------------------------------------------------------------------
    The close cross (Apple audit G3). One drawn X everywhere a layer, a file
    or a notice can be closed: 16px, stroke 1.75, in a 32px round field, 44px
@@ -184,7 +196,7 @@
   pointer-events: none;
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .close-button:hover {
     background: var(--hover);
     color: var(--ink);

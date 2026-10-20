@@ -49,7 +49,9 @@
   text-align: left;
   cursor: pointer;
 }
-.attachment-chip-preview:hover { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .attachment-chip-preview:hover { background: var(--hover); }
+}
 #attachmentBar .attachment-chip-thumb,
 #attachmentBar .attachment-chip-icon {
   width: 24px;

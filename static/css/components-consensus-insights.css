@@ -220,8 +220,10 @@
 
 /* Hover is a tone step, not a ring (Apple-Audit G5); focus keeps the one
    focus ring of base.css. */
-.claim-jump-link:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+@media (hover: hover) and (pointer: fine) {
+  .claim-jump-link:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
 }
 
 /* --- Differences: flache Liste ---------------------------------------------
@@ -440,9 +442,13 @@
   transform: rotate(180deg);
 }
 
-.diff-more-summary:hover,
 .diff-more-summary:focus-visible {
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .diff-more-summary:hover {
+    color: var(--ink);
+  }
 }
 
 .diff-position {
@@ -504,12 +510,19 @@
   cursor: pointer;
 }
 
-.diff-quote-toggle:hover,
 .diff-quote-toggle:focus-visible {
   color: var(--ink);
   text-decoration: underline;
   text-decoration-color: var(--line);
   text-underline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .diff-quote-toggle:hover {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 3px;
+  }
 }
 
 .diff-quote-toggle:focus-visible {
@@ -583,16 +596,26 @@
   transition: color var(--dur-press) var(--ease-standard);
 }
 
-.diff-jump-link:hover,
 .diff-jump-link:focus-visible {
   color: var(--ink);
 }
+@media (hover: hover) and (pointer: fine) {
+  .diff-jump-link:hover {
+    color: var(--ink);
+  }
+}
 
-.diff-jump-link:hover .diff-position-name,
 .diff-jump-link:focus-visible .diff-position-name {
   text-decoration: underline;
   text-decoration-color: var(--line);
   text-underline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .diff-jump-link:hover .diff-position-name {
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 3px;
+  }
 }
 
 .diff-jump-link:focus-visible {
@@ -662,10 +685,12 @@
   flex-shrink: 0;
 }
 
-.diff-resolve-btn:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
-  color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
-  background: var(--hover);
+@media (hover: hover) and (pointer: fine) {
+  .diff-resolve-btn:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+    color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
+    background: var(--hover);
+  }
 }
 
 .diff-resolve-btn:disabled {
@@ -690,8 +715,10 @@
   color: color-mix(in srgb, var(--text-color) 68%, var(--sidebar-text-muted));
 }
 
-.diff-resolve-btn.is-pro-locked:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-color) 10%, transparent);
+@media (hover: hover) and (pointer: fine) {
+  .diff-resolve-btn.is-pro-locked:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-color) 10%, transparent);
+  }
 }
 
 /* Mockup-Variante des zentralen Pro-Badges: kompakt und leicht eckig. */
@@ -774,9 +801,13 @@
   cursor: pointer;
 }
 
-.resolve-model-toggle:hover .resolve-disclosure,
 .resolve-model-toggle:focus-visible .resolve-disclosure {
   color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+}
+@media (hover: hover) and (pointer: fine) {
+  .resolve-model-toggle:hover .resolve-disclosure {
+    color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+  }
 }
 
 
@@ -878,9 +909,13 @@
   cursor: pointer;
 }
 
-.resolve-prompt-toggle:hover,
 .resolve-prompt-toggle:focus-visible {
   color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+}
+@media (hover: hover) and (pointer: fine) {
+  .resolve-prompt-toggle:hover {
+    color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+  }
 }
 
 .resolve-prompt-toggle svg {

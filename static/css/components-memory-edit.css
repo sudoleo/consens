@@ -44,9 +44,13 @@
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.memory-selection-action:hover,
 .memory-selection-action:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .memory-selection-action:hover {
+    background: var(--hover);
+  }
 }
 
 .memory-selection-action svg,
@@ -275,9 +279,13 @@ html.memory-edit-open body {
   color: var(--text-color);
 }
 
-.memory-edit-cancel:hover,
 .memory-edit-cancel:focus-visible {
   background: var(--hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  .memory-edit-cancel:hover {
+    background: var(--hover);
+  }
 }
 
 /* Material from .btn (components-input.css). */

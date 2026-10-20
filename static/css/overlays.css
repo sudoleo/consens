@@ -349,7 +349,7 @@ dialog.modal > .modal-content > .close-button {
   color: color-mix(in srgb, var(--ground) 72%, transparent);
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .toast-action:hover:not(:disabled),
   .toast .close-button:hover {
     background: color-mix(in srgb, var(--ground) 14%, transparent);

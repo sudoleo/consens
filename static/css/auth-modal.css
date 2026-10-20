@@ -114,7 +114,9 @@
   transition: color var(--dur-state) var(--ease-standard);
 }
 
-#loginModal .auth-tab:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .auth-tab:hover { color: var(--ink); }
+}
 
 /* Chosen: the thumb under it and the full ink; the weight stays. */
 #loginModal .auth-tab[aria-selected="true"] {
@@ -158,9 +160,15 @@
   height: 20px;
 }
 
-#loginModal .oauth-button:is(:hover, :focus-visible):not(:disabled) {
+#loginModal .oauth-button:focus-visible:not(:disabled) {
   border-color: color-mix(in srgb, var(--ink) 28%, transparent);
   background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix));
+}
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .oauth-button:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+    background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix));
+  }
 }
 
 #loginModal .oauth-button:disabled,
@@ -219,7 +227,10 @@
 }
 
 #loginModal .auth-chip[hidden] { display: none; }
-#loginModal .auth-chip:is(:hover, :focus-visible) { background: var(--raise-hover); }
+#loginModal .auth-chip:focus-visible { background: var(--raise-hover); }
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .auth-chip:hover { background: var(--raise-hover); }
+}
 
 #loginModal .oauth-divider {
   display: flex;
@@ -299,7 +310,10 @@
   cursor: pointer;
 }
 
-#loginModal .auth-reveal:is(:hover, :focus-visible) { background: var(--hover); color: var(--ink); }
+#loginModal .auth-reveal:focus-visible { background: var(--hover); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .auth-reveal:hover { background: var(--hover); color: var(--ink); }
+}
 
 #loginModal .auth-forgot-row {
   display: flex;
@@ -322,7 +336,10 @@
   cursor: pointer;
 }
 
-#loginModal .auth-link:is(:hover, :focus-visible) { color: var(--ink); text-decoration-color: currentColor; }
+#loginModal .auth-link:focus-visible { color: var(--ink); text-decoration-color: currentColor; }
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .auth-link:hover { color: var(--ink); text-decoration-color: currentColor; }
+}
 #loginModal .auth-link:disabled { color: var(--ink-3); cursor: default; text-decoration: none; }
 
 /* The one filled button (.btn material, components-input.css), full width. */
@@ -378,8 +395,10 @@
   text-underline-offset: 2px;
 }
 
-#loginModal .auth-legal a:hover,
-#loginModal .auth-footer-links a:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .auth-legal a:hover,
+  #loginModal .auth-footer-links a:hover { color: var(--ink); }
+}
 
 #loginModal .auth-footer-links {
   display: flex;
@@ -458,7 +477,10 @@
   cursor: pointer;
 }
 
-#loginModal .auth-secondary-action:is(:hover, :focus-visible) { background: var(--hover); }
+#loginModal .auth-secondary-action:focus-visible { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .auth-secondary-action:hover { background: var(--hover); }
+}
 
 @media (max-width: 480px) {
   #loginModal .auth-modal { margin-top: 12px; }

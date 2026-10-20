@@ -648,7 +648,8 @@ unten; drehen mit `--chevron-turn`: -90deg rechts, 90deg links, 180deg oben)
 und `--file-mask` (Dokument-Glyphe für Dateityp-Plaketten). Dazu die Utility
 `.chevron` (1em-Box, `currentColor`, `--chevron-size`); Pseudo-Element-Chevrons
 nutzen dieselben drei Zeilen (`background: currentColor` + `mask`). Hover-Regeln
-neu immer in `@media (hover: hover)` schreiben. Gemessen vorher/nachher
+stehen immer in `@media (hover: hover) and (pointer: fine)` (Touch-Vertrag,
+§8). Gemessen vorher/nachher
 (App + öffentliche CSS ohne Admin): Hover-Hintergründe 67 → 35 verschiedene
 Werte (88 × `var(--hover)`), `opacity: 1`-Gegenregeln 41 → 9 (übrig nur
 echtes Aufdecken), Hover-Ausblendungen 11 → 3, Schriftgrößen < 12 px 12 → 0,
@@ -8932,6 +8933,26 @@ Handy.
   bleiben unverändert.
 - **Datenminimierung ist Designentscheidung**: keine IP-/User-Agent-Speicherung,
   keine Datei-Bytes in Firestore. Nicht „aus Versehen" mitloggen.
+- **Touch ist keine Maus (seit 2026-10-20, Apple-Audit F3, F4, F15).** Ein Tipp
+  lässt `:hover` auf Touch-Geräten stehen, bis man woanders tippt (der
+  Reasoning-Schalter sah danach eingeschaltet aus). Deshalb steht JEDE Regel mit
+  `:hover` in `static/css/*.css` (außer `admin*.css`) in genau dieser Kapsel:
+  `@media (hover: hover) and (pointer: fine) { … }`. `:focus-visible`,
+  `[aria-expanded="true"]`, `.is-open` usw. stehen daneben außerhalb (eine
+  gemischte Regel wird geteilt, Werte identisch), damit Tastatur- und
+  Offen-Zustände überall gleich aussehen. Gegenregeln „A tap leaves :hover
+  stuck“ unter `(hover: none)` gibt es nicht mehr. Was auf Touch sichtbar sein
+  muss (Chat-Menü „…“, Suche, Faltzeichen), zeigt ein eigener
+  `@media (hover: none)`-Block, nie ein Hover. `foundation.css` setzt am
+  `:root` `-webkit-tap-highlight-color: transparent` (kein grauer/blauer
+  Browser-Blitz; das Drücken ist `--press-scale` aus `base.css`) und
+  `text-size-adjust: 100%` (Safari vergrößert im Querformat keine Schrift);
+  `variables.css` und `public-tokens.css` importieren es, also gilt es für `/app`
+  und jede öffentliche Seite. `tests/js/touch-contract.test.mjs` verbietet
+  ungeschützte Hover-Regeln, eine zweite Schreibweise der Kapsel und lokale
+  Tap-/Textgrößen-Regeln; der CSS-Leser dafür ist
+  `tests/js/helpers/css-rules.mjs` (`parseCss`, `walkRules`, `ancestors`,
+  `splitSelectors`).
 
 ---
 

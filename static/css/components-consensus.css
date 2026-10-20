@@ -118,8 +118,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   cursor: pointer;
 }
 
-.agent-mode-answers-toggle:hover {
-  color: var(--text-color);
+@media (hover: hover) and (pointer: fine) {
+  .agent-mode-answers-toggle:hover {
+    color: var(--text-color);
+  }
 }
 
 .agent-mode-answers-toggle:focus-visible {
@@ -145,9 +147,11 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 /* Subtle, frameless hover affordance instead of a lifted card frame. */
-.response-box:hover {
-  background: color-mix(in srgb, var(--glass-bg-soft) 38%, transparent);
-  border-radius: var(--radius-md);
+@media (hover: hover) and (pointer: fine) {
+  .response-box:hover {
+    background: color-mix(in srgb, var(--glass-bg-soft) 38%, transparent);
+    border-radius: var(--radius-md);
+  }
 }
 
 /* Excluded answers collapse to a small "set aside" pill so they stay legible
@@ -287,11 +291,17 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   align-items: center;
 }
 
-.response-box.excluded .exclude-btn:hover,
 .response-box.excluded .exclude-btn:focus-visible {
   background-color: var(--hover);
   color: var(--text-color);
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .response-box.excluded .exclude-btn:hover {
+    background-color: var(--hover);
+    color: var(--text-color);
+    opacity: 1;
+  }
 }
 
 /* Rahmenloses Konsens-Layout: sitzt direkt auf dem Seitenhintergrund,
@@ -502,9 +512,13 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transform: none;
 }
 
-.consensus-differences-summary:hover,
 .consensus-differences-summary:focus-visible {
   color: var(--text-color);
+}
+@media (hover: hover) and (pointer: fine) {
+  .consensus-differences-summary:hover {
+    color: var(--text-color);
+  }
 }
 
 .consensus-differences-content {
@@ -598,9 +612,11 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   letter-spacing: var(--tracking-wide);
 }
 
-.consensus-differences:hover {
-  /* frameless: kein Karten-Schatten beim Hover */
-  box-shadow: none;
+@media (hover: hover) and (pointer: fine) {
+  .consensus-differences:hover {
+    /* frameless: kein Karten-Schatten beim Hover */
+    box-shadow: none;
+  }
 }
 
 .consensus-differences.credibility-framed {
@@ -608,11 +624,13 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--cred-frame) 34%, transparent);
 }
 
-.consensus-differences.credibility-framed:hover {
-  box-shadow:
-    inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 42%, transparent),
-    0 10px 24px rgba(20, 21, 23, 0.045),
-    0 0 0 3px var(--cred-frame-wash);
+@media (hover: hover) and (pointer: fine) {
+  .consensus-differences.credibility-framed:hover {
+    box-shadow:
+      inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 42%, transparent),
+      0 10px 24px rgba(20, 21, 23, 0.045),
+      0 0 0 3px var(--cred-frame-wash);
+  }
 }
 
 .consensus-differences.credibility-framed .consensus-differences-summary {
@@ -707,19 +725,23 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   box-shadow: none;
 }
 
-.dark-mode .consensus-main:hover {
-  box-shadow: none;
+@media (hover: hover) and (pointer: fine) {
+  .dark-mode .consensus-main:hover {
+    box-shadow: none;
+  }
 }
 
 .dark-mode .consensus-differences {
   border-top-color: color-mix(in srgb, var(--sidebar-border) 60%, transparent);
 }
 
-.dark-mode .consensus-differences.credibility-framed:hover {
-  box-shadow:
-    inset 1px 0 0 color-mix(in srgb, var(--cred-frame, var(--accent)) 34%, transparent),
-    0 12px 30px rgba(0, 0, 0, 0.28),
-    0 0 0 3px var(--cred-frame-wash, transparent);
+@media (hover: hover) and (pointer: fine) {
+  .dark-mode .consensus-differences.credibility-framed:hover {
+    box-shadow:
+      inset 1px 0 0 color-mix(in srgb, var(--cred-frame, var(--accent)) 34%, transparent),
+      0 12px 30px rgba(0, 0, 0, 0.28),
+      0 0 0 3px var(--cred-frame-wash, transparent);
+  }
 }
 
 .consensus-copy-inline {
@@ -754,10 +776,15 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 
-.consensus-share-pill:hover,
 .consensus-share-pill:focus-visible {
   background: var(--hover);
   color: var(--text-color);
+}
+@media (hover: hover) and (pointer: fine) {
+  .consensus-share-pill:hover {
+    background: var(--hover);
+    color: var(--text-color);
+  }
 }
 
 .consensus-share-pill:active {
@@ -897,9 +924,11 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transition: color var(--dur-press) var(--ease-standard), text-decoration-color var(--dur-press) var(--ease-standard);
 }
 
-.watch-nudge-skip:hover {
-  color: var(--text-color);
-  text-decoration-color: currentColor;
+@media (hover: hover) and (pointer: fine) {
+  .watch-nudge-skip:hover {
+    color: var(--text-color);
+    text-decoration-color: currentColor;
+  }
 }
 
 .watch-nudge-skip:focus-visible {
@@ -967,11 +996,16 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 
-.consensus-actions-toggle:hover,
 .consensus-actions-toggle:focus-visible,
 .consensus-actions-wrapper.open .consensus-actions-toggle {
   background: var(--hover);
   color: var(--text-color);
+}
+@media (hover: hover) and (pointer: fine) {
+  .consensus-actions-toggle:hover {
+    background: var(--hover);
+    color: var(--text-color);
+  }
 }
 
 .consensus-actions-toggle:active {
@@ -1044,10 +1078,15 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   text-align: left;
 }
 
-.consensus-actions-menu .consensus-copy-icon-btn:hover,
 .consensus-actions-menu .consensus-copy-icon-btn:focus-visible {
   background: var(--hover);
   color: color-mix(in srgb, var(--text-color) 88%, var(--accent));
+}
+@media (hover: hover) and (pointer: fine) {
+  .consensus-actions-menu .consensus-copy-icon-btn:hover {
+    background: var(--hover);
+    color: color-mix(in srgb, var(--text-color) 88%, var(--accent));
+  }
 }
 
 .consensus-actions-menu .menu-item-icon {
@@ -1057,9 +1096,13 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   color: var(--sidebar-text-muted);
 }
 
-.consensus-actions-menu .consensus-copy-icon-btn:hover .menu-item-icon,
 .consensus-actions-menu .consensus-copy-icon-btn:focus-visible .menu-item-icon {
   color: var(--accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .consensus-actions-menu .consensus-copy-icon-btn:hover .menu-item-icon {
+    color: var(--accent);
+  }
 }
 
 .consensus-section {
@@ -1213,14 +1256,21 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   pointer-events: none;
 }
 
-.consensus-model .select-wrapper select:hover,
 .consensus-model .select-wrapper select:focus,
-.consensus-model .select-wrapper .model-picker-display:hover,
 .consensus-model .select-wrapper .model-picker-display:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
   background: color-mix(in srgb, var(--input-bg) 88%, var(--accent) 12%);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
   outline: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .consensus-model .select-wrapper select:hover,
+  .consensus-model .select-wrapper .model-picker-display:hover {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
+    background: color-mix(in srgb, var(--input-bg) 88%, var(--accent) 12%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
+    outline: none;
+  }
 }
 
 .consensus-model .select-wrapper select option {

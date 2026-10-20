@@ -29,12 +29,11 @@
   list-style: none;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  -webkit-tap-highlight-color: transparent;
   transition: background-color var(--dur-press) var(--ease-standard);
 }
 .nav-menu > summary::-webkit-details-marker { display: none; }
 /* A tone step like every ghost control, not a fade (Apple-Audit G5). */
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .nav-menu > summary:hover { background: var(--hover); }
 }
 .nav-menu > summary:focus-visible { outline: var(--focus-ring); outline-offset: -4px; border-radius: var(--radius-sm); }
@@ -70,7 +69,9 @@
   font-size: var(--font-size-base);
   text-decoration: none;
 }
-.nav-links .nav-menu .nav-menu-panel a:hover { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .nav-links .nav-menu .nav-menu-panel a:hover { background: var(--hover); }
+}
 .nav-links .nav-menu .nav-menu-panel a[aria-current="page"] { background: var(--selected); }
 
 /* In and out with the same short movement: public-nav.js holds the menu open

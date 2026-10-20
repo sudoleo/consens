@@ -40,12 +40,19 @@
   transition: border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
-.theme-toggle:hover,
 .theme-toggle:focus-visible {
   background: color-mix(in srgb, var(--glass-bg-strong) 92%, #ffffff) !important;
   background-color: color-mix(in srgb, var(--glass-bg-strong) 92%, #ffffff) !important;
   color: #525252 !important;
   border-color: #737373 !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .theme-toggle:hover {
+    background: color-mix(in srgb, var(--glass-bg-strong) 92%, #ffffff) !important;
+    background-color: color-mix(in srgb, var(--glass-bg-strong) 92%, #ffffff) !important;
+    color: #525252 !important;
+    border-color: #737373 !important;
+  }
 }
 
 .theme-toggle:focus-visible {
@@ -88,11 +95,17 @@
   display: block;
 }
 
-.theme-toggle.is-dark:hover,
 .theme-toggle.is-dark:focus-visible {
   background: #141414 !important;
   background-color: #141414 !important;
   border-color: #141414 !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .theme-toggle.is-dark:hover {
+    background: #141414 !important;
+    background-color: #141414 !important;
+    border-color: #141414 !important;
+  }
 }
 
 /* Appearance-Zeile in den Settings: seit dem Topbar-Aus der einzige

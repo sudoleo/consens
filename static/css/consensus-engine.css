@@ -400,12 +400,14 @@
 
 /* These panels have no frame left to tint on hover, so hover is a tone —
    the same move the sidebar list and the footer tabs make in /app. */
-.ce-step:hover,
-.ce-diff-stage:hover,
-.ce-faq-list article:hover {
-  transform: none;
-  background: var(--raise-hover);
-  box-shadow: none;
+@media (hover: hover) and (pointer: fine) {
+  .ce-step:hover,
+  .ce-diff-stage:hover,
+  .ce-faq-list article:hover {
+    transform: none;
+    background: var(--raise-hover);
+    box-shadow: none;
+  }
 }
 
 .ce-diff-engine {

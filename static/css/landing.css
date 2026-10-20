@@ -164,8 +164,10 @@ img { display: block; max-width: 100%; }
   box-shadow: none;
 }
 
-.lp-btn--primary:hover {
-  background: var(--button-bg-hover);
+@media (hover: hover) and (pointer: fine) {
+  .lp-btn--primary:hover {
+    background: var(--button-bg-hover);
+  }
 }
 
 .dark-mode .lp-btn--primary { color: #141414; }
@@ -192,7 +194,9 @@ img { display: block; max-width: 100%; }
   transition: transform var(--dur-state) var(--ease-standard);
 }
 
-.lp-link:hover::after { transform: translateX(3px) rotate(-90deg); }
+@media (hover: hover) and (pointer: fine) {
+  .lp-link:hover::after { transform: translateX(3px) rotate(-90deg); }
+}
 
 /* Inline "go on" marks after link text: the same chevron. */
 .link-chevron {
@@ -258,7 +262,9 @@ img { display: block; max-width: 100%; }
   color: var(--text-secondary);
 }
 
-.lp-nav-links a:not(.lp-nav-cta):hover { color: var(--text-primary); }
+@media (hover: hover) and (pointer: fine) {
+  .lp-nav-links a:not(.lp-nav-cta):hover { color: var(--text-primary); }
+}
 
 .lp-nav-cta {
   display: inline-flex;
@@ -273,7 +279,9 @@ img { display: block; max-width: 100%; }
   transition: background-color var(--dur-state) var(--ease-standard);
 }
 
-.lp-nav-cta:hover { background: var(--button-bg-hover); color: #ffffff; }
+@media (hover: hover) and (pointer: fine) {
+  .lp-nav-cta:hover { background: var(--button-bg-hover); color: #ffffff; }
+}
 .dark-mode .lp-nav-cta { color: #141414; }
 
 /* --------------------------------------------------------------------------
@@ -365,13 +373,20 @@ img { display: block; max-width: 100%; }
   transition: transform var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
 }
 
-.lp-prompt.lp-hero-prompt:hover,
 .lp-prompt.lp-hero-prompt:focus-visible,
 .lp-prompt.lp-hero-prompt:has(.lp-hero-ask-link:focus-visible) {
   transform: translateY(-2px);
   /* Hover is the field lifting a little further off the section, plus the
      same hairline focus gets in /app — not a coloured frame and a glow. */
   box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
+}
+@media (hover: hover) and (pointer: fine) {
+  .lp-prompt.lp-hero-prompt:hover {
+    transform: translateY(-2px);
+    /* Hover is the field lifting a little further off the section, plus the
+       same hairline focus gets in /app — not a coloured frame and a glow. */
+    box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
+  }
 }
 
 .lp-prompt.lp-hero-prompt:focus-visible,
@@ -1411,7 +1426,9 @@ img { display: block; max-width: 100%; }
 .lp-watch-message dd { margin: 2px 0 0; color: var(--text-secondary); }
 .lp-watch-notification a { display: inline-flex; align-items: center; gap: 5px; margin-top: 16px; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 .lp-watch-notification a span { font-size: var(--font-size-lg); transition: transform var(--dur-state) var(--ease-standard); }
-.lp-watch-notification a:hover span { transform: translateX(3px); }
+@media (hover: hover) and (pointer: fine) {
+  .lp-watch-notification a:hover span { transform: translateX(3px); }
+}
 /* The second, quieter way: a real Watch, only while one is still checked. */
 .lp-watch-notification a.lp-watch-live { margin-left: 18px; color: var(--ink-2); }
 
@@ -1514,7 +1531,9 @@ img { display: block; max-width: 100%; }
   transform: none;
 }
 
-.consensus-differences-summary:hover { color: var(--text-color); }
+@media (hover: hover) and (pointer: fine) {
+  .consensus-differences-summary:hover { color: var(--text-color); }
+}
 
 .consensus-differences-content { padding-bottom: 8px; }
 
@@ -1595,7 +1614,9 @@ img { display: block; max-width: 100%; }
 /* Landing-only illustration behavior around the shared controls. */
 .claim-badge { flex-shrink: 0; }
 .lp-mark-key .claim-badge { cursor: default; }
-.lp-mark-key .claim-badge:hover { background: transparent; color: var(--ink-2); }
+@media (hover: hover) and (pointer: fine) {
+  .lp-mark-key .claim-badge:hover { background: transparent; color: var(--ink-2); }
+}
 .claims-fallback-row .claim-badge { margin: 0; }
 
 /* --------------------------------------------------------------------------
@@ -1982,10 +2003,12 @@ img { display: block; max-width: 100%; }
   opacity: 0.75;
 }
 
-.diff-jump-link:hover {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
-  background: var(--hover);
-  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
+@media (hover: hover) and (pointer: fine) {
+  .diff-jump-link:hover {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
+    background: var(--hover);
+    color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
+  }
 }
 
 /* Rail note instead of a filled hint box. */
@@ -2028,10 +2051,12 @@ img { display: block; max-width: 100%; }
   transition: box-shadow var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
-.diff-resolve-btn:hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
-  color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
-  background: var(--hover);
+@media (hover: hover) and (pointer: fine) {
+  .diff-resolve-btn:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+    color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
+    background: var(--hover);
+  }
 }
 
 .diff-resolve-icon { flex-shrink: 0; }
@@ -2370,12 +2395,14 @@ img { display: block; max-width: 100%; }
   transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
 }
 .dark-mode .lp-logo-mark img { filter: grayscale(1) brightness(0) invert(1) opacity(0.52); }
-.lp-logo:hover .lp-logo-mark img { filter: none; opacity: 1; }
-.dark-mode .lp-logo:hover .lp-logo-mark img[src*="chatgpt"],
-.dark-mode .lp-logo:hover .lp-logo-mark img[src*="grok"],
-.dark-mode .lp-logo:hover .lp-logo-mark img[src*="kimi"],
-.dark-mode .lp-logo:hover .lp-logo-mark img[src*="meta.svg"],
-.dark-mode .lp-logo:hover .lp-logo-mark img[src*="zai"] { filter: invert(1); }
+@media (hover: hover) and (pointer: fine) {
+  .lp-logo:hover .lp-logo-mark img { filter: none; opacity: 1; }
+  .dark-mode .lp-logo:hover .lp-logo-mark img[src*="chatgpt"],
+  .dark-mode .lp-logo:hover .lp-logo-mark img[src*="grok"],
+  .dark-mode .lp-logo:hover .lp-logo-mark img[src*="kimi"],
+  .dark-mode .lp-logo:hover .lp-logo-mark img[src*="meta.svg"],
+  .dark-mode .lp-logo:hover .lp-logo-mark img[src*="zai"] { filter: invert(1); }
+}
 
 .lp-logo span { color: var(--text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 
@@ -2388,7 +2415,9 @@ img { display: block; max-width: 100%; }
   text-underline-offset: 2px;
 }
 
-.lp-card p a:hover { color: var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .lp-card p a:hover { color: var(--accent); }
+}
 
 /* --------------------------------------------------------------------------
    Final CTA
@@ -2416,7 +2445,9 @@ img { display: block; max-width: 100%; }
   font-size: var(--font-size-sm);
 }
 .lp-footer-links { display: flex; flex-wrap: wrap; gap: 18px; }
-.lp-footer-links a:hover { color: var(--text-primary); }
+@media (hover: hover) and (pointer: fine) {
+  .lp-footer-links a:hover { color: var(--text-primary); }
+}
 
 /* --------------------------------------------------------------------------
    Scroll reveal (one fade-up per scene)
@@ -2643,7 +2674,10 @@ img { display: block; max-width: 100%; }
   margin: clamp(30px, 4.5vw, 46px) auto 0;
 }
 .lp-hero-composer .lp-prompt.lp-hero-prompt { width: 100%; margin: 0; }
-.lp-hero-composer .lp-prompt.lp-hero-prompt:is(:hover, :focus-visible, :has(.lp-hero-ask-link:focus-visible)) { transform: none; }
+.lp-hero-composer .lp-prompt.lp-hero-prompt:is(:focus-visible, :has(.lp-hero-ask-link:focus-visible)) { transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .lp-hero-composer .lp-prompt.lp-hero-prompt:hover { transform: none; }
+}
 .lp-composer-tools {
   --lp-mode-active: var(--agree);
   position: relative;

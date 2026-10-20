@@ -49,9 +49,11 @@ button.demo-action {
   transform: translateX(.5px);
 }
 
-.demo-action:hover,
-a.lp-hero-prompt:hover .demo-action {
-  background: var(--button-bg-hover);
+@media (hover: hover) and (pointer: fine) {
+  .demo-action:hover,
+  a.lp-hero-prompt:hover .demo-action {
+    background: var(--button-bg-hover);
+  }
 }
 
 /* A press gives way instead of moving: the control sinks into the field. */

@@ -56,7 +56,7 @@
   transition: background-color var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   :is(.button, .btn, .share-primary-btn, .btn-pro, .auth-primary-action, .memory-edit-submit,
     .watch-nudge-btn, .post-demo-login-action, .agent-google-btn.is-primary,
     .agent-answer-error-actions button:first-child, .wd-button.is-primary, .wd-action.is-strong,
@@ -549,11 +549,17 @@ body:not(.dark-mode) .chat-input-container::before {
   transition: transform var(--dur-state) var(--ease-standard);
 }
 
-.attach-trigger:hover,
 .attach-trigger:focus-visible {
   color: var(--text-color);
   border-color: color-mix(in srgb, var(--accent) 32%, var(--glass-border));
   box-shadow: var(--chip-shadow-active), inset 0 1px 0 var(--glass-highlight);
+}
+@media (hover: hover) and (pointer: fine) {
+  .attach-trigger:hover {
+    color: var(--text-color);
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--glass-border));
+    box-shadow: var(--chip-shadow-active), inset 0 1px 0 var(--glass-highlight);
+  }
 }
 
 .attach-trigger.is-open {
@@ -627,10 +633,15 @@ body:not(.dark-mode) .chat-input-container::before {
   transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
-.attach-menu-item:hover,
 .attach-menu-item:focus-visible {
   background: var(--hover);
   border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
+}
+@media (hover: hover) and (pointer: fine) {
+  .attach-menu-item:hover {
+    background: var(--hover);
+    border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
+  }
 }
 
 .attach-menu-item svg {
@@ -676,10 +687,15 @@ body:not(.dark-mode) .chat-input-container::before {
   transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
-.attach-menu-toggle:hover,
 .attach-menu-toggle:focus-within {
   background: var(--hover);
   border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
+}
+@media (hover: hover) and (pointer: fine) {
+  .attach-menu-toggle:hover {
+    background: var(--hover);
+    border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
+  }
 }
 
 .attach-menu-toggle-icon {
@@ -973,12 +989,17 @@ body:not(.dark-mode) .chat-input-container::before {
   margin: -1px -2px 0 0;
 }
 
-.composer-quote-remove:hover,
 .composer-quote-remove:focus-visible,
-.attachment-chip-remove:hover,
 .attachment-chip-remove:focus-visible {
   background: var(--hover);
   color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .composer-quote-remove:hover,
+  .attachment-chip-remove:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
 }
 
 /* The drawn cross of the close component (foundation.css .close-icon), a
@@ -992,8 +1013,10 @@ body:not(.dark-mode) .chat-input-container::before {
   cursor: pointer;
 }
 
-.attachment-chip[role="button"]:hover {
-  background: color-mix(in srgb, var(--ink) 6%, var(--ground));
+@media (hover: hover) and (pointer: fine) {
+  .attachment-chip[role="button"]:hover {
+    background: color-mix(in srgb, var(--ink) 6%, var(--ground));
+  }
 }
 
 .attachment-chip[role="button"]:focus-visible {

@@ -47,9 +47,11 @@
   transition: color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
-.bench-related-signal:hover {
-  color: var(--ink);
-  border-color: var(--line);
+@media (hover: hover) and (pointer: fine) {
+  .bench-related-signal:hover {
+    color: var(--ink);
+    border-color: var(--line);
+  }
 }
 
 .bench-related-signal > span:first-child {

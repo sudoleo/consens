@@ -39,7 +39,9 @@
   border: 1px solid var(--line); border-radius: var(--radius-pill, 999px); background: var(--well); color: var(--ink);
   font: inherit; font-size: var(--font-size-xs); line-height: 1; cursor: pointer;
 }
-.agent-files-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); border-color: color-mix(in srgb, var(--ink) 28%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-files-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); border-color: color-mix(in srgb, var(--ink) 28%, transparent); }
+}
 .agent-files-chip-type { font-weight: 600; letter-spacing: .02em; }
 .agent-files-chip-size { color: var(--ink-3); }
 .agent-files-chip:disabled, .agent-files-icon-btn:disabled { opacity: .55; cursor: default; }
@@ -61,7 +63,9 @@
 .agent-doc-earlier > summary::-webkit-details-marker { display: none; }
 .agent-doc-earlier > summary::before { content: ''; width: 1em; height: 1em; margin: 0 6px 0 0; background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transform: rotate(-90deg); transition: transform var(--dur-press) var(--ease-standard); }
 .agent-doc-earlier[open] > summary::before { transform: none; }
-.agent-doc-earlier > summary:hover { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-doc-earlier > summary:hover { color: var(--ink); }
+}
 .agent-doc-version { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
 .agent-doc-version:first-of-type { margin-top: 6px; }
 .agent-doc-version-label { color: var(--ink-2); }
@@ -83,7 +87,10 @@
   display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
   border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--ink-2); cursor: pointer;
 }
-.agent-files-more:hover, .agent-files-more[aria-expanded="true"], .agent-files-icon-btn:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.agent-files-more[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-files-more:hover, .agent-files-icon-btn:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+}
 .agent-files-menu {
   position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 190px; padding: 5px;
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--well); box-shadow: var(--lift);
@@ -93,7 +100,10 @@
   display: flex; align-items: center; width: 100%; min-height: 38px; padding: 8px 10px; border: 0; border-radius: var(--radius-xs);
   background: transparent; color: var(--ink); font: inherit; font-size: var(--font-size-ui); text-align: left; cursor: pointer;
 }
-.agent-files-menu-item:hover, .agent-files-menu-item:focus-visible { background: var(--hover); }
+.agent-files-menu-item:focus-visible { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-files-menu-item:hover { background: var(--hover); }
+}
 .agent-files-menu-item.is-danger { color: var(--dispute); }
 
 .agent-files-confirm {
@@ -111,7 +121,9 @@
 .dark-mode .agent-files-danger { color: #1a1a1a; }
 .agent-files-danger:disabled { opacity: .7; cursor: default; }
 .agent-files-ghost { border: 1px solid var(--line); background: var(--well); color: var(--ink); font-weight: 500; }
-.agent-files-ghost:hover { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-files-ghost:hover { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); }
+}
 
 /* Per-file upload progress, above the answer while the run starts. */
 .agent-uploads { display: grid; gap: 6px; }
