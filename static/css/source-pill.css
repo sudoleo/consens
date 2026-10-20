@@ -1,0 +1,211 @@
+/* ==========================================================================
+   Sources — one site icon and one citation pill (Apple-Audit G9)
+
+   Imported by style.css (/app) and public-pages.css (shared answers, Topic
+   and Watch pages), so a source looks the same wherever it is cited. Before,
+   the same logo was a circle in the answer, a square in its preview, a 36 px
+   tile in the reader (light grey in the dark) and, on the public pages, a
+   tinted, bolder pill; OpenAI's black mark showed on a white tile, as a
+   black circle and black on dark on one page.
+
+   The site icon: a rounded square (radius a quarter of its side), the logo
+   inset on a light plate. On light surfaces the plate disappears; in the
+   dark it keeps a black mark visible. Two sizes by role: 14 px in a line of
+   text, 20 px at the head of a list row (--site-icon-size). A missing icon
+   is the same box with a globe, never a broken image or a letter.
+
+   The citation pill: favicon + short domain on the text baseline, a quiet
+   well with a hairline; hover is one tone step.
+   ========================================================================== */
+:root {
+  --site-icon-plate: #ffffff;
+  --globe-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M3.5 12h17M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5S9.6 6.1 12 3.5Z'/%3E%3C/svg%3E");
+}
+
+.dark-mode {
+  --site-icon-plate: #e9e9e7;
+}
+
+/* ---- The site icon -------------------------------------------------------- */
+.site-icon,
+.src-ref-favicon,
+.src-ref-glyph,
+.source-favicon,
+.source-teaser-favicon,
+.wd-source-icon,
+.share-md .wp-ref-icon,
+.answer-reader-site-icon {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: var(--site-icon-size, 14px);
+  height: var(--site-icon-size, 14px);
+  padding: calc(var(--site-icon-size, 14px) / 14);
+  border-radius: calc(var(--site-icon-size, 14px) / 4);
+  background: var(--site-icon-plate);
+  box-shadow: none;
+  object-fit: contain;
+}
+
+/* At the head of a list row. */
+.wp-link-icon,
+.share-source-favicon,
+.answer-reader-site-icon {
+  --site-icon-size: 20px;
+}
+
+/* Missing: the globe in the same box, in the quiet ink, without a plate. */
+.site-icon.is-missing {
+  padding: 0;
+  background: none;
+}
+
+.src-ref-glyph,
+.answer-reader-site-icon > .site-icon-fallback {
+  display: inline-block;
+  background: var(--ink-3);
+  -webkit-mask: var(--globe-mask) center / 86% no-repeat;
+  mask: var(--globe-mask) center / 86% no-repeat;
+}
+
+/* The reader's list keeps its markup (a box with the image and its
+   fallback); the box is the icon. */
+.answer-reader-site-icon {
+  position: relative;
+  display: inline-block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.answer-reader-site-icon:not(:has(img)) {
+  background: none;
+}
+
+.answer-reader-site-icon img {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: calc(var(--site-icon-size) / 14);
+  object-fit: contain;
+}
+
+.answer-reader-site-icon > .site-icon-fallback {
+  position: absolute;
+  inset: 0;
+}
+
+.answer-reader-site-icon > .site-icon-fallback[hidden] {
+  display: none;
+}
+
+/* ---- The citation pill ---------------------------------------------------
+   .src-ref: chat prose in /app (sources.js); .source-link: the raw model
+   answers; a[href^="#src-"]: the public answer (check-page.js adds the
+   icon). Adjacent citations share one pill ("uci.org +2"); when the domain
+   is already in the sentence the pill is its icon alone (.is-compact). */
+.src-ref,
+.source-link,
+.share-md a[href^="#src-"] {
+  --src-ref-bg: var(--well);
+  display: inline-flex;
+  /* The label carries the baseline, so the pill sits on the line of text
+     instead of floating above it; the icon centres itself. */
+  align-items: baseline;
+  gap: 4px;
+  box-sizing: border-box;
+  max-width: min(15em, 100%);
+  margin-inline: 0.25em 0;
+  padding: 1px 7px 1px 3px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--src-ref-bg);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+  letter-spacing: var(--tracking-normal);
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: baseline;
+  /* On the baseline the smaller label pulls the pill's middle below the
+     middle of the prose letters; lifted optically, without changing the
+     line box (a raised vertical-align would open up the line spacing). */
+  position: relative;
+  top: -0.14em;
+  cursor: pointer;
+  transform: none;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
+}
+
+/* Without an icon the pill keeps even ends. */
+.source-link:not(.has-favicon),
+.share-md a[href^="#src-"]:not(.has-favicon) {
+  padding-inline: 7px;
+}
+
+.src-ref:hover,
+.src-ref:focus-visible,
+.source-link:hover,
+.source-link:focus-visible,
+.share-md a[href^="#src-"]:hover,
+.share-md a[href^="#src-"]:focus-visible {
+  --src-ref-bg: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix, 6%));
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.src-ref:focus-visible,
+.source-link:focus-visible,
+.share-md a[href^="#src-"]:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* The icon inside a pill centres on the label. */
+:is(.src-ref, .source-link, .share-md a[href^="#src-"]) :is(.src-ref-favicon, .src-ref-glyph, .source-favicon, .site-icon) {
+  align-self: center;
+}
+
+.src-ref-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.src-ref-more {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+}
+
+.src-ref:is(:hover, :focus-visible) .src-ref-more {
+  color: var(--ink-2);
+}
+
+/* The domain is already in the sentence: favicon only (plus "+N"). */
+.src-ref.is-compact {
+  /* Without a label there is no text baseline to sit on; centre the icon
+     on the x-height instead of letting it ride above the line. */
+  vertical-align: -0.3em;
+  top: 0;
+  margin-inline-start: 0.1em;
+  padding-inline: 2px;
+}
+
+.src-ref.is-compact.is-group {
+  padding-inline-end: 6px;
+}
+
+.src-ref.is-compact .src-ref-label {
+  display: none;
+}
+
+/* Legacy separator from saved HTML; pills need no comma between them. */
+.src-ref-sep {
+  display: none;
+}

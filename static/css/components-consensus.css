@@ -120,7 +120,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .agent-mode-answers-toggle:hover {
   color: var(--text-color);
-  opacity: 1;
 }
 
 .agent-mode-answers-toggle:focus-visible {
@@ -288,7 +287,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .response-box.excluded .exclude-btn:hover,
 .response-box.excluded .exclude-btn:focus-visible {
-  background-color: var(--sidebar-hover);
+  background-color: var(--hover);
   color: var(--text-color);
   opacity: 1;
 }
@@ -487,17 +486,18 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 /* Eigener Pfeil, damit er in beiden Themes zum Text passt */
 .consensus-differences-summary::before {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 1.4px solid currentColor;
-  border-bottom: 1.4px solid currentColor;
-  transform: rotate(-45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
   transition: transform var(--dur-state) var(--ease-standard);
   flex-shrink: 0;
 }
 
 .consensus-differences-panel[open] > .consensus-differences-summary::before {
-  transform: rotate(45deg);
+  transform: none;
 }
 
 .consensus-differences-summary:hover,
@@ -755,7 +755,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .consensus-share-pill:hover,
 .consensus-share-pill:focus-visible {
-  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background: var(--hover);
   color: var(--text-color);
   outline: none;
 }
@@ -861,34 +861,14 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
    primaeren Knoepfe (--button-bg/--button-text), darunter die drei Fakten,
    die ihn ehrlich machen (Rhythmus, Anlass, Ausstieg). Der Weg in den Dialog
    bleibt als leiser Textlink darunter. */
+/* Material from .btn (components-input.css): only its place here. */
 .watch-nudge-btn {
   width: 100%;
   margin-top: 3px;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--button-bg);
-  color: var(--button-text);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
-  cursor: pointer;
-  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
-}
-
-.watch-nudge-btn:hover:not(:disabled) {
-  opacity: .9;
-  transform: translateY(-1px);
-}
-
-.watch-nudge-btn:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
 }
 
 .watch-nudge-btn:disabled {
   opacity: .6;
-  transform: none;
   cursor: default;
 }
 
@@ -961,7 +941,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .watch-feature-nudge-close:hover,
 .watch-feature-nudge-close:focus-visible {
-  background: var(--well);
+  background: var(--hover);
   color: var(--text-color);
   outline: none;
 }
@@ -1016,7 +996,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-actions-toggle:hover,
 .consensus-actions-toggle:focus-visible,
 .consensus-actions-wrapper.open .consensus-actions-toggle {
-  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background: var(--hover);
   color: var(--text-color);
   outline: none;
 }
@@ -1095,7 +1075,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .consensus-actions-menu .consensus-copy-icon-btn:hover,
 .consensus-actions-menu .consensus-copy-icon-btn:focus-visible {
-  background: color-mix(in srgb, var(--accent) 8%, var(--sidebar-hover));
+  background: var(--hover);
   color: color-mix(in srgb, var(--text-color) 88%, var(--accent));
   outline: none;
 }
@@ -1251,14 +1231,15 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-model .select-wrapper::after {
   content: "";
   position: absolute;
-  right: 11px;
+  right: 9px;
   top: 50%;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--sidebar-text-muted);
-  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
   pointer-events: none;
 }
 

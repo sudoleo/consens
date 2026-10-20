@@ -183,7 +183,7 @@
             <strong>Models</strong>
             <span id="sidebarModelCount" aria-live="polite">6 providers selected</span>
           </span>
-          <span class="sidebar-model-chevron" aria-hidden="true">&#8250;</span>
+          <span class="sidebar-model-chevron chevron" aria-hidden="true"></span>
         </button>
 
         <!-- DOM state only. The accessible visual controls live in the
@@ -213,7 +213,7 @@
                 </svg>
                 <span>Chats</span>
               </span>
-              <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
+              <span class="sidebar-toggle-arrow chevron" aria-hidden="true"></span>
             </button>
           </h2>
           <button id="bookmarkSearchTrigger" class="sidebar-search-trigger" type="button"
@@ -904,7 +904,7 @@
       <form id="feedbackForm">
         <textarea name="message" placeholder="Your Feedback" aria-label="Your feedback" maxlength="4000" required autofocus></textarea>
         <input type="email" name="email" placeholder="Your email (optional)" aria-label="Your email (optional)" autocomplete="email">
-        <button type="submit">Submit</button>
+        <button type="submit" class="feedback-submit">Submit</button>
         <p id="feedbackStatus" class="feedback-status" role="status" aria-live="polite" hidden></p>
       </form>
     </div>

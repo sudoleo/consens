@@ -118,7 +118,7 @@ dialog.modal::backdrop {
 
 .feedback-modal .close:hover,
 .feedback-modal .close:focus {
-  background: var(--sidebar-hover);
+  background: var(--hover);
   color: var(--text-color);
 }
 
@@ -164,40 +164,19 @@ dialog.modal::backdrop {
 #feedbackForm textarea:focus,
 #feedbackForm input[type="email"]:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-ring);
 }
 
-#feedbackForm button[type="submit"] {
-  width: 100% !important;
-  min-height: 38px;
-  margin: 2px 0 0 !important;
-  padding: 9px 12px !important;
-  border: 1px solid var(--button-bg) !important;
-  border-radius: var(--radius-xs) !important;
-  background: var(--button-bg) !important;
-  color: var(--button-text) !important;
-  box-shadow: var(--box-shadow);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--font-size-sm) !important;
-  font-weight: var(--font-weight-semibold) !important;
-  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
-}
-
-#feedbackForm button[type="submit"]:hover,
-#feedbackForm button[type="submit"]:focus-visible {
-  opacity: 0.92;
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-hover);
-  outline: none;
+/* The one filled button (.btn material, components-input.css), full width. */
+#feedbackForm .feedback-submit {
+  width: 100%;
+  margin: 2px 0 0;
 }
 
 /* One send at a time: the button stays locked until the answer is in. */
-#feedbackForm button[type="submit"]:disabled {
+#feedbackForm .feedback-submit:disabled {
   opacity: 0.6;
-  transform: none;
-  box-shadow: none;
   cursor: progress;
 }
 
@@ -361,9 +340,8 @@ dialog.modal::backdrop {
 .settings-header .close:focus,
 .settings-header .help-button:hover,
 .settings-header .help-button:focus {
-  background: var(--sidebar-hover);
+  background: var(--hover);
   color: var(--text-color);
-  opacity: 1;
 }
 
 /* Reiter statt einer langen Bahn: links das Inhaltsverzeichnis, rechts genau
@@ -420,17 +398,15 @@ dialog.modal::backdrop {
    ein Hover darauf waere unsichtbar. Aus `--text-color` gemischt kippt der
    Tint automatisch mit dem Theme mit und bleibt in beiden sichtbar. */
 .settings-nav-item:hover {
-  background: color-mix(in srgb, var(--text-color) 6%, transparent);
+  background: var(--hover);
   color: var(--text-color);
-  opacity: 1;
 }
 
 /* Aktiv braucht mehr als den Hover-Tint, sonst ist beim Zeigen nicht mehr
    erkennbar, wo man steht. */
 .settings-nav-item.is-active {
-  background: color-mix(in srgb, var(--text-color) 11%, transparent);
+  background: var(--selected);
   color: var(--text-color);
-  font-weight: var(--font-weight-semibold);
 }
 
 .settings-nav-item:focus-visible {
@@ -585,14 +561,15 @@ dialog.modal::backdrop {
 .settings-select::after {
   content: "";
   position: absolute;
-  right: 11px;
+  right: 9px;
   top: 50%;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--sidebar-text-muted);
-  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
   pointer-events: none;
 }
 
@@ -676,10 +653,9 @@ dialog.modal::backdrop {
 }
 
 .settings-version {
-  color: var(--sidebar-text-muted);
+  color: var(--ink-3);
   font-size: var(--font-size-micro);
   line-height: var(--line-height-solid);
-  opacity: 0.62;
 }
 
 /* Unter 700px hat eine Navigationsspalte neben dem Panel keinen Platz mehr: die
@@ -763,7 +739,7 @@ dialog.modal::backdrop {
 }
 
 .collapse-header:hover {
-  background: var(--sidebar-hover);
+  background: var(--raise-hover);
   box-shadow: var(--card-shadow-hover);
 }
 
@@ -818,8 +794,9 @@ dialog.modal::backdrop {
 
 .settings-body input[type="text"]:focus,
 .settings-body textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  outline: none;
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-ring);
 }
 
 .settings-body .custom-checkbox-label input {
@@ -832,7 +809,6 @@ dialog.modal::backdrop {
 .save-prompt-btn {
   width: 100%;
   margin: 10px 0 0;
-  border-radius: var(--radius-xs) !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -946,7 +922,7 @@ dialog.modal::backdrop {
 }
 
 .settings-inline-btn:hover:not(:disabled) {
-  background: var(--sidebar-hover);
+  background: var(--hover);
   color: var(--text-color);
 }
 
@@ -1101,12 +1077,18 @@ dialog.modal::backdrop {
 }
 
 .settings-note > summary::before {
-  content: "▸";
-  font-size: var(--font-size-micro);
+  content: "";
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
+  transition: transform var(--dur-state) var(--ease-standard);
 }
 
 .settings-note[open] > summary::before {
-  content: "▾";
+  transform: none;
 }
 
 .settings-note > summary:hover {
@@ -1214,7 +1196,7 @@ dialog.modal::backdrop {
 
 .faq-modal .close:hover,
 .faq-modal .close:focus {
-  background: var(--sidebar-hover);
+  background: var(--hover);
   color: var(--text-color);
 }
 
@@ -1298,7 +1280,7 @@ dialog.modal::backdrop {
 }
 
 .faq-question:hover {
-  background: var(--sidebar-hover);
+  background: var(--hover);
 }
 
 .faq-number {
@@ -1455,7 +1437,7 @@ dialog.modal::backdrop {
 
 .pro-modal-content .close:hover,
 .pro-modal-content .close:focus {
-  background: var(--sidebar-hover);
+  background: var(--hover);
   color: var(--text-color);
 }
 
@@ -1545,12 +1527,12 @@ dialog.modal::backdrop {
 .btn-pro {
   width: 100%;
   min-height: 36px;
-  border-radius: var(--radius-xs) !important;
+  border-radius: var(--radius-sm);
   font: inherit;
-  font-size: var(--font-size-sm) !important;
-  font-weight: var(--font-weight-semibold) !important;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
+  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .btn-free {
@@ -1560,23 +1542,11 @@ dialog.modal::backdrop {
 }
 
 .btn-free:hover {
-  background: var(--sidebar-hover) !important;
+  background: var(--hover) !important;
   color: var(--text-color) !important;
-  opacity: 1;
 }
 
-.btn-pro {
-  background: var(--button-bg) !important;
-  border: 1px solid var(--button-bg) !important;
-  color: var(--button-text) !important;
-  box-shadow: var(--box-shadow);
-}
-
-.btn-pro:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-hover);
-  opacity: 0.94;
-}
+/* .btn-pro wears the .btn material (components-input.css). */
 
 .guarantee {
   color: var(--sidebar-text-muted);
@@ -1653,7 +1623,7 @@ html.share-modal-open body {
   font-size: var(--font-size-lg); font-weight: var(--font-weight-regular); line-height: var(--line-height-solid); cursor: pointer;
 }
 #shareModal .close:hover, #shareModal .close:focus-visible {
-  background: color-mix(in srgb, var(--sidebar-hover) 72%, transparent);
+  background: var(--hover);
   color: var(--text-color); outline: none;
 }
 .share-modal-content h2 {
@@ -1677,21 +1647,16 @@ html.share-modal-open body {
   line-height: var(--line-height-solid); cursor: pointer; text-decoration: none;
   transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
-.share-primary-btn {
-  border: 1px solid color-mix(in srgb, var(--button-bg) 86%, #ffffff 14%);
-  background: linear-gradient(180deg, color-mix(in srgb, #ffffff 14%, transparent), transparent 52%), var(--button-bg);
-  color: var(--button-text);
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--button-bg) 18%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 32%, transparent);
-}
-.share-primary-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 30px color-mix(in srgb, var(--button-bg) 24%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 36%, transparent); }
-.share-primary-btn:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+/* .share-primary-btn wears the .btn material (components-input.css): no
+   gloss, no shadow, no lift - and no light halo under it in dark mode. */
+.share-primary-btn { border: 0; }
+.share-primary-btn:disabled { opacity: 0.55; cursor: default; }
 .share-secondary-btn {
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-  background: color-mix(in srgb, var(--glass-bg-strong) 58%, transparent);
+  border: 1px solid var(--line-soft);
+  background: var(--raise);
   color: var(--text-color);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
-.share-secondary-btn:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-border)); background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong)); }
+.share-secondary-btn:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-border)); background: var(--raise-hover); }
 .share-danger-btn { border: 1px solid color-mix(in srgb, var(--clear-button-text) 36%, transparent); background: transparent; color: var(--clear-button-text); }
 .share-danger-btn:hover { background: color-mix(in srgb, var(--clear-button-bg) 64%, transparent); border-color: color-mix(in srgb, var(--clear-button-text) 52%, transparent); }
 .share-link-btn { border: none; background: transparent; color: var(--sidebar-text-muted); text-decoration: underline; text-underline-offset: 2px; padding: 0 4px; font-weight: var(--font-weight-medium); }
@@ -1700,10 +1665,10 @@ html.share-modal-open body {
 .share-url-row input {
   flex: 1; min-width: 0; padding: 8px 11px; border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-  background: color-mix(in srgb, var(--input-bg) 84%, transparent); color: inherit; font-size: var(--font-size-sm);
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+  background: var(--input-bg); color: inherit; font-size: var(--font-size-sm);
+  box-shadow: none;
 }
-.share-url-row input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
+.share-url-row input:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
 .share-list { list-style: none; margin: 0; padding: 0; max-height: none; overflow: visible; }
 .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent); }
 .share-list li:last-child { border-bottom: none; }
@@ -1713,7 +1678,7 @@ html.share-modal-open body {
 /* The question field of the Watch dialog (the other watch fields come from
    components-watch.css, shared with the card settings). */
 .watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 0; border-radius: var(--radius-sm); background: var(--well); box-shadow: inset 0 0 0 1px var(--line-soft); color: var(--ink); font: inherit; font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-.watch-condition-input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.watch-condition-input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--field-focus-border), var(--field-focus-ring); }
 .watch-condition-input[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--dispute); }
 .watch-condition-input + .watch-field-error { margin-top: 6px !important; }
 

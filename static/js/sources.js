@@ -155,14 +155,14 @@ function getSourcePillLabel(src, token) {
   return number ? `Source ${number}` : String(token || "Source");
 }
 
-// Neutral monogram for sources without (or with a failed) favicon: never a
-// broken-image icon. The proxy itself answers unknown hosts with a globe.
-function createSourceGlyph(label) {
+// The same globe for sources without (or with a failed) favicon as on the
+// public pages (source-pill.css draws it): never a broken-image icon, and no
+// 8-px letter (Apple-Audit G9, G10). The proxy answers unknown hosts with a
+// globe too.
+function createSourceGlyph() {
   const glyph = document.createElement("span");
   glyph.className = "src-ref-glyph";
   glyph.setAttribute("aria-hidden", "true");
-  const letter = String(label || "").match(/[\p{L}\p{N}]/u);
-  glyph.textContent = letter ? letter[0].toUpperCase() : "·";
   return glyph;
 }
 

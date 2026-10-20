@@ -127,7 +127,8 @@ def test_single_difference_and_missing_favicon(browser, phase4_server):
         page.locator('#consensusDifferencesTab').click()
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_attribute('open','')
         page.locator('#answerReaderSections [data-section="sources"]').click()
-        expect(page.locator('#answerReaderInspector .answer-reader-site-icon > span')).to_have_text('E')
+        # A missing favicon is the globe in the same box (source-pill.css).
+        expect(page.locator('#answerReaderInspector .answer-reader-site-icon > .site-icon-fallback')).to_be_visible()
         expect(page.locator('#answerReaderInspector .answer-reader-site-icon img')).to_have_count(0)
         card = page.locator('#answerReaderInspector .answer-reader-source-card')
         icon = card.locator('.answer-reader-site-icon')

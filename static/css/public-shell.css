@@ -216,8 +216,8 @@ body {
 }
 
 .model-card { transition: background-color var(--dur-state) var(--ease-standard); }
-.model-card:hover { transform: none; background: var(--surface); }
-.hub-item:hover { background: var(--surface); }
+.model-card:hover { transform: none; background: var(--hover); }
+.hub-item:hover { background: var(--hover); }
 
 /* --------------------------------------------------------------------------
    4. Chips, toggles and pills
@@ -276,7 +276,7 @@ body {
 .share-report-form input:focus,
 .share-report-form textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 1px var(--line);
+  box-shadow: inset 0 0 0 1px var(--field-focus-border), var(--field-focus-ring);
 }
 
 /* --------------------------------------------------------------------------
@@ -390,7 +390,7 @@ body {
 
 .topic-card:hover {
   transform: none;
-  background: var(--well);
+  background: var(--raise-hover);
 }
 
 .src-embed {

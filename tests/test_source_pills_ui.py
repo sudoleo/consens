@@ -22,8 +22,9 @@ def _rule(css: str, selector: str) -> str:
 
 
 def test_source_pill_sits_on_the_baseline_not_raised():
-    css = read("static/css/shell.css")
-    pill = _rule(css, ".src-ref")
+    css = read("static/css/source-pill.css")
+    # One pill for /app and the public pages (Apple-Audit G9).
+    pill = _rule(css, '.src-ref,\n.source-link,\n.share-md a[href^="#src-"]')
     assert "vertical-align: baseline" in pill
     assert "vertical-align: super" not in pill
     assert "border-radius: var(--radius-pill)" in pill

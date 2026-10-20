@@ -4,6 +4,8 @@
 
 @import url('./public-tokens.css');
 @import url('./public-nav.css');
+/* Site icons and citation pills: the same component as in /app. */
+@import url('./source-pill.css');
 
 *,
 *::before,
@@ -153,11 +155,11 @@ a:hover {
   box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
+/* Hover is a tone step, never a lift (Apple-Audit G4). */
 .nav-cta:hover,
 .button-primary:hover {
-  background: var(--accent-hover);
+  background: var(--button-bg-hover);
   color: var(--button-text);
-  transform: translateY(-1px);
 }
 
 .button-secondary {
@@ -1029,53 +1031,8 @@ canvas {
 .share-differences-md { margin-bottom: 4px; }
 .share-differences-md > :last-child { margin-bottom: 0; }
 
-/* Inline-Citations: gleiche Chip-Sprache wie .source-link in der App */
-.share-md a[href^="#src-"] {
-  display: inline-flex;
-  align-items: center;
-  max-width: min(200px, 100%);
-  margin: 0 2px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: color-mix(in srgb, var(--accent) 64%, var(--text));
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-normal);
-  line-height: var(--line-height-ui);
-  text-decoration: none;
-  /* Sits with the middle of the line rather than on the baseline, so the chip
-     reads as part of the sentence instead of hovering above it. */
-  vertical-align: middle;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 36%, transparent);
-  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-}
-
-.share-md a[href^="#src-"]:hover,
-.share-md a[href^="#src-"]:focus-visible {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  color: color-mix(in srgb, var(--accent) 48%, var(--text));
-}
-
-.share-md a[href^="#src-"].has-favicon {
-  gap: 5px;
-}
-
-.share-md .cite-favicon {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-  border-radius: 2px;
-  object-fit: contain;
-  /* White backing keeps dark/transparent logos legible in both themes. */
-  background: #fff;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #000 8%, transparent);
-}
+/* Inline-Citations: dasselbe Bauteil wie .src-ref in der App
+   (source-pill.css, Apple-Audit G9). */
 
 /* Quellenliste: kompakte einzeilige Eintraege (Nummer + Titel + Domain),
    ab Tablet zweispaltig, lange Listen starten eingeklappt. */
@@ -1128,15 +1085,6 @@ canvas {
   font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
   line-height: var(--line-height-solid);
-}
-
-.share-source-favicon {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-2xs);
-  object-fit: contain;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .share-source-body {
@@ -1194,7 +1142,7 @@ canvas {
 .share-sources-toggle:hover {
   color: var(--heading);
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  background: var(--hover);
 }
 
 .share-citation-text {
@@ -1348,9 +1296,8 @@ canvas {
 .share-related-item:hover,
 .share-related-item:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong));
+  background: var(--raise-hover);
   color: var(--text);
-  transform: translateY(-1px);
   outline: none;
 }
 
@@ -1579,7 +1526,7 @@ canvas {
 
 .share-report-form button:hover {
   border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel-bg));
+  background: var(--raise-hover);
 }
 
 @media (max-width: 700px) {
@@ -1815,8 +1762,7 @@ canvas {
   transition: background-color .15s ease;
 }
 .wp-link:hover,
-.wp-link:focus-visible { background: var(--well); box-shadow: inset 0 0 0 1px var(--line-soft); }
-.wp-link-icon { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px; }
+.wp-link:focus-visible { background: var(--raise-hover); box-shadow: inset 0 0 0 1px var(--line-soft); }
 .wp-link-body { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
 .wp-link-title {
   display: -webkit-box;
@@ -1849,10 +1795,7 @@ canvas {
 .share-md a.wp-ref:focus-visible { text-decoration-color: currentColor; }
 .share-md .wp-ref-icon {
   display: inline-block;
-  width: 14px;
-  height: 14px;
   margin: 0 4px 0 1px;
-  border-radius: 3px;
   vertical-align: -2px;
 }
 
@@ -1988,23 +1931,13 @@ canvas {
 .wp-event-text { max-width: 66ch; }
 
 /* I7, L5 — A site icon has its box before it loads and keeps it if it fails
-   (check-page.js puts a globe in), and it fades in instead of popping. In
-   the dark theme every icon sits on a small light plate, so a black mark
-   (GitHub) does not vanish into the page. */
+   (check-page.js puts a globe in), and it fades in instead of popping. Its
+   shape and its light plate in the dark come from source-pill.css. */
 @media (scripting: enabled) {
   .site-icon { opacity: 0; transition: opacity var(--dur-state) var(--ease-standard); }
   .site-icon.is-loaded,
   .site-icon.is-missing { opacity: 1; }
 }
-.dark-mode .site-icon,
-.dark-mode .share-md .wp-ref-icon {
-  box-sizing: border-box;
-  padding: 2px;
-  border-radius: 4px;
-  background: #ecece9;
-}
-.dark-mode .share-md .cite-favicon { background: #ecece9; box-shadow: none; }
-.site-icon.is-missing { background: none; padding: 0; }
 
 /* L5, I8 — Pictures on a white ground are a step softer in the dark theme,
    and nothing waits on white while it loads. */
@@ -2286,8 +2219,8 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 .hub-toolbar input:focus,
 .hub-toolbar select:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-ring);
 }
 
 .hub-toolbar input::placeholder {
@@ -2328,7 +2261,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 
 .hub-row:hover,
 .hub-row:focus-visible {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  background: var(--hover);
   color: var(--text);
   outline: none;
 }
@@ -2347,10 +2280,11 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
   background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 
+/* "/100" steps back by weight, in the badge's own colour: transparency
+   took it below the contrast floor (Apple-Audit G13). */
 .hub-score small {
   font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  opacity: 0.75;
+  font-weight: var(--font-weight-regular);
 }
 
 .hub-score.is-high {

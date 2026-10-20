@@ -22,7 +22,8 @@ def seed_long_answer(page):
     }""")
 
 
-COMPOSER_SURFACE = {'light': 'rgba(245, 245, 245, 0.96)', 'dark': 'rgba(48, 51, 56, 0.96)'}
+# The composer is the raised field (--field = --well, Apple-Audit G8).
+COMPOSER_SURFACE = {'light': 'rgb(255, 255, 255)', 'dark': 'rgb(38, 40, 43)'}
 
 # iPhone Safari (iOS 26; WebKit LocalFrameView::fixedContainerEdges) paints
 # the strips behind its status bar and bottom bar: it hit-tests the middle of
@@ -73,12 +74,14 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         assert menu.bounding_box()['width'] >= 44
         assert menu.bounding_box()['height'] >= 44
         assert header.bounding_box()['height'] == 56
-        # No bar: the menu and the actions are islands in the composer's
-        # material, the strip between them belongs to the thread.
+        # No bar: the menu and the actions are bare glyphs, as on the
+        # desktop (Apple-Audit G17); the strip between them belongs to the
+        # thread.
         expect(header).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         islands = page.locator('#toggleSidebarButton, #mobileConversationActions')
         for island in islands.all():
-            expect(island).to_have_css('background-color', COMPOSER_SURFACE[theme])
+            expect(island).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
+            expect(island).to_have_css('box-shadow', 'none')
         expect(menu).to_have_css('border-top-left-radius', '50%')
         expect(page.locator('#mobileConversationActions')).to_have_css('border-top-left-radius', '999px')
         expect(header.locator('.brand-float')).to_be_hidden()
@@ -290,7 +293,7 @@ def test_menu_island_carries_the_watches_hint_until_watches_opens(browser, phase
         page.evaluate("document.getElementById('viewSwitchWatches').classList.add('has-watch-pulse')")
         assert page.evaluate(dot) != 'none'
         assert page.evaluate("getComputedStyle(document.getElementById('toggleSidebarButton'), '::after').backgroundColor") \
-            == 'rgb(40, 125, 104)'
+            == 'rgb(33, 120, 99)'
         page.locator('#toggleSidebarButton').click()
         expect(page.locator('#mobileSidebarViews #viewSwitchWatches')).to_be_visible()
         assert page.evaluate("getComputedStyle(document.getElementById('viewSwitchWatches'), '::after').content") != 'none'

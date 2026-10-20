@@ -48,11 +48,8 @@ body {
     transition: width var(--dur-layer) var(--ease-standard), left var(--dur-layer) var(--ease-standard);
   }
 
-  /* Chat and Watches both start beside the sidebar, so the switch over
-     them stands in one place in both views (Apple-Audit J4). */
-  .view-switch {
-    left: calc(50vw + var(--app-sidebar-offset) / 2);
-  }
+  /* The Chat | Watches switch follows the column too: components-watch.css,
+     next to its own rule (Apple-Audit J4, C3). */
 }
 
 /* --------------------------------------------------------------------------
@@ -114,7 +111,7 @@ body:has(.sidebar.collapsed) .app-nav-float {
     visibility: hidden;
     pointer-events: none;
     transform: translate(-50%, calc(-100% - 20px));
-    transition-delay: 0s, 0s, 0s, 0s, 0.22s;
+    transition-delay: 0s, 0s, 0s, 0.22s;
   }
 }
 
@@ -136,6 +133,27 @@ body:has(.sidebar.collapsed) .app-nav-float {
 
 body:has(.sidebar.collapsed) .brand-float {
   display: inline-flex;
+}
+
+/* Desktop: there is only ever one logo (Apple-Audit C3). Opening, the
+   floating mark fades out at once, before the panel brings its own; closing,
+   it fades in once the panel's mark has slid out of view, so the two never
+   stand side by side. It stays laid out, invisible, to fade at all. */
+@media (min-width: 1100px) {
+  .brand-float {
+    display: inline-flex;
+    opacity: 0;
+    visibility: hidden;
+    /* Gone within the first frames, before the panel's own mark reaches the
+       screen edge (about 55 ms into the slide). */
+    transition: opacity calc(var(--dur-press) / 2) linear, visibility 0s linear calc(var(--dur-press) / 2);
+  }
+
+  body:has(.sidebar.collapsed) .brand-float {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--dur-state) var(--ease-out) calc(var(--dur-layer) / 2), visibility 0s linear 0s;
+  }
 }
 
 /* Offene Overlay-Sidebar (mobil): Brand ausblenden, der Sidebar-Kopf zeigt es. */
@@ -295,9 +313,9 @@ body:has(.sidebar.active) .brand-float {
 .auth-top-signup {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 14px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -321,19 +339,9 @@ body:has(.sidebar.active) .brand-float {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
     color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
-  opacity: 1;
 }
 
-.auth-top-signup {
-  border: 1px solid color-mix(in srgb, var(--button-bg) 78%, transparent);
-  background: var(--button-bg);
-  color: var(--button-text);
-}
-
-.auth-top-signup:hover {
-  opacity: 0.92;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 18%, transparent);
-}
+/* .auth-top-signup wears the .btn material (components-input.css). */
 
 @media (max-width: 640px) {
   .auth-top-actions {
@@ -383,7 +391,6 @@ body:has(.sidebar.active) .brand-float {
     color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px color-mix(in srgb, var(--accent) 10%, transparent);
   text-decoration: none;
-  opacity: 1;
 }
 
 .login-text[hidden] {
@@ -541,7 +548,7 @@ body:has(.sidebar.active) .brand-float {
 }
 
 .sidebar-search-box input:hover {
-  background: var(--sidebar-hover);
+  background: var(--hover);
 }
 
 .sidebar-search-box input:focus {
@@ -595,7 +602,7 @@ body:has(.sidebar.active) .brand-float {
 
 /* Flat like the in-sidebar toggle: a tone on hover, no lifted glass. */
 .app-nav-float .sidebar-toggle:hover {
-  background-color: var(--raise);
+  background-color: var(--hover);
   box-shadow: none;
   transform: none;
 }
@@ -735,8 +742,7 @@ body:has(.sidebar.active) .brand-float {
   justify-content: center;
   gap: 6px;
   font-size: var(--font-size-micro);
-  color: var(--sidebar-text-muted);
-  opacity: 0.85;
+  color: var(--ink-3);
 }
 
 .sidebar-footer-link {
@@ -785,7 +791,7 @@ body:has(.sidebar.active) .brand-float {
 }
 
 #editSystemPromptBtn:hover {
-  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background-color: var(--hover);
   color: var(--text-color);
 }
 
@@ -847,7 +853,6 @@ body:has(.sidebar.active) .brand-float {
 
 .sidebar-toggle-btn:hover,
 .sidebar-toggle-btn:focus-visible {
-  opacity: 1;
   outline: none;
 }
 
@@ -855,25 +860,22 @@ body:has(.sidebar.active) .brand-float {
   color: var(--accent);
 }
 
+/* The chevron of foundation.css: down while the list is open, right when
+   it is folded; its tone comes from the colour, not from opacity. */
 .sidebar-toggle-arrow {
-  display: inline-block;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-solid);
-  opacity: 0.45;
-  transform: rotate(90deg); /* points down when open */
-  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-state) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
+  transition: transform var(--dur-state) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .sidebar-toggle-btn:hover .sidebar-toggle-arrow,
 .sidebar-toggle-btn:focus-visible .sidebar-toggle-arrow {
-  opacity: 0.85;
-  color: var(--accent);
+  color: var(--ink);
 }
 
 /* Collapsed state */
 .sidebar-section.is-collapsed .sidebar-toggle-arrow {
-  transform: rotate(0deg); /* points right when collapsed */
+  --chevron-turn: -90deg;
 }
 
 /* Commit + GitHub-Mark als ein Ziel. Die Mark ist bewusst winzig und traegt
@@ -934,7 +936,6 @@ body:has(.sidebar.active) .brand-float {
    deutlicherer Rand sagt beim Hovern, dass hier etwas aufgeht. */
 .email-icon:hover {
   border-color: color-mix(in srgb, var(--text-color) 30%, var(--sidebar-border));
-  opacity: 1;
 }
 
 .email-icon:active {
@@ -1033,7 +1034,7 @@ body:has(.sidebar.active) .brand-float {
 
 .email-popup .top-bar-about:hover,
 .email-popup .top-bar-about:focus-visible {
-  background: #f3f4f4;
+  background: var(--hover);
   outline: none;
 }
 
@@ -1054,7 +1055,7 @@ body:has(.sidebar.active) .brand-float {
 
 .dark-mode .email-popup .top-bar-about:hover,
 .dark-mode .email-popup .top-bar-about:focus-visible {
-  background: #363636;
+  background: var(--hover);
 }
 
 /* --- Die Kontostufe am Kuerzel -------------------------------------------
@@ -1191,7 +1192,7 @@ body:has(.sidebar.active) .brand-float {
 }
 .sidebar .bookmark.run-entry:hover,
 .sidebar .bookmark.run-entry:focus-visible {
-  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background-color: var(--hover);
 }
 .run-entry-status {
   position: absolute;
@@ -1200,7 +1201,7 @@ body:has(.sidebar.active) .brand-float {
   max-width: 78px;
   overflow: hidden;
   color: var(--sidebar-text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-size-xs);
   /* overflow:hidden clips at the line box: with line-height 1 the
      descenders of "Working" (g, p) were cut off. */
   line-height: 1.35;
@@ -1276,7 +1277,7 @@ body:has(.sidebar.active) .brand-float {
 .sidebar .bookmark:has(> p:focus-visible),
 .sidebar .bookmark.run-entry:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .sidebar .bookmark:hover {
-  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background-color: var(--hover);
 }
 /* "…": more options for this chat (Rename, Share, Delete). Quiet until the
    row is pointed at or focused, always there on touch. */
@@ -1310,7 +1311,7 @@ body:has(.sidebar.active) .brand-float {
 .bookmark-menu-button:hover,
 .bookmark-menu-button:focus-visible,
 .bookmark-menu-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  background: var(--hover);
   color: var(--ink);
   outline: none;
 }
@@ -1385,7 +1386,7 @@ body:has(.sidebar.active) .brand-float {
   text-align: left;
   cursor: pointer;
 }
-.bookmark-menu-item:is(:hover, :focus-visible) { background: var(--raise); }
+.bookmark-menu-item:is(:hover, :focus-visible) { background: var(--hover); }
 .bookmark-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .bookmark-menu-item svg {
   width: 16px;

@@ -5,25 +5,81 @@
 /* --------------------------------------------------------------------------
    Buttons & Inputs
    -------------------------------------------------------------------------- */
-/* The solid default button is opt-in: `.btn` (or the older `.button`).
-   It used to apply to every button minus some ninety exceptions, which
-   outranked every component rule and handed each new button a heavy look it
-   had to fight. A button now starts neutral and asks for this look. */
+/* The one filled button (Apple-Audit G4). Opt-in: `.btn` (or the older
+   `.button`); a <button> starts neutral and asks for this look. It used to
+   come in three shapes: 48 px in the login, 38 px with smaller corners in
+   the feedback form, a pill on the watch page, and with a gloss, a shadow
+   and a lift on hover in the share dialog (in dark mode a light halo glowed
+   under it). Now there is one: 36 px (44 px on touch), --radius-sm, flat;
+   hover is a tone step toward the page, a press gives way (base.css).
+
+   The primary buttons that predate the class wear the same material from
+   this one rule; their own rules only place them (width, margin, flex). New
+   code writes class="btn". */
 .button,
-.btn {
-  padding: 10px 16px;
-  font-size: var(--font-size-base);
+.btn,
+.share-primary-btn,
+.btn-pro,
+.auth-primary-action,
+.memory-edit-submit,
+.watch-nudge-btn,
+.post-demo-login-action,
+.agent-google-btn.is-primary,
+.agent-answer-error-actions button:first-child,
+.wd-button.is-primary,
+.wd-action.is-strong,
+.run-blocked-btn.is-primary,
+.verify-banner-btn,
+.auth-top-signup,
+#feedbackForm .feedback-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-sizing: border-box;
+  min-height: 36px;
+  height: auto;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: var(--button-bg);
   color: var(--button-text);
-  border: none;
-  border-radius: var(--radius-sm);
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--dur-state) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
+  transition: background-color var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 
-button:hover {
-  opacity: 0.9;
+@media (hover: hover) {
+  :is(.button, .btn, .share-primary-btn, .btn-pro, .auth-primary-action, .memory-edit-submit,
+    .watch-nudge-btn, .post-demo-login-action, .agent-google-btn.is-primary,
+    .agent-answer-error-actions button:first-child, .wd-button.is-primary, .wd-action.is-strong,
+    .run-blocked-btn.is-primary, .verify-banner-btn, .auth-top-signup, #feedbackForm .feedback-submit):hover:not(:disabled) {
+    background: var(--button-bg-hover);
+    color: var(--button-text);
+  }
 }
+
+@media (pointer: coarse) {
+  :is(.button, .btn, .share-primary-btn, .btn-pro, .auth-primary-action, .memory-edit-submit,
+    .watch-nudge-btn, .post-demo-login-action, .agent-google-btn.is-primary,
+    .agent-answer-error-actions button:first-child, .wd-button.is-primary, .wd-action.is-strong,
+    .run-blocked-btn.is-primary, .verify-banner-btn, .auth-top-signup, #feedbackForm .feedback-submit) {
+    min-height: 44px;
+  }
+}
+
+/* Hover is a tone step on the control's own surface (--hover, --raise-hover,
+   --button-bg-hover in foundation.css), never transparency: the global
+   `button:hover { opacity: .9 }` that once lived here faded text, icons and
+   the dots inside a button, and needed some forty `opacity: 1` exceptions
+   (Apple-Audit G5). */
 
 button:disabled {
   opacity: 0.5;
@@ -38,15 +94,17 @@ textarea {
   border-radius: var(--radius-sm);
   background-color: var(--input-bg);
   color: var(--text-color);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 42%, transparent);
-  transition: border var(--dur-layer), box-shadow var(--dur-layer), background-color var(--dur-layer);
+  box-shadow: none;
+  transition: border-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
+/* Field focus (Apple-Audit G12): one look for every text field, from the
+   two tokens in foundation.css. */
 input[type="text"]:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--button-bg);
-  box-shadow: var(--liquid-focus-ring), inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 48%, transparent);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-ring);
 }
 
 /* --------------------------------------------------------------------------
@@ -298,9 +356,9 @@ body:not(.dark-mode) .chat-input-container::before {
   opacity: 0.72;
 }
 
-/* Das generische textarea:focus setzt einen --liquid-focus-ring; im
-   Chat-Input ist das ein doppelter, unnoetiger blauer Rahmen zusaetzlich zum
-   Container. Hier gezielt entfernen (Container traegt die Fokus-Affordanz). */
+/* Das generische textarea:focus setzt den Feld-Fokus (--field-focus-*); im
+   Chat-Input waere das ein zweiter Rahmen im Container. Hier gezielt
+   entfernen (der Container traegt die Fokus-Affordanz). */
 .chat-input-container .input-field:focus {
   box-shadow: none;
   border-color: transparent;
@@ -374,32 +432,9 @@ body:not(.dark-mode) .chat-input-container::before {
   line-height: var(--line-height-ui);
 }
 
+/* Material from .btn above; only its place here. */
 .post-demo-login-action {
   flex: 0 0 auto;
-  min-height: 34px;
-  padding: 7px 12px;
-  border: 1px solid color-mix(in srgb, var(--button-bg) 78%, transparent);
-  border-radius: var(--radius-sm);
-  background: var(--button-bg);
-  color: var(--button-text);
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: transform var(--dur-press) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
-}
-
-.post-demo-login-action:hover {
-  opacity: 1;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 18%, transparent);
-}
-
-.post-demo-login-action:focus-visible {
-  outline: none;
-  box-shadow: var(--liquid-focus-ring);
 }
 
 @media (max-width: 600px) {
@@ -552,7 +587,7 @@ body:not(.dark-mode) .chat-input-container::before {
 
 .attach-menu-item:hover,
 .attach-menu-item:focus-visible {
-  background: color-mix(in srgb, var(--glass-bg-strong) 70%, var(--sidebar-hover));
+  background: var(--hover);
   border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
 }
 
@@ -601,7 +636,7 @@ body:not(.dark-mode) .chat-input-container::before {
 
 .attach-menu-toggle:hover,
 .attach-menu-toggle:focus-within {
-  background: color-mix(in srgb, var(--glass-bg-strong) 70%, var(--sidebar-hover));
+  background: var(--hover);
   border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
 }
 
@@ -855,9 +890,18 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink-2);
-  font-size: 9px;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
+  /* A document glyph instead of a 9-px type label (Apple-Audit G10); the
+     label stays in the markup, the file name beside it carries the type. */
+  font-size: 0;
+}
+
+.attachment-chip-icon::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask: var(--file-mask) center / contain no-repeat;
+  mask: var(--file-mask) center / contain no-repeat;
 }
 
 .attachment-chip-meta {
@@ -918,9 +962,8 @@ body:not(.dark-mode) .chat-input-container::before {
 .attachment-chip-remove:hover,
 .attachment-chip-remove:focus-visible {
   outline: none;
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  background: var(--hover);
   color: var(--ink);
-  opacity: 1;
 }
 
 .composer-quote-remove svg {

@@ -60,18 +60,14 @@ img { display: block; max-width: 100%; }
    so attach and the run switch keep the same one-step-down relationship on
    both themes without a second set of overrides.
    -------------------------------------------------------------------------- */
-:root {
-  --lp-field: #fdfdfc;
-  --lp-field-line: rgba(34, 36, 40, 0.11);
-  --lp-field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
-  --lp-field-lift-hover: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
-}
-
+/* The material itself is the raised field of public-tokens.css (--field*),
+   the same tokens the /app composer uses (Apple-Audit G8). */
+:root,
 .dark-mode {
-  --lp-field: #303336;
-  --lp-field-line: rgba(255, 255, 255, 0.11);
-  --lp-field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
-  --lp-field-lift-hover: 0 2px 5px rgba(0, 0, 0, 0.36), 0 22px 44px -20px rgba(0, 0, 0, 0.6);
+  --lp-field: var(--field);
+  --lp-field-line: var(--field-line);
+  --lp-field-lift: var(--field-lift);
+  --lp-field-lift-hover: var(--field-lift-active);
 }
 
 /* --------------------------------------------------------------------------
@@ -169,8 +165,7 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-btn--primary:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
+  background: var(--button-bg-hover);
 }
 
 .dark-mode .lp-btn--primary { color: #141414; }
@@ -185,15 +180,26 @@ img { display: block; max-width: 100%; }
   font-weight: var(--font-weight-medium);
 }
 
+/* The chevron of foundation.css, pointing on. */
 .lp-link::after {
-  content: "›";
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-solid);
-  transform: translateY(-0.04em);
+  content: "";
+  width: 0.8em;
+  height: 0.8em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
   transition: transform var(--dur-state) var(--ease-standard);
 }
 
-.lp-link:hover::after { transform: translate(3px, -0.04em); }
+.lp-link:hover::after { transform: translateX(3px) rotate(-90deg); }
+
+/* Inline "go on" marks after link text: the same chevron. */
+.link-chevron {
+  --chevron-turn: -90deg;
+  --chevron-size: 0.8em;
+  margin-left: 0.15em;
+}
 
 /* --------------------------------------------------------------------------
    Navigation — an opaque bar with a horizon, not a pane of glass
@@ -267,7 +273,7 @@ img { display: block; max-width: 100%; }
   transition: background-color var(--dur-state) var(--ease-standard);
 }
 
-.lp-nav-cta:hover { background: var(--accent-hover); color: #ffffff; }
+.lp-nav-cta:hover { background: var(--button-bg-hover); color: #ffffff; }
 .dark-mode .lp-nav-cta { color: #141414; }
 
 /* --------------------------------------------------------------------------
@@ -924,14 +930,12 @@ img { display: block; max-width: 100%; }
 .lp-run-chip-count { margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums; transition: color var(--dur-state) var(--ease-standard); }
 
 .lp-run-chip i {
-  width: 5px;
-  height: 5px;
-  margin-top: -3px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.65;
-  transition: opacity var(--dur-state) var(--ease-standard);
+  width: 1em;
+  height: 1em;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
 
 /* Its step lights the text, never a frame: the picker in /app has none. */
@@ -1016,13 +1020,12 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-agent-clock i {
-  width: 5px;
-  height: 5px;
-  margin-top: -3px;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.6;
+  width: 1em;
+  height: 1em;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
 
 /* Once the check is back the log folds into the clock line (Apple-Audit I1):
@@ -1497,17 +1500,18 @@ img { display: block; max-width: 100%; }
 
 .consensus-differences-summary::before {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 1.4px solid currentColor;
-  border-bottom: 1.4px solid currentColor;
-  transform: rotate(-45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
   transition: transform var(--dur-state) var(--ease-standard);
   flex-shrink: 0;
 }
 
 .consensus-differences-panel[open] > .consensus-differences-summary::before {
-  transform: rotate(45deg);
+  transform: none;
 }
 
 .consensus-differences-summary:hover { color: var(--text-color); }
@@ -1991,9 +1995,8 @@ img { display: block; max-width: 100%; }
 
 .diff-jump-link:hover {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  background: var(--hover);
   color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
-  box-shadow: var(--liquid-focus-ring);
 }
 
 /* Rail note instead of a filled hint box. */
@@ -2039,8 +2042,7 @@ img { display: block; max-width: 100%; }
 .diff-resolve-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
   color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  box-shadow: var(--liquid-focus-ring);
+  background: var(--hover);
 }
 
 .diff-resolve-icon { flex-shrink: 0; }

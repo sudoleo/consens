@@ -295,7 +295,8 @@
       if (!domain) { domain = document.createElement('span'); domain.className = 'consensus-source-host'; domain.textContent = hostName || 'Reference'; }
       body.prepend(domain); link?.classList.add('consensus-source-title');
       const badge = document.createElement('span'); badge.className = 'answer-reader-site-icon'; badge.setAttribute('aria-hidden', 'true');
-      const fallback = document.createElement('span'); fallback.textContent = (hostName || 'S').slice(0, 1).toUpperCase(); badge.append(fallback);
+      // The globe of source-pill.css until the favicon has loaded (Apple-Audit G9).
+      const fallback = document.createElement('span'); fallback.className = 'site-icon-fallback'; badge.append(fallback);
       if (hostName) {
         const img = document.createElement('img'); img.alt = ''; img.width = 20; img.height = 20; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
         img.src = '/api/topics/favicon?d=' + encodeURIComponent(hostName);

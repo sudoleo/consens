@@ -213,12 +213,10 @@
   color: var(--text-color) !important;
   font-size: var(--font-size-sm);
   line-height: var(--line-height-heading);
-  opacity: 0.9;
 }
 
 #emailPopup .top-bar-about:hover,
 #logoutButton:hover {
   color: var(--button-bg) !important;
-  opacity: 1;
 }
 

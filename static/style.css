@@ -36,6 +36,8 @@
 @import url('./css/undo-notice.css');
 /* Native selects: chevron and open list, after every component's box. */
 @import url('./css/select.css');
+/* Site icons and citation pills, shared with the public pages. */
+@import url('./css/source-pill.css');
 /* The login / sign-up dialog, standalone after every component layer. */
 @import url('./css/auth-modal.css');
 /* Letter clouds behind the empty start screen (letter-clouds.js). */

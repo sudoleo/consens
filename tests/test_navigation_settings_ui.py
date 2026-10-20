@@ -73,7 +73,8 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     # The solid button look is opt-in (`.btn`), so sidebar controls start
     # neutral instead of needing an entry in an exception chain.
     assert "button:not(" not in input_css
-    assert ".btn {" in input_css
+    # One rule for the filled button and the older primaries (Apple-Audit G4).
+    assert ".button,\n.btn," in input_css
 
 
 def test_public_navigation_is_compact_and_learning_links_live_in_footer():
@@ -411,10 +412,11 @@ def test_settings_tabs_read_as_navigation_not_as_buttons():
     assert "border: 0;" in nav_item
     assert "box-shadow: none;" in nav_item
 
-    # Die Tints werden aus der Textfarbe gemischt: im Dark Mode ist `--raise`
-    # exakt der Modalhintergrund, ein Hover darauf waere unsichtbar.
-    assert "color-mix(in srgb, var(--text-color) 6%, transparent)" in nav_item
-    assert "color-mix(in srgb, var(--text-color) 11%, transparent)" in nav_item
+    # Die Tints sind die Ink-Waschungen --hover/--selected (foundation.css):
+    # im Dark Mode ist `--raise` exakt der Modalhintergrund, ein Hover darauf
+    # waere unsichtbar (Apple-Audit G5).
+    assert "background: var(--hover);" in nav_item
+    assert "background: var(--selected);" in nav_item
     assert "var(--raise)" not in nav_item
 
 

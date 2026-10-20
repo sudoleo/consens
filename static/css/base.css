@@ -31,10 +31,6 @@ a {
   transition: opacity var(--dur-state) var(--ease-standard), color var(--dur-layer) var(--ease-standard);
 }
 
-a:hover {
-  opacity: 1;
-}
-
 /* One focus ring for every control that does not draw its own (foundation.css).
    :where() keeps it at zero specificity, so a component's own ring still wins. */
 :where(a, button, summary, select, textarea, input, [role="button"], [role="switch"], [role="tab"], [tabindex]):focus-visible {

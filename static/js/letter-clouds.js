@@ -6,7 +6,8 @@
  * Mit der ersten Frage, einem geöffneten Chat oder der Watch-Seite blendet
  * die Ebene aus und die Schleife hält ganz an: im Chat kostet sie nichts.
  *
- * Sparsam gebaut: unten ein Raster aus Zeichen, das fast nie neu gemalt wird,
+ * Sparsam gebaut: unten ein Raster aus Zeichen in voller Gerätedichte (bis
+ * 3x), das fast nie neu gemalt wird,
  * darüber ein winziger Nebel-Canvas in Seitenfarbe (ein Punkt je 10 px), den
  * der Browser weich hochskaliert. Pro Bild ändert sich nur der Nebel. Ruhig
  * 10 Bilder/s, zwischen denen der Tab schläft; nur während einer Welle im
@@ -159,7 +160,11 @@
   // auf einmal neu (Apple-Audit D11). Nur hinzugekommene Zellen sind neu.
   function resize() {
     stale = false;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Die Zeichen werden in voller Gerätedichte gemalt (bis 3x): auf dem
+    // iPhone waren sie mit 2x um das 1,5-Fache hochskaliert und weicher als
+    // der Text davor (Apple-Audit G16). Das Raster wird fast nie neu gemalt,
+    // der Nebel bleibt grob (FOG, unabhängig von der Dichte).
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
     cw = Math.round(7.2 * dpr);
     rh = Math.round(13 * dpr);
     W = layer.clientWidth || window.innerWidth;

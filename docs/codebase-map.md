@@ -634,10 +634,45 @@ die Bewegungs-Tokens (`--ease-standard`/`--ease-out`/`--ease-in`,
 EIN Fokusring (`--focus-ring`, `--focus-ring-offset`; `base.css` setzt ihn per
 `:where(...)` als Default für jedes fokussierbare Element) und `--light` für das
 Hauslicht. Komponenten wählen den nächstliegenden Token statt eines eigenen Werts.
+**Material-Bausteine (seit 2026-10-20, Apple-Audit Welle 2, w2c):** ein zweiter
+Block `:root, .dark-mode` in `foundation.css` leitet aus den Themenwerten ab
+(auch auf `body.dark-mode` deklariert, sonst erbt der dunkle App-Body die helle
+Tinte): `--hover` / `--selected` (Tinten-Waschung `--ink` in `--hover-mix` 6 %
+/ `--selected-mix` 10 %, dunkel 4,5 % / 8 %; für Ghost-Knöpfe, Menü- und
+Listenzeilen, transparent in Ruhe), `--raise-hover` / `--raise-selected`
+(deckend, für Flächen, die in Ruhe `--raise` tragen), `--button-bg-hover`
+(gefüllter Knopf, ein Tonschritt Richtung Seite), `--field-focus-border` +
+`--field-focus-ring` (der eine Feld-Fokus: Rand dunkelt, 3-px-Hof außen, Feld
+behält seine Größe), `--chevron-mask` (das eine Chevron, SVG-Maske, zeigt nach
+unten; drehen mit `--chevron-turn`: -90deg rechts, 90deg links, 180deg oben)
+und `--file-mask` (Dokument-Glyphe für Dateityp-Plaketten). Dazu die Utility
+`.chevron` (1em-Box, `currentColor`, `--chevron-size`); Pseudo-Element-Chevrons
+nutzen dieselben drei Zeilen (`background: currentColor` + `mask`). Hover-Regeln
+neu immer in `@media (hover: hover)` schreiben. Gemessen vorher/nachher
+(App + öffentliche CSS ohne Admin): Hover-Hintergründe 67 → 35 verschiedene
+Werte (88 × `var(--hover)`), `opacity: 1`-Gegenregeln 41 → 9 (übrig nur
+echtes Aufdecken), Hover-Ausblendungen 11 → 3, Schriftgrößen < 12 px 12 → 0,
+gedrehte Rand-Chevrons 25 Regeln / 52 Rotationen → 0 (übrig 3 Häkchen),
+Schatten 119 → 107 verschiedene Werte; Radien unverändert 36.
 **Buttons:** Der gefüllte Standardknopf ist opt-in (`.btn`, Altname `.button`,
 `components-input.css`). Die frühere globale `button:not(...)`-Kette mit rund
 90 Ausnahmen ist entfernt; ein `<button>` startet neutral. Admin-Seiten
-geben klassenlosen Buttons den alten Look in `admin.css`.
+geben klassenlosen Buttons den alten Look in `admin.css`. Seit 2026-10-20
+(Apple-Audit G4) ist `.btn` der EINE gefüllte Knopf: 36 px (44 px bei
+`pointer: coarse`), `--radius-sm`, flach, ohne Verlauf/Schatten/Anheben, Hover
+`--button-bg-hover`, Druck aus `base.css`. Dieselbe Regel trägt die älteren
+Primärknöpfe (`.share-primary-btn`, `.btn-pro`, `.auth-primary-action`,
+`.memory-edit-submit`, `.watch-nudge-btn`, `.post-demo-login-action`,
+`.agent-google-btn.is-primary`, Agent-Fehler-Retry
+`.agent-answer-error-actions button:first-child`, `.wd-button.is-primary`,
+`.wd-action.is-strong`, `.run-blocked-btn.is-primary`, `.verify-banner-btn`,
+`.auth-top-signup`, `#feedbackForm .feedback-submit`); deren eigene Regeln
+setzen nur noch Platz (Breite, Abstand). Neuer Code schreibt `class="btn"`.
+Die globale `button:hover { opacity: .9 }` ist entfernt (G5). Öffentliche CTAs
+(`.nav-cta`, `.button-primary`, `.lp-btn--primary`) bleiben Pillen ihres
+Kontexts, heben sich aber nicht mehr an. Die gewählte Option eines Menüs
+(`.model-picker-option.is-selected`) steht in voller Tinte ohne eigene Fläche,
+Grau heißt „nicht wählbar“ (G6).
 `shell.css` gibt Agent-/Consensus-Antworten und gespeicherten Turns denselben
 Leserhythmus: 17 px (`--font-size-read`) mit 1,7-facher Zeilenhöhe, Fließtext
 höchstens 66 Zeichen breit (Tabellen, Code, Formeln volle Spalte), normale
@@ -885,25 +920,43 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Highlights und Schatten mehr. `static/css/public-tokens.css` spiegelt die
   identische Skala, deshalb sind Landing-/Public-Mockups aus demselben Material
   wie `/app` (Testvertrag: `tests/test_public_design_system.py`). Dark Mode
-  überschreibt die Grundwerte + die Ampel.
+  überschreibt die Grundwerte + die Ampel. **Gemessene Stufen (seit
+  2026-10-20, Apple-Audit G7/G13/G15, Vertrag `tests/test_material_tokens.py`
+  mit OKLab- und WCAG-Rechnung):** Grund → `--raise` 3,6 hell (`#eeeeee`) und
+  3,7 dunkel (`#212325`), vorher 1,5 hell und 10,3 in der dunklen App;
+  `shell.css` überschreibt `--raise` nicht mehr (die bläuliche App-Fläche
+  `#303338` ist weg, `--app-surface*` sind nur noch Aliasse auf
+  `--raise`/`--raise-hover`/`--raise-selected`). Graustufen gespreizt:
+  `--ink-2` `#4a4d53` / dunkel `#b0b2b6`, `--ink-3` `#606369` / `#94979b`
+  (Abstand ink-2 → ink-3 8 bzw. 9, vorher 2,8), `--ink-3` hält ≥ 4,5:1 auf
+  Grund, `--raise` und gehovertem `--raise`; Text bekommt seinen Ton aus der
+  Farbe, nicht aus `opacity`. Die Ampel ist textsicher auf Grund und `--raise`
+  (`--agree #217863`, `--partial #896512`, `--dispute #ad4b57`; dunkel
+  `--dispute #f07f76`, ein Rot statt des Korall, das neben Bernstein braun
+  wirkte), die `-bg`-Töne sitzen auf demselben Farbton. Die Mail-Palette
+  (`app/services/mailer.py`) zieht die Graustufen mit.
   Seit 2026-09-06 hebt `shell.css` Chat-Fragen (auch historische), Claim-Popovers
   und Claim-/Contradiction-Hoverkarten mit dem lokalen Token `--chat-surface`
-  ab: dezentes Neutralgrau (`#f5f5f5`) in Light,
-  unveraendert `#303338` in Dark. Der Composer nutzt eigene
-  `--composer-*`-Tokens fuer Flaeche, Kontur, Schatten und einen maskierten
-  6-px-Backdrop-Blur hinter dem transparenten Thread-Wrapper. Desktop bleibt
+  ab (seit 2026-10-20 = `--raise`). Der Composer ist seit 2026-10-20 das
+  gehobene Feld `--field` (= `--well`) mit `--field-line` und `--field-lift`
+  (aktiv `--field-lift-active`) aus `variables.css`/`public-tokens.css`:
+  dasselbe Material wie das Startseiten-Feld (`--lp-field*` in `landing.css`
+  sind Aliasse), deckend, ohne Blur (Apple-Audit G8); `--composer-*` sind
+  Aliasse darauf. Desktop bleibt
   sticky, Mobile fixed; die bestehende Hoehenreserve und Menue-Ebene bleiben
-  erhalten. Die anschliessende /app-Vereinheitlichung nutzt `--app-surface`
-  auf `body` fuer alle angehobenen Flaechen und bindet dort `--raise`,
-  `--chat-surface`, Container-/Response-/Glass-Aliasse neu. Hover und Auswahl
-  haben eigene `--app-surface-hover`/`--app-surface-selected`-Toene.
+  erhalten. `--app-surface`/`--app-surface-hover`/`--app-surface-selected`
+  auf `body` sind seit 2026-10-20 nur noch Aliasse auf `--raise`,
+  `--raise-hover`, `--raise-selected`.
   Der Consensus-/Watches-Umschalter ist in Threads und Direktvergleichen
   ausgeblendet; auf Start- und Watch-Ansicht bleibt er sichtbar. Sein aktives
   Segment ist in Light weiss mit dezenter Kontur. Seit 2026-10-20 steht er in
-  beiden Ansichten an derselben Stelle (`layout.css`: `left: calc(50% +
-  --app-sidebar-offset / 2)` ohne Ausnahme für Watches, Apple-Audit J4), weil
-  auch die Watch-Seite rechts der Seitenleiste beginnt; das Gleiten beim
-  Ein-/Ausklappen der Leiste (C3) baut darauf auf.
+  beiden Ansichten an derselben Stelle (`left: calc(50vw +
+  --app-sidebar-offset / 2)` ab 1100 px, Apple-Audit J4), weil auch die
+  Watch-Seite rechts der Seitenleiste beginnt. Die Regel liegt in
+  `components-watch.css` neben der Grundregel des Schalters (in `layout.css`
+  verlor sie gegen die spätere `left: 50vw` und griff nie) und gleitet mit
+  `left var(--dur-layer) var(--ease-standard)` wie die Spalte (C3). Gewählt
+  wird über Thumb und Tinte, nie über fettere Schrift (C9).
   Die Thread-Container starten deshalb mit 30 px oberem Padding (46 px bis
   1099 px fuer die verbleibende Float-Navigation, vorher 58 px).
   Light-Highlights nutzen produktweit Jade/Bernstein/Rosenrot und Schiefergrau.
@@ -961,10 +1014,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   1100 px sind es `-10px`, weil beide Container dort ihre je 2 px
   Scroll-Padding verlieren. Der
   Zusatzabstand vor `.sidebar-pinned` ist auf 8 px reduziert (plus 10 px
-  Container-Gap), damit `New comparison → Models` enger bleibt. Models und
-  Bookmarks teilen dieselben Icon-/Textspalten und dieselbe Titeltypografie;
-  der Bookmark-Toggle sowie seine Suche sind bis zum verifizierten Login
-  nativ deaktiviert.
+  Container-Gap), damit `New comparison → Models` enger bleibt. Seit
+  2026-10-20 (Apple-Audit G2) sind `#newRunButton`, `#sidebarModelPicker` und
+  `#bookmarksToggle` EIN Zeilenbauteil: Grid `18px minmax(0, 1fr) auto`,
+  16-px-Glyphe mittig in der 18-px-Spalte, 9 px Abstand, Label 14 px/500,
+  `min-height: 36px`, `padding: 6px 8px`, derselbe 4-px-Einzug wie die
+  Sektionen (Glyphen bei x = 24, Wörter bei x = 51); Models trägt die Anzahl
+  als zweite Zeile in `--ink-3` (12 px). New comparison ist in Ruhe transparent
+  und auf dem leeren Start als „hier bist du“ `--selected` getönt. In der
+  Schublade (≤1099 px) verlieren die Sektionen ihren 4-px-Einzug, damit Models
+  und Chat-Titel bündig mit New chat stehen. Der Bookmark-Toggle sowie seine
+  Suche sind bis zum verifizierten Login nativ deaktiviert.
 - **Ziehbare Sidebar-Breite** (seit 2026-10-08) — `static/js/sidebar-resize.js`
   (Head-Bundle, `App.sidebarResize` `{get, set, reset, bounds}`) setzt
   `--sidebar-width` auf `<html>` (Default 260px in `layout.css :root`), schon vor
@@ -985,7 +1045,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Wortmarke in `.sidebar-brand-row`. Beide zeichnen dasselbe Panel-Icon (`.sidebar-panel-icon`,
   Rechteck mit linker Schiene statt Burger, 20 px, flacher Hover).
   `shell.css` blendet den schwebenden per `body:not(:has(.sidebar.collapsed))`
-  (Overlay ≤1099px: `body:has(.sidebar.active)`) aus. `app-init.js` bindet
+  (Overlay ≤1099px: `body:has(.sidebar.active)`) aus. **Ein- und Ausklappen ab
+  1100 px (seit 2026-10-20, Apple-Audit C3):** es gibt nie zwei Logos und nie
+  zwei Panel-Glyphen. Der schwebende Toggle liegt bei offener Leiste genau auf
+  `#sidebarToggleInner` (`left: sidebar-width - 46px`) und ist dort
+  `visibility: hidden` statt `display: none`; beim Schließen tritt der innere
+  sofort ab und der schwebende gleitet (`left`, `--dur-layer`,
+  `--ease-standard`, wie Leiste und Spalte) in die Ecke, beim Öffnen gleitet er
+  zurück und übergibt per verzögerter `visibility` (`--dur-layer`), wenn die
+  Leiste angekommen ist. Die schwebende Wortmarke `.brand-float` bleibt ab
+  1100 px gelegt und blendet: aus in 60 ms, bevor die Marke der Leiste den
+  Rand erreicht; ein, nachdem sie hinausgeglitten ist (Verzögerung
+  `--dur-layer / 2`). `.app-nav-float` selbst nimmt keine Klicks
+  (`pointer-events: none`, nur seine sichtbaren Teile). `body.is-sidebar-settling`
+  schaltet alle drei Übergänge ab. Auch die Agent-Spalte (≥1200 px) gleitet
+  mit `--dur-layer` statt 200 ms. Regression pro Bild:
+  `tests/e2e/test_sidebar_resize.py::test_logo_toggle_and_switch_move_with_the_sidebar`. `app-init.js` bindet
   **alle** `.sidebar-toggle`-Buttons an denselben Handler; `updateToggleButton`
   pflegt aria/title auf allen. Eine geschlossene Sidebar wird zusätzlich
   `inert` + `aria-hidden`, damit ihre offscreen liegenden Controls weder in der
@@ -1014,10 +1089,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
   verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
 - **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px seit
-  2026-10-13 keine Leiste mehr, sondern zwei schwebende Inseln im Material des
-  Composers (`--composer-surface`, 1-px-Ring `--composer-edge`,
-  `--composer-shadow`): links das Menü als runder 44-px-Knopf, rechts eine Pille
-  mit New chat und, für die fertige Antwort, Watch und „…“. Share steht mobil
+  2026-10-13 keine Leiste mehr, sondern zwei Gruppen: links das Menü als
+  44-px-Knopf, rechts New chat und, für die fertige Antwort, Watch und „…“.
+  Seit 2026-10-20 (Apple-Audit G17, Max' Entscheidung „rahmenlos wie am
+  Desktop“) stehen beide als bloße Glyphen ohne erhabenen Kreis, Ring oder
+  Schatten (vorher Inseln im Composer-Material); Hover `--hover`, das offene
+  „…“-Menü `--selected`, über gescrolltem Text trägt sie der `--ground`-Verlauf
+  des Kopfs. Share steht mobil
   nicht als Icon in der Pille, sondern als erste Zeile „Share publicly“ im
   „…“-Menü (`.consensus-menu-share` aus `consensus-actions.js`, nur ≤1099 px
   sichtbar; sie fokussiert den Toggle und klickt den echten `#consensusShareButton`,
@@ -1689,8 +1767,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   hochgestellter Zahlen (User-Entscheidung): Favicon (14 px, über den eigenen
   Proxy `/api/topics/favicon`, kein Drittanbieter im Browser) + kurze Domain
   ohne `www.` auf der Grundlinie, `--well`-Fläche, Radius voll, lange Domains
-  mit Ellipse. Scheitert das Favicon, ersetzt ein neutrales Monogramm
-  `.src-ref-glyph` das Bild. Benachbarte Tags (`[S1, S2]`, `[S1][S2]`) werden
+  mit Ellipse. Scheitert das Favicon, steht derselbe Globus wie auf den
+  öffentlichen Seiten im selben Kasten (`.src-ref-glyph`, leer, von CSS
+  gemalt; vorher ein 8,5-px-Buchstabe). **Ein Bauteil für App und öffentliche
+  Seiten (seit 2026-10-20, Apple-Audit G9):** `static/css/source-pill.css`,
+  importiert von `style.css` und `public-pages.css`, trägt das Site-Icon
+  (abgerundetes Quadrat, Radius = ein Viertel der Seite, Logo auf heller
+  Platte `--site-icon-plate`, dunkel `#e9e9e7`, damit schwarze Marken sichtbar
+  bleiben; `--site-icon-size` 14 px im Text, 20 px am Kopf einer Listenzeile;
+  fehlend der Globus `--globe-mask`) und die Zitat-Pille für `.src-ref`,
+  `.source-link` (rohe Modellantworten) und `.share-md a[href^="#src-"]`
+  (öffentliche Antwort). Klassen: `.site-icon`, `.src-ref-favicon`,
+  `.source-favicon`, `.source-teaser-favicon`, `.wd-source-icon`,
+  `.wp-ref-icon`, `.wp-link-icon`, `.share-source-favicon`,
+  `.answer-reader-site-icon` (Leser, jetzt 20 px statt 36-px-Kachel, Fallback
+  `.site-icon-fallback`). Keine andere Datei setzt Größe, Radius oder Tönung
+  eines Site-Icons oder einer Pille (Test in `tests/test_material_tokens.py`). Benachbarte Tags (`[S1, S2]`, `[S1][S2]`) werden
   **eine** Pille „uci.org +2“ (`.is-group`, `data-source-numbers="1 2 3"`);
   `aria-label` lautet „Source: uci.org (and 2 more)“. Steht die Domain direkt
   vor dem Tag schon im Text, zeigt die Pille nur das Favicon (`.is-compact`) —
@@ -2040,7 +2132,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   2026-10-20, Apple-Audit D11). Ein neues Format übernimmt die Zeichen, die
   schon dastehen; neu gewürfelt werden nur hinzugekommene Zellen (Tastatur,
   Drehen). Bauweise: ein Glyphen-Canvas (Atlas, fast nie neu
-  gemalt, Deckkraft 0.26) unter einem winzigen Nebel-Canvas in der
+  gemalt, Deckkraft 0.26; seit 2026-10-20 in voller Gerätedichte bis 3x statt
+  höchstens 2x, Apple-Audit G16: auf dem iPhone waren die Zeichen 1,5-fach
+  hochskaliert; gemessen 390 px, DPR 3 gegen 2: Haupt-Thread Ruhe +3–5 ms/s
+  bei ~25–33 ms/s, Welle +10–20 ms/s, Leinwand 1170×2532 statt 780×1688,
+  am echten iPhone noch nachzumessen) unter einem winzigen Nebel-Canvas in der
   berechneten Seitenfarbe (1 Punkt je 10 px, vom Browser weich hochskaliert);
   pro Bild ändert sich nur der Nebel. Wolken = zwei gedrehte Abtastungen
   eines normierten, kachelbaren Wertrauschens (ungedreht zeichnet das Gitter
@@ -2493,8 +2589,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Systemfarben in sehr geringer Deckung (Grün #34c759, Orange #ff9500, Rot
   #ff3b30, Grau #8e8e93; dunkel die Dark-Varianten) und nach Informationswert
   gestaffelt: Grün (der Normalfall) am leisesten, dann Grau, Bernstein, Rot.
-  Dark-Rot mischt nicht aus dem korallfarbenen `--dispute`, das sonst mit
-  Bernstein verschwamm. Hover
+  Seit 2026-10-20 (Apple-Audit G15) behalten die Marken diese Helligkeit und
+  Buntheit, nehmen aber den Farbton der Ampel-Tokens
+  (`oklch(from var(--dispute) L C h)` in `@supports`, davor dieselbe Rechnung
+  als feste Farbe; ein Test hält beide im Gleichschritt); dafür ist das
+  dunkle `--dispute` ein Rot statt Korall geworden. `--cx-major-line` ist
+  `--partial`. Hover
   vertieft denselben Ton (`--cx-mark-*-strong`), statt eine zweite Fläche zu setzen.
   Treffen zwei Marken denselben Satz, hebt `markSentence` die Marke über
   `MARK_LEVELS` (unanimous < minor < split < major) auf die stärkere Stufe an,
@@ -8355,6 +8455,16 @@ auslösen; vor diesem Lauf zeigt die Watch-Seite transparent den ausstehenden
 ersten Check statt eines leeren Consensus-Panels.
 
 ---
+
+**Material-Vertrag (seit 2026-10-20):** `tests/test_material_tokens.py` rechnet
+die Oberflächen- und Textstufen in OKLab/WCAG nach (gleiche Stufe hell/dunkel,
+gespreizte Graustufen, `--ink-3` ≥ 4,5:1, Ampel textsicher, Marken auf dem
+Ampel-Farbton) und hält die Bauteile: ein Hover-Token statt Transparenz, ein
+gefüllter Knopf, gewählte Option in Tinte, ein Composer-Material, ein
+Quellen-Bauteil, Schrift ≥ 12 px (Lint über alle App- und öffentlichen
+Stylesheets außer Admin), ein Chevron, ein Feld-Fokus, Umschalter ohne
+Fettsprung, eine Sidebar-Zeile, Gleiten mit der Leiste, bloßer Menüknopf am
+Handy.
 
 ## 8. Kritische Verträge & Stolperfallen
 

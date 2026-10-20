@@ -161,14 +161,16 @@ it('shows only the favicon when the domain is already written before the citatio
   dom.window.close();
 });
 
-it('replaces a failed favicon with a neutral monogram instead of a broken image', () => {
+it('replaces a failed favicon with the globe box instead of a broken image', () => {
   const {window: w, dom} = setup();
   const body = render(w, 'A finding (https://njaped.no/page).');
   const icon = body.querySelector('.src-ref-favicon');
   icon.dispatchEvent(new w.Event('error'));
   expect(body.querySelector('.src-ref img')).toBeNull();
   const glyph = body.querySelector('.src-ref .src-ref-glyph');
-  expect(glyph.textContent).toBe('N');
+  // The globe is drawn by source-pill.css, the same as on the public pages;
+  // no 8-px letter is left in it (Apple-Audit G9, G10).
+  expect(glyph.textContent).toBe('');
   expect(glyph.getAttribute('aria-hidden')).toBe('true');
   dom.window.close();
 });

@@ -775,10 +775,19 @@
       return;
     }
     if (reducedMotion() || !node.isConnected) return;
-    const after = node.scrollHeight;
-    if (Math.abs(after - before) < 1) return;
+    // style.height means the border box or the content box, depending on the
+    // node; both ends of the movement are measured in that same box, so a
+    // bordered dialog does not pop 2 px at the start or the end.
+    const cs = getComputedStyle(node);
+    const px = name => parseFloat(cs[name]) || 0;
+    const borders = px("borderTopWidth") + px("borderBottomWidth");
+    const paddings = px("paddingTop") + px("paddingBottom");
+    const borderBox = cs.boxSizing === "border-box";
+    const from = borderBox ? before : before - borders - paddings;
+    const after = borderBox ? node.scrollHeight + borders : node.scrollHeight - paddings;
+    if (Math.abs(after - from) < 1) return;
     node.style.overflow = "hidden";
-    node.style.height = before + "px";
+    node.style.height = from + "px";
     void node.offsetHeight;
     node.style.transition = "height var(--dur-state) var(--ease-standard)";
     node.style.height = after + "px";
