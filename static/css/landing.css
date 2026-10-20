@@ -165,8 +165,7 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-btn--primary:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
+  background: var(--button-bg-hover);
 }
 
 .dark-mode .lp-btn--primary { color: #141414; }
@@ -263,7 +262,7 @@ img { display: block; max-width: 100%; }
   transition: background-color var(--dur-state) var(--ease-standard);
 }
 
-.lp-nav-cta:hover { background: var(--accent-hover); color: #ffffff; }
+.lp-nav-cta:hover { background: var(--button-bg-hover); color: #ffffff; }
 .dark-mode .lp-nav-cta { color: #141414; }
 
 /* --------------------------------------------------------------------------
@@ -1987,9 +1986,8 @@ img { display: block; max-width: 100%; }
 
 .diff-jump-link:hover {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  background: var(--hover);
   color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
-  box-shadow: var(--liquid-focus-ring);
 }
 
 /* Rail note instead of a filled hint box. */
@@ -2035,8 +2033,7 @@ img { display: block; max-width: 100%; }
 .diff-resolve-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
   color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  box-shadow: var(--liquid-focus-ring);
+  background: var(--hover);
 }
 
 .diff-resolve-icon { flex-shrink: 0; }

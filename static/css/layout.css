@@ -48,11 +48,8 @@ body {
     transition: width var(--dur-layer) var(--ease-standard), left var(--dur-layer) var(--ease-standard);
   }
 
-  /* Chat and Watches both start beside the sidebar, so the switch over
-     them stands in one place in both views (Apple-Audit J4). */
-  .view-switch {
-    left: calc(50vw + var(--app-sidebar-offset) / 2);
-  }
+  /* The Chat | Watches switch follows the column too: components-watch.css,
+     next to its own rule (Apple-Audit J4, C3). */
 }
 
 /* --------------------------------------------------------------------------
@@ -295,9 +292,9 @@ body:has(.sidebar.active) .brand-float {
 .auth-top-signup {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 14px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -321,19 +318,9 @@ body:has(.sidebar.active) .brand-float {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
     color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
-  opacity: 1;
 }
 
-.auth-top-signup {
-  border: 1px solid color-mix(in srgb, var(--button-bg) 78%, transparent);
-  background: var(--button-bg);
-  color: var(--button-text);
-}
-
-.auth-top-signup:hover {
-  opacity: 0.92;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 18%, transparent);
-}
+/* .auth-top-signup wears the .btn material (components-input.css). */
 
 @media (max-width: 640px) {
   .auth-top-actions {
@@ -383,7 +370,6 @@ body:has(.sidebar.active) .brand-float {
     color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px color-mix(in srgb, var(--accent) 10%, transparent);
   text-decoration: none;
-  opacity: 1;
 }
 
 .login-text[hidden] {
@@ -541,7 +527,7 @@ body:has(.sidebar.active) .brand-float {
 }
 
 .sidebar-search-box input:hover {
-  background: var(--sidebar-hover);
+  background: var(--hover);
 }
 
 .sidebar-search-box input:focus {
@@ -595,7 +581,7 @@ body:has(.sidebar.active) .brand-float {
 
 /* Flat like the in-sidebar toggle: a tone on hover, no lifted glass. */
 .app-nav-float .sidebar-toggle:hover {
-  background-color: var(--raise);
+  background-color: var(--hover);
   box-shadow: none;
   transform: none;
 }
@@ -784,7 +770,7 @@ body:has(.sidebar.active) .brand-float {
 }
 
 #editSystemPromptBtn:hover {
-  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background-color: var(--hover);
   color: var(--text-color);
 }
 
@@ -846,7 +832,6 @@ body:has(.sidebar.active) .brand-float {
 
 .sidebar-toggle-btn:hover,
 .sidebar-toggle-btn:focus-visible {
-  opacity: 1;
   outline: none;
 }
 
@@ -933,7 +918,6 @@ body:has(.sidebar.active) .brand-float {
    deutlicherer Rand sagt beim Hovern, dass hier etwas aufgeht. */
 .email-icon:hover {
   border-color: color-mix(in srgb, var(--text-color) 30%, var(--sidebar-border));
-  opacity: 1;
 }
 
 .email-icon:active {
@@ -1032,7 +1016,7 @@ body:has(.sidebar.active) .brand-float {
 
 .email-popup .top-bar-about:hover,
 .email-popup .top-bar-about:focus-visible {
-  background: #f3f4f4;
+  background: var(--hover);
   outline: none;
 }
 
@@ -1053,7 +1037,7 @@ body:has(.sidebar.active) .brand-float {
 
 .dark-mode .email-popup .top-bar-about:hover,
 .dark-mode .email-popup .top-bar-about:focus-visible {
-  background: #363636;
+  background: var(--hover);
 }
 
 /* --- Die Kontostufe am Kuerzel -------------------------------------------
@@ -1190,7 +1174,7 @@ body:has(.sidebar.active) .brand-float {
 }
 .sidebar .bookmark.run-entry:hover,
 .sidebar .bookmark.run-entry:focus-visible {
-  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background-color: var(--hover);
 }
 .run-entry-status {
   position: absolute;
@@ -1275,7 +1259,7 @@ body:has(.sidebar.active) .brand-float {
 .sidebar .bookmark:has(> p:focus-visible),
 .sidebar .bookmark.run-entry:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .sidebar .bookmark:hover {
-  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  background-color: var(--hover);
 }
 /* "…": more options for this chat (Rename, Share, Delete). Quiet until the
    row is pointed at or focused, always there on touch. */
@@ -1309,7 +1293,7 @@ body:has(.sidebar.active) .brand-float {
 .bookmark-menu-button:hover,
 .bookmark-menu-button:focus-visible,
 .bookmark-menu-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  background: var(--hover);
   color: var(--ink);
   outline: none;
 }
@@ -1384,7 +1368,7 @@ body:has(.sidebar.active) .brand-float {
   text-align: left;
   cursor: pointer;
 }
-.bookmark-menu-item:is(:hover, :focus-visible) { background: var(--raise); }
+.bookmark-menu-item:is(:hover, :focus-visible) { background: var(--hover); }
 .bookmark-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .bookmark-menu-item svg {
   width: 16px;

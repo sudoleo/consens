@@ -49,8 +49,7 @@
 .memory-selection-action:hover,
 .memory-selection-action:focus-visible {
   outline: none;
-  background: var(--ground);
-  opacity: 1;
+  background: var(--hover);
 }
 
 .memory-selection-action svg,
@@ -164,9 +163,8 @@ html.memory-edit-open body {
 .memory-edit-close:hover,
 .memory-edit-close:focus-visible {
   outline: none;
-  background: var(--raise);
+  background: var(--hover);
   color: var(--text-color);
-  opacity: 1;
 }
 
 .memory-edit-dialog-body {
@@ -255,8 +253,8 @@ html.memory-edit-open body {
 .memory-edit-dialog textarea::placeholder { color: var(--sidebar-text-muted); }
 .memory-edit-dialog textarea:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: var(--liquid-focus-ring);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-ring);
 }
 
 .memory-edit-dialog textarea[aria-invalid="true"] {
@@ -309,22 +307,13 @@ html.memory-edit-open body {
 .memory-edit-cancel:hover,
 .memory-edit-cancel:focus-visible {
   outline: none;
-  background: var(--raise);
-  opacity: 1;
+  background: var(--hover);
 }
 
+/* Material from .btn (components-input.css). */
 .memory-edit-submit {
   position: relative;
   min-width: 118px;
-  border: 1px solid var(--button-bg);
-  background: var(--button-bg);
-  color: var(--button-text);
-}
-
-.memory-edit-submit:hover:not(:disabled),
-.memory-edit-submit:focus-visible:not(:disabled) {
-  outline: none;
-  opacity: .9;
 }
 
 .memory-edit-submit.is-busy::before {
@@ -391,7 +380,6 @@ html.memory-edit-open body {
 .memory-edit-toast button:focus-visible {
   outline: none;
   background: var(--ground);
-  opacity: 1;
 }
 
 @keyframes memory-menu-in {

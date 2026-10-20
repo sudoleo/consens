@@ -236,10 +236,10 @@
   transition: box-shadow var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
-.claim-jump-link:hover,
-.claim-jump-link:focus-visible {
-  box-shadow: var(--liquid-focus-ring);
-  outline: none;
+/* Hover is a tone step, not a ring (Apple-Audit G5); focus keeps the one
+   focus ring of base.css. */
+.claim-jump-link:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* --- Differences: flache Liste ---------------------------------------------
@@ -680,13 +680,10 @@
   flex-shrink: 0;
 }
 
-.diff-resolve-btn:hover:not(:disabled),
-.diff-resolve-btn:focus-visible {
+.diff-resolve-btn:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
   color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  box-shadow: var(--liquid-focus-ring);
-  outline: none;
+  background: var(--hover);
 }
 
 .diff-resolve-btn:disabled {

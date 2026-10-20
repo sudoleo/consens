@@ -134,6 +134,10 @@
 /* (+) and Send are the two round ends of the row, as tall as a picker. */
 .chat-input-container .attach-trigger,
 .chat-input-container .input-action-btn-primary { width: 36px; height: 36px; min-width: 36px; min-height: 36px; border-radius: 50%; }
+/* (+) is built like the picker beside it and answers like it: no fill at
+   rest, one tone step on hover and while its menu is open (Apple-Audit G5). */
+.chat-input-container .attach-trigger { background: transparent; }
+.chat-input-container .attach-trigger:is(:hover, :focus-visible, .is-open) { background: var(--hover); }
 
 /* The Agent menus: a short list, one line of help per choice. The models
    menu keeps its own panel (model rows, presets). */
@@ -145,8 +149,8 @@
   display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
   color: var(--ink); font-size: var(--font-size-ui); line-height: 1.4; border-radius: var(--radius-xs);
 }
-.chat-input-container .agent-model-controls .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
-.chat-input-container .agent-model-controls .model-picker-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--raise); }
+.chat-input-container .agent-model-controls .model-picker-option:hover { background: var(--hover); }
+.chat-input-container .agent-model-controls .model-picker-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--hover); }
 .chat-input-container .agent-model-controls .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
 .model-picker-option-description { flex-basis: 100%; font-size: var(--font-size-xs); color: var(--ink-3); font-weight: 400; line-height: 1.5; }
 /* Rows that lead to another level (sections, Custom, a provider) and the
@@ -308,7 +312,7 @@
 /* The grid above must not bring back a row the mode has hidden. */
 .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle)[hidden] { display: none; }
 .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle):is(:hover, :focus-visible, :focus-within) {
-  background: var(--raise);
+  background: var(--hover);
   border-color: transparent;
 }
 .chat-input-container .attach-menu .attach-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
@@ -479,7 +483,7 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
 /* Curated questions wait here while predicted ones (composer-starters.js)
    stand in for them. */
 .composer-starter[hidden] { display: none; }
-.composer-starter:hover { background: var(--app-surface-selected); color: var(--ink); }
+.composer-starter:hover { background: var(--raise-hover); color: var(--ink); }
 .composer-starter:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 640px) {
   body.is-hero:not(.direct-comparison-active) .composer-starters {

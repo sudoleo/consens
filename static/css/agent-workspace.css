@@ -39,7 +39,7 @@
   border: 1px solid var(--line); border-radius: var(--radius-pill, 999px); background: var(--well); color: var(--ink);
   font: inherit; font-size: var(--font-size-xs); line-height: 1; cursor: pointer;
 }
-.agent-files-chip:hover:not(:disabled) { background: var(--ground); border-color: color-mix(in srgb, var(--ink) 28%, transparent); }
+.agent-files-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); border-color: color-mix(in srgb, var(--ink) 28%, transparent); }
 .agent-files-chip-type { font-weight: 600; letter-spacing: .02em; }
 .agent-files-chip-size { color: var(--ink-3); }
 .agent-files-chip:disabled, .agent-files-icon-btn:disabled { opacity: .55; cursor: default; }
@@ -83,7 +83,7 @@
   display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
   border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--ink-2); cursor: pointer;
 }
-.agent-files-more:hover, .agent-files-more[aria-expanded="true"], .agent-files-icon-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.agent-files-more:hover, .agent-files-more[aria-expanded="true"], .agent-files-icon-btn:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 .agent-files-menu {
   position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 190px; padding: 5px;
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--well); box-shadow: var(--lift);
@@ -93,7 +93,7 @@
   display: flex; align-items: center; width: 100%; min-height: 38px; padding: 8px 10px; border: 0; border-radius: var(--radius-xs);
   background: transparent; color: var(--ink); font: inherit; font-size: var(--font-size-ui); text-align: left; cursor: pointer;
 }
-.agent-files-menu-item:hover, .agent-files-menu-item:focus-visible { background: var(--raise); outline: none; }
+.agent-files-menu-item:hover, .agent-files-menu-item:focus-visible { background: var(--hover); outline: none; }
 .agent-files-menu-item.is-danger { color: var(--dispute); }
 
 .agent-files-confirm {

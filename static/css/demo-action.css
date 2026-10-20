@@ -51,8 +51,7 @@ button.demo-action {
 
 .demo-action:hover,
 a.lp-hero-prompt:hover .demo-action {
-  opacity: 1;
-  background: color-mix(in srgb, var(--ink) 88%, var(--ground));
+  background: var(--button-bg-hover);
 }
 
 /* A press gives way instead of moving: the control sinks into the field. */

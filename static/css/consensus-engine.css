@@ -404,7 +404,7 @@
 .ce-diff-stage:hover,
 .ce-faq-list article:hover {
   transform: none;
-  background: var(--well);
+  background: var(--raise-hover);
   box-shadow: none;
 }
 

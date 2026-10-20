@@ -2400,9 +2400,11 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('toggle.setAttribute("aria-expanded"', dashboard)
         self.assertIn("Watch for something new", dashboard)
         # No global button rule may repaint any button on the page: the solid
-        # look is opt-in via `.btn`.
+        # look is opt-in via `.btn`, one rule for it and the older primaries
+        # such as `.wd-button.is-primary` (Apple-Audit G4).
         self.assertNotIn("button:not(", input_css)
-        self.assertIn(".btn {", input_css)
+        self.assertIn(".button,\n.btn,", input_css)
+        self.assertIn(".wd-button.is-primary,", input_css)
 
 
 class WatchPageRouteTests(unittest.TestCase):

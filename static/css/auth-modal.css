@@ -48,7 +48,7 @@
 }
 
 #loginModal .auth-modal .close:is(:hover, :focus-visible) {
-  background: var(--line-soft);
+  background: var(--hover);
   color: var(--ink);
 }
 
@@ -91,6 +91,7 @@
 /* --- Log in / Sign up --------------------------------------------------- */
 #loginModal .auth-tabs {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: 1fr 1fr;
   margin: 20px 28px 0;
@@ -164,9 +165,8 @@
 }
 
 #loginModal .oauth-button:is(:hover, :focus-visible):not(:disabled) {
-  opacity: 1;
   border-color: color-mix(in srgb, var(--ink) 28%, transparent);
-  background: color-mix(in srgb, var(--well) 92%, var(--ink) 8%);
+  background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix));
 }
 
 #loginModal .oauth-button:disabled,
@@ -225,7 +225,7 @@
 }
 
 #loginModal .auth-chip[hidden] { display: none; }
-#loginModal .auth-chip:is(:hover, :focus-visible) { opacity: 1; background: var(--line-soft); }
+#loginModal .auth-chip:is(:hover, :focus-visible) { background: var(--raise-hover); }
 
 #loginModal .oauth-divider {
   display: flex;
@@ -272,8 +272,8 @@
 
 #loginModal .auth-form input:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
-  box-shadow: 0 0 0 3px var(--line-soft);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-ring);
 }
 
 #loginModal .auth-form input[aria-invalid="true"] {
@@ -305,7 +305,7 @@
   cursor: pointer;
 }
 
-#loginModal .auth-reveal:is(:hover, :focus-visible) { opacity: 1; background: var(--line-soft); color: var(--ink); }
+#loginModal .auth-reveal:is(:hover, :focus-visible) { background: var(--hover); color: var(--ink); }
 
 #loginModal .auth-forgot-row {
   display: flex;
@@ -328,37 +328,17 @@
   cursor: pointer;
 }
 
-#loginModal .auth-link:is(:hover, :focus-visible) { opacity: 1; color: var(--ink); text-decoration-color: currentColor; }
+#loginModal .auth-link:is(:hover, :focus-visible) { color: var(--ink); text-decoration-color: currentColor; }
 #loginModal .auth-link:disabled { color: var(--ink-3); cursor: default; text-decoration: none; }
 
+/* The one filled button (.btn material, components-input.css), full width. */
 #loginModal .auth-primary-action {
   width: 100%;
-  min-height: 48px;
   margin: 4px 0 0;
-  padding: 0 16px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--button-bg);
-  color: var(--button-text);
-  font: inherit;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  text-align: center;
-  text-decoration: none;
-  cursor: pointer;
-  transition: opacity var(--dur-press) var(--ease-standard);
-}
-
-#loginModal a.auth-primary-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
 }
 
 #loginModal .auth-primary-action[hidden],
 #loginModal .auth-primary-action.u-display-none { display: none; }
-#loginModal .auth-primary-action:is(:hover, :focus-visible):not(:disabled) { opacity: 0.9; }
 
 #loginModal .error-message,
 #loginModal .auth-status {
@@ -484,7 +464,7 @@
   cursor: pointer;
 }
 
-#loginModal .auth-secondary-action:is(:hover, :focus-visible) { opacity: 1; background: var(--line-soft); }
+#loginModal .auth-secondary-action:is(:hover, :focus-visible) { background: var(--hover); }
 
 @media (max-width: 480px) {
   #loginModal .auth-modal { margin-top: 12px; }

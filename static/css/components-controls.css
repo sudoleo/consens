@@ -42,7 +42,6 @@
 
 .theme-toggle:hover,
 .theme-toggle:focus-visible {
-  opacity: 1;
   background: color-mix(in srgb, var(--glass-bg-strong) 92%, #ffffff) !important;
   background-color: color-mix(in srgb, var(--glass-bg-strong) 92%, #ffffff) !important;
   color: #525252 !important;

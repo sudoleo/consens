@@ -254,7 +254,7 @@
 .claim-badge:hover,
 .claim-badge:focus-visible,
 .claim-badge.is-linked-hover {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  background: var(--hover);
   color: var(--text-color);
   outline: none;
 }
@@ -275,7 +275,7 @@
 .claim-badge.has-dissent:hover,
 .claim-badge.has-dissent:focus-visible,
 .claim-badge.has-dissent.is-linked-hover {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  background: var(--hover);
   color: var(--text-color);
 }
 
@@ -284,14 +284,13 @@
    deshalb erkennbar bleiben, ohne Aufmerksamkeit von den Saetzen zu ziehen,
    an denen wirklich etwas gemessen wurde. */
 .claim-badge.is-thin {
-  color: var(--ink-3, var(--ink-2));
-  opacity: 0.75;
+  color: var(--ink-3);
 }
 
 .claim-badge.is-thin:hover,
 .claim-badge.is-thin:focus-visible,
 .claim-badge.is-thin.is-linked-hover {
-  opacity: 1;
+  color: var(--ink-2);
 }
 
 .claim-ratio {
@@ -334,10 +333,17 @@
    (Honig #f0b429, Rot #e5484d). Im Dark Mode nimmt die Schrift der Stelle
    denselben Ton an (Ton in Ton), statt hell auf dunklem Farbband zu
    stehen. Ohne benannte Stelle (aeltere Laeufe) traegt der ganze Satz
-   dieselbe Farbe. */
+   dieselbe Farbe.
+
+   Eine Bedeutung, eine Farbe (2026-10-20, Apple-Audit G15): die Marken
+   hatten eine eigene Palette und damit ein anderes Rot und Bernstein als die
+   Pruef-Punkte und die Ampel daneben (dE 9,9). Seitdem behalten sie
+   Helligkeit und Buntheit der Stufen oben, nehmen aber den Farbton der
+   Ampel-Tokens; das dunkle Korall von --dispute ist dafuer ein Rot geworden,
+   damit Widerspruch neben Bernstein nicht mehr braun wirkt. */
 :root {
-  --cx-mark-agree: #eaf6ed;
-  --cx-mark-agree-strong: #dcf2e2;
+  /* Grau ist keine Ampel-Bedeutung: Nuance und duenne Abdeckung bleiben
+     neutrale Werte. */
   --cx-mark-note: #ececed;
   --cx-mark-note-strong: #e3e3e4;
   /* Die duenne Abdeckung ist die LEISESTE Marke von allen: gerade so viel
@@ -519,18 +525,6 @@
 .dark-mode:not(.consensus-markers-hidden) .cx-claim.is-major:not(.has-spot, .is-marker-filtered, .is-quiet),
 .dark-mode:not(.consensus-markers-hidden) .cx-claim.is-major.has-spot:not(.is-marker-filtered, .is-quiet) .cx-spot {
   color: var(--cx-ink-major);
-}
-
-:root {
-  /* Bernstein-Note der Badges und der kurze Aufblitz einer geoeffneten Karte.
-     Die Marken selbst laufen ueber die Ampel-Tokens darueber. */
-  --cx-major-line: #c8862f;
-  --cx-flash: rgba(217, 155, 70, 0.16);
-}
-
-.dark-mode {
-  --cx-major-line: #e8b968;
-  --cx-flash: rgba(243, 198, 111, 0.15);
 }
 
 /* Die markierte Passage ist selbst anfassbar - und seit die Punkte daneben

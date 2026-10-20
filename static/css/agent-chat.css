@@ -33,7 +33,7 @@
 .agent-sidebar button, .agent-inline-models button {
   border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; min-height: 36px;
 }
-.agent-sidebar button:hover, .agent-inline-models button:hover { background: var(--raise); color: var(--ink); }
+.agent-sidebar button:hover, .agent-inline-models button:hover { background: var(--hover); color: var(--ink); }
 .agent-sidebar :is(button, summary, a, [tabindex]):focus-visible, .agent-inline-models button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-sidebar .agent-sidebar-stop:not([hidden]) {
   display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 4px 10px;
@@ -79,7 +79,7 @@
   padding: 9px 10px; border-radius: var(--radius-sm); background: var(--agent-panel-bg);
   transition: background-color var(--dur-press) var(--ease-standard);
 }
-.agent-session > summary:hover { background-color: var(--raise); }
+.agent-session > summary:hover { background-color: var(--hover); }
 /* A model icon names its row with a short tone that fades (agent-delegation.js point). */
 .agent-session > summary.is-pointed { animation: agent-session-point 1.4s var(--ease-standard) both; }
 @keyframes agent-session-point { 0%, 40% { background-color: var(--raise); } }
@@ -170,7 +170,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 .agent-model-stack .agent-inline-model:first-child { margin-left: 0; }
-.agent-model-stack .agent-inline-model:is(:hover, :focus-visible) { z-index: 2; background: var(--raise); filter: none; }
+.agent-model-stack .agent-inline-model:is(:hover, :focus-visible) { z-index: 2; background: var(--hover); filter: none; }
 .agent-history-models { margin: 2px 0 12px; }
 /* An earlier turn shows its marks beside "Thought for …", like the live one. */
 .agent-activity > summary > .agent-history-models { margin: 0; }
@@ -236,9 +236,10 @@
   background: var(--ground); color: var(--ink); font: inherit; font-size: var(--font-size-xs); font-weight: 500; cursor: pointer;
   transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
-.agent-answer-error-actions button:first-child { background: var(--button-bg, var(--ink)); border-color: var(--button-bg, var(--ink)); color: var(--button-text, var(--ground)); }
-.agent-answer-error-actions button:hover, .agent-review-notice button:hover, .agent-progress-review-jump:hover { background: var(--raise); }
-.agent-answer-error-actions button:first-child:hover { background: color-mix(in srgb, var(--button-bg, var(--ink)) 88%, var(--ground)); }
+/* Retry is the one filled button (.btn material, components-input.css); the
+   other choices beside it share its height, corners and type size. */
+.agent-answer-error-actions button { padding: 0 14px; border-radius: var(--radius-sm); font-size: var(--font-size-sm); }
+.agent-answer-error-actions button:hover, .agent-review-notice button:hover, .agent-progress-review-jump:hover { background: var(--hover); }
 .agent-answer-error-actions button:focus-visible, .agent-progress-review-jump:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 #agentAnswerResources:empty { display: none; }
 /* The one "waiting on you" signal: a compact notice above the composer. */
@@ -249,7 +250,7 @@
 .agent-review-notice #agentReviewMessage { flex: 1 1 auto; min-width: 0; font-weight: 500; }
 .agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; border: 1px solid color-mix(in srgb, var(--partial) 45%, var(--line));
   border-radius: var(--radius-xs); background: var(--ground); color: var(--ink); font-weight: 500; }
-.agent-composer-notice.agent-review-notice button:hover { background: var(--raise); }
+.agent-composer-notice.agent-review-notice button:hover { background: var(--hover); }
 .agent-progress-review { margin: -6px 0 16px; }
 .agent-progress-review-jump { gap: 7px; color: var(--agent-ink, var(--ink)); border-color: color-mix(in srgb, var(--partial) 45%, var(--line)); background: var(--partial-bg); }
 .agent-progress-review-jump::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--partial); flex: none; }
@@ -275,7 +276,7 @@
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
-.agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
+.agent-evidence-links .agent-evidence-link:hover { background: var(--hover); color: var(--ink); }
 .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (pointer: coarse) {
@@ -689,7 +690,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-settings-to { color: var(--ink); font-weight: var(--font-weight-semibold); }
 .agent-settings-card :is(.agent-settings-note, .agent-settings-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
-.agent-settings-apply { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 .agent-settings-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .agent-settings-link:hover { color: var(--ink); }
 .agent-settings-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
@@ -813,8 +813,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .passage-check-count.is-disputed::before { background: var(--dispute); }
 .passage-check-count.is-split::before { background: var(--partial); }
 .passage-check-count.is-holds::before { background: var(--pc-holds); }
-/* The global button:hover dims the whole button, the dot with it. */
-.passage-check :is(.passage-check-count, .passage-check-toggle, .passage-check-more):hover { opacity: 1; }
 .passage-check-count:hover { color: var(--ink); }
 .passage-check-num {
   color: var(--ink);
