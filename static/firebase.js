@@ -211,6 +211,11 @@ let bookmarksLoading = false;
 let bookmarksLoadRequestId = 0;
 let openedBookmarkId = null;
 const bookmarkDetailCache = new Map();
+// The chats opened last, as they were shown (detail plus transcript), newest
+// last: switching back shows one at once and checks it in the background
+// (openBookmark). Every save of a chat drops its entry.
+const bookmarkViewCache = new Map();
+const BOOKMARK_VIEW_CACHE_SIZE = 10;
 const authState = window.App.authState;
 let bookmarkViewEpoch = 0;
 let accountMenuDocumentClickHandler = null;
@@ -221,6 +226,8 @@ let accountMenuDocumentClickHandler = null;
 window.addEventListener("consensio:run-registry-change", event => {
   if (["created", "visible", "visible-cleared", "saved-view", "cleared"].includes(event.detail?.type)) {
     bookmarkViewEpoch += 1;
+    // Whatever the view shows now, it is no longer a chat still loading.
+    hideChatOpening();
     // Share/Watch rehydration is view-owned just like bookmark detail loading.
     // A late result from saved view A must not replace the result id projected
     // by live run B.
@@ -323,6 +330,7 @@ function clearAuthenticatedUiState() {
   bookmarksLoadRequestId += 1;
   openedBookmarkId = null;
   bookmarkDetailCache.clear();
+  bookmarkViewCache.clear();
   window.bookmarksData = [];
   window.App?.composerStarters?.clear?.();
   setBookmarksAccess(false);
@@ -1953,6 +1961,8 @@ function upsertBookmarkMeta(bookmark, {
   }
   if (!window.bookmarksData) window.bookmarksData = [];
   const existingIndex = window.bookmarksData.findIndex(item => item.id === meta.id);
+  // A saved write changed the chat: its remembered view is out of date.
+  if (nameIt) bookmarkViewCache.delete(meta.id);
   if (existingIndex >= 0) {
     window.bookmarksData[existingIndex] = meta;
     updateBookmarkDOM(meta);
@@ -2579,8 +2589,14 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
   };
 }
 
-async function loadBookmarkConversationOnce(bookmark) {
-  if (!bookmark?.chat_id || !auth.currentUser) return [];
+// The transcript of a chat bookmark, by bookmark ID alone: it loads beside
+// the bookmark detail instead of after it (Apple audit D2). The caller checks
+// `chatId` against the detail's chat. A bookmark without a chat answers with
+// no chat and no turns.
+async function loadBookmarkConversationOnce(bookmarkId) {
+  if (!auth.currentUser) return { chatId: "", turns: [] };
+  const bookmark = { id: bookmarkId };
+  let chatId = null;
   const requestUser = auth.currentUser;
   const requestUid = requestUser.uid;
   const requestGeneration = authState.generation;
@@ -2611,9 +2627,11 @@ async function loadBookmarkConversationOnce(bookmark) {
       error.retryable = response.status === 429 || response.status >= 500;
       throw error;
     }
-    if (String(data.chat_id || "") !== String(bookmark.chat_id || "")) {
+    const pageChat = String(data.chat_id || "");
+    if (chatId !== null && pageChat !== chatId) {
       throw new Error("Bookmark conversation did not match the saved chat");
     }
+    chatId = pageChat;
     (Array.isArray(data.turns) ? data.turns : []).forEach(turn => {
       const turnId = String(turn?.id || turn?.turn_id || "");
       if (turnId && seenTurnIds.has(turnId)) return;
@@ -2630,15 +2648,15 @@ async function loadBookmarkConversationOnce(bookmark) {
     if (nextCursor) seenCursors.add(nextCursor);
     cursor = nextCursor;
   } while (cursor);
-  return turns;
+  return { chatId: chatId || "", turns };
 }
 
-async function loadBookmarkConversation(bookmark) {
+async function loadBookmarkConversation(bookmarkId) {
   try {
-    return await loadBookmarkConversationOnce(bookmark);
+    return await loadBookmarkConversationOnce(bookmarkId);
   } catch (error) {
     if (!error?.retryable) throw error;
-    return await loadBookmarkConversationOnce(bookmark);
+    return await loadBookmarkConversationOnce(bookmarkId);
   }
 }
 
@@ -2990,6 +3008,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       cursor = bookmarksNextCursor;
     } while (loadAll && cursor);
     renderBookmarksLoadMore();
+    syncActiveBookmark();
     window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
     // The example questions predicted from the newest chats (composer-starters.js).
     if (!append) window.App.composerStarters?.refresh?.();
@@ -3061,8 +3080,116 @@ async function loadBookmarkDetail(bookmarkId) {
   return data.bookmark;
 }
 
+// The chat on screen is marked in the list (shell.css .bookmark.is-active):
+// at once when its row is chosen, and from then on by what the view shows.
+function activeBookmarkId() {
+  const registry = window.App.runRegistry;
+  const visible = registry?.visible?.();
+  if (visible) return visible.bookmark?.id || "";
+  return registry?.getSelectedConversationIdentity?.()?.bookmarkId || "";
+}
+function syncActiveBookmark(bookmarkId = activeBookmarkId()) {
+  document.querySelectorAll("#bookmarksContainer .bookmark").forEach(row => {
+    const active = Boolean(bookmarkId) && row.dataset.id === bookmarkId;
+    if (row.classList.contains("is-active") === active) return;
+    row.classList.toggle("is-active", active);
+    if (active) row.setAttribute("aria-current", "true"); else row.removeAttribute("aria-current");
+  });
+}
+window.addEventListener("consensio:run-registry-change", () => syncActiveBookmark());
+
+// While a chat that is not in memory loads, the thread already shows it:
+// its question and a quiet answer skeleton (Apple audit D2). The view of the
+// chat before is only hidden (body.chat-opening), so a failed load gives it
+// back unchanged.
+function showChatOpening(bookmarkId) {
+  const column = document.querySelector(".container");
+  if (!column) return null;
+  hideChatOpening();
+  const meta = (window.bookmarksData || []).find(item => item.id === bookmarkId);
+  const block = document.createElement("div");
+  block.className = "thread-opening";
+  block.setAttribute("role", "status");
+  block.setAttribute("aria-label", "Opening chat");
+  const question = String(meta?.query || "").replace(/\s+/g, " ").trim();
+  if (question) {
+    const ask = document.createElement("div");
+    ask.className = "thread-ask";
+    const bubble = document.createElement("div");
+    bubble.className = "thread-ask-bubble";
+    const text = document.createElement("div");
+    text.className = "thread-ask-text thread-opening-question";
+    text.textContent = question;
+    bubble.append(text);
+    ask.append(bubble);
+    block.append(ask);
+  }
+  const lines = document.createElement("div");
+  lines.className = "answer-skeleton skeleton-group";
+  lines.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 4; i += 1) {
+    const line = document.createElement("span");
+    line.className = "skeleton";
+    lines.append(line);
+  }
+  block.append(lines);
+  column.prepend(block);
+  const wasHero = document.body.classList.contains("is-hero");
+  window.exitHeroMode?.();
+  document.body.classList.add("chat-opening");
+  window.scrollTo({ top: 0, left: window.scrollX, behavior: "instant" });
+  return { block, wasHero };
+}
+function hideChatOpening(opening = null, { restore = false } = {}) {
+  document.body.classList.remove("chat-opening");
+  document.querySelectorAll(".container > .thread-opening").forEach(block => block.remove());
+  if (restore && opening?.wasHero) {
+    document.body.classList.add("is-hero");
+    window.syncHeroResponseAccess?.();
+  }
+}
+
+// Detail and transcript of one chat, requested side by side. A transcript
+// that is missing, broken or belongs to another chat falls back to the saved
+// continuation data, as before.
+async function loadBookmarkView(bookmarkId) {
+  const conversation = loadBookmarkConversation(bookmarkId).catch(error => ({ error }));
+  const bookmark = await loadBookmarkDetail(bookmarkId);
+  const result = await conversation;
+  let turns = [];
+  let conversationLoadFailed = false;
+  if (bookmark?.chat_id) {
+    if (result.error || String(result.chatId || "") !== String(bookmark.chat_id)) {
+      conversationLoadFailed = true;
+      console.warn("Could not load full bookmark conversation; using saved continuation data.",
+        result.error || new Error("Bookmark conversation did not match the saved chat"));
+    } else {
+      turns = result.turns;
+    }
+  }
+  return { bookmark, turns, conversationLoadFailed };
+}
+function rememberBookmarkView(bookmarkId, view) {
+  bookmarkViewCache.delete(bookmarkId);
+  if (view.conversationLoadFailed) return;
+  bookmarkViewCache.set(bookmarkId, view);
+  while (bookmarkViewCache.size > BOOKMARK_VIEW_CACHE_SIZE) {
+    bookmarkViewCache.delete(bookmarkViewCache.keys().next().value);
+  }
+}
+// What a chat's view is made of, to tell whether a background check found
+// anything new.
+function bookmarkViewSignature(view) {
+  return JSON.stringify([view.bookmark?.timestamp || null, view.bookmark?.title || "", view.bookmark?.responses?.consensus?.length || 0,
+    (view.turns || []).map(turn => [turn.id || turn.turn_id, turn.status, turn.agent_review?.status, String(turn.consensus || "").length])]);
+}
+
 window.openBookmark = async function (bookmarkId) {
   if (!bookmarkWriteAllowed(auth.currentUser?.uid, bookmarkId)) return;
+  // The tap is answered at once: the phone menu closes and the row is
+  // marked before anything loads (Apple audit D2).
+  window.App.chatScroll?.closeMenu?.();
+  syncActiveBookmark(bookmarkId);
   const requestEpoch = ++bookmarkViewEpoch;
   const liveContext = window.App.runRegistry?.findByBookmarkId?.(bookmarkId);
   if (liveContext) {
@@ -3076,32 +3203,55 @@ window.openBookmark = async function (bookmarkId) {
   const viewIsCurrent = () => requestEpoch === bookmarkViewEpoch
     && isCurrentAuthenticatedUser(requestUid, requestGeneration)
     && bookmarkWriteAllowed(requestUid, bookmarkId);
+  const show = view => {
+    hideChatOpening();
+    openedBookmarkId = bookmarkId;
+    loadSingleBookmarkUI(view.bookmark, view.turns, { conversationLoadFailed: view.conversationLoadFailed });
+    window.App.chatScroll?.opened?.();
+  };
+  // A chat seen a moment ago is there at once and checked in the background;
+  // only a change since then redraws it, without moving the reader.
+  const cached = bookmarkViewCache.get(bookmarkId);
+  if (cached) {
+    bookmarkViewCache.delete(bookmarkId);
+    bookmarkViewCache.set(bookmarkId, cached);
+    show(cached);
+    trackAppEvent("app_bookmark_opened", { source: "cache" });
+    const shownEpoch = bookmarkViewEpoch;
+    bookmarkDetailCache.delete(bookmarkId);
+    try {
+      const fresh = await loadBookmarkView(bookmarkId);
+      const stillShown = shownEpoch === bookmarkViewEpoch && isCurrentAuthenticatedUser(requestUid, requestGeneration)
+        && bookmarkWriteAllowed(requestUid, bookmarkId);
+      if (!stillShown) return;
+      if (bookmarkViewSignature(fresh) !== bookmarkViewSignature(cached)) {
+        loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed });
+      }
+      rememberBookmarkView(bookmarkId, fresh);
+    } catch (error) {
+      console.warn("Could not check the opened chat for changes.", error);
+    }
+    return;
+  }
   const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmarkId}"]`);
   row?.classList.add("is-loading");
+  const opening = showChatOpening(bookmarkId);
   try {
-    const bookmark = await loadBookmarkDetail(bookmarkId);
+    const view = await loadBookmarkView(bookmarkId);
     if (!viewIsCurrent()) return;
-    let conversationTurns = [];
-    let conversationLoadFailed = false;
-    try {
-      conversationTurns = await loadBookmarkConversation(bookmark);
-      if (!viewIsCurrent()) return;
-    } catch (conversationError) {
-      if (!viewIsCurrent()) return;
-      conversationLoadFailed = Boolean(bookmark?.chat_id);
-      console.warn("Could not load full bookmark conversation; using saved continuation data.", conversationError);
-    }
-    if (!viewIsCurrent()) return;
-    openedBookmarkId = bookmarkId;
-    loadSingleBookmarkUI(bookmark, conversationTurns, { conversationLoadFailed });
-    window.App.chatScroll?.opened?.();
+    show(view);
+    rememberBookmarkView(bookmarkId, view);
     trackAppEvent("app_bookmark_opened");
   } catch (error) {
     if (!viewIsCurrent()) return;
+    hideChatOpening(opening, { restore: true });
+    syncActiveBookmark();
     console.error("Error opening bookmark:", error);
     window.App?.showPopup?.("Could not load this bookmark.");
   } finally {
     row?.classList.remove("is-loading");
+    // A newer choice took over the view: its own opening stays.
+    if (requestEpoch !== bookmarkViewEpoch && !document.querySelector(".container > .thread-opening")) syncActiveBookmark();
   }
 };
 
@@ -3207,6 +3357,7 @@ async function deleteBookmark(bookmarkId) {
       // A deleted chat's topic must not stay among the predicted examples.
       window.App.composerStarters?.refresh?.();
       bookmarkDetailCache.delete(bookmarkId);
+      bookmarkViewCache.delete(bookmarkId);
       if (openedBookmarkId === bookmarkId) openedBookmarkId = null;
       (window.App.runRegistry?.list?.() || [])
         .filter(context => context.bookmark?.id === bookmarkId)
@@ -3332,6 +3483,10 @@ function createReadyBookmarkRow(bookmark, runId = null) {
   div.addEventListener("click", () => {
     window.openBookmark(bookmark.id);
   });
+  if (bookmark.id && bookmark.id === activeBookmarkId()) {
+    div.classList.add("is-active");
+    div.setAttribute("aria-current", "true");
+  }
 
   return div;
 }
@@ -3423,6 +3578,7 @@ window.App.bookmarkUi = Object.freeze({
   versionParts: bookmarkShareVersionParts,
   invalidate(bookmarkId) {
     bookmarkDetailCache.delete(String(bookmarkId || ""));
+    bookmarkViewCache.delete(String(bookmarkId || ""));
   },
   canWrite(bookmarkId, uid = auth.currentUser?.uid) {
     return bookmarkWriteAllowed(uid, bookmarkId);

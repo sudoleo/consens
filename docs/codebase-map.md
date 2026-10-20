@@ -2062,10 +2062,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   das gerundete `scrollHeight`, und sie rundet ab: sonst tauschten Reserve und
   Seitenhöhe bei gebrochener Lage (Frage bei 292,625 px, Full-HD-Fenster) in
   jedem Frame 1 px, und die Scrollleiste flackerte den ganzen Lauf über.
-  `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` für einen
-  einmaligen sanften Sprung ans Gesprächsende auf (mit Reserve: die letzte
-  Frage oben), auch bei noch lokal vorhandenen Runs; mobil schließt dabei die
-  Sidebar. „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
+  `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` auf, auch
+  bei noch lokal vorhandenen Runs: **seit 2026-10-20 ohne Fahrt** (Apple-Audit
+  A2/A3) — die neueste Frage wird synchron vor dem ersten Bild an ihre
+  Landeposition geschrieben (`behavior: "instant"`, nicht ans absolute Ende,
+  mobil also nie unter dem schwebenden Kopf) und folgt ihr nur noch
+  `OPEN_SETTLE_MS` (600 ms) lang, falls spätes Layout sie verschiebt; jede
+  Leseinteraktion beendet das. Die 420-ms-Fahrt gibt es nur noch für Senden
+  (`sent()`, Frage nach oben) und „Latest message“. `closeMenu()` schließt das
+  Handy-Menü; `openBookmark` ruft es schon beim Antippen.
+  „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
   beim Drücken bestand (gemessen an der Reserve-Unterkante); Text, der während
   des Sprungs ankommt, verlängert ihn nicht, ein wachsender Composer schon.
   Gespeicherte Ansichten binden die
@@ -4380,6 +4386,23 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Ein Klick auf `.bookmark.run-entry[data-run-id]` setzt `visibleRunId` und
   projiziert den exakten Zwischen-/Endstand dieses Contexts zurück. Nur Logout
   beziehungsweise ein Auth-Reset cancelt und verwirft alle Runs.
+- **Chat öffnen (`firebase.js` `openBookmark`, seit 2026-10-20, Apple-Audit
+  D2):** Das Antippen antwortet sofort: Handy-Menü zu
+  (`App.chatScroll.closeMenu`), Zeile markiert (`syncActiveBookmark` setzt
+  `.bookmark.is-active` + `aria-current` für den Chat auf dem Schirm, nachgeführt
+  bei jedem Registry-Ereignis und neuen Zeilen). Ein Chat aus dem Speicher
+  (`bookmarkViewCache`, die letzten 10 geöffneten, LRU; jeder Save über
+  `upsertBookmarkMeta`, Löschen und `bookmarkUi.invalidate` werfen ihn raus)
+  steht sofort da und wird im Hintergrund geprüft; nur eine echte Änderung
+  (`bookmarkViewSignature`) rendert ihn neu, ohne die Leseposition zu bewegen.
+  Sonst zeigt `showChatOpening` sofort Frage (aus der Listen-Meta) und
+  `.answer-skeleton` (`.thread-opening`, `body.chat-opening` blendet den
+  vorigen Chat nur aus; ein Fehler gibt ihn unverändert zurück), und
+  `loadBookmarkView` lädt Detail (`/bookmarks/{id}`) und Transkript
+  (`/bookmarks/{id}/conversation`, jetzt nur per Bookmark-ID) **parallel**; ein
+  fehlendes, fehlerhaftes oder fremdes Transkript (`chat_id` ≠ Detail) fällt wie
+  bisher auf die gespeicherten Fortsetzungsdaten zurück. Jedes Registry-
+  Sichtereignis räumt eine noch stehende Öffnung weg.
 - Jeder asynchrone Callback prüft Run- und Auth-Identität, mutiert ausschließlich
   den eigenen Context und rendert den Haupt-DOM nur, wenn dessen `runId` gerade
   sichtbar ist. Quellen-Mapping arbeitet auf expliziten Listen statt

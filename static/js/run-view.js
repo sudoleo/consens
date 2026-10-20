@@ -457,7 +457,9 @@
       else container.prepend(row);
     }
 
+    const active = row.classList.contains("is-active");
     row.className = `bookmark run-entry run-status-${context.status}`;
+    if (active) row.classList.add("is-active");
     if (context.status === "starting" || context.status === "running") row.classList.add("is-pending");
     row.setAttribute("aria-label", `${context.bookmark.title || context.question}. ${statusLabel(context)}. Open run.`);
     row.title = `${statusLabel(context)} — open this run`;
