@@ -589,10 +589,13 @@ canvas {
   max-width: var(--maxw);
 }
 
-/* Lange Fragen/Prompts: Schrift skaliert herunter statt das Layout zu brechen */
+/* Lange Fragen/Prompts: Schrift skaliert herunter statt das Layout zu brechen.
+   A headline is balanced, never hyphenated ("sys-tem", "develop-ing"); only
+   a token longer than the line (a pasted URL) breaks (Apple-Audit I9). */
 .share-question {
-  overflow-wrap: anywhere;
-  hyphens: auto;
+  overflow-wrap: break-word;
+  hyphens: manual;
+  text-wrap: balance;
 }
 
 .share-question.is-long {
@@ -607,28 +610,57 @@ canvas {
   font-weight: var(--font-weight-bold);
 }
 
-/* Eingeklappte Frage — dieselbe Geste wie #threadAsk in /app: drei Zeilen,
-   darunter ein leiser Link. Die Klammer setzt erst das Skript (is-clamped),
-   damit ohne JS die vollstaendige Frage stehen bleibt. */
-.share-question.is-clamped {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
+/* Eingeklappte Frage — dieselbe Geste wie #threadAsk in /app: drei Zeilen.
+   The template sends the fold (is-clamped), so a long question is folded in
+   the first paint already instead of collapsing under the reader (I2); only
+   with script, so without it the whole question stands. The link sits at the
+   end of the third line over a fade, so showing it moves nothing; opened,
+   it moves under the question. */
+@media (scripting: enabled) {
+  .share-question.is-clamped {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+  }
 }
 
+.wp-question-wrap { position: relative; }
+
 .share-question-more {
-  margin: 9px 0 0;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: inline-flex;
+  /* On the baseline of the question's last line, not centred in the box. */
+  align-items: flex-end;
+  min-height: 32px;
+  margin: 0;
   border: 0;
-  padding: 0;
-  background: none;
+  padding: 0 0 4px 48px;
+  background: linear-gradient(90deg, transparent, var(--page-bg) 44px);
   font: inherit;
   font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   color: var(--muted);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: var(--border);
+}
+
+.wp-question-wrap.is-open .share-question-more {
+  position: relative;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+}
+
+/* 44 px to hit without painting over the line above. */
+.share-question-more::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
 }
 
 .share-question-more:hover {
@@ -973,9 +1005,11 @@ canvas {
 
 .share-md p, .share-md ul, .share-md ol, .share-md table, .share-md blockquote, .share-md pre { margin: 0 0 14px; }
 .share-md h1, .share-md h2, .share-md h3, .share-md h4 { margin: 22px 0 10px; line-height: var(--line-height-heading); color: var(--heading); }
-.share-md h1 { font-size: var(--font-size-2xl); }
-.share-md h2 { font-size: var(--font-size-xl); }
-.share-md h3, .share-md h4 { font-size: var(--font-size-lg); }
+/* The answer's own headings stay below the page's outline: "Short answer"
+   at 24 px outranked the state line (18) and the section label (Apple-Audit
+   L18). */
+.share-md h1, .share-md h2 { font-size: var(--font-size-lg); }
+.share-md h3, .share-md h4 { font-size: var(--font-size-base); }
 .share-md ul, .share-md ol { padding-left: 22px; }
 .share-md pre { overflow-x: auto; padding: 12px; border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.06); }
 .dark-mode .share-md pre { background: rgba(255, 255, 255, 0.08); }
@@ -1724,6 +1758,7 @@ canvas {
 .wp-state-mark { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--agree); }
 .wp-state.is-moved .wp-state-mark { background: var(--partial); }
 .wp-state.is-waiting .wp-state-mark,
+.wp-state.is-paused .wp-state-mark,
 .wp-state.is-past .wp-state-mark { background: var(--muted); }
 .wp-state-text { margin: 8px 0 0; color: var(--text); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
 .wp-goal { margin: 12px 0 0; color: var(--text); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
@@ -1920,10 +1955,167 @@ canvas {
   .wp-chart { display: none; }
   .wp-state { margin-top: 18px; padding: 16px; }
   .wp-state.is-compact { margin-top: 12px; padding: 0; }
-  /* Topic-Seiten: die Direktlinks als wischbare Reihe statt vier
-     gestapelter Kacheln vor der Antwort. */
-  .topic-shell .wp-links { margin-top: 24px; }
-  .topic-shell .wp-links-list {
+  /* The direct links as a swipeable row: for Watch pages too since
+     2026-10-20, see "after the Apple audit" below. */
+  .wp-follow { padding: 16px; }
+}
+
+/* ==========================================================================
+   Watch, Topic and share pages after the Apple audit (2026-10-20)
+   One reading measure, one disclosure, site icons that keep their box, a
+   timeline whose every point is visible, and targets a thumb can hit.
+   ========================================================================== */
+
+/* Anything the page hides stays hidden, whatever display a component sets:
+   an inline-flex toggle with [hidden] used to stay on screen. */
+[hidden] { display: none !important; }
+
+/* I6 — Running text at the app's measure (66ch, shell.css), not 110
+   characters across the whole column. Tables, code, formulas and figures
+   keep the full width. */
+.share-md > p,
+.share-md > ul,
+.share-md > ol,
+.share-md > blockquote,
+.share-md > h1,
+.share-md > h2,
+.share-md > h3,
+.share-md > h4,
+.wp-state-text,
+.wp-event-text { max-width: 66ch; }
+
+/* I7, L5 — A site icon has its box before it loads and keeps it if it fails
+   (check-page.js puts a globe in), and it fades in instead of popping. In
+   the dark theme every icon sits on a small light plate, so a black mark
+   (GitHub) does not vanish into the page. */
+@media (scripting: enabled) {
+  .site-icon { opacity: 0; transition: opacity var(--dur-state) var(--ease-standard); }
+  .site-icon.is-loaded,
+  .site-icon.is-missing { opacity: 1; }
+}
+.dark-mode .site-icon,
+.dark-mode .share-md .wp-ref-icon {
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 4px;
+  background: #ecece9;
+}
+.dark-mode .share-md .cite-favicon { background: #ecece9; box-shadow: none; }
+.site-icon.is-missing { background: none; padding: 0; }
+
+/* L5, I8 — Pictures on a white ground are a step softer in the dark theme,
+   and nothing waits on white while it loads. */
+.dark-mode .wp-image img { background: var(--raise); }
+.dark-mode .wp-image:not(.is-logo) img { filter: brightness(0.9); }
+
+/* L12 — An odd last tile takes the whole row instead of standing beside a
+   hole. */
+.wp-links-list > li:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* L7 — One colour, one meaning: amber is "the answer changed" in the curve as
+   in the timeline below it, and those points are larger. A check without a
+   score is a hollow mark on the axis, not a gap. */
+.watch-chart-point.is-change { fill: var(--partial); stroke: var(--panel-bg); stroke-width: 2; }
+.watch-chart-point.is-unscored { fill: var(--panel-bg); stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 2 2; }
+.watch-chart-point.is-change.is-unscored { fill: var(--panel-bg); stroke: var(--partial); stroke-dasharray: none; }
+
+/* L14 — One disclosure: the words, then a chevron that turns. The same for
+   folded checks, the source list and the comparison of the models. */
+.wp-disclosure-toggle,
+button.wp-disclosure-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--heading);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+  cursor: pointer;
+}
+button.wp-disclosure-toggle { margin-top: 10px; }
+button.wp-disclosure-toggle:hover,
+.wp-disclosure > summary:hover .wp-disclosure-toggle { color: var(--accent); background: none; }
+.wp-chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  transition: transform var(--dur-layer) var(--ease-standard);
+}
+details.wp-disclosure[open]:not(.is-closing) > summary .wp-chevron,
+button.wp-disclosure-toggle[aria-expanded="true"] .wp-chevron { transform: rotate(180deg); }
+.wp-disclosure > summary { list-style: none; cursor: pointer; }
+.wp-disclosure > summary::-webkit-details-marker { display: none; }
+.wp-disclosure-hide { display: none; }
+details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-show { display: none; }
+details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inline; }
+.wp-more > summary { display: block; }
+
+/* L19 — A folded run of quiet checks is a point on the line like every
+   other: a ring in the muted ink, on a line that can be seen. Its toggle
+   stands right after its words, not at the far edge. */
+.wp-event::before { background: var(--line); }
+.wp-event.is-quiet::after { border: 2px solid var(--muted); background: var(--page-bg); }
+.wp-event.is-quiet summary { gap: 2px 10px; }
+.wp-event.is-quiet summary::after { content: none; }
+.wp-event.is-quiet .wp-disclosure-toggle { min-height: 0; color: var(--accent); font-size: var(--font-size-xs); }
+
+/* L14 — A jump to a check (a point of the curve, the state line) marks it
+   for a moment, so the eye finds where it landed. */
+.wp-event.is-flash,
+.wp-quiet-list li.is-flash { animation: wp-flash 1.8s var(--ease-standard); }
+@keyframes wp-flash {
+  0%, 30% { background: color-mix(in srgb, var(--partial) 14%, transparent); }
+  100% { background: transparent; }
+}
+.wp-event,
+.wp-quiet-list li { border-radius: var(--radius-xs); }
+
+/* L15 — A difference is one card of one material: the kind as a quiet line,
+   the claim, each side as text with its families, the quote set back, and
+   how to verify it as a plain line. No pill, no boxes, no amber panel. */
+.wp-more .diff-card {
+  margin: 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.wp-more .diff-card + .diff-card { margin-top: 16px; }
+.wp-diff-kind { margin: 0; color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.wp-diff.is-contradiction .wp-diff-kind { color: var(--partial); }
+.wp-more .diff-card h3 { margin: 4px 0 10px; }
+.wp-more .diff-position { margin: 0 0 10px; padding: 0; border: 0; background: none; }
+.wp-more .diff-position blockquote { border-left: 0; padding-left: 0; font-style: italic; }
+.wp-more .diff-verify { margin: 10px 0 0; padding: 0; border: 0; background: none; font-style: normal; color: var(--muted); }
+
+/* Without script nothing is folded: every source shows (the toggle would do
+   nothing). */
+@media (scripting: none) {
+  .share-sources.is-collapsed li { display: flex; }
+  #shareSourcesToggle { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-chevron, .site-icon { transition: none; }
+  .wp-event.is-flash, .wp-quiet-list li.is-flash { animation: none; }
+}
+
+@media (max-width: 700px) {
+  /* L6 — The direct links are a swipeable row on every Watch and Topic
+     page, so the answer starts on the first screen instead of under four
+     stacked tiles. */
+  .wp-shell .wp-links { margin-top: 24px; }
+  .wp-shell .wp-links-list {
     display: flex;
     gap: 8px;
     margin: 0 -16px;
@@ -1934,11 +2126,31 @@ canvas {
     scroll-padding-inline: 16px;
     scrollbar-width: none;
   }
-  .topic-shell .wp-links-list::-webkit-scrollbar { display: none; }
-  .topic-shell .wp-links-list li { flex: 0 0 74%; scroll-snap-align: start; }
-  .topic-shell .wp-link { padding: 10px 12px; }
-  .topic-shell .wp-answer { margin-top: 28px; }
-  .wp-follow { padding: 16px; }
+  .wp-shell .wp-links-list::-webkit-scrollbar { display: none; }
+  .wp-shell .wp-links-list li { flex: 0 0 74%; scroll-snap-align: start; }
+  .wp-shell .wp-links-list li:only-child { flex-basis: 100%; }
+  .wp-shell .wp-link { padding: 10px 12px; }
+  .wp-shell .wp-answer { margin-top: 28px; }
+
+  /* L10 — 44 px for everything a thumb taps in the history and the foot;
+     the type stays small. */
+  .wp-version,
+  .wp-back,
+  .wp-event.is-quiet summary,
+  .wp-more > summary,
+  .wp-disclosure-toggle,
+  button.wp-disclosure-toggle,
+  .share-report-toggle,
+  .wp-foot .wp-cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .wp-version { margin-top: 0; }
+  .wp-event.is-quiet summary,
+  .wp-more > summary { display: flex; }
+  .wp-quiet-list li { padding: 0; }
+  .wp-evidence a { padding-block: 12px; line-height: 20px; }
 }
 
 /* ==========================================================================
@@ -2098,9 +2310,12 @@ canvas {
   border-bottom: 1px solid var(--border);
 }
 
+/* The first column has one width for every row, so the question titles
+   share one text edge whether the badge reads 64/100, 100/100 or Watch
+   (Apple-Audit I5: it was 9 px further right next to a 100/100). */
 .hub-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   padding: 13px 8px;
@@ -2117,7 +2332,8 @@ canvas {
 
 /* Agreement-Score als Ampel-Badge: der schnellste Scan-Anker der Zeile. */
 .hub-score {
-  min-width: 58px;
+  box-sizing: border-box;
+  width: 100%;
   padding: 5px 8px;
   border-radius: var(--radius-pill);
   text-align: center;
@@ -2195,19 +2411,31 @@ canvas {
   color: color-mix(in srgb, var(--accent-tertiary) 70%, var(--text));
 }
 
-.hub-meta-watch {
+/* A Watch row: the badge says whether it is still checked (green dot as on
+   its page), the meta line carries the page's own headline. */
+.hub-score.is-watch {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: color-mix(in srgb, var(--accent-secondary) 62%, var(--text));
+  justify-content: center;
+  gap: 6px;
+  font-weight: var(--font-weight-semibold);
 }
 
-.hub-meta-watch i {
+.hub-score.is-watch i {
+  flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: currentColor;
 }
+
+.hub-score.is-watch.is-active {
+  color: color-mix(in srgb, var(--accent-secondary) 62%, var(--text));
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+}
+
+.hub-meta-watch { color: var(--muted); }
+.hub-meta-watch.is-moved { color: color-mix(in srgb, var(--accent-tertiary) 70%, var(--text)); }
 
 .hub-arrow {
   color: var(--muted);
@@ -2237,7 +2465,7 @@ canvas {
   }
 
   .hub-row {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: 68px minmax(0, 1fr);
     gap: 12px;
     padding-inline: 4px;
   }
@@ -2247,7 +2475,7 @@ canvas {
   }
 
   .hub-score {
-    min-width: 52px;
+    padding-inline: 6px;
     font-size: var(--font-size-sm);
   }
 }

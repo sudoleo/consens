@@ -37,6 +37,25 @@ SHARE_CACHE_CONTROL = "public, max-age=60, s-maxage=60, stale-while-revalidate=6
 templates = Jinja2Templates(directory="templates")
 register_asset_globals(templates)
 
+
+def clip_words(text, limit: int) -> str:
+    """Cut at the last word boundary within ``limit`` and end with "…".
+
+    Tab titles, search results and link previews ended mid-word ("…actually
+    includ | consens.io") with ``question[:70]`` (Apple-Audit L8).
+    """
+    text = " ".join(str(text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    space = cut.rfind(" ")
+    if space >= limit // 2:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:-–—") + "…"
+
+
+templates.env.filters["clip_words"] = clip_words
+
 router = APIRouter()
 
 _SHARE_ERROR_STATUS = {
@@ -366,7 +385,9 @@ def questions_hub(request: Request):
         logging.error("list_hub_shares failed category=%s", safe_exception(exc))
         entries = []
 
-    watch_count = sum(1 for e in entries if e["is_watch"])
+    # "tracked over time" counts the Watches that are still checked; a paused
+    # one is not tracked any more (Apple-Audit L2).
+    watch_count = sum(1 for e in entries if (e.get("watch") or {}).get("active"))
     jsonld = {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
@@ -448,14 +469,37 @@ def share_og_card(request: Request, slug_id: str):
     display_payload = snapshots.public_share_payload(display_data)
     answered_on = og_image.date_label(display_payload["answered_at"])
     checked_label = f"Answered {answered_on}" if answered_on else ""
-    png = og_image.share_card_png(
-        share_id,
-        question=str(data.get("question") or ""),
-        score=score if isinstance(score, (int, float)) else None,
-        model_count=model_count,
-        contradiction_count=contradiction_count,
-        checked_label=checked_label,
-    )
+    if watch_page:
+        # A Watch's card tells what its page leads with, like a Topic card:
+        # that it is watched and whether the answer moved -- not a score the
+        # page no longer shows (Apple-Audit L13).
+        watch_state = _watch_state_view(
+            watch_page,
+            _build_watch_history_view(history_points, width=PAGE_CHART_WIDTH),
+            _build_watch_drift_view(
+                history_points, display_version["id"] if display_version else "",
+                query_first=bool(data.get("watch_query_only")),
+            ),
+            awaiting=bool(data.get("awaiting_first_watch_run")) and not (display_version or {}).get("snapshot"),
+            version_kind=(display_version or {}).get("kind", "fallback"),
+            selected_run_id=(display_version or {}).get("id", ""),
+            fallback_notice=(display_version or {}).get("fallback_notice", ""),
+        )
+        png = og_image.watch_card_png(
+            share_id,
+            question=str(data.get("question") or ""),
+            state_line=watch_state.get("headline") or "",
+            model_count=model_count,
+        )
+    else:
+        png = og_image.share_card_png(
+            share_id,
+            question=str(data.get("question") or ""),
+            score=score if isinstance(score, (int, float)) else None,
+            model_count=model_count,
+            contradiction_count=contradiction_count,
+            checked_label=checked_label,
+        )
     if png is None:
         raise HTTPException(status_code=404, detail="Not found")
     return Response(
@@ -610,7 +654,16 @@ def share_page(request: Request, slug_id: str):
             )
 
     sources_view = []
+    # A link back to consens.io (often this very page) is no source: it
+    # leaves the list, the direct links and the inline names, and its [S#]
+    # markers drop like those of an expired redirect (Apple-Audit L4).
+    own_sources = [
+        {"id": source.get("id")} for source in payload["sources"]
+        if source_links.is_own_page(source.get("url")) and source.get("id")
+    ]
     for source in payload["sources"]:
+        if source_links.is_own_page(source.get("url")):
+            continue
         match = re.match(r"^S(\d+)$", str(source.get("id") or ""))
         url = source.get("url") or ""
         # Grounding-Redirects zeigen sonst alle denselben Google-Host statt der
@@ -641,9 +694,9 @@ def share_page(request: Request, slug_id: str):
         watch_key_links = source_links.key_links(sources_view, payload["consensus_md"])
         site_links = source_links.site_mentions(sources_view, payload["consensus_md"])
     consensus_html = render_public_markdown(
-        payload["consensus_md"], payload["sources"],
+        payload["consensus_md"], source_links.without_own_pages(payload["sources"]),
         # Abgelaufene Weiterleitungen sind entfernt; ihre [S3]-Verweise fallen weg.
-        excluded_sources=payload["expired_sources"], site_links=site_links,
+        excluded_sources=payload["expired_sources"] + own_sources, site_links=site_links,
     )
 
     # Differences: strukturierte Karten, sonst Freitext-Fallback (markdown-
@@ -820,7 +873,8 @@ def share_page(request: Request, slug_id: str):
         "is_private": is_private,
         "question": payload["question"],
         "consensus_html": consensus_html,
-        "differences": differences,
+        # Old judge texts say "Model C"; the page names the families (L15).
+        "differences": check_page.named_differences(differences),
         "differences_data": differences_data,
         "differences_fallback_html": differences_fallback_html,
         "best_model_display": best_model_display,

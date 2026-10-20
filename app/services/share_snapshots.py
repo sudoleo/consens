@@ -329,6 +329,16 @@ def consensus_model_view(consensus_model):
                 break
     model_id = _CONSENSUS_ENGINE_MODELS.get(raw)
     model_label = cfg.get_model_label(model_id) if model_id else ""
+    if not model_label and raw in cfg.MODEL_CONFIGS:
+        # Agent runs store the model id itself ("gpt-5.6-luna"); the page
+        # printed it raw above the list that names the same model "GPT-5.6
+        # Luna" (Apple-Audit I11).
+        config = cfg.MODEL_CONFIGS[raw]
+        model_label = config.label
+        provider = provider or next(
+            (key for key in PROVIDERS_BY_LABEL if key.lower() == str(config.provider or "").lower()),
+            None,
+        )
     return {
         "provider": provider or "",
         "label": PROVIDER_CITATION_LABELS.get(provider) if provider else raw,
@@ -354,10 +364,15 @@ def consulted_models_view(included_models):
         model_name = model_name.strip()
         if model_name and "-" in model_name and " " not in model_name:
             model_name = cfg.get_model_label(model_name)
+        # "Google Gemini Gemini 3.5 Flash-Lite": a model name that already
+        # carries the family needs no label in front (Apple-Audit L15).
+        family_words = {word.lower() for word in re.findall(r"[A-Za-z]{3,}", label)}
+        named = bool(model_name) and bool(family_words & {word.lower() for word in re.findall(r"[A-Za-z]{3,}", model_name)})
         view.append({
             "provider": provider or "",
             "label": label,
             "model": model_name,
+            "display": model_name if named else " ".join(part for part in (label, model_name) if part),
             "icon": PROVIDERS_BY_LABEL[provider].icon_url if provider else "",
         })
     return view
@@ -1812,13 +1827,19 @@ def list_hub_shares(db=None, max_items=1000):
         modified = data.get("last_watch_run_at")
         if not isinstance(modified, datetime):
             modified = created_at
+        is_watch = isinstance(data.get("last_watch_run_at"), datetime)
+        # A Watch row says what its page leads with -- "Unchanged since ...",
+        # "Paused · last checked ..." -- not the score of the first answer,
+        # which the page no longer shows (Apple-Audit L2, L3).
+        watch = _hub_watch_state(db, doc.id) if is_watch else None
         entries.append({
             "path": share_path(data.get("slug") or "", doc.id),
             "question": _clip(data.get("question"), 300),
-            "score": int(score) if isinstance(score, (int, float)) else None,
-            "model_count": model_count,
-            "contradiction_count": contradictions,
-            "is_watch": isinstance(data.get("last_watch_run_at"), datetime),
+            "score": int(score) if isinstance(score, (int, float)) and not watch else None,
+            "model_count": 0 if watch else model_count,
+            "contradiction_count": 0 if watch else contradictions,
+            "is_watch": is_watch,
+            "watch": watch,
             "date_display": modified.strftime("%b %Y") if isinstance(modified, datetime) else "",
             "sort_date": modified.strftime("%Y-%m-%d") if isinstance(modified, datetime) else "",
         })
@@ -1828,6 +1849,58 @@ def list_hub_shares(db=None, max_items=1000):
     if use_cache:
         _hub_cache["hub"] = entries
     return entries
+
+
+# watch_service.WATCHES_COLLECTION; importing it here would be circular.
+WATCHES_COLLECTION = "watches"
+_PUBLIC_WATCH_STATUSES = frozenset({"active", "paused", "paused_error", "resolved"})
+
+
+def _hub_watch_state(db, share_id):
+    """The headline of a Watch page, for its row on /questions.
+
+    The Watch document a page shows is the newest public one of its share
+    (watch_service.get_public_watch_meta). It carries its last 16 history
+    points; only a longer record is read from the share's history. Read once
+    per hub cache entry (15 min); ``None`` when it cannot be read.
+    """
+    from app.services import check_page
+
+    try:
+        candidates = [
+            snapshot.to_dict() or {}
+            for snapshot in _where(db.collection(WATCHES_COLLECTION), "share_id", "==", share_id).stream()
+        ]
+    except Exception as exc:
+        logging.warning("hub watch state failed category=%s", safe_exception(exc))
+        return None
+    candidates = [item for item in candidates if item.get("status") in _PUBLIC_WATCH_STATUSES]
+    oldest = datetime.min.replace(tzinfo=timezone.utc)
+    # Without a Watch the page still shows its record as archived history.
+    watch = max(
+        candidates,
+        key=lambda item: item.get("created_at") if isinstance(item.get("created_at"), datetime) else oldest,
+        default={"status": "history"},
+    )
+    points = watch.get("history_points")
+    if not isinstance(points, list) or len(points) >= 16:
+        try:
+            points = list_watch_history(share_id, db=db)
+        except Exception as exc:
+            logging.warning("hub watch history failed category=%s", safe_exception(exc))
+            points = points if isinstance(points, list) else []
+    points = sorted(
+        (point for point in points if isinstance(point, dict) and isinstance(point.get("ts"), datetime)),
+        key=lambda point: point["ts"],
+    )
+    if not candidates and not points:
+        # Neither a Watch nor a record to show: the row keeps its own data.
+        return None
+    resolution = watch.get("resolution") if isinstance(watch.get("resolution"), dict) else {}
+    return check_page.watch_summary(
+        str(watch.get("status") or ""), points,
+        last_run=watch.get("last_run_at"), resolved_at=resolution.get("at"),
+    )
 
 
 REPORT_REASONS = ("inaccurate", "harmful", "spam", "copyright", "other")

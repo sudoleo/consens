@@ -4,7 +4,14 @@
   Same markup, same CSS (public-pages.css, .wp-*), so the two pages cannot
   drift apart. Import with context:
   {% import "partials/check_page.html" as check with context %}
+
+  Since 2026-10-20 (Apple-Audit L14) every fold on these pages is ONE
+  disclosure: text, then a chevron that turns (.wp-disclosure-toggle,
+  .wp-chevron); check-page.js animates its height and lands the focus in what
+  opened. Everything is complete without script.
 #}
+
+{% macro chevron() %}<svg class="wp-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>{% endmacro %}
 
 {# Question or title, kicker line above it, and the picture from the sources
    (Produktseite, passender Artikel oder die Logos der Seiten, um die es geht)
@@ -14,9 +21,14 @@
 <header class="wp-head{% if image %} has-image{% endif %}">
   <div class="wp-head-text">
   <p class="wp-kicker"><span class="wp-dot is-{{ status }}" aria-hidden="true"></span>{{ caller() }}</p>
-  <!-- Lange Fragen klappen auf drei Zeilen ein; ohne JS bleibt der volle Text. -->
-  <h1 id="shareQuestion" class="wp-question share-question{% if heading | length > 120 %} is-long{% endif %}{% if heading | length > 260 %} is-very-long{% endif %}">{{ heading }}</h1>
-  {% if clamp %}<button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>{% endif %}
+  {#- A long question arrives folded to three lines (with script: the clamp
+      lives in @media (scripting: enabled)), so nothing the reader has started
+      on folds up after the first paint (Apple-Audit I2). The link sits on
+      the third line instead of under it: showing it moves nothing. -#}
+  <div class="wp-question-wrap">
+    <h1 id="shareQuestion" class="wp-question share-question{% if clamp %} is-clamped{% endif %}{% if heading | length > 120 %} is-long{% endif %}{% if heading | length > 260 %} is-very-long{% endif %}">{{ heading }}</h1>
+    {% if clamp %}<button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>{% endif %}
+  </div>
   {% if subheading %}<p class="wp-subheading">{{ subheading }}</p>{% endif %}
   </div>
   {% if image and image.kind == 'symbol' %}
@@ -62,9 +74,15 @@
 {% endif %}
 {% endmacro %}
 
+{# A website's icon: same box whether it loads, is late or missing. Script
+   fades it in once loaded and puts a neutral globe in its place when it
+   fails, so a row never closes up or pops (Apple-Audit I7). #}
+{% macro favicon(domain, class_name, size) %}<img class="{{ class_name }} site-icon" src="/api/topics/favicon?d={{ domain | urlencode }}" alt="" width="{{ size }}" height="{{ size }}" loading="lazy" referrerpolicy="no-referrer">{% endmacro %}
+
 {# Direkt zu den Seiten, um die es geht (source_links.key_links): wer ein
    Thema verfolgt, will selbst nachsehen, nicht erst die Quellenliste am Ende
-   suchen. Navigation, kein Beleg einzelner Sätze. #}
+   suchen. Navigation, kein Beleg einzelner Sätze. On a phone a swipeable row,
+   so the answer starts on the first screen (Apple-Audit L6). #}
 {% macro direct_links(links) %}
 {% if links %}
 <section class="wp-links" aria-labelledby="wpLinksHeading">
@@ -73,7 +91,7 @@
     {% for link in links %}
     <li>
       <a class="wp-link" href="{{ link.url }}" target="_blank" rel="nofollow noopener noreferrer">
-        <img class="wp-link-icon" src="/api/topics/favicon?d={{ link.domain | urlencode }}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">
+        {{ favicon(link.domain, "wp-link-icon", 20) }}
         <span class="wp-link-body">
           <span class="wp-link-title">{{ link.title }}</span>
           {% if link.domain != link.title %}<span class="wp-link-domain">{{ link.domain }}</span>{% endif %}
@@ -87,18 +105,21 @@
 {% endif %}
 {% endmacro %}
 
-{# The answer and the sources behind it. #}
+{# The answer and the sources behind it. More than five sources arrive
+   folded, so going back to the page lands where the reader was instead of
+   above a list that folds after the scroll was restored (Apple-Audit L11). #}
 {% macro answer(label, answer_html, sources, heading_class="wp-label") %}
+{% set folded = sources | length > 5 %}
 <section class="wp-answer" aria-labelledby="wpAnswerHeading">
   <h2 id="wpAnswerHeading" class="{{ heading_class }}">{{ label }}</h2>
   <div class="share-md">{{ answer_html | safe }}</div>
   {% if sources %}
   <h3 class="wp-label wp-sources-label">Sources</h3>
-  <ol id="shareSources" class="share-sources">
+  <ol id="shareSources" class="share-sources{% if folded %} is-collapsed is-short{% endif %}">
     {% for source in sources %}
     <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
       <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
-      {% if source.domain %}<img class="share-source-favicon" src="/api/topics/favicon?d={{ source.domain | urlencode }}" alt="" loading="lazy" width="18" height="18" referrerpolicy="no-referrer">{% endif %}
+      {% if source.domain %}{{ favicon(source.domain, "share-source-favicon", 18) }}{% endif %}
       <span class="share-source-body">
         <a class="share-source-title" href="{{ source.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ source.title }}</a>
         {% if source.domain and source.domain != source.title %}<span class="share-source-domain">{{ source.domain }}</span>{% endif %}
@@ -106,8 +127,8 @@
     </li>
     {% endfor %}
   </ol>
-  {% if sources | length > 5 %}
-  <button type="button" id="shareSourcesToggle" class="share-sources-toggle" hidden>Show all {{ sources | length }} sources</button>
+  {% if folded %}
+  <button type="button" id="shareSourcesToggle" class="wp-disclosure-toggle share-sources-toggle" aria-expanded="false" aria-controls="shareSources">Show all {{ sources | length }} sources{{ chevron() }}</button>
   {% endif %}
   {% endif %}
 </section>
@@ -121,7 +142,9 @@
 
 {# Die Agreement-Kurve nur auf breiten Bildschirmen (CSS blendet sie unter
    700 px aus): dort ist Platz, auf dem Handy war sie nur Lärm. Jeder Punkt
-   springt zu seinem Check in der Zeitleiste. #}
+   springt zu seinem Check in der Zeitleiste. A check that moved the answer is
+   the amber of the timeline below, larger; a check without a score sits as a
+   hollow mark on the axis instead of leaving a gap (Apple-Audit L7). #}
 {% macro agreement_chart(history) %}
 <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
      aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}. Select a point to jump to that check.">
@@ -133,11 +156,13 @@
   <text class="watch-axis-label" x="13" y="94">50</text>
   <text class="watch-axis-label" x="21" y="165">0</text>
   <path class="watch-chart-line" d="{{ history.path }}"></path>
-  {% for point in history.points if point.y is not none %}
+  {% for point in history.points %}
+  {% set changed = point.trigger == 'changed' %}
+  {% set scored = point.y is not none %}
   <a class="watch-chart-target" href="#watch-run-{{ point.anchor_id }}"
-     aria-label="{{ point.day }}: {{ point.agreement_score }} out of 100 agreement{% if point.trigger == 'changed' and point.change_summary %}. {{ point.change_summary }}{% endif %}">
-    <circle class="watch-chart-point{% if point.trigger == 'changed' %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.trigger == 'changed' %}5{% else %}4{% endif %}">
-      <title>{{ point.day }}: {{ point.agreement_score }}/100{% if point.trigger == 'changed' %} · the answer changed{% endif %}</title>
+     aria-label="{{ point.day }}: {% if scored %}{{ point.agreement_score }} out of 100 agreement{% else %}no agreement score{% endif %}{% if changed %}. The answer changed{% if point.change_summary %}: {{ point.change_summary }}{% endif %}{% endif %}">
+    <circle class="watch-chart-point{% if changed %} is-change{% endif %}{% if not scored %} is-unscored{% endif %}" cx="{{ point.x }}" cy="{{ point.y if scored else 160 }}" r="{% if changed %}6{% elif scored %}4{% else %}3.5{% endif %}">
+      <title>{{ point.day }}: {% if scored %}{{ point.agreement_score }}/100{% else %}no score{% endif %}{% if changed %} · the answer changed{% endif %}</title>
     </circle>
   </a>
   {% endfor %}
@@ -147,8 +172,10 @@
 {% endmacro %}
 
 {# History: only the checks that moved the answer stand on their own, plus
-   the newest and the first one; quiet checks fold into one entry. #}
-{% macro history(page_history, selected, start_title, start_text, notes=[]) %}
+   the newest and the first one; quiet checks fold into one entry.
+   ``shown_text`` is the sentence the state box above already says: the entry
+   it comes from does not print it a second time (Apple-Audit L16). #}
+{% macro history(page_history, selected, start_title, start_text, notes=[], shown_text="") %}
 {% if page_history and page_history.timeline %}
 <section class="wp-history" aria-labelledby="wpHistoryHeading">
   <h2 id="wpHistoryHeading" class="wp-label">History</h2>
@@ -156,7 +183,7 @@
   {% if page_history.points | length > 1 and page_history.path %}
   <figure class="wp-chart">
     {{ agreement_chart(page_history) }}
-    <figcaption>How strongly the models agree, per check. Filled points mark checks that changed the answer.</figcaption>
+    <figcaption>How strongly the models agree, per check. Amber points mark checks that changed the answer.</figcaption>
   </figure>
   {% endif %}
   <ol class="wp-timeline">
@@ -164,16 +191,19 @@
     {% set point = entry.points[0] %}
     {% if entry.kind == "quiet" %}
     <li class="wp-event is-quiet">
-      <details{% if selected.id in entry.run_ids %} open{% endif %}>
+      <details class="wp-disclosure"{% if selected.id in entry.run_ids %} open{% endif %}>
         <summary>
           <time datetime="{{ entry.points[-1].ts.isoformat() }}">{{ entry.points[-1].day }}{% if entry.points | length > 1 %} – {{ point.day }}{% endif %}</time>
           <span class="wp-event-title">{% if entry.points | length > 1 %}{{ entry.points | length }} checks, no change{% else %}Checked, no change{% endif %}</span>
+          <span class="wp-disclosure-toggle" aria-hidden="true"><span class="wp-disclosure-show">Show</span><span class="wp-disclosure-hide">Hide</span>{{ chevron() }}</span>
         </summary>
+        <div class="wp-disclosure-body">
         <ul class="wp-quiet-list">
           {% for item in entry.points %}
           <li id="watch-run-{{ item.anchor_id }}" tabindex="-1"><time datetime="{{ item.ts.isoformat() }}">{{ item.day }}</time>{% if item.restated %}<span>same answer, new wording</span>{% elif item.signal == "held" %}<span>sources did not come up, answer stands</span>{% elif item.signal == "reverted" %}<span>a different reading, set aside</span>{% endif %}{{ version_link(item, selected) }}</li>
           {% endfor %}
         </ul>
+        </div>
       </details>
     </li>
     {% else %}
@@ -181,7 +211,7 @@
       <time datetime="{{ point.ts.isoformat() }}">{{ point.day }}{% if entry.kind == "start" %}, {{ point.ts.year }}{% endif %}</time>
       {% if entry.kind == "moved" %}
       <p class="wp-event-title">The answer changed</p>
-      {% if point.change_summary %}<p class="wp-event-text">{{ point.change_summary }}</p>{% endif %}
+      {% if point.change_summary and not (shown_text and point.run_id == selected.id and point.change_summary == shown_text) %}<p class="wp-event-text">{{ point.change_summary }}</p>{% endif %}
       {% if point.evidence_sources %}
       <ul class="wp-evidence">
         {% for item in point.evidence_sources[:3] %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
@@ -210,15 +240,21 @@
 {% endif %}
 {% endmacro %}
 
-{# How the models compared, folded: for the reader who wants the apparatus. #}
+{# How the models compared, folded: for the reader who wants the apparatus.
+   One material per card: the kind as a quiet label, the claim, each side as
+   text with its families, the quote set back, "How to verify" as a line --
+   no pill, boxes or amber panel (Apple-Audit L15). The share router names the
+   families in place of the judge's "Model A/B/C"
+   (check_page.named_differences). #}
 {% macro models_compared(model_count, contradiction_count, consulted_models, differences, differences_fallback_html) %}
-<details class="wp-more">
-  <summary>How the {% if model_count %}{{ model_count }} {% endif %}models compared{% if contradiction_count %} &middot; {{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }}{% endif %}</summary>
-  {% if consulted_models %}<p class="wp-models">{% for m in consulted_models %}{{ m.label }}{% if m.model %} {{ m.model }}{% endif %}{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>{% endif %}
+<details class="wp-more wp-disclosure">
+  <summary><span class="wp-disclosure-toggle">How the {% if model_count %}{{ model_count }} {% endif %}models compared{% if contradiction_count %} &middot; {{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }}{% endif %}{{ chevron() }}</span></summary>
+  <div class="wp-disclosure-body">
+  {% if consulted_models %}<p class="wp-models">{% for m in consulted_models %}{{ m.display or ((m.label ~ " " ~ m.model) if m.model else m.label) }}{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>{% endif %}
   {% if differences %}
   {% for diff in differences %}
-  <article class="diff-card">
-    <span class="diff-type{% if diff.type == 'contradiction' %} diff-type-contradiction{% endif %}">{{ diff.type or "difference" }}{% if diff.severity == 'major' %} &middot; critical{% elif diff.severity == 'minor' %} &middot; minor detail{% endif %}</span>
+  <article class="diff-card wp-diff{% if diff.type == 'contradiction' %} is-contradiction{% endif %}">
+    <p class="wp-diff-kind">{{ (diff.type or "difference") | capitalize }}{% if diff.severity == 'major' %} &middot; critical{% elif diff.severity == 'minor' %} &middot; minor detail{% endif %}</p>
     <h3>{{ diff.claim }}</h3>
     {% for position in diff.positions %}
     <div class="diff-position">
@@ -235,5 +271,6 @@
   {% else %}
   <p class="wp-models">The models broadly agree; no notable differences.</p>
   {% endif %}
+  </div>
 </details>
 {% endmacro %}

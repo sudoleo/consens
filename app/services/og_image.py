@@ -2,7 +2,9 @@
 
 Statt des Favicons zeigt der Link-Preview die Frage der Seite: darüber leise
 das Datum, unten neben der Wortmarke, was hinter der Antwort steht (Agreement,
-Modelle, Widersprüche). Rein aus gespeicherten Daten gerendert – keine LLM-Calls.
+Modelle, Widersprüche). Watch- und Topic-Karten tragen statt Datum und Score
+den Zustand ihrer Seite („Watch · Unchanged since …“, seit 2026-10-20). Rein
+aus gespeicherten Daten gerendert – keine LLM-Calls.
 Dazu die Markenkarte für alle übrigen Seiten (``render_brand_card``, als
 static/og-home-v2.png gespeichert von scripts/render_brand_card.py).
 
@@ -298,6 +300,18 @@ def card_png(cache_id: str, *, question: str, score=None, facts: list[str] = (),
         return None
     _cache[key] = png
     return png
+
+
+def watch_card_png(share_id: str, *, question: str, state_line: str,
+                   model_count: int) -> bytes | None:
+    """A Watch's card, built like a Topic card: above the question what its
+    page leads with ("Watch · Unchanged since Sep 24", "Watch · Paused · last
+    checked Oct 1"), no score -- the page shows none (Apple-Audit L13)."""
+    return card_png(
+        f"watch:{share_id}", question=question,
+        facts=[f"{model_count} AI models" if model_count else "Several AI models"],
+        dateline=" · ".join(part for part in ("Watch", state_line) if part),
+    )
 
 
 def share_card_png(share_id: str, *, question: str, score, model_count: int,

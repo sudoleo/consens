@@ -28,6 +28,28 @@ MAX_CARD_LINKS = 3
 MAX_INLINE_LINKS = 8
 MIN_NAME_LENGTH = 4
 
+# consens.io itself. A search that finds the page about this very question
+# hands it back as a source: a Watch then cited itself, under "Direct links"
+# and in its source list (Apple-Audit L4). Such a link is never evidence.
+OWN_HOSTS = ("consens.io",)
+
+
+def is_own_page(url) -> bool:
+    """True for a link to consens.io (any subdomain)."""
+    try:
+        host = (urlsplit(str(url or "")).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    return any(host == own or host.endswith("." + own) for own in OWN_HOSTS)
+
+
+def without_own_pages(sources) -> list:
+    """The sources without links to consens.io (see ``is_own_page``)."""
+    return [
+        source for source in sources or []
+        if not (isinstance(source, dict) and is_own_page(source.get("url")))
+    ]
+
 
 def source_entries(sources) -> list[dict]:
     """Gespeicherte Quellen als Einträge mit Domain, Site-Name und ob die URL
@@ -94,7 +116,7 @@ def _quality(entry: dict) -> int:
 
 def _usable(entry: dict) -> bool:
     url = str(entry.get("url") or "")
-    return url.startswith(("https://", "http://")) and bool(entry.get("domain"))
+    return url.startswith(("https://", "http://")) and bool(entry.get("domain")) and not is_own_page(url)
 
 
 def best_by_domain(sources) -> dict[str, dict]:
@@ -164,7 +186,15 @@ def site_mentions(sources, text: str, limit: int = MAX_INLINE_LINKS) -> list[dic
     return [item for _start, item in found[:limit]]
 
 
-_TITLE_SEPARATORS = re.compile(r"\s+(?:[-|–—·:]|::)\s+")
+# " - ", " | ", " · ", " \ " (Anthropic writes "Introducing Claude \ Anthropic").
+_TITLE_SEPARATORS = re.compile(r"\s+(?:[-|–—·:\\/]|::)\s+")
+# Product names a site signs its titles with ("... - ChatGPT" on
+# help.openai.com): stripped like the site's own name.
+_SITE_ALIASES = {
+    "openai": ("chatgpt",),
+    "anthropic": ("claude",),
+    "google": ("gemini",),
+}
 
 
 def _slug_title(url: str) -> str:
@@ -206,10 +236,16 @@ def display_title(entry: dict) -> str:
     if title.lower().removeprefix("www.") == domain and entry.get("is_direct"):
         return _slug_title(str(entry.get("url") or "")) or title
     names = {str(entry.get("site") or "").lower(), str(entry.get("domain") or "").lower()} - {""}
+    names |= {alias for name in list(names) for alias in _SITE_ALIASES.get(name.split(".")[0], ())}
     parts = _TITLE_SEPARATORS.split(title)
     while len(parts) > 1:
         tail = parts[-1].strip().lower().replace(" ", "")
-        if not any(name in tail or (len(tail) >= 4 and tail in name) for name in names):
+        # "Owner's Manual - Amp" on ampcode.com: a short brand that starts the
+        # site's name counts as the name too.
+        if not any(
+            name in tail or (len(tail) >= 4 and tail in name) or (len(tail) >= 3 and name.startswith(tail))
+            for name in names
+        ):
             break
         parts.pop()
     cleaned = " - ".join(part.strip() for part in parts).strip()
@@ -241,10 +277,19 @@ def key_links(sources, text: str, limit: int = MAX_KEY_LINKS) -> list[dict]:
             continue
         ranked.append((-(int(mentioned) * 3 + quality), order.get(id(entry), 0), entry))
     ranked.sort(key=lambda item: item[:2])
-    return [
-        {**entry, "title": display_title(entry)}
-        for *_rank, entry in ranked[:limit]
-    ]
+    # Two tiles with the same title (a GitHub file and its issue page) read
+    # as a doubled link: the better-ranked one stays (Apple-Audit L12).
+    links, titles = [], set()
+    for *_rank, entry in ranked:
+        title = display_title(entry)
+        key = re.sub(r"\W+", " ", title).strip().lower()
+        if key in titles:
+            continue
+        titles.add(key)
+        links.append({**entry, "title": title})
+        if len(links) == limit:
+            break
+    return links
 
 
 def card_links(sources, text: str, limit: int = MAX_CARD_LINKS) -> list[dict]:

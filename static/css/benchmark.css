@@ -210,7 +210,9 @@
 
 .bench-chart.is-visible .bench-bar { height: calc(var(--val) * var(--scale)); }
 
-/* consens.io: the subject of the page, solid brand blue (no glow). */
+/* consens.io: the subject of the page, solid in the accent ink -- black in
+   light, white in dark; the caption calls it "the highlighted bar" (no colour
+   name, Apple-Audit I10). */
 .bench-col.is-consensus .bench-bar {
   border-color: var(--bench-consensus-edge);
   background: var(--bench-consensus-fill);

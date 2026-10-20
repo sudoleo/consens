@@ -73,17 +73,24 @@
             data-score="{{ entry.score if entry.score is not none else -1 }}"
             data-contradictions="{{ entry.contradiction_count }}">
           <a href="{{ entry.path }}" class="hub-row" data-umami-event="hub_question_click">
+            {#- A Watch row says what its page leads with (check_page.watch_summary):
+                the state, never the score of the first answer the page no
+                longer shows (Apple-Audit L2, L3). -#}
+            {% if entry.watch %}
+            <span class="hub-score is-watch{% if entry.watch.active %} is-active{% endif %}" aria-hidden="true"><i></i>Watch</span>
+            {% else %}
             <span class="hub-score{% if entry.score is none %} is-empty{% elif entry.score >= 75 %} is-high{% elif entry.score >= 50 %} is-mid{% else %} is-low{% endif %}"
                   aria-label="{% if entry.score is not none %}Agreement {{ entry.score }} out of 100{% else %}No agreement score{% endif %}">
               {% if entry.score is not none %}{{ entry.score }}<small>/100</small>{% else %}&mdash;{% endif %}
             </span>
+            {% endif %}
             <span class="hub-main">
               <span class="hub-question">{{ entry.question }}</span>
               <span class="hub-meta">
+                {% if entry.watch %}<span class="hub-meta-watch is-{{ entry.watch.tone }}"><span class="visually-hidden">Watch: </span>{{ entry.watch.headline }}</span>{% endif %}
                 {% if entry.model_count %}<span>{{ entry.model_count }} model{{ "s" if entry.model_count != 1 }}</span>{% endif %}
                 {% if entry.contradiction_count %}<span class="hub-meta-contradiction">{{ entry.contradiction_count }} contradiction{{ "s" if entry.contradiction_count != 1 }}</span>{% endif %}
-                {% if entry.is_watch %}<span class="hub-meta-watch"><i aria-hidden="true"></i>Tracked</span>{% endif %}
-                {% if entry.date_display %}<span>{{ entry.date_display }}</span>{% endif %}
+                {% if entry.date_display and not entry.watch %}<span>{{ entry.date_display }}</span>{% endif %}
               </span>
             </span>
             <span class="hub-arrow" aria-hidden="true">&rarr;</span>

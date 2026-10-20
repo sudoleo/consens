@@ -10,10 +10,16 @@ what counts as movement (docs/watch-evidence-model.md).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from app.services import drift_signal
-from app.services.history_view import day_label
+from app.services.history_view import build_history_view, day_label
+
+# A paused Watch is not checked any more. Its page says so first, in grey,
+# instead of promising "Unchanged since ..." in green for weeks after its last
+# check (Apple-Audit L2; Max: shown honestly, not restarted).
+PAUSED_STATUSES = frozenset({"paused", "paused_error"})
 
 
 def drift_view(history_points, selected_run_id="", query_first=False):
@@ -73,13 +79,15 @@ def state_view(
     points = (history or {}).get("points") or []
     start = points[0]["ts"] if points else None
     facts = []
+    paused = page.get("status") in PAUSED_STATUSES
     if len(points) > 1:
         facts.append(f"Checked {len(points)} times since {day_label(start)}")
     elif start:
         facts.append(f"First checked {day_label(start)}")
     if page["is_active"] and page["next_run"]["day"]:
         facts.append(f"next check {page['next_run']['day']}")
-    elif not page["is_active"]:
+    elif not page["is_active"] and not paused:
+        # A paused page says it in its headline; the facts would repeat it.
         facts.append(page["status_label"].lower())
     state = {"tone": "steady", "headline": "", "text": "", "sources": [], "note": "", "facts": facts}
 
@@ -102,6 +110,10 @@ def state_view(
         return {**state, "tone": "resolved",
                 "headline": f"Resolved on {resolution['at']['day']}" if resolution["at"]["day"] else "Resolved",
                 "text": resolution["reason"], "sources": resolution["sources"]}
+    if paused:
+        last = (page.get("last_run") or {}).get("day") or ""
+        return {**state, "tone": "paused",
+                "headline": f"Paused · last checked {last}" if last else "Paused"}
     drift = drift or {}
     if drift.get("pending_check"):
         pending = drift["pending_check"]
@@ -116,3 +128,98 @@ def state_view(
     if since:
         state["headline"] = f"Unchanged since {day_label(since)}"
     return state
+
+
+def watch_summary(status, points, *, last_run=None, resolved_at=None):
+    """The headline of a Watch page for the places that point at it: its row
+    on /questions and its preview card (Apple-Audit L3, L13).
+
+    Built by :func:`state_view` from the same history, so the list and the
+    card can no longer announce a score or a state the page does not show.
+    ``points`` are the Watch's history points, oldest first.
+    """
+    points = list(points or [])
+    history = build_history_view(points) if points else None
+    page = {
+        "is_active": status == "active",
+        "status": status,
+        "status_label": str(status or "").replace("_", " ").capitalize(),
+        "next_run": {"day": ""},
+        "last_run": {"day": day_label(last_run) if isinstance(last_run, datetime) else ""},
+        "resolution": (
+            {"at": {"day": day_label(resolved_at) if isinstance(resolved_at, datetime) else ""},
+             "reason": "", "sources": []}
+            if status == "resolved" else None
+        ),
+    }
+    state = state_view(
+        page, history, drift_view(points), awaiting=False,
+        version_kind="current", selected_run_id="",
+    )
+    return {"tone": state["tone"], "headline": state["headline"], "active": status == "active"}
+
+
+# "Model C claims ... whereas Models A and B ...": the judge's own labels.
+# Since 2026-10-16 the judge step names the real models itself
+# (consensus_engine._named_models); pages written before keep the letters.
+_JUDGE_LABEL = re.compile(r"\bModels?\s+([A-Z](?:\s*(?:,|/|&|\band\b|\bor\b)\s*[A-Z])*)\b")
+
+
+def _label_letters(text: str) -> list[str]:
+    letters: list[str] = []
+    for match in _JUDGE_LABEL.finditer(str(text or "")):
+        for letter in re.findall(r"[A-Z]", match.group(1)):
+            if letter not in letters:
+                letters.append(letter)
+    return letters
+
+
+def named_differences(differences):
+    """Differences with "Model A/B/C" replaced by the families the page names
+    next to each position, and without a family line that only repeats the
+    stance (Apple-Audit L15). Readers had to map "Model C" to "Gemini"
+    themselves.
+
+    The letters are one judge call's anonymization, so one mapping holds for
+    every difference on the page. It is read off the positions: a stance that
+    names exactly as many letters as the position lists families pairs them in
+    order. A letter that cannot be placed keeps its text.
+    """
+    differences = [diff for diff in differences or [] if isinstance(diff, dict)]
+    mapping: dict[str, str] = {}
+    for _round in range(2):
+        for diff in differences:
+            for position in diff.get("positions") or []:
+                if not isinstance(position, dict):
+                    continue
+                letters = _label_letters(position.get("stance"))
+                models = [str(model) for model in position.get("models") or [] if model]
+                if not letters or len(letters) != len(models):
+                    continue
+                for letter, model in zip(letters, models):
+                    if letter in mapping or model in mapping.values():
+                        continue
+                    mapping[letter] = model
+
+    def name(text):
+        def replace(match):
+            letters = re.findall(r"[A-Z]", match.group(1))
+            if not all(letter in mapping for letter in letters):
+                return match.group(0)
+            return re.sub(r"[A-Z]", lambda found: mapping[found.group(0)], match.group(1))
+        return _JUDGE_LABEL.sub(replace, str(text or ""))
+
+    named = []
+    for diff in differences:
+        positions = []
+        for position in diff.get("positions") or []:
+            if not isinstance(position, dict):
+                continue
+            stance = name(position.get("stance"))
+            models = list(position.get("models") or [])
+            if models and all(str(model) in stance for model in models):
+                models = []
+            positions.append({**position, "stance": stance, "models": models})
+        named.append({**diff, "claim": name(diff.get("claim")),
+                      "verify": name(diff.get("verify")), "positions": positions})
+    return named
