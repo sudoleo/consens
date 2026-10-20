@@ -690,7 +690,7 @@ def _follow_link_step(path: str, token: str, *, unsubscribe: bool, heading: str,
 
 @router.get("/topic-follow/confirm", response_class=HTMLResponse)
 @limiter.limit("20/minute")
-async def topic_follow_confirm_page(request: Request, token: str = ""):
+def topic_follow_confirm_page(request: Request, token: str = ""):
     return _follow_link_step(
         "/topic-follow/confirm", token, unsubscribe=False,
         heading="Confirm your follow",
@@ -718,7 +718,7 @@ async def topic_follow_confirm(request: Request, token: str = ""):
 
 @router.get("/topic-follow/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
-async def topic_follow_unsubscribe_page(request: Request, token: str = ""):
+def topic_follow_unsubscribe_page(request: Request, token: str = ""):
     return _follow_link_step(
         "/topic-follow/unsubscribe", token, unsubscribe=True,
         heading="Unfollow this topic?",
