@@ -676,10 +676,9 @@ dialog.modal::backdrop {
 }
 
 .settings-version {
-  color: var(--sidebar-text-muted);
+  color: var(--ink-3);
   font-size: var(--font-size-micro);
   line-height: var(--line-height-solid);
-  opacity: 0.62;
 }
 
 /* Unter 700px hat eine Navigationsspalte neben dem Panel keinen Platz mehr: die

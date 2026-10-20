@@ -24,21 +24,29 @@
      marketing pages and the product mockups they contain must be made of the
      same material as /app, otherwise the screenshots stop being screenshots. */
   --ground: #fafafa;
-  --raise: #f5f5f5;
+  --raise: #eeeeee;
   --well: #fff;
   --ink: #222428;
-  --ink-2: #5c5f66;
-  --ink-3: #64676d;
+  --ink-2: #4a4d53;
+  --ink-3: #606369;
   --line: rgba(34, 36, 40, 0.14);
   --line-soft: rgba(34, 36, 40, 0.07);
   --lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
 
-  --agree: #287d68;
-  --agree-bg: #e1efe9;
-  --partial: #946b1f;
-  --partial-bg: #f7edcf;
-  --dispute: #b14f5b;
-  --dispute-bg: #f5e0e3;
+  --agree: #217863;
+  --agree-bg: #e0efea;
+  --partial: #896512;
+  --partial-bg: #fbebcf;
+  --dispute: #ad4b57;
+  --dispute-bg: #f5e0e1;
+
+  /* Interaction steps and the raised field: same values as variables.css. */
+  --hover-mix: 6%;
+  --selected-mix: 10%;
+  --field: var(--well);
+  --field-line: rgba(34, 36, 40, 0.11);
+  --field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
+  --field-lift-active: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
 
   --text-primary: var(--ink);
   --text-secondary: var(--ink-3);
@@ -63,7 +71,7 @@
 
   --sidebar-text-muted: var(--text-secondary);
   --sidebar-border: var(--line-soft);
-  --sidebar-hover: var(--raise);
+  --sidebar-hover: var(--hover);
   --slider-bg: #cccccc;
 
   --response-bg: var(--raise);
@@ -109,7 +117,7 @@
   --raise: #212325;
   --well: #26282b;
   --ink: #ededed;
-  --ink-2: #a7a9ad;
+  --ink-2: #b0b2b6;
   --ink-3: #94979b;
   --line: rgba(255, 255, 255, 0.14);
   --line-soft: rgba(255, 255, 255, 0.07);
@@ -119,8 +127,15 @@
   --agree-bg: rgba(109, 192, 164, 0.17);
   --partial: #dcb163;
   --partial-bg: rgba(220, 177, 99, 0.17);
-  --dispute: #db8368;
-  --dispute-bg: rgba(219, 131, 104, 0.17);
+  --dispute: #f07f76;
+  --dispute-bg: rgba(240, 127, 118, 0.17);
+
+  --hover-mix: 4.5%;
+  --selected-mix: 8%;
+  --field: var(--well);
+  --field-line: rgba(255, 255, 255, 0.11);
+  --field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
+  --field-lift-active: 0 2px 5px rgba(0, 0, 0, 0.36), 0 22px 44px -20px rgba(0, 0, 0, 0.6);
 
   --text-primary: var(--ink);
   --text-secondary: var(--ink-3);
@@ -144,7 +159,7 @@
   --button-text: #141414;
 
   --sidebar-border: var(--line-soft);
-  --sidebar-hover: var(--raise);
+  --sidebar-hover: var(--hover);
   --slider-bg: #636363;
 
   --response-bg: var(--raise);

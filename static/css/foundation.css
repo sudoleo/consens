@@ -43,3 +43,58 @@
   --light: var(--agree);
   --light-core: color-mix(in srgb, var(--agree) 88%, white);
 }
+
+/* Interaction tokens, derived from the theme values in variables.css /
+   public-tokens.css. Declared on .dark-mode as well: /app puts the dark
+   class on <body>, and a custom property that names another one is resolved
+   where it is declared, so a :root-only definition would hand the light ink
+   to a dark body. */
+:root,
+.dark-mode {
+  /* Hover is a tone step, never transparency of the control (Apple-Audit
+     G5). An ink wash, so the same step reads on ground, raise and well:
+     ghost buttons, menu rows, list rows. --selected is the next step
+     (pressed, the current row, the chosen segment). */
+  --hover: color-mix(in srgb, var(--ink) var(--hover-mix, 6%), transparent);
+  --selected: color-mix(in srgb, var(--ink) var(--selected-mix, 10%), transparent);
+  /* The same steps for a control that is FILLED with --raise at rest (a
+     neutral pill, a chip): opaque, one step above its own tone. A wash
+     would replace the fill and read lighter than the resting state. */
+  --raise-hover: color-mix(in srgb, var(--raise), var(--ink) var(--hover-mix, 6%));
+  --raise-selected: color-mix(in srgb, var(--raise), var(--ink) var(--selected-mix, 10%));
+  /* The filled primary (.btn) steps toward the page on hover, in both
+     themes: no opacity, no lift, no glow (Apple-Audit G4). */
+  --button-bg-hover: color-mix(in srgb, var(--button-bg) 86%, var(--ground));
+
+  /* Field focus (Apple-Audit G12): one look for every text field. The
+     border darkens and a soft ring of the same ink lies outside it, so the
+     field never changes size. Use both:
+       border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); */
+  --field-focus-border: color-mix(in srgb, var(--ink) 50%, transparent);
+  --field-focus-ring: 0 0 0 3px color-mix(in srgb, var(--ink) 10%, transparent);
+
+  /* The chevron (Apple-Audit G11): one drawn symbol for every disclosure,
+     menu and "more" arrow, painted in currentColor through a mask so it
+     scales with the text and stays sharp. It points DOWN; turn it with
+     --chevron-turn (-90deg = right, 90deg = left, 180deg = up). */
+  /* A document (file without a picture), for type plaques. */
+  --file-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3.5V8h4.5M9 13h6M9 16.5h4'/%3E%3C/svg%3E");
+  --chevron-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 5.5l5 5 5-5' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* The chevron as an element: <span class="chevron" aria-hidden="true"></span>.
+   Pseudo-element chevrons use the same three lines (mask, currentColor,
+   --chevron-turn) with --chevron-mask. Size follows the font: 1em box, the
+   stroke sits in its middle half. */
+.chevron {
+  display: inline-block;
+  flex-shrink: 0;
+  width: var(--chevron-size, 1em);
+  height: var(--chevron-size, 1em);
+  background-color: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(var(--chevron-turn, 0deg));
+  transition: transform var(--dur-state) var(--ease-standard);
+  vertical-align: middle;
+}

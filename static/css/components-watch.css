@@ -199,7 +199,7 @@ body.is-view-settle.is-watch-view .watch-page {
   background: color-mix(in srgb, var(--sidebar-border) 78%, transparent);
 }
 .watch-limit-meter i { display: block; height: 100%; border-radius: inherit; background: var(--ink-2); }
-.watch-limit-detail { margin-top: 4px; opacity: .9; }
+.watch-limit-detail { margin-top: 4px; color: var(--ink-2); }
 .watch-limit-detail span + span::before { content: "·"; margin-right: 8px; }
 .watch-limit-sep { color: var(--ink-3); }
 .watch-limit-upgrade {

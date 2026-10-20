@@ -87,11 +87,11 @@ function rule(css, selector) {
 
 describe("contrast of the footer note and the close mark (F10)", () => {
   const variables = read("static/css/variables.css");
-  const shell = read("static/css/shell.css");
   const [lightInk3, darkInk3] = [...variables.matchAll(/--ink-3:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]);
   const [lightGround, darkGround] = [...variables.matchAll(/--ground:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]);
-  const lightSurface = shell.match(/body:not\(\.dark-mode\) \{[^}]*--app-surface:\s*(#[0-9a-f]{6})/i)[1];
-  const darkSurface = shell.match(/body\.dark-mode \{\s*--app-surface:\s*(#[0-9a-f]{6})/i)[1];
+  // Dialogs and menus sit on --raise; /app no longer paints its own surface
+  // in shell.css (Apple-Audit G7).
+  const [lightSurface, darkSurface] = [...variables.matchAll(/--raise:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]);
 
   it("colours both with --ink-3", () => {
     const consensus = read("static/css/components-consensus.css");
@@ -105,6 +105,6 @@ describe("contrast of the footer note and the close mark (F10)", () => {
     expect(contrast(lightInk3, lightGround)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(darkInk3, darkGround)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(lightInk3, lightSurface)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(darkInk3, darkSurface)).toBeGreaterThanOrEqual(3);
+    expect(contrast(darkInk3, darkSurface)).toBeGreaterThanOrEqual(4.5);
   });
 });

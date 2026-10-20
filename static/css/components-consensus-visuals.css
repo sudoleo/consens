@@ -346,32 +346,64 @@
      die gemessenen Saetze sehen und nicht die ungemessenen. */
   --cx-mark-thin: #f2f3f5;
   --cx-mark-thin-strong: #e7e9ed;
-  /* Deckend, ueber --ground gemischt: Honig 27 % / 40 %, Rot 17 % / 28 %. */
-  --cx-mark-split: #f7e7c2;
-  --cx-mark-split-strong: #f6dea6;
+  /* Eine Bedeutung, eine Farbe (Apple-Audit G15): Gruen, Bernstein und Rot
+     der Marken sind die Ampel-Tokens (--agree/--partial/--dispute) als
+     duenne Schicht - derselbe Farbton wie Punkte, Labels und Schienen,
+     nur Helligkeit und Buntheit einer Markierung. Abgeleitet wird darunter
+     per oklch(from ...); diese Werte sind dieselbe Rechnung als feste Farbe
+     fuer Browser ohne relative Farben (ein Test haelt sie im Gleichschritt). */
+  --cx-mark-agree: #e7f6f1;
+  --cx-mark-agree-strong: #d7f3e9;
+  --cx-mark-split: #fae6c2;
+  --cx-mark-split-strong: #fadca6;
   --cx-mark-major: #f6dcdd;
   --cx-mark-major-strong: #f4c8ca;
+  /* Bernstein-Note der Badges und der kurze Aufblitz einer geoeffneten Karte. */
+  --cx-major-line: var(--partial);
+  --cx-flash: rgba(208, 161, 64, 0.16);
 }
 
 .dark-mode {
-  /* Dieselben Systemfarben in ihrer Dark-Variante, transparent gemischt.
-     Rot mischt bewusst NICHT aus --dispute: das dunkle Korall (#db8368)
-     liegt im Farbton so nah am Bernstein, dass Widerspruch und geteilte
-     Zustimmung als dieselbe braune Flaeche erschienen (dE 2,7) und Bernstein
-     sogar lauter war als Rot. */
-  --cx-mark-agree: color-mix(in srgb, #30d158 9%, transparent);
-  --cx-mark-agree-strong: color-mix(in srgb, #30d158 17%, transparent);
+  /* Dieselben Ampel-Toene in leuchtender Fassung, transparent gemischt;
+     die Schrift einer markierten Stelle nimmt denselben Ton an (Ton in Ton). */
   --cx-mark-note: color-mix(in srgb, var(--ink) 9%, transparent);
   --cx-mark-note-strong: color-mix(in srgb, var(--ink) 16%, transparent);
   --cx-mark-thin: color-mix(in srgb, var(--ink) 6%, transparent);
   --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 13%, transparent);
-  --cx-mark-split: color-mix(in srgb, #f0b429 17%, transparent);
-  --cx-mark-split-strong: color-mix(in srgb, #f0b429 27%, transparent);
-  --cx-mark-major: color-mix(in srgb, #ff7b72 19%, transparent);
-  --cx-mark-major-strong: color-mix(in srgb, #ff7b72 29%, transparent);
-  /* Ton in Ton: die Schrift einer markierten Stelle */
-  --cx-ink-split: #f5d58f;
-  --cx-ink-major: #ffb3ad;
+  --cx-mark-agree: rgba(46, 204, 162, 0.09);
+  --cx-mark-agree-strong: rgba(46, 204, 162, 0.18);
+  --cx-mark-split: rgba(242, 179, 42, 0.17);
+  --cx-mark-split-strong: rgba(242, 179, 42, 0.27);
+  --cx-mark-major: rgba(255, 123, 114, 0.19);
+  --cx-mark-major-strong: rgba(255, 123, 114, 0.29);
+  --cx-ink-split: #f9d390;
+  --cx-ink-major: #ffb3ab;
+  --cx-major-line: var(--partial);
+  --cx-flash: rgba(245, 197, 111, 0.15);
+}
+
+@supports (color: oklch(from red l c h)) {
+  :root {
+    --cx-mark-agree: oklch(from var(--agree) 0.962 0.017 h);
+    --cx-mark-agree-strong: oklch(from var(--agree) 0.941 0.031 h);
+    --cx-mark-split: oklch(from var(--partial) 0.931 0.051 h);
+    --cx-mark-split-strong: oklch(from var(--partial) 0.907 0.077 h);
+    --cx-mark-major: oklch(from var(--dispute) 0.916 0.029 h);
+    --cx-mark-major-strong: oklch(from var(--dispute) 0.871 0.05 h);
+    --cx-flash: oklch(from var(--partial) 0.734 0.125 h / 0.16);
+  }
+
+  .dark-mode {
+    --cx-mark-agree: oklch(from var(--agree) 0.756 0.14 h / 0.09);
+    --cx-mark-agree-strong: oklch(from var(--agree) 0.756 0.14 h / 0.18);
+    --cx-mark-split: oklch(from var(--partial) 0.804 0.156 h / 0.17);
+    --cx-mark-split-strong: oklch(from var(--partial) 0.804 0.156 h / 0.27);
+    --cx-mark-major: oklch(from var(--dispute) 0.734 0.163 h / 0.19);
+    --cx-mark-major-strong: oklch(from var(--dispute) 0.734 0.163 h / 0.29);
+    --cx-ink-split: oklch(from var(--partial) 0.884 0.095 h);
+    --cx-ink-major: oklch(from var(--dispute) 0.837 0.09 h);
+    --cx-flash: oklch(from var(--partial) 0.848 0.117 h / 0.15);
+  }
 }
 
 .cx-claim {

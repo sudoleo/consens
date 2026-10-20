@@ -12,40 +12,21 @@
    fades out at both ends, never from a rectangle drawn around content.
    ========================================================================== */
 
-/* App surface aliases. The light foundation matches public-tokens.css;
-   rebind aliases on body so inherited custom properties
-   resolve against this app's light/dark surface, including older components. */
+/* App surface aliases. The surfaces themselves live in variables.css, the
+   same values as public-tokens.css (Apple-Audit G7: the app had its own,
+   bluish dark surface, #303338, ten times the step of the website). These
+   names stay for older components and resolve on body, where /app puts its
+   dark class. */
 body,
 body.dark-mode {
-  --app-surface: #fff;
-  --app-surface-hover: color-mix(in srgb, var(--app-surface) 94%, var(--ink));
-  --app-surface-selected: color-mix(in srgb, var(--app-surface) 89%, var(--ink));
-  --raise: var(--app-surface);
-  --chat-surface: var(--app-surface);
-  --container-bg: var(--app-surface);
-  --response-bg: var(--app-surface);
-  --glass-bg: var(--app-surface);
-  --glass-bg-strong: var(--app-surface);
-  --glass-bg-soft: var(--app-surface);
-  --sidebar-hover: var(--app-surface-hover);
+  --app-surface: var(--raise);
+  --app-surface-hover: var(--raise-hover);
+  --app-surface-selected: var(--raise-selected);
+  --chat-surface: var(--raise);
 }
 
-/* Light mode: near-white canvas and subtle neutral-grey raised surfaces. */
 body:not(.dark-mode) {
-  --app-surface: #f5f5f5;
-  --app-surface-hover: #ededed;
-  --app-surface-selected: #e7e7e7;
-  --ground: #fafafa;
-  --well: #fff;
-  --bg-color: var(--ground);
-  --sidebar-bg: var(--ground);
-  --input-bg: var(--well);
-  --chip-bg: var(--ground);
   --code-bg: #fff;
-}
-
-body.dark-mode {
-  --app-surface: #303338;
 }
 
 /* --------------------------------------------------------------------------
@@ -842,21 +823,20 @@ body.direct-comparison-active:not(:has(#watchDashboard:not([hidden]))) .view-swi
 
 /* --------------------------------------------------------------------------
    4. Chat surfaces and floating composer
-   The composer shares the app surface hue with its own translucent finish.
+   The composer is the raised field (--field*, variables.css): the same
+   material as the landing page's field, so the step from the website into
+   the product is a cut in the same film (Apple-Audit G8). Opaque: there is
+   no glass left to blur what scrolls beneath it.
    -------------------------------------------------------------------------- */
-:root {
+:root,
+body.dark-mode {
   /* A one-line composer is a pill: 1px edge + 6px padding + half of the
      36px round controls, so its ends are concentric with (+) and Send. */
   --composer-pill-radius: 25px;
-  --composer-surface: rgba(245, 245, 245, 0.96);
-  --composer-edge: rgba(34, 36, 40, 0.09);
-  --composer-shadow: 0 2px 6px rgba(28, 30, 33, 0.04), 0 8px 28px rgba(28, 30, 33, 0.08);
-  --composer-halo: var(--ground);
-}
-body.dark-mode {
-  --composer-surface: rgba(48, 51, 56, 0.96);
-  --composer-edge: rgba(255, 255, 255, 0.12);
-  --composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 8px 28px rgba(0, 0, 0, 0.28);
+  --composer-surface: var(--field);
+  --composer-edge: var(--field-line);
+  --composer-shadow: var(--field-lift);
+  --composer-shadow-active: var(--field-lift-active);
   --composer-halo: var(--ground);
 }
 .claim-popover {

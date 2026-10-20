@@ -138,8 +138,8 @@ def _base_message(recipient: str, subject: str, plain: str, html_body: str,
 GROUND = "#fafafa"      # --ground
 RAISE = "#efeff0"       # a filled object (goal, code, source chip) on --ground
 INK = "#222428"         # --ink
-INK_SOFT = "#5c5f66"    # --ink-2
-MUTED = "#64676d"       # --ink-3
+INK_SOFT = "#4a4d53"    # --ink-2
+MUTED = "#606369"       # --ink-3
 BORDER = "#dcdcdd"      # --line over --ground
 LINE_SOFT = "#ebebec"   # --line-soft over --ground
 BUTTON_TEXT = "#ffffff"
@@ -151,7 +151,7 @@ MAIL_PALETTE = {
 _DARK_ROLES = {
     ".cx-bg": "background:#191a1c",
     ".cx-ink": "color:#ededed",
-    ".cx-soft": "color:#a7a9ad",
+    ".cx-soft": "color:#b0b2b6",
     ".cx-muted": "color:#94979b",
     ".cx-raise": "background:#26282b",
     ".cx-line": "border-color:#3a3b3e",

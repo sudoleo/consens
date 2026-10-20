@@ -103,7 +103,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(preview.locator('.agent-current-status')).to_have_count(1)
         if quiet != 'colors':
             # Current typography uses the same secondary ink for trace and steps.
-            trace_color = 'rgb(167, 169, 173)' if dark else 'rgb(92, 95, 102)'
+            trace_color = 'rgb(176, 178, 182)' if dark else 'rgb(74, 77, 83)'
             step_color = trace_color
             colors = preview.locator(':scope > *').evaluate_all('els => els.map(el => getComputedStyle(el).color)')
             assert colors == [trace_color, step_color, trace_color, step_color]

@@ -60,18 +60,14 @@ img { display: block; max-width: 100%; }
    so attach and the run switch keep the same one-step-down relationship on
    both themes without a second set of overrides.
    -------------------------------------------------------------------------- */
-:root {
-  --lp-field: #fdfdfc;
-  --lp-field-line: rgba(34, 36, 40, 0.11);
-  --lp-field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
-  --lp-field-lift-hover: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
-}
-
+/* The material itself is the raised field of public-tokens.css (--field*),
+   the same tokens the /app composer uses (Apple-Audit G8). */
+:root,
 .dark-mode {
-  --lp-field: #303336;
-  --lp-field-line: rgba(255, 255, 255, 0.11);
-  --lp-field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
-  --lp-field-lift-hover: 0 2px 5px rgba(0, 0, 0, 0.36), 0 22px 44px -20px rgba(0, 0, 0, 0.6);
+  --lp-field: var(--field);
+  --lp-field-line: var(--field-line);
+  --lp-field-lift: var(--field-lift);
+  --lp-field-lift-hover: var(--field-lift-active);
 }
 
 /* --------------------------------------------------------------------------

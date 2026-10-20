@@ -735,8 +735,7 @@ body:has(.sidebar.active) .brand-float {
   justify-content: center;
   gap: 6px;
   font-size: var(--font-size-micro);
-  color: var(--sidebar-text-muted);
-  opacity: 0.85;
+  color: var(--ink-3);
 }
 
 .sidebar-footer-link {
