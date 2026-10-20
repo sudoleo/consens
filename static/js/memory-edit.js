@@ -290,7 +290,6 @@
     state.requestId = makeRequestId();
     state.requestFeedback = textarea.value.trim();
     backdrop.hidden = false;
-    document.documentElement.classList.add("memory-edit-open");
     updateCounter();
     requestAnimationFrame(() => {
       textarea.focus();
@@ -301,7 +300,6 @@
   function closeDialog() {
     if (state.busy) return;
     document.getElementById("memoryEditBackdrop").hidden = true;
-    document.documentElement.classList.remove("memory-edit-open");
     state.returnFocus?.focus?.();
   }
 
@@ -426,7 +424,6 @@
       const selection = document.getElementById("memoryEditSelection");
       if (selection) selection.textContent = "";
     }
-    document.documentElement.classList.remove("memory-edit-open");
     state.toast?.cancel();
     state.toast = null;
   }
@@ -468,7 +465,6 @@
       if (epoch !== state.epoch) return;
       if (result.status === "processing") throw new Error("This Memory action is already processing.");
       document.getElementById("memoryEditBackdrop").hidden = true;
-      document.documentElement.classList.remove("memory-edit-open");
       await window.App?.userMemory?.load?.(true, { keepDraft: true });
       if (epoch !== state.epoch || !bindingIsCurrent(binding)) return;
       showUndo(result, intent, binding);

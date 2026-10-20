@@ -165,7 +165,6 @@
 .agent-google-notice.is-error { background: var(--dispute-bg); color: var(--ink); }
 .agent-google-notice.is-error > .agent-google-icon { color: var(--dispute); }
 .agent-google-notice .agent-google-btn.is-link { min-height: 32px; padding-block: 2px; color: var(--ink); }
-body.agent-google-sheet-open { overflow: hidden; }
 
 @media (max-width: 699px) {
   .agent-google-overlay { align-items: flex-end; padding: 0; }

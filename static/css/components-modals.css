@@ -1362,12 +1362,8 @@
   background: color-mix(in srgb, var(--sidebar-hover) 62%, transparent);
 }
 
-/* Share/Watch dialog; kept with the modal component instead of the template. */
-html.share-modal-open,
-html.share-modal-open body {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
+/* Share/Watch dialog; kept with the modal component instead of the template.
+   The page behind stays still through the one scroll lock (foundation.css). */
 #shareModal {
   align-items: center; justify-content: center; overflow: hidden;
   box-sizing: border-box; padding: 16px;

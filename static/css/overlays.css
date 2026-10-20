@@ -33,6 +33,17 @@ dialog.modal::backdrop {
   background: transparent;
 }
 
+/* A dim with nothing to scroll takes no pan, and a card's own scroll ends
+   at its edge: the page behind stays where it is (Apple audit F2, with the
+   one scroll lock in foundation.css). */
+.claim-sheet-backdrop {
+  touch-action: none;
+}
+
+.claim-popover {
+  overscroll-behavior: contain;
+}
+
 .answer-reader-dialog::backdrop {
   background: var(--scrim, rgba(18, 19, 21, 0.32));
 }

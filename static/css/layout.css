@@ -453,6 +453,9 @@ body:has(.sidebar.active) .brand-float {
   transition: transform var(--dur-layer) var(--ease-standard), background-color var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard);
   overflow-y: auto;
   overflow-x: hidden;
+  /* The end of the chat list is the end: the thread beside it or behind
+     the phone menu does not take over the scroll (Apple-Audit F2). */
+  overscroll-behavior: contain;
   flex-direction: column;
   display: flex;
 }
@@ -540,6 +543,7 @@ body:has(.sidebar.active) .brand-float {
   margin-bottom: 80px;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 /* Bündig mit der Bookmarks-Liste: kein Extra-Margin (die Section bringt

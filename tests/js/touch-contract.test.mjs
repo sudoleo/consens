@@ -90,3 +90,22 @@ describe("no browser tap flash, no text inflation (F3, F15)", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("one scroll lock (F2)", () => {
+  const foundation = read("static/css/foundation.css");
+
+  it("holds the page under every covering layer, keyed on the layer's own state", () => {
+    const lock = foundation.slice(foundation.indexOf("html:has(:is("), foundation.indexOf("overscroll-behavior: none;"));
+    for (const layer of ["dialog:modal", ".sidebar.active", "body.agent-sidebar-sheet", ".claim-sheet-backdrop:not([hidden])",
+      ".memory-edit-backdrop:not([hidden])", ".agent-google-overlay:not([hidden])"]) {
+      expect(lock).toContain(layer);
+    }
+    expect(lock).toMatch(/\) body \{\s*overflow: hidden;/);
+  });
+
+  it("has no second lock beside it", () => {
+    const files = [...SHEETS, ...readdirSync(path.join(ROOT, "static/js")).filter(name => name.endsWith(".js")).map(name => `static/js/${name}`)];
+    const offenders = files.filter(file => /share-modal-open|memory-edit-open|agent-google-sheet-open/.test(read(file)));
+    expect(offenders).toEqual([]);
+  });
+});

@@ -212,7 +212,7 @@
     margin-left: calc((var(--app-sidebar-offset) + 100% - 346px - var(--agent-chat-width)) / 2);
   }
 }
-.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); }
+.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); touch-action: none; }
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
   /* A sheet over the chat is a floating layer: the one place it lifts. */

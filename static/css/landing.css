@@ -1692,6 +1692,9 @@ img { display: block; max-width: 100%; }
   inset: 0;
   z-index: 1399;
   background: rgba(18, 19, 21, 0.42);
+  /* Nothing behind the dim scrolls (Apple-Audit F2; the lock itself is in
+     foundation.css). */
+  touch-action: none;
 }
 
 .claim-popover {
@@ -1699,6 +1702,7 @@ img { display: block; max-width: 100%; }
   z-index: 1400;
   max-height: 60vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px 16px;
   border-radius: var(--radius-md);
   background: var(--raise);

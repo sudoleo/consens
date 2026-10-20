@@ -946,6 +946,18 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
   sie (Capture: ein offener Dialog oder ein Popover bekommt Escape zuerst).
+  Seit 2026-10-20 (Apple-Audit F11, `bindDrawerSwipe`) folgt sie einem
+  Finger nach links (Pointer-Events `pointerType: "touch"`, auf der Leiste
+  oder dem abgedunkelten Rest): die Leiste per Inline-`transform`
+  (`.sidebar.is-dragging` ohne Transition), das Dimm (`body::after`) per
+  pausierter Web Animation; ab einem Drittel Weg oder einem Wisch schließt sie
+  (`closeOverlaySidebar`, Fokus zurück an den Menüknopf), sonst gleitet sie
+  zurück; Leiste und Dimm laufen von der Fingerstelle weiter (für das Dimm
+  eine eigene Animation, weil eine abgebrochene Script-Animation ihren Wert
+  keiner CSS-Transition übergibt). `touch-action: pan-y pinch-zoom` an der
+  offenen Leiste, `pinch-zoom` am `body` (das Pseudo-Element fragt der
+  Browser nicht); mit „Reduce motion“ wandert nichts mit, der Wisch schließt
+  trotzdem.
 - **`feedback-dialog.js`** (`window.App.feedback`, seit 2026-10-15) — der
   Feedback-Dialog `#feedbackModal`; vorher teils in `app-init.js`, teils als
   `window.sendFeedback` in `firebase.js`. Gäste sehen statt des Formulars einen
@@ -8971,6 +8983,19 @@ Handy.
   zwischen Passwortfeld und Knopf). Fließtext-Links (Rechtliches im
   Login-Text) und volle Listenzeilen (Chats 40 px) bleiben bewusst so.
   `tests/e2e/test_touch_targets.py` misst mit `elementFromPoint` bei 320/390 px.
+  **Eine Scroll-Sperre (F2):** `foundation.css` hält `html` und `body` auf
+  `overflow: hidden; overscroll-behavior: none`, solange eine deckende Ebene
+  offen ist – erkannt am Zustand der Ebene selbst, per
+  `html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet,
+  .claim-sheet-backdrop:not([hidden]), .memory-edit-backdrop:not([hidden]),
+  .agent-google-overlay:not([hidden]), …))`; es gibt nichts zu halten oder zu
+  vergessen. Die früheren Einzelsperren (`html.share-modal-open`,
+  `html.memory-edit-open`, `body.agent-google-sheet-open`) sind entfallen. Eine
+  neue deckende Ebene kommt in diese eine Liste. Scrollende Ebenen enden an
+  ihrem Rand (`overscroll-behavior: contain` an Seitenleiste, Chatliste,
+  Satzkarte, Dialog), Dimmflächen ohne Inhalt nehmen keinen Pan
+  (`touch-action: none`). `tests/e2e/test_touch_layers.py` prüft Sperre und
+  Wischen mit CDP-Touch-Events.
 
 ---
 

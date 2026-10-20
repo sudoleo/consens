@@ -448,7 +448,6 @@
     ensureSheet();
     sheetOpener = opener instanceof Element ? opener : document.activeElement;
     sheet.hidden = false;
-    document.body.classList.add('agent-google-sheet-open');
     renderSheet();
     loadConnections();
     requestAnimationFrame(() => {
@@ -460,7 +459,6 @@
   function closeSheet() {
     if (!sheet || sheet.hidden) return;
     sheet.hidden = true; disconnecting = false;
-    document.body.classList.remove('agent-google-sheet-open');
     const visible = el => el && el.isConnected && el.getClientRects().length;
     const target = [sheetOpener, document.getElementById('attachTrigger'), document.getElementById('questionInput')].find(visible);
     target?.focus({preventScroll: true});

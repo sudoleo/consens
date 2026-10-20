@@ -212,6 +212,21 @@
   cursor: default;
 }
 
+/* One scroll lock (Apple audit F2). While a layer covers the page - a modal
+   dialog, the phone menu, the activity sheet, a sentence card or the
+   sources sheet on a phone, the Memory and Gmail & Calendar sheets - the page
+   behind it does not move along with a finger or the wheel. The layers' own
+   state is the switch, so there is nothing to hold or to forget to release.
+   Scrolling inside a layer stays its own (overscroll-behavior: contain
+   there); a dim with nothing to scroll takes no pan at all (touch-action). */
+html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-sheet-backdrop:not([hidden]),
+  .memory-edit-backdrop:not([hidden]), .agent-google-overlay:not([hidden]))),
+html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-sheet-backdrop:not([hidden]),
+  .memory-edit-backdrop:not([hidden]), .agent-google-overlay:not([hidden]))) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* Touch targets (Apple audit F5). A finger needs 44 x 44 px; what is drawn
    keeps its size. A smaller control gets an invisible hit area from one of
    its own pseudo-elements:

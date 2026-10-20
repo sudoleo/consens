@@ -71,12 +71,6 @@
   background: var(--line);
 }
 
-html.memory-edit-open,
-html.memory-edit-open body {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
 .memory-edit-backdrop {
   position: fixed;
   inset: 0;

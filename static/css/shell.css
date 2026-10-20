@@ -4747,6 +4747,16 @@ body .theme-toggle:focus-visible {
     pointer-events: auto;
     transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s;
   }
+  /* Nothing behind the dim pans (Apple-Audit F2): a swipe on it belongs to
+     the menu (app-init.js, F11). The dim is body's ::after, and a pseudo
+     element's own touch-action is not asked, so the body carries it; the
+     menu and every dialog are scroll containers with their own. */
+  body:has(.sidebar.active) { touch-action: pinch-zoom; }
+  /* The menu follows a finger to the left (app-init.js, Apple-Audit F11);
+     up and down stay the list's own scroll, a pinch still zooms. While the
+     finger holds it, it moves with the finger and nothing else. */
+  .sidebar.active { touch-action: pan-y pinch-zoom; }
+  .sidebar.is-dragging { transition: none; }
   #sidebarToggleInner svg line {
     transform-box: view-box;
     transform-origin: 12px 12px;
