@@ -620,14 +620,15 @@ def test_logged_out_watch_deep_link_survives_and_late_login_renders(browser, pha
         page.route("**/api/my/watch-brief", lambda route: _json(route, {"brief": {}}))
         page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
 
-        expect(page.locator("#watchDashBody")).to_contain_text(
-            "Please log in to see your Consensus Watch dashboard."
-        )
+        # A guest sees what a watch is, by example, and the way in (J3).
+        expect(page.locator("#watchDashBody")).to_contain_text("What a watch looks like")
+        expect(page.locator(".wd-item.is-example")).to_be_visible()
+        expect(page.locator("#watchDashCreate")).to_have_text("Log in to start watching")
         assert page.url.endswith("/app/watches")
 
         page.evaluate("() => window.__switchE2EUser('account-b')")
-        expect(page.locator("#watchDashCreate")).to_be_visible(timeout=5000)
-        expect(page.locator("#watchDashBody")).to_contain_text("Tell us what you are waiting for.")
+        expect(page.locator("#watchDashCreate")).to_have_text("New watch", timeout=5000)
+        expect(page.locator("#watchDashBody")).to_contain_text("Start from an example")
         assert page.url.endswith("/app/watches")
     finally:
         context.close()

@@ -48,8 +48,10 @@ body {
     transition: width var(--dur-layer) var(--ease-standard), left var(--dur-layer) var(--ease-standard);
   }
 
-  body:not(:has(.watch-page:not([hidden]))) .view-switch {
-    left: calc(50% + var(--app-sidebar-offset) / 2);
+  /* Chat and Watches both start beside the sidebar, so the switch over
+     them stands in one place in both views (Apple-Audit J4). */
+  .view-switch {
+    left: calc(50vw + var(--app-sidebar-offset) / 2);
   }
 }
 
@@ -92,12 +94,6 @@ body:has(.sidebar.collapsed) .app-nav-float {
   body:has(.sidebar.collapsed) .brand-float {
     display: none;
   }
-}
-
-/* Waehrend die Watch-Seite offen ist, uebernimmt der View-Switch die
-   Navigation — Burger/Brand wuerden unter dem Overlay nichts bewirken. */
-body:has(.watch-page:not([hidden])) .app-nav-float {
-  display: none;
 }
 
 /* Reading mode: fixed navigation yields to the answer while scrolling down.
@@ -486,10 +482,12 @@ body:has(.sidebar.active) .brand-float {
   /* So does the sidebar the app opens or shuts by itself (start, sign-in;
      app-init.js setSidebarCollapsedInstantly). */
   body.is-resizing-sidebar .container,
+  body.is-resizing-sidebar .watch-page-inner,
   body.is-resizing-sidebar .sidebar,
   body.is-resizing-sidebar .app-nav-float,
   body.is-resizing-sidebar .view-switch,
   body.is-sidebar-settling .container,
+  body.is-sidebar-settling .watch-page-inner,
   body.is-sidebar-settling .sidebar,
   body.is-sidebar-settling .app-nav-float,
   body.is-sidebar-settling .view-switch {

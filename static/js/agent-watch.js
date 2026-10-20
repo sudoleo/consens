@@ -69,7 +69,8 @@
     const status = node('p', 'agent-watch-status');
     status.setAttribute('role', 'status');
     const view = { key, card, title, question, goal, settings, status, proposal: null, created: null, busy: false, message: '' };
-    view.start = button('btn agent-watch-start', 'Start watching', () => start(view));
+    // The one primary button of every watch surface (Apple-Audit J18).
+    view.start = button('wd-button is-primary agent-watch-start', 'Start watching', () => start(view));
     view.adjust = button('agent-watch-link', 'Adjust', () => adjust(view));
     view.manage = button('agent-watch-link', 'Open Watches', () => App.watchUi?.openWatchDialog?.('list'));
     const actions = node('div', 'agent-watch-actions');
@@ -98,7 +99,7 @@
     const paused = Boolean(watch) && !['active', 'resolved'].includes(watch.status);
     view.card.dataset.state = state;
     view.title.textContent = !watch ? 'Watch this question'
-      : paused ? 'Watch paused' : watch.status === 'resolved' ? 'Watch resolved' : 'Watching';
+      : paused ? 'Watch paused' : watch.status === 'resolved' ? 'Reached' : 'Watching';
     view.question.textContent = watch?.question || proposal.question;
     const goal = watch ? line(watch.condition) : proposal.goals[0] || '';
     view.goal.textContent = !goal ? 'Any change to the answer'
@@ -108,8 +109,8 @@
     // A failed start speaks only while starting is still the next step: an
     // existing Watch or a full account says what holds now.
     view.status.textContent = state === 'proposal' ? view.message
-      : paused ? 'You already watch this question. The Watch is paused.'
-        : watch?.status === 'resolved' ? 'This Watch found what it waited for.'
+      : paused ? 'You already watch this question. The watch is paused.'
+        : watch?.status === 'resolved' ? 'This watch found what it waited for.'
           : watch && ui ? `Checks ${ui.formatWatchSchedule(watch)}.`
             : full && ui ? ui.limitMessage(limits) : '';
     view.status.hidden = !view.status.textContent;

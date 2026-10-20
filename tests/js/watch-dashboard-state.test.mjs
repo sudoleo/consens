@@ -10,7 +10,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
  */
 function boot(body = "") {
   const harness = loadScripts(
-    ["static/js/watch-state.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
+    ["static/js/watch-state.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
     {
       body,
       before(window) {
@@ -119,15 +119,16 @@ describe("dashboard render", () => {
     await window.App.watchDashboard.render();
 
     const body = window.document.getElementById("watchDashBody");
-    const sections = [...body.querySelectorAll(".wd-section-head h2")].map(node => node.textContent);
-    expect(sections).toEqual(["Watching", "Resolved", "Delivery"]);
+    const sections = [...body.querySelectorAll(".wd-section:not([hidden]) .wd-section-head h2")].map(node => node.textContent);
+    // A goal that happened is "Reached", one word for it everywhere (J18).
+    expect(sections).toEqual(["Watching", "Reached", "Delivery"]);
     expect(body.querySelector(".wd-item.is-moved .wd-goal-text").textContent).toBe("GPT-6 is released");
     expect(body.querySelector(".wd-item.is-resolved .wd-goal-status").textContent).toBe("Reached");
-    expect(body.textContent).toContain("Why a Watch, not a scheduled prompt");
+    expect(body.textContent).toContain("Why a watch, not a scheduled prompt");
     expect(body.textContent).not.toMatch(/\/100/);
   });
 
-  it("shows the source's picture beside the question and removes it for good", async () => {
+  it("shows the source's picture beside the question, leads to the watch and removes it from the settings", async () => {
     const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
     const { window } = harness;
     window.history.replaceState(null, "", "/app/watches");
@@ -178,14 +179,18 @@ describe("dashboard render", () => {
     const img = figure.querySelector("img");
     expect(img.getAttribute("src")).toBe(imageUrl);
     expect(img.alt).toBe("");
+    // The picture leads to the watch's own page, like its question (J23).
     const frame = figure.querySelector("a.wd-image-frame");
-    expect(frame.href).toBe("https://shop.test/p/1");
-    expect(frame.rel).toContain("noreferrer");
-    expect(frame.getAttribute("aria-label")).toBe("Image from shop.test");
-
-    figure.querySelector(".wd-image-remove").click();
-    await vi.waitFor(() => expect(card.querySelector(".wd-image.is-item")).toBeNull());
-    expect(calls).toContainEqual(["DELETE", "/api/watch/WatchImage0001/image"]);
+    expect(frame.getAttribute("href")).toBe("/s/a");
+    expect(frame.getAttribute("aria-hidden")).toBe("true");
+    // No standing × on the tile; removing it is a setting with Undo.
+    expect(figure.querySelector(".wd-image-remove")).toBeNull();
+    card.querySelector('[data-action="remove-picture"]').click();
+    expect(card.querySelector(".wd-image.is-item")).toBeNull();
+    expect(calls.some(call => call[0] === "DELETE")).toBe(false);
+    expect(window.document.getElementById("wdUndoToast").textContent).toContain("Picture removed");
+    window.App.watchDashboard.commitPending();
+    await vi.waitFor(() => expect(calls).toContainEqual(["DELETE", "/api/watch/WatchImage0001/image"]));
     // The removed picture gives way to the watch's symbol.
     expect(card.querySelector(".wd-image.is-symbol svg")).not.toBeNull();
     expect(card.classList.contains("has-image")).toBe(true);
@@ -233,8 +238,9 @@ describe("dashboard render", () => {
     expect(job.querySelector(".wd-record")).toBeNull();
     expect(card("Cursor").querySelectorAll(".wd-record .wd-tick").length).toBe(3);
     // The footer is one line of parts; each dot is tied to the part before it.
+    // A next check in the past is due, never "12 min ago" (J5).
     const side = job.querySelector(".wd-item-side");
-    expect(side.textContent.replace(/ /g, " ")).toMatch(/^Next check \S.* · Weekly · Public page · Telegram$/);
+    expect(side.textContent.replace(/ /g, " ")).toMatch(/^Check due now · Weekly · Public page · Telegram$/);
     expect([...side.querySelectorAll(".wd-sep")].every(dot => dot.previousSibling.textContent === " ")).toBe(true);
   });
 
@@ -315,7 +321,7 @@ describe("dashboard render", () => {
     const logo = cards[0].querySelector(".wd-image");
     expect(logo.classList.contains("is-logo")).toBe(true);
     expect(logo.querySelector(".wd-image-frame").title).toBe("Logo: cursor.com, claude.com");
-    expect(logo.querySelector(".wd-image-remove").title).toBe("Remove logo");
+    expect(cards[0].querySelector('[data-action="remove-picture"]').textContent).toBe("Remove logo");
     const job = cards[1].querySelector(".wd-image.is-symbol");
     expect(job.getAttribute("aria-hidden")).toBe("true");
     expect(job.querySelector("svg rect")).not.toBeNull();
@@ -387,8 +393,10 @@ describe("details and wrong matches", () => {
     const input = card.querySelector(".wd-goal-input.is-details");
     expect(input.value).toBe("Only new, from a shop.");
     expect(card.querySelector(".wd-settings").textContent).toContain("Ruled out: kleinanzeigen.de.");
+    // Saved when the field is left, like every text in the settings (J9).
     input.value = "Only new, from a shop. No private sellers.";
-    [...card.querySelectorAll(".wd-button")].find(button => button.textContent === "Save details").click();
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
 
     await vi.waitFor(() => expect(calls.some(call => call[0] === "PATCH")).toBe(true));
     const patch = calls.find(call => call[0] === "PATCH");
@@ -420,7 +428,8 @@ describe("details and wrong matches", () => {
     const wrong = [...card.querySelectorAll(".wd-action")].find(button => button.textContent === "Not what I wanted");
     wrong.click();
     const input = card.querySelector(".wd-goal-input.is-reject");
-    expect(card.querySelector(".wd-settings").hidden).toBe(false);
+    expect(card.classList.contains("is-open")).toBe(true);
+    expect(card.querySelector(".wd-settings").hasAttribute("inert")).toBe(false);
     // One way on at a time: no second "Keep watching" for a new goal.
     expect(reject.hidden).toBe(false);
     expect(goalBox.hidden).toBe(true);

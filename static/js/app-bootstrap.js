@@ -76,10 +76,25 @@
   if (theme !== "dark" && theme !== "light") {
     theme = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
   }
+  // /app/watches opens as the Watches page from its first frame (Apple-Audit
+  // J6): the chat column is never painted, the page and its card skeleton
+  // are, and watch.js takes over once the session is known.
+  const watchPage = window.location.pathname === "/app/watches";
+  window.App.watchSkeleton = function () {
+    const card = '<div class="wd-skeleton-card" aria-hidden="true">'
+      + '<span class="skeleton is-status"></span><span class="skeleton is-title"></span>'
+      + '<span class="skeleton is-line"></span><span class="skeleton is-line is-short"></span>'
+      + '<span class="skeleton is-foot"></span></div>';
+    return '<div class="wd-skeleton skeleton-group" role="status" aria-label="Loading your watches">'
+      + '<div class="wd-skeleton-summary" aria-hidden="true"><span class="skeleton"></span></div>'
+      + '<div class="wd-skeleton-list">' + card.repeat(3) + '</div></div>';
+  };
   const seeded = new Set();
+  const SEED_KEYS = 9;
   function seed() {
     if (!seeded.has("body") && document.body) {
       seeded.add("body");
+      if (watchPage) document.body.classList.add("is-watch-view");
       if (theme === "dark") document.body.classList.add("dark-mode");
       // The consensus view is painted before auth resolves; run-mode.js
       // (earlier in this bundle) owns the stored choice.
@@ -157,7 +172,31 @@
       seeded.add("starters");
       window.App.composerStarters?.seed(check.parentElement);
     }
-    return seeded.size === 7;
+    // The switch says "Watches" before it is ever painted as "Chat".
+    if (!watchPage) {
+      seeded.add("switch");
+      seeded.add("watches");
+    }
+    const watches = !seeded.has("switch") && document.getElementById("viewSwitchWatches");
+    if (watches) {
+      seeded.add("switch");
+      const chat = document.getElementById("viewSwitchConsensus");
+      chat?.classList.remove("is-active");
+      chat?.setAttribute("aria-pressed", "false");
+      watches.classList.add("is-active");
+      watches.setAttribute("aria-pressed", "true");
+      watches.closest(".view-switch")?.setAttribute("data-active", "watches");
+    }
+    const dashBody = !seeded.has("watches") && document.getElementById("watchDashBody");
+    if (dashBody) {
+      seeded.add("watches");
+      document.getElementById("watchDashboard").hidden = false;
+      if (!dashBody.childElementCount) {
+        dashBody.innerHTML = window.App.watchSkeleton();
+        dashBody.setAttribute("aria-busy", "true");
+      }
+    }
+    return seeded.size === SEED_KEYS;
   }
   if (!seed() && typeof MutationObserver === "function") {
     const observer = new MutationObserver(() => { if (seed()) observer.disconnect(); });

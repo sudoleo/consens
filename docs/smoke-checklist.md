@@ -640,6 +640,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Herunterscrollen; Aufwärtsscrollen, Seitenanfang oder Tastatur-Navigation
       bringen beide ohne Flackern zurück. Dasselbe gilt im scrollenden
       Watch-Dashboard für den View-Schalter.
+- [ ] Watches am echten iPhone (Apple-Audit F14, F8, J2): auf /app/watches
+      fährt Safaris untere Leiste beim Scrollen ein, ein Tipp auf die
+      Statusleiste springt nach oben, die Leisten behalten die Seitenfarbe;
+      zurück im Chat steht der Thread an seiner alten Stelle. Im „New
+      watch“-Sheet bleibt mit offener Tastatur (Fragefeld, „Something
+      else…“, Details) „Start watching“ über der Tastatur erreichbar, und
+      kein Schritt lässt das Sheet springen.
 - [ ] Auto-Consensus folgt dem Modus: Consensus triggert ihn nach Abschluss;
       Compare sendet keinen `/consensus`-Request und blendet „Check
       contradictions“ in Leiste und (+)-Menü aus. Die Demo (`?demo=1`) zeigt

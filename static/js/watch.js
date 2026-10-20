@@ -1,5 +1,6 @@
 // Consensus Watch UI. Classic script/module contract: exports window.openWatchDialog
 // (create dialog + dashboard) and window.openWatchDashboard (dashboard only).
+// The fields and the time wording come from watch-fields.js (App.watchFields).
 (function () {
   const FEATURE_NUDGE_STORAGE_KEY = "consensio.watchFeatureNudge.dismissed.v1";
   const FEATURE_NUDGE_RUNS_STORAGE_KEY = "consensio.watchFeatureNudge.runs.v1";
@@ -10,6 +11,10 @@
   // Beduerfnis, das er selbst schon hat.
   const FEATURE_NUDGE_MIN_RUNS = 3;
   const VIEW_SWITCH_HINT_STORAGE_KEY = "consensio.watchViewSwitchHint.seen.v1";
+  // What a guest asked for before signing in (the sign-in reloads the page):
+  // the dialog opens again with it afterwards (Apple-Audit J3).
+  const PENDING_STORAGE_KEY = "consensio.watchAfterLogin.v1";
+  const PENDING_MAX_AGE_MS = 60 * 60 * 1000;
   const WATCH_WEEKDAYS = [
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
   ];
@@ -18,6 +23,15 @@
   let featureNudgeQuestion = "";
   let featureNudgePositionHandler = null;
   const watchState = window.App.watchState;
+  const fields = () => window.App.watchFields;
+
+  function reducedMotion() {
+    try {
+      return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+    } catch (_) {
+      return false;
+    }
+  }
 
   function featureNudgeWasDismissed() {
     try {
@@ -141,6 +155,8 @@
   // fuehrt die erste Pruefung zum Termin aus). Zaehler und "nicht mehr zeigen"
   // sind fuer beide Modi dieselben.
   function showWatchFeatureNudge(source) {
+    // Every finished consensus also brings its question to the Watch button.
+    syncConsensusWatchButton();
     if (featureNudgeWasDismissed() || featureNudgeTimer
         || document.getElementById("watchFeatureNudge")) return;
     // Jeder abgeschlossene Lauf zaehlt -- auch der eines Gastes, damit der
@@ -151,6 +167,8 @@
     const questionSource = source && source.eligible && source.question && source.anchor
       ? { question: String(source.question), anchor: source.anchor } : null;
     if (source && !questionSource) return;
+    // A question that is already watched needs no invitation (J17).
+    if (questionSource && watchedFor(questionSource.question)) return;
     const usable = () => Boolean(window.auth?.currentUser)
       && (questionSource ? questionSource.anchor.isConnected : Boolean(window.lastShareResultId));
     if (!usable()) return;
@@ -166,7 +184,7 @@
       nudge.id = "watchFeatureNudge";
       nudge.className = "watch-feature-nudge";
       nudge.setAttribute("role", "status");
-      nudge.setAttribute("aria-label", "New Consensus Watch feature");
+      nudge.setAttribute("aria-label", "New: watches");
       // Der Hinweis war frueher nur ein Hinweis: er erklaerte die Funktion und
       // liess den Nutzer dann den Watch-Knopf suchen. Jetzt steht die Aktion
       // selbst darin — ein Klick, fertige Voreinstellungen. Der Preis dafuer
@@ -177,7 +195,7 @@
         <span class="watch-feature-nudge-label">New</span>
         <strong>Keep this answer current</strong>
         <span class="watch-feature-nudge-copy">We re-check it across model families and write only when a source moves the answer.</span>
-        <button type="button" class="watch-nudge-btn" id="watchNudgeStart">Watch this question</button>
+        <button type="button" class="watch-nudge-btn" id="watchNudgeStart">Start watching</button>
         <span class="watch-nudge-meta">Weekly &middot; e-mail only on evidence &middot; stop anytime</span>
         <button type="button" class="watch-nudge-skip" id="watchNudgeCustomize">Add a goal or change the schedule</button>
       `;
@@ -225,10 +243,7 @@
 
   async function startWatchFromNudge(button) {
     if (!button || button.disabled) return;
-    if (!window.auth?.currentUser) {
-      popup("Please log in to use Consensus Watch.");
-      return;
-    }
+    if (!requireAccount({ question: featureNudgeQuestion || normalizeWatchQuestion(window.lastQuestion) }, button)) return;
     button.disabled = true;
     button.textContent = "Starting…";
     window.App?.trackAppEvent?.("app_watch_nudge_start_click");
@@ -252,13 +267,19 @@
       renderNudgeSuccess(data.watch);
     } catch (error) {
       button.disabled = false;
-      button.textContent = "Watch this question";
-      // Kontingent voll oder Server-Fehler: der Dialog kann mehr erklaeren
-      // (Limits, Upgrade, Telegram) als dieser Streifen.
-      if (error.status === 429) {
+      button.textContent = "Start watching";
+      // Kontingent voll, schon beobachtet oder Server-Fehler: der Dialog kann
+      // mehr erklaeren (Limits, Upgrade, Telegram) als dieser Streifen. Ein
+      // Request-Limit ist kein Kontingent (H6): es sagt nur, wann es weitergeht.
+      if (error.code === "rate_limited") {
+        popup(error.message);
+        return;
+      }
+      if (error.status === 429 || isAlreadyWatched(error)) {
         watchState.setLimits(null);
-        const question = featureNudgeQuestion;
-        dismissWatchFeatureNudge("limit");
+        const question = featureNudgeQuestion || normalizeWatchQuestion(window.lastQuestion);
+        dismissWatchFeatureNudge(error.status === 429 ? "limit" : "watched");
+        await loadWatchLimits(true).catch(() => {});
         if (question) openWatchDialog("create", { question });
         else openWatchDialog("confirm");
         return;
@@ -278,7 +299,7 @@
       <span class="watch-feature-nudge-label is-active">Watching</span>
       <strong>You are set</strong>
       <span class="watch-feature-nudge-copy">First check: ${escapeHtml(formatWatchSchedule(watch))}. We only write when a source moves the answer.</span>
-      <button type="button" class="watch-nudge-skip" id="watchNudgeOpenDash">Manage your watches</button>
+      <button type="button" class="watch-nudge-skip" id="watchNudgeOpenDash">Open Watches</button>
     `;
     nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
       event.stopPropagation();
@@ -287,7 +308,7 @@
     nudge.querySelector("#watchNudgeOpenDash").addEventListener("click", event => {
       event.stopPropagation();
       dismissWatchFeatureNudge("created");
-      openWatchDashboard();
+      openWatchDashboard({ focus: watch.id });
     });
     placeWatchFeatureNudge(nudge, featureNudgeAnchor);
     loadWatchLimits(true).catch(() => {});
@@ -348,11 +369,27 @@
       throw new Error("Authentication changed.");
     }
     if (!response.ok) {
-      const error = new Error(data.error || data.detail || ("HTTP " + response.status));
+      // The reason may come flat ({error, code}) or as FastAPI's detail,
+      // a string or an object of the same fields.
+      const detail = data.detail && typeof data.detail === "object" ? data.detail : {};
+      const message = data.error || (typeof data.detail === "string" ? data.detail : "")
+        || detail.error || detail.message || ("HTTP " + response.status);
+      const error = new Error(message);
       error.status = response.status;
+      error.code = String(data.code || detail.code || "");
+      error.watchId = String(data.watch_id || detail.watch_id || "");
+      error.retryAfter = Number(data.retry_after || detail.retry_after
+        || response.headers?.get?.("Retry-After")) || 0;
       throw error;
     }
     return data;
+  }
+
+  // "This question is already watched": the server's code (J17), or its
+  // older wording.
+  function isAlreadyWatched(error) {
+    return error?.code === "already_watched"
+      || (error?.status === 409 && /already watched/i.test(error.message || ""));
   }
 
   async function loadTelegramState(force) {
@@ -426,6 +463,8 @@
     target.innerHTML = `Watches: <strong>${limits.activeCount} / ${limits.activeLimit}</strong>`;
   }
 
+  // The plan line in the page head: one quiet line with real separators
+  // ("Pro access · 6 of 10 active · 4 slots free"), the detail below it.
   function renderWatchLimit(target, limits) {
     if (!target || !limits) return;
     const tier = window.App.normalizeTier?.(limits.plan) || "free";
@@ -436,8 +475,8 @@
       ? "Pro access" : (tier === "plus" ? "Plus access" : "Standard access");
     const activeLabel = `${limits.activeCount} of ${limits.activeLimit} active`;
     const availabilityLabel = limits.atLimit
-      ? "Limit reached"
-      : `${limits.remaining} slot${limits.remaining === 1 ? "" : "s"} available`;
+      ? "All slots in use"
+      : `${limits.remaining} slot${limits.remaining === 1 ? "" : "s"} free`;
     const meterWidth = limits.activeLimit > 0
       ? Math.min(100, Math.round((limits.activeCount / limits.activeLimit) * 100)) : 100;
     target.hidden = false;
@@ -446,28 +485,27 @@
       <div class="watch-limit-main">
         <span class="watch-limit-plan">${planLabel}</span>
         <strong>${activeLabel}</strong>
-        <span>${availabilityLabel}</span>
+        <span class="watch-limit-sep" aria-hidden="true">·</span>
+        <span class="watch-limit-availability">${availabilityLabel}</span>
         <span class="watch-limit-meter" aria-hidden="true"><i style="width:${meterWidth}%"></i></span>
       </div>
       <div class="watch-limit-detail">
-        <span>Paused Watches do not count.</span>
-        ${isFree ? `<span>Watch slots and check intervals are limited during early access.</span><button type="button" class="watch-limit-upgrade">About early access</button>` : ""}
+        <span>Paused watches don't count.</span>
+        ${isFree ? `<span>Slots and check intervals are limited during early access.</span><button type="button" class="watch-limit-upgrade">About early access</button>` : ""}
       </div>`;
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
   }
 
-  // Why no new Watch can start: the create dialog and the Agent card say the
-  // same sentence.
+  // Why no new watch can start: the dialog, the page and the Agent card say
+  // the same sentence.
   function limitMessage(limits) {
     return limits.activeLimit > 1
-      ? `All ${limits.activeLimit} Watch slots are in use. Pause one to start a new Watch.`
+      ? `All ${limits.activeLimit} watch slots are in use. Pause one to start another.`
       : limits.activeLimit === 1
-        ? "Your Watch slot is in use. Pause that Watch to start a new one."
+        ? "Your watch slot is in use. Pause that watch to start another."
         : "Watches are not available for your account yet.";
   }
 
-  // The dialog only mentions the limit when it blocks: the sidebar and the
-  // dashboard already carry the count, the dialog is about the question.
   function renderDialogWatchLimit(target, limits) {
     if (!limits.atLimit) {
       target.hidden = true;
@@ -483,6 +521,9 @@
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
   }
 
+  // A dialog opened before the limits were known learns them late: it then
+  // says so where the form is and holds the start (J25 covers the usual
+  // case, a limit known before the dialog opens).
   function applyDialogWatchLimit(limits) {
     const target = document.getElementById("watchDialogLimit");
     if (!target || !limits) return;
@@ -491,7 +532,7 @@
       || document.getElementById("watchConfirmBtn");
     if (!action || !limits.atLimit) return;
     action.disabled = true;
-    action.textContent = "Watch limit reached";
+    action.textContent = "All slots in use";
   }
 
   function refreshDialogWatchLimit() {
@@ -504,30 +545,107 @@
     });
   }
 
+  // ------------------------------------------------------------------
+  // Telegram pairing (J19): one pairing at a time for the whole page. It
+  // waits as long as the link is valid (10 min), checks at once when the
+  // reader comes back from Telegram and never asks for a reload. Every
+  // surface that offers it (dialog, card settings, Delivery) listens.
+  // ------------------------------------------------------------------
+  const TELEGRAM_LINK_MS = 10 * 60 * 1000;
+  const telegramListeners = new Set();
+  let telegramPairing = null;
+
+  function telegramStatus() {
+    return telegramPairing ? telegramPairing.state : "idle";
+  }
+
+  function onTelegramStatus(listener) {
+    telegramListeners.add(listener);
+    return () => telegramListeners.delete(listener);
+  }
+
+  function emitTelegram(state, detail) {
+    telegramListeners.forEach(listener => {
+      try { listener(state, detail); } catch (_) { /* a closed surface */ }
+    });
+  }
+
+  function cancelTelegramPairing() {
+    if (!telegramPairing) return;
+    telegramPairing.stop();
+    telegramPairing = null;
+    emitTelegram("idle");
+  }
+
   async function connectTelegram(onConnected) {
+    if (telegramPairing) return null;
     let pendingWindow = null;
+    let stopped = false;
+    let timer = null;
+    const startedAt = Date.now();
+    const pairing = {
+      state: "waiting",
+      stop() {
+        stopped = true;
+        clearTimeout(timer);
+        window.removeEventListener("focus", checkSoon);
+        document.removeEventListener("visibilitychange", onVisible);
+      }
+    };
+    telegramPairing = pairing;
+    emitTelegram("waiting");
+    function finish(state, detail) {
+      if (telegramPairing !== pairing) return;
+      pairing.stop();
+      telegramPairing = null;
+      emitTelegram(state, detail);
+    }
+    async function check() {
+      if (stopped) return;
+      try {
+        const state = await loadTelegramState(true);
+        if (stopped) return;
+        if (state.connected) {
+          finish("connected", state);
+          onConnected?.(state);
+          return;
+        }
+      } catch (_) { /* the next try decides */ }
+      if (stopped) return;
+      const waited = Date.now() - startedAt;
+      if (waited >= TELEGRAM_LINK_MS) {
+        finish("expired");
+        return;
+      }
+      // Quick at first (the reader is in Telegram right now), then calmer.
+      timer = setTimeout(check, waited < 40000 ? 2000 : waited < 120000 ? 5000 : 15000);
+    }
+    function checkSoon() {
+      if (stopped) return;
+      clearTimeout(timer);
+      timer = setTimeout(check, 250);
+    }
+    function onVisible() {
+      if (document.visibilityState === "visible") checkSoon();
+    }
     try {
       pendingWindow = window.open("about:blank", "_blank");
       if (pendingWindow) pendingWindow.opener = null;
       const data = await api("POST", "/api/my/telegram/link", {});
+      if (stopped) {
+        try { pendingWindow?.close(); } catch (_) { /* ignored */ }
+        return null;
+      }
       if (pendingWindow) pendingWindow.location = data.url;
       else window.location.href = data.url;
-      popup("Start the bot in Telegram. This page will detect the connection automatically.");
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const state = await loadTelegramState(true);
-        if (state.connected) {
-          popup("Telegram connected.");
-          onConnected?.(state);
-          return state;
-        }
-      }
-      popup("Connection not detected yet. Finish /start in Telegram, then refresh this page.");
+      window.addEventListener("focus", checkSoon);
+      document.addEventListener("visibilitychange", onVisible);
+      timer = setTimeout(check, 2000);
     } catch (error) {
       try { pendingWindow?.close(); } catch (_) { /* ignored */ }
-      popup("Telegram connection failed: " + error.message);
+      finish("failed", error);
     }
-    return null;
+    return pairing;
   }
 
   function escapeHtml(value) {
@@ -545,15 +663,6 @@
       && Number((window.APP_LIMITS || {}).watch_plus_daily_interval_allowed) !== 0;
   }
 
-  function intervalOptions(selected) {
-    const dailyDisabled = !dailyIntervalAllowed();
-    return `
-      <option value="weekly"${selected === "weekly" ? " selected" : ""}>Weekly</option>
-      <option value="monthly"${selected === "monthly" ? " selected" : ""}>Monthly</option>
-      <option value="daily"${selected === "daily" ? " selected" : ""}${dailyDisabled ? " disabled" : ""}>Daily${dailyDisabled ? " (Pro)" : ""}</option>
-    `;
-  }
-
   function browserWeekday() {
     const sundayFirstIndex = new Date().getDay();
     return WATCH_WEEKDAYS[(sundayFirstIndex + 6) % 7];
@@ -565,30 +674,18 @@
     return WATCH_WEEKDAYS[(tomorrow.getDay() + 6) % 7];
   }
 
-  function weekdayOptions(selected) {
-    const current = WATCH_WEEKDAYS.includes(selected) ? selected : browserWeekday();
-    return WATCH_WEEKDAYS.map(day =>
-      `<option value="${day}"${day === current ? " selected" : ""}>${day[0].toUpperCase() + day.slice(1)}</option>`
-    ).join("");
-  }
-
   // "Weekly on Sunday at 09:00 · E-mail · Private": schedule, channels,
   // alert rule (only when not the default) and page of a Watch's settings,
   // in the create dialog and on the Agent card.
   function settingsSummary(settings) {
-    const interval = settings.interval;
-    let schedule = interval === "daily" ? "Daily" : interval === "monthly" ? "Monthly" : "Weekly";
-    if (interval === "weekly" && WATCH_WEEKDAYS.includes(settings.run_weekday)) {
-      schedule += " on " + settings.run_weekday[0].toUpperCase() + settings.run_weekday.slice(1);
-    }
-    if (settings.run_time) schedule += " at " + settings.run_time;
+    const schedule = fields().scheduleLabel({ ...settings, timezone: settings.timezone || browserTimezone() });
     const channels = [
       settings.email_enabled ? "E-mail" : "",
       settings.telegram_enabled ? "Telegram" : ""
     ].filter(Boolean).join(" + ") || "No channel";
     const parts = [schedule, channels];
     if (settings.email_mode === "every_run") parts.push("Every check");
-    if (settings.email_mode === "condition") parts.push("Only when it resolves");
+    if (settings.email_mode === "condition") parts.push("Only when it is reached");
     parts.push(settings.visibility === "public" ? "Public" : "Private");
     return parts.join(" · ");
   }
@@ -603,53 +700,18 @@
   // of watch_service.creation_outlook, from the list loadWatchLimits keeps.
   function watchedFor(question) {
     const key = questionKey(question);
+    if (!key) return null;
     return (watchState.watches || []).find(watch => questionKey(watch.question) === key) || null;
   }
 
+  // "weekly on Tuesday at 09:00", the time zone only when it is not the
+  // reader's own (watch-fields.js scheduleText: one wording everywhere).
   function formatWatchSchedule(watch) {
-    let label = String(watch.interval || "weekly");
-    if (watch.interval === "weekly" && WATCH_WEEKDAYS.includes(watch.run_weekday)) {
-      label += " on " + watch.run_weekday[0].toUpperCase() + watch.run_weekday.slice(1);
-    }
-    if (watch.run_time) {
-      label += " at " + watch.run_time + (watch.timezone ? " (" + watch.timezone + ")" : "");
-    }
-    return label;
+    return fields().scheduleText(watch);
   }
 
   function browserTimezone() {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    } catch (_) {
-      return "UTC";
-    }
-  }
-
-  // Alert rules in the words of the evidence model: a watch writes when a
-  // source moves the answer, when its goal is reached, or after every check.
-  function emailModeOptions(selected, hasGoal) {
-    return `
-      <option value="changes_only"${selected === "changes_only" || !selected ? " selected" : ""}>${hasGoal ? "When it moves or resolves" : "When it moves on evidence"}</option>
-      <option value="condition"${selected === "condition" ? " selected" : ""}>Only when it resolves</option>
-      <option value="every_run"${selected === "every_run" ? " selected" : ""}>After every check</option>
-    `;
-  }
-
-  function bindWeekdayVisibility(intervalSelect, wrapper) {
-    if (!intervalSelect || !wrapper) return;
-    const sync = () => { wrapper.hidden = intervalSelect.value !== "weekly"; };
-    intervalSelect.addEventListener("change", sync);
-    sync();
-  }
-
-  function clearWatchFieldError(field) {
-    if (!field) return;
-    field.removeAttribute("aria-invalid");
-    const error = document.getElementById(field.id + "Error");
-    if (error) {
-      error.textContent = "";
-      error.hidden = true;
-    }
+    return fields().browserTimezone();
   }
 
   function setWatchFieldError(field, message) {
@@ -659,6 +721,16 @@
     if (error) {
       error.textContent = message;
       error.hidden = false;
+    }
+  }
+
+  function clearWatchFieldError(field) {
+    if (!field) return;
+    field.removeAttribute("aria-invalid");
+    const error = document.getElementById(field.id + "Error");
+    if (error) {
+      error.textContent = "";
+      error.hidden = true;
     }
   }
 
@@ -679,18 +751,106 @@
     field.addEventListener(eventName, () => clearWatchFieldError(field));
   }
 
-  const WATCH_QUESTION_MIN_CHARS = 8;
+  function focusQuietly(node) {
+    if (!node) return;
+    try { node.focus({ preventScroll: true }); } catch (_) { node.focus(); }
+  }
 
-  function openWatchDialog(view, options) {
-    if (!window.auth?.currentUser) {
-      popup("Please log in to use Consensus Watch.");
+  // A block that changes its height grows or shrinks over --dur-state from
+  // where it was instead of in one frame (J2). `hold` keeps the old height
+  // while the reader types in a field below it; the block settles once the
+  // field is left, so nothing slides away under the cursor.
+  function smoothHeight(node, mutate, { hold = null } = {}) {
+    if (!node) { mutate(); return; }
+    const before = node.getBoundingClientRect().height;
+    mutate();
+    if (hold && hold.contains(document.activeElement)) {
+      node.style.minHeight = before + "px";
+      const release = event => {
+        if (hold.contains(event.relatedTarget)) return;
+        hold.removeEventListener("focusout", release);
+        smoothHeight(node, () => { node.style.minHeight = ""; });
+      };
+      hold.addEventListener("focusout", release);
       return;
     }
+    if (reducedMotion() || !node.isConnected) return;
+    const after = node.scrollHeight;
+    if (Math.abs(after - before) < 1) return;
+    node.style.overflow = "hidden";
+    node.style.height = before + "px";
+    void node.offsetHeight;
+    node.style.transition = "height var(--dur-state) var(--ease-standard)";
+    node.style.height = after + "px";
+    let done = false;
+    const settle = () => {
+      if (done) return;
+      done = true;
+      node.style.height = "";
+      node.style.overflow = "";
+      node.style.transition = "";
+    };
+    node.addEventListener("transitionend", event => { if (event.target === node) settle(); }, { once: true });
+    setTimeout(settle, 400);
+  }
+
+  const WATCH_QUESTION_MIN_CHARS = 8;
+
+  // ------------------------------------------------------------------
+  // Guests (J3): every invitation leads into the sign-in and, after the
+  // reload it ends in, straight back to the dialog with the same question.
+  // ------------------------------------------------------------------
+  function readPending() {
+    try {
+      const pending = JSON.parse(localStorage.getItem(PENDING_STORAGE_KEY) || "null");
+      return pending && typeof pending === "object" ? pending : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writePending(value) {
+    try {
+      if (value) localStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(value));
+      else localStorage.removeItem(PENDING_STORAGE_KEY);
+    } catch (_) { /* private mode: the reader starts over after signing in */ }
+  }
+
+  function requireAccount(intent, trigger) {
+    if (window.auth?.currentUser) return true;
+    writePending({
+      at: Date.now(),
+      question: normalizeWatchQuestion(intent?.question).slice(0, 2000),
+      goal: normalizeWatchQuestion(intent?.goal).slice(0, 500)
+    });
+    if (window.App?.openAuthModal) {
+      window.App.openAuthModal("login", trigger || document.activeElement, "watch",
+        { lead: "Log in to start watching. Your question waits for you." });
+    } else {
+      popup("Log in to start watching.");
+    }
+    return false;
+  }
+
+  function resumePendingWatch() {
+    if (!window.auth?.currentUser) return;
+    const pending = readPending();
+    if (!pending) return;
+    writePending(null);
+    if (Date.now() - Number(pending.at || 0) > PENDING_MAX_AGE_MS) return;
+    openWatchDialog("create", { question: pending.question || "", goal: pending.goal || "", source: "after_login" });
+  }
+
+  function openWatchDialog(view, options) {
+    const setup = options || {};
     if (view === "list") {
       closeDialog();
       openWatchDashboard();
       return;
     }
+    const knownQuestion = normalizeWatchQuestion(
+      view === "create" ? setup.question : (setup.question || window.lastQuestion));
+    if (!requireAccount({ question: knownQuestion, goal: setup.goal }, setup.trigger)) return;
     const { modal } = els();
     if (!modal) return;
     let modalIntent = null;
@@ -700,6 +860,18 @@
       modal.classList.add("is-watch-dialog");
       modal.style.display = "flex";
     }
+    // The state belongs to the button, not to an error after the form (J17):
+    // a question that is already watched opens as the watch it is.
+    const existing = knownQuestion && watchedFor(knownQuestion);
+    if (existing) {
+      renderAlreadyWatching(existing, modalIntent);
+      return;
+    }
+    // Before any typing: no free slot, no form (J25).
+    if (watchState.limits?.atLimit) {
+      renderLimitStep(modalIntent);
+      return;
+    }
     if (view !== "create") {
       renderConfirm(undefined, modalIntent);
       return;
@@ -707,11 +879,10 @@
     // A question that is already known (an example, the chat's last
     // question, an Agent proposal) goes straight to the goal; "Edit" leads
     // back to the field. Options: question, goal (the preset choice), goals
-    // (suggestions the caller already has, so none are fetched), interval and
-    // source (analytics).
-    const setup = options || {};
-    const knownQuestion = normalizeWatchQuestion(setup.question);
-    if (knownQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
+    // (suggestions the caller already has, so none are fetched), interval,
+    // editQuestion (a follow-up: start at the field, prefilled) and source
+    // (analytics).
+    if (knownQuestion.length >= WATCH_QUESTION_MIN_CHARS && !setup.editQuestion) {
       renderConfirm({ ...setup, question: knownQuestion }, modalIntent);
     } else {
       renderQuestionStep(setup.question, modalIntent, setup);
@@ -722,10 +893,58 @@
     return String(value || "").replace(/\s+/g, " ").trim();
   }
 
+  function dialogButton(id, label, kind = "secondary") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = id;
+    button.className = kind === "primary" ? "wd-button is-primary"
+      : kind === "link" ? "wd-link" : "wd-button";
+    button.textContent = label;
+    return button;
+  }
+
+  // The action bar of every step: one primary, a quiet second, an error line
+  // above them that says what went wrong without a toast.
+  function dialogActions(...buttons) {
+    const bar = document.createElement("div");
+    bar.className = "share-modal-actions watch-dialog-actions";
+    const error = document.createElement("p");
+    error.id = "watchDialogError";
+    error.className = "watch-field-error watch-dialog-error";
+    error.setAttribute("role", "alert");
+    error.hidden = true;
+    bar.append(error, ...buttons);
+    return bar;
+  }
+
+  function showDialogError(message) {
+    const error = document.getElementById("watchDialogError");
+    if (!error) {
+      popup(message);
+      return;
+    }
+    error.textContent = message;
+    error.hidden = !message;
+  }
+
+  function questionPreview(question, editable) {
+    const preview = document.createElement("div");
+    preview.className = "watch-question-preview";
+    const text = document.createElement("strong");
+    text.textContent = question;
+    preview.appendChild(text);
+    if (editable) {
+      const edit = dialogButton("watchQuestionEdit", "Edit", "link");
+      edit.className = "watch-question-edit";
+      preview.appendChild(edit);
+    }
+    return preview;
+  }
+
   function renderQuestionStep(initialQuestion, modalIntent, setup = {}) {
     const { title, body } = els();
     if (!body) return;
-    title.textContent = "New Watch";
+    title.textContent = "New watch";
     body.innerHTML = `
       <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite" hidden></div>
       <div class="watch-question-field">
@@ -733,21 +952,25 @@
         <p id="watchQuestionNote" class="watch-goal-hint">One question about something that will change: a release, a decision, a price.</p>
         <textarea id="watchQuestion" class="watch-condition-input watch-question-input" maxlength="2000" rows="3" placeholder="Example: When will OpenAI release GPT-6?" aria-describedby="watchQuestionNote watchQuestionError">${escapeHtml(initialQuestion || "")}</textarea>
         <p id="watchQuestionError" class="watch-field-error" role="alert" hidden></p>
-      </div>
-      <div class="share-modal-actions">
-        <button type="button" id="watchQuestionNext" class="share-primary-btn">Continue</button>
-        <button type="button" id="watchCancelBtn" class="share-secondary-btn">Cancel</button>
       </div>`;
+    const next = dialogButton("watchQuestionNext", "Continue", "primary");
+    const cancel = dialogButton("watchCancelBtn", "Cancel");
+    body.appendChild(dialogActions(next, cancel));
     const input = document.getElementById("watchQuestion");
-    const next = document.getElementById("watchQuestionNext");
     bindWatchFieldErrorReset(input, "input");
-    document.getElementById("watchCancelBtn").addEventListener("click", closeDialog);
+    cancel.addEventListener("click", closeDialog);
     next.addEventListener("click", () => {
       clearWatchFieldError(input);
       const question = normalizeWatchQuestion(input.value);
       if (question.length < WATCH_QUESTION_MIN_CHARS) {
         setWatchFieldError(input, "Enter a complete question so the models know what to evaluate.");
         focusWatchField(input);
+        return;
+      }
+      // The same question as one already watched: say so now, not after the form.
+      const existing = watchedFor(question);
+      if (existing) {
+        renderAlreadyWatching(existing, modalIntent);
         return;
       }
       // Goals belong to the question they were written for; schedule and
@@ -763,7 +986,11 @@
       if (!next.disabled) next.click();
     });
     refreshDialogWatchLimit();
-    requestAnimationFrame(() => input.focus());
+    requestAnimationFrame(() => {
+      focusQuietly(input);
+      const end = input.value.length;
+      try { input.setSelectionRange(end, end); } catch (_) { /* not a text field */ }
+    });
   }
 
   // Suggestions cost a Judge call; going back to edit the question and
@@ -784,7 +1011,12 @@
       });
   }
 
+  // The goal suggestions are three rows at most; their places are held from
+  // the first frame, so the list below never jumps when they arrive (J2).
+  const GOAL_SUGGESTION_ROWS = 3;
+
   function renderConfirm(options, modalIntent) {
+    const F = fields();
     const directQuestion = normalizeWatchQuestion(options?.question);
     const presetGoal = normalizeWatchQuestion(options?.goal);
     const suppliedGoals = Array.isArray(options?.goals)
@@ -793,160 +1025,86 @@
     const watchedQuestion = directQuestion || normalizeWatchQuestion(window.lastQuestion);
     const { title, body } = els();
     if (!body) return;
-    title.textContent = directQuestion ? "New Watch" : "Watch this answer";
-    body.innerHTML = `
-      <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite" hidden></div>
-      ${watchedQuestion ? `<div class="watch-question-preview">
-        <strong>${escapeHtml(watchedQuestion)}</strong>
-        ${directQuestion ? '<button type="button" id="watchQuestionEdit" class="watch-question-edit">Edit</button>' : ""}
-      </div>` : ""}
-      <fieldset class="watch-goal" aria-describedby="watchGoalHint">
-        <legend id="watchGoalLabel" class="watch-goal-label">What are you waiting for?</legend>
-        <div class="watch-goal-options">
-          <div id="watchGoalSuggestions" class="watch-goal-suggestions" aria-live="polite"></div>
-          <div class="watch-goal-option is-custom">
-            <input type="radio" name="watchGoalChoice" id="watchGoalCustomChoice" value="custom" aria-label="Something else">
-            <input type="text" id="watchGoal" class="watch-goal-input" maxlength="500" placeholder="Something else…" aria-label="Something else: the event you are waiting for" aria-describedby="watchGoalError" autocomplete="off">
-          </div>
-          <label class="watch-goal-option">
-            <input type="radio" name="watchGoalChoice" id="watchGoalNone" value="none">
-            <span>Any change to the answer</span>
-          </label>
-        </div>
-        <p id="watchGoalHint" class="watch-goal-hint"></p>
-        <p id="watchGoalError" class="watch-field-error" role="alert" hidden></p>
-      </fieldset>
-      <details id="watchAdvancedSettings" class="watch-settings">
-        <summary>
-          <span id="watchSettingsSummary" class="watch-settings-summary"></span>
-          <span id="watchSettingsToggle" class="watch-settings-toggle">Change</span>
-        </summary>
-        <div class="watch-settings-body">
-          <div class="watch-config-grid">
-            <div class="watch-config-field">
-              <label class="watch-interval-label" for="watchInterval">How often</label>
-              <select id="watchInterval" class="watch-interval-select">${intervalOptions(presetInterval)}</select>
-            </div>
-            <div id="watchWeekdayWrap" class="watch-config-field">
-              <label class="watch-interval-label" for="watchWeekday">Day</label>
-              <select id="watchWeekday" class="watch-interval-select">${weekdayOptions(browserTomorrowWeekday())}</select>
-            </div>
-            <div class="watch-config-field">
-              <label class="watch-interval-label" for="watchRunTime">Time</label>
-              <input id="watchRunTime" class="watch-time-input" type="time" value="09:00" required aria-describedby="watchRunTimeNote watchRunTimeError">
-              <p id="watchRunTimeNote" class="watch-data-note"><span id="watchTimezoneLabel"></span></p>
-              <p id="watchRunTimeError" class="watch-field-error" role="alert" hidden></p>
-            </div>
-          </div>
-          <div class="watch-config-field">
-            <label class="watch-interval-label" for="watchEmailMode">Notify me</label>
-            <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only", Boolean(presetGoal))}</select>
-          </div>
-          <div class="watch-config-field">
-            <span class="watch-interval-label">Send to</span>
-            <div class="watch-channel-options">
-              <label class="watch-channel-option"><input type="checkbox" id="watchEmailEnabled" checked> E-mail</label>
-              <label id="watchTelegramOption" class="watch-channel-option"><input type="checkbox" id="watchTelegramEnabled" disabled> Telegram</label>
-              <button type="button" id="watchTelegramConnect" class="share-link-btn" hidden>Connect Telegram</button>
-            </div>
-            <p id="watchChannelsError" class="watch-field-error" role="alert" hidden></p>
-          </div>
-          <div class="watch-config-field">
-            <label class="watch-interval-label" for="watchVisibility">Watch page</label>
-            <select id="watchVisibility" class="watch-interval-select" required aria-describedby="watchVisibilityError">
-              <option value="private" selected>Private, only you</option>
-              <option value="public">Public, anyone with the link</option>
-            </select>
-            <p id="watchVisibilityError" class="watch-field-error" role="alert" hidden></p>
-          </div>
-        </div>
-      </details>
-      <div class="share-modal-actions">
-        <button type="button" id="watchConfirmBtn" class="share-primary-btn">Start watching</button>
-        <button type="button" id="watchCancelBtn" class="share-secondary-btn">Cancel</button>
-      </div>`;
-    document.getElementById("watchCancelBtn").addEventListener("click", closeDialog);
-    const visibilitySelect = document.getElementById("watchVisibility");
-    const intervalSelect = document.getElementById("watchInterval");
-    const weekdaySelect = document.getElementById("watchWeekday");
-    const runTimeInput = document.getElementById("watchRunTime");
-    const emailModeSelect = document.getElementById("watchEmailMode");
-    const goalInput = document.getElementById("watchGoal");
-    const customChoice = document.getElementById("watchGoalCustomChoice");
-    const noneChoice = document.getElementById("watchGoalNone");
-    const goalHint = document.getElementById("watchGoalHint");
-    const suggestions = document.getElementById("watchGoalSuggestions");
-    const emailEnabledInput = document.getElementById("watchEmailEnabled");
-    const telegramOption = document.getElementById("watchTelegramOption");
-    const telegramEnabledInput = document.getElementById("watchTelegramEnabled");
-    const telegramConnect = document.getElementById("watchTelegramConnect");
-    const channelsError = document.getElementById("watchChannelsError");
-    const advanced = document.getElementById("watchAdvancedSettings");
-    const settingsToggle = document.getElementById("watchSettingsToggle");
-    document.getElementById("watchTimezoneLabel").textContent = browserTimezone();
-    bindWeekdayVisibility(intervalSelect, document.getElementById("watchWeekdayWrap"));
+    title.textContent = "New watch";
+    body.replaceChildren();
+    const limitNote = document.createElement("div");
+    limitNote.id = "watchDialogLimit";
+    limitNote.className = "watch-limit-summary is-dialog";
+    limitNote.setAttribute("aria-live", "polite");
+    limitNote.hidden = true;
+    body.appendChild(limitNote);
+    if (watchedQuestion) body.appendChild(questionPreview(watchedQuestion, Boolean(directQuestion)));
 
     // --- What are you waiting for? -------------------------------------
-    // One visible choice instead of chips above an empty field: suggestions
-    // looked like decoration, and nothing showed that one still had to be
-    // clicked. The first row (a preset goal, else the first suggestion) is
-    // picked for the reader as long as they have not chosen anything.
+    // One visible choice instead of chips above an empty field. "Any change
+    // to the answer" is picked from the first frame, so what a quick Start
+    // sends is what the reader sees (J16); arriving suggestions take the
+    // pick over only while the reader has not chosen.
+    const goals = F.goalList({ prefix: "watchGoal", name: "watchGoalChoice" });
+    body.appendChild(goals.root);
+    const goalInput = goals.input;
+    const customChoice = goals.customChoice;
+    const noneChoice = goals.anyChoice;
+    const goalHint = goals.hint;
+    const suggestions = goals.offered;
     let goalTouched = false;
 
-    function checkedGoalChoice() {
-      return body.querySelector('input[name="watchGoalChoice"]:checked');
-    }
     function selectedGoal() {
-      const checked = checkedGoalChoice();
-      if (!checked || checked.value === "none") return "";
-      if (checked.value === "custom") return normalizeWatchQuestion(goalInput.value);
-      return checked.dataset.goal || "";
+      const value = goals.value();
+      return value.kind === "none" || !value.kind ? "" : value.goal;
     }
     function syncGoalHint() {
-      const checked = checkedGoalChoice();
-      goalHint.textContent = !checked
-        ? ""
-        : checked.value === "none"
-          ? "You hear from us whenever a source changes the answer."
-          : "When a source confirms it, you get the proof and the Watch ends.";
+      const checked = goals.checked();
+      goalHint.textContent = !checked || checked.value === "none"
+        ? "You hear from us whenever a source changes the answer."
+        : "When a source confirms it, you get the proof and the watch ends.";
     }
     function onGoalChange(keepError) {
       if (!keepError) clearWatchFieldError(goalInput);
       syncGoalHint();
       syncAlertLabels();
     }
-    function goalOption(goal) {
-      const option = document.createElement("label");
-      option.className = "watch-goal-option";
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = "watchGoalChoice";
-      radio.value = "suggested";
-      radio.dataset.goal = goal;
-      const text = document.createElement("span");
-      text.textContent = goal;
-      option.append(radio, text);
-      return option;
-    }
-    function renderGoalOptions(goals, settled) {
-      const current = selectedGoal();
+    function offeredGoals(goalsList) {
       const offered = presetGoal ? [presetGoal] : [];
-      goals.forEach(goal => {
+      goalsList.forEach(goal => {
         if (goal && !offered.includes(goal)) offered.push(goal);
       });
-      suggestions.innerHTML = "";
-      offered.forEach(goal => suggestions.appendChild(goalOption(goal)));
-      const radios = Array.from(suggestions.querySelectorAll('input[name="watchGoalChoice"]'));
-      const keep = radios.find(radio => radio.dataset.goal === current);
-      if (keep) keep.checked = true;
-      else if (!goalTouched && !checkedGoalChoice()) {
-        if (radios[0]) radios[0].checked = true;
-        else if (settled) noneChoice.checked = true;
-      }
+      return offered.slice(0, GOAL_SUGGESTION_ROWS + (presetGoal ? 1 : 0));
+    }
+    // Settled suggestions replace the held rows. The first offered row is
+    // picked for the reader as long as they have not chosen anything; a
+    // focus on the old pick follows it.
+    function renderGoalOptions(goalsList) {
+      const before = goals.checked();
+      const hadFocus = before && document.activeElement === before;
+      smoothHeight(suggestions, () => {
+        goals.setOffered(offeredGoals(goalsList));
+        suggestions.classList.toggle("is-empty", !suggestions.children.length);
+        const radios = goals.offeredRadios();
+        if (!goalTouched && radios[0]) radios[0].checked = true;
+        else if (!goals.checked()) noneChoice.checked = true;
+      }, { hold: goals.input.closest(".watch-goal-option") });
+      const after = goals.checked();
+      if (hadFocus && after && after !== before) focusQuietly(after);
       onGoalChange();
     }
+    function renderGoalPlaceholders() {
+      const known = offeredGoals([]);
+      goals.setOffered(known);
+      const loading = document.createElement("div");
+      loading.className = "watch-goal-loading";
+      loading.setAttribute("aria-hidden", "true");
+      loading.innerHTML = '<span class="watch-goal-option is-loading"></span>'.repeat(GOAL_SUGGESTION_ROWS);
+      suggestions.appendChild(loading);
+      const status = document.createElement("span");
+      status.className = "watch-sr-only";
+      status.textContent = "Finding events you may be waiting for…";
+      suggestions.appendChild(status);
+      if (known.length) goals.select(known[0]);
+      else noneChoice.checked = true;
+    }
 
-    body.querySelector(".watch-goal").addEventListener("change", event => {
+    goals.root.addEventListener("change", event => {
       if (event.target.name !== "watchGoalChoice") return;
       goalTouched = true;
       if (event.target === customChoice) goalInput.focus();
@@ -965,38 +1123,60 @@
       customChoice.checked = true;
       onGoalChange();
     });
-    // The custom row is a div (two controls), so its padding answers clicks
-    // like the label rows around it.
-    goalInput.closest(".watch-goal-option").addEventListener("click", event => {
-      if (event.target === event.currentTarget) goalInput.focus();
-    });
-
-    renderGoalOptions([]);
-    if (suppliedGoals) {
-      renderGoalOptions(suppliedGoals, true);
-    } else if (watchedQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
-      const loading = document.createElement("div");
-      loading.className = "watch-goal-loading";
-      loading.innerHTML = '<span class="watch-goal-option is-loading" aria-hidden="true"></span>'.repeat(2)
-        + '<span class="watch-sr-only">Finding events you may be waiting for…</span>';
-      suggestions.appendChild(loading);
-      loadGoalSuggestions(watchedQuestion, () => watchModalIntentIsCurrent(modalIntent))
-        .then(goals => {
-          if (suggestions.isConnected) renderGoalOptions(goals, true);
-        })
-        .catch(() => {
-          if (suggestions.isConnected) renderGoalOptions([], true);
-        });
-    } else {
-      renderGoalOptions([], true);
-    }
-
-    document.getElementById("watchQuestionEdit")?.addEventListener("click", () => {
-      renderQuestionStep(directQuestion, modalIntent,
-        { ...options, goal: selectedGoal() || presetGoal, interval: intervalSelect.value });
-    });
 
     // --- Schedule, alerts, channels, page: one line until "Change" -------
+    const advanced = document.createElement("details");
+    advanced.id = "watchAdvancedSettings";
+    advanced.className = "watch-settings";
+    const summary = document.createElement("summary");
+    summary.innerHTML = '<span id="watchSettingsSummary" class="watch-settings-summary"></span>'
+      + '<span id="watchSettingsToggle" class="watch-settings-toggle">Change</span>';
+    advanced.appendChild(summary);
+    const settingsBody = document.createElement("div");
+    settingsBody.className = "watch-settings-body";
+    advanced.appendChild(settingsBody);
+    body.appendChild(advanced);
+
+    const detailsInput = F.detailsInput("watchDetails", "");
+    settingsBody.appendChild(F.field({ label: "Details that matter", control: detailsInput, id: "watchDetails",
+      hint: "Every check searches with these. The goal only counts when they fit." }));
+    const intervalSelect = F.intervalSelect("watchInterval", presetInterval, dailyIntervalAllowed());
+    const weekdaySelect = F.weekdaySelect("watchWeekday", browserTomorrowWeekday());
+    const runTimeInput = F.timeInput("watchRunTime", "09:00");
+    const grid = document.createElement("div");
+    grid.className = "watch-config-grid";
+    const weekdayField = F.field({ label: "Day", control: weekdaySelect, id: "watchWeekdayWrap" });
+    weekdayField.id = "watchWeekdayWrap";
+    grid.append(
+      F.field({ label: "How often", control: intervalSelect }),
+      weekdayField,
+      F.field({ label: "Time", control: runTimeInput, id: "watchRunTime" })
+    );
+    settingsBody.appendChild(grid);
+    const emailModeSelect = F.alertSelect("watchEmailMode", "changes_only", Boolean(presetGoal));
+    settingsBody.appendChild(F.field({ label: "Notify me", control: emailModeSelect, wide: true }));
+    const channels = buildChannels({ idPrefix: "watch", email: true, telegram: false });
+    settingsBody.appendChild(channels.field);
+    const visibilitySelect = F.visibilitySelect("watchVisibility", "private");
+    visibilitySelect.required = true;
+    settingsBody.appendChild(F.field({ label: "Watch page", control: visibilitySelect, id: "watchVisibility" }));
+
+    const confirm = dialogButton("watchConfirmBtn", "Start watching", "primary");
+    const cancel = dialogButton("watchCancelBtn", "Cancel");
+    body.appendChild(dialogActions(confirm, cancel));
+    cancel.addEventListener("click", closeDialog);
+
+    const emailEnabledInput = channels.email;
+    const telegramEnabledInput = channels.telegram;
+    const channelsError = channels.error;
+    const settingsToggle = document.getElementById("watchSettingsToggle");
+    const syncWeekday = () => {
+      const hide = intervalSelect.value !== "weekly";
+      if (weekdayField.hidden !== hide) smoothHeight(grid, () => { weekdayField.hidden = hide; });
+    };
+    intervalSelect.addEventListener("change", syncWeekday);
+    syncWeekday();
+
     // The fields as POST /api/watch takes them; the summary line reads the same.
     function currentSettings() {
       return {
@@ -1013,8 +1193,7 @@
       document.getElementById("watchSettingsSummary").textContent = settingsSummary(currentSettings());
     }
     function syncAlertLabels() {
-      const selected = emailModeSelect.value;
-      emailModeSelect.innerHTML = emailModeOptions(selected, Boolean(selectedGoal()));
+      F.relabelAlerts(emailModeSelect, Boolean(selectedGoal()));
       updateSetupSummary();
     }
     [visibilitySelect, intervalSelect, weekdaySelect, emailModeSelect,
@@ -1022,32 +1201,41 @@
       input.addEventListener("change", updateSetupSummary);
     });
     runTimeInput.addEventListener("input", updateSetupSummary);
+    // "Change" opens the settings below the line; the dialog grows down from
+    // its fixed top edge, softly.
+    summary.addEventListener("click", event => {
+      event.preventDefault();
+      smoothHeight(settingsBody.parentElement, () => { advanced.open = !advanced.open; });
+    });
     advanced.addEventListener("toggle", () => {
       settingsToggle.textContent = advanced.open ? "Done" : "Change";
     });
-    updateSetupSummary();
 
-    function syncTelegram(state) {
-      // Without a configured bot the option is noise; unconnected, it offers
-      // the connection next to it.
-      telegramOption.hidden = !state.configured;
-      telegramEnabledInput.disabled = !state.connected;
-      telegramConnect.hidden = !!state.connected || !state.configured;
-      telegramOption.title = state.connected && state.telegram_username
-        ? "Connected as @" + state.telegram_username : "";
+    renderGoalPlaceholders();
+    syncGoalHint();
+    updateSetupSummary();
+    if (suppliedGoals) {
+      renderGoalOptions(suppliedGoals);
+    } else if (watchedQuestion.length >= WATCH_QUESTION_MIN_CHARS) {
+      loadGoalSuggestions(watchedQuestion, () => watchModalIntentIsCurrent(modalIntent))
+        .then(goalsList => {
+          if (suggestions.isConnected) renderGoalOptions(goalsList);
+        })
+        .catch(() => {
+          if (suggestions.isConnected) renderGoalOptions([]);
+        });
+    } else {
+      renderGoalOptions([]);
     }
-    loadTelegramState().then(syncTelegram).catch(() => {
-      syncTelegram({ configured: false, connected: false });
+
+    document.getElementById("watchQuestionEdit")?.addEventListener("click", () => {
+      renderQuestionStep(directQuestion, modalIntent,
+        { ...options, goal: selectedGoal() || presetGoal, interval: intervalSelect.value });
     });
-    telegramConnect.addEventListener("click", () => connectTelegram(syncTelegram));
-    [emailEnabledInput, telegramEnabledInput].forEach(input => input.addEventListener("change", () => {
-      channelsError.hidden = true;
-      channelsError.textContent = "";
-    }));
+
     bindWatchFieldErrorReset(visibilitySelect, "change");
     bindWatchFieldErrorReset(runTimeInput, "input");
     emailModeSelect.addEventListener("change", () => clearWatchFieldError(goalInput));
-    const confirm = document.getElementById("watchConfirmBtn");
     if (!directQuestion && !window.lastShareResultId && window.currentBookmarkShareResultContext) {
       confirm.disabled = true;
       confirm.textContent = "Preparing saved consensus…";
@@ -1061,6 +1249,10 @@
       confirm.textContent = "Run a consensus first";
     }
     refreshDialogWatchLimit();
+    // The focus lands on the step's first choice, never on the page (J27).
+    requestAnimationFrame(() => {
+      if (!body.contains(document.activeElement)) focusQuietly(goals.checked() || confirm);
+    });
     confirm.addEventListener("click", async function () {
       const resultId = directQuestion ? "" : await (window.resolveCurrentShareResultId?.()
         || Promise.resolve(window.lastShareResultId));
@@ -1071,6 +1263,7 @@
       const goal = selectedGoal();
       const runTime = runTimeInput.value;
       [visibilitySelect, runTimeInput, goalInput].forEach(clearWatchFieldError);
+      showDialogError("");
       const invalidFields = [];
       if (customChoice.checked && !goal) {
         setWatchFieldError(goalInput, "Describe the event, or pick one of the options.");
@@ -1088,7 +1281,7 @@
         invalidFields.push(runTimeInput);
       }
       if (!emailEnabledInput.checked && !telegramEnabledInput.checked) {
-        channelsError.textContent = "Keep at least one delivery channel enabled.";
+        channelsError.textContent = "Keep at least one way to reach you.";
         channelsError.hidden = false;
         invalidFields.push(emailEnabledInput);
       }
@@ -1098,6 +1291,7 @@
       }
       this.disabled = true;
       this.textContent = "Starting…";
+      const question = directQuestion || watchedQuestion;
       try {
         const payload = { ...currentSettings(), condition: goal, timezone: browserTimezone() };
         if (directQuestion) payload.question = directQuestion;
@@ -1109,33 +1303,224 @@
           () => watchModalIntentIsCurrent(modalIntent)
         );
         if (!watchModalIntentIsCurrent(modalIntent)) return;
-        // Sidebar count and Agent cards follow the new Watch.
+        let watch = data.watch;
+        // "Details that matter" ride along in the same step; the create
+        // endpoint takes them through the watch's own update.
+        const details = normalizeWatchQuestion(detailsInput.value);
+        let detailsFailed = false;
+        if (details) {
+          try {
+            const updated = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { requirements: details });
+            watch = Object.assign({}, watch, updated.watch);
+          } catch (_) {
+            detailsFailed = true;
+          }
+        }
+        if (!watchModalIntentIsCurrent(modalIntent)) return;
+        // Sidebar count, Watch buttons and Agent cards follow the new watch.
         loadWatchLimits(true).catch(() => {});
-        const checked = checkedGoalChoice();
+        const checked = goals.checked();
         window.App?.trackAppEvent?.("app_watch_created", {
-          interval: data.watch.interval,
+          interval: watch.interval,
           source: options?.source || (directQuestion ? "query_first" : "consensus"),
           has_goal: Boolean(goal),
           goal_source: checked ? checked.value : "none"
         });
-        renderSuccess(data.watch, modalIntent);
+        renderSuccess(watch, modalIntent, { detailsFailed });
       } catch (error) {
-        if (!watchModalIntentIsCurrent(modalIntent)) return;
+        if (error?.stale || !watchModalIntentIsCurrent(modalIntent)) return;
         this.disabled = false;
         this.textContent = "Start watching";
-        if (error.status === 429) {
-          watchState.setLimits(null);
-          loadWatchLimits(true).then(applyDialogWatchLimit).catch(() => {});
+        if (isAlreadyWatched(error)) {
+          await loadWatchLimits(true).catch(() => {});
+          if (!watchModalIntentIsCurrent(modalIntent)) return;
+          renderAlreadyWatching(watchedFor(question) || { id: error.watchId, question }, modalIntent);
+          return;
         }
-        popup("Watch could not be started: " + error.message);
+        if (error.status === 429 && error.code !== "rate_limited") {
+          watchState.setLimits(null);
+          await loadWatchLimits(true).catch(() => {});
+          if (!watchModalIntentIsCurrent(modalIntent)) return;
+          renderLimitStep(modalIntent);
+          return;
+        }
+        showDialogError(error.code === "rate_limited"
+          ? error.message : "Watch could not be started: " + error.message);
       }
     });
   }
 
-  function renderSuccess(watch, modalIntent) {
+  // E-mail and Telegram as one group of boxes (never a label around both,
+  // J10). Without a configured bot Telegram is noise; unconnected, it says
+  // why it is off and offers the connection beside it (J19).
+  function buildChannels({ idPrefix = "", email = true, telegram = false, onChange } = {}) {
+    const F = fields();
+    const group = document.createElement("div");
+    group.className = "watch-channel-options";
+    const make = (id, label) => {
+      const wrap = document.createElement("label");
+      wrap.className = "watch-channel-option";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      if (id) box.id = id;
+      wrap.append(box, document.createTextNode(" " + label));
+      group.appendChild(wrap);
+      return { wrap, box };
+    };
+    const mail = make(idPrefix ? idPrefix + "EmailEnabled" : "", "E-mail");
+    mail.box.checked = email;
+    const tg = make(idPrefix ? idPrefix + "TelegramEnabled" : "", "Telegram");
+    if (idPrefix) tg.wrap.id = idPrefix + "TelegramOption";
+    tg.box.checked = telegram;
+    tg.box.disabled = true;
+    const connect = document.createElement("button");
+    connect.type = "button";
+    connect.className = "wd-link watch-telegram-connect";
+    if (idPrefix) connect.id = idPrefix + "TelegramConnect";
+    connect.textContent = "Connect Telegram";
+    connect.hidden = true;
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "wd-link watch-telegram-cancel";
+    cancel.textContent = "Cancel";
+    cancel.hidden = true;
+    group.append(connect, cancel);
+    const field = F.field({ label: "Send to", control: group, group: true, id: idPrefix ? idPrefix + "Channels" : "" });
+    const note = document.createElement("p");
+    note.className = "watch-field-hint watch-telegram-note";
+    note.hidden = true;
+    field.insertBefore(note, field.querySelector(".watch-field-error"));
+    const error = field.querySelector(".watch-field-error");
+    let telegramState = { configured: false, connected: false };
+    // Only the place the reader connected from ticks its box afterwards;
+    // other open settings just learn that Telegram is there now.
+    let initiated = false;
+
+    function sync(state = telegramState) {
+      telegramState = state || { configured: false, connected: false };
+      const status = telegramStatus();
+      tg.wrap.hidden = !telegramState.configured;
+      tg.box.disabled = !telegramState.connected;
+      if (!telegramState.connected) tg.box.checked = false;
+      tg.wrap.title = telegramState.connected && telegramState.telegram_username
+        ? "Connected as @" + telegramState.telegram_username : "";
+      const offer = telegramState.configured && !telegramState.connected;
+      connect.hidden = !offer;
+      connect.disabled = status === "waiting";
+      connect.textContent = status === "waiting" ? "Waiting for Telegram…" : "Connect Telegram";
+      cancel.hidden = !(offer && status === "waiting");
+      note.hidden = !offer;
+      note.textContent = status === "waiting"
+        ? "Press Start in Telegram. This updates by itself."
+        : "Connect Telegram once to get messages there too.";
+    }
+    const unsubscribe = onTelegramStatus((state, detail) => {
+      if (!group.isConnected) { unsubscribe(); return; }
+      if (state === "connected") {
+        sync(detail);
+        if (!initiated) return;
+        initiated = false;
+        // Connected for this watch: the box is ticked, not left for later.
+        tg.box.checked = true;
+        tg.box.dispatchEvent(new Event("change", { bubbles: true }));
+        F.markSaved(field, "Connected");
+        return;
+      }
+      if (state !== "waiting") initiated = false;
+      sync();
+      if (state === "expired") F.setError(field, "The link expired. Connect again when you are ready.");
+      if (state === "failed") F.setError(field, "Telegram could not be connected: " + (detail?.message || "try again."));
+    });
+    connect.addEventListener("click", () => {
+      F.setError(field, "");
+      initiated = true;
+      connectTelegram(state => {
+        watchState.setTelegram(state);
+      });
+    });
+    cancel.addEventListener("click", cancelTelegramPairing);
+    [mail.box, tg.box].forEach(box => box.addEventListener("change", () => {
+      F.setError(field, "");
+      onChange?.(box === mail.box ? "email_enabled" : "telegram_enabled", box);
+    }));
+    if (watchState.telegram) sync(watchState.telegram);
+    else {
+      sync();
+      if (window.auth?.currentUser) loadTelegramState().then(sync).catch(() => sync());
+    }
+    return { field, email: mail.box, telegram: tg.box, error, sync, connect };
+  }
+
+  // A question this account already watches (J17): what holds now and the
+  // way to it, instead of a form that ends in "already watched".
+  function renderAlreadyWatching(watch, modalIntent) {
     if (!watchModalIntentIsCurrent(modalIntent)) return;
     const { title, body } = els();
-    title.textContent = "Your Watch is active";
+    if (!body) return;
+    const paused = watch.status && !["active", "resolved"].includes(watch.status);
+    title.textContent = "Watching";
+    body.replaceChildren();
+    if (watch.question) body.appendChild(questionPreview(watch.question, false));
+    const card = document.createElement("div");
+    card.className = "watch-success-card";
+    card.innerHTML = '<span class="watch-success-icon" aria-hidden="true">✓</span><div><strong></strong><p></p></div>';
+    card.querySelector("strong").textContent = watch.status === "resolved"
+      ? "You watched this question until its goal was reached."
+      : paused ? "You already watch this question. The watch is paused."
+        : "You already watch this question.";
+    card.querySelector("p").textContent = watch.interval
+      ? "Checks " + formatWatchSchedule(watch) + "." : "";
+    body.appendChild(card);
+    const open = dialogButton("watchOpenExisting", "Open watch", "primary");
+    const close = dialogButton("watchCancelBtn", "Close");
+    body.appendChild(dialogActions(open, close));
+    open.addEventListener("click", () => openWatchDashboard({ focus: watch.id }));
+    close.addEventListener("click", closeDialog);
+    requestAnimationFrame(() => focusQuietly(open));
+  }
+
+  // All slots in use (J25): said before any typing, with the way out.
+  function renderLimitStep(modalIntent) {
+    if (!watchModalIntentIsCurrent(modalIntent)) return;
+    const { title, body } = els();
+    if (!body) return;
+    const limits = watchState.limits;
+    title.textContent = "New watch";
+    body.replaceChildren();
+    const card = document.createElement("div");
+    card.id = "watchDialogLimit";
+    card.className = "watch-limit-step";
+    const text = document.createElement("p");
+    text.textContent = limits ? limitMessage(limits) : "All watch slots are in use. Pause one to start another.";
+    card.appendChild(text);
+    const detail = document.createElement("p");
+    detail.className = "watch-field-hint";
+    detail.textContent = "Paused watches don't count, and you can resume them any time.";
+    card.appendChild(detail);
+    if ((window.App.normalizeTier?.(limits?.plan) || "free") === "free") {
+      const about = document.createElement("button");
+      about.type = "button";
+      about.className = "watch-limit-upgrade";
+      about.textContent = "About early access";
+      about.addEventListener("click", showWatchCostInfo);
+      card.appendChild(about);
+    }
+    body.appendChild(card);
+    const show = dialogButton("watchShowList", "Show my watches", "primary");
+    const close = dialogButton("watchCancelBtn", "Close");
+    body.appendChild(dialogActions(show, close));
+    show.addEventListener("click", () => {
+      closeDialog();
+      openWatchDashboard({ focusList: true });
+    });
+    close.addEventListener("click", closeDialog);
+    requestAnimationFrame(() => focusQuietly(show));
+  }
+
+  function renderSuccess(watch, modalIntent, { detailsFailed = false } = {}) {
+    if (!watchModalIntentIsCurrent(modalIntent)) return;
+    const { title, body } = els();
+    title.textContent = "Watching";
     const onWatchPage = onWatchPagePath();
     body.innerHTML = `
       <div class="watch-success-card">
@@ -1143,12 +1528,13 @@
         <div>
           <strong id="watchStartSummary"></strong>
           <p id="watchMailSummary"></p>
+          <p id="watchDetailsNote" class="watch-field-error" hidden></p>
         </div>
-      </div>
-      <div class="share-modal-actions">
-        <button type="button" id="watchDoneBtn" class="share-primary-btn">Done</button>
-        ${onWatchPage ? "" : '<button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>'}
       </div>`;
+    const done = dialogButton("watchDoneBtn", "Done", "primary");
+    const buttons = [done];
+    if (!onWatchPage) buttons.push(dialogButton("watchListLink", "Open Watches", "link"));
+    body.appendChild(dialogActions(...buttons));
     document.getElementById("watchStartSummary").textContent = "Checks " + formatWatchSchedule(watch);
     const goal = String(watch.condition || "").trim();
     document.getElementById("watchMailSummary").textContent = watch.email_mode === "every_run"
@@ -1158,15 +1544,22 @@
           ? `We write when a source confirms “${goal}”.`
           : `We write when a source confirms “${goal}”, and whenever the answer changes before that.`)
         : "We write only when a source changes the answer.";
-    // On the Watch page the list behind the dialog must show the new Watch.
-    document.getElementById("watchDoneBtn").addEventListener("click", () => {
-      if (onWatchPagePath()) openWatchDashboard();
-      else closeDialog();
+    if (detailsFailed) {
+      const note = document.getElementById("watchDetailsNote");
+      note.textContent = "Your details could not be saved. Add them under Settings on the card.";
+      note.hidden = false;
+    }
+    // On the Watch page the new watch appears at the top of the list behind
+    // the dialog, at once and marked, not after a reload far below (J15).
+    done.addEventListener("click", () => {
+      closeDialog();
+      if (onWatchPagePath()) window.App.watchDashboard?.addCreated?.(watch);
     });
     document.getElementById("watchListLink")?.addEventListener("click", () => {
       closeDialog();
-      openWatchDashboard();
+      openWatchDashboard({ focus: watch.id });
     });
+    requestAnimationFrame(() => focusQuietly(done));
   }
 
   function makeButton(label, className, handler) {
@@ -1180,10 +1573,23 @@
 
   // ------------------------------------------------------------------
   // Watch page (/app/watches): full view with URL + segmented-switch sync.
+  // The page scrolls the document like every page (F14): the chat column
+  // steps aside while it is open (body.is-watch-view) and gets its scroll
+  // position back when it returns. Changing views fades through: the old
+  // view fades out, the new one fades in with a small rise; the switch
+  // itself never moves (C6, J4).
   // ------------------------------------------------------------------
 
   const WATCH_PAGE_PATH = "/app/watches";
   const APP_PATH = "/app";
+  const VIEW_OUT_MS = 120;
+  const VIEW_IN_MS = 200;
+  let viewToken = 0;
+  let chatScrollY = 0;
+  let viewTimer = null;
+  // The state a running fade is heading for: asking again for it (the
+  // popstate that follows our own history.back()) must not restart it.
+  let viewHeading = null;
 
   function dashEls() {
     return {
@@ -1206,6 +1612,67 @@
     watchesButton.classList.toggle("is-active", isWatchView);
     watchesButton.setAttribute("aria-pressed", String(isWatchView));
     consensusButton.closest(".view-switch")?.setAttribute("data-active", isWatchView ? "watches" : "chat");
+  }
+
+  function watchViewIsOpen() {
+    const { page } = dashEls();
+    return Boolean(page && !page.hidden);
+  }
+
+  const VIEW_CLASSES = ["is-view-out", "is-view-in", "is-view-settle", "is-switch-out", "is-switch-in"];
+
+  // Opens or closes the page. `restoreScroll: false` leaves the window where
+  // a caller is about to put it (a chat opened from the sidebar).
+  function setWatchView(open, { animate = true, restoreScroll = true } = {}) {
+    const { page } = dashEls();
+    if (!page) return;
+    if (viewHeading === open) return;
+    const token = ++viewToken;
+    clearTimeout(viewTimer);
+    viewHeading = null;
+    const body = document.body;
+    setViewSwitchState(open);
+    const isOpen = !page.hidden;
+    // The switch lives on the start screen and on Watches; into or out of a
+    // chat it fades with the page instead of popping.
+    const switchMoves = !body.classList.contains("is-hero");
+    const swap = () => {
+      if (open && !isOpen) {
+        chatScrollY = window.scrollY || 0;
+        page.hidden = false;
+        body.classList.add("is-watch-view");
+        window.scrollTo(0, 0);
+      } else if (!open && isOpen) {
+        page.hidden = true;
+        body.classList.remove("is-watch-view");
+        if (restoreScroll) window.scrollTo(0, chatScrollY);
+      }
+    };
+    body.classList.remove(...VIEW_CLASSES);
+    if (open === isOpen || !animate || reducedMotion()) {
+      swap();
+      return;
+    }
+    body.classList.add("is-view-out");
+    if (switchMoves && !open) body.classList.add("is-switch-out");
+    viewHeading = open;
+    viewTimer = setTimeout(() => {
+      if (token !== viewToken) return;
+      viewHeading = null;
+      swap();
+      body.classList.remove("is-view-out", "is-switch-out");
+      body.classList.add("is-view-in");
+      if (switchMoves && open) body.classList.add("is-switch-in");
+      void body.offsetHeight;
+      requestAnimationFrame(() => {
+        if (token !== viewToken) return;
+        body.classList.add("is-view-settle");
+        body.classList.remove("is-view-in", "is-switch-in");
+        viewTimer = setTimeout(() => {
+          if (token === viewToken) body.classList.remove("is-view-settle");
+        }, VIEW_IN_MS + 40);
+      });
+    }, VIEW_OUT_MS);
   }
 
   function acknowledgeViewSwitchHint() {
@@ -1233,24 +1700,35 @@
     const { page } = dashEls();
     if (!page || page.dataset.wired) return;
     page.dataset.wired = "1";
-    document.addEventListener("keydown", event => {
-      if (event.key === "Escape" && !page.hidden) closeWatchDashboard();
-    });
+    // Esc closes the topmost layer only (a dialog, a menu): the page is a
+    // page, not a layer, and never closes on Esc with work in it (J1).
     // Browser-Navigation (Back/Forward) hält Seite und URL synchron.
     window.addEventListener("popstate", () => {
       if (onWatchPagePath()) showWatchPage();
       else {
-        page.hidden = true;
-        setViewSwitchState(false);
+        window.App.watchDashboard?.commitPending?.();
+        setWatchView(false);
       }
     });
+    // New chat leaves Watches at once: its handler (app-init.js) puts the
+    // focus into the composer, which the fade would still keep hidden.
+    document.addEventListener("click", event => {
+      if (!watchViewIsOpen() || !event.target?.closest?.("#newRunButton")) return;
+      closeWatchDashboard({ animate: false });
+    }, true);
+    // A chat opened from the sidebar leaves Watches for that chat.
+    document.getElementById("bookmarksContainer")?.addEventListener("click", event => {
+      if (!watchViewIsOpen() || event.target.closest(".delete-bookmark")) return;
+      if (!event.target.closest(".bookmark")) return;
+      closeWatchDashboard({ animate: false, restoreScroll: false });
+    }, true);
   }
 
-  function closeWatchDashboard() {
+  function closeWatchDashboard(options = {}) {
     const { page } = dashEls();
     if (!page) return;
-    page.hidden = true;
-    setViewSwitchState(false);
+    window.App.watchDashboard?.commitPending?.();
+    setWatchView(false, options);
     if (!onWatchPagePath()) return;
     // Innerhalb der App geöffnet: echter History-Schritt zurück. Direkt auf
     // /app/watches geladen: URL ohne neuen History-Eintrag auf /app setzen.
@@ -1261,20 +1739,26 @@
     }
   }
 
-  function showWatchPage() {
+  function showWatchPage(options = {}) {
     const { page } = dashEls();
     if (!page) return;
     wireWatchPage();
-    page.hidden = false;
-    setViewSwitchState(true);
-    window.App.watchDashboard?.render();
-  }
-
-  function openWatchDashboard() {
+    setWatchView(true, { animate: options.animate !== false });
     if (!window.auth?.currentUser) {
-      popup("Please log in to use Consensus Watch.");
+      window.App.watchDashboard?.renderGuest?.();
       return;
     }
+    const rendering = window.App.watchDashboard?.render({ visit: true });
+    if (options.focus || options.focusList) {
+      Promise.resolve(rendering).then(() => {
+        if (options.focus) window.App.watchDashboard?.focusWatch?.(options.focus);
+      });
+    }
+  }
+
+  // Guests see the page too: what a watch is, by example, and the way in
+  // (J3) -- no toast that says "log in" and leaves them where they were.
+  function openWatchDashboard(options = {}) {
     // Share and Watch share one modal node. A navigation to the full Watch
     // view must never leave the previous Share surface floating above it.
     closeDialog();
@@ -1282,80 +1766,176 @@
     if (!onWatchPagePath()) {
       window.history.pushState({ watchPage: true }, "", WATCH_PAGE_PATH);
     }
-    showWatchPage();
+    showWatchPage(options);
   }
 
   function initWatchPageRoute() {
-    // Deep-Link /app/watches: Seite sofort zeigen, auf den asynchronen
-    // Firebase-Auth-Status warten und erst dann laden.
+    // Deep-Link /app/watches: app-bootstrap.js has already painted the page
+    // with its card skeleton (J6); here it waits for the asynchronous
+    // Firebase auth state and only then loads -- without a line of
+    // "Checking your session…" in between.
     if (!onWatchPagePath()) return;
     acknowledgeViewSwitchHint();
     const { page, body } = dashEls();
     if (!page || !body) return;
     wireWatchPage();
     page.hidden = false;
+    document.body.classList.add("is-watch-view");
     setViewSwitchState(true);
-    body.innerHTML = '<p class="watch-dash-loading">Checking your session…</p>';
+    if (!body.childElementCount) window.App.watchDashboard?.renderSkeleton?.();
+    // /app/watches?create=1 (the public watch page's invitation): the dialog
+    // opens once the session is known; a guest is asked to sign in first.
+    const url = new URL(window.location.href);
+    const wantsCreate = url.searchParams.get("create") === "1";
+    if (wantsCreate) {
+      url.searchParams.delete("create");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
     const startedAt = Date.now();
-    (function waitForAuth() {
+    // watch-dashboard.js comes right after this file in the same bundle: the
+    // first look waits until it is there (a guest whose state is already
+    // known would otherwise keep the skeleton).
+    const waitForAuth = function () {
       if (window.auth?.currentUser) {
         window.App.watchDashboard?.render();
+        if (wantsCreate) openWatchDialog("create", { source: "watch_page" });
         return;
       }
-      if (window.__consensioAuthState?.known === true) {
-        renderWatchLoginHint();
+      if (window.__consensioAuthState?.known === true || Date.now() - startedAt >= 8000) {
+        window.App.watchDashboard?.renderGuest?.();
+        if (wantsCreate) requireAccount({}, document.getElementById("watchDashCreate"));
         return;
       }
-      if (Date.now() - startedAt < 8000) {
-        setTimeout(waitForAuth, 250);
-        return;
-      }
-      renderWatchLoginHint();
-    })();
+      setTimeout(waitForAuth, 250);
+    };
+    setTimeout(waitForAuth, 0);
   }
 
   function renderWatchLoginHint(message) {
-    const { page, body } = dashEls();
-    if (!page || !body || !onWatchPagePath()) return;
+    const { page } = dashEls();
+    if (!page || !onWatchPagePath()) return;
     wireWatchPage();
     page.hidden = false;
+    document.body.classList.add("is-watch-view");
     setViewSwitchState(true);
-    body.innerHTML = "";
-    const hint = document.createElement("div");
-    hint.className = "wd-loading";
-    hint.textContent = message || "Please log in to see your Consensus Watch dashboard.";
-    body.appendChild(hint);
+    window.App.watchDashboard?.renderGuest?.(message);
+  }
+
+  // ------------------------------------------------------------------
+  // Watch buttons under an answer (Consensus footer, Agent answer): the
+  // same pill in both modes (J20); a watched question reads "Watching" and
+  // opens its watch (J17).
+  // ------------------------------------------------------------------
+  const EYE_ICON = '<svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>';
+  const answerButtons = new Set();
+
+  function syncWatchPill(button) {
+    if (!button?.isConnected) return;
+    const watch = watchedFor(button._watchQuestion?.());
+    const watching = Boolean(watch);
+    const label = button.querySelector("span");
+    const text = watching ? "Watching" : "Watch";
+    if (label && label.textContent !== text) label.textContent = text;
+    button.classList.toggle("is-watching", watching);
+    const description = watching ? "You watch this question. Open it on Watches." : "Watch this question for changes";
+    button.title = description;
+    button.setAttribute("aria-label", description);
+  }
+
+  function watchPill(id, question, onStart) {
+    const button = document.createElement("button");
+    button.type = "button";
+    if (id) button.id = id;
+    button.className = "consensus-share-pill watch-consensus-pill";
+    button.innerHTML = EYE_ICON + "<span>Watch</span>";
+    button._watchQuestion = question;
+    button.addEventListener("click", () => {
+      dismissWatchFeatureNudge("opened");
+      const watch = watchedFor(question());
+      if (watch) openWatchDashboard({ focus: watch.id });
+      else onStart(button);
+    });
+    answerButtons.add(button);
+    return button;
+  }
+
+  function syncConsensusWatchButton() {
+    const button = document.getElementById("consensusWatchButton");
+    if (button) syncWatchPill(button);
   }
 
   function initWatchButton() {
     const bar = document.querySelector("#consensusResponse .consensus-copy-inline");
     if (!bar || document.getElementById("consensusWatchButton")) return;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.id = "consensusWatchButton";
-    button.className = "consensus-share-pill watch-consensus-pill";
-    button.title = "Watch this consensus for material changes";
-    button.setAttribute("aria-label", "Watch this consensus for changes");
-    button.innerHTML = '<svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg><span>Watch</span>';
-    button.addEventListener("click", () => {
-      dismissWatchFeatureNudge("opened");
-      openWatchDialog("confirm");
-    });
+    const button = watchPill("consensusWatchButton",
+      () => normalizeWatchQuestion(window.lastQuestion),
+      trigger => openWatchDialog("confirm", { trigger }));
     const anchor = document.createElement("span");
     anchor.className = "watch-feature-anchor";
     anchor.appendChild(button);
     const actions = bar.querySelector(".consensus-actions-wrapper");
     bar.insertBefore(anchor, actions || null);
+    syncWatchPill(button);
+    // A bookmark or a new run changes the question under the same button.
+    const answer = document.getElementById("consensusAnswerBody");
+    if (answer && typeof MutationObserver === "function") {
+      new MutationObserver(syncConsensusWatchButton).observe(answer, { childList: true });
+    }
   }
+
+  // The Agent answer's pill, right after its evidence row (Sources ·
+  // Answers · Differences) in the same line, on phones on the next one;
+  // without an evidence row, on a line of its own under the answer.
+  // agent-chat.js calls this on every projection; a finished answer is
+  // `eligible`, a follow-up opens at the question so it can stand alone.
+  function syncAnswerWatchButton(answerBody, { question = "", eligible = false, followUp = false } = {}) {
+    if (!answerBody) return;
+    let button = answerBody._watchPill;
+    const text = normalizeWatchQuestion(question);
+    if (!eligible || text.length < WATCH_QUESTION_MIN_CHARS) {
+      button?.closest(".agent-watch-pill-row")?.remove();
+      button?.remove();
+      answerButtons.delete(button);
+      answerBody._watchPill = null;
+      return;
+    }
+    if (!button) {
+      button = watchPill("agentAnswerWatchButton", () => answerBody._watchPill?._question || text,
+        trigger => openWatchDialog("create", { question: button._question, editQuestion: button._followUp, source: "agent_answer", trigger }));
+      button.classList.add("agent-watch-pill");
+      answerBody._watchPill = button;
+    }
+    button._question = text;
+    button._followUp = followUp;
+    const nav = answerBody._agentReview?.isConnected
+      ? answerBody._agentReview.querySelector(".agent-evidence-links") : null;
+    if (nav) {
+      button.closest(".agent-watch-pill-row")?.remove();
+      if (nav.nextElementSibling !== button) nav.after(button);
+    } else {
+      let row = button.closest(".agent-watch-pill-row");
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "agent-watch-pill-row";
+        row.appendChild(button);
+      }
+      const after = answerBody._agentReview?.isConnected ? answerBody._agentReview : answerBody;
+      if (after.nextElementSibling !== row) after.after(row);
+    }
+    syncWatchPill(button);
+  }
+
+  window.addEventListener("consensio:watches-changed", () => answerButtons.forEach(syncWatchPill));
 
   function initViewSwitch() {
     const consensusButton = document.getElementById("viewSwitchConsensus");
     const watchesButton = document.getElementById("viewSwitchWatches");
     if (!consensusButton || !watchesButton) return;
 
-    consensusButton.addEventListener("click", closeWatchDashboard);
+    consensusButton.addEventListener("click", () => closeWatchDashboard());
     watchesButton.addEventListener("click", () => {
       acknowledgeViewSwitchHint();
+      if (watchViewIsOpen() && onWatchPagePath()) return;
       openWatchDashboard();
     });
     setViewSwitchState(onWatchPagePath());
@@ -1363,21 +1943,27 @@
   }
 
   function initDashboardCreateButton() {
-    document.getElementById("watchDashCreate")?.addEventListener("click", () => {
-      openWatchDialog("create");
+    document.getElementById("watchDashCreate")?.addEventListener("click", event => {
+      openWatchDialog("create", { trigger: event.currentTarget, source: "dashboard" });
     });
   }
 
   function resetAfterLogout() {
-    const { page, body } = dashEls();
+    const { page } = dashEls();
     watchState.resetSession();
-    if (body) body.innerHTML = "";
+    cancelTelegramPairing();
     const quota = document.getElementById("watchUsageDisplay");
     if (quota) quota.textContent = "";
+    answerButtons.forEach(syncWatchPill);
+    // Nothing of the old session stays: an Undo still open is taken back.
+    window.App.watchDashboard?.reset?.();
     if (onWatchPagePath()) {
       renderWatchLoginHint();
     } else {
-      if (page) page.hidden = true;
+      if (page) {
+        page.hidden = true;
+        document.body.classList.remove("is-watch-view");
+      }
       setViewSwitchState(false);
     }
   }
@@ -1390,30 +1976,38 @@
     // Slots and watched questions, loaded once per session (Agent cards).
     loadState: () => loadWatchLimits(false),
     watchedFor: watchedFor,
+    answerButton: syncAnswerWatchButton,
     resetAfterLogout: resetAfterLogout
   });
   // Shared with watch-dashboard.js, which renders /app/watches, and with
   // agent-watch.js, the Watch card under an Agent answer.
   window.App.watchUi = {
     api: api,
+    isAlreadyWatched: isAlreadyWatched,
     watchDefaults: watchDefaults,
     settingsSummary: settingsSummary,
     limitMessage: limitMessage,
     receiveWatchList: receiveWatchList,
+    loadTelegramState: loadTelegramState,
     popup: popup,
     escapeHtml: escapeHtml,
     makeButton: makeButton,
     formatWatchSchedule: formatWatchSchedule,
-    intervalOptions: intervalOptions,
-    weekdayOptions: weekdayOptions,
-    emailModeOptions: emailModeOptions,
     browserWeekday: browserWeekday,
     browserTimezone: browserTimezone,
+    dailyIntervalAllowed: dailyIntervalAllowed,
+    buildChannels: buildChannels,
     connectTelegram: connectTelegram,
+    cancelTelegramPairing: cancelTelegramPairing,
+    onTelegramStatus: onTelegramStatus,
+    telegramStatus: telegramStatus,
     normalizeWatchLimits: normalizeWatchLimits,
     renderWatchLimit: renderWatchLimit,
     openWatchDialog: openWatchDialog,
-    onWatchPagePath: onWatchPagePath
+    requireAccount: requireAccount,
+    onWatchPagePath: onWatchPagePath,
+    smoothHeight: smoothHeight,
+    reducedMotion: reducedMotion
   };
   initWatchButton();
   initViewSwitch();
@@ -1422,8 +2016,13 @@
   window.addEventListener("consensio:auth-state", event => {
     const uid = event.detail?.uid || null;
     const changed = watchState.updateAuthUid(uid);
+    if (uid && window.auth?.currentUser?.uid === uid) {
+      // Watch buttons know their state from the first answer on.
+      loadWatchLimits(false).catch(() => {});
+      resumePendingWatch();
+    }
     if (!onWatchPagePath() || !changed) return;
-    if (uid && window.auth?.currentUser?.uid === uid) showWatchPage();
+    if (uid && window.auth?.currentUser?.uid === uid) showWatchPage({ animate: false });
     else renderWatchLoginHint();
   });
   window.addEventListener("consensio:auth-unavailable", () => {

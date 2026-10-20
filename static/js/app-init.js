@@ -837,8 +837,9 @@
             );
           }
 
+          // The Watch page scrolls the window as well (components-watch.css).
           function canAutoHide(source) {
-            return source === watchPage ? watchIsOpen() : consensusIsReadable();
+            return source === watchPage ? watchIsOpen() : watchIsOpen() || consensusIsReadable();
           }
 
           function setChromeHidden(hidden) {
