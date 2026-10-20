@@ -57,6 +57,9 @@
     var normalized = unwrap(data);
     var code = String(normalized.error_code || normalized.code || "").toLowerCase();
     var text = String(message || normalized.error || normalized.detail || "").toLowerCase();
+    // Too many requests in a short time is a wait, never the day's
+    // allowance ("rate_limited", "provider_rate_limited", Apple-Audit H1).
+    if (code.indexOf("rate_limited") !== -1) return false;
     return code === "token_budget_exhausted"
       || code.indexOf("limit") !== -1
       || text.indexOf("usage limit") !== -1

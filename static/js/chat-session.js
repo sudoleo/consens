@@ -76,11 +76,11 @@
   // error_code + Text; alles andere bleibt beim generischen Retry-Hinweis.
   const PERSISTENCE_ERROR_MESSAGES = {
     chat_limit_reached:
-      "You've reached the maximum number of saved chats. Delete an old chat to start a new one.",
+      "You’ve reached the maximum number of saved chats. Delete an old chat to start a new one.",
     turn_limit_reached:
-      "This conversation has reached its maximum length. Start a new comparison to continue.",
+      "This chat has reached its maximum length. Start a new chat to continue.",
     chat_rate_limited:
-      "Too many new conversations in a short time. Please wait a moment.",
+      "Too many new chats in a short time. Wait a moment and try again.",
     pro_required: "This consensus engine is reserved for Pro users."
   };
 

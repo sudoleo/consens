@@ -54,20 +54,17 @@
   function uid() { return window.auth?.currentUser?.uid || ''; }
   async function request(path, options = {}) {
     const user = window.auth?.currentUser;
-    if (!user) throw new Error('Sign in to use Google data.');
+    if (!user) throw new Error('Log in to use Google data.');
     const token = await user.getIdToken();
     if (window.auth?.currentUser?.uid !== user.uid) throw new Error('Account changed.');
     const response = await fetch(path, {...options, headers: {Authorization: `Bearer ${token}`, ...options.headers}});
     if (window.auth?.currentUser?.uid !== user.uid) throw new Error('Account changed.');
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      const error = new Error(typeof data.detail === 'string' ? data.detail : data.error || 'The Google request failed. Please retry.');
-      error.status = response.status;
-      throw error;
-    }
+    if (!response.ok) throw App.httpError(response, await App.readJson(response).catch(() => ({})));
     return response;
   }
-  const api = async (path, options) => (await request(path, options)).json();
+  const api = async (path, options) => App.readJson(await request(path, options));
+  // Google's step failed: its sentence, or ours, never the engine's.
+  const failed = error => App.userError(error, { fallback: 'The Google request failed. Try again.' });
   const post = (path, body) => api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   function button(label, action, cls = '') {
     const el = node('button', label, `settings-inline-btn agent-google-btn${cls ? ' ' + cls : ''}`);
@@ -76,7 +73,7 @@
       if (el.getAttribute('aria-busy') === 'true') return;
       el.setAttribute('aria-busy', 'true'); el.disabled = true;
       // Synchronous until the action's first await, so popups stay user-initiated.
-      try { await action(event); } catch (error) { App.showPopup?.(error.message); }
+      try { await action(event); } catch (error) { App.showPopup?.(failed(error)); }
       finally { el.removeAttribute('aria-busy'); el.disabled = false; el._sync?.(); }
     });
     return el;
@@ -216,7 +213,7 @@
         if (calendarOn && !can(account(), 'calendar_read')) calendarOn = false;
       } catch (error) {
         if (seq !== connectionsGen) return;
-        connections = {...connections, status: connections.status === 'refreshing' ? 'ready' : 'error', error: error.message};
+        connections = {...connections, status: connections.status === 'refreshing' ? 'ready' : 'error', error: failed(error)};
       } finally {
         if (seq === connectionsGen) { connectionsPromise = null; renderSheet(); changed(); }
       }
@@ -257,7 +254,7 @@
       const email = finished?.connection?.email;
       if (email) App.showPopup?.(`Connected ${email}. Choose Gmail or calendars for your message.`);
       await current.after?.();
-    } catch (error) { App.showPopup?.(error.message); }
+    } catch (error) { App.showPopup?.(failed(error)); }
   });
   async function loadCalendars(pageToken = '') {
     const owner = uid(), connection = chosen, seq = ++calendarGen;
@@ -271,7 +268,7 @@
       calendars.next = result.next_page_token || null; calendars.status = 'ready';
     } catch (error) {
       if (seq !== calendarGen) return;
-      calendars.status = 'error'; calendars.error = error.message;
+      calendars.status = 'error'; calendars.error = failed(error);
     }
     renderCalendarList();
   }
@@ -516,7 +513,7 @@
     const focused = list.contains(document.activeElement) ? document.activeElement.id : '';
     const children = [];
     if (calendars.status === 'loading') children.push(node('p', 'Loading calendars…', 'agent-google-muted'));
-    if (calendars.status === 'error') children.push(notice(`Couldn't load calendars. ${calendars.error}`, 'error', () => loadCalendars()));
+    if (calendars.status === 'error') children.push(notice(`Couldn’t load calendars. ${calendars.error}`, 'error', () => loadCalendars()));
     if (calendars.status === 'ready' && !calendars.items.length) children.push(node('p', 'No calendars found for this account.', 'agent-google-muted'));
     calendars.items.forEach((item, index) => {
       const name = item.summary || item.id;
@@ -557,7 +554,7 @@
     children.push(points, details);
     const status = connections.status;
     if (status === 'idle' || status === 'loading') children.push(node('p', 'Loading Google accounts…', 'agent-google-muted'));
-    else if (status === 'error') children.push(notice(`Couldn't load Google accounts. ${connections.error}`, 'error', () => loadConnections(true)));
+    else if (status === 'error') children.push(notice(`Couldn’t load Google accounts. ${connections.error}`, 'error', () => loadConnections(true)));
     else if (!connections.configured) children.push(notice('Gmail and Calendar are not available on this installation.', 'info'));
     else if (!connections.accounts.length) {
       const empty = node('section', '', 'agent-google-empty');
@@ -623,7 +620,7 @@
       if (value.date) return `${value.date} (all day; end date is exclusive)`;
       if (value.dateTime) {
         try {
-          return `${new Date(value.dateTime).toLocaleString(undefined, {timeZone: value.timeZone || 'UTC', dateStyle: 'medium', timeStyle: 'short'})} · ${value.timeZone || 'UTC'} (${value.dateTime.match(/(Z|[+-]\d\d:\d\d)$/)?.[0] || ''})`;
+          return `${App.format.dateTime(value.dateTime, {year: true, timeZone: value.timeZone || 'UTC'})} · ${value.timeZone || 'UTC'} (${value.dateTime.match(/(Z|[+-]\d\d:\d\d)$/)?.[0] || ''})`;
         } catch (_) { return `${value.dateTime} ${value.timeZone || ''}`; }
       }
       return '';
@@ -633,8 +630,9 @@
   function when(value) {
     if (!value) return '';
     try {
-      if (value.date) return new Date(`${value.date}T12:00:00Z`).toLocaleDateString(undefined, {timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'});
-      return new Date(value.dateTime).toLocaleString(undefined, {timeZone: value.timeZone || 'UTC', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+      // One way to write a time (App.format, Apple-Audit H8), in the event's own zone.
+      if (value.date) return App.format.date(`${value.date}T12:00:00Z`, {weekday: true, timeZone: 'UTC'});
+      return App.format.dateTime(value.dateTime, {weekday: true, timeZone: value.timeZone || 'UTC'});
     } catch (_) { return value.dateTime || value.date || ''; }
   }
   function expired(action) { return action.status === 'pending' && Date.parse(action.approval_until) <= Date.now(); }
@@ -795,16 +793,16 @@
       field(list, 'Target', preview.target || '');
     }
     if (preview.reply) { field(list, 'Reply message', preview.reply.message_id || ''); field(list, 'Thread', preview.reply.thread_id || ''); }
-    if (action.created_at) field(list, 'Prepared', new Date(action.created_at).toLocaleString());
-    if (action.approval_until) field(list, 'Approval until', new Date(action.approval_until).toLocaleString());
+    if (action.created_at) field(list, 'Prepared', App.format.dateTime(action.created_at));
+    if (action.approval_until) field(list, 'Approval until', App.format.dateTime(action.approval_until));
     box.append(list);
     return box;
   }
   function expiryText(action) {
     const until = Date.parse(action.approval_until), minutes = Math.ceil((until - Date.now()) / 60000);
     if (!Number.isFinite(minutes)) return '';
-    if (minutes > 60) return `Confirm by ${new Date(until).toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'})}`;
-    return minutes <= 1 ? 'Confirm within a minute' : `Confirm within ${minutes} min`;
+    if (minutes > 60) return `Confirm by ${App.format.dateTime(until)}`;
+    return minutes <= 1 ? 'Confirm within a minute' : `Confirm within ${App.format.duration(minutes * 60000, {minutes: true})}`;
   }
   async function afterChange(chatId, focusId) {
     if (currentChat() === chatId) await refreshActions(chatId, true);

@@ -389,7 +389,7 @@ describe("single-model agent chat", () => {
     // A turn with an answer check of its own keeps the usual words.
     review.checks.push({comparison_id:'c2',status:'succeeded'});
     w.App.agentActivity.render(host, {events, review});
-    expect(host.textContent).toContain('Answer review · Completed');
+    expect(host.textContent).toContain('Answer check · Completed');
     expect(host.textContent).not.toContain('Checked your text');
     dom.window.close();
   });
@@ -401,7 +401,7 @@ describe("single-model agent chat", () => {
       {kind:'tool',id:'s',name:'check_contradictions',status:'succeeded'}];
     w.App.agentActivity.render(host, {events, review: {checks:[{comparison_id:'c1',status:'succeeded'}]}});
     expect(host.querySelectorAll('.agent-activity-tool')).toHaveLength(1);
-    expect(host.textContent).toContain('Answer review · Completed');
+    expect(host.textContent).toContain('Answer check · Completed');
     expect(host.textContent).not.toMatch(/source check|Tool ·/i);
     dom.window.close();
   });
@@ -587,7 +587,7 @@ describe("single-model agent chat", () => {
     const usage = { input_tokens: 100, output_tokens: 20, estimated_cost_nano_usd: 12000000, cost_source: "provider" };
     window.App.agentActivity.render(host, { usage, status: "failed" });
     expect(host.querySelector(".agent-usage").textContent).toContain("$0.0120 provider cost");
-    expect(host.querySelector("summary").textContent).toContain("Response failed");
+    expect(host.querySelector("summary").textContent).toContain("Failed");
     expect(host.querySelector(".agent-activity-marker")).toBe(null);
     window.App.agentActivity.render(host, { usage: { ...usage, cost_source: "catalog" } });
     expect(host.querySelector(".agent-usage").textContent).toContain("~$0.0120 estimated");
@@ -803,7 +803,7 @@ describe("single-model agent chat", () => {
     w.App.agentActivity.render(host, {running:false, status:'failed', elapsedMs:103000, answerText:'Answer.', review:{status:'succeeded'}});
     expect(host.querySelector('.agent-activity-title').textContent).toBe('Thought for 1m 43s');
     w.App.agentActivity.render(host, {running:false, status:'failed', elapsedMs:103000, answerText:'Answer.', review:null});
-    expect(host.querySelector('.agent-activity-title').textContent).toBe('Response failed after 1m 43s');
+    expect(host.querySelector('.agent-activity-title').textContent).toBe('Failed after 1m 43s');
     dom.window.close();
   });
 
@@ -1780,6 +1780,32 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Apple-Audit H1: the engine's words ("Load failed", "Failed to fetch",
+  // "The string did not match the expected pattern.") never reach the reader.
+  it.each([
+    ['offline', false, async () => { throw new TypeError('Load failed'); }, 'You’re offline. Your message is back in the box.'],
+    ['a proxy page', true, async () => ({ ok: true, status: 200, text: async () => '<!doctype html><title>Sign in to the Wi-Fi</title>' }),
+      'consens.io can’t be reached right now. Your message is back in the box.'],
+    ['a gateway error', true, async () => ({ ok: false, status: 502, text: async () => '<html>Bad gateway</html>' }),
+      'consens.io can’t be reached right now. Your message is back in the box.'],
+  ])('says in plain words that a message not sent because of %s is back in the box', async (_case, online, chats, words) => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    Object.defineProperty(w.navigator, 'onLine', { configurable: true, get: () => online });
+    w.fetch.mockImplementation(async url => url === '/chats' ? chats() : { ok: true, json: async () => structuredClone(CATALOG) });
+    d.body.insertAdjacentHTML('beforeend', '<div id="bookmarksContainer"></div>');
+    d.getElementById('questionInput').value = 'Sent from a tunnel';
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    w.App.agentChat.project(run); w.App.agentChat.render();
+    const error = d.getElementById('agentAnswerError').textContent;
+    expect(error).toBe(words);
+    expect(error).not.toMatch(/Load failed|Failed to fetch|expected pattern|doctype|gateway|Wi-Fi/i);
+    expect(w.streamSSERequest).not.toHaveBeenCalled();
+    expect(d.getElementById('questionInput').value).toBe('Sent from a tunnel');
+    dom.window.close();
+  });
+
   it('says the chat list is full before anything is sent and keeps the draft', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
@@ -1838,8 +1864,10 @@ describe("single-model agent chat", () => {
     await w.App.agentChat.send();
     w.App.agentChat.project(w.App.runRegistry.visible());
     const error = d.getElementById('agentAnswerError').textContent;
-    expect(error).toContain('Not enough Agent tokens left for this step (needs about 18k, 1.2k left)');
+    // The reader's unit is the allowance, never tokens (Apple-Audit H4).
+    expect(error).toContain('Not enough of today’s allowance is left for this step.');
     expect(error).not.toContain('reservation');
+    expect(error).not.toMatch(/tokens|\d+k/);
     expect([...d.querySelectorAll('#agentAnswerErrorActions button')].map(b => b.textContent)).toEqual(['Try a smaller model', 'Choose models']);
     expect(d.getElementById('questionInput').value).toBe('Long question');
     w.App.openModelPicker = vi.fn();

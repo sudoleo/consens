@@ -165,7 +165,7 @@
   function choose(event) {
     event.stopPropagation();
     App.closeAttachMenu?.();
-    if (!uid()) { popup('Sign in to add files.'); return; }
+    if (!uid()) { App.askToLogIn?.('Log in to add files.', { trigger: event.currentTarget, source: 'drive' }); return; }
     if (slots() <= 0) { popup(`You can attach up to ${Number(App.attachments?.maxFiles) || 2} files per question.`); return; }
     const config = settings;
     if (!config || !ready()) {

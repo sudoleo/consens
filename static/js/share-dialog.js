@@ -140,7 +140,7 @@
     const { modal } = shareDialogEls();
     if (!modal) return;
     if (!window.auth?.currentUser) {
-      window.App.showPopup("Please log in to share.");
+      window.App.askToLogIn("Log in to share this answer.", { source: "share" });
       return;
     }
     setSharedModalOpen(true, "share");
@@ -172,14 +172,11 @@
       if (!authSnapshotIsCurrent(authSnapshot) || !shareViewIsCurrent(viewEpoch)) {
         throw staleShareRequest();
       }
-      let data = {};
-      try { data = await response.json(); } catch (e) { /* leerer Body */ }
+      const data = await window.App.readJson(response).catch(() => ({}));
       if (!authSnapshotIsCurrent(authSnapshot) || !shareViewIsCurrent(viewEpoch)) {
         throw staleShareRequest();
       }
-      if (!response.ok) {
-        throw new Error(data.error || data.detail || ("HTTP " + response.status));
-      }
+      if (!response.ok) throw window.App.httpError(response, data);
       return data;
     } catch (error) {
       if (error?.name === "AbortError") throw staleShareRequest();
@@ -211,12 +208,12 @@
     const viewEpoch = beginShareView();
     const { body, title } = shareDialogEls();
     if (!body) return;
-    title.textContent = "Share this consensus publicly";
+    title.textContent = "Share this answer publicly";
     body.innerHTML = `
       <p>This creates a <strong>public, read-only page</strong> with the question,
-      the consensus answer, the differences and the sources of this run.</p>
+      the answer, its differences and its sources.</p>
       <ul class="share-modal-notes">
-        <li>Anyone with the link can view it - no login required.</li>
+        <li>Anyone with the link can view it, without an account.</li>
         <li>The page contains no account data and is not linked to you publicly.</li>
         <li>It is a snapshot: later runs will not change it.</li>
         <li>You can revoke the link at any time under "My shared links".</li>
@@ -263,7 +260,7 @@
         if (err?.stale) return;
         this.disabled = false;
         this.textContent = "Create public link";
-        window.App.showPopup("Sharing failed: " + err.message);
+        window.App.showPopup(window.App.userError(err, { fallback: "The link couldn’t be created. Try again." }), { tone: "error" });
       }
     });
   }
@@ -274,7 +271,7 @@
     if (!body) return;
     title.textContent = "Public link created";
     body.innerHTML = `
-      <p>Your consensus is now available at:</p>
+      <p>Your answer is now public at:</p>
       <div class="share-url-row">
         <input type="text" id="shareUrlInput" readonly>
         <button type="button" id="shareCopyUrlBtn" class="share-primary-btn">Copy</button>
@@ -307,7 +304,7 @@
       if (err?.stale || !shareViewIsCurrent(viewEpoch)) return;
       body.innerHTML = "";
       const p = document.createElement("p");
-      p.textContent = "Could not load your shared links: " + err.message;
+      p.textContent = "Your shared links couldn’t be loaded. " + window.App.userError(err, { fallback: "Try again." });
       body.appendChild(p);
       return;
     }
@@ -369,7 +366,7 @@
         } catch (err) {
           if (err?.stale) return;
           revokeBtn.disabled = false;
-          window.App.toast?.({ message: "Revoking failed: " + err.message, tone: "error" });
+          window.App.toast?.({ message: window.App.userError(err, { fallback: "The link couldn’t be revoked. Try again." }), tone: "error" });
         }
       });
 

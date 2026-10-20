@@ -280,7 +280,7 @@ def test_restored_context_keeps_the_composer_open_and_continuable(app_page):
     app_page.evaluate("() => window.App.followup.markContinuationUnavailable()")
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Start a new comparison — saved context unavailable"
+        "placeholder", "Start a new chat — the saved context is unavailable"
     )
 
 
@@ -766,7 +766,9 @@ def test_usage_display_is_stable_and_updates_visible_quota_panel(app_page):
     box = app_page.locator("#quotaTrigger .quota-ring").bounding_box()
     assert box is not None and box["width"] <= 20.5
     expect(app_page.locator("#quotaPercent")).to_have_text("62%")
-    expect(app_page.locator("#quotaDetail")).to_contain_text("409k of 660k tokens")
+    # The reader sees the allowance; the token figures are for admins only (Apple-Audit H4).
+    expect(app_page.locator("#quotaDetail")).to_contain_text("A Consensus run uses about")
+    expect(app_page.locator("#quotaDetail .admin-only")).to_be_hidden()
 
 
 def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
@@ -1799,7 +1801,7 @@ def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
     expect(app_page.locator("#watchAdvancedSettings")).not_to_have_attribute("open", "")
     expect(app_page.locator("#watchVisibility")).to_be_hidden()
     assert app_page.locator("#watchVisibility").input_value() == "private"
-    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("E-mail · Private")
+    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Email · Private")
     dialog_box = app_page.locator("#shareModal .share-modal-content").bounding_box()
     assert dialog_box is not None
     assert dialog_box["y"] >= 0
@@ -1890,7 +1892,7 @@ def test_query_first_watch_guides_question_then_configuration(app_page):
     expect(app_page.locator("#watchDashCreate")).to_be_visible()
     expect(app_page.locator("#watchDashLimit")).to_contain_text("Standard access")
     expect(app_page.locator("#watchDashLimit")).to_contain_text("0 of 1 active")
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused watches don't count")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused watches don’t count")
 
     # An empty page has one heading and one action, the head's; below it, on
     # the same left edge, only the ways to start (Apple-Audit J24).

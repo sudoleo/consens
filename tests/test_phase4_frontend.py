@@ -66,8 +66,8 @@ def test_bookmark_save_failures_are_visible_and_deduplicated():
         firebase, "async function saveBookmarkConsensus(", "window.saveBookmarkConsensus ="
     )
 
-    assert "Bookmark limit reached" in notice
-    assert "Bookmark storage is full" in notice
+    assert "Your saved chats are full" in notice
+    assert "Your chat storage is full" in notice
     assert "600_000" in notice
     assert "window.App?.showPopup?.(message)" in notice
     assert 'showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`)' in model_save
@@ -152,7 +152,7 @@ def test_auth_bootstrap_watchdog_precedes_firebase_and_clears_stale_skeletons():
     assert loads_before("auth-bootstrap.js", "firebase.js")
     assert 'document.getElementById("authTopActions")' in bootstrap
     assert "authTopActions.hidden = false" in bootstrap
-    assert "Login is temporarily unavailable" in watchdog
+    assert "Logging in isn’t possible right now" in watchdog
     assert 'window.dispatchEvent(new CustomEvent("consensio:auth-unavailable"))' in watchdog
 
 
@@ -192,7 +192,7 @@ def test_bookmark_load_failure_has_a_visible_retry_state():
     firebase = read("static/firebase.js")
 
     assert "function renderBookmarksLoadError" in firebase
-    assert 'message.textContent = "Bookmarks could not be loaded."' in firebase
+    assert 'message.textContent = "Your chats couldn’t be loaded."' in firebase
     assert 'retry.textContent = "Try again"' in firebase
     assert "renderBookmarksLoadError(container)" in firebase
 
@@ -221,7 +221,7 @@ def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
     # Escape closes it, Tab wraps inside and focus goes back to the opener.
     modal_dialog = read("static/js/modal-dialog.js")
     assert '<dialog id="loginModal" class="modal" aria-labelledby="authTitle">' in template
-    assert 'id="closeLoginModal" aria-label="Close login dialog"' in template
+    assert 'id="closeLoginModal" aria-label="Close"' in template
     assert "window.App.modalDialog.open(modal, { opener: trigger || null, focus: initialFocus })" in firebase
     assert "keepOpen: authDialogHasTyping" in firebase
     assert "function trapTab(dialog, event)" in modal_dialog

@@ -25,18 +25,18 @@
   // The reason a failed send gives the person, in the dialog's own words.
   // FastAPI sends a string detail for 401/429/500 and a list for validation.
   function errorMessage(status, data) {
-    if (status === 401) return "Please log in again to send feedback.";
+    if (status === 401) return "Log in again to send feedback.";
     const detail = Array.isArray(data?.detail) ? data.detail[0]?.msg : data?.detail;
     if (typeof detail === "string" && detail.trim()) return detail.replace(/^Value error,\s*/, "");
-    if (status === 429) return "Too many messages in a row. Please wait a minute and try again.";
-    return "Your feedback could not be sent. Please try again.";
+    if (status === 429) return "Too many messages in a row. Wait a minute and try again.";
+    return "Your feedback couldn’t be sent. Try again.";
   }
 
   // Resolves with the server's answer; rejects with an Error whose message
   // can be shown as is.
   async function send(message, email) {
     const user = window.auth?.currentUser;
-    if (!user) throw new Error("Please log in to send feedback.");
+    if (!user) throw new Error("Log in to send feedback.");
     let response;
     try {
       const idToken = await user.getIdToken();
@@ -47,9 +47,9 @@
       });
     } catch (error) {
       console.error("Feedback request failed:", error);
-      throw new Error("Your feedback could not be sent. Check your connection and try again.");
+      throw new Error(window.App.userError(error, { fallback: "Your feedback couldn’t be sent. Try again." }));
     }
-    const data = await response.json().catch(() => null);
+    const data = await window.App.readJson(response).catch(() => null);
     if (!response.ok || data?.status !== "success") {
       throw new Error(errorMessage(response.status, data));
     }

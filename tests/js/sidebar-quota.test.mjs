@@ -46,12 +46,16 @@ it('shows one quiet ring for the shared account, the value only in label and pan
   expect(d.getElementById('quotaPrimary').hidden).toBe(false);
   expect(d.getElementById('quotaPercent').textContent).toBe('62%');
   expect(d.getElementById('quotaReset').textContent).toMatch(/^Resets at .+ · in /);
-  expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · a Consensus run uses about 8%');
+  // The token figures are the operator's: they stand in an admin-only part
+  // (style.css hides .admin-only without body.viewer-is-admin, Apple-Audit H4).
+  expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · A Consensus run uses about 8%.');
+  expect(d.querySelector('#quotaDetail .admin-only').textContent).toBe('409k of 660k tokens · ');
+  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Consensus run uses about 8%.');
   // The Reasoning switch shows its own (larger) run, under its new name.
   const reasoning = d.getElementById('reasoningToggle');
   reasoning.checked = true;
   w.App.sidebarQuota.sync();
-  expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · a Reasoning run uses about 23%');
+  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Reasoning run uses about 23%.');
   reasoning.checked = false;
   w.App.sidebarQuota.sync();
   expect(d.getElementById('quotaWatchValue').textContent).toBe('3 / 5');
@@ -66,8 +70,9 @@ it('turns only the arc and the bar amber or red, and explains holds and estimate
   expect(d.getElementById('quotaPercent').textContent).toBe('22%');
   expect(d.getElementById('quotaRingArc').getAttribute('stroke')).toBe('var(--partial)');
   expect(d.getElementById('quotaTrack').dataset.state).toBe('low');
-  expect(d.getElementById('quotaFoot').textContent).toContain('55k held for work in progress.');
-  expect(d.getElementById('quotaFoot').textContent).toContain('10k estimated until the provider reports');
+  expect(d.getElementById('quotaFoot').textContent).toContain('8% is held for a message still running.');
+  expect(d.getElementById('quotaFoot').textContent).toContain('2% is an estimate until the exact use is known.');
+  expect(d.getElementById('quotaFoot').textContent).not.toMatch(/\d+k|tokens/);
 
   // Small remainders are "<1%", an overdrawn account is 0% and red.
   w.App.tokenBudget.apply({ limit: 660000, used: 657700, remaining: 2300, revision: 5, day: '2026-10-01' });

@@ -71,23 +71,22 @@
 
   async function request(path, options = {}) {
     const user = window.auth?.currentUser;
-    if (!user) throw new Error('Sign in to access files.');
+    if (!user) throw new Error('Log in to open files.');
     const token = await user.getIdToken();
     if (window.auth?.currentUser?.uid !== user.uid) throw new Error('Account changed.');
     const response = await fetch(path, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers } });
     if (window.auth?.currentUser?.uid !== user.uid) throw new Error('Account changed.');
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(typeof body.detail === 'string' ? body.detail : body.error || 'The file request failed. Please retry.');
-    }
+    if (!response.ok) throw App.httpError(response, await App.readJson(response).catch(() => ({})));
     return response;
   }
+  // A file step failed: the server's sentence or ours, never the engine's.
+  const fileError = (failure, context) => App.userError(failure, { context, fallback: context ? undefined : 'The file request failed. Try again.' });
   // Shared with agent-google.js: a plain inline button that reports failures.
   function button(label, action) {
     const control = node('button', 'settings-inline-btn', label); control.type = 'button';
     control.addEventListener('click', async () => {
       control.disabled = true;
-      try { await action(); } catch (failure) { App.showPopup?.(failure.message); }
+      try { await action(); } catch (failure) { App.showPopup?.(fileError(failure)); }
       finally { control.disabled = false; }
     });
     return control;
@@ -121,7 +120,7 @@
     const time = Date.parse(file.expires_at || '');
     if (!Number.isFinite(time)) return '';
     if (time <= Date.now()) return 'Expired';
-    return `Expires ${new Date(time).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+    return `Expires ${App.format.date(time)}`;
   }
   function sender(value) {
     const text = String(value || '').trim();
@@ -243,7 +242,7 @@
         for (const file of removeFiles) await request(`/agent/chats/${chatId}/files/${file.id}`, { method: 'DELETE' });
         confirmKey = '';
       } catch (failure) {
-        App.showPopup?.(failure.message);
+        App.showPopup?.(fileError(failure, 'delete'));
         remove.disabled = cancel.disabled = false; remove.textContent = label;
         return;
       }
@@ -281,7 +280,7 @@
     if (!available) control.title = file.status === 'processing' ? 'Still processing' : 'No longer available';
     control.addEventListener('click', async () => {
       control.disabled = true;
-      try { await download(chatId, file); } catch (failure) { App.showPopup?.(failure.message); }
+      try { await download(chatId, file); } catch (failure) { App.showPopup?.(fileError(failure)); }
       finally { control.disabled = false; }
     });
     return control;
@@ -403,8 +402,8 @@
     const box = node('div', 'agent-resource-notice');
     box.append(icon('warning'));
     const text = node('div', 'agent-resource-notice-text');
-    text.append(node('strong', '', files.length === 1 ? `Parts of ${files[0].name} couldn't be read`
-      : `Parts of ${files.length} files couldn't be read`));
+    text.append(node('strong', '', files.length === 1 ? `Parts of ${files[0].name} couldn’t be read`
+      : `Parts of ${files.length} files couldn’t be read`));
     for (const file of files) text.append(node('span', '', files.length === 1 ? file.warnings.join(' ') : `${file.name}: ${file.warnings.join(' ')}`));
     box.append(text);
     return box;
@@ -463,7 +462,7 @@
       if (error) {
         // Only worth a line when this answer's own files are missing.
         const notice = node('div', 'agent-files-error');
-        notice.append(icon('warning'), node('span', '', `Couldn't load this chat's files. ${error}`));
+        notice.append(icon('warning'), node('span', '', `Couldn’t load this chat’s files. ${error}`));
         const retry = node('button', 'agent-files-ghost', 'Retry'); retry.type = 'button';
         retry.addEventListener('click', () => refresh(chatId, true));
         notice.append(retry);
@@ -481,7 +480,7 @@
     controller?.abort(); controller = new AbortController();
     try {
       const response = await request(`/agent/chats/${chatId}/files`, { signal: controller.signal });
-      const body = await response.json();
+      const body = await App.readJson(response);
       if (seq !== generation || chatId !== chat || uid !== window.auth?.currentUser?.uid) return;
       data = { files: Array.isArray(body.files) ? body.files : [] }; error = ''; revision++;
       clearTimeout(retryTimer); retryTimer = null;
@@ -493,7 +492,7 @@
         retryTimer = setTimeout(() => { retryTimer = null; if (chat === chatId) refresh(chatId, true); }, RETRY_MS);
         return;
       }
-      error = failure.message || 'Please retry.'; revision++;
+      error = App.userError(failure, { fallback: 'Try again.' }); revision++;
     }
     project();
   }
@@ -569,16 +568,19 @@
           method: 'POST', signal, headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: file.name, data: file.data,
             ...(file.origin?.source === 'google_drive' && file.origin.file_id ? { drive_file_id: file.origin.file_id } : {}) }) });
-        data = await response.json();
+        data = await App.readJson(response);
       } catch (failure) {
         if (failure.name === 'AbortError' || signal.aborted) { uploads.delete(chatId); update(); throw failure; }
         uploads.delete(chatId);
         context.metadata.uploadFailed = true;
         // The file stays in the composer with the reason on its chip, so it can
         // be removed or replaced and the message sent again.
-        App.attachments?.markError?.(file, failure.message);
+        App.attachments?.markError?.(file, fileError(failure, 'upload'));
         if (result.length) refresh(chatId, true); else update();
-        throw new Error(`Couldn't upload ${file.name}. ${failure.message}`);
+        // Offline or unreachable is the message's problem, not the file's:
+        // the run says so and puts the message back (agent-chat.js failRun).
+        if (['offline', 'unreachable', 'timeout'].includes(App.userError.kind(failure))) throw failure;
+        throw new Error(`Couldn’t upload ${file.name}. ${fileError(failure, 'upload')}`);
       }
       if (!App.runRegistry.isAuthCurrent(context) || signal.aborted) { uploads.delete(chatId); update(); throw new DOMException('Stopped', 'AbortError'); }
       list[index].state = 'done'; list[index].warnings = data.file?.warnings || [];

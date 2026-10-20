@@ -53,6 +53,10 @@
    !important: existing UI code must remain able to reveal an element via an
    inline ``element.style.display`` assignment. */
 .u-display-none { display: none; }
+/* Token counts and provider cost are the operator's figures, not the
+   reader's (Apple-Audit H4): they show only while an admin is signed in
+   (firebase.js sets body.viewer-is-admin from /user_status). */
+body:not(.viewer-is-admin) .admin-only { display: none !important; }
 .u-display-block { display: block; }
 .u-position-relative { position: relative; }
 .u-m-0 { margin: 0 !important; }

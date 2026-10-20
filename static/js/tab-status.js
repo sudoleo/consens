@@ -7,7 +7,7 @@
   "use strict";
   const READY = "Answer ready";
   const WORKING = "Working…";
-  const FAILED = "Run stopped";
+  const FAILED = "Failed";
   let baseTitle = document.title;
   let shown = null; // the label currently in the title, or null for the base
 

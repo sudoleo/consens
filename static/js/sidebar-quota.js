@@ -45,11 +45,18 @@
     return api ? api.formatTokens(value) : String(value);
   }
 
+  // A part of the allowance as the reader sees it: "8%", never "<1" as 0.
+  function shareOf(value, limit) {
+    if (!(limit > 0)) return "Some";
+    var percent = Math.round(value / limit * 100);
+    return percent < 1 ? "Less than 1%" : percent + "%";
+  }
+
   /* "Watches: 2 / 5" → {value: 2, limit: 5}; null while loading. */
   function parseWatches() {
     var strong = el("watchUsageDisplay") && el("watchUsageDisplay").querySelector("strong");
     var text = strong ? (strong.textContent || "").trim() : "";
-    if (!text || text === "...") return null;
+    if (!text || text === "…" || text === "...") return null;
     if (/unlimited/i.test(text)) return { unlimited: true };
     var parts = text.split("/");
     if (parts.length !== 2) return null;
@@ -125,19 +132,34 @@
     setText(el("quotaReset"), "Resets at " + view.reset.clock + " · in " + view.reset.relative);
 
     if (detail) {
-      var line = fmt(view.left) + " of " + fmt(view.limit) + " tokens";
+      // The reader's unit is the allowance in percent; the token figures
+      // are the operator's and stand in a line only an admin sees
+      // (.admin-only, Apple-Audit H4).
       var mode = nextRunMode();
       var share = mode !== "agent" && tokens() ? tokens().runShare(mode) : null;
-      if (share) line += " · a " + MODE_NAMES[mode] + " uses about " + share;
-      else if (mode === "agent") line += " · Agent books each model call";
-      setText(detail, line);
+      var line = share ? "A " + MODE_NAMES[mode] + " uses about " + share + "."
+        : mode === "agent" ? "Agent uses a little of it for each model it asks." : "";
+      var figures = fmt(view.left) + " of " + fmt(view.limit) + " tokens";
+      var admin = detail.querySelector(".admin-only");
+      var words = detail.querySelector(".quota-detail-words");
+      if (!admin || !words) {
+        admin = document.createElement("span");
+        admin.className = "admin-only";
+        words = document.createElement("span");
+        words.className = "quota-detail-words";
+        detail.replaceChildren(admin, words);
+      }
+      setText(admin, line ? figures + " · " : figures);
+      setText(words, line);
+      // Without words of its own the line is the admin's figures alone.
+      detail.classList.toggle("admin-only", !line);
       setHidden(detail, false);
     }
 
     if (foot) {
       var notes = [];
-      if (view.reserved > 0) notes.push(fmt(view.reserved) + " held for work in progress.");
-      if (view.estimated > 0) notes.push(fmt(view.estimated) + " estimated until the provider reports the exact usage.");
+      if (view.reserved > 0) notes.push(shareOf(view.reserved, view.limit) + " is held for a message still running.");
+      if (view.estimated > 0) notes.push(shareOf(view.estimated, view.limit) + " is an estimate until the exact use is known.");
       if (view.state === "out") notes.push("Compare, Consensus and Agent share this allowance; it returns at the reset.");
       if (view.stale) notes.push("Last confirmed value; it refreshes when the connection is back.");
       setText(foot, notes.join(" "));

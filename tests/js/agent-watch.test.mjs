@@ -69,7 +69,7 @@ describe("Agent Watch card", () => {
     expect(card().querySelector(".agent-watch-question").textContent).toBe(QUESTION);
     expect(card().querySelector(".agent-watch-goal").textContent).toBe("Waiting for: GPT-6 is officially released");
     expect(card().querySelector(".agent-watch-settings").textContent)
-      .toBe(`Weekly on ${day[0].toUpperCase()}${day.slice(1)} at 09:00 · E-mail · Private`);
+      .toBe(`Weekly on ${day[0].toUpperCase()}${day.slice(1)} at 09:00 · Email · Private`);
     expect(card().querySelector(".agent-watch-start").disabled).toBe(false);
   });
 
@@ -123,14 +123,15 @@ describe("Agent Watch card", () => {
   });
 
   it("keeps the reason of a refused start that leaves Start the next step", async () => {
-    const { render, card } = boot({ create: { status: 429, data: { error: "Rate limit exceeded: 5 per 1 minute" } } });
+    const { render, card } = boot({ create: { status: 429, data: { error: "Too many requests in a short time. Please wait a moment and try again.",
+      code: "rate_limited", retry_after: 30 } } });
     render({ proposal: PROPOSAL });
     await settle();
     card().querySelector(".agent-watch-start").click();
     await settle();
     expect(card().dataset.state).toBe("proposal");
     expect(card().querySelector(".agent-watch-status").textContent)
-      .toBe("Watch could not be started: Rate limit exceeded: 5 per 1 minute");
+      .toBe("Watch not started. Too many requests in a short time. Please wait a moment and try again.");
   });
 
   it("explains a full account instead of offering a button that fails", async () => {

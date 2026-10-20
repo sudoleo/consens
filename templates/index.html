@@ -175,7 +175,7 @@
       <div id="usageOptions" class="visually-hidden u-mt-0">
         <h2 class="sidebar-static-heading">Usage</h2>
         <div id="usageDisplay">
-          <span id="watchUsageDisplay">Watches: <strong>...</strong></span><br>
+          <span id="watchUsageDisplay">Watches: <strong>…</strong></span><br>
           <span id="countdownDisplay"></span>
         </div>
       </div>
@@ -184,7 +184,7 @@
            open on the composer's run picker, where they have enough room. -->
       <div class="sidebar-section models-section">
         <button id="sidebarModelPicker" class="sidebar-model-entry" type="button"
-          aria-haspopup="listbox" data-tooltip="Choose providers, models and the consensus engine.">
+          aria-haspopup="listbox" data-tooltip="Choose the models that answer.">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
             <polyline points="2 17 12 22 22 17"></polyline>
@@ -228,7 +228,7 @@
             </button>
           </h2>
           <button id="bookmarkSearchTrigger" class="sidebar-search-trigger" type="button"
-                  aria-label="Search bookmarks" aria-expanded="false" aria-controls="chatSearch"
+                  aria-label="Search chats" aria-expanded="false" aria-controls="chatSearch"
                   aria-disabled="true" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7"></circle>
@@ -397,7 +397,7 @@
           <li class="run-step" data-step="prepare" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Prepare</span></li>
           <li class="run-step" data-step="answers" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Answers</span><span class="run-count" id="runCount"></span></li>
           <li class="run-step" data-step="consensus" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Consensus</span></li>
-          <li class="run-step" data-step="differences" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Contradiction check</span></li>
+          <li class="run-step" data-step="differences" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Answer check</span></li>
         </ol>
         <p class="run-meta"><span class="run-meta-text" id="runMeta"></span><span class="run-meta-next" id="runMetaNext"></span></p>
         <span class="run-time" id="runTime"></span>
@@ -517,7 +517,7 @@
             <span class="attach-menu-toggle-icon" aria-hidden="true"></span>
             <span class="attach-menu-toggle-text">
               <span class="search-mode-label menu-switch-label">Reasoning</span>
-              <span class="attach-menu-toggle-sub">Slower, uses more tokens</span>
+              <span class="attach-menu-toggle-sub">Slower, uses more of your allowance</span>
             </span>
             <span class="switch attach-menu-switch">
               <input type="checkbox" id="reasoningToggle">
@@ -659,7 +659,7 @@
         </svg>
       </span>
       <div class="verify-banner-copy">
-        <strong class="verify-banner-title">Confirm your e-mail to get started</strong>
+        <strong class="verify-banner-title">Confirm your email to get started</strong>
         <p class="verify-banner-body">
           We sent a confirmation link to <span id="verifyBannerEmail" class="verify-banner-email"></span>.
           Click it and you land right back here — your question stays in the field.
@@ -687,7 +687,7 @@
           <div class="consensus-box" id="consensusResponse">
             <!-- Die Antwort, volle Breite -->
             <div class="consensus-main">
-              <h2>Consensus Answer</h2>
+              <h2>Consensus answer</h2>
               <!-- Einziges Renderziel des Konsenstextes (Streaming + Final).
                    Bewusst ein Blockcontainer statt eines <p>: die Inline-Marker
                    wrappen Ranges im gerenderten Markdown. Zugriff ausschliesslich
@@ -733,7 +733,7 @@
                          consensus-progress.js (renderProvenance) aus dem echten
                          Zaehler, damit hier nie ein falscher Preis steht. -->
                     <button type="button" id="runReplayButton" class="run-replay-btn"
-                      title="Start a new comparison with the same question"><span class="run-replay-label">Run again</span><span class="run-replay-cost" id="runReplayCost"></span></button>
+                      title="Start a new chat with the same question"><span class="run-replay-label">Run again</span><span class="run-replay-cost" id="runReplayCost"></span></button>
                   </div>
               </div>
               <!-- Quellenverzeichnis: die hochgestellten Zahlen im Antworttext
@@ -815,7 +815,7 @@
        style: static/css/auth-modal.css) -->
   <dialog id="loginModal" class="modal" aria-labelledby="authTitle">
       <div class="modal-content auth-modal" id="loginModalContent" tabindex="-1">
-        <button type="button" class="close close-button" id="closeLoginModal" aria-label="Close login dialog"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        <button type="button" class="close close-button" id="closeLoginModal" aria-label="Close"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 
         <div class="auth-head">
           <img class="auth-mark" src="/static/favicon.png" alt="" width="38" height="27" />
@@ -854,18 +854,18 @@
 
           <!-- Google refuses to sign in inside app browsers (LinkedIn, Instagram, ...). -->
           <div id="inAppBrowserNotice" class="auth-inapp" role="note" hidden>
-            <p><strong>Google sign-in doesn&rsquo;t work inside <span id="inAppBrowserName">this app</span>.</strong>
-              <span id="inAppBrowserHint">Open consens.io in your browser (menu &rarr; &ldquo;Open in browser&rdquo;), or use your e-mail below.</span></p>
+            <p><strong>Logging in with Google doesn&rsquo;t work inside <span id="inAppBrowserName">this app</span>.</strong>
+              <span id="inAppBrowserHint">Open consens.io in your browser (menu &rarr; &ldquo;Open in browser&rdquo;), or use your email below.</span></p>
             <div class="auth-inapp-actions">
               <a id="inAppOpenBrowser" class="auth-chip" href="#" hidden>Open in Chrome</a>
               <button type="button" id="inAppCopyLink" class="auth-chip">Copy link</button>
             </div>
           </div>
 
-          <div id="oauthDivider" class="oauth-divider"><span>or with e-mail</span></div>
+          <div id="oauthDivider" class="oauth-divider"><span>or with email</span></div>
 
           <div class="auth-email-section">
-            <input type="email" id="loginEmail" name="email" placeholder="E-mail address" aria-label="E-mail address"
+            <input type="email" id="loginEmail" name="email" placeholder="Email address" aria-label="Email address"
               autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" />
 
             <div id="loginPasswordField" class="auth-password">
@@ -884,7 +884,7 @@
             <div id="loginError" class="error-message" role="alert" aria-live="polite"></div>
             <div id="registerError" class="error-message" role="alert" aria-live="polite"></div>
 
-            <p id="singleMailNote" class="auth-note u-display-none">No password needed yet. We&rsquo;ll e-mail you a link to set one.</p>
+            <p id="singleMailNote" class="auth-note u-display-none">No password needed yet. We&rsquo;ll email you a link to set one.</p>
           </div>
 
           <p id="authConsentNote" class="auth-legal">
@@ -909,14 +909,14 @@
   <dialog id="feedbackModal" class="modal" aria-labelledby="feedbackTitle">
     <div class="modal-content feedback-modal">
       <button type="button" class="close close-button" id="closeFeedbackModal" aria-label="Close feedback"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
-      <h2 id="feedbackTitle">Send Feedback</h2>
+      <h2 id="feedbackTitle">Send feedback</h2>
       <div id="feedbackGuestNote" class="feedback-guest-note" hidden>
         <p>Log in to send feedback from here, or write to
           <a href="mailto:contact@consens.io">contact@consens.io</a>.</p>
         <button type="button" id="feedbackLoginButton" class="feedback-login-button">Log in</button>
       </div>
       <form id="feedbackForm">
-        <textarea name="message" placeholder="Your Feedback" aria-label="Your feedback" maxlength="4000" required autofocus></textarea>
+        <textarea name="message" placeholder="Your feedback" aria-label="Your feedback" maxlength="4000" required autofocus></textarea>
         <input type="email" name="email" placeholder="Your email (optional)" aria-label="Your email (optional)" autocomplete="email">
         <button type="submit" class="feedback-submit">Submit</button>
         <p id="feedbackStatus" class="feedback-status" role="status" aria-live="polite" hidden></p>
@@ -929,7 +929,7 @@
   <dialog id="shareModal" class="modal" aria-labelledby="shareModalTitle">
     <div class="modal-content share-modal-content">
       <button type="button" class="close close-button" id="closeShareModal" aria-label="Close dialog"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
-      <h2 id="shareModalTitle">Share this consensus publicly</h2>
+      <h2 id="shareModalTitle">Share this answer publicly</h2>
       <div id="shareModalBody"></div>
     </div>
   </dialog>
@@ -987,7 +987,7 @@
           Paid plans are coming. There is no subscription to buy yet.
         </p>
         <p>
-          Feedback or a feature you'd like to use? Write to
+          Feedback or a feature you’d like to use? Write to
           <a href="mailto:contact@consens.io">contact@consens.io</a>.
         </p>
         <div class="pro-beta-actions">
@@ -1012,6 +1012,12 @@
             </button>
             <button id="closeSystemPromptModal" class="close close-button" type="button" aria-label="Close settings"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
+        </div>
+        <!-- A guest sees why Memory and the key are greyed out, and the way
+             in (app-ui.js syncSettingsGuestNote, Apple-Audit H13). -->
+        <div id="settingsGuestNote" class="settings-guest-note" hidden>
+          <p>Memory, your settings and your own API key are kept on your account.</p>
+          <button type="button" id="settingsLoginButton" class="btn">Log in</button>
         </div>
 
         <div class="settings-layout">
@@ -1114,8 +1120,8 @@
 
                 <div class="settings-memory-subheading settings-memory-subheading--notes">
                   <h4>Memory note</h4>
-                  <p>Paste a longer memory summary or keep your own background note here. It is plain text;
-                    Luna may add or patch one passage only when you explicitly submit a Remember or Correct memory action.</p>
+                  <p>Paste a longer memory summary or keep your own background note here. It’s plain text;
+                    consens.io changes a passage only when you choose Remember or Correct memory.</p>
                 </div>
                 <div class="settings-memory-field settings-memory-field--notes">
                   <label class="settings-field-label" for="memoryNotesInput">Note</label>
@@ -1148,7 +1154,7 @@
                 Switch it off and nothing new is saved; what was saved stays until you delete it here.</p>
               <p>The four About you fields are intentionally short. The server applies your plan’s limit (Free, Plus or Pro) to Saved memories,
                 but a long shared note can pull all six models towards the same framing and make the agreement score
-                look higher than it is. Please leave out health details, beliefs, or other people's personal data.</p>
+                look higher than it is. Leave out health details, beliefs or other people’s personal data.</p>
             </details>
           </section>
 
@@ -1164,7 +1170,7 @@
                 <label class="settings-field-label" for="systemPromptInput">System prompt</label>
                 <p>Customize how the models respond. Leave empty to use the default.</p>
                 <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7" maxlength="12000" placeholder="Use the app default, or enter your own instructions for Consensus answers."></textarea>
-                <button id="saveSystemPromptBtn" class="btn save-prompt-btn">Save System Prompt</button>
+                <button id="saveSystemPromptBtn" class="btn save-prompt-btn">Save system prompt</button>
               </div>
             </div>
           </section>
@@ -1248,7 +1254,7 @@
                 <label for="agentJudgesSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer check</strong>
-                    <small>Two judges check every answer that rests on comparisons against the model answers: the agreement score and the highlights come from them. Off finishes the answer sooner, without score or highlights. A text you ask Agent to check is still checked.</small>
+                    <small>Every answer that rests on a comparison is checked against the model answers; the agreement score and the highlights come from this check. Off finishes the answer sooner, without score or highlights. A text you ask Agent to check is still checked.</small>
                   </span>
                   <span class="settings-select">
                     <select id="agentJudgesSelect">
@@ -1319,7 +1325,7 @@
                 <label for="agreementDisplaySelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Agreement score</strong>
-                    <small>How much of the agreement verdict shows below Consensus and Agent answers. Hidden leaves only the drawers.</small>
+                    <small>How much of the agreement verdict shows below an answer. Hidden keeps only the links to its differences, answers and sources.</small>
                   </span>
                   <span class="settings-select">
                     <select id="agreementDisplaySelect">
@@ -1362,12 +1368,12 @@
                 <div id="apiSettingsArea" class="settings-collapsible-area u-display-none">
 
               <div class="api-key-group">
-                <label for="openrouterKey">OpenRouter API Key <span id="openrouterFeedback" class="feedback"></span></label>
-                <input type="text" id="openrouterKey" placeholder="sk-or-..." autocomplete="off">
+                <label for="openrouterKey">OpenRouter API key <span id="openrouterFeedback" class="feedback"></span></label>
+                <input type="text" id="openrouterKey" placeholder="sk-or-…" autocomplete="off">
               </div>
 
               <button id="testAllKeysButton" type="button" class="btn save-keys-btn">
-                Save & Test Keys
+                Save and test key
                 <span id="apiSpinner" class="spinner u-display-none"></span>
               </button>
               <div id="apiKeysStatus" class="api-keys-status" role="status" aria-live="polite" hidden></div>
@@ -1386,7 +1392,7 @@
               <div class="settings-section settings-danger-section">
                 <div>
                   <h4>Delete account</h4>
-                  <p>Permanently delete your account, bookmarks, and stored data. This cannot be undone.</p>
+                  <p>Permanently delete your account, your chats and all stored data. This can’t be undone.</p>
                 </div>
                 <button type="button" id="deleteAccountBtn" class="settings-danger-btn">Delete account</button>
               </div>
@@ -1395,12 +1401,8 @@
 
           </div>
         </div>
-
-        <!-- Die Version gehoert zum Fenster, nicht zu einer Kategorie: im Body
-             stuende sie unter jedem einzelnen Panel. -->
-        <div class="settings-footer">
-          <span class="settings-version">{% if app_commit %}build {{ app_commit }}{% endif %}</span>
-        </div>
+        {#- The build stays in the source link's tooltip in the sidebar
+            footer; Settings shows no commit hash (Apple-Audit H5). -#}
       </div>
     </dialog>
 
@@ -1411,159 +1413,99 @@
         <div class="modal-content faq-modal">
           <button type="button" class="close close-button" id="closeHelpModal" aria-label="Close help"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           <div class="faq-header">
-            <h2 id="helpTitle">FAQ & Quick Start</h2>
+            <h2 id="helpTitle">Help</h2>
           </div>
+          {#- What the product is today (Apple-Audit H7): one answer that
+              several models check, Watches, the allowance, memory, data.
+              Six questions, short, in the words the app uses. -#}
           <div class="faq-body">
             <div class="faq-intro">
-              <p>
-                <strong>What is consens.io?</strong><br>
-                consens.io runs your query in parallel across multiple large language models and presents their answers
-                side by side. In addition, it can integrate external search systems to retrieve current and verifiable
-                information.
-              </p>
-              <p><strong>Benefits:</strong><br>
-                ✓ Systematic comparison of Models<br>
-                ✓ Structured consensus building<br>
-                ✓ Integration of web-based research sources<br>
-              </p>
+              <p>consens.io writes one answer to your question and checks it against several AI models from
+                different companies, so you see where they agree and where they don’t.</p>
             </div>
 
             <div class="faq-item">
               <h3>
                 <span class="faq-number">1.</span>
-                What is Auto Consensus?
+                What happens when I send a message?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Auto Consensus automatically analyses several model responses, identifies agreements and discrepancies,
-                and generates a consolidated answer. The goal is a transparent and robust synthesis of the available
-                outputs.
+                Agent researches your question, asks the models you chose for their own answers and writes one
+                answer from them. The models come from OpenAI, Anthropic, Google Gemini, Mistral, Grok, DeepSeek,
+                Moonshot AI/Kimi, Z.ai/GLM and Meta Muse. While it works, the line above the answer shows each step;
+                open it later to see what was done. Compare (the answers side by side), Consensus, files and Reasoning are in the (+)
+                menu next to the message box.
               </p>
             </div>
 
             <div class="faq-item">
               <h3>
                 <span class="faq-number">2.</span>
-                What does Consensus Button do?
+                What do the marks in an answer mean?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                The Consensus Button combines the selected model responses into a single joint answer. Before running
-                it, you can include or exclude individual responses so that only the models you consider relevant
-                contribute to the final result.
+                Once the answer is written, a separate check compares each sentence with the model answers. A mark
+                shows where they differ: amber where they split, red where they contradict each other. Click a mark
+                to see who said what. The score below the answer counts how much the models agreed; it compares
+                answers and is not a fact-check. Settings › Display decides what is marked.
               </p>
             </div>
 
             <div class="faq-item">
               <h3>
                 <span class="faq-number">3.</span>
-                What is the Consensus Model?
+                What is a Watch?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                The Consensus Model is a dedicated model that does not answer user queries directly. Instead, it
-                evaluates, structures, and synthesises the already generated model responses into a coherent overall
-                statement.
+                A Watch asks your question again on a schedule, weekly or monthly (daily on Pro). It writes to you
+                by email or Telegram only when new evidence moves the answer, or when what you are waiting for
+                happens. Start one with the Watch button under an answer; all of them are under Watches at the top.
               </p>
             </div>
 
             <div class="faq-item">
               <h3>
                 <span class="faq-number">4.</span>
-                What does “Differences” show?
+                How much can I use it?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Differences highlights substantive deviations between the model responses. This makes it easier to see
-                where models arrive at different conclusions or add distinct perspectives.
+                consens.io is free while it’s being tested. Sending needs an account. Every account has a daily
+                allowance that all messages share; the ring at the bottom of the sidebar shows what’s left and when
+                it resets (midnight UTC). More models, Reasoning and longer answers use more of it. With your own
+                OpenRouter API key (Settings › Connections), messages run on your key instead.
               </p>
             </div>
 
             <div class="faq-item">
               <h3>
                 <span class="faq-number">5.</span>
-                What does the Reasoning switch do?
+                What does consens.io remember?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                With Reasoning on, the same models you selected think longer before they answer. That can help with
-                harder questions, but answers take longer and a run uses more of your daily allowance. It is available
-                on every plan; in Agent mode the same control lets you pick the reasoning level of the chat model.
+                Your chats are saved to your account, so you can open and continue them. Memory (Settings › Memory)
+                holds what you tell it about yourself and goes with your questions while it’s on; you can edit,
+                pause or delete it. Agent adds details from your messages only if you turn on “Let Agent update
+                memory”.
               </p>
             </div>
 
             <div class="faq-item">
               <h3>
                 <span class="faq-number">6.</span>
-                What does Web Search include?
+                What happens to my data?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Web Search forwards your query to a grounding Model in the background. The crawled webpages are passed
-                to all the models. The results are displayed directly within consens.io.
-              </p>
-            </div>
-
-            <div class="faq-item">
-              <h3>
-                <span class="faq-number">7.</span>
-                What is the purpose of including or excluding answers?
-                <span class="faq-toggle-icon">＋</span>
-              </h3>
-              <p>
-                By including or excluding individual model answers, you control which outputs are used in the consensus
-                generation. This allows you to filter out low-quality or irrelevant responses before they influence the
-                final result.
-              </p>
-            </div>
-
-            <div class="faq-item">
-              <h3>
-                <span class="faq-number">8.</span>
-                When do I need to enter API keys?
-                <span class="faq-toggle-icon">＋</span>
-              </h3>
-              <p>
-                API keys are only required if you want to use your own model access. You need a verified login before
-                saving, testing, or using personal credentials.
-              </p>
-            </div>
-
-            <div class="faq-item">
-              <h3>
-                <span class="faq-number">9.</span>
-                Which AI models are available?
-                <span class="faq-toggle-icon">＋</span>
-              </h3>
-              <p>
-                consens.io provides access to current large language models from several providers, including OpenAI,
-                Mistral, Anthropic, Grok, DeepSeek, Google Gemini, Moonshot AI/Kimi, Z.ai/GLM and Meta Muse.
-              </p>
-            </div>
-
-            <div class="faq-item">
-              <h3>
-                <span class="faq-number">10.</span>
-                How many queries can I make?
-                <span class="faq-toggle-icon">＋</span>
-              </h3>
-              <p>
-                Your remaining allowance is shown in the sidebar. Compare, Consensus, Reasoning runs and Agent share it.
-                Usage is limited during early access, and limits may change as the service develops.
-              </p>
-            </div>
-
-            <div class="faq-item">
-              <h3>
-                <span class="faq-number">11.</span>
-                What does consens.io cost?
-                <span class="faq-toggle-icon">＋</span>
-              </h3>
-              <p>
-                consens.io is currently free during early access. Usage limits apply, and some features
-                are available only to selected accounts. Paid plans are coming. There is no subscription to buy yet.
-                For more runs, you can connect your own OpenRouter API key in Settings and pay OpenRouter directly.
-                Feedback is welcome at <a href="mailto:contact@consens.io">contact@consens.io</a>.
+                Your messages go through OpenRouter to the providers whose models answer them, and only to endpoints
+                that don’t collect prompts for training. Delete a chat from its menu in the sidebar; deleting your account
+                (Settings › Account) removes your chats and everything stored about you. The
+                <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> has the details;
+                questions go to <a href="mailto:contact@consens.io">contact@consens.io</a>.
               </p>
             </div>
           </div>

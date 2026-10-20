@@ -113,9 +113,9 @@ describe("Watch times (watch-fields.js)", () => {
     const now = new Date(2026, 9, 20, 14, 0).getTime();
     expect(F.nextCheck({ next_run_at: new Date(now - 12 * 60000).toISOString() }, now).text).toBe("Check due now");
     expect(F.nextCheck({ checking: true, next_run_at: new Date(now - 60000).toISOString() }, now).text).toBe("Checking now…");
-    expect(F.nextCheck({ next_run_at: new Date(now + 12 * 60000).toISOString() }, now).text).toBe("Next check in 12 min");
+    expect(F.nextCheck({ next_run_at: new Date(now + 12 * 60000).toISOString() }, now).text).toBe("Next check in 12m");
     expect(F.nextCheck({ next_run_at: new Date(2026, 9, 21, 9, 0).toISOString() }, now).text).toBe("Next check tomorrow, 09:00");
-    expect(F.relativePast(new Date(now - 3 * 3600000).toISOString(), now)).toBe("3 h ago");
+    expect(F.relativePast(new Date(now - 3 * 3600000).toISOString(), now)).toBe("3h ago");
   });
 });
 
@@ -349,7 +349,7 @@ describe("Cards change in place (D6, J8, J13, J14)", () => {
       window.Date.now = () => now;
       await window.App.watchDashboard.render();
       const next = document.querySelector(".wd-side-next");
-      expect(next.textContent).toBe("Next check in 2 min");
+      expect(next.textContent).toBe("Next check in 2m");
       now = new Date(2026, 9, 20, 9, 3).getTime();
       window.__intervals.forEach(fn => fn());
       expect(next.textContent).toBe("Check due now");

@@ -936,7 +936,7 @@ def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
         aborted = page.evaluate("() => window.__runGate.aborted()")
         assert f"consensus|{question_a}" in aborted
         assert f"consensus|{question_b}" not in aborted
-        expect(page.locator(f'[data-run-id="{run_a}"]')).to_contain_text("Canceled")
+        expect(page.locator(f'[data-run-id="{run_a}"]')).to_contain_text("Stopped")
         expect(page.locator(f'[data-run-id="{run_b}"]')).to_contain_text(
             "Writing consensus"
         )
@@ -1826,13 +1826,13 @@ def test_late_watch_create_cannot_overwrite_newer_share_modal(browser, phase4_se
 
         page.evaluate("() => window.openShareDialog('confirm')")
         expect(page.locator("#shareModalTitle")).to_have_text(
-            "Share this consensus publicly"
+            "Share this answer publicly"
         )
         page.evaluate("() => window.__resolveWatchCreate()")
         page.wait_for_timeout(150)
 
         expect(page.locator("#shareModalTitle")).to_have_text(
-            "Share this consensus publicly"
+            "Share this answer publicly"
         )
         expect(page.locator("#shareModalBody")).not_to_contain_text(
             "Your Watch is active"
@@ -1883,7 +1883,7 @@ def test_watch_create_is_not_sent_after_modal_changes_during_token_wait(
 
         assert page.evaluate("() => window.__watchPostSent") is False
         expect(page.locator("#shareModalTitle")).to_have_text(
-            "Share this consensus publicly"
+            "Share this answer publicly"
         )
     finally:
         context.close()

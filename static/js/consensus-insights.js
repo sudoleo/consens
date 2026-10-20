@@ -1112,8 +1112,7 @@
             if (judge && judge.provider) {
               const note = document.createElement("span");
               note.className = "verdict-judge";
-              note.title = "The differences analysis is a separate judge call that"
-                + " checks the consensus against every model answer.";
+              note.title = "A separate check compares the consensus with every model answer.";
               const provider = document.createElement("span");
               provider.textContent = "analysis by " + judge.provider
                 + (judge.tier === "pro" ? " (Pro)" : "");
@@ -1920,7 +1919,7 @@
               if (hasDetail) {
                 head.type = "button";
                 head.setAttribute("aria-expanded", "false");
-                head.title = "Show this model's revised answer";
+                head.title = "Show this model’s revised answer";
               }
 
               const name = document.createElement("span");
@@ -2056,7 +2055,7 @@
 
           async function runResolveRound(diff, button, resultBox) {
             if (!window.auth?.currentUser) {
-              window.App?.showPopup?.("Please log in to resolve contradictions.");
+              window.App?.askToLogIn?.("Log in to resolve this disagreement.", { trigger: button, source: "resolve" });
               return;
             }
             // Bind everything before the first await. A different run or
@@ -2130,7 +2129,7 @@
                 controller: actionController
               }) || null;
             } catch (error) {
-              window.App?.showPopup?.(error?.message || "This Resolve round cannot start yet.");
+              window.App?.showPopup?.(window.App.userError(error, { fallback: "This resolve round can’t start yet." }));
               return;
             }
             const finishRegistryAction = function () {
@@ -2174,7 +2173,7 @@
             }
             if (!idToken || !authIsCurrent()) {
               finishRegistryAction();
-              window.App?.showPopup?.("Please log in to resolve contradictions.");
+              window.App?.showPopup?.("Your session has ended. Log in again to resolve this disagreement.");
               return;
             }
 
@@ -2214,7 +2213,7 @@
                 }),
                 signal: actionController.signal
               });
-              const data = await response.json().catch(() => ({}));
+              const data = await window.App.readJson(response).catch(() => ({}));
               if (!authIsCurrent()) return;
               if (!response.ok) {
                 const detail = data?.detail && typeof data.detail === "object" ? data.detail : null;
@@ -2227,10 +2226,7 @@
                   showResolveProTeaser();
                   return;
                 }
-                const message = detail?.error || data?.error
-                  || (typeof data?.detail === "string" ? data.detail : "")
-                  || ("Resolve HTTP " + response.status);
-                throw new Error(message);
+                throw window.App.httpError(response, data);
               }
 
               window.App.renderUsageDisplay(data, binding.auth);
@@ -2326,7 +2322,7 @@
               resultBox.innerHTML = "";
               const note = document.createElement("div");
               note.className = "resolve-outcome is-error";
-              note.textContent = error?.message || "The resolve round failed. Please try again.";
+              note.textContent = window.App.userError(error, { fallback: "The resolve round failed. Try again." });
               resultBox.appendChild(note);
               resultBox.hidden = false;
               button.disabled = false;
@@ -2376,7 +2372,7 @@
             label.className = "diff-resolve-btn-label";
             label.textContent = "Resolve with the models";
             btn.appendChild(label);
-            btn.title = "Ask the disagreeing models to re-examine this point against each other's position (uses 1 request)";
+            btn.title = "Ask the disagreeing models to re-examine this point against each other’s position (uses 1 request)";
             // Pro-Chip immer zeigen: Free-Nutzer sehen den Hinweis (Klick öffnet
             // die Kosten-Erklaerung), Pro-Nutzer die gleiche klare Kennzeichnung.
             const chip = document.createElement("span");

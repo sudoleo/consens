@@ -129,7 +129,9 @@
   top: 2px;
   width: 4px;
   height: 10px;
-  border: solid white;
+  /* The check takes the ink of a filled button: white on the dark box,
+     dark on the light box of dark mode (it was white on light grey). */
+  border: solid var(--button-text);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }

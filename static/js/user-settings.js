@@ -623,7 +623,7 @@
     let state;
     try {
       state = serverState(await request(candidate, "GET"));
-      if (!state) throw transient("The account's settings could not be read.");
+      if (!state) throw transient("The account’s settings could not be read.");
     } catch (error) {
       if (isCurrent(candidate) && !error.stale && !error.permanent) scheduleRetry(candidate, load);
       return false;

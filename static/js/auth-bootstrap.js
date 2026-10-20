@@ -28,7 +28,7 @@
     const { modal, close, error } = modalEls();
     if (!modal) return;
     if (error) {
-      error.textContent = "Login is temporarily unavailable. Check your connection and try again.";
+      error.textContent = "Logging in isn’t possible right now. Check your connection and try again.";
     }
     if (modal.open) return;
     if (window.App?.modalDialog) window.App.modalDialog.open(modal, { opener: trigger || null, focus: close });

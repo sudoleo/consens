@@ -545,7 +545,7 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
     email_enabled = validate_notification_channel(email_enabled, "email_enabled")
     telegram_enabled = validate_notification_channel(telegram_enabled, "telegram_enabled")
     if not email_enabled and not telegram_enabled:
-        raise WatchError("notification_channel_required", "Enable e-mail or Telegram notifications.")
+        raise WatchError("notification_channel_required", "Turn on email or Telegram notifications.")
     condition = validate_condition(condition, required=email_mode == "condition")
     run_time, timezone_name = validate_run_schedule(run_time, timezone_name)
     run_weekday = validate_run_weekday(run_weekday, interval, has_run_time=bool(run_time))

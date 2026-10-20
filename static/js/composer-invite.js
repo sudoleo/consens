@@ -19,7 +19,7 @@
   const PENDING_MAX_AGE_MS = 60 * 60 * 1000;
   // A pasted AI answer is long; a pasted question of one line is "typed".
   const PASTE_MIN_CHARS = 200;
-  const GUEST_SEND_LEAD = "Your question stays here and runs as soon as you're signed in.";
+  const GUEST_SEND_LEAD = "Your question stays here and runs as soon as you’re logged in.";
 
   let source = "typed";
   let afterLogin = false;

@@ -196,7 +196,7 @@
         <strong>Keep this answer current</strong>
         <span class="watch-feature-nudge-copy">We re-check it across model families and write only when a source moves the answer.</span>
         <button type="button" class="watch-nudge-btn" id="watchNudgeStart">Start watching</button>
-        <span class="watch-nudge-meta">Weekly &middot; e-mail only on evidence &middot; stop anytime</span>
+        <span class="watch-nudge-meta">Weekly &middot; email only on evidence &middot; stop any time</span>
         <button type="button" class="watch-nudge-skip" id="watchNudgeCustomize">Add a goal or change the schedule</button>
       `;
       nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
@@ -272,7 +272,7 @@
       // mehr erklaeren (Limits, Upgrade, Telegram) als dieser Streifen. Ein
       // Request-Limit ist kein Kontingent (H6): es sagt nur, wann es weitergeht.
       if (error.code === "rate_limited") {
-        popup(error.message);
+        popup(window.App.userError(error));
         return;
       }
       if (error.status === 429 || isAlreadyWatched(error)) {
@@ -284,7 +284,7 @@
         else openWatchDialog("confirm");
         return;
       }
-      popup("Watch could not be started: " + error.message);
+      popup("Watch not started. " + window.App.userError(error, { fallback: "Try again." }));
     }
   }
 
@@ -346,7 +346,7 @@
 
   async function api(method, path, body, intentIsCurrent) {
     const user = window.auth?.currentUser;
-    if (!user) throw new Error("Please log in first.");
+    if (!user) throw new Error("Log in first.");
     const userUid = user.uid;
     const requestEpoch = watchState.sessionEpoch;
     const token = await user.getIdToken();
@@ -363,23 +363,16 @@
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: body ? JSON.stringify(body) : undefined
     });
-    let data = {};
-    try { data = await response.json(); } catch (_) { /* empty body */ }
+    const data = await window.App.readJson(response);
     if (requestEpoch !== watchState.sessionEpoch || window.auth?.currentUser?.uid !== userUid) {
       throw new Error("Authentication changed.");
     }
     if (!response.ok) {
       // The reason may come flat ({error, code}) or as FastAPI's detail,
-      // a string or an object of the same fields.
+      // a string or an object of the same fields (App.httpError reads all).
+      const error = window.App.httpError(response, data);
       const detail = data.detail && typeof data.detail === "object" ? data.detail : {};
-      const message = data.error || (typeof data.detail === "string" ? data.detail : "")
-        || detail.error || detail.message || ("HTTP " + response.status);
-      const error = new Error(message);
-      error.status = response.status;
-      error.code = String(data.code || detail.code || "");
       error.watchId = String(data.watch_id || detail.watch_id || "");
-      error.retryAfter = Number(data.retry_after || detail.retry_after
-        || response.headers?.get?.("Retry-After")) || 0;
       throw error;
     }
     return data;
@@ -490,7 +483,7 @@
         <span class="watch-limit-meter" aria-hidden="true"><i style="width:${meterWidth}%"></i></span>
       </div>
       <div class="watch-limit-detail">
-        <span>Paused watches don't count.</span>
+        <span>Paused watches don’t count.</span>
         ${isFree ? `<span>Slots and check intervals are limited during early access.</span><button type="button" class="watch-limit-upgrade">About early access</button>` : ""}
       </div>`;
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
@@ -680,7 +673,7 @@
   function settingsSummary(settings) {
     const schedule = fields().scheduleLabel({ ...settings, timezone: settings.timezone || browserTimezone() });
     const channels = [
-      settings.email_enabled ? "E-mail" : "",
+      settings.email_enabled ? "Email" : "",
       settings.telegram_enabled ? "Telegram" : ""
     ].filter(Boolean).join(" + ") || "No channel";
     const parts = [schedule, channels];
@@ -1354,7 +1347,7 @@
           return;
         }
         showDialogError(error.code === "rate_limited"
-          ? error.message : "Watch could not be started: " + error.message);
+          ? window.App.userError(error) : "Watch not started. " + window.App.userError(error, { fallback: "Try again." }));
       }
     });
   }
@@ -1376,7 +1369,7 @@
       group.appendChild(wrap);
       return { wrap, box };
     };
-    const mail = make(idPrefix ? idPrefix + "EmailEnabled" : "", "E-mail");
+    const mail = make(idPrefix ? idPrefix + "EmailEnabled" : "", "Email");
     mail.box.checked = email;
     const tg = make(idPrefix ? idPrefix + "TelegramEnabled" : "", "Telegram");
     if (idPrefix) tg.wrap.id = idPrefix + "TelegramOption";
@@ -1438,7 +1431,7 @@
       if (state !== "waiting") initiated = false;
       sync();
       if (state === "expired") F.setError(field, "The link expired. Connect again when you are ready.");
-      if (state === "failed") F.setError(field, "Telegram could not be connected: " + (detail?.message || "try again."));
+      if (state === "failed") F.setError(field, "Telegram couldn’t be connected. " + window.App.userError(detail, { fallback: "Try again." }));
     });
     connect.addEventListener("click", () => {
       F.setError(field, "");
@@ -1504,7 +1497,7 @@
     card.appendChild(text);
     const detail = document.createElement("p");
     detail.className = "watch-field-hint";
-    detail.textContent = "Paused watches don't count, and you can resume them any time.";
+    detail.textContent = "Paused watches don’t count, and you can resume them any time.";
     card.appendChild(detail);
     if ((window.App.normalizeTier?.(limits?.plan) || "free") === "free") {
       const about = document.createElement("button");
@@ -1695,14 +1688,24 @@
     try {
       if (localStorage.getItem(VIEW_SWITCH_HINT_STORAGE_KEY) === "true") return;
     } catch (_) {}
-    setTimeout(() => {
-      if (!onWatchPagePath() && !document.getElementById("watchFeatureNudge")) {
+    // A dot stands only where something waits that can be opened: a guest
+    // could only be asked for an account behind it, so the hint waits for
+    // a signed-in account (Apple-Audit H2), also on the phone's menu button.
+    let scheduled = false;
+    const schedule = () => {
+      if (scheduled || !window.auth?.currentUser) return;
+      scheduled = true;
+      window.removeEventListener("consensio:auth-state", schedule);
+      setTimeout(() => {
+        if (!window.auth?.currentUser || onWatchPagePath() || document.getElementById("watchFeatureNudge")) return;
         watchesButton.addEventListener("animationend", () => {
           watchesButton.classList.remove("has-watch-pulse");
         }, { once: true });
         watchesButton.classList.add("has-watch-pulse");
-      }
-    }, 1400);
+      }, 1400);
+    };
+    schedule();
+    if (!scheduled) window.addEventListener("consensio:auth-state", schedule);
   }
 
   function wireWatchPage() {
@@ -2036,7 +2039,7 @@
   });
   window.addEventListener("consensio:auth-unavailable", () => {
     if (onWatchPagePath()) {
-      renderWatchLoginHint("Login is temporarily unavailable. Check your connection and reload to try again.");
+      renderWatchLoginHint("Logging in isn’t possible right now. Check your connection and reload to try again.");
     }
   });
 })();

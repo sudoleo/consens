@@ -2,7 +2,8 @@
 (function () {
   "use strict";
   const App = window.App = window.App || {};
-  const statuses = { failed: "Response failed", cancelled: "Response stopped", canceled: "Response stopped" };
+  // The glossary's words for a run (App.words, Apple-Audit H9).
+  const statuses = { failed: "Failed", cancelled: "Stopped", canceled: "Stopped" };
   // One table per tool: noun (history/failure rows), running and completed copy.
   // Unknown future tools fall back to a neutral label instead of a raw name.
   const tools = {
@@ -13,7 +14,7 @@
     prepare_watch: ['Watch', 'Preparing a Watch…', 'Prepared a Watch for you to start'],
     read_settings: ['Settings', 'Checking your settings…', 'Checked your settings'],
     prepare_settings_change: ['Settings', 'Preparing a settings change…', 'Prepared a settings change for you to apply'],
-    judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
+    judge_answer: ['Answer check', 'Checking the answer…', 'Checked the answer'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
     send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
@@ -94,17 +95,16 @@
     const end = Date.parse(turn?.completed_at || turn?.failed_at);
     return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
   }
+  // "23s", "3m 7s": the one way the app writes a span (App.format).
   function durationText(ms) {
-    const seconds = Math.floor(Math.max(0, ms) / 1000);
-    const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60;
-    return `${hours ? `${hours}h ` : ''}${minutes || hours ? `${minutes}m ` : ''}${seconds % 60}s`;
+    return App.format.duration(ms);
   }
   // "Working for 12s" while it runs, "Thought for 3m 7s" once it is done.
   function durationLabel(ms, running, status) {
     if (!Number.isFinite(ms)) return running ? 'Working' : statuses[status] || 'Activity';
     const time = durationText(ms);
     if (running) return `Working for ${time}`;
-    if (status === 'failed') return `Response failed after ${time}`;
+    if (status === 'failed') return `Failed after ${time}`;
     if (statuses[status] === statuses.cancelled) return `Stopped after ${time}`;
     return `Thought for ${time}`;
   }
@@ -345,8 +345,10 @@
       content.setAttribute("aria-label", "Agent activity");
       const note = document.createElement("p");
       note.className = "agent-activity-note";
+      // Tokens and provider cost are the operator's figures, not the
+      // reader's (Apple-Audit H4): only an admin sees this line.
       const usageEl = document.createElement("p");
-      usageEl.className = "agent-usage";
+      usageEl.className = "agent-usage admin-only";
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
       preview.setAttribute('aria-relevant', 'additions text');
@@ -514,7 +516,7 @@
           node.dataset.signature = signature;
           node.dataset.status = item.status;
           const title = document.createElement("strong");
-          const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Skipped · budget reserve", cancelled: "Stopped", unknown: "Usage unavailable" };
+          const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Skipped · allowance kept for the answer", cancelled: "Stopped", unknown: "Usage unavailable" };
           const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
           title.textContent = item.status === 'succeeded' && textOnly && textOnlySteps[item.name]
             ? textOnlySteps[item.name]
@@ -557,13 +559,14 @@
     if (finishReason === "length") view.note.textContent += " The response reached its output limit.";
     view.note.hidden = !view.note.textContent;
     const measured = usage && Number.isFinite(usage.input_tokens) && Number.isFinite(usage.output_tokens);
-    const tokens = measured ? `${(usage.input_tokens + usage.output_tokens).toLocaleString()} ${usage.complete === false ? "measured tokens · usage incomplete" : "tokens"}` : "Usage unavailable";
+    const number = App.format.number;
+    const tokens = measured ? `${number(usage.input_tokens + usage.output_tokens)} ${usage.complete === false ? "measured tokens · usage incomplete" : "tokens"}` : "Usage unavailable";
     const dollars = Number.isFinite(usage?.estimated_cost_nano_usd) ? usage.estimated_cost_nano_usd / 1e9 : NaN;
     const providerCost = usage?.cost_source === "provider";
     const cost = Number.isFinite(dollars)
       ? ` · ${usage.cost_complete === false ? "at least " : ""}${providerCost ? "" : "~"}$${dollars.toFixed(dollars > 0 && dollars < .0001 ? 6 : 4)} ${providerCost ? "provider cost" : "estimated"}${usage.cost_complete === false ? " · cost incomplete" : ""}` : "";
     view.usageEl.textContent = tokens + cost;
-    view.usageEl.title = measured ? `${usage.input_tokens.toLocaleString()} input · ${usage.output_tokens.toLocaleString()} output tokens` : "The provider did not report token usage.";
+    view.usageEl.title = measured ? `${number(usage.input_tokens)} input · ${number(usage.output_tokens)} output tokens` : "The provider did not report token usage.";
     view.usageEl.hidden = running;
     // A history the reader opened stays open while it is on screen: closing
     // it there moved the answer below. Above the viewport the correction in

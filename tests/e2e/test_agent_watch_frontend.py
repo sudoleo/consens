@@ -88,7 +88,7 @@ def test_agent_watch_card_starts_the_prepared_watch_and_adjust_opens_the_dialog(
         expect(card).to_have_attribute("data-state", "proposal")
         expect(card.locator(".agent-watch-question")).to_have_text(QUESTION)
         expect(card.locator(".agent-watch-goal")).to_have_text("Waiting for: " + GOALS[0])
-        expect(card.locator(".agent-watch-settings")).to_contain_text("09:00 · E-mail · Private")
+        expect(card.locator(".agent-watch-settings")).to_contain_text("09:00 · Email · Private")
         # The card sits under the answer it is introduced by.
         answer_box = page.locator("#agentAnswerBody").bounding_box()
         card_box = card.bounding_box()

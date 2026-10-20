@@ -351,7 +351,7 @@ def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
     if not attachments_allowed:
         raise HTTPException(
             status_code=403,
-            detail="Sign in to attach files.",
+            detail="Log in to attach files.",
         )
 
     if not isinstance(raw_list, list):

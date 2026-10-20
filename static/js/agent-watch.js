@@ -139,7 +139,7 @@
       // Already watched (409) or no free slot (429) is then said by the
       // refreshed list below; any other refusal, the request rate limit
       // included, keeps its reason while Start is still offered.
-      view.message = `Watch could not be started: ${error.message}`;
+      view.message = `Watch not started. ${App.userError(error, { fallback: 'Try again.' })}`;
     } finally {
       view.busy = false;
       sync(view);

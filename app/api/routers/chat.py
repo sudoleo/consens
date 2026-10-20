@@ -204,7 +204,7 @@ def _token_limit_detail(exc: UsageLimitExceeded, tier) -> dict:
     detail = usage_response_fields(exc.token_budget, tier)
     detail.update({
         "error": (
-            "Today's token allowance does not cover another run. "
+            "Today’s allowance doesn’t cover another run. "
             "It resets at 00:00 UTC."
         ),
         "error_code": "token_budget_exhausted",

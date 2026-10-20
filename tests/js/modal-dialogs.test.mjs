@@ -55,8 +55,8 @@ describe("dialog markup", () => {
     const { document, errors, window } = await boot();
     for (const [id, title] of [
       ["systemPromptModal", "Settings"],
-      ["helpModal", "FAQ & Quick Start"],
-      ["feedbackModal", "Send Feedback"],
+      ["helpModal", "Help"],
+      ["feedbackModal", "Send feedback"],
     ]) {
       const dialog = document.getElementById(id);
       expect(dialog.tagName).toBe("DIALOG");
@@ -197,6 +197,90 @@ describe("Settings and Help", () => {
     document.activeElement.blur();
     await settle(window);
     expect(document.activeElement).toBe(gear);
+    window.close();
+  });
+});
+
+describe("Settings for a guest (Apple-Audit H13)", () => {
+  it("says why Memory and the key are greyed out and leads to the login", async () => {
+    const opened = [];
+    const { document, window } = await boot({
+      before(win) {
+        win.App = win.App || {};
+        win.App.openAuthModal = (mode, trigger, source, options) => opened.push({ mode, trigger, source, lead: options?.lead });
+      }
+    });
+    const note = document.getElementById("settingsGuestNote");
+    document.getElementById("editSystemPromptBtn").click();
+    expect(note.hidden).toBe(false);
+    expect(note.textContent).toContain("kept on your account");
+    document.getElementById("settingsLoginButton").click();
+    expect(document.getElementById("systemPromptModal").open).toBe(false);
+    expect(opened).toEqual([{ mode: "login", trigger: document.getElementById("editSystemPromptBtn"), source: "settings",
+      lead: "Log in to keep your memory and settings on your account." }]);
+    window.close();
+  });
+
+  it("shows no such line to an account", async () => {
+    const { document, window } = await boot({ before(win) {
+      win.auth = { currentUser: { uid: "u1", emailVerified: true, getIdToken: async () => "token" } };
+      win.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) });
+    } });
+    document.getElementById("editSystemPromptBtn").click();
+    expect(document.getElementById("settingsGuestNote").hidden).toBe(true);
+    await settle(window);
+    window.close();
+  });
+});
+
+describe("The key test (Apple-Audit H12)", () => {
+  function bootWith(respond) {
+    return boot({ before(win) {
+      win.auth = { currentUser: { uid: "u1", emailVerified: true, getIdToken: async () => "token" } };
+      const memory = () => new Promise(() => {});
+      win.fetch = async (url, options) => (url === "/check_keys" ? respond() : memory());
+    } });
+  }
+
+  it("marks a valid key with a check in the agreement colour, never a star", async () => {
+    const { document, window } = await bootWith(async () => new Response(JSON.stringify({ results: { OpenRouter: "valid" } }), { status: 200 }));
+    document.getElementById("openrouterKey").value = "sk-or-test";
+    await window.testAllKeys();
+    const verdict = document.getElementById("openrouterFeedback");
+    expect(verdict.classList.contains("is-valid")).toBe(true);
+    expect(verdict.querySelector("svg path").getAttribute("d")).toBe("M3.5 8.5l3 3 6-7");
+    expect(verdict.getAttribute("aria-label")).toBe("Key verified");
+    expect(verdict.textContent).not.toMatch(/[☆★✓✗]/);
+    expect(verdict.style.color).toBe("");
+    expect(document.getElementById("apiKeysStatus").textContent).toBe("Key saved and verified.");
+    window.close();
+  });
+
+  it("says plainly when the test itself failed, never JSON or the engine's words", async () => {
+    const { document, window } = await bootWith(async () => new Response("<html>Bad gateway</html>", { status: 502 }));
+    document.getElementById("openrouterKey").value = "sk-or-test";
+    await window.testAllKeys();
+    const status = document.getElementById("apiKeysStatus").textContent;
+    expect(status).toBe("The key couldn’t be tested. consens.io can’t be reached right now. Try again in a moment.");
+    expect(document.getElementById("openrouterFeedback").childElementCount).toBe(0);
+    window.close();
+  });
+});
+
+describe("The help (Apple-Audit H7)", () => {
+  it("describes the product of today: one answer the models check, Watches, the allowance, memory, data", async () => {
+    const { document, window } = await boot();
+    const help = document.getElementById("helpModal");
+    const questions = [...help.querySelectorAll(".faq-item h3")].map(heading => heading.textContent.replace(/[＋+−]/g, "").replace(/\s+/g, " ").trim());
+    expect(questions).toEqual([
+      "1. What happens when I send a message?",
+      "2. What do the marks in an answer mean?",
+      "3. What is a Watch?",
+      "4. How much can I use it?",
+      "5. What does consens.io remember?",
+      "6. What happens to my data?",
+    ]);
+    expect(help.textContent).not.toMatch(/Auto Consensus|Consensus Button|Consensus Model|login/);
     window.close();
   });
 });

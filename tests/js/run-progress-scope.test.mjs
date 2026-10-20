@@ -18,7 +18,7 @@ const BODY = `
         <li class="run-step" data-step="prepare"><span class="run-step-label"></span></li>
         <li class="run-step" data-step="answers"><span class="run-step-label">Answers</span><span id="runCount"></span></li>
         <li class="run-step" data-step="consensus"><span class="run-step-label">Consensus</span></li>
-        <li class="run-step" data-step="differences"><span class="run-step-label">Contradiction check</span></li>
+        <li class="run-step" data-step="differences"><span class="run-step-label">Answer check</span></li>
       </ol>
       <p><span id="runMeta"></span><span id="runMetaNext"></span></p>
       <span class="run-time" id="runTime"></span>
@@ -263,7 +263,7 @@ describe("guided-run block belongs to the visible run", () => {
     dom.window.close();
   });
 
-  it.each([["error", "No answer"], ["skipped", "Skipped"], ["canceled", "Canceled"]])(
+  it.each([["error", "No answer"], ["skipped", "Skipped"], ["canceled", "Stopped"]])(
     "shows %s as a terminal outcome, never a successful answer or character count",
     async (state, label) => {
       const { registry, document, dom } = boot();

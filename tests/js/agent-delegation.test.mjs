@@ -501,7 +501,7 @@ describe("Agent sidebar", () => {
     expect(check.querySelector(".agent-session-state").textContent).toMatch(/^Completed · /);
     expect(check.querySelector(".agent-session-tokens").textContent).toMatch(/^2[.,]700 tokens$/);
     expect(d.querySelector(".agent-sidebar-status").textContent).toBe("");
-    expect(d.querySelector(".agent-session-list").textContent).not.toMatch(/Failed|Not finished|Replaced|Tokens unavailable|Judge/);
+    expect(d.querySelector(".agent-session-list").textContent).not.toMatch(/Failed|Replaced|Tokens unavailable|Judge/);
     check.open = true; check.dispatchEvent(new w.Event("toggle"));
     expect(check.querySelector(".agent-judge-note").textContent).toBe("Results are marked in the answer and listed under Review.");
     expect(w.fetch.mock.calls.every(([url]) => url.endsWith("/agents"))).toBe(true);
@@ -525,7 +525,7 @@ describe("Agent sidebar", () => {
     w.App.agentDelegation.project({ chatId, turnId, running: false });
     d.querySelector(".agent-sidebar-toggle").click();
     const row = d.querySelector(".agent-session");
-    expect(row.querySelector(".agent-session-state").textContent).toMatch(/^Not finished · /);
+    expect(row.querySelector(".agent-session-state").textContent).toMatch(/^Failed · /);
     row.open = true; row.dispatchEvent(new w.Event("toggle"));
     expect(row.querySelector(".agent-judge-note").textContent).toBe("The differences check could not run. The answer is shown without it.");
     dom.window.close();
@@ -538,7 +538,7 @@ describe("Agent sidebar", () => {
     w.App.agentDelegation.project({ chatId, turnId, running: false });
     d.querySelector(".agent-sidebar-toggle").click();
     const row = d.querySelector(".agent-session");
-    expect(row.querySelector(".agent-session-state").textContent).toMatch(/^Not finished · /);
+    expect(row.querySelector(".agent-session-state").textContent).toMatch(/^Failed · /);
     row.open = true; row.dispatchEvent(new w.Event("toggle"));
     expect(row.querySelector(".agent-judge-note").textContent).toBe("The differences check could not run. The answer is shown without it.");
     dom.window.close();

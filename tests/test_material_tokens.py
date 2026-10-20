@@ -210,8 +210,8 @@ def test_no_text_takes_its_tone_from_transparency():
     footer = re.search(r"\.sidebar-footer-meta \{([^}]*)\}", layout).group(1)
     assert "opacity" not in footer
     modals = strip_comments(read("components-modals.css"))
-    version = re.search(r"\.settings-version \{([^}]*)\}", modals).group(1)
-    assert "opacity" not in version
+    guest = re.search(r"\.settings-guest-note p \{([^}]*)\}", modals).group(1)
+    assert "opacity" not in guest
 
 
 # --- the parts, built once (Apple-Audit G2, G4, G5, G6, G8-G12, G17, C3, C9) --

@@ -151,7 +151,7 @@ def test_saved_interruption_keeps_reason_and_partial_answer_visible(browser, pha
         expect(page.locator("#agentAnswerError")).to_have_text(INCOMPLETE_NOTE)
         expect(page.locator("#agentAnswerError")).to_be_visible()
         expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
-        expect(page.locator("#agentAnswerActivity summary")).to_contain_text("Response failed")
+        expect(page.locator("#agentAnswerActivity summary")).to_contain_text("Failed")
         expect(page.locator("#agentRecover")).not_to_be_visible()
         page.locator("#agentAnswerError").scroll_into_view_if_needed()
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
@@ -528,7 +528,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator('#agentAnswerActivity .agent-progress')).to_contain_text('release their unused allowance')
         expect(page.locator('#agentAnswerActivity details')).not_to_have_attribute('open', '')
         if width == 1280:
-            expect(page.locator('.run-entry-status')).to_have_text('Waiting for tokens')
+            expect(page.locator('.run-entry-status')).to_have_text('Waiting for allowance')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         _snapshot(page, f"agent-allowance-wait-{width}-{'dark' if dark else 'light'}")
         page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'resumed', status:'working'})")
@@ -677,7 +677,7 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerError")).to_have_text("The model is temporarily unavailable.")
         expect(page.locator("#agentRecover")).to_be_visible()
-        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Response failed")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Failed")
         assert page.locator(".agent-activity-title").evaluate("el => getComputedStyle(el).animationName") == "none"
         page.wait_for_function("() => !App.runRegistry.visible()?.controllers.query")
         assert len(attempts) == 2
@@ -772,7 +772,7 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
           code:'agent_token_reservation', required_tokens:50000, available_tokens:40000, recoverable:false,
           token_budget:{used:61122, remaining:188878, reserved:0, unknown:100000, limit:250000, observed_at:3}})""")
         # Plain copy with a next step instead of the ledger wording.
-        expect(page.locator('#agentAnswerError')).to_contain_text('Not enough Agent tokens left for this step (needs about 50k, 40k left)')
+        expect(page.locator('#agentAnswerError')).to_contain_text('Not enough of today’s allowance is left for this step.')
         expect(page.locator('#agentAnswerError')).not_to_contain_text('reservation')
         expect(page.locator('#agentAnswerErrorActions button')).to_have_text(['Try a smaller model', 'Choose models'])
         # Nothing was answered, so the question returns to the composer.
@@ -873,8 +873,10 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         page.evaluate("turn => { App.agentActivity.renderTurn(document.getElementById('agentAnswerActivity'), turn); }", turn)
         expect(details.locator('.agent-activity-title')).to_have_text('Thought for 18s')
         expect(details.locator("a")).to_have_count(2)
-        expected_tokens = page.evaluate("() => (1400).toLocaleString() + ' tokens'")
-        expect(details.locator(".agent-usage")).to_contain_text(expected_tokens)
+        # One locale whatever the browser's (App.format, Apple-Audit H8); the
+        # figure is the operator's and hidden from a reader (H4).
+        expect(details.locator(".agent-usage")).to_contain_text("1,400 tokens")
+        expect(details.locator(".agent-usage")).to_be_hidden()
     finally:
         context.close()
 
@@ -928,7 +930,9 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         details.locator("summary").click()
         expect(details.locator(".agent-activity-reasoning")).to_have_text("A casual greeting.")
         expect(details.locator(".agent-activity-tool")).to_have_count(0)
+        # Tokens and cost are the operator's figures (Apple-Audit H4): in the DOM, hidden for a reader.
         expect(details.locator(".agent-usage")).to_have_text("862 tokens · $0.0004 provider cost")
+        expect(details.locator(".agent-usage")).to_be_hidden()
         _snapshot(page, f"agent-greeting-without-search-{width}")
     finally:
         context.close()

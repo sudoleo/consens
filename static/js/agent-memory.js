@@ -44,19 +44,15 @@
       const response = await fetch(`/api/my/memory/changes/${changeId}/undo`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
-      let data = {};
-      try { data = await response.json(); } catch (_) { /* empty body */ }
+      const data = await App.readJson(response).catch(() => ({}));
       if (window.auth?.currentUser?.uid !== uid) return;
-      if (!response.ok) {
-        const detail = data.detail || data.error;
-        throw new Error((detail && (detail.message || (typeof detail === 'string' ? detail : ''))) || 'Undo failed.');
-      }
+      if (!response.ok) throw App.httpError(response, data);
       undone.add(changeId);
       view.changes = view.changes.map(change => change.change_id === changeId ? { ...change, undone: true } : change);
       view.status.textContent = 'Undone.';
       window.dispatchEvent(new CustomEvent('consensio:memory-changed'));
     } catch (error) {
-      view.status.textContent = error.message || 'Undo failed.';
+      view.status.textContent = App.userError(error, { fallback: 'Undo failed. Try again.' });
     } finally {
       view.busy = false;
       sync(view);
