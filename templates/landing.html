@@ -508,28 +508,32 @@
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">04 · Monitor</p>
           <h2 class="lp-h2">Know when the answer changes.</h2>
-          <p class="lp-lead">Turn any question into a Watch. consens.io reruns it on your schedule and alerts you only when the result materially moves.</p>
+          <p class="lp-lead">Turn any question into a Watch and say what you're waiting for. consens.io checks it on your schedule and tells you when the answer moves on new evidence, or when that thing happens.</p>
         </div>
 
+        <!-- The same parts as a card on /app/watches and the Telegram message
+             (watch-dashboard.js, telegram_watch._notification_text): a goal
+             with its standing, moves backed by a source, no scores. -->
         <div class="lp-watch-story lp-reveal" aria-label="Consensus Watch example">
           <div class="lp-watch-card">
             <div class="lp-watch-card-head">
               <span><img src="/static/favicon.png" alt="">Consensus Watch</span>
-              <span class="lp-watch-active"><i aria-hidden="true"></i>Active</span>
+              <span class="lp-watch-status is-moved"><i aria-hidden="true"></i>Moved</span>
             </div>
             <h3>Has the EU guidance for general-purpose AI models changed?</h3>
-            <div class="lp-watch-meta"><span>Weekly</span><span>Material changes only</span><span>Telegram</span></div>
+            <p class="lp-watch-goal"><span class="lp-watch-goal-label">Waiting for</span> <span class="lp-watch-goal-text">The AI Office can fine model providers</span>&nbsp;<span aria-hidden="true">·</span> <span class="lp-watch-goal-status">Not yet</span></p>
+            <div class="lp-watch-meta"><span>Weekly</span><span>When it moves or resolves</span><span>Telegram</span></div>
             <div class="lp-watch-timeline">
               <div class="lp-watch-point is-baseline">
                 <span class="lp-watch-date">Jul 14</span>
                 <i aria-hidden="true"></i>
-                <div><strong>Baseline</strong><small>72/100 model agreement</small></div>
+                <div><strong>First check</strong><small>The answer and the sources behind it.</small></div>
               </div>
               <div class="lp-watch-point is-change">
                 <span class="lp-watch-date">Jul 21</span>
                 <i aria-hidden="true"></i>
-                <div><strong>Changed</strong><small>New transparency requirements are now included.</small></div>
-                <span class="lp-watch-movement">34/100 movement</span>
+                <div><strong>Moved on evidence</strong><small>New transparency requirements are now included.</small></div>
+                <span class="lp-watch-source">ec.europa.eu</span>
               </div>
             </div>
           </div>
@@ -539,9 +543,16 @@
               <span class="lp-watch-telegram" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.7 3.4 18.5 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.1 12.8 1.2 11.3c-1.1-.3-1.1-1.1.2-1.6l19-7.3c.9-.3 1.7.2 1.3 1z"></path></svg>
               </span>
-              <span><strong>Consensus changed</strong><small>Telegram · now</small></span>
+              <span><strong>The answer moved</strong><small>Telegram · now</small></span>
             </div>
-            <p>The latest run now includes new transparency requirements. The core conclusion moved materially.</p>
+            <dl class="lp-watch-message">
+              <dt>What changed</dt>
+              <dd>The answer now includes the new transparency requirements for model providers.</dd>
+              <dt>Why</dt>
+              <dd>New evidence the earlier answer did not have.</dd>
+              <dt>Waiting for</dt>
+              <dd>The AI Office can fine model providers</dd>
+            </dl>
             <a href="/app/watches" data-umami-event="landing_watch_create">Create a Watch <span aria-hidden="true">›</span></a>
           </div>
         </div>
