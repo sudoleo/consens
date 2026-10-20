@@ -6,7 +6,7 @@
     selection: null,
     intent: "correct",
     busy: false,
-    undoTimer: null,
+    toast: null,
     requestId: null,
     requestFeedback: null,
     returnFocus: null,
@@ -120,7 +120,7 @@
             <h2 id="memoryEditTitle"></h2>
             <p id="memoryEditDescription"></p>
           </div>
-          <button type="button" class="memory-edit-close" aria-label="Close">${icons.close}</button>
+          <button type="button" class="memory-edit-close close-button" aria-label="Close">${window.App?.closeIcon?.() || icons.close}</button>
         </header>
         <div class="memory-edit-dialog-body">
           <div class="memory-edit-context">
@@ -141,14 +141,9 @@
         </footer>
       </section>`;
 
-    const toast = document.createElement("div");
-    toast.id = "memoryEditToast";
-    toast.className = "memory-edit-toast";
-    toast.hidden = true;
-    toast.setAttribute("role", "status");
-    toast.setAttribute("aria-live", "polite");
-
-    document.body.append(menu, backdrop, toast);
+    // The confirmation with its Undo is the app's one notice line
+    // (App.toast, notices.js), not a toast of its own.
+    document.body.append(menu, backdrop);
     document.addEventListener("close", event => {
       if (event.target.contains?.(menu)) hideMenu();
     }, true);
@@ -224,7 +219,7 @@
 
   function captureSelection(event) {
     if (state.busy || !document.getElementById("memoryEditBackdrop")?.hidden) return;
-    if (event?.target?.closest?.(".memory-selection-menu, .memory-edit-toast")) return;
+    if (event?.target?.closest?.(".memory-selection-menu, .toast-region")) return;
     const input = event?.target?.closest?.("#questionInput");
     if (input && input.selectionStart !== input.selectionEnd) {
       return showSelection(
@@ -432,12 +427,8 @@
       if (selection) selection.textContent = "";
     }
     document.documentElement.classList.remove("memory-edit-open");
-    clearTimeout(state.undoTimer);
-    const toast = document.getElementById("memoryEditToast");
-    if (toast) {
-      toast.hidden = true;
-      toast.replaceChildren();
-    }
+    state.toast?.cancel();
+    state.toast = null;
   }
 
   function handleAuthState(event) {
@@ -493,52 +484,39 @@
     }
   }
 
+  // The way back stays offered while the server keeps the revision, at
+  // most ten seconds on screen (hover and focus hold it longer).
+  const UNDO_VISIBLE_MS = 10000;
   function showUndo(result, intent, binding) {
-    const toast = document.getElementById("memoryEditToast");
-    toast.replaceChildren();
-    const check = document.createElement("span");
-    check.className = "memory-edit-toast-icon";
-    check.innerHTML = icons.check;
-    const content = document.createElement("span");
-    content.className = "memory-edit-toast-content";
-    content.textContent = intent === "add"
-      ? (result.operation === "append" ? "Added to Memory" : result.operation === "replace" ? "Memory updated" : "Saved to Memory")
-      : "Memory updated";
-    const undo = document.createElement("button");
-    undo.type = "button";
-    undo.className = "memory-edit-undo";
-    undo.textContent = "Undo";
-    undo.addEventListener("click", () => undoEdit(result.revision_id, undo, binding, intent));
-    toast.append(check, content, undo);
-    toast.hidden = false;
     state.undoBinding = binding;
-    clearTimeout(state.undoTimer);
+    state.toast?.cancel();
     const expires = Date.parse(result.undo_expires_at || "");
-    const delay = Number.isFinite(expires) ? Math.max(0, expires - Date.now()) : 60000;
-    state.undoTimer = setTimeout(() => { toast.hidden = true; }, Math.min(delay, 60000));
+    const left = Number.isFinite(expires) ? Math.max(0, expires - Date.now()) : UNDO_VISIBLE_MS;
+    state.toast = window.App?.toast?.({
+      message: intent === "add"
+        ? (result.operation === "append" ? "Added to Memory" : result.operation === "replace" ? "Memory updated" : "Saved to Memory")
+        : "Memory updated",
+      tone: "success",
+      duration: Math.max(3000, Math.min(left, UNDO_VISIBLE_MS)),
+      action: { label: "Undo", onAction: handle => undoEdit(result.revision_id, handle, binding, intent) },
+    }) || null;
   }
 
-  async function undoEdit(revisionId, button, binding, intent) {
-    button.disabled = true;
-    const toast = document.getElementById("memoryEditToast");
+  async function undoEdit(revisionId, handle, binding, intent) {
     const epoch = state.epoch;
     try {
       await post("/api/my/memory/undo", { revision_id: revisionId }, binding);
       if (epoch !== state.epoch) return;
       await window.App?.userMemory?.load?.(true, { keepDraft: true });
       if (epoch !== state.epoch || !bindingIsCurrent(binding)) return;
-      toast.querySelector(".memory-edit-toast-content").textContent = "Previous Memory restored";
-      button.remove();
+      handle.update({ message: "Previous Memory restored", action: null, duration: 2500 });
       window.App?.trackAppEvent?.("app_memory_ai_edit", { intent, status: "undone" });
-      setTimeout(() => { toast.hidden = true; }, 2500);
     } catch (error) {
       if (error?.stale || epoch !== state.epoch) {
         if (epoch === state.epoch) resetForAuthChange();
         return;
       }
-      toast.querySelector(".memory-edit-toast-content").textContent = error.message || "Memory could not be restored.";
-      button.remove();
-      setTimeout(() => { toast.hidden = true; }, 4000);
+      handle.update({ message: error.message || "Memory could not be restored.", tone: "error", action: null, duration: 4000 });
     }
   }
 

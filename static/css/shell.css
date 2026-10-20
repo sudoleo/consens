@@ -299,7 +299,6 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .sidebar-new-run:focus-visible {
   background: var(--app-surface-hover);
   border-color: var(--line-soft);
-  outline: none;
 }
 
 .sidebar-new-run svg {
@@ -421,7 +420,6 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .sidebar-search-trigger:focus-visible {
   background: var(--app-surface-hover);
   color: var(--ink);
-  outline: none;
 }
 
 .sidebar-bookmarks-head.is-searching .sidebar-search-trigger {
@@ -530,7 +528,6 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .sidebar-model-entry:focus-visible {
   background: var(--raise);
   color: var(--ink);
-  outline: none;
 }
 
 .sidebar-model-entry > svg {
@@ -961,7 +958,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 }
 
 .input-action-btn-primary:not(:disabled):active {
-  transform: scale(0.94);
+  transform: scale(var(--press-scale));
 }
 
 .input-action-btn-primary:focus-visible {
@@ -1003,7 +1000,8 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 
 @media (prefers-reduced-motion: no-preference) {
   .input-action-btn-primary.send-glow.is-cancel-action::before {
-    animation: send-glow-breathe 4.8s ease-in-out infinite;
+    /* The house light breathes at half the beat: slow and deliberate. */
+    animation: send-glow-breathe calc(var(--dur-beat) * 2) var(--ease-standard) infinite;
   }
 }
 
@@ -1022,12 +1020,12 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   .input-action-btn-primary.is-launching::after {
-    animation: send-fan-out 0.6s ease-out;
+    animation: send-fan-out var(--dur-light) var(--ease-out);
   }
 
   .input-action-btn-primary.is-cancel-action svg,
   .input-action-btn-primary.is-returning svg {
-    animation: send-stop-in 0.22s ease-out 0.06s backwards;
+    animation: send-stop-in var(--dur-state) var(--ease-out) var(--dur-press) backwards;
   }
 }
 
@@ -1217,7 +1215,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   height: 8px;
   border: 0;
   background: var(--run-accent);
-  animation: runPulse 1.8s ease-out infinite;
+  animation: runPulse var(--dur-beat) var(--ease-out) infinite;
 }
 
 .run[data-stage="done"] .run-compact-dot { animation: none; }
@@ -1288,7 +1286,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 .run-track.is-indeterminate i {
   width: 34%;
   transition: none;
-  animation: runSweep 2.4s ease-in-out infinite;
+  animation: runSweep var(--dur-beat) var(--ease-standard) infinite;
 }
 
 @keyframes runSweep {
@@ -1383,10 +1381,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 .run-icon-check,
 .run-icon-minus { display: none; }
 
-.run-model:is([data-state="streaming"], [data-state="reasoning"], [data-state="waiting"]) .run-model-icon {
-  animation: runSpin 1s linear infinite;
-}
-
+/* A working model's ring turns like the one spinner (motion.css). */
 .run-model:is([data-state="reasoning"], [data-state="waiting"]) .run-icon-arc { stroke: var(--ink-3); }
 
 .run-model[data-state="done"] .run-icon-ring { stroke: var(--run-accent); }
@@ -1401,10 +1396,6 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 .run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-icon-minus {
   display: inline;
   stroke: var(--ink-3);
-}
-
-@keyframes runSpin {
-  to { transform: rotate(360deg); }
 }
 
 .run-model-skip {
@@ -1426,7 +1417,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   font-size: var(--font-size-micro);
   white-space: nowrap;
   cursor: pointer;
-  animation: runSkipReveal 220ms ease-out both;
+  animation: runSkipReveal var(--dur-state) var(--ease-out) both;
   transition: color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
 }
 
@@ -1474,7 +1465,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   overflow: hidden;
   border-radius: inherit;
   background: var(--run-busy);
-  transition: width var(--dur-layer) linear;
+  transition: width var(--dur-layer) var(--ease-linear);
 }
 
 /* No answer text yet: the request is alive, but how far along it is cannot
@@ -1483,7 +1474,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   width: 22%;
   background: color-mix(in srgb, var(--ink-3) 70%, transparent);
   transition: none;
-  animation: runRowSweep 1.6s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+  animation: runRowSweep var(--dur-beat) var(--ease-standard) infinite;
   animation-delay: var(--model-shimmer-delay, 0s);
 }
 
@@ -1500,7 +1491,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, transparent 30%, rgb(255 255 255 / 30%) 43%, rgb(255 255 255 / 92%) 50%, rgb(255 255 255 / 30%) 57%, transparent 70%);
-  animation: runModelShimmer 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: runModelShimmer var(--dur-beat) var(--ease-standard) infinite;
   animation-delay: var(--model-shimmer-delay, 0s);
   pointer-events: none;
 }
@@ -1704,21 +1695,9 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   color: var(--ink);
 }
 
+/* The shared close cross (.close-button, foundation.css); here its place. */
 .run-blocked-close {
-  flex: none;
-  padding: 2px 6px;
-  border: none;
-  background: none;
-  font-size: var(--font-size-xs);
-  line-height: 1;
-  color: var(--ink-3);
-  cursor: pointer;
-  border-radius: var(--radius-xs);
-}
-
-.run-blocked-close:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--blocked-tone) 12%, transparent);
+  margin: -6px -6px -6px 0;
 }
 
 .run-blocked-body {
@@ -2706,8 +2685,8 @@ body:not(.is-hero) .input-section {
       margin var(--dur-state) var(--ease-out),
       padding var(--dur-state) var(--ease-out),
       border-radius var(--dur-state) var(--ease-out),
-      box-shadow var(--dur-layer),
-      background-color var(--dur-layer);
+      box-shadow var(--dur-layer) var(--ease-standard),
+      background-color var(--dur-layer) var(--ease-standard);
   }
 
   /* Beim Zuklappen steht die verbleibende eine Zeile schon an ihrem Platz —
@@ -4307,7 +4286,7 @@ body .theme-toggle:is(:hover, :focus-visible) {
   text-overflow: ellipsis;
 }
 .composer-mode-bar:not([hidden]) {
-  animation: composer-mode-reveal 260ms cubic-bezier(.22, 1, .36, 1) both;
+  animation: composer-mode-reveal var(--dur-state) var(--ease-out) both;
 }
 @keyframes composer-mode-reveal {
   from { opacity: 0; transform: translateY(5px); }
@@ -4362,7 +4341,7 @@ body .theme-toggle:is(:hover, :focus-visible) {
     /* The strip between the islands belongs to the thread: a tap there
        reaches the text beneath, only the islands take it. */
     pointer-events: none;
-    transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s linear 0s;
+    transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s var(--ease-linear) 0s;
   }
 
   .app-mobile-header > * { pointer-events: auto; }
@@ -4632,7 +4611,7 @@ body .theme-toggle:is(:hover, :focus-visible) {
     visibility: hidden;
     pointer-events: none;
     transform: translateY(-100%);
-    transition-delay: 0s, 0s, .22s;
+    transition-delay: 0s, 0s, var(--dur-state);
   }
 }
 
@@ -4670,11 +4649,11 @@ body .theme-toggle:is(:hover, :focus-visible) {
     position: fixed;
     inset: 0;
     z-index: calc(var(--z-sidebar) - 1);
-    background: var(--overlay-dim);
+    background: var(--scrim);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s linear var(--dur-layer);
+    transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s var(--ease-linear) var(--dur-layer);
   }
   body:has(.sidebar.active)::after {
     opacity: 1;

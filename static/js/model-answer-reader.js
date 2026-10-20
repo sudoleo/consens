@@ -81,6 +81,8 @@
   let activePicker = null;
   // Small interface icons inherit the app's ink in both themes.
   function icon(name) {
+    // The close cross is the app's one cross (foundation.css .close-icon).
+    if (name === "close" && window.App?.closeIcon) return window.App.closeIcon();
     const paths = { close: 'M6 6l12 12M18 6 6 18', expand: 'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5',
       reduce: 'M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5', compare: 'M3 5h18v14H3zM12 5v14',
       read: 'M5 4h14v16H5zM9 8h6m-6 4h6', copy: 'M9 9h11v11H9zM15 5V3H3v12h2' };
@@ -872,7 +874,7 @@
       const motion = composer.animate([
         { translate: `${before.left - after.left}px ${before.top - after.top}px` },
         { translate: "0px 0px" }
-      ], { duration: 300, easing: "cubic-bezier(.22, 1, .36, 1)" });
+      ], { duration: window.App?.motion?.ms?.("layer") ?? 320, easing: window.App?.motion?.ease?.("out") ?? "cubic-bezier(.22, 1, .36, 1)" });
       composerMotion = motion;
       motion.finished.catch(() => {}).then(() => {
         if (composerMotion !== motion) return;

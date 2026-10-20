@@ -468,13 +468,21 @@
         input.value = item.text;
         input.maxLength = itemInput?.maxLength > 0 ? itemInput.maxLength : 300;
         input.setAttribute("aria-label", "Edit memory");
+        // An emptied field is not a way to delete: Save waits for words,
+        // Delete is its own button with its own Undo (Apple audit E9).
+        const save = itemButton("Save", () => saveEdit(item, input.value));
+        const syncSave = () => { save.disabled = !input.value.trim() || state.itemsBusy; };
+        input.addEventListener("input", syncSave);
         input.addEventListener("keydown", event => {
-          if (event.key === "Enter") { event.preventDefault(); saveEdit(item, input.value); }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (input.value.trim()) saveEdit(item, input.value);
+          }
           if (event.key === "Escape") { event.preventDefault(); state.editingId = null; renderItems(); }
         });
-        row.append(input,
-          itemButton("Save", () => saveEdit(item, input.value)),
+        row.append(input, save,
           itemButton("Cancel", () => { state.editingId = null; renderItems(); }));
+        requestAnimationFrame(syncSave);
         requestAnimationFrame(() => input.focus());
         return row;
       }
@@ -490,7 +498,7 @@
       body.append(text, meta);
       row.append(body,
         itemButton("Edit", () => { state.editingId = item.id; renderItems(); }, `Edit memory: ${item.text}`),
-        itemButton("Delete", () => changeItems([{ op: "delete", id: item.id }], "Deleted."), `Delete memory: ${item.text}`));
+        itemButton("Delete", () => deleteItem(item), `Delete memory: ${item.text}`));
       return row;
     }));
     if (itemsEmpty) itemsEmpty.hidden = state.items.length > 0;
@@ -527,8 +535,8 @@
       const result = await api("POST", { changes, expected_revision: state.itemsRevision ?? 0 }, "/api/my/memory/items");
       state.editingId = null;
       await acceptItems(result);
-      setItemsStatus(successMessage, "ok");
-      return true;
+      setItemsStatus(successMessage, successMessage ? "ok" : "");
+      return result || true;
     } catch (error) {
       if (error.status === 409 && error.code === "revision_conflict") {
         await reloadItems();
@@ -543,9 +551,35 @@
     }
   }
 
+  // A memory deleted by hand can be taken back, like a change by Agent: the
+  // notice line offers Undo, which restores it as it was (text, origin,
+  // date) through the change's own undo.
+  async function deleteItem(item) {
+    const result = await changeItems([{ op: "delete", id: item.id }], "");
+    if (!result) return;
+    setItemsStatus("", "");
+    const changeId = typeof result === "object" ? result.change_id : null;
+    window.App?.toast?.({
+      message: "Memory deleted",
+      key: "memory-item-deleted",
+      action: changeId ? { label: "Undo", onAction: handle => undoDelete(changeId, handle) } : null,
+    });
+  }
+
+  async function undoDelete(changeId, handle) {
+    if (!currentUser()) return;
+    try {
+      const restored = await api("POST", null, `/api/my/memory/changes/${encodeURIComponent(changeId)}/undo`);
+      await acceptItems(restored);
+      handle.update({ message: "Memory restored", action: null });
+    } catch (error) {
+      handle.update({ message: error.message || "The memory could not be restored.", tone: "error", action: null });
+    }
+  }
+
   function saveEdit(item, value) {
     const text = String(value || "").trim();
-    if (!text) return changeItems([{ op: "delete", id: item.id }], "Deleted.");
+    if (!text) return Promise.resolve(false);
     if (text === item.text) {
       state.editingId = null;
       renderItems();
@@ -613,6 +647,8 @@
 
   function settingsModalIsOpen() {
     const modal = document.getElementById("systemPromptModal");
+    // A <dialog>: `open`, not the display, which stays set while it fades out.
+    if (modal && "open" in modal) return Boolean(modal.open);
     return !!modal && getComputedStyle(modal).display !== "none";
   }
 

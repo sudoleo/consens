@@ -2061,8 +2061,8 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
             hasProBadge,
             markCount,
             marksHidden,
-            proModalDisplay: document.getElementById("proFeatureModal").style.display,
-            featureNoticeHidden: document.getElementById("featureAccessNotice").hidden,
+            proModalOpen: document.getElementById("proFeatureModal").open,
+            featureNotice: document.querySelector("#appToasts .toast")?.textContent || "",
           };
         }"""
     )
@@ -2073,8 +2073,8 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     assert result["hasProBadge"]
     assert result["markCount"] == len(result["expected"])
     assert result["marksHidden"]
-    assert result["proModalDisplay"] != "block"
-    assert result["featureNoticeHidden"] is False
+    assert result["proModalOpen"] is False
+    assert "High Quality mode" in result["featureNotice"]
 
     app_page.evaluate(
         """() => {

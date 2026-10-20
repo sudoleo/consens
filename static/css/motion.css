@@ -1,0 +1,106 @@
+/* ==========================================================================
+   Motion — the rules every moving part of /app shares
+   (Apple audit C8, C10, C11, C13, C14)
+
+   1. Theme switch   light and dark change in one cross-fade (App.motion.switchTheme)
+   2. Disclosures    a <details> opens and closes its height (disclosure.js)
+   3. One spinner    one look, one turn per --dur-spin
+   4. Reduce motion  large journeys become fades
+   Durations and curves come from foundation.css only; a test reads every
+   transition and animation of the app (tests/js/motion-tokens.test.mjs).
+   Loaded after every component layer.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Theme switch
+
+   For the frame of the switch every transition is off, so the sidebar, the
+   composer and the fields do not follow the page at their own speeds. The
+   view transition then cross-fades the whole page once.
+   -------------------------------------------------------------------------- */
+html.is-theme-switching *,
+html.is-theme-switching *::before,
+html.is-theme-switching *::after {
+  transition: none !important;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-state);
+  animation-timing-function: var(--ease-standard);
+}
+
+/* --------------------------------------------------------------------------
+   2. Disclosures (disclosure.js animates the height; nothing here moves)
+   -------------------------------------------------------------------------- */
+details.is-disclosing {
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   3. The one spinner
+
+   A faint track and an arc of the current colour. Every wait in the app
+   turns the same way; a component sets only its size and colour.
+   -------------------------------------------------------------------------- */
+.spinner,
+.agent-upload-spinner,
+.bookmark-pending-spinner,
+.diff-resolve-btn.is-loading::before,
+.memory-edit-submit.is-busy::before {
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spinner-turn var(--dur-spin) var(--ease-linear) infinite;
+}
+
+.spinner { color: var(--ink-3); }
+.agent-upload-spinner { color: var(--ink-2); }
+.bookmark-pending-spinner { color: var(--sidebar-text-muted); }
+
+.run-model:is([data-state="streaming"], [data-state="reasoning"], [data-state="waiting"]) .run-model-icon {
+  animation: spinner-turn var(--dur-spin) var(--ease-linear) infinite;
+}
+
+@keyframes spinner-turn {
+  to { transform: rotate(360deg); }
+}
+
+/* --------------------------------------------------------------------------
+   4. Reduce motion
+
+   Nothing travels: the sidebar (82 % of a phone) fades where it stands
+   instead of sliding in, the column does not glide beside it, layers fade
+   without rising. A spinner still turns, slowly: it is the only sign that
+   something is happening.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition:
+      opacity var(--dur-state) var(--ease-standard),
+      visibility 0s var(--ease-linear) 0s !important;
+  }
+
+  .sidebar.collapsed {
+    transform: none !important;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--dur-state) var(--ease-standard),
+      visibility 0s var(--ease-linear) var(--dur-state) !important;
+  }
+
+  .container,
+  .view-switch,
+  .app-nav-float,
+  .brand-float {
+    transition: none !important;
+  }
+
+  :is(.spinner, .agent-upload-spinner, .bookmark-pending-spinner,
+    .diff-resolve-btn.is-loading::before, .memory-edit-submit.is-busy::before),
+  .run-model:is([data-state="streaming"], [data-state="reasoning"], [data-state="waiting"]) .run-model-icon {
+    animation-duration: calc(var(--dur-spin) * 3);
+  }
+}

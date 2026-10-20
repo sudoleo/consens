@@ -175,7 +175,7 @@
   height: 20px;
   border: 2px solid var(--checkbox-border);
   border-radius: var(--radius-2xs);
-  transition: background-color var(--dur-layer), border-color var(--dur-layer);
+  transition: background-color var(--dur-layer) var(--ease-standard), border-color var(--dur-layer) var(--ease-standard);
   position: relative;
 }
 

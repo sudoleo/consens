@@ -171,11 +171,18 @@
     }
   }
 
+  // The card is one of the app's popovers (App.popover): opening it closes
+  // the account menu or any other, and it rises out of its ring.
   function setOpen(open) {
     var panel = el("sidebarQuota");
     var trigger = el("quotaTrigger");
     if (!panel) return;
     if (open) sync();
+    var popover = window.App && window.App.popover;
+    if (popover && open !== panel.classList.contains("is-open")) {
+      if (open) popover.opened(panel, { trigger: trigger });
+      else popover.closed(panel);
+    }
     panel.classList.toggle("is-open", open);
     if (trigger) trigger.setAttribute("aria-expanded", String(open));
   }
@@ -186,6 +193,9 @@
     if (!trigger || !panel) return;
 
     sync();
+    if (window.App && window.App.popover) {
+      window.App.popover.register(panel, { close: function () { setOpen(false); } });
+    }
 
     // Watches still arrive through the hidden #usageDisplay column.
     var source = el("usageDisplay");

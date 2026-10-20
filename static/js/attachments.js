@@ -168,7 +168,25 @@
       });
     }
 
-    function setMenuOpen(open) {
+    // The (+) menu is one of the app's popovers (App.popover): opening it
+    // closes every other menu or card, it comes out of (+) and goes back
+    // into it, and it belongs to the keyboard like the account menu: focus
+    // goes to its first row, the arrows and Home/End move, Escape closes it
+    // and gives focus back to (+), Tab leaves it (Apple audit C4, E6, E10).
+    function menuItems() {
+      return Array.from(menu.querySelectorAll(
+        "button:not([hidden]):not(:disabled), label.attach-menu-toggle:not([hidden]) input:not(:disabled)"
+      )).filter(function (item) { return !item.closest("[hidden]") && item.getClientRects().length > 0; });
+    }
+
+    function setMenuOpen(open, options) {
+      const focus = options && options.focus;
+      if (menu.hidden === !open) {
+        if (open && focus === "first") window.App?.popover?.focusItem(menu, menuItems, 0);
+        return;
+      }
+      if (open) window.App?.popover?.opened(menu, { trigger: trigger });
+      else window.App?.popover?.closed(menu);
       menu.hidden = !open;
       trigger.setAttribute("aria-expanded", String(open));
       trigger.classList.toggle("is-open", open);
@@ -177,7 +195,17 @@
       // Trigger die Propagation, also erreicht ihn unser document-Listener nie
       // — er muss hier ausdruecklich zugemacht werden.
       if (open) window.App?.collapseExpandedModelPicker?.();
+      if (open && focus === "first") window.App?.popover?.focusItem(menu, menuItems, 0);
+      if (open && focus === "last") window.App?.popover?.focusItem(menu, menuItems, -1);
+      if (!open && focus === "trigger") trigger.focus({ preventScroll: true });
     }
+
+    window.App?.popover?.register(menu, { close: function () { setMenuOpen(false); } });
+    window.App?.popover?.menuKeys(menu, {
+      items: menuItems,
+      close: function (options) { setMenuOpen(false, { focus: options && options.focus ? "trigger" : null }); },
+      opener: trigger,
+    });
 
     // Andere Composer-Popups schliessen dieses Menue ueber window.App.
     window.App = window.App || {};
@@ -185,9 +213,16 @@
       if (!menu.hidden) setMenuOpen(false);
     };
 
+    // A pointer press leaves the focus where the pointer is (no ring jumps
+    // into the menu); a key press (Enter, Space: detail 0) goes in.
     trigger.addEventListener("click", function (event) {
       event.stopPropagation();
-      setMenuOpen(menu.hidden);
+      setMenuOpen(menu.hidden, { focus: event.detail === 0 ? "first" : null });
+    });
+    trigger.addEventListener("keydown", function (event) {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      setMenuOpen(true, { focus: event.key === "ArrowDown" ? "first" : "last" });
     });
 
     document.addEventListener("click", function (event) {
@@ -196,14 +231,12 @@
       }
     });
 
+    // Escape from anywhere else (the field, (+) itself) closes the menu too,
+    // and focus goes back to (+) if it was in the menu.
     document.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape") return;
-      const viewer = document.getElementById("attachmentViewerModal");
-      if (viewer && !viewer.hidden) {
-        closeAttachmentViewer();
-        return;
-      }
-      if (!menu.hidden) setMenuOpen(false);
+      if (event.key !== "Escape" || event.defaultPrevented || menu.hidden) return;
+      const inside = menu.contains(document.activeElement);
+      setMenuOpen(false, { focus: inside || document.activeElement === trigger ? "trigger" : null });
     });
 
     // --- Viewer (einfache Vorschau beim Klick auf einen Chip) ---
@@ -216,14 +249,34 @@
     // an older response stale so it can never paint into the wrong preview.
     let viewerToken = 0;
 
-    function closeAttachmentViewer() {
-      if (!viewerOverlay) return;
-      viewerToken++;
-      viewerOverlay.hidden = true;
+    // The preview is a native <dialog> (App.modalDialog): focus goes in and
+    // back, Tab stays inside, Escape and the backdrop close it. Its content
+    // is emptied once it has faded out, not while it still shows.
+    function releaseViewerContent() {
       if (viewerBody) viewerBody.innerHTML = "";
       if (viewerObjectUrl) {
         URL.revokeObjectURL(viewerObjectUrl);
         viewerObjectUrl = null;
+      }
+    }
+
+    function settleViewerClose() {
+      const token = ++viewerToken;
+      const wait = window.App?.motion ? window.App.motion.ms("state") + 60 : 0;
+      window.setTimeout(function () {
+        if (token === viewerToken && !(viewerOverlay && viewerOverlay.hasAttribute("open"))) releaseViewerContent();
+      }, wait);
+    }
+
+    if (viewerOverlay) window.App?.modalDialog?.bind(viewerOverlay, { onClose: settleViewerClose });
+
+    function closeAttachmentViewer() {
+      if (!viewerOverlay) return;
+      if (!viewerOverlay.hasAttribute("open")) return;
+      if (window.App?.modalDialog) window.App.modalDialog.close(viewerOverlay);
+      else {
+        viewerOverlay.removeAttribute("open");
+        settleViewerClose();
       }
     }
 
@@ -352,9 +405,11 @@
 
     function openAttachmentViewer(att) {
       if (!viewerOverlay || !viewerBody) return;
-      closeAttachmentViewer();
+      // A newer preview makes an older stored file's answer stale; an open
+      // dialog stays open and only changes what it shows.
+      viewerToken++;
+      releaseViewerContent();
       viewerTitle.textContent = att.name;
-      viewerBody.innerHTML = "";
 
       if (att.fileId && window.App?.agentWorkspace?.openFile) {
         showStoredAttachment(att);
@@ -403,16 +458,14 @@
         }
       }
 
-      viewerOverlay.hidden = false;
+      if (!viewerOverlay.hasAttribute("open")) {
+        if (window.App?.modalDialog) window.App.modalDialog.open(viewerOverlay, { focus: viewerClose });
+        else viewerOverlay.setAttribute("open", "");
+      }
       trackAppEvent("app_attachment_viewed", { mime: att.mime, preview_only: !!att.previewOnly, stored: !!att.fileId });
     }
 
     if (viewerClose) viewerClose.addEventListener("click", closeAttachmentViewer);
-    if (viewerOverlay) {
-      viewerOverlay.addEventListener("click", function (event) {
-        if (event.target === viewerOverlay) closeAttachmentViewer();
-      });
-    }
 
     // Files are open to every account since 2026-10-02: they are paid from
     // the same token account as the question. They still need an account,
@@ -426,10 +479,9 @@
       const modal = document.getElementById("loginModal");
       if (window.App?.openAuthModal) {
         window.App.openAuthModal("login", null, "attachments");
-      } else if (modal) {
-        modal.style.display = "block";
+      } else if (modal && window.App?.modalDialog) {
+        window.App.modalDialog.open(modal, { focus: document.getElementById("loginEmail") });
         trackAppEvent("auth_modal_open", { source: "attachments" });
-        requestAnimationFrame(() => document.getElementById("loginEmail")?.focus());
       } else {
         window.App?.showPopup?.("Sign in to attach files. You can enter your question as text.");
       }
@@ -678,7 +730,7 @@
         removeBtn.className = "attachment-chip-remove";
         removeBtn.title = "Remove attachment";
         removeBtn.setAttribute("aria-label", "Remove " + att.name);
-        removeBtn.innerHTML = "&#10005;";
+        removeBtn.innerHTML = window.App?.closeIcon?.() || "";
         removeBtn.addEventListener("click", function (event) {
           event.stopPropagation();
           window.pendingAttachments.splice(index, 1);
@@ -888,6 +940,27 @@
       pendingFileReads = 0;
     }
     window.addEventListener("consensio:auth-state", invalidateImports);
+
+    // A file that cannot come along is said at the composer, once for the
+    // whole drop, instead of one browser window per file (Apple audit E1).
+    function sayAttachmentProblem(message) {
+      if (window.App?.composerNotice) {
+        window.App.composerNotice.show(message, { tone: "error", duration: 9000 });
+      } else {
+        window.App?.toast?.({ message: message, tone: "error" });
+      }
+    }
+    function oversizeMessage(items) {
+      if (items.length === 1) {
+        const only = items[0];
+        return "'" + only.name + "' is " + formatFileSize(only.size) + ". The limit is " + only.limitMb + " MB per file.";
+      }
+      const names = items.map(function (item) { return "'" + item.name + "' (" + formatFileSize(item.size) + ")"; });
+      const limits = Array.from(new Set(items.map(function (item) { return item.limitMb; })));
+      return names.slice(0, -1).join(", ") + " and " + names[names.length - 1]
+        + " are over the limit of " + limits.join(" / ") + " MB per file.";
+    }
+
     function addFiles(files, options) {
       const generation = readGeneration;
       const owner = window.auth?.currentUser?.uid;
@@ -900,32 +973,32 @@
         return;
       }
 
-      let unsupportedShown = false;
-      let limitShown = false;
+      let unsupported = "";
+      let limitReached = false;
+      const oversize = [];
+      window.App?.composerNotice?.clear();
 
       files.forEach(function (file, index) {
         const mime = inferMime(file);
         if (!mime || (imagesOnly && mime.indexOf("image/") !== 0)) {
-          if (!unsupportedShown) {
-            alert(imagesOnly
+          if (!unsupported) {
+            unsupported = imagesOnly
               ? "Only PNG, JPG, and WebP images can be pasted here."
-              : "'" + (file.name || "This file") + "' is not supported. Allowed: " + ATTACH_TYPES_LABEL + ".");
-            unsupportedShown = true;
+              : "'" + (file.name || "This file") + "' is not supported. Allowed: " + ATTACH_TYPES_LABEL + ".";
           }
           return;
         }
         const sizeLimit = maxInputBytes(mime);
         if (file.size > sizeLimit) {
-          alert("'" + attachmentName(file, mime, source, index) + "' is "
-            + formatFileSize(file.size) + ". The limit is "
-            + Math.round(sizeLimit / (1024 * 1024)) + " MB per file.");
+          oversize.push({
+            name: attachmentName(file, mime, source, index),
+            size: file.size,
+            limitMb: Math.round(sizeLimit / (1024 * 1024))
+          });
           return;
         }
         if (window.pendingAttachments.length + pendingFileReads >= ATTACH_MAX_FILES) {
-          if (!limitShown) {
-            alert("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
-            limitShown = true;
-          }
+          limitReached = true;
           return;
         }
 
@@ -957,9 +1030,15 @@
           // A failed read of an abandoned draft is not the new draft's error.
           if (generation !== readGeneration) return;
           pendingFileReads = Math.max(0, pendingFileReads - 1);
-          alert("The file could not be read. Please try again.");
+          sayAttachmentProblem("The file could not be read. Please try again.");
         });
       });
+
+      const problems = [];
+      if (unsupported) problems.push(unsupported);
+      if (oversize.length) problems.push(oversizeMessage(oversize));
+      if (limitReached) problems.push("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
+      if (problems.length) sayAttachmentProblem(problems.join(" "));
     }
 
     // A file that first has to be fetched (Google Drive). It holds its slot as
@@ -975,7 +1054,7 @@
         return false;
       }
       if (window.pendingAttachments.length + pendingFileReads >= ATTACH_MAX_FILES) {
-        alert("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
+        sayAttachmentProblem("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
         return false;
       }
       const placeholder = { name: String(item.name || "File"), mime: item.mime || "", size: item.size || 0,

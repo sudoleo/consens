@@ -59,7 +59,7 @@ a.lp-hero-prompt:hover .demo-action {
 .demo-action:active,
 a.lp-hero-prompt:active .demo-action {
   background: color-mix(in srgb, var(--ink) 80%, var(--ground));
-  transform: scale(0.97);
+  transform: scale(var(--press-scale));
 }
 
 .demo-action:focus-visible,

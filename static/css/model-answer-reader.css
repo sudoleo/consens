@@ -31,7 +31,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
   max-width: 100%;
   border-radius: var(--radius-xs);
   box-shadow: none;
-  transition: background var(--dur-press);
+  transition: background var(--dur-press) var(--ease-standard);
 }
 .model-answer-reader button {
   display: inline-flex;
@@ -72,7 +72,6 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
   box-shadow: var(--lift);
   overflow: hidden;
 }
-.answer-reader-dialog::backdrop { background: var(--overlay-dim); }
 .answer-reader-dialog.is-docked {
   inset: 0 0 0 auto;
   margin: 0;
@@ -83,28 +82,8 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
   /* A docked inspector stays below modal backdrops and their dialogs. */
   z-index: calc(var(--z-modal) - 2);
 }
-/* Only entering the reader moves it; tab changes and streaming stay still.
-   Keep the travel short and closing immediate, even during the entrance. */
-@media (prefers-reduced-motion: no-preference) {
-  .answer-reader-dialog[open] {
-    animation: answer-reader-enter 180ms cubic-bezier(.22, 1, .36, 1);
-  }
-  .answer-reader-dialog[open].is-docked {
-    --reader-enter-x: 16px;
-    --reader-enter-y: 0px;
-  }
-  .answer-reader-dialog[open]::backdrop {
-    animation: answer-reader-backdrop-enter 180ms ease-out;
-  }
-}
-@keyframes answer-reader-enter {
-  from { opacity: 0; transform: translate(var(--reader-enter-x, 0px), var(--reader-enter-y, 8px)); }
-  to { opacity: 1; transform: translate(0, 0); }
-}
-@keyframes answer-reader-backdrop-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+/* Only opening and closing the reader move it (the shared dialog motion,
+   overlays.css); tab changes and streaming stay still. */
 .answer-reader-dialog .model-answer-reader { height: 100%; min-height: 0; padding: 24px 28px 0; }
 .answer-reader-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .answer-reader-heading { min-width: 0; }
@@ -253,7 +232,7 @@ body.answer-reader-modal { overflow: hidden; }
 .model-answer-reader .answer-reader-picker-menu > button { display: flex; width: 100%; min-height: 44px; padding: 10px; gap: 10px; text-align: left; justify-content: flex-start; border-radius: var(--radius-2xs); font-size: var(--font-size-ui); }
 .answer-reader-option-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .answer-reader-option-text small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; margin-top: 4px; }
-.model-answer-reader .answer-reader-picker-menu > button:is(:hover,:focus-visible) { outline: none; background: var(--raise); }
+.model-answer-reader .answer-reader-picker-menu > button:is(:hover,:focus-visible) {background: var(--raise); }
 .model-answer-reader .answer-reader-picker-menu > button[aria-selected="true"] { background: var(--app-surface-selected, var(--raise)); }
 .answer-reader-option-check { color: var(--ink-2); margin-left: auto; visibility: hidden; }
 [aria-selected="true"] > .answer-reader-option-check { visibility: visible; }
@@ -556,7 +535,7 @@ body.direct-comparison-active .consensus-section { display: none; }
 .answer-preview-lines i:last-child { width: 52%; }
 body.comparison-layout-changing .input-section { transition: none; }
 @media (prefers-reduced-motion: no-preference) {
-  .model-answer-reader.is-preview { animation: comparison-preview-enter 300ms ease-out both; }
+  .model-answer-reader.is-preview { animation: comparison-preview-enter var(--dur-layer) var(--ease-out) both; }
 }
 @keyframes comparison-preview-enter {
   from { opacity: 0; translate: 0 8px; }

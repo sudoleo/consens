@@ -10,7 +10,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
  */
 function boot(body = "") {
   const harness = loadScripts(
-    ["static/js/watch-state.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
+    ["static/js/motion.js", "static/js/notices.js", "static/js/watch-state.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
     {
       body,
       before(window) {
@@ -188,7 +188,7 @@ describe("dashboard render", () => {
     card.querySelector('[data-action="remove-picture"]').click();
     expect(card.querySelector(".wd-image.is-item")).toBeNull();
     expect(calls.some(call => call[0] === "DELETE")).toBe(false);
-    expect(window.document.getElementById("wdUndoToast").textContent).toContain("Picture removed");
+    expect(window.document.querySelector("#appToasts .toast").textContent).toContain("Picture removed");
     window.App.watchDashboard.commitPending();
     await vi.waitFor(() => expect(calls).toContainEqual(["DELETE", "/api/watch/WatchImage0001/image"]));
     // The removed picture gives way to the watch's symbol.

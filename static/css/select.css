@@ -88,7 +88,6 @@
   :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:is(:hover, :focus-visible),
   :root select:is(.watch-interval-select, .wd-select) option:is(:hover, :focus-visible) {
     background: var(--raise, #f5f5f5);
-    outline: none;
   }
 
   :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:checked,

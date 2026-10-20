@@ -170,10 +170,16 @@
   --hairline-soft: var(--line-soft);
 }
 
+/* The one focus ring of the app (foundation.css), on the public pages too:
+   2px of the second ink with 2px of air; a text link rounds its corners
+   instead of getting a square box (Apple audit E4). */
 :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
-  outline-offset: 3px;
-  box-shadow: var(--liquid-focus-ring);
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+:where(a):focus-visible {
+  border-radius: var(--radius-2xs);
 }
 
 /* A net under every public page: nothing that reaches past the edge (a long

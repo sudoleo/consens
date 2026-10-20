@@ -39,7 +39,8 @@ def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phas
         reader_screenshot(page, f'bookmark-menu-{width}')
         menu.get_by_role('menuitem', name='Delete').click()
         expect(row).to_be_hidden()
-        notice = page.locator('#undoNotice')
+        # The app's one notice line (App.toast), with its Undo.
+        notice = page.locator('#appToasts .toast.is-shown')
         expect(notice).to_contain_text('Chat deleted')
         reader_screenshot(page, f'bookmark-undo-{width}')
         # Undo brings it back; nothing went to the server.

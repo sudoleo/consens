@@ -74,7 +74,7 @@ body {
   gap: 8px;
   z-index: var(--z-header);
   transition: left var(--dur-layer) var(--ease-standard), transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard),
-    visibility 0s linear 0s;
+    visibility 0s var(--ease-linear) 0s;
 }
 
 body:has(.sidebar.collapsed) .app-nav-float {
@@ -106,7 +106,7 @@ body:has(.sidebar.collapsed) .app-nav-float {
     visibility: hidden;
     pointer-events: none;
     transform: translateY(calc(-100% - 20px));
-    transition-delay: 0s, 0s, 0s, 0.22s;
+    transition-delay: 0s, 0s, 0s, var(--dur-state);
   }
 
   body.is-reading-chrome-hidden .view-switch {
@@ -114,7 +114,7 @@ body:has(.sidebar.collapsed) .app-nav-float {
     visibility: hidden;
     pointer-events: none;
     transform: translate(-50%, calc(-100% - 20px));
-    transition-delay: 0s, 0s, 0s, 0s, 0.22s;
+    transition-delay: 0s, 0s, 0s, 0s, var(--dur-state);
   }
 }
 
@@ -122,7 +122,7 @@ body:has(.sidebar.collapsed) .app-nav-float {
   .app-nav-float,
   .app-mobile-header,
   .view-switch {
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
 }
 
@@ -848,7 +848,6 @@ body:has(.sidebar.active) .brand-float {
 .sidebar-toggle-btn:hover,
 .sidebar-toggle-btn:focus-visible {
   opacity: 1;
-  outline: none;
 }
 
 .sidebar-toggle-btn:focus-visible {
@@ -938,7 +937,7 @@ body:has(.sidebar.active) .brand-float {
 }
 
 .email-icon:active {
-  transform: scale(0.96);
+  transform: scale(var(--press-scale));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1034,7 +1033,6 @@ body:has(.sidebar.active) .brand-float {
 .email-popup .top-bar-about:hover,
 .email-popup .top-bar-about:focus-visible {
   background: #f3f4f4;
-  outline: none;
 }
 
 .dark-mode .email-icon {
@@ -1178,7 +1176,7 @@ body:has(.sidebar.active) .brand-float {
 }
 .sidebar .bookmark.is-pending p {
   color: var(--sidebar-text-muted);
-  animation: bookmarkPendingPulse 1.7s ease-in-out infinite;
+  animation: bookmarkPendingPulse var(--dur-beat) var(--ease-standard) infinite;
 }
 /* Registry runs are intentionally openable while they are pending. The
    legacy one-off placeholder above remains inert for old clients. */
@@ -1218,20 +1216,15 @@ body:has(.sidebar.active) .brand-float {
   width: 11px;
   height: 11px;
   margin-top: -6px;
-  box-sizing: border-box;
-  border: 1.5px solid color-mix(in srgb, var(--sidebar-text-muted) 28%, transparent);
-  border-top-color: var(--sidebar-text-muted);
-  border-radius: 50%;
-  animation: bookmarkPendingSpin .8s linear infinite;
+  /* Look and turn: the one spinner (motion.css). */
 }
-@keyframes bookmarkPendingSpin { to { transform: rotate(360deg); } }
+
 @keyframes bookmarkPendingPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: .62; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar .bookmark.is-pending p,
-  .bookmark-pending-spinner { animation: none; }
 }
 
 /* Bookmarks: schlichte einzeilige Textzeilen mit Ellipsis (kein Card-Look) */
@@ -1278,6 +1271,11 @@ body:has(.sidebar.active) .brand-float {
 .sidebar .bookmark:hover {
   background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
 }
+/* A row answers a press the way a list does: it darkens a step while held,
+   it does not shrink (Apple audit E11). */
+.sidebar .bookmark:not(.is-renaming, .is-pending):active {
+  background-color: var(--app-surface-selected, var(--sidebar-hover));
+}
 /* "…": more options for this chat (Rename, Share, Delete). Quiet until the
    row is pointed at or focused, always there on touch. */
 .bookmark-menu-button {
@@ -1312,7 +1310,6 @@ body:has(.sidebar.active) .brand-float {
 .bookmark-menu-button[aria-expanded="true"] {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
-  outline: none;
 }
 .bookmark-menu-button:focus-visible { outline: var(--focus-ring); }
 /* The row whose menu is open keeps its tint. */
@@ -1360,12 +1357,9 @@ body:has(.sidebar.active) .brand-float {
   background: var(--well);
   box-shadow: var(--lift);
   outline: none;
-  transform-origin: top right;
-}
-.bookmark-menu.opens-up { transform-origin: bottom right; }
-@media (prefers-reduced-motion: no-preference) {
-  .bookmark-menu { animation: bookmark-menu-in var(--dur-state) var(--ease-out); }
-  @keyframes bookmark-menu-in { from { opacity: 0; transform: scale(.97); } }
+  /* It hangs from its "…" at the right; the way in and out is the shared
+     popover motion (overlays.css). */
+  --popover-origin-x: 100%;
 }
 .bookmark-menu-item {
   display: grid;

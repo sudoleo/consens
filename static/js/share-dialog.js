@@ -8,7 +8,6 @@
 // =====================================================================
 
 (function () {
-  let dialogReturnFocus = null;
   let sharedModalEpoch = 0;
   let sharedModalMode = null;
   const activeShareControllers = new Set();
@@ -29,7 +28,31 @@
     const { modal } = shareDialogEls();
     return epoch === sharedModalEpoch
       && sharedModalMode === "share"
-      && modal?.style.display === "flex";
+      && dialogIsOpen(modal);
+  }
+
+  // #shareModal is a native <dialog> opened through App.modalDialog: focus
+  // goes in and back, Tab stays inside, Escape closes this layer only (the
+  // Watches page beneath keeps what is typed there, Apple-Audit J1), and it
+  // fades in and out like every dialog (overlays.css).
+  function dialogIsOpen(modal) {
+    return Boolean(modal?.open || modal?.hasAttribute?.("open"));
+  }
+
+  function settleSharedModalClose() {
+    invalidateSharedModalRequests();
+    sharedModalMode = null;
+    document.documentElement.classList.remove("share-modal-open");
+  }
+
+  function bindSharedModal(modal) {
+    if (!modal || modal.dataset.sharedModalBound === "true") return;
+    modal.dataset.sharedModalBound = "true";
+    window.App?.modalDialog?.bind(modal, {
+      // A watch being set up is not dropped by a click beside it.
+      keepOpen: () => modal.classList.contains("is-watch-dialog"),
+      onClose: settleSharedModalClose,
+    });
   }
 
   function staleShareRequest() {
@@ -73,37 +96,39 @@
     return !!snapshot
       && snapshot.epoch === sharedModalEpoch
       && snapshot.mode === sharedModalMode
-      && modal?.style.display === "flex";
+      && dialogIsOpen(modal);
   }
 
   function setSharedModalOpen(isOpen, mode) {
     const { modal, body } = shareDialogEls();
     if (!modal) return null;
+    bindSharedModal(modal);
     if (isOpen) {
       // Every explicit open is a new user intent, including a second Watch or
       // Share open while the same modal mode is already visible.
       invalidateSharedModalRequests();
       sharedModalMode = mode || null;
-      if (modal.style.display !== "flex") dialogReturnFocus = document.activeElement;
+      // The mode classes stay on after closing: the dialog keeps its shape
+      // while it fades out, and the next open sets them again.
       modal.classList.toggle("is-watch-dialog", mode === "watch");
       modal.classList.toggle("is-share-dialog", mode !== "watch");
-      modal.style.display = "flex";
       document.documentElement.classList.add("share-modal-open");
+      if (!dialogIsOpen(modal)) {
+        if (window.App?.modalDialog) window.App.modalDialog.open(modal);
+        else modal.setAttribute("open", "");
+      }
       requestAnimationFrame(() => {
         if (body) body.scrollTop = 0;
       });
       return sharedModalSnapshot();
     }
-    invalidateSharedModalRequests();
-    sharedModalMode = null;
-    modal.style.display = "none";
-    modal.classList.remove("is-watch-dialog", "is-share-dialog");
-    document.documentElement.classList.remove("share-modal-open");
-    if (dialogReturnFocus && dialogReturnFocus.isConnected
-        && typeof dialogReturnFocus.focus === "function") {
-      dialogReturnFocus.focus({ preventScroll: true });
+    if (dialogIsOpen(modal)) {
+      if (window.App?.modalDialog) window.App.modalDialog.close(modal);
+      else modal.removeAttribute("open");
     }
-    dialogReturnFocus = null;
+    // close() settled it already (onClose); a dialog that was not open, or
+    // an engine without the helper, still ends every request of the view.
+    settleSharedModalClose();
     return sharedModalSnapshot();
   }
 
@@ -178,7 +203,7 @@
     navigator.clipboard.writeText(url).then(() => {
       window.App.showPopup("Link copied to clipboard.");
     }).catch(() => {
-      alert("Copy to clipboard failed.");
+      window.App.toast?.({ message: "Copy to clipboard failed.", tone: "error" });
     });
   }
 
@@ -324,9 +349,15 @@
       revokeBtn.className = "share-danger-btn";
       revokeBtn.textContent = "Revoke";
       revokeBtn.addEventListener("click", async () => {
-        if (!confirm(share.visibility === "private"
-          ? "Revoke this private page? It will no longer be available to you."
-          : "Revoke this public link? Visitors will no longer be able to open it.")) return;
+        const confirmed = await window.App.confirm({
+          title: share.visibility === "private" ? "Revoke this private page?" : "Revoke this public link?",
+          body: share.visibility === "private"
+            ? "It will no longer be available to you."
+            : "Visitors will no longer be able to open it.",
+          confirmLabel: "Revoke",
+          danger: true,
+        });
+        if (!confirmed || !shareViewIsCurrent(viewEpoch)) return;
         revokeBtn.disabled = true;
         try {
           await shareApiRequest("DELETE", "/api/share/" + encodeURIComponent(share.share_id), undefined, viewEpoch);
@@ -338,7 +369,7 @@
         } catch (err) {
           if (err?.stale) return;
           revokeBtn.disabled = false;
-          window.App.showPopup("Revoking failed: " + err.message);
+          window.App.toast?.({ message: "Revoking failed: " + err.message, tone: "error" });
         }
       });
 
@@ -371,21 +402,8 @@
   (function initShareModal() {
     const modal = document.getElementById("shareModal");
     if (!modal) return;
+    bindSharedModal(modal);
     const closeBtn = document.getElementById("closeShareModal");
     if (closeBtn) closeBtn.addEventListener("click", closeShareDialog);
-    window.addEventListener("click", (event) => {
-      if (event.target === modal && !modal.classList.contains("is-watch-dialog")) {
-        closeShareDialog();
-      }
-    });
-    // Esc closes this layer and only this one: the page beneath (Watches,
-    // with what is typed there) never hears it (Apple-Audit J1).
-    document.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return;
-      if (modal.style.display !== "flex") return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeShareDialog();
-    });
   })();
 })();

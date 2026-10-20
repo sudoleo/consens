@@ -42,7 +42,10 @@ function boot({ withCanvas = true } = {}) {
           addEventListener() {}, removeEventListener() {},
           addListener() {}, removeListener() {}
         });
-        window.alert = (message) => alerts.push(String(message));
+        // A refused file is said at the composer (App.composerNotice), never
+        // in a browser window: alert() would fail this test.
+        window.alert = () => { throw new Error("alert() is not used for attachments"); };
+        window.App = { composerNotice: { show: (message) => alerts.push(String(message)), clear() {} } };
         window.URL.createObjectURL = () => "blob:image";
         window.URL.revokeObjectURL = () => {};
 

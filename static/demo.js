@@ -1191,11 +1191,10 @@ document.getElementById("postDemoLoginButton")?.addEventListener("click", event 
     return;
   }
   const modal = document.getElementById("loginModal");
-  if (!modal) return;
+  if (!modal || !window.App?.modalDialog) return;
 
-  modal.style.display = "block";
+  window.App.modalDialog.open(modal, { opener: event.currentTarget, focus: document.getElementById("loginEmail") });
   window.trackAppEvent?.("auth_modal_open", { source: "post_demo" });
-  requestAnimationFrame(() => document.getElementById("loginEmail")?.focus());
 });
 
 function toggleSettingsCollapse(contentId, arrowId) {

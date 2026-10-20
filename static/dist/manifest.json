@@ -1,5 +1,5 @@
 {
-  "sources": "c790bbb96f22",
+  "sources": "4c83097abe63",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -39,6 +39,8 @@
     "static/css/letter-clouds.css",
     "static/css/model-answer-reader.css",
     "static/css/model-pulse.css",
+    "static/css/motion.css",
+    "static/css/overlays.css",
     "static/css/public-nav.css",
     "static/css/public-pages.css",
     "static/css/public-shell.css",
@@ -50,7 +52,6 @@
     "static/css/status-palette.css",
     "static/css/topics.css",
     "static/css/typography.css",
-    "static/css/undo-notice.css",
     "static/css/variables.css",
     "static/demo.js",
     "static/firebase.js",
@@ -85,12 +86,14 @@
     "static/js/composer-keyboard.js",
     "static/js/composer-quote.js",
     "static/js/composer-starters.js",
+    "static/js/confirm-dialog.js",
     "static/js/consensus-actions.js",
     "static/js/consensus-anchor.js",
     "static/js/consensus-insights.js",
     "static/js/consensus-lifecycle.js",
     "static/js/consensus-progress.js",
     "static/js/consensus-run.js",
+    "static/js/disclosure.js",
     "static/js/email-verify.js",
     "static/js/error-reporter.js",
     "static/js/feature-access.js",
@@ -103,7 +106,10 @@
     "static/js/modal-dialog.js",
     "static/js/model-answer-reader.js",
     "static/js/model-picker.js",
+    "static/js/motion.js",
+    "static/js/notices.js",
     "static/js/passage-check.js",
+    "static/js/popover.js",
     "static/js/query-send.js",
     "static/js/request-deadline.js",
     "static/js/run-mode.js",
@@ -115,7 +121,7 @@
     "static/js/sources.js",
     "static/js/tab-status.js",
     "static/js/token-budget.js",
-    "static/js/undo-notice.js",
+    "static/js/tooltip.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
     "static/js/user-settings.js",
@@ -197,44 +203,44 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.66cfc7d3a03d.js",
+      "src": "/static/dist/head.bf63b5ef6543.js",
       "module": false,
       "defer": false
     },
     {
       "name": "auth",
-      "src": "/static/dist/auth.5c8ab3c866cb.js",
+      "src": "/static/dist/auth.e148c0e3b0c7.js",
       "module": false,
       "defer": true
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.f6127136ade9.js",
+      "src": "/static/dist/firebase.103c411a8c65.js",
       "module": true,
       "defer": false
     },
     {
       "name": "demo",
-      "src": "/static/dist/demo.1a3421e3e4d2.js",
+      "src": "/static/dist/demo.1bcf3ec5aeb7.js",
       "module": true,
       "defer": false
     },
     {
       "name": "app",
-      "src": "/static/dist/app.956a75ce06b5.js",
+      "src": "/static/dist/app.9cd87bdd02ed.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.f40d4e3cd7ae.css",
-    "landing": "/static/dist/landing.44d4411e76b0.css",
-    "public": "/static/dist/public.7adfd7c44c2d.css"
+    "app": "/static/dist/app.e6b1fc10b039.css",
+    "landing": "/static/dist/landing.dad979956532.css",
+    "public": "/static/dist/public.0dc67ad2ffbb.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "1cf12cab1eb4",
+      "hash": "dbe3b895ab53",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -261,20 +267,21 @@
         "static/css/layout.css",
         "static/css/letter-clouds.css",
         "static/css/model-answer-reader.css",
+        "static/css/motion.css",
+        "static/css/overlays.css",
         "static/css/select.css",
         "static/css/send-glow.css",
         "static/css/shell.css",
         "static/css/skeleton.css",
         "static/css/status-palette.css",
         "static/css/typography.css",
-        "static/css/undo-notice.css",
         "static/css/variables.css",
         "static/style.css"
       ]
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "4e2c69746666",
+      "hash": "02f0dc019b05",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -290,7 +297,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "9ca606ab39fd",
+      "hash": "eec0c28b90d6",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -302,20 +309,21 @@
     }
   },
   "previous_assets": [
-    "app.778da87e40d9.css",
-    "app.74495e3f7918.css",
-    "app.1a0a96c00b97.js",
-    "app.4f741ddb98e5.js",
-    "auth.5e487d1e2570.js",
+    "app.29ea9b6396bf.css",
+    "app.fbe3022556e8.css",
+    "app.32a441c9dc25.js",
+    "app.f3592cdea87b.js",
+    "auth.41ef93a7d4fe.js",
+    "auth.dff43ed011f3.js",
+    "demo.1a3421e3e4d2.js",
     "demo.9cb7e261a771.js",
-    "demo.f96893d39783.js",
-    "firebase.0a46d0f4756b.js",
-    "firebase.02d5cd4749ea.js",
+    "firebase.aece77bfd3be.js",
+    "firebase.3b9130c9b782.js",
+    "head.66cfc7d3a03d.js",
     "head.4d50a0d52b68.js",
-    "head.9076e14a6904.js",
-    "landing.272588d29602.css",
-    "landing.a49e221e792e.css",
-    "public.a64e7193f6a4.css",
-    "public.b31e93bd51de.css"
+    "landing.6c80f48f3b82.css",
+    "landing.44d4411e76b0.css",
+    "public.2a273e1d2d09.css",
+    "public.a44796a0d7f7.css"
   ]
 }

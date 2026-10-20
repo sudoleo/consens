@@ -94,11 +94,6 @@
 }
 .agent-google-sheet-head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 10px 20px; }
 .agent-google-sheet-head h2 { flex: 1; margin: 0; text-align: left; font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
-.agent-google-close {
-  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 0; padding: 0; border: 0;
-  border-radius: var(--radius-xs); background: transparent; color: var(--ink-2); cursor: pointer;
-}
-.agent-google-close:hover { background: var(--raise); color: var(--ink); }
 .agent-google-sheet-body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 16px;
   font-size: var(--font-size-sm); line-height: 1.5; overflow-wrap: anywhere;

@@ -142,7 +142,9 @@
           toggle.addEventListener("click", function () {
             const newTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
             writeStored("theme", newTheme);
-            applyTheme(newTheme);
+            // One step, not a smear of different speeds (Apple audit C8).
+            if (window.App.motion?.switchTheme) window.App.motion.switchTheme(() => applyTheme(newTheme));
+            else applyTheme(newTheme);
           });
         });
 
@@ -414,28 +416,14 @@
         // one try.
         window.updateQuestionInputAccess();
 
-        let mobileInfoPopupTimer = null;
-
         function isCompactControlLayout() {
           return window.matchMedia("(max-width: 900px)").matches;
         }
 
+        // A thin forward to the one notice line (App.toast, notices.js).
         function showMobileInfoPopup(message) {
           if (!message || !isCompactControlLayout()) return;
-
-          const popup = document.getElementById("disclaimerPopup");
-          const popupText = popup ? popup.querySelector("p") : null;
-          if (!popup || !popupText) return;
-
-          popupText.textContent = message;
-          popup.classList.add("show");
-
-          if (mobileInfoPopupTimer) {
-            clearTimeout(mobileInfoPopupTimer);
-          }
-          mobileInfoPopupTimer = setTimeout(() => {
-            popup.classList.remove("show");
-          }, 7000);
+          window.App.toast?.({ message });
         }
         window.showMobileInfoPopup = showMobileInfoPopup;
 
@@ -583,6 +571,46 @@
         }
         requestAnimationFrame(syncThreadComposerReserve);
 
+        // On a phone or tablet the open sidebar is a drawer over the page
+        // (Apple audit E6): the page behind is inert while it is open, focus
+        // goes into it and comes back to the menu button when it closes, and
+        // Escape closes it. What lives on <body> for the drawer (a chat's row
+        // menu, the notice line, dialogs) stays usable.
+        const DRAWER_BACKDROP = [".container", ".app-mobile-header", ".app-nav-float", "#authTopActions",
+          "#viewSwitch", "#mobileConversationActions", ".app-bottom-edge"];
+        let drawerOpen = false;
+        function syncDrawerFocus(sidebar, open) {
+          if (open === drawerOpen) return;
+          drawerOpen = open;
+          DRAWER_BACKDROP.forEach(function (selector) {
+            document.querySelectorAll(selector).forEach(function (element) {
+              if (element.contains(sidebar)) return;
+              element.inert = open;
+            });
+          });
+          if (open) {
+            const target = sidebar.querySelector("#sidebarToggleInner") || sidebar.querySelector("button:not([disabled])");
+            if (target && !sidebar.contains(document.activeElement)) target.focus({ preventScroll: true });
+          } else if (!document.activeElement || document.activeElement === document.body) {
+            document.getElementById("toggleSidebarButton")?.focus({ preventScroll: true });
+          }
+        }
+        // Capture: a menu or dialog open above the drawer takes its Escape
+        // first (they stop it); only a plain Escape closes the drawer.
+        window.addEventListener("keydown", function (event) {
+          if (event.key !== "Escape" || event.isComposing || !drawerOpen) return;
+          if (document.querySelector("dialog[open]")) return;
+          if (window.App?.popover?.anyOpen?.()) return;
+          const sidebar = document.querySelector(".sidebar");
+          if (!sidebar?.classList.contains("active")) return;
+          if (event.target?.closest?.(".bookmark-rename-input")) return;
+          const hadFocus = sidebar.contains(document.activeElement);
+          closeOverlaySidebar();
+          if (hadFocus || document.activeElement === document.body) {
+            document.getElementById("toggleSidebarButton")?.focus({ preventScroll: true });
+          }
+        }, true);
+
         function closeOverlaySidebar() {
           const sidebar = document.querySelector(".sidebar");
           if (!sidebar || !usesOverlaySidebar()) return;
@@ -599,7 +627,7 @@
           // sidebar stays, so closing the dialog can hand focus back to the
           // gear inside it. A chat's row menu and its "Undo" line belong to
           // the list too.
-          if (event.target.closest("dialog, .bookmark-menu, .undo-notice")) return;
+          if (event.target.closest("dialog, .bookmark-menu, .toast-region")) return;
 
           if (!sidebar.contains(event.target) && !event.target.closest(".sidebar-toggle")) {
             closeOverlaySidebar();
@@ -662,8 +690,10 @@
             // Counted like the server: code points after NFKC (an emoji is one
             // character, "…" becomes three).
             const length = [...String(message).normalize("NFKC").trim()].length;
+            // Said under the field it is about, not in a browser window
+            // (Apple audit E1); typing again takes it away.
             if (length > maxChars) {
-              alert(`Your message is longer than ${maxChars.toLocaleString("en-US")} characters `
+              window.App.composerNotice.show(`Your message is longer than ${maxChars.toLocaleString("en-US")} characters `
                 + `(it has ${length.toLocaleString("en-US")}). `
                 + "Shorten it, or paste only the part you want checked.");
               return false;
@@ -678,7 +708,7 @@
           const maxWords = Number(maxWordsRaw || 0);
 
           if (wordCount > maxWords) {
-            alert(`The query is above the limit of ${maxWords} words (you entered ${wordCount}).`);
+            window.App.composerNotice.show(`The query is above the limit of ${maxWords} words (you entered ${wordCount}).`);
             return false;
           }
           return true;
@@ -945,6 +975,7 @@
           } else {
             sidebar.setAttribute("aria-hidden", "true");
           }
+          syncDrawerFocus(sidebar, isOpen && usesOverlaySidebar());
           document.querySelectorAll(".sidebar-toggle").forEach(function (toggleButton) {
             toggleButton.setAttribute("aria-expanded", String(isOpen));
             toggleButton.setAttribute("aria-label", isOpen ? "Collapse sidebar" : "Open sidebar");
@@ -1671,84 +1702,9 @@
         // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
         // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.
 
-        // 1. Tooltip Element einmalig erstellen
-        const tooltip = document.createElement('div');
-        tooltip.className = 'global-tooltip';
-        document.body.appendChild(tooltip);
-
-        let tooltipTimer = null;
-        let activeTooltipTarget = null;
-
-        const clearTooltipTimer = () => {
-          if (tooltipTimer) {
-            clearTimeout(tooltipTimer);
-            tooltipTimer = null;
-          }
-        };
-
-        // Funktion zum Anzeigen
-        const showTooltip = (target) => {
-          if (!target) return;
-
-          const text = target.getAttribute('data-tooltip');
-          if (!text) return;
-
-          // Text setzen
-          tooltip.textContent = text;
-          tooltip.classList.add('visible');
-
-          // Position berechnen
-          const rect = target.getBoundingClientRect();
-
-          // Standard: Links am Text ausgerichtet, unterhalb des Textes
-          let top = rect.bottom + 5;
-          let left = rect.left;
-
-          // Sicherheitscheck: Falls Tooltip rechts aus dem Bild ragt (Mobile)
-          // Wir setzen ihn temporär, um die Breite zu messen
-          tooltip.style.left = left + 'px';
-          tooltip.style.top = top + 'px';
-
-          const tooltipRect = tooltip.getBoundingClientRect();
-          if (tooltipRect.right > window.innerWidth) {
-            // Nach links schieben, damit er im Bild bleibt
-            left = window.innerWidth - tooltipRect.width - 10;
-          }
-
-          tooltip.style.left = left + 'px';
-          tooltip.style.top = top + 'px';
-        };
-
-        // Funktion zum Verstecken
-        const hideTooltip = () => {
-          clearTooltipTimer();
-          activeTooltipTarget = null;
-          tooltip.classList.remove('visible');
-        };
-
-        // Event Listener für alle Elemente mit data-tooltip
-        document.body.addEventListener('mouseover', (e) => {
-          const target = e.target.closest('[data-tooltip]');
-          if (!target || target.contains(e.relatedTarget)) return;
-
-          clearTooltipTimer();
-          activeTooltipTarget = target;
-          tooltipTimer = setTimeout(() => {
-            if (activeTooltipTarget === target) {
-              showTooltip(target);
-            }
-          }, 2500);
-        });
-
-        document.body.addEventListener('mouseout', (e) => {
-          const target = e.target.closest('[data-tooltip]');
-          if (!target || target.contains(e.relatedTarget)) return;
-
-          hideTooltip();
-        });
-
-        // Optional: Beim Scrollen verstecken, damit er nicht "floated"
-        window.addEventListener('scroll', hideTooltip, true);
+        // The one tooltip of the app (tooltip.js): title and data-tooltip, for
+        // the pointer, the keyboard and a tap on a mark (Apple audit E12).
+        window.App.tooltip?.init?.();
 
         }
 

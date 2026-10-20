@@ -565,13 +565,13 @@
             const pop = $("claimPopover");
             const backdrop = $("claimSheetBackdrop");
             if (pop) {
+              if (!pop.hidden) window.App?.popover?.closed(pop);
               pop.hidden = true;
-              pop.classList.remove("is-modal");
               pop.removeAttribute("aria-modal");
               pop.removeAttribute("aria-labelledby");
               pop.removeAttribute("tabindex");
-              pop.innerHTML = "";
-              pop.style.left = pop.style.top = pop.style.width = "";
+              // Content, place and shape stay until the next open, so the
+              // card fades out as it was instead of collapsing first.
             }
             if (backdrop) backdrop.hidden = true;
             setClaimModalBackgroundInert(false);
@@ -629,6 +629,10 @@
             const backdrop = ensureOverlayOnBody($("claimSheetBackdrop"));
             if (!pop) return;
             closeClaimPopover({ restoreFocus: false });
+            pop.innerHTML = "";
+            pop.style.left = pop.style.top = pop.style.width = "";
+            // One of the app's popovers (App.popover): any other menu closes.
+            window.App?.popover?.register(pop, { close: () => closeClaimPopover({ restoreFocus: false }) });
             claimPopoverTrigger = anchorEl || document.activeElement;
             const coverage = claimCoverage(claim);
 
@@ -640,9 +644,9 @@
             appendClaimSupport(title, claim);
             const close = document.createElement("button");
             close.type = "button";
-            close.className = "claim-popover-close";
+            close.className = "claim-popover-close close-button";
             close.setAttribute("aria-label", "Close");
-            close.innerHTML = "&times;";
+            close.innerHTML = window.App?.closeIcon?.() || "";
             close.addEventListener("click", closeClaimPopover);
             header.append(title, close);
             pop.appendChild(header);
@@ -704,6 +708,7 @@
             const asModal = isMobileViewport();
             pop.classList.toggle("is-modal", asModal);
             pop.setAttribute("aria-labelledby", title.id);
+            window.App?.popover?.opened(pop, { trigger: asModal ? null : anchorEl });
             pop.hidden = false;
             if (asModal) {
               pop.setAttribute("aria-modal", "true");

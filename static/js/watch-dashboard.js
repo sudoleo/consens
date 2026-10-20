@@ -1331,80 +1331,32 @@
   }
 
   // ------------------------------------------------------------------
-  // Undo notice: one at a time, bottom centre, with the action that takes
-  // it back. A newer notice lets the older one happen. Shared building
-  // block until the app has a common notice system (Welle 2):
-  // App.watchDashboard.showUndoToast(message, {undo, commit, timeout}).
+  // Undo notice: the app's one notice line (App.toast, notices.js) with the
+  // action that takes it back. A newer notice lets the older one happen.
+  // App.watchDashboard.showUndoToast(message, {undo, commit, timeout}) stays
+  // as a thin forward for the cards.
   // ------------------------------------------------------------------
-  const toast = { node: null, current: null, timer: null, hideTimer: null };
-
-  function toastNode() {
-    if (toast.node?.isConnected) return toast.node;
-    const node = el("div", "wd-toast");
-    node.id = "wdUndoToast";
-    node.setAttribute("role", "status");
-    node.setAttribute("aria-live", "polite");
-    node.hidden = true;
-    const text = el("span", "wd-toast-text");
-    const undo = el("button", "wd-toast-undo", "Undo");
-    undo.type = "button";
-    node.append(text, undo);
-    undo.addEventListener("click", () => finishToast(false));
-    node.addEventListener("pointerenter", () => pauseToast(true));
-    node.addEventListener("pointerleave", () => pauseToast(false));
-    node.addEventListener("focusin", () => pauseToast(true));
-    node.addEventListener("focusout", () => pauseToast(false));
-    document.body.appendChild(node);
-    toast.node = node;
-    return node;
-  }
-
-  function pauseToast(paused) {
-    const current = toast.current;
-    if (!current) return;
-    clearTimeout(toast.timer);
-    if (!paused) toast.timer = setTimeout(() => finishToast(true), Math.max(1500, current.remaining));
-    else current.remaining = Math.max(1500, current.deadline - Date.now());
-  }
-
-  function finishToast(commit) {
-    const current = toast.current;
-    clearTimeout(toast.timer);
-    toast.current = null;
-    if (current) {
-      try {
-        if (commit) current.commit?.();
-        else current.undo?.();
-      } catch (_) { /* the notice still leaves */ }
-    }
-    const node = toast.node;
-    if (!node || node.hidden) return;
-    node.classList.remove("is-shown");
-    clearTimeout(toast.hideTimer);
-    toast.hideTimer = setTimeout(() => { if (!toast.current) node.hidden = true; }, reducedMotion() ? 0 : 220);
-  }
+  let dashToast = null;
 
   function showUndoToast(message, { undo = null, commit = null, timeout = UNDO_MS } = {}) {
-    if (toast.current) finishToast(true);
-    const node = toastNode();
-    clearTimeout(toast.hideTimer);
-    node.querySelector(".wd-toast-text").textContent = message;
-    const undoButton = node.querySelector(".wd-toast-undo");
-    undoButton.hidden = !undo;
-    toast.current = { undo, commit, deadline: Date.now() + timeout, remaining: timeout };
-    node.hidden = false;
-    void node.offsetWidth;
-    node.classList.add("is-shown");
-    toast.timer = setTimeout(() => finishToast(true), timeout);
+    dashToast?.settle();
+    const handle = window.App.toast({
+      message,
+      action: typeof undo === "function" ? { label: "Undo", onAction: () => { undo(); } } : null,
+      onExpire: typeof commit === "function" ? commit : null,
+      duration: timeout,
+    });
+    dashToast = handle;
     return {
-      dismiss: () => finishToast(true),
-      focusUndo: () => { try { undoButton.focus({ preventScroll: true }); } catch (_) { undoButton.focus(); } }
+      dismiss: () => handle.settle(),
+      focusUndo: () => handle.focusAction()
     };
   }
 
   // Leaving the page (or the tab) lets every pending Undo happen now.
   function commitPending() {
-    if (toast.current) finishToast(true);
+    dashToast?.settle();
+    dashToast = null;
     page.cards.forEach(entry => entry.panel?.flush?.());
   }
 
@@ -1780,7 +1732,15 @@
       page.cards.forEach(entry => entry.panel?.sync?.(entry.watch));
     };
     const disconnect = () => ui().makeButton("Disconnect", "wd-button", async function () {
-      if (state.connected && !confirm("Disconnect Telegram? Watches keep the setting but cannot deliver there until you reconnect.")) return;
+      if (state.connected) {
+        const confirmed = await window.App.confirm({
+          title: "Disconnect Telegram?",
+          body: "Watches keep the setting but cannot deliver there until you reconnect.",
+          confirmLabel: "Disconnect",
+          danger: true,
+        });
+        if (!confirmed || !this.isConnected) return;
+      }
       this.disabled = true;
       try {
         const data = await ui().api("DELETE", "/api/my/telegram", {});
@@ -2081,7 +2041,10 @@
 
   function reset() {
     renderToken += 1;
-    if (toast.current) finishToast(false);
+    // An account change drops a pending Undo without doing it: nothing of
+    // the old account's page is sent with the next one.
+    dashToast?.cancel();
+    dashToast = null;
     page.cards.clear();
     page.sections.clear();
     page.fresh.clear();

@@ -1,5 +1,5 @@
 /**
- * Boot the real /app classic scripts (groups head + app from bundles.json,
+ * Boot the real /app classic scripts (groups head, auth and app from bundles.json,
  * in their load order) against markup cut from templates/index.html.
  *
  * Tests that exercise a whole flow (a dialog, the sidebar search, a timer
@@ -16,8 +16,11 @@ import { loadScripts, ROOT } from "./appWindow.mjs";
 const bundles = JSON.parse(readFileSync(path.join(ROOT, "static/js/bundles.json"), "utf8"));
 
 export const APP_SCRIPTS = bundles.groups
-  .filter((group) => group.kind === "classic" && ["head", "app"].includes(group.name))
-  .flatMap((group) => group.files.map((entry) => (typeof entry === "string" ? entry : entry.file)));
+  .filter((group) => group.kind === "classic" && ["head", "auth", "app"].includes(group.name))
+  .flatMap((group) => group.files.map((entry) => (typeof entry === "string" ? entry : entry.file)))
+  // The overlay modules of the auth group (dialogs, popovers, notices) are
+  // part of the app; the auth watchdog needs the Firebase module it watches.
+  .filter((file) => !file.endsWith("auth-bootstrap.js"));
 
 // Normalized: a Windows checkout has CRLF, the markers below use LF.
 const TEMPLATE = readFileSync(path.join(ROOT, "templates/index.html"), "utf8").replace(/\r\n/g, "\n");

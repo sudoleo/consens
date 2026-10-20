@@ -118,12 +118,13 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     assert 'severity: "major"' in demo
     assert 'severity: "minor"' in demo
     assert 'type: "emphasis"' in demo
-    # Das Kreuz ist ein echtes Glyph (wie bei den Modal-Close-Buttons), nicht
-    # mehr aus zwei gedrehten Pseudo-Elementen gebaut.
+    # Das Kreuz ist das eine gezeichnete Schliessen-Kreuz der App (Apple-Audit
+    # G3, foundation.css .close-button), kein Glyph aus einer Ersatzschrift.
     assert (
-        'class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&#10005;</button>'
-        in watch
+        'class="watch-feature-nudge-close close-button" aria-label="Dismiss new feature tip">'
+        '<svg class="close-icon"' in watch
     )
+    assert "&#10005;" not in watch
     assert "rows.forEach" in leaderboard
     assert "/api/model-pulse?" in leaderboard
     for name in ('name="period"', 'name="mode"', 'name="with"', 'name="sort"'):

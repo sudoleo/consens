@@ -101,7 +101,7 @@
       button.dataset.question = item.question;
       button.textContent = item.label;
       target.insertBefore(button, check);
-      if (!quiet && button.animate) button.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
+      if (!quiet && button.animate) button.animate([{ opacity: 0 }, { opacity: 1 }], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "ease-out" });
     });
   }
 

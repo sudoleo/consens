@@ -115,6 +115,20 @@
      Skripte wie auf Topic-Seiten. #}
   <script defer src="{{ asset_url('/static/js/check-page.js') }}"></script>
   <script>
+    // A failed send is said under the form it belongs to, not in a browser
+    // window (Apple audit E1).
+    function formError(form, message) {
+      let line = form.querySelector(".share-form-error");
+      if (!line) {
+        line = document.createElement("p");
+        line.className = "share-form-error";
+        line.setAttribute("role", "alert");
+        form.append(line);
+      }
+      line.textContent = message || "";
+      line.hidden = !message;
+    }
+
     {% if can_follow %}
     // Follow-Formular: Double-Opt-in-Anfrage, rein serverseitig verarbeitet.
     (function () {
@@ -127,6 +141,7 @@
         if (!email) return;
         const button = form.querySelector("button[type=submit]");
         button.disabled = true;
+        formError(form, "");
         fetch("/api/share/{{ share_id }}/follow", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -140,7 +155,7 @@
           });
         }).catch(function (error) {
           button.disabled = false;
-          alert("Follow request failed: " + error.message);
+          formError(form, "Follow request failed: " + error.message);
         });
       });
     })();
@@ -159,6 +174,7 @@
         const reason = document.getElementById("shareReportReason").value;
         const submitBtn = form.querySelector("button[type=submit]");
         submitBtn.disabled = true;
+        formError(form, "");
         fetch("/api/share/{{ share_id }}/report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -170,7 +186,7 @@
           done.hidden = false;
         }).catch(function () {
           submitBtn.disabled = false;
-          alert("Reporting failed. Please try again later.");
+          formError(form, "Reporting failed. Please try again later.");
         });
       });
     })();

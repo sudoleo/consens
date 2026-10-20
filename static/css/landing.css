@@ -1711,20 +1711,9 @@ img { display: block; max-width: 100%; }
   font-weight: var(--font-weight-bold);
 }
 
+/* The shared close cross (.close-button, foundation.css); here its place. */
 .claim-popover-close {
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 50%;
-  background: var(--well);
-  color: var(--ink);
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-solid);
-  cursor: pointer;
+  margin: -6px -8px -6px 0;
 }
 
 .claim-popover-claim {

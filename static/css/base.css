@@ -36,16 +36,33 @@ a:hover {
 }
 
 /* One focus ring for every control that does not draw its own (foundation.css).
-   :where() keeps it at zero specificity, so a component's own ring still wins. */
+   :where() keeps it at zero specificity, so a component's own ring still wins.
+   No component hides it behind a hover tint any more: a tint of 1.1:1 is no
+   place marker (Apple audit E4, tests/js/focus-and-press.test.mjs). */
 :where(a, button, summary, select, textarea, input, [role="button"], [role="switch"], [role="tab"], [tabindex]):focus-visible {
   outline: var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
 
-/* Everything you press gives way a little. Zero specificity: a control that
+/* A text link keeps the same air, with its corners rounded like a control's. */
+:where(a):focus-visible {
+  border-radius: var(--radius-2xs);
+}
+
+/* Inside a menu the ring sits just inside the row, where the menu's own edge
+   cannot cut it off. */
+:is(.attach-menu-item, .attach-menu-mode, .bookmark-menu-item, .email-popup .top-bar-about,
+  .consensus-actions-menu .consensus-copy-icon-btn, .agent-files-menu-item,
+  .answer-reader-picker-menu > button, .memory-selection-action, .model-picker-menu button):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* Everything you press gives way by the same amount (--press-scale,
+   foundation.css; Apple audit E11). Zero specificity: a control that
    already moves (its own transform) keeps its own behaviour. */
 :where(button:not(:disabled), .btn, [role="button"]):where(:active) {
-  transform: scale(0.97);
+  transform: scale(var(--press-scale));
 }
 @media (prefers-reduced-motion: reduce) {
   :where(button:not(:disabled), .btn, [role="button"]):where(:active) { transform: none; }

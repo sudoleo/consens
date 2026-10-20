@@ -6,10 +6,7 @@
   height: 16px;
   flex: 0 0 16px;
   display: inline-block;
-  border: 2px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
-  border-top-color: var(--sidebar-text-muted);
-  border-radius: 50%;
-  animation: spin 0.85s linear infinite;
+  /* Look and turn: the one spinner (motion.css). */
 }
 
 .thinking-wrap {
@@ -64,19 +61,19 @@
   box-shadow: none;
   opacity: 0.28;
   transform: scale(0.82);
-  animation: consensusLoaderDots 1.55s ease-in-out infinite;
+  animation: consensusLoaderDots var(--dur-beat) var(--ease-standard) infinite;
 }
 
 .consensus-loader span:nth-child(2) {
-  animation-delay: 0.12s;
+  animation-delay: calc(var(--dur-beat) / 12);
 }
 
 .consensus-loader span:nth-child(3) {
-  animation-delay: 0.24s;
+  animation-delay: calc(var(--dur-beat) / 6);
 }
 
 .consensus-loader span:nth-child(4) {
-  animation-delay: 0.36s;
+  animation-delay: calc(var(--dur-beat) / 4);
 }
 
 .typing-dots {
@@ -95,15 +92,15 @@
 }
 
 .typing-dots span:nth-child(1) {
-  animation: typing-dot-one 1.2s steps(1, end) infinite;
+  animation: typing-dot-one var(--dur-beat) steps(1, end) infinite;
 }
 
 .typing-dots span:nth-child(2) {
-  animation: typing-dot-two 1.2s steps(1, end) infinite;
+  animation: typing-dot-two var(--dur-beat) steps(1, end) infinite;
 }
 
 .typing-dots span:nth-child(3) {
-  animation: typing-dot-three 1.2s steps(1, end) infinite;
+  animation: typing-dot-three var(--dur-beat) steps(1, end) infinite;
 }
 
 .response-box .collapsible-content .thinking-wrap,
@@ -129,12 +126,6 @@
 /* --------------------------------------------------------------------------
    Animations
    -------------------------------------------------------------------------- */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes consensusLoaderDots {
   0%, 100% {
     opacity: 0.28;

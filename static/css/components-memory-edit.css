@@ -14,12 +14,10 @@
   background: var(--raise);
   color: var(--text-color);
   box-shadow: var(--lift);
-  animation: memory-menu-in 130ms ease-out;
 }
 
 .memory-selection-menu[hidden],
-.memory-edit-backdrop[hidden],
-.memory-edit-toast[hidden] { display: none; }
+.memory-edit-backdrop[hidden] { display: none; }
 
 /* Gast: nur "Ask about this". Eingeloggt im Frage-Text: nur die Memory-Aktionen.
    Der Trenner faellt mit der Seite weg, die er sonst abtrennen wuerde. */
@@ -48,15 +46,12 @@
 
 .memory-selection-action:hover,
 .memory-selection-action:focus-visible {
-  outline: none;
   background: var(--ground);
   opacity: 1;
 }
 
 .memory-selection-action svg,
-.memory-edit-title-icon svg,
-.memory-edit-close svg,
-.memory-edit-toast-icon svg {
+.memory-edit-title-icon svg {
   width: 16px;
   height: 16px;
   fill: none;
@@ -87,8 +82,6 @@ html.memory-edit-open body {
   place-items: center;
   box-sizing: border-box;
   padding: 18px;
-  background: var(--overlay-dim);
-  animation: memory-backdrop-in 150ms ease-out;
 }
 
 .memory-edit-dialog {
@@ -97,13 +90,8 @@ html.memory-edit-open body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--ground);
   color: var(--text-color);
-  box-shadow: var(--lift);
   text-align: left;
-  animation: memory-dialog-in 170ms ease-out;
 }
 
 .memory-edit-dialog-head {
@@ -146,27 +134,9 @@ html.memory-edit-open body {
   line-height: var(--line-height-ui);
 }
 
+/* The shared close cross (.close-button, foundation.css); here its place. */
 .memory-edit-close {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   margin: -2px -2px 0 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--sidebar-text-muted);
-  cursor: pointer;
-}
-
-.memory-edit-close:hover,
-.memory-edit-close:focus-visible {
-  outline: none;
-  background: var(--raise);
-  color: var(--text-color);
-  opacity: 1;
 }
 
 .memory-edit-dialog-body {
@@ -308,7 +278,6 @@ html.memory-edit-open body {
 
 .memory-edit-cancel:hover,
 .memory-edit-cancel:focus-visible {
-  outline: none;
   background: var(--raise);
   opacity: 1;
 }
@@ -323,7 +292,6 @@ html.memory-edit-open body {
 
 .memory-edit-submit:hover:not(:disabled),
 .memory-edit-submit:focus-visible:not(:disabled) {
-  outline: none;
   opacity: .9;
 }
 
@@ -331,80 +299,9 @@ html.memory-edit-open body {
   width: 12px;
   height: 12px;
   margin-right: 7px;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
   content: "";
-  animation: memory-spin 650ms linear infinite;
+  /* Look and turn: the one spinner (motion.css). */
 }
-
-.memory-edit-toast {
-  position: fixed;
-  z-index: calc(var(--z-modal) + 20);
-  right: 18px;
-  bottom: max(18px, env(safe-area-inset-bottom));
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  min-width: min(320px, calc(100vw - 36px));
-  max-width: min(420px, calc(100vw - 36px));
-  box-sizing: border-box;
-  padding: 10px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--raise);
-  color: var(--text-color);
-  box-shadow: var(--lift);
-  font-size: var(--font-size-sm);
-  animation: memory-toast-in 170ms ease-out;
-}
-
-.memory-edit-toast-icon {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-xs);
-  background: var(--agree-bg);
-  color: var(--agree);
-}
-
-.memory-edit-toast-content { line-height: var(--line-height-ui); }
-
-.memory-edit-toast button {
-  min-height: 30px;
-  margin: 0;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-color);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.memory-edit-toast button:hover,
-.memory-edit-toast button:focus-visible {
-  outline: none;
-  background: var(--ground);
-  opacity: 1;
-}
-
-@keyframes memory-menu-in {
-  from { opacity: 0; transform: translateY(-3px) scale(.98); }
-}
-@keyframes memory-backdrop-in { from { opacity: 0; } }
-@keyframes memory-dialog-in {
-  from { opacity: 0; transform: translateY(5px) scale(.99); }
-}
-@keyframes memory-toast-in {
-  from { opacity: 0; transform: translateY(6px); }
-}
-@keyframes memory-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 560px) {
   .memory-edit-backdrop {
@@ -420,17 +317,6 @@ html.memory-edit-open body {
   .memory-edit-dialog-body { padding: 16px 15px; }
   .memory-edit-dialog-actions { padding: 12px 15px 14px; }
   .memory-edit-submit { flex: 1; }
-  .memory-edit-toast {
-    right: 10px;
-    bottom: max(10px, env(safe-area-inset-bottom));
-    min-width: calc(100vw - 20px);
-    max-width: calc(100vw - 20px);
-  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .memory-selection-menu,
-  .memory-edit-backdrop,
-  .memory-edit-dialog,
-  .memory-edit-toast { animation: none; }
-}
+

@@ -21,7 +21,7 @@ function boot({ own = OWN, live = NEW, hidden = false, session = {}, deferFetch 
     body: `<style>.modal{display:none}</style>
       <meta id="appBootstrapConfig" data-app-build="${own}">
       <textarea id="questionInput"></textarea>
-      <div id="loginModal" class="modal"></div>
+      <dialog id="loginModal" class="modal"></dialog>
       <div id="watchDashboard" hidden></div>`,
     before(window) {
       window.document.body.classList.add("is-hero");
@@ -107,7 +107,7 @@ describe("app update", () => {
     ["a run is still going", app => { app.state.active = 1; }],
     ["the composer holds a draft", app => { app.window.document.getElementById("questionInput").value = "half a question"; }],
     ["a file waits in the composer", app => { app.window.pendingAttachments = [{ name: "a.pdf" }]; }],
-    ["a dialog is open", app => { app.window.document.getElementById("loginModal").style.display = "block"; }],
+    ["a dialog is open", app => { app.window.document.getElementById("loginModal").setAttribute("open", ""); }],
     ["a result is on screen that is not saved", app => {
       app.window.document.body.classList.remove("is-hero");
       app.state.run = { status: "succeeded" };

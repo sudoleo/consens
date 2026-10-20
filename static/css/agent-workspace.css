@@ -93,7 +93,7 @@
   display: flex; align-items: center; width: 100%; min-height: 38px; padding: 8px 10px; border: 0; border-radius: var(--radius-xs);
   background: transparent; color: var(--ink); font: inherit; font-size: var(--font-size-ui); text-align: left; cursor: pointer;
 }
-.agent-files-menu-item:hover, .agent-files-menu-item:focus-visible { background: var(--raise); outline: none; }
+.agent-files-menu-item:hover, .agent-files-menu-item:focus-visible { background: var(--raise);}
 .agent-files-menu-item.is-danger { color: var(--dispute); }
 
 .agent-files-confirm {
@@ -128,11 +128,8 @@
 .agent-file-meta .agent-files-icon { width: 14px; height: 14px; }
 .agent-file-origin { color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-file-warning { color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: var(--font-size-xs); line-height: 1.5; }
-.agent-upload-spinner {
-  width: 12px; height: 12px; flex: none; border: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent);
-  border-top-color: var(--ink-2); border-radius: 50%; animation: agent-upload-spin 800ms linear infinite;
-}
-@keyframes agent-upload-spin { to { transform: rotate(360deg); } }
+/* Look and turn: the one spinner (motion.css). */
+.agent-upload-spinner { width: 12px; height: 12px; flex: none; }
 .agent-upload-row.is-done .agent-file-meta { color: var(--agree); }
 
 .agent-resource-notice {
@@ -161,7 +158,7 @@
 /* A file from Google Drive: an ordinary chip that names its origin; while it
    loads, the size line says so and pulses quietly. */
 .attachment-chip.is-loading { cursor: progress; }
-.attachment-chip.is-loading .attachment-chip-size { animation: attachment-drive-loading 1.4s ease-in-out infinite; }
+.attachment-chip.is-loading .attachment-chip-size { animation: attachment-drive-loading var(--dur-beat) var(--ease-standard) infinite; }
 @keyframes attachment-drive-loading { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) {
   .attachment-chip.is-loading .attachment-chip-size { animation: none; }
@@ -187,7 +184,6 @@
   .agent-doc-version .agent-files-chip { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .agent-upload-spinner { animation-duration: 2400ms; }
   .agent-doc-earlier > summary::before { transition: none; }
 }
 @media (forced-colors: active) {

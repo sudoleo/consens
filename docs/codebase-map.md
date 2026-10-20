@@ -675,9 +675,12 @@ siehe §8): zuerst die synchronen `app-bootstrap.js`, `app-state.js`,
 marked und DOMPurify: kein Head-Skript ruft sie, und deferred Skripte und Module
 laufen in Dokumentreihenfolge, also vor `firebase.js` und der `app`-Gruppe), der same-origin
 `email-verify.js` als inhaltsadressierte `window.App.emailVerification`-Brücke,
-den `auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module), dann
-deferred `modal-dialog.js`, `app-ui.js` und die Feature-Module unter `static/js/` in fester
-Reihenfolge, zuletzt `app-init.js` und `app-dom-events.js`.
+die Gruppe `auth` (deferred) mit den Ebenen-Modulen `motion.js`,
+`modal-dialog.js`, `popover.js`, `notices.js`, `confirm-dialog.js` und dem
+`auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module; der
+Login-Dialog öffnet schon beim Auswerten von `firebase.js`), dann deferred
+`app-ui.js` und die Feature-Module unter `static/js/` in fester Reihenfolge,
+zuletzt `tooltip.js`, `app-init.js` und `app-dom-events.js`.
 
 In Produktion liefert `npm run build` daraus fünf inhaltsgehashte Bundles
 (419 KB statt 872 KB in 36 lokalen JS-Requests); ohne Build-Output oder mit
@@ -795,20 +798,118 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   reduce` `"auto"` (pro Aufruf gelesen); jedes `scrollTo`/`scrollIntoView` mit
   `behavior` in `/app` nimmt den Wert von hier (Audit F15,
   `tests/js/reduced-motion-and-head.test.mjs` verbietet ein hartes `"smooth"`).
-- **`modal-dialog.js`** (`window.App.modalDialog`, seit 2026-10-15, erste Datei
-  der `app`-Gruppe) — Helfer für native `<dialog>`-Fenster: `bind(dialog,
-  {keepOpen?, onClose?})`, `open(dialog, {opener?, focus?})`, `close(dialog)`,
-  `isOpen(dialog)`. `open` nutzt `showModal()` (Top-Layer, Hintergrund inert,
-  Stapeln ohne z-index), merkt den Auslöser (aktives Element, sonst `opener`,
-  weil Safari geklickte Buttons nicht fokussiert) und setzt den Fokus auf
-  `focus` bzw. `[autofocus]`; jedes Schließen (Button, Escape, `close()`)
-  gibt den Fokus an den Auslöser zurück. Der Hintergrund schließt nur einen
-  Klick, der auch dort begann (Text markieren und über dem Hintergrund
-  loslassen kommt als Klick auf den Dialog an; Audit F5, gleiches Muster wie
-  der Login-Dialog in `firebase.js`), `keepOpen()` kann auch den verhindern.
+- **`modal-dialog.js`** (`window.App.modalDialog`, seit 2026-10-15; seit
+  2026-10-20 in der `auth`-Gruppe vor `firebase.js`) — Helfer für **jedes**
+  modale Fenster der App, alle native `<dialog class="modal">`: Settings, Help
+  (`app-ui.js`), Feedback (`feedback-dialog.js`), Login (`firebase.js`,
+  `auth-bootstrap.js`, `demo.js`), Share/Watch (`share-dialog.js`, `watch.js`),
+  der Early-Access-Hinweis (`feature-access.js`), die Anhang-Vorschau
+  (`attachments.js`) und `App.confirm`. `bind(dialog, {keepOpen?, onClose?})`,
+  `open(dialog, {opener?, focus?})`, `close(dialog)`, `isOpen(dialog)`. `open`
+  nutzt `showModal()` (Top-Layer, Hintergrund inert, Stapeln ohne z-index),
+  schließt offene Popover (`App.popover.closeAll`), merkt den Auslöser
+  (aktives Element, sonst `opener`, weil Safari geklickte Buttons nicht
+  fokussiert) und setzt den Fokus auf `focus` bzw. `[autofocus]`; Tab bleibt
+  im Dialog (letztes → erstes Element, Shift umgekehrt); jedes Schließen
+  (Button, Escape, `close()`) gibt den Fokus an den Auslöser zurück. Der
+  Hintergrund schließt nur einen Klick, der auch dort begann (Audit F5),
+  `keepOpen()` kann auch den verhindern (Login mit Getipptem, Watch-Dialog).
   Escape im Dialog stoppt die Weitergabe an Escape-Handler dahinter; ohne
-  `showModal()` (jsdom) schließt der Helfer selbst. Nutzer: Settings, Help
-  (`app-ui.js`) und Feedback (`feedback-dialog.js`).
+  `showModal()` (jsdom) setzt/entfernt der Helfer `open` selbst. `close()`
+  bleibt synchron (Fokus und Seite sofort zurück); das Ausblenden malt CSS
+  (`overlays.css`, `display`/`overlay` mit `allow-discrete`).
+  `App.closeIcon()` liefert das eine gezeichnete Schließen-Kreuz.
+- **Ebenen über dem Inhalt (seit 2026-10-20, Apple-Audit C1, C4, E1, E3, E6,
+  E10, G1, G3)** — ein Material und eine Bewegung für alles, was über der
+  Seite liegt (`static/css/overlays.css`, nach allen Komponenten geladen):
+  - **Scrim:** ein Token `--scrim` (`foundation.css`, hell/dunkel) hinter
+    jedem modalen Fenster, dem Antwortleser (`::backdrop`), dem Memory-Dialog,
+    dem Gmail-/Calendar-Sheet, dem Satzkarten-Sheet und der Handy-Schublade;
+    nirgends mehr `backdrop-filter` (`tests/js/overlays.test.mjs` verbietet
+    jeden Wert außer `none`, Admin ausgenommen).
+  - **Dialogfläche:** `--raise`, `--lift`, `--radius-lg`, eine Haarlinie
+    `--line-soft` für `.modal-content` (und Memory-/Google-Sheet).
+    Bewegung: Dialog blendet in `--dur-layer`/`--ease-out` ein, die Fläche
+    steigt 8px aus 98 % (`@starting-style`); Ausgang `--dur-state`/`--ease-in`.
+  - **Popover (`popover.js`, `App.popover`):** (+)-Menü, Modellwahl,
+    Kontomenü, „…“-Menüs (Chatzeile, Cite, Agent-Dateien), Kontingent-Karte,
+    Satzkarte. `register(el, {close})`, `opened(el, {trigger})` (vor dem
+    Zeigen: schließt alle anderen, setzt Richtung `--popover-shift`/
+    `--popover-origin-y` vom Auslöser aus), `closed(el)`, `closeAll`,
+    `anyOpen`, `menuKeys(el, {items, close, opener})` (Pfeile mit Umlauf,
+    Home/End, Escape mit Rückgabe, Tab verlässt), `focusItem`, `leave(el,
+    done)` für Menüs, die beim Schließen entfernt werden (`.is-leaving`).
+    Rein: 4px + 98 % in `--dur-state`/`--ease-out`; raus `--dur-press`/
+    `--ease-in`. Die Bewegung kommt aus CSS (`display` allow-discrete), das
+    Öffnen/Schließen der Module bleibt synchron.
+  - **Hinweise (`notices.js`):** `App.toast({message, tone, action, undo,
+    onExpire, duration, key})` → `{update, settle, cancel, dismiss,
+    focusAction}`; eine Zeile über dem Composer (`--toast-lift`: Composer,
+    Tastatur, Safe Area), immer nur eine, weitere warten (eine mit Aktion
+    verdrängt sofort, die vorige wird „expired“), `role=status`, Dauer nach
+    Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`) bleiben bis
+    zum Schließen, Hover/Fokus pausieren, asynchrone Aktionen zeigen ihren
+    Fortgang und melden über `update()`. Ist ein modaler Dialog offen, zieht
+    die Zeile in ihn (sonst läge sie inert darunter). `App.toast.current()`,
+    `App.toast.settleAll()`. Dünne Weiterleitungen: `App.showPopup(message,
+    options)` (`app-core.js`, ~100 Aufrufer), `App.undoNotice.show({text,
+    actionLabel, onAction, onExpire, duration})` (Chat löschen),
+    `App.watchDashboard.showUndoToast(message, {undo, commit, timeout})`,
+    `window.showMobileInfoPopup`; Memory-Undo (`memory-edit.js`), Memory-Löschen
+    (`user-memory.js`) und der Feature-Hinweis (`feature-access.js`) rufen
+    `App.toast` direkt. `App.composerNotice.show(message, {tone, for,
+    duration})` / `.clear()` sagt Eingabefehler (zu lange Nachricht, zu viele
+    Wörter, falsche/zu große/zu viele Dateien – eine Zeile pro Wurf) als
+    `#composerInputNotice` unter `#agentComposerNotice`, faltet weich auf und
+    zu und verschwindet beim nächsten Tippen.
+  - **Bestätigung (`confirm-dialog.js`):** `App.confirm({title, body,
+    confirmLabel, cancelLabel, danger})` → `Promise<boolean>`; ein
+    `#appConfirmDialog`, bei `danger` Fokus auf Cancel. Ersetzt jedes
+    `confirm()`/`alert()` außerhalb des Admins (Logout, Konto löschen, Link
+    widerrufen, Telegram trennen); öffentliche Formulare melden Fehler inline
+    (`.share-form-error`). `tests/js/overlays.test.mjs` verbietet
+    `alert(`/`confirm(` in `static/` und `templates/` (außer Admin).
+  - **Schließen-Kreuz:** `.close-button` + `.close-icon` in `foundation.css`
+    (SVG-X 16px, Strich 1,75, 32-px-Kreis, auf Touch 44 px Trefferfläche);
+    nirgends mehr „×“/„✕“-Glyphen (Test).
+- **`motion.js`** (`window.App.motion`, `auth`-Gruppe, zuerst) — Bewegungs-
+  Tokens für Skript: `ms("layer")`, `ease("out")`, `reduced()`,
+  `leave(el, done)`, `switchTheme(apply)` (Hell/Dunkel in einem Schritt:
+  `html.is-theme-switching` schaltet für das Bild alle Transitions ab, eine
+  View-Transition blendet die Seite einmal über). FLIP-Gleiten (`app-core.js`,
+  Antwortleser), Zeilen-/Chip-Animationen (`firebase.js`, Starter, Aktivität)
+  lesen Dauer und Kurve hier.
+- **`disclosure.js`** (`window.App.disclosure`) — jedes `<details>` in `/app`
+  öffnet und schließt seine Höhe weich (`--dur-state`); Module mit eigener
+  Bewegung („Thought for …“, Watch-Einstellungen, Reader-Frage) stoppen den
+  Klick per `preventDefault`, `data-disclosure="static"` nimmt eines aus.
+  Reduzierte Bewegung: sofort.
+- **`tooltip.js`** (`window.App.tooltip`, `init()` ruft `app-init.js` als
+  Letztes) — der eine Tooltip (`.global-tooltip`, `role=tooltip`) für `title`
+  und `data-tooltip`: Zeiger nach 500 ms (beim Weiterziehen sofort), Tastatur-
+  Fokus, Tipp auf eine Marke ohne eigene Aktion; das `title`-Attribut wird nur
+  während des Hoverns geparkt (`data-tooltip-title`), damit der Browser keinen
+  zweiten zeichnet. Wiederholt ein Tooltip nur den sichtbaren Text, erscheint
+  er nicht.
+- **Bewegungs-Regeln (`static/css/motion.css`, Apple-Audit C8, C10, C11, C13,
+  C14):** Theme-Wechsel ohne Verschmieren, ein Spinner (`.spinner` und die
+  übrigen Ladezeichen: Spur + Bogen in `currentColor`, eine Drehung je
+  `--dur-spin`), was sich wiederholt (Schimmer, Puls, Hervorheben) läuft im
+  einen `--dur-beat` (das Hauslicht atmet in `calc(var(--dur-beat) * 2)`),
+  reduzierte Bewegung: Seitenleiste blendet statt zu fahren, Spalte gleitet
+  nicht, Ebenen blenden ohne Steigen, Spinner dreht langsamer. Drücken:
+  `--press-scale` (0,97, bei reduzierter Bewegung 1) für jeden Knopf; Zeilen
+  dunkeln beim Drücken ab. Fokus: der eine Ring (`--focus-ring`, auch im
+  Dunkelmodus aus der dunklen `--ink-2`, ≥ 7:1), kein `outline: none` hinter
+  einem Hover-Ton mehr, in Menüs nach innen versetzt; Textlinks runden die
+  Ecken. `tests/js/motion-tokens.test.mjs` verlangt in jeder Transition und
+  Animation von `/app` nur `var(--dur-*)`/`var(--ease-*)` (keine rohen
+  Zeiten/Kurven, kein `transition: all`) und prüft Spinner, Takt, Ring und
+  Druck.
+- **Handy-Schublade (`app-init.js`, `syncDrawerFocus`):** die offene
+  Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
+  sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
+  sie (Capture: ein offener Dialog oder ein Popover bekommt Escape zuerst).
 - **`feedback-dialog.js`** (`window.App.feedback`, seit 2026-10-15) — der
   Feedback-Dialog `#feedbackModal`; vorher teils in `app-init.js`, teils als
   `window.sendFeedback` in `firebase.js`. Gäste sehen statt des Formulars einen
@@ -1362,8 +1463,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   this | Remember | Correct memory** an (die erste Aktion gehört
   `composer-quote.js` und braucht kein Konto; ohne Konto bleiben die beiden
   Memory-Aktionen samt Trenner weg). Der Dialog besitzt Quellvorschau, Fokusfalle,
-  Escape-/Backdrop-Schließen, zustandsabhängige Copy und einen gemeinsamen
-  Undo-Toast; mobil erscheint er als Bottom-Sheet. `POST /api/my/memory/edit`
+  Escape-/Backdrop-Schließen, zustandsabhängige Copy und Undo über die
+  gemeinsame Hinweis-Zeile (`App.toast`); mobil erscheint er als Bottom-Sheet. `POST /api/my/memory/edit`
   akzeptiert `client_request_id`, Quelltyp, markierten Text, `intent=add|correct`
   und höchstens das konfigurierte Feedback-Limit; die explizite Eingabe ist die
   Freigabe, es gibt keinen zweiten Bestätigungsschritt. Vor dem Luna-Call
@@ -1514,7 +1615,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `items_revision` und `limits.items/item_chars`; `PUT` nimmt `auto_memory`
   (fehlt das Feld, bleibt der gespeicherte Wert — alte Browser setzen ihn nicht
   zurück); `POST /api/my/memory/items` (`changes` ≤ 20, `expected_revision`,
-  409 `revision_conflict` mit Revision; scheitert nach dem Schreiben nur das
+  antwortet seit 2026-10-20 mit `change_id` der Änderung, damit auch eine von
+  Hand gelöschte Erinnerung ein Undo hat; 409 `revision_conflict` mit
+  Revision; scheitert nach dem Schreiben nur das
   erneute Lesen der Liste, antworten alle drei Schreib-Endpunkte trotzdem
   `success` mit `items_stale: true` statt 503, und der Browser lädt die Liste
   separat nach), `DELETE /api/my/memory/items` (löscht
@@ -1524,7 +1627,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `undone`). UI: `user-memory.js` zeigt Schalter `#memoryAutoSwitch` (gesperrt
   bei pausiertem Memory, speichert sofort nur sich selbst), die Liste
   `#memoryItemsSection` mit Bearbeiten/Löschen/Hinzufügen und zweistufigem
-  „Delete all“; `agent-memory.js` (`App.agentMemory.render/receive`) zeigt
+  „Delete all“ (Löschen zeigt „Memory deleted · Undo“ über `App.toast` und
+  nimmt es über `/changes/{change_id}/undo` zurück; ein geleertes Feld löscht
+  nicht, „Save“ wartet auf Text, Apple-Audit E9); `agent-memory.js` (`App.agentMemory.render/receive`) zeigt
   „Memory updated“ mit Undo und „Manage memory“ (öffnet Settings, Memory ist
   der erste Reiter) nur WÄHREND des laufenden Agent-Laufs; `render` ohne
   `running` (fertige, wiedergeöffnete, Verlaufsantwort) entfernt den Hinweis,
@@ -2356,9 +2461,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Besuch. Pause/Resume ändern die Karte am Platz und sagen „Watch paused ·
   Undo“; Delete faltet die Karte weich weg und schickt den DELETE erst, wenn
   das Undo (6 s) verstrichen ist (oder beim Verlassen der Seite/des Tabs).
-  `showUndoToast(message, {undo, commit, timeout})` ist der kleine, eigene
-  Hinweis dafür (unten mittig, einer zur Zeit, pausiert bei Hover/Fokus) —
-  ein Baustein zum Überführen in ein gemeinsames Hinweis-System (Welle 2).
+  `showUndoToast(message, {undo, commit, timeout})` leitet seit 2026-10-20
+  an die gemeinsame Hinweis-Zeile weiter (`App.toast`, `notices.js`): eine
+  zur Zeit, pausiert bei Hover/Fokus, ein Kontowechsel verwirft sie ohne
+  Commit.
   Einstellungen klappen über `grid-template-rows` 0fr→1fr in `--dur-layer`
   auf (geschlossen `inert`). **Speichermodell** (J7, J9, J11): jede Änderung
   landet sofort und sagt „Saved“ am Feld — Auswahl nach 350 ms (mehrere
@@ -4607,11 +4713,11 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Neue Zeilen öffnen ihren Platz weich (`bookmarkUi.insertSoftly`). Eine Suche
   ohne Treffer sagt „No chats match …“ (`#bookmarksSearchEmpty`, `app-init.js`
   `filterBookmarks`); die leere Liste eines neuen Kontos bleibt leer.
-- **`App.undoNotice` (`static/js/undo-notice.js`, `css/undo-notice.css`) —
-  gemeinsamer Baustein** für jeden rücknehmbaren Schritt, bis Welle 2 das
-  gemeinsame Hinweis-System baut: `show({text, actionLabel, onAction, onExpire,
-  duration})` → `{settle(), cancel()}`; eine neue Zeile erledigt die vorige
-  (ihr `onExpire` läuft). Eine Zeile unten mittig, `role=status`.
+- **`App.undoNotice`** — seit 2026-10-20 eine dünne Weiterleitung an
+  `App.toast` (`notices.js`; `undo-notice.js`/`.css` sind entfernt):
+  `show({text, actionLabel, onAction, onExpire, duration})` →
+  `{settle(), cancel()}`; eine neue Zeile mit Aktion erledigt die vorige
+  (ihr `onExpire` läuft), `current()`.
 - Jeder asynchrone Callback prüft Run- und Auth-Identität, mutiert ausschließlich
   den eigenen Context und rendert den Haupt-DOM nur, wenn dessen `runId` gerade
   sichtbar ist. Quellen-Mapping arbeitet auf expliziten Listen statt
@@ -5885,9 +5991,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   oder Testphasen-Abschnitt; FAQ und About erläutern den aktuellen Zugang.
 - Firebase-ID-Token wird mit `verify_user_token` geprüft (Standard: nur
   E-Mail-verifizierte Nutzer; `allow_unverified=True` nur für Registrierung/Delete).
-- Das Login-Overlay ist ein echtes `role="dialog"` mit `aria-modal`,
-  Überschriftsreferenz, fokussierbarem benanntem Close-Button, Fokus-Einstieg,
-  Tab-Schleife, Escape/Backdrop-Abbruch und Fokus-Rückgabe an den Auslöser.
+- Der Login ist seit 2026-10-20 ein nativer `<dialog class="modal">` über
+  `App.modalDialog` (Überschriftsreferenz, benannter Close-Button, Fokus-
+  Einstieg, Tab-Schleife, Escape/Backdrop-Abbruch nur ohne Getipptes,
+  Fokus-Rückgabe an den Auslöser, Ein- und Ausblenden wie jedes Fenster).
 - **Login-Dialog (seit 2026-10-04, `static/firebase.js`, Stil allein in
   `static/css/auth-modal.css`):** ein Formular mit zwei Tabs (`#authTabLogin`
   / `#authTabRegister`, Pfeiltasten), Google zuerst. Enter bzw. „Los“ der
@@ -8507,16 +8614,17 @@ ersten Check statt eines leeren Consensus-Panels.
   `placeWatchFeatureNudge` schreibt nur dort, wo sie im Bild gehalten wird
   (Oberkante, über dem Composer). Fixiert lief sie jedem Scroll ein Bild
   hinterher (Apple-Audit D8).
-- **Settings, Help und Feedback sind native `<dialog>`s im Top-Layer.** Sie
-  werden nur über `window.App.modalDialog.open/close` geschaltet, nie über
-  `style.display` (`dialog.modal[open]` zeigt sie, `user-memory.js` prüft die
-  berechnete `display`). `showModal()` macht alles außerhalb inert und legt den
-  Dialog über jedes `z-index`: Ein Overlay, das aus einem dieser Dialoge heraus
-  geöffnet wird und selbst kein modaler `<dialog>` ist (Login-Modal,
-  `#shareModal`, `.popup`, Tooltips), läge darunter und wäre nicht bedienbar.
-  Vorher den Dialog schließen (so macht es „Log in“ im Feedback-Dialog) oder das
-  Overlay ebenfalls als `<dialog>` mit `showModal()` öffnen. Der Hintergrund-
-  Klick braucht ein `pointerdown` auf dem Dialog selbst (Audit F5).
+- **Jedes modale Fenster ist ein nativer `<dialog class="modal">` im
+  Top-Layer** (Settings, Help, Feedback, Login, Share/Watch, Early Access,
+  Anhang-Vorschau, `App.confirm`). Sie werden nur über
+  `window.App.modalDialog.open/close` geschaltet, nie über `style.display` oder
+  `hidden` (`dialog.modal[open]` zeigt sie, `user-memory.js` prüft die
+  berechnete `display`; beim Schließen bleibt `display` für die Dauer des
+  Ausblendens gesetzt, ein Test sollte `open` prüfen). `showModal()` macht
+  alles außerhalb inert: Was aus einem Dialog heraus erscheint und kein
+  modaler `<dialog>` ist, muss in ihn hinein (so machen es `App.toast` und
+  der Tooltip) oder selbst `showModal()` nutzen. Der Hintergrund-Klick braucht
+  ein `pointerdown` auf dem Dialog selbst (Audit F5).
 - **`window.App.sharedModal.open(mode)` / `.close()`** koordinieren den gemeinsam
   genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,
   Background-Scroll-Lock und Rückgabe des Fokus an den Auslöser.

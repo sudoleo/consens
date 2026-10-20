@@ -95,9 +95,10 @@ describe("contrast of the footer note and the close mark (F10)", () => {
 
   it("colours both with --ink-3", () => {
     const consensus = read("static/css/components-consensus.css");
-    const modals = read("static/css/components-modals.css");
+    // The one close cross of every dialog (Apple audit G3) lives in foundation.css.
+    const foundation = read("static/css/foundation.css");
     expect(rule(consensus, ".feedback-note")).toContain("color: var(--ink-3)");
-    expect(rule(modals, ".close")).toContain("color: var(--ink-3)");
+    expect(rule(foundation, ".close-button")).toContain("color: var(--ink-3)");
     expect(variables).not.toContain("--feedback-text-color");
   });
 
