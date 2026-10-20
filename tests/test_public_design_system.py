@@ -258,14 +258,14 @@ def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
     assert "/100" not in section
     assert "materially" not in section
     dashboard = read("static/js/watch-dashboard.js")
-    alert_options = read("static/js/watch.js")
+    alert_options = read("static/js/watch-fields.js")
     telegram = read("app/services/telegram_watch.py")
     for label, source in (
         ("Moved", dashboard),
         ("Waiting for", dashboard),
         ("Not yet", dashboard),
         ("Moved on evidence", dashboard),
-        ("When it moves or resolves", alert_options),
+        ("When it moves or is reached", alert_options),
         ("The answer moved", telegram),
         ("What changed", telegram),
         ("New evidence the earlier answer did not have.", telegram),
