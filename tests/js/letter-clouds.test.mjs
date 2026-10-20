@@ -14,7 +14,7 @@ function fakeContext() {
   return ctx;
 }
 
-function boot({ hero = true, reduce = false, hidden = false, canvas = true, watchHidden = true, media = true } = {}) {
+function boot({ hero = true, reduce = false, hidden = false, canvas = true, watchHidden = true, media = true, dpr = 1 } = {}) {
   const queue = [];
   const timers = new Map();
   let lastTimer = 0;
@@ -25,6 +25,7 @@ function boot({ hero = true, reduce = false, hidden = false, canvas = true, watc
       <section class="watch-page"${watchHidden ? " hidden" : ""}></section>`,
     before(window) {
       if (hero) window.document.body.classList.add("is-hero");
+      Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: dpr });
       window.requestAnimationFrame = fn => { queue.push(fn); return queue.length; };
       window.cancelAnimationFrame = () => { queue.length = 0; };
       window.setTimeout = (fn, ms) => { timers.set(++lastTimer, { fn, ms }); return lastTimer; };
@@ -183,6 +184,20 @@ describe("letter clouds", () => {
     await app.settle();
     expect(glyphs(app).width).toBe(700);
     expect(app.state()).toMatchObject({ active: true, running: true });
+  });
+
+  // Apple audit G16: capped at 2x, the glyphs were scaled up 1.5 times on a
+  // 3x iPhone and looked softer than the text in front of them. The fog stays
+  // coarse at every density.
+  it("draws the glyphs at the full density of a 3x screen and keeps the fog coarse", () => {
+    const app = boot({ dpr: 3 });
+    const layerWidth = app.window.innerWidth;
+    expect(glyphs(app).width).toBe(Math.round(layerWidth * 3));
+    const fog = app.document.querySelector(".letter-clouds-fog");
+    expect(fog.width).toBe(Math.ceil(layerWidth / 10) + 1);
+    // A denser screen than 3x paints no more than 3x.
+    const app4 = boot({ dpr: 4 });
+    expect(glyphs(app4).width).toBe(Math.round(app4.window.innerWidth * 3));
   });
 
   it("frees its canvases once it has faded out behind a chat", async () => {
