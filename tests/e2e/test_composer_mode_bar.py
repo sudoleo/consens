@@ -107,7 +107,8 @@ def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser
         reasoning = page.locator('#composerReasoningToggle')
         expect(reasoning).to_contain_text('Reasoning')
         reasoning.click()
-        notice = page.locator('#featureAccessNotice')
+        # The app's one notice line (App.toast) says it, with the way to the note.
+        notice = page.locator('#appToasts .toast.is-shown')
         expect(notice).to_be_hidden()
         expect(reasoning).to_have_attribute('aria-checked', 'true')
         expect(page.locator('#reasoningToggle')).to_be_checked()
@@ -130,7 +131,7 @@ def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser
         page.screenshot(path=str(output / f'{width}-notice.png'))
         rect = notice.bounding_box()
         assert rect['x'] >= 0 and rect['x'] + rect['width'] <= width
-        page.locator('#featureAccessDetails').click()
+        notice.get_by_role('button', name='About early access').click()
         modal = page.locator('#proFeatureModal')
         expect(modal).to_be_visible()
         expect(notice).to_be_hidden()

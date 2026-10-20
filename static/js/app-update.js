@@ -43,7 +43,7 @@
   function dialogOpen() {
     // The docked answer reader is a side panel, not a dialog in the way.
     if (document.querySelector("dialog[open]:not(.is-docked)")) return true;
-    return Array.from(document.querySelectorAll(".modal"))
+    return Array.from(document.querySelectorAll(".modal:not(dialog)"))
       .some(modal => window.getComputedStyle(modal).display !== "none");
   }
 

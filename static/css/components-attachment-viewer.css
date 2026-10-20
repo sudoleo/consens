@@ -1,36 +1,25 @@
 /* --------------------------------------------------------------------------
    Attachment Viewer (Vorschau-Modal)
    -------------------------------------------------------------------------- */
-.attachment-viewer-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
+/* A native <dialog class="modal"> (App.modalDialog): scrim, surface and the
+   way in and out come from overlays.css; here the preview's own size. */
+dialog.attachment-viewer-dialog[open] {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 18px;
-  background: var(--overlay-dim);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
-.attachment-viewer-overlay[hidden] {
-  display: none;
-}
-
-.attachment-viewer {
+/* .modal-content (components-modals.css, later in the cascade) sizes the
+   small dialogs; the preview is wider. */
+.modal-content.attachment-viewer {
   display: flex;
   flex-direction: column;
   width: min(94vw, 760px);
   max-height: min(88dvh, 820px);
-  border: var(--card-border);
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 34%, transparent), transparent 42%),
-    var(--container-bg);
-  box-shadow: var(--card-shadow-hover);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  margin: 0;
+  padding: 0;
+  text-align: left;
   overflow: hidden;
 }
 
@@ -51,28 +40,6 @@
   color: var(--text-color);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-}
-
-.attachment-viewer-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-}
-
-.attachment-viewer-close:hover {
-  background: var(--hover);
-  color: var(--text-color);
 }
 
 .attachment-viewer-body {

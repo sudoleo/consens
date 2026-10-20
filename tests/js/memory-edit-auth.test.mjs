@@ -17,7 +17,7 @@ function account(uid) {
 
 function boot() {
   const requests = [];
-  const ctx = loadScripts(["static/js/auth-session-state.js", "static/js/memory-edit.js"], {
+  const ctx = loadScripts(["static/js/auth-session-state.js", "static/js/motion.js", "static/js/modal-dialog.js", "static/js/notices.js", "static/js/memory-edit.js"], {
     body: '<textarea id="questionInput">Account A preference</textarea>',
     before(window) {
       window.auth = { currentUser: account("A") };
@@ -54,6 +54,8 @@ function switchAccount(ctx, uid) {
 }
 
 const submit = ctx => ctx.document.querySelector(".memory-edit-submit").click();
+// The confirmation with its Undo is the app's one notice line (App.toast).
+const undoToast = ctx => ctx.document.querySelector("#appToasts .toast");
 
 describe("memory edit dialog ownership", () => {
   it("closes and forgets A's selection when the account changes to B", async () => {
@@ -98,7 +100,7 @@ describe("memory edit dialog ownership", () => {
     await settle();
 
     expect(ctx.window.App.userMemory.load).not.toHaveBeenCalled();
-    expect(ctx.document.getElementById("memoryEditToast").hidden).toBe(true);
+    expect(undoToast(ctx)).toBeNull();
   });
 
   it("hides A's Undo toast when the account changes", async () => {
@@ -111,13 +113,16 @@ describe("memory edit dialog ownership", () => {
       json: async () => ({ status: "applied", revision_id: "b".repeat(32), operation: "append" }),
     });
     await settle();
-    const toast = ctx.document.getElementById("memoryEditToast");
-    expect(toast.hidden).toBe(false);
+    const toast = undoToast(ctx);
+    expect(toast.textContent).toContain("Added to Memory");
+    expect(toast.querySelector(".toast-action").textContent).toBe("Undo");
 
     switchAccount(ctx, "B");
 
-    expect(toast.hidden).toBe(true);
-    expect(toast.querySelector(".memory-edit-undo")).toBeNull();
+    // The line leaves (its way out runs, then it is gone) and its Undo is not
+    // offered any more.
+    expect(toast.classList.contains("is-shown")).toBe(false);
+    expect(ctx.window.App.toast.current()).toBeNull();
   });
 
   it("keeps working through a token refresh of the same account", async () => {
@@ -137,6 +142,6 @@ describe("memory edit dialog ownership", () => {
 
     expect(JSON.parse(ctx.requests[0].options.body).selected_text).toBe("Account A preference");
     expect(ctx.window.App.userMemory.load).toHaveBeenCalledWith(true, { keepDraft: true });
-    expect(ctx.document.getElementById("memoryEditToast").hidden).toBe(false);
+    expect(undoToast(ctx).textContent).toContain("Added to Memory");
   });
 });

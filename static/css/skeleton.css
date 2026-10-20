@@ -18,7 +18,7 @@
   background: linear-gradient(100deg, transparent 15%,
     color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 85%);
   transform: translateX(-100%);
-  animation: skeleton-shimmer 2.4s cubic-bezier(.4, 0, .2, 1) infinite;
+  animation: skeleton-shimmer var(--dur-beat) var(--ease-standard) infinite;
 }
 
 @keyframes skeleton-shimmer {
@@ -28,7 +28,7 @@
 
 /* A fast response can replace the reserved space before it becomes visible. */
 .skeleton-group {
-  animation: skeleton-enter 180ms ease-out 120ms both;
+  animation: skeleton-enter var(--dur-state) var(--ease-out) var(--dur-press) both;
 }
 
 @keyframes skeleton-enter {

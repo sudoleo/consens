@@ -15,11 +15,11 @@ const BODY = `<div class="input-section">
   </div>
   <input id="reasoningToggle" type="checkbox">
   <div id="threadAskAttachments"></div>
-  <div id="attachmentViewerModal" hidden><span id="attachmentViewerTitle"></span>
-    <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button></div>`;
+  <dialog id="attachmentViewerModal" class="modal"><div class="modal-content"><span id="attachmentViewerTitle"></span>
+    <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button></div></dialog>`;
 
 function boot() {
-  const ctx = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
+  const ctx = loadScripts(["static/js/motion.js", "static/js/modal-dialog.js", "static/js/user-settings.js", "static/js/run-mode.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
       window.document.body.classList.add("is-hero");
@@ -89,12 +89,12 @@ describe("composer attachment tray", () => {
     window.pendingAttachments.push({ ...FILE, name: "Second.txt" });
     window.renderAttachmentChips();
     document.querySelector(".attachment-chip-preview").click();
-    expect(document.getElementById("attachmentViewerModal").hidden).toBe(false);
+    expect(document.getElementById("attachmentViewerModal").open).toBe(true);
     document.getElementById("attachmentViewerClose").click();
     const remove = document.querySelector(".attachment-chip-remove");
     expect(remove.closest(".attachment-chip-preview")).toBeNull();
     remove.dispatchEvent(new window.KeyboardEvent("keydown", {key: "Enter", bubbles: true}));
-    expect(document.getElementById("attachmentViewerModal").hidden).toBe(true);
+    expect(document.getElementById("attachmentViewerModal").open).toBe(false);
     remove.click();
     expect(window.pendingAttachments.map(file => file.name)).toEqual(["Second.txt"]);
     expect(document.activeElement).toBe(document.querySelector(".attachment-chip-remove"));
@@ -148,7 +148,7 @@ describe("composer attachment tray", () => {
     expect(window.App.agentWorkspace.removeFile).not.toHaveBeenCalled();
     expect(body.textContent).toContain("Remove notes.txt? The agent can no longer use it in this chat.");
     [...body.querySelectorAll(".attachment-viewer-actions button")].find(b => b.textContent === "Remove").click();
-    await vi.waitFor(() => expect(document.getElementById("attachmentViewerModal").hidden).toBe(true));
+    await vi.waitFor(() => expect(document.getElementById("attachmentViewerModal").open).toBe(false));
     expect(window.App.agentWorkspace.removeFile).toHaveBeenCalledWith(id);
   });
 

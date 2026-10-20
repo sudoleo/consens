@@ -29,7 +29,7 @@
   min-width: 280px;
   padding: 12px 16px;
   border-radius: var(--radius-lg);
-  transition: background var(--dur-layer), box-shadow var(--dur-layer), border var(--dur-layer), transform var(--dur-layer);
+  transition: background var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard), border var(--dur-layer) var(--ease-standard), transform var(--dur-layer) var(--ease-standard);
   position: relative;
   isolation: isolate;
 }
@@ -83,11 +83,11 @@ body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers) .response-se
 }
 
 body.agent-mode-show-answers .response-section > .response-box {
-  animation: modelBoxesIn 0.28s cubic-bezier(0.2, 0, 0, 1);
+  animation: modelBoxesIn var(--dur-layer) var(--ease-standard);
 }
 
 body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .response-box {
-  animation: modelBoxesIn 0.28s cubic-bezier(0.2, 0, 0, 1);
+  animation: modelBoxesIn var(--dur-layer) var(--ease-standard);
 }
 
 .agent-mode-answers-row {
@@ -249,7 +249,9 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .exclude-btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 20px;
   height: 20px;
   padding: 0;
@@ -260,7 +262,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   line-height: 20px;
   border-radius: 75%;
   cursor: pointer;
-  transition: background-color var(--dur-layer), border-color var(--dur-layer), opacity var(--dur-layer);
+  transition: background-color var(--dur-layer) var(--ease-standard), border-color var(--dur-layer) var(--ease-standard), opacity var(--dur-layer) var(--ease-standard);
   color: #888;
 }
 
@@ -444,7 +446,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   min-width: 0;
   position: relative;
   isolation: isolate;
-  transition: background var(--dur-layer), box-shadow var(--dur-layer), border var(--dur-layer);
+  transition: background var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard), border var(--dur-layer) var(--ease-standard);
 }
 
 .consensus-differences {
@@ -503,7 +505,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-differences-summary:hover,
 .consensus-differences-summary:focus-visible {
   color: var(--text-color);
-  outline: none;
 }
 
 .consensus-differences-content {
@@ -757,11 +758,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-share-pill:focus-visible {
   background: var(--hover);
   color: var(--text-color);
-  outline: none;
 }
 
 .consensus-share-pill:active {
-  transform: translateY(1px);
+  transform: scale(var(--press-scale));
 }
 
 .watch-consensus-pill {
@@ -815,7 +815,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   white-space: normal;
   overflow-y: auto;
   visibility: hidden;
-  animation: watchFeatureNudgeIn .28s cubic-bezier(.22, 1, .36, 1) both;
+  animation: watchFeatureNudgeIn var(--dur-layer) var(--ease-out) both;
 }
 
 .dark-mode .watch-feature-nudge {
@@ -912,38 +912,12 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   color: var(--agree);
 }
 
-/* Gleiche Sprache wie die Close-Buttons der Modals (`.auth-modal .close`):
-   quadratisch, flaechenlos, gedaempft, Hover fuellt dezent. Zwei Dinge liessen
-   ihn vorher als graue Pille erscheinen: die fehlende Ausnahme in der
-   `button:not(...)`-Kette (components-input.css) und ein aus zwei gedrehten
-   Pseudo-Elementen gebautes Kreuz. Jetzt: ein echtes Glyph, auf der Hoehe der
-   Augenbraue. */
+/* The shared close cross (.close-button, foundation.css), at the height of
+   the eyebrow label. */
 .watch-feature-nudge-close {
   position: absolute;
-  top: 7px;
-  right: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: var(--sidebar-text-muted);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-solid);
-  cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-}
-
-.watch-feature-nudge-close:hover,
-.watch-feature-nudge-close:focus-visible {
-  background: var(--hover);
-  color: var(--text-color);
-  outline: none;
+  top: 3px;
+  right: 4px;
 }
 
 @keyframes watchFeatureNudgeIn {
@@ -998,11 +972,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-actions-wrapper.open .consensus-actions-toggle {
   background: var(--hover);
   color: var(--text-color);
-  outline: none;
 }
 
 .consensus-actions-toggle:active {
-  transform: translateY(1px);
+  transform: scale(var(--press-scale));
 }
 
 .consensus-actions-toggle .quote-toggle-icon {
@@ -1037,8 +1010,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   border-radius: var(--radius-md);
   box-shadow: 0 14px 36px rgba(30, 32, 35, 0.12), 0 2px 8px rgba(30, 32, 35, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   z-index: var(--z-dropdown);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.2);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.2);
 }
 
 .dark-mode .consensus-actions-menu {
@@ -1077,7 +1048,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-actions-menu .consensus-copy-icon-btn:focus-visible {
   background: var(--hover);
   color: color-mix(in srgb, var(--text-color) 88%, var(--accent));
-  outline: none;
 }
 
 .consensus-actions-menu .menu-item-icon {

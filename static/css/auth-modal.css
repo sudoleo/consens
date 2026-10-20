@@ -17,40 +17,11 @@
   padding: 0;
   overflow: hidden auto;
   overscroll-behavior: contain;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--raise);
   color: var(--ink);
-  box-shadow: var(--lift);
   text-align: left;
 }
 
 #loginModal .auth-modal:focus { outline: none; }
-
-#loginModal .auth-modal .close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--ink-3);
-  font: inherit;
-  font-size: var(--font-size-xl);
-  line-height: 1;
-  cursor: pointer;
-}
-
-#loginModal .auth-modal .close:is(:hover, :focus-visible) {
-  background: var(--hover);
-  color: var(--ink);
-}
 
 /* --- Head --------------------------------------------------------------- */
 #loginModal .auth-head {
@@ -198,7 +169,7 @@
   cursor: progress;
 }
 
-#loginModal [aria-busy="true"] img { animation: auth-pulse 1.1s var(--ease-standard) infinite alternate; }
+#loginModal [aria-busy="true"] img { animation: auth-pulse var(--dur-beat) var(--ease-standard) infinite alternate; }
 
 @keyframes auth-pulse { from { opacity: 1; } to { opacity: 0.35; } }
 

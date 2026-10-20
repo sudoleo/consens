@@ -256,7 +256,6 @@
 .claim-badge.is-linked-hover {
   background: var(--hover);
   color: var(--text-color);
-  outline: none;
 }
 
 .claim-badge:focus-visible {

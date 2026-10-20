@@ -667,6 +667,20 @@ def test_settings_api_lists_edits_undoes_and_clears_saved_memories(items_api):
     assert cleared.status_code == 200 and cleared.json()["items"] == []
 
 
+def test_a_memory_deleted_by_hand_can_be_taken_back(items_api):
+    added = items_api.post("/api/my/memory/items", headers=AUTH, json={
+        "changes": [{"op": "add", "text": "Prefers tea."}], "expected_revision": 0}).json()
+    item = added["items"][0]
+    deleted = items_api.post("/api/my/memory/items", headers=AUTH, json={
+        "changes": [{"op": "delete", "id": item["id"]}], "expected_revision": added["items_revision"]})
+    assert deleted.status_code == 200 and deleted.json()["items"] == []
+    change_id = deleted.json()["change_id"]
+    assert agent_memory.CHANGE_ID_RE.fullmatch(change_id)
+    restored = items_api.post(f"/api/my/memory/changes/{change_id}/undo", headers=AUTH).json()
+    assert [(entry["id"], entry["text"], entry["origin"]) for entry in restored["items"]] == [
+        (item["id"], "Prefers tea.", "user")]
+
+
 def test_auto_memory_switch_is_saved_and_kept_by_older_clients(items_api):
     on = items_api.put("/api/my/memory", headers=AUTH, json={"auto_memory": True, "expected_revision": 0})
     assert on.status_code == 200 and on.json()["memory"]["auto_memory"] is True

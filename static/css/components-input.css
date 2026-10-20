@@ -252,10 +252,8 @@ body.is-hero .consensus-section { display: none; }
   padding-bottom: 50px;
   position: relative;
   box-shadow: var(--card-shadow);
-  transition: border-color var(--dur-layer), box-shadow var(--dur-layer), background-color var(--dur-layer),
+  transition: border-color var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard), background-color var(--dur-layer) var(--ease-standard),
     border-radius var(--dur-state) var(--ease-out);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.74)) saturate(1.2);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.74)) saturate(1.2);
   overflow: hidden;
   isolation: isolate;
 }
@@ -471,7 +469,13 @@ body:not(.dark-mode) .chat-input-container::before {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: all var(--dur-state) var(--ease-standard);
+  /* Named properties, not "all": a size or place change must never glide. */
+  transition:
+    background-color var(--dur-state) var(--ease-standard),
+    color var(--dur-state) var(--ease-standard),
+    opacity var(--dur-state) var(--ease-standard),
+    box-shadow var(--dur-state) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
   font-family: inherit;
 }
 
@@ -494,8 +498,6 @@ body:not(.dark-mode) .chat-input-container::before {
   color: var(--sidebar-text-muted);
   cursor: pointer;
   box-shadow: var(--chip-shadow);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.15);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.15);
   transition: color var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 
@@ -555,8 +557,6 @@ body:not(.dark-mode) .chat-input-container::before {
     linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.66)),
     color-mix(in srgb, var(--container-bg) 78%, transparent);
   box-shadow: 0 18px 44px rgba(30, 32, 35, 0.16), 0 4px 12px rgba(30, 32, 35, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(30px) saturate(1.4);
-  -webkit-backdrop-filter: blur(30px) saturate(1.4);
 }
 
 .dark-mode .attach-menu {
@@ -674,8 +674,9 @@ body:not(.dark-mode) .chat-input-container::before {
   color: var(--sidebar-text-muted);
 }
 
-/* Menue-Schalter im selben Liquid-Glass-Grün-Look wie der Agent-Mode-Switch.
-   .attach-menu-Präfix, um die Basis-.switch-Maße (50px) zu überschreiben. */
+/* The switch in the (+) menu: flat, no glass and no gloss (Apple audit G1).
+   A grey track, a white knob, the house green when on. .attach-menu prefix
+   to override the base .switch size (50px). */
 .attach-menu .attach-menu-switch {
   flex: 0 0 auto;
   width: 46px;
@@ -685,59 +686,32 @@ body:not(.dark-mode) .chat-input-container::before {
 
 .attach-menu-switch .slider {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.18)),
-    color-mix(in srgb, var(--slider-bg) 58%, var(--glass-bg-strong));
-  box-shadow:
-    0 5px 13px rgba(30, 32, 35, 0.08),
-    inset 0 1px 1px rgba(255, 255, 255, 0.82),
-    inset 0 -1px 2px rgba(30, 32, 35, 0.12);
-  backdrop-filter: blur(12px) saturate(1.18);
-  -webkit-backdrop-filter: blur(12px) saturate(1.18);
+  border: 0;
+  background: color-mix(in srgb, var(--ink) 16%, var(--well));
+  box-shadow: none;
 }
 
 .attach-menu-switch .slider::before {
   width: 22px;
   height: 22px;
-  left: 1px;
-  bottom: 1px;
-  background:
-    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.42) 36%, rgba(255, 255, 255, 0.2) 62%),
-    color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  box-shadow:
-    0 4px 10px rgba(30, 32, 35, 0.1),
-    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+  left: 2px;
+  bottom: 2px;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .attach-menu-switch input:checked + .slider {
   /* The house green, flat: an "on" switch is a state, not a light. */
-  border-color: transparent;
   background: var(--agree);
-  box-shadow: none;
 }
 
 .attach-menu-switch input:checked + .slider::before {
   transform: translateX(20px);
-  border-color: rgba(210, 255, 224, 0.78);
 }
 
 .dark-mode .attach-menu-switch .slider {
-  border-color: rgba(255, 255, 255, 0.16);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    color-mix(in srgb, var(--slider-bg) 72%, var(--glass-bg-strong));
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.18),
-    inset 0 1px 1px rgba(255, 255, 255, 0.12);
-}
-
-.dark-mode .attach-menu-switch .slider::before {
-  border-color: rgba(255, 255, 255, 0.2);
-  background:
-    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.12) 42%, rgba(255, 255, 255, 0.06) 72%),
-    color-mix(in srgb, var(--glass-bg-strong) 84%, transparent);
+  background: color-mix(in srgb, var(--ink) 22%, var(--well));
 }
 
 /* ==========================================================================
@@ -961,18 +935,15 @@ body:not(.dark-mode) .chat-input-container::before {
 .composer-quote-remove:focus-visible,
 .attachment-chip-remove:hover,
 .attachment-chip-remove:focus-visible {
-  outline: none;
   background: var(--hover);
   color: var(--ink);
 }
 
-.composer-quote-remove svg {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
+/* The drawn cross of the close component (foundation.css .close-icon), a
+   size down for the fields of a chip and a quote. */
+:is(.composer-quote-remove, .attachment-chip-remove, .exclude-btn) .close-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .attachment-chip[role="button"] {

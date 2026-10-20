@@ -32,14 +32,19 @@
 /* The composer row's layout, for every mode (see its header). */
 @import url('./css/composer.css');
 @import url('./css/chat-scroll.css');
-/* "Chat deleted · Undo" and every other undoable step (undo-notice.js). */
-@import url('./css/undo-notice.css');
 /* Native selects: chevron and open list, after every component's box. */
 @import url('./css/select.css');
 /* Site icons and citation pills, shared with the public pages. */
 @import url('./css/source-pill.css');
 /* The login / sign-up dialog, standalone after every component layer. */
 @import url('./css/auth-modal.css');
+/* Every layer above the page and how it comes and goes: scrim, dialog
+   surface and motion, popovers, the notice line, App.confirm. After every
+   component, so the one surface and the one motion win. */
+@import url('./css/overlays.css');
+/* What every moving part shares: the theme switch, disclosures, the one
+   spinner, reduced motion (Apple audit C8, C10, C11, C13). */
+@import url('./css/motion.css');
 /* Letter clouds behind the empty start screen (letter-clouds.js). */
 @import url('./css/letter-clouds.css');
 

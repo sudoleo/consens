@@ -232,9 +232,10 @@
       : "All " + claim.agree.length + " models agree";
     const close = document.createElement("button");
     close.type = "button";
-    close.className = "claim-popover-close";
+    close.className = "claim-popover-close close-button";
     close.setAttribute("aria-label", "Close");
-    close.innerHTML = "&times;";
+    // The one close cross of the app (foundation.css .close-button).
+    close.innerHTML = '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
     close.addEventListener("click", () => closePopover());
     header.append(title, close);
     pop.appendChild(header);

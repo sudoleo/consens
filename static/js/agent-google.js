@@ -418,8 +418,10 @@
     dialog.setAttribute('aria-labelledby', 'agentGoogleSheetTitle'); dialog.setAttribute('aria-describedby', 'agentGoogleSheetIntro');
     const head = node('header', '', 'agent-google-sheet-head');
     const title = node('h2', 'Gmail & Calendar'); title.id = 'agentGoogleSheetTitle';
-    const close = node('button', '', 'settings-inline-btn agent-google-close'); close.type = 'button';
-    close.setAttribute('aria-label', 'Close Gmail & Calendar'); close.append(svg('close'));
+    // The app's one close cross (foundation.css .close-button, Apple audit G3).
+    const close = node('button', '', 'close-button agent-google-close'); close.type = 'button';
+    close.setAttribute('aria-label', 'Close Gmail & Calendar');
+    if (window.App?.closeIcon) close.innerHTML = window.App.closeIcon(); else close.append(svg('close'));
     close.addEventListener('click', closeSheet);
     head.append(title, close);
     const body = node('div', '', 'agent-google-sheet-body'); body.id = 'agentGoogleSheetBody';

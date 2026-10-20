@@ -158,7 +158,7 @@
   let offscreenUpdate = false;
   function motion(element, frames, finish = () => {}, duration = 220) {
     if (offscreenUpdate || quietMotion?.matches || !element.animate || !element.isConnected) { finish(); return null; }
-    const animation = element.animate(frames, { duration, easing: 'cubic-bezier(.2, .7, .2, 1)', fill: 'both' });
+    const animation = element.animate(frames, { duration, easing: window.App?.motion?.ease?.("out") ?? 'cubic-bezier(.2, .7, .2, 1)', fill: 'both' });
     activeMotion.add(animation);
     animation.onfinish = () => { activeMotion.delete(animation); if (finish() !== false) animation.cancel(); };
     animation.oncancel = () => activeMotion.delete(animation);

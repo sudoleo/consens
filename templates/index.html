@@ -443,8 +443,8 @@
           </svg>
         </span>
         <h2 class="run-blocked-title" id="runBlockedTitle"></h2>
-        <button type="button" class="run-blocked-close" id="runBlockedClose"
-          title="Dismiss" aria-label="Dismiss this notice">&#10005;</button>
+        <button type="button" class="run-blocked-close close-button" id="runBlockedClose"
+          aria-label="Dismiss this notice"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       </div>
       <p class="run-blocked-body" id="runBlockedBody"></p>
       <p class="run-blocked-meta" id="runBlockedMeta" hidden></p>
@@ -484,11 +484,7 @@
           <figcaption class="composer-quote-label">Quoted</figcaption>
           <blockquote id="composerQuoteText" class="composer-quote-text"></blockquote>
           <button type="button" id="composerQuoteRemove" class="composer-quote-remove"
-            title="Remove quote" aria-label="Remove the quoted passage">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m7 7 10 10M17 7 7 17"></path>
-            </svg>
-          </button>
+            aria-label="Remove the quoted passage"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
         </figure>
         <textarea class="input-field" id="questionInput" rows="1" placeholder="Enter your question"></textarea>
         <!-- Attachment-Menü (öffnet über dem Plus-Button) -->
@@ -778,7 +774,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" data-exclude-target="{{ family.responseId }}" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="{{ family.responseId }}" title="Exclude answer" aria-label="Exclude answer"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
         </h2>
         <div class="collapsible-content"></div>
@@ -794,10 +790,11 @@
        .container setzt container-type/isolation und wäre damit der Containing
        Block für position:fixed – das klemmt das Login-Modal in die App-Spalte. -->
 
-  <!-- Login Modal (logic: static/firebase.js, style: static/css/auth-modal.css) -->
-  <div id="loginModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <!-- Login dialog (native <dialog>, App.modalDialog; logic: static/firebase.js,
+       style: static/css/auth-modal.css) -->
+  <dialog id="loginModal" class="modal" aria-labelledby="authTitle">
       <div class="modal-content auth-modal" id="loginModalContent" tabindex="-1">
-        <button type="button" class="close" id="closeLoginModal" aria-label="Close login dialog">&times;</button>
+        <button type="button" class="close close-button" id="closeLoginModal" aria-label="Close login dialog"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 
         <div class="auth-head">
           <img class="auth-mark" src="/static/favicon.png" alt="" width="38" height="27" />
@@ -883,18 +880,14 @@
           </div>
         </form>
       </div>
-    </div>
-
-  <div id="disclaimerPopup" class="popup">
-    <p></p>
-  </div>
+    </dialog>
 
   <!-- Feedback dialog (native <dialog>, App.modalDialog; logic: app-init.js).
        Sending needs an account, so guests get the login hint and the address
        instead of a form that can only fail. -->
   <dialog id="feedbackModal" class="modal" aria-labelledby="feedbackTitle">
     <div class="modal-content feedback-modal">
-      <button type="button" class="close" id="closeFeedbackModal" aria-label="Close feedback">&times;</button>
+      <button type="button" class="close close-button" id="closeFeedbackModal" aria-label="Close feedback"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       <h2 id="feedbackTitle">Send Feedback</h2>
       <div id="feedbackGuestNote" class="feedback-guest-note" hidden>
         <p>Log in to send feedback from here, or write to
@@ -910,14 +903,15 @@
     </div>
   </dialog>
 
-  <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
-  <div id="shareModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
+  <!-- Share and Watch dialog (native <dialog>, App.modalDialog; logic:
+       share-dialog.js, watch.js): public links and a new watch. -->
+  <dialog id="shareModal" class="modal" aria-labelledby="shareModalTitle">
     <div class="modal-content share-modal-content">
-      <button type="button" class="close" id="closeShareModal" aria-label="Close dialog">&times;</button>
+      <button type="button" class="close close-button" id="closeShareModal" aria-label="Close dialog"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       <h2 id="shareModalTitle">Share this consensus publicly</h2>
       <div id="shareModalBody"></div>
     </div>
-  </div>
+  </dialog>
 
   <!-- Watches-Seite (/app/watches): scrollt im Dokument rechts der Seitenleiste,
        der Chat tritt solange zur Seite (body.is-watch-view). app-bootstrap.js
@@ -942,38 +936,24 @@
     </div>
   </div>
 
-  <!-- Attachment Viewer (einfache Vorschau für angehängte Dateien) -->
-  <div id="attachmentViewerModal" class="attachment-viewer-overlay" hidden>
-    <div class="attachment-viewer" role="dialog" aria-modal="true" aria-labelledby="attachmentViewerTitle">
+  <!-- Attachment preview (native <dialog>, App.modalDialog; attachments.js) -->
+  <dialog id="attachmentViewerModal" class="modal attachment-viewer-dialog" aria-labelledby="attachmentViewerTitle">
+    <div class="modal-content attachment-viewer">
       <div class="attachment-viewer-head">
         <span id="attachmentViewerTitle" class="attachment-viewer-title"></span>
-        <button type="button" id="attachmentViewerClose" class="attachment-viewer-close" aria-label="Close preview">&#10005;</button>
+        <button type="button" id="attachmentViewerClose" class="attachment-viewer-close close-button" aria-label="Close preview"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       </div>
       <div id="attachmentViewerBody" class="attachment-viewer-body"></div>
     </div>
-  </div>
+  </dialog>
 
-  <!-- Logout-Bestätigung: eigenes, passend gestyltes Modal statt window.confirm -->
-  <div id="logoutConfirmModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="logoutConfirmTitle">
-    <div class="modal-content confirm-modal-content">
-      <h2 id="logoutConfirmTitle">Log out of consens.io?</h2>
-      <p>You can log back in anytime. Your bookmarks stay saved to your account.</p>
-      <div class="confirm-modal-actions">
-        <button type="button" id="logoutCancelBtn" class="btn-free">Cancel</button>
-        <button type="button" id="logoutConfirmBtn" class="btn-pro">Log out</button>
-      </div>
-    </div>
-  </div>
+  <!-- Logging out asks through App.confirm (confirm-dialog.js, firebase.js
+       openLogoutConfirm); a feature that is not open yet says so with
+       App.toast (feature-access.js). -->
 
-  <aside id="featureAccessNotice" class="feature-access-notice" aria-label="Feature availability" hidden>
-    <p id="featureAccessMessage" role="status" aria-live="polite" aria-atomic="true"></p>
-    <a id="featureAccessDetails" href="#proFeatureModal">About early access</a>
-    <button type="button" id="closeFeatureAccessNotice" class="close" aria-label="Dismiss feature notice">&times;</button>
-  </aside>
-
-  <div id="proFeatureModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="accessInfoTitle">
+  <dialog id="proFeatureModal" class="modal" aria-labelledby="accessInfoTitle">
     <div class="modal-content pro-modal-content">
-      <button type="button" class="close" id="closeProModal" aria-label="Close early access information">&times;</button>
+      <button type="button" class="close close-button" id="closeProModal" aria-label="Close early access information"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 
       <div class="pro-header">
         <h2 id="accessInfoTitle">Early access</h2>
@@ -995,7 +975,7 @@
       </div>
 
     </div>
-  </div>
+  </dialog>
 
   <div id="popupContainer">
     <!-- Settings (native <dialog>, App.modalDialog; logic: static/app-ui.js) -->
@@ -1009,7 +989,7 @@
               aria-label="Help and explanation">
               &#63;
             </button>
-            <button id="closeSystemPromptModal" class="close" type="button" aria-label="Close settings">&times;</button>
+            <button id="closeSystemPromptModal" class="close close-button" type="button" aria-label="Close settings"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
         </div>
 
@@ -1408,7 +1388,7 @@
            the other along. -->
       <dialog id="helpModal" class="modal" aria-labelledby="helpTitle">
         <div class="modal-content faq-modal">
-          <button type="button" class="close" id="closeHelpModal" aria-label="Close help">&times;</button>
+          <button type="button" class="close close-button" id="closeHelpModal" aria-label="Close help"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           <div class="faq-header">
             <h2 id="helpTitle">FAQ & Quick Start</h2>
           </div>

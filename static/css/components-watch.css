@@ -29,7 +29,7 @@
   box-shadow: none;
   z-index: var(--z-header);
   isolation: isolate;
-  transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s linear 0s;
+  transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s var(--ease-linear) 0s;
 }
 .view-switch[hidden] { display: none; }
 /* Chat and Watches both start beside the sidebar, so the switch over them
@@ -40,7 +40,7 @@
   .view-switch {
     left: calc(50vw + var(--app-sidebar-offset) / 2);
     transition: left var(--dur-layer) var(--ease-standard), transform var(--dur-state) var(--ease-standard),
-      opacity var(--dur-state) var(--ease-standard), visibility 0s linear 0s;
+      opacity var(--dur-state) var(--ease-standard), visibility 0s var(--ease-linear) 0s;
   }
 }
 .view-switch-thumb {
@@ -99,7 +99,7 @@
   border-radius: 50%;
   background: var(--agree);
   pointer-events: none;
-  animation: watchSwitchPulse 1.8s var(--ease-out) 2;
+  animation: watchSwitchPulse var(--dur-beat) var(--ease-out) 2;
 }
 @keyframes watchSwitchPulse {
   0% { opacity: 0; transform: scale(.4); }
@@ -656,7 +656,7 @@ body.is-view-settle.is-watch-view .watch-page {
 .wd-item.is-error { --wd-tone: var(--dispute); }
 .wd-item.is-rechecking { --wd-tone: var(--ink-2); }
 /* What was just created or asked for is marked for a moment (J15). */
-.wd-item.is-highlight { animation: wdHighlight 2.2s var(--ease-standard) both; }
+.wd-item.is-highlight { animation: wdHighlight var(--dur-beat) var(--ease-standard) both; }
 @keyframes wdHighlight {
   0%, 35% { background-color: color-mix(in srgb, var(--ink) 9%, var(--raise)); }
   100% { background-color: var(--raise); }
@@ -682,7 +682,7 @@ body.is-view-settle.is-watch-view .watch-page {
 .is-moved .wd-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--partial) 18%, transparent); }
 .is-held .wd-dot,
 .is-waiting .wd-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
-.is-rechecking .wd-dot { animation: wdPulse 1.6s ease-in-out infinite; }
+.is-rechecking .wd-dot { animation: wdPulse var(--dur-beat) var(--ease-standard) infinite; }
 @keyframes wdPulse { 50% { opacity: .35; } }
 .wd-status-label { color: var(--ink); font-weight: var(--font-weight-semibold); }
 .is-moved .wd-status-label { color: var(--partial); }
@@ -817,7 +817,7 @@ body.is-view-settle.is-watch-view .watch-page {
 .wd-tick.is-moved { background: var(--partial); }
 .wd-tick.is-preliminary { background: color-mix(in srgb, var(--partial) 45%, transparent); }
 .wd-tick.is-held { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
-.wd-tick.is-confirming { background: var(--ink-2); animation: wdPulse 1.6s ease-in-out infinite; }
+.wd-tick.is-confirming { background: var(--ink-2); animation: wdPulse var(--dur-beat) var(--ease-standard) infinite; }
 .wd-tick.is-reverted { background: color-mix(in srgb, var(--ink-3) 35%, transparent); height: 8px; }
 .wd-tick.is-resolved { background: var(--agree); }
 
@@ -979,45 +979,6 @@ body.is-view-settle.is-watch-view .watch-page {
 .wd-brief-inputs .watch-select { width: auto; max-width: 260px; }
 .wd-switch { flex: 0 0 auto; }
 
-/* --- Undo notice (watch-dashboard.js showUndoToast) --- */
-.wd-toast {
-  position: fixed;
-  z-index: var(--z-feedback);
-  left: 50%;
-  width: max-content;
-  bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  max-width: calc(100vw - 32px);
-  box-sizing: border-box;
-  padding: 10px 10px 10px 18px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--ground);
-  font-size: var(--font-size-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
-  opacity: 0;
-  transform: translate(-50%, 8px);
-  transition: opacity var(--dur-state) var(--ease-out), transform var(--dur-state) var(--ease-out);
-}
-.wd-toast[hidden] { display: none; }
-.wd-toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
-.wd-toast-undo {
-  min-height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ground) 16%, var(--ink));
-  color: var(--ground);
-  font: inherit;
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-}
-.wd-toast-undo:hover { background: color-mix(in srgb, var(--ground) 24%, var(--ink)); }
-.wd-toast-undo:focus-visible { outline: 2px solid var(--ground); outline-offset: 2px; }
-.wd-toast-undo[hidden] { display: none; }
-
 /* --- The Watch pill under an Agent answer (J20), same as under Consensus --- */
 .agent-review > .watch-consensus-pill.agent-watch-pill { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .agent-watch-pill-row { display: flex; margin: 10px 0 0 -8px; }
@@ -1095,7 +1056,7 @@ body.is-view-settle.is-watch-view .watch-page {
 .watch-goal-option.is-loading {
   background: linear-gradient(90deg, var(--raise), var(--well), var(--raise));
   background-size: 200% 100%;
-  animation: wdShimmer 1.2s ease-in-out infinite;
+  animation: wdShimmer var(--dur-beat) var(--ease-standard) infinite;
   cursor: default;
 }
 .watch-goal-option.is-loading:hover { box-shadow: none; }
@@ -1152,7 +1113,6 @@ body.is-view-settle.is-watch-view .watch-page {
   #watchDashBody.is-arriving > * { animation: none; }
   .wd-settings,
   .wd-settings-content,
-  .wd-toast,
   .watch-page,
   body:is(.is-view-out, .is-view-in, .is-view-settle) .container { transition: none !important; }
 }

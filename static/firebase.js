@@ -85,19 +85,13 @@ async function refreshVerificationState() {
   return true;
 }
 
-// Logout-Bestätigung als In-App-Modal (#logoutConfirmModal in index.html)
-// statt Browser-window.confirm. Buttons werden einmalig beim Modul-Load
-// verdrahtet; der Logout-Button im Account-Popup ruft nur openLogoutConfirm().
-function closeLogoutConfirm() {
-  const modal = document.getElementById("logoutConfirmModal");
-  if (modal) modal.style.display = "none";
-}
-
+// Logging out asks first, with the app's own question (App.confirm,
+// confirm-dialog.js); the Logout entry of the account menu only calls
+// openLogoutConfirm().
 async function performLogout() {
   if (performLogout.inProgress) return;
   performLogout.inProgress = true;
   trackAppEvent("auth_logout_click");
-  closeLogoutConfirm();
   try {
     // Settings changed in the last moment still need the account's token;
     // sent beside the session cleanup, waited for at most 3 s. What does not
@@ -129,21 +123,19 @@ async function performLogout() {
     clearLocalProviderKeys();
   } catch (error) {
     console.error("Logout failed:", error);
-    window.App?.showPopup?.("Logout could not be completed. You are still signed in. Please try again.");
+    window.App?.toast?.({ message: "Logout could not be completed. You are still signed in. Please try again.", tone: "error" });
   } finally {
     performLogout.inProgress = false;
   }
 }
 
-function openLogoutConfirm() {
-  const modal = document.getElementById("logoutConfirmModal");
-  if (!modal) {
-    // Fallback (Seite ohne Modal-Markup): Browser-Dialog wie früher.
-    if (window.confirm("Log out of consens.io?")) performLogout();
-    return;
-  }
-  modal.style.display = "block";
-  document.getElementById("logoutCancelBtn")?.focus();
+async function openLogoutConfirm() {
+  const confirmed = await window.App.confirm({
+    title: "Log out of consens.io?",
+    body: "You can log back in anytime. Your bookmarks stay saved to your account.",
+    confirmLabel: "Log out",
+  });
+  if (confirmed) performLogout();
 }
 
 function resetLoadedRunAfterLogout() {
@@ -162,20 +154,6 @@ function resetLoadedRunAfterLogout() {
   document.body.classList.add("is-hero");
   window.syncHeroResponseAccess?.();
 }
-
-(function initLogoutConfirmModal() {
-  const modal = document.getElementById("logoutConfirmModal");
-  if (!modal) return;
-  document.getElementById("logoutConfirmBtn")?.addEventListener("click", performLogout);
-  document.getElementById("logoutCancelBtn")?.addEventListener("click", closeLogoutConfirm);
-  // Klick auf den Backdrop oder Escape schließt ohne Logout.
-  modal.addEventListener("click", e => {
-    if (e.target === modal) closeLogoutConfirm();
-  });
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && modal.style.display === "block") closeLogoutConfirm();
-  });
-})();
 
 // Standard-Persistenz global setzen (beim Laden, nicht im Click-Handler)
 setPersistence(auth, browserLocalPersistence)
@@ -662,9 +640,15 @@ onIdTokenChanged(auth, async (user) => {
       items[(index + items.length) % items.length].focus();
     }
 
+    // One of the app's popovers (App.popover): opening it closes any other
+    // menu or card, and it comes out of the control that opened it.
+    window.App.popover?.register(emailPopup, { close: () => setAccountMenuOpen(false) });
+
     function setAccountMenuOpen(isOpen, { opener = null, focus = null } = {}) {
       if ((!emailPopup.hidden) !== isOpen) {
         if (isOpen && opener) accountMenuOpener = opener;
+        if (isOpen) window.App.popover?.opened(emailPopup, { trigger: accountMenuOpener });
+        else window.App.popover?.closed(emailPopup);
         emailPopup.hidden = !isOpen;
         emailIcon.setAttribute("aria-expanded", String(isOpen));
         if (accountIdentity) accountIdentity.setAttribute("aria-expanded", String(isOpen));
@@ -1496,47 +1480,70 @@ googleBtn.addEventListener("click", handleGoogleSignIn);
 
 // --- Opening and closing ----------------------------------------------------
 
+// The dialog is a native <dialog> opened through App.modalDialog
+// (modal-dialog.js): the page behind is inert, Tab stays inside, Escape and
+// the close button close it, focus goes back to whoever opened it, and it
+// fades in and out like every other dialog (overlays.css). The backdrop
+// closes it only for a deliberate click there, and never once something is
+// typed (a dragged text selection ends its click on the backdrop).
+function authDialog() {
+  return document.getElementById("loginModal");
+}
+
+function authDialogHasTyping() {
+  const modal = authDialog();
+  return Boolean(modal && Array.from(modal.querySelectorAll("input"))
+    .some(input => !["checkbox", "radio", "hidden"].includes(input.type) && input.value.trim()));
+}
+
+function bindAuthDialog(modal) {
+  window.App.modalDialog?.bind(modal, {
+    keepOpen: authDialogHasTyping,
+    onClose: () => {
+      authContextLead = "";
+      hidePassword();
+    },
+  });
+}
+
+function showAuthModal(mode, trigger) {
+  const modal = authDialog();
+  if (!modal) return;
+  if (mode) setMode(mode);
+  syncInAppBrowserNotice();
+  // On a phone a focused field opens the keyboard, which covers the Google
+  // button before the user has chosen a way in.
+  const initialFocus = (isCoarsePointer()
+    ? document.getElementById("loginModalContent")
+    : emailEl) || document.getElementById("closeLoginModal");
+  bindAuthDialog(modal);
+  if (modal.open) {
+    initialFocus?.focus({ preventScroll: true });
+    return;
+  }
+  if (window.App.modalDialog) {
+    window.App.modalDialog.open(modal, { opener: trigger || null, focus: initialFocus });
+  } else {
+    modal.setAttribute("open", "");
+    initialFocus?.focus({ preventScroll: true });
+  }
+}
+
+function closeAuthModal() {
+  const modal = authDialog();
+  if (!modal?.open) return;
+  if (window.App.modalDialog) window.App.modalDialog.close(modal);
+  else {
+    modal.removeAttribute("open");
+    authContextLead = "";
+    hidePassword();
+  }
+}
+
 // Klick auf den Login-Bereich: Öffne das Modal, wenn nicht angemeldet.
 // Eingeloggt passiert hier bewusst NICHTS - das User-Icon öffnet sein eigenes
 // Popup (stopPropagation), Logout läuft ausschließlich über den bestätigten
 // Logout-Button im Popup. Vorher loggte ein Klick knapp neben das Icon aus.
-let authModalReturnFocus = null;
-
-function authModalFocusableElements() {
-  const content = document.getElementById("loginModalContent");
-  if (!content) return [];
-  return Array.from(content.querySelectorAll(
-    'button:not([disabled]):not([hidden]), a[href], input:not([disabled]):not([type="hidden"]), [tabindex]:not([tabindex="-1"])'
-  )).filter(element => !element.hidden && element.getClientRects().length > 0);
-}
-
-function showAuthModal(mode, trigger) {
-  const modal = document.getElementById("loginModal");
-  if (!modal) return;
-  if (mode) setMode(mode);
-  if (modal.style.display !== "block") authModalReturnFocus = trigger || document.activeElement;
-  modal.style.display = "block";
-  syncInAppBrowserNotice();
-  // On a phone a focused field opens the keyboard, which covers the Google
-  // button before the user has chosen a way in.
-  const initialFocus = isCoarsePointer()
-    ? document.getElementById("loginModalContent")
-    : emailEl;
-  (initialFocus || document.getElementById("closeLoginModal"))?.focus({ preventScroll: true });
-}
-
-function closeAuthModal() {
-  const modal = document.getElementById("loginModal");
-  if (!modal || modal.style.display !== "block") return;
-  modal.style.display = "none";
-  authContextLead = "";
-  hidePassword();
-  if (authModalReturnFocus?.isConnected && typeof authModalReturnFocus.focus === "function") {
-    authModalReturnFocus.focus({ preventScroll: true });
-  }
-  authModalReturnFocus = null;
-}
-
 document.getElementById("loginContainer").addEventListener("click", event => {
   if (!auth.currentUser) {
     showAuthModal("login", event.currentTarget);
@@ -1562,49 +1569,6 @@ document.getElementById("authTopSignupBtn")?.addEventListener("click", event => 
 
 // Schließen des Modals
 document.getElementById("closeLoginModal").addEventListener("click", closeAuthModal);
-// The backdrop closes the dialog only for a deliberate click on it: the press
-// must start there too (a text selection dragged out of a field ends its click
-// on the backdrop), and nothing typed into the dialog may be lost that way.
-// The close button and Escape stay the explicit exits.
-let authBackdropPress = false;
-document.getElementById("loginModal")?.addEventListener("pointerdown", event => {
-  authBackdropPress = event.target === event.currentTarget;
-});
-document.getElementById("loginModal")?.addEventListener("click", event => {
-  const pressedHere = authBackdropPress;
-  authBackdropPress = false;
-  if (event.target !== event.currentTarget || !pressedHere) return;
-  const typed = Array.from(event.currentTarget.querySelectorAll("input"))
-    .some(input => !["checkbox", "radio", "hidden"].includes(input.type) && input.value.trim());
-  if (!typed) closeAuthModal();
-});
-document.addEventListener("keydown", event => {
-  const modal = document.getElementById("loginModal");
-  if (!modal || modal.style.display !== "block") return;
-  if (event.key === "Escape") {
-    event.preventDefault();
-    closeAuthModal();
-    return;
-  }
-  if (event.key !== "Tab") return;
-  const focusable = authModalFocusableElements();
-  if (!focusable.length) {
-    event.preventDefault();
-    document.getElementById("loginModalContent")?.focus();
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  const outside = !focusable.includes(document.activeElement);
-  if (event.shiftKey && (document.activeElement === first || outside)) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && (document.activeElement === last || outside)) {
-    event.preventDefault();
-    first.focus();
-  }
-});
-
 // Standard: beim Öffnen im Login-Modus
 setMode("login");
 
@@ -1679,16 +1643,33 @@ const SIGNED_IN_RETURN = (() => {
 })();
 
 // --- Account löschen (DSGVO Art. 17) ---
-document.getElementById("deleteAccountBtn")?.addEventListener("click", async () => {
+// The app asks once, in its own dialog (App.confirm), and says how it went
+// in the notice line (App.toast); the browser's grey windows are gone
+// (Apple audit E1). After a deletion the line is read before the page
+// leaves for the start page.
+const ACCOUNT_DELETED_READ_MS = 2400;
+document.getElementById("deleteAccountBtn")?.addEventListener("click", async event => {
+  const button = event.currentTarget;
   if (!auth.currentUser) {
-    alert("Please log in first.");
+    window.App.toast({ message: "Please log in first.", tone: "error" });
     return;
   }
-  const confirmed = window.confirm(
-    "Delete your account permanently?\n\nThis removes your account, bookmarks, and all data stored about you. This cannot be undone."
-  );
-  if (!confirmed) return;
+  const confirmed = await window.App.confirm({
+    title: "Delete your account permanently?",
+    body: "This removes your account, bookmarks, and all data stored about you. This cannot be undone.",
+    confirmLabel: "Delete account",
+    danger: true,
+  });
+  if (!confirmed || !auth.currentUser) return;
 
+  const failed = message => {
+    trackAppEvent("auth_account_deletion_result", { status: "error" });
+    window.App.toast({ message: message || "Account deletion failed. Please try again or contact us.", tone: "error" });
+  };
+  const leave = () => window.setTimeout(() => { window.location.href = "/?landing=1"; }, ACCOUNT_DELETED_READ_MS);
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = "Deleting…";
   trackAppEvent("auth_account_deletion_started");
   try {
     const token = await auth.currentUser.getIdToken(true);
@@ -1702,25 +1683,28 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async () 
       trackAppEvent("auth_account_deletion_result", { status: "cleanup_pending" });
       try { localStorage.removeItem("id_token"); } catch {}
       window.App.userSettings.stop();
-      alert(data.message || "Your account is blocked. Remaining data cleanup is queued and will be retried automatically.");
+      window.App.toast({ message: data.message || "Your account is blocked. Remaining data cleanup is queued and will be retried automatically.", duration: Infinity });
       await signOut(auth).catch(() => {});
-      window.location.href = "/?landing=1";
+      leave();
     } else if (res.ok && data.status === "deleted" && data.cleanup_pending !== true) {
       trackAppEvent("auth_account_deletion_result", { status: "success" });
       try { localStorage.removeItem("id_token"); } catch {}
       window.App.userSettings.stop();
-      alert("Your account and data have been deleted.");
+      window.App.toast({ message: "Your account and data have been deleted.", tone: "success", duration: Infinity });
       // Der Auth-Account existiert nicht mehr; lokale Session beenden und zur Startseite
       signOut(auth).catch(() => {});
-      window.location.href = "/?landing=1";
+      leave();
     } else {
-      trackAppEvent("auth_account_deletion_result", { status: "error" });
-      alert(data.detail || data.error || "Account deletion failed. Please try again or contact us.");
+      failed(data.detail || data.error);
     }
   } catch (err) {
     console.error("Account deletion failed:", err);
-    trackAppEvent("auth_account_deletion_result", { status: "error" });
-    alert("Account deletion failed. Please try again or contact us.");
+    failed();
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = label;
+    }
   }
 });
 
@@ -2036,7 +2020,7 @@ function applyBookmarkTitle(named, source = "generated") {
     if (label.textContent === bookmarkLabelText(title)) continue;
     label.textContent = bookmarkLabelText(title);
     if (source === "generated" && label.animate && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      label.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
+      label.animate([{ opacity: 0 }, { opacity: 1 }], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "ease-out" });
     }
   }
   document.querySelectorAll(`.bookmark[data-id="${named.id}"] .bookmark-menu-button`)
@@ -3057,7 +3041,7 @@ function revealLoadedBookmarks(container, skeleton, shown) {
     skeleton.setAttribute("aria-hidden", "true");
     Object.assign(skeleton.style, { position: "absolute", top: `${top}px`, left: "0", right: "0", pointerEvents: "none" });
     container.style.position = "relative";
-    const fade = skeleton.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "ease-out", fill: "forwards" });
+    const fade = skeleton.animate([{ opacity: 1 }, { opacity: 0 }], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "ease-out", fill: "forwards" });
     fade.finished.catch(() => {}).then(() => {
       skeleton.remove();
       if (!container.querySelector(".bookmarks-skeleton")) container.style.position = "";
@@ -3066,7 +3050,7 @@ function revealLoadedBookmarks(container, skeleton, shown) {
   // Only what is on screen settles in; the rows below the fold just appear.
   rows.slice(0, 16).forEach((row, index) => row.animate(
     [{ opacity: 0 }, { opacity: 1 }],
-    { duration: 240, delay: Math.min(index, 10) * 16, easing: "ease-out", fill: "backwards" }
+    { duration: window.App?.motion?.ms?.("state") ?? 200, delay: Math.min(index, 10) * 16, easing: window.App?.motion?.ease?.("out") ?? "ease-out", fill: "backwards" }
   ));
 }
 
@@ -3305,7 +3289,7 @@ async function deleteBookmark(bookmarkId) {
       saved.animation = row.animate([
         { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, marginBottom: style.marginBottom, transform: 'translateX(0)' },
         { height: '0px', opacity: 0, paddingTop: '0px', paddingBottom: '0px', marginBottom: '0px', transform: 'translateX(-8px)' }
-      ], { duration: 180, easing: 'ease-out', fill: 'forwards' });
+      ], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? 'ease-out', fill: 'forwards' });
       saved.animation.onfinish = () => row.remove();
     } else row.remove();
     return saved;
@@ -3508,6 +3492,8 @@ document.addEventListener("keydown", event => {
 let openBookmarkMenu = null;
 function showBookmarkMenu(button, { keyboard = false } = {}) {
   closeBookmarkMenu();
+  // A menu still on its way out gives way to the new one at once.
+  document.querySelectorAll(".bookmark-menu.is-leaving").forEach(menu => menu.remove());
   const row = button.closest(".bookmark");
   if (!row?.dataset.id) return;
   const menu = document.createElement("div");
@@ -3527,6 +3513,10 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
     item.append(text);
     menu.append(item);
   }
+  // One of the app's popovers: it closes any other menu and comes out of
+  // its "…" (App.popover, overlays.css), and leaves the same way.
+  window.App.popover?.register(menu, { close: () => closeBookmarkMenu() });
+  window.App.popover?.opened(menu, { trigger: button });
   document.body.append(menu);
   const bounds = button.getBoundingClientRect();
   const width = menu.offsetWidth, height = menu.offsetHeight;
@@ -3568,7 +3558,12 @@ function closeBookmarkMenu({ focus = false } = {}) {
   if (!openBookmarkMenu) return;
   const { menu, button, row } = openBookmarkMenu;
   openBookmarkMenu = null;
-  menu.remove();
+  if (window.App.popover) {
+    window.App.popover.leave(menu, () => {
+      window.App.popover.unregister(menu);
+      menu.remove();
+    });
+  } else menu.remove();
   button.setAttribute("aria-expanded", "false");
   row.classList.remove("has-menu");
   if (focus && button.isConnected) button.focus({ preventScroll: true });
@@ -3673,7 +3668,7 @@ function collapseBookmarkRow(row) {
   const animation = row.animate([
     { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, marginBottom: style.marginBottom },
     { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginBottom: "0px" }
-  ], { duration: 180, easing: "ease-out" });
+  ], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "ease-out" });
   animation.onfinish = done;
   row._collapse = animation;
 }
@@ -3694,7 +3689,7 @@ function insertBookmarkRowSoftly(row) {
   row.animate([
     { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", overflow: "hidden" },
     { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, overflow: "hidden" }
-  ], { duration: 200, easing: "cubic-bezier(.22, 1, .36, 1)" });
+  ], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "cubic-bezier(.22, 1, .36, 1)" });
 }
 function leaveDeletedChat() {
   window.App.runRegistry?.clearVisible?.();
@@ -3809,7 +3804,7 @@ function settleRunRow(row, bookmark, runId) {
   if (status) {
     const quiet = !status.animate || matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (quiet) status.remove();
-    else status.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" })
+    else status.animate([{ opacity: 1 }, { opacity: 0 }], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "ease-out", fill: "forwards" })
       .finished.catch(() => {}).then(() => status.remove());
   }
   if (!row.querySelector(":scope > .bookmark-menu-button")) row.append(createBookmarkMenuButton(title));

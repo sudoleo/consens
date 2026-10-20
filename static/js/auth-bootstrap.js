@@ -5,7 +5,6 @@
 (function () {
   const timeout = Number(window.AUTH_BOOTSTRAP_TIMEOUT_MS) || 8000;
   let fallbackActive = false;
-  let returnFocus = null;
 
   function modalEls() {
     return {
@@ -15,23 +14,28 @@
     };
   }
 
+  // #loginModal is a native <dialog> (App.modalDialog, overlays group, loaded
+  // before this file): it brings focus back to the trigger and closes on
+  // Escape and its backdrop by itself.
   function closeUnavailableDialog() {
     const { modal } = modalEls();
-    if (!modal || modal.style.display !== "block") return;
-    modal.style.display = "none";
-    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
-    returnFocus = null;
+    if (!modal?.open) return;
+    if (window.App?.modalDialog) window.App.modalDialog.close(modal);
+    else modal.removeAttribute("open");
   }
 
   function openUnavailableDialog(trigger) {
     const { modal, close, error } = modalEls();
     if (!modal) return;
-    returnFocus = trigger || document.activeElement;
     if (error) {
       error.textContent = "Login is temporarily unavailable. Check your connection and try again.";
     }
-    modal.style.display = "block";
-    close?.focus({ preventScroll: true });
+    if (modal.open) return;
+    if (window.App?.modalDialog) window.App.modalDialog.open(modal, { opener: trigger || null, focus: close });
+    else {
+      modal.setAttribute("open", "");
+      close?.focus({ preventScroll: true });
+    }
   }
 
   function activateFallback() {
@@ -59,9 +63,6 @@
       openUnavailableDialog(trigger);
     }, true);
     modalEls().close?.addEventListener("click", closeUnavailableDialog);
-    document.addEventListener("keydown", event => {
-      if (event.key === "Escape") closeUnavailableDialog();
-    });
     window.dispatchEvent(new CustomEvent("consensio:auth-unavailable"));
   }
 

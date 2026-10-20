@@ -2301,9 +2301,11 @@ class WatchFrontendContractTests(unittest.TestCase):
         share_source = Path("static/js/share-dialog.js").read_text(encoding="utf-8")
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
 
-        self.assertIn('!modal.classList.contains("is-watch-dialog")', share_source)
+        # A watch being set up is not dropped by a click beside it.
+        self.assertIn('keepOpen: () => modal.classList.contains("is-watch-dialog")', share_source)
         self.assertIn('consensio.watchViewSwitchHint.seen.v1', watch_source)
-        self.assertIn('animation: watchSwitchPulse 1.8s var(--ease-out) 2', css)
+        # Two beats of the one tempo that repeats (Apple audit C13).
+        self.assertIn('animation: watchSwitchPulse var(--dur-beat) var(--ease-out) 2', css)
         self.assertIn('prefers-reduced-motion: reduce', css)
 
     def test_watch_limits_are_visible_before_creation_and_on_dashboard(self):
@@ -2333,7 +2335,8 @@ class WatchFrontendContractTests(unittest.TestCase):
 
         share_source = Path("static/js/share-dialog.js").read_text(encoding="utf-8")
         self.assertIn('document.documentElement.classList.add("share-modal-open")', share_source)
-        self.assertIn('modal.style.display = "flex"', share_source)
+        self.assertIn("window.App.modalDialog.open(modal)", share_source)
+        self.assertIn("dialog#shareModal[open] { display: flex; }", modal_css)
         self.assertIn('window.App.sharedModal', share_source)
 
         watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")

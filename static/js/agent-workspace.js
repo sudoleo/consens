@@ -179,7 +179,9 @@
     for (const open of document.querySelectorAll('.agent-files-more[aria-expanded="true"]')) {
       if (open === except) continue;
       open.setAttribute('aria-expanded', 'false');
-      open.nextElementSibling?.setAttribute('hidden', '');
+      const menu = open.nextElementSibling;
+      if (menu) App.popover?.closed(menu);
+      menu?.setAttribute('hidden', '');
     }
   }
   document.addEventListener('click', event => {
@@ -203,8 +205,13 @@
       entry.addEventListener('click', () => { closeMenus(); item.run(); });
       menu.append(entry);
     }
+    // One of the app's popovers (App.popover): any other menu closes, and it
+    // comes out of "…" and goes back (overlays.css).
+    App.popover?.register(menu, { close: () => toggle(false) });
     const toggle = open => {
       closeMenus(trigger);
+      if (open) App.popover?.opened(menu, { trigger });
+      else App.popover?.closed(menu);
       trigger.setAttribute('aria-expanded', String(open)); menu.hidden = !open;
       if (open) menu.querySelector('button')?.focus();
     };

@@ -15,14 +15,14 @@
 @media (min-width: 1200px) {
   body.agent-sidebar-open .auth-top-actions { right: calc(346px + 16px); }
 }
-.agent-sidebar:not([hidden]) { animation: agent-sidebar-enter .24s cubic-bezier(.2, .7, .2, 1) both; }
+.agent-sidebar:not([hidden]) { animation: agent-sidebar-enter var(--dur-state) var(--ease-out) both; }
 @keyframes agent-sidebar-enter {
   from { opacity: 0; transform: translate(var(--agent-enter-x), var(--agent-enter-y)); }
   to { opacity: 1; transform: translate(0, 0); }
 }
 /* It leaves the way it came (agent-delegation.js setPanelVisible, Apple
    audit C5): the same distance and direction, a little faster. */
-.agent-sidebar.is-leaving { animation: agent-sidebar-leave .2s cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
+.agent-sidebar.is-leaving { animation: agent-sidebar-leave var(--dur-state) var(--ease-in) both; pointer-events: none; }
 @keyframes agent-sidebar-leave {
   from { opacity: 1; transform: translate(0, 0); }
   to { opacity: 0; transform: translate(var(--agent-enter-x), var(--agent-enter-y)); }
@@ -59,7 +59,7 @@
   background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 16%, transparent) 0 4px, transparent 4px 7px);
 }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-  .agent-sidebar-segments i[data-state="busy"] { animation: agent-segment-breathe 2.8s ease-in-out infinite; }
+  .agent-sidebar-segments i[data-state="busy"] { animation: agent-segment-breathe var(--dur-beat) var(--ease-standard) infinite; }
 }
 @keyframes agent-segment-breathe { 50% { opacity: .55; } }
 .agent-sidebar-status:empty { display: none; }
@@ -81,7 +81,7 @@
 }
 .agent-session > summary:hover { background-color: var(--hover); }
 /* A model icon names its row with a short tone that fades (agent-delegation.js point). */
-.agent-session > summary.is-pointed { animation: agent-session-point 1.4s var(--ease-standard) both; }
+.agent-session > summary.is-pointed { animation: agent-session-point var(--dur-beat) var(--ease-standard) both; }
 @keyframes agent-session-point { 0%, 40% { background-color: var(--raise); } }
 /* An open row keeps its heading in view while its answer scrolls past, so
    the reader knows whose answer it is and can fold it from anywhere. */
@@ -116,7 +116,7 @@
 .agent-session[data-status="question"] .agent-session-state { color: var(--ink); font-weight: 600; }
 /* Aligned with the model name above it; no scroll area of its own. */
 .agent-session-detail { padding: 2px 10px 14px 35px; overflow-wrap: anywhere; }
-.agent-session[open] .agent-session-detail { animation: agent-detail-enter .2s ease both; }
+.agent-session[open] .agent-session-detail { animation: agent-detail-enter var(--dur-state) var(--ease-standard) both; }
 @keyframes agent-detail-enter { from { opacity: 0; transform: translateY(-3px); } }
 .agent-session-detail h3 { margin: 12px 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: 600; }
 .agent-session-detail > :first-child, .agent-session-detail > :first-child h3 { margin-top: 6px; }
@@ -127,7 +127,7 @@
 .agent-token-breakdown dt { color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-token-breakdown dd { margin: 3px 0 0; font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-detail-skeleton { display: grid; gap: 9px; padding: 8px 0 16px; min-height: 50px; }
-.agent-detail-skeleton span { display: block; height: 8px; border-radius: var(--radius-2xs); background: var(--line); animation: agent-detail-pulse 1.5s ease-in-out infinite; }
+.agent-detail-skeleton span { display: block; height: 8px; border-radius: var(--radius-2xs); background: var(--line); animation: agent-detail-pulse var(--dur-beat) var(--ease-standard) infinite; }
 .agent-detail-skeleton span:nth-child(2) { width: 87%; }
 .agent-detail-skeleton span:nth-child(3) { width: 64%; }
 @keyframes agent-detail-pulse { 50% { opacity: .4; } }
@@ -163,7 +163,7 @@
 /* Only a model that joins a live run settles in (agent-delegation.js);
    saved and earlier turns show their icons at once (Apple audit A10). */
 .agent-model-stack .agent-inline-model.is-arriving {
-  animation: agent-icon-enter .24s cubic-bezier(.2, .7, .2, 1) var(--agent-icon-delay, 0ms) both;
+  animation: agent-icon-enter var(--dur-state) var(--ease-out) var(--agent-icon-delay, 0ms) both;
 }
 @keyframes agent-icon-enter {
   from { opacity: 0; transform: translateY(4px); }
@@ -208,9 +208,9 @@
     border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter .2s ease both; }
+  .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter var(--dur-state) var(--ease-standard) both; }
   @keyframes agent-scrim-enter { from { opacity: 0; } }
-  .agent-sidebar-scrim.is-leaving { animation: agent-scrim-leave .2s ease both; pointer-events: none; }
+  .agent-sidebar-scrim.is-leaving { animation: agent-scrim-leave var(--dur-state) var(--ease-standard) both; pointer-events: none; }
   @keyframes agent-scrim-leave { to { opacity: 0; } }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -441,7 +441,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background-image: linear-gradient(105deg, transparent 43%,
       color-mix(in srgb, var(--bg-color, #fff) 55%, transparent) 50%, transparent 57%);
-    background-size: 250% 100%; animation: label-shine 2.4s linear infinite;
+    background-size: 250% 100%; animation: label-shine var(--dur-beat) var(--ease-linear) infinite;
   }
   @supports (background-clip: text) or (-webkit-background-clip: text) {
     .agent-activity.is-running .agent-activity-tool[data-status="running"] > strong {
@@ -450,7 +450,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
         color-mix(in srgb, var(--agent-ink) 45%, var(--bg-color, #fff)) 50%, var(--agent-ink) 57%);
       background-size: 250% 100%; background-clip: text; -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      animation: label-shine 2.4s linear infinite;
+      animation: label-shine var(--dur-beat) var(--ease-linear) infinite;
     }
   }
 }
@@ -518,7 +518,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     pointer-events: none;
     background-image: linear-gradient(90deg, transparent,
       color-mix(in srgb, var(--bg-color, #fff) 40%, transparent) 50%, transparent);
-    animation: agent-answer-sheen 2.4s linear infinite;
+    animation: agent-answer-sheen var(--dur-beat) var(--ease-linear) infinite;
     transition: opacity var(--dur-light) var(--ease-standard);
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
@@ -535,10 +535,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
     background-repeat: no-repeat;
     box-shadow: none;
-    animation: agent-mark-stroke .62s cubic-bezier(.25, .75, .3, 1) var(--cx-reveal-delay, 0ms) backwards;
+    animation: agent-mark-stroke var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered, .is-mark-shown) {
-    animation: agent-mark-badge .34s ease-out var(--cx-reveal-delay, 0ms) backwards;
+    animation: agent-mark-badge var(--dur-layer) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
   /* Provisional marks (Coverage windows that are done while Differences
      still runs, agent-review.js preview) arrive quietly: each fades in once,
@@ -547,10 +547,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     .cx-claim.is-mark-arriving:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
   body:not(.consensus-markers-hidden) #agentAnswerBody
     .cx-claim.is-mark-arriving.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered) .cx-spot {
-    animation: agent-mark-arrive .45s ease-out backwards;
+    animation: agent-mark-arrive var(--dur-layer) var(--ease-out) backwards;
   }
   body:not(.consensus-markers-hidden) #agentAnswerBody .claim-badge.is-mark-arriving:not(.is-marker-filtered) {
-    animation: agent-mark-badge .34s ease-out backwards;
+    animation: agent-mark-badge var(--dur-layer) var(--ease-out) backwards;
   }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
@@ -596,7 +596,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .agent-activity.is-running .agent-model-stack .agent-inline-model:is([data-status="waiting"], [data-status="working"], [data-status="question"], [data-status="rework"]) > * {
-    animation: agent-model-wait 1.8s ease-in-out infinite;
+    animation: agent-model-wait var(--dur-beat) var(--ease-standard) infinite;
   }
 }
 @keyframes agent-model-wait {
@@ -606,7 +606,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    catches the light once. */
 @media (prefers-reduced-motion: no-preference) {
   #agentAnswerBody.is-marks-revealing ~ .agent-review .agent-agreement-num {
-    animation: agent-agreement-arrive 1.4s var(--ease-out) .25s both;
+    animation: agent-agreement-arrive var(--dur-beat) var(--ease-out) var(--dur-state) both;
   }
 }
 @keyframes agent-agreement-arrive {
@@ -886,7 +886,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .cx-claim.pc-claim.has-spot:not(.is-quiet):is(:hover, :focus-visible) .cx-spot { --cx-spot-paint: var(--cx-mark-strong); }
 .cx-claim.pc-claim.is-quiet:is(:hover, :focus-visible) { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
 @media (prefers-reduced-motion: no-preference) {
-  .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe 1.8s ease-in-out infinite; }
+  .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe var(--dur-beat) var(--ease-standard) infinite; }
 }
 @media (pointer: coarse) {
   /* A larger target for a finger without moving the line; wrapped rows

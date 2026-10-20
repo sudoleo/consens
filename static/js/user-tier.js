@@ -72,7 +72,7 @@
 
     if (isPro) {
       const proModal = document.getElementById("proFeatureModal");
-      if (proModal) proModal.style.display = "none";
+      if (proModal?.open) window.App.modalDialog?.close(proModal);
 
       // Dropdowns entsperren
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true);

@@ -602,7 +602,7 @@ def test_last_bookmark_click_wins_when_detail_responses_arrive_out_of_order(brow
         assert page.evaluate("() => window.App.bookmarkSession.currentId()") == "bookmark_b"
         assert page.evaluate("() => window.lastQuestion") == "Question B"
         assert page.evaluate("() => window.consensusCitationMeta?.question") == "Question B"
-        expect(page.locator(".explanation-popup")).to_have_count(0)
+        expect(page.locator("#appToasts .toast")).to_have_count(0)
     finally:
         context.close()
 
@@ -1698,7 +1698,7 @@ def test_attachment_filter_blocks_one_model_run_before_prepare(browser, phase4_s
         page.fill("#questionInput", "Can this filtered run start?")
         page.evaluate("() => window.sendQuestion()")
 
-        expect(page.locator(".explanation-popup")).to_contain_text(
+        expect(page.locator("#appToasts .toast")).to_contain_text(
             "Choose at least two compatible models"
         )
         assert requests == []

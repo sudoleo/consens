@@ -10,7 +10,7 @@
    den ganzen Differences-Bereich, nicht als Hinweis auf eine Zeile. */
 .diff-card.is-focused {
   border-radius: var(--radius-xs);
-  animation: diffCardFlash 1.9s ease forwards;
+  animation: diffCardFlash var(--dur-beat) var(--ease-standard) forwards;
 }
 
 @keyframes diffCardFlash {
@@ -90,8 +90,6 @@
   padding: 14px 16px;
   border-radius: var(--radius-md);
   background: var(--container-bg);
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  backdrop-filter: blur(var(--glass-blur));
   border: var(--card-border);
   box-shadow: var(--card-shadow-hover);
   color: var(--text-color);
@@ -123,25 +121,9 @@
   font-size: var(--font-size-sm);
 }
 
+/* The shared close cross (.close-button, foundation.css); here its place. */
 .claim-popover-close {
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 50%;
-  background: var(--sidebar-hover);
-  color: var(--text-color);
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-solid);
-  cursor: pointer;
-}
-
-.claim-popover-close:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
+  margin: -6px -8px -6px 0;
 }
 
 .claim-popover-claim {
@@ -696,14 +678,7 @@
   width: 12px;
   height: 12px;
   flex-shrink: 0;
-  border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-top-color: color-mix(in srgb, var(--accent) 85%, var(--text-color));
-  animation: resolveBtnSpin 0.8s linear infinite;
-}
-
-@keyframes resolveBtnSpin {
-  to { transform: rotate(360deg); }
+  /* Look and turn: the one spinner (motion.css). */
 }
 
 /* Pro-Teaser: gedämpfter Button mit Pro-Chip für Free-Nutzer.
@@ -804,9 +779,6 @@
   color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
 }
 
-.resolve-model-toggle:focus-visible {
-  outline: none;
-}
 
 .resolve-model-toggle:focus-visible .resolve-model-name {
   text-decoration: underline;
@@ -909,7 +881,6 @@
 .resolve-prompt-toggle:hover,
 .resolve-prompt-toggle:focus-visible {
   color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
-  outline: none;
 }
 
 .resolve-prompt-toggle svg {
@@ -981,12 +952,12 @@ mark.quote-flash {
   color: inherit;
   border-radius: 3px;
   padding: 0 1px;
-  animation: quoteFlashFade 2.4s ease forwards;
+  animation: quoteFlashFade var(--dur-beat) var(--ease-standard) forwards;
 }
 
 .quote-flash-block {
   border-radius: var(--radius-xs);
-  animation: quoteFlashBlockFade 2.4s ease forwards;
+  animation: quoteFlashBlockFade var(--dur-beat) var(--ease-standard) forwards;
 }
 
 .response-box.jump-flash {

@@ -221,10 +221,18 @@ def test_overlong_agent_message_is_stopped_with_a_clear_reason(browser, phase4_s
         assert page.evaluate("validateInputText()") is True
         # ... 8,001 characters do not.
         page.locator("#questionInput").fill("x" * 8001)
+        page.evaluate("""() => {
+          window.__composerNotices = 0;
+          const show = App.composerNotice.show;
+          App.composerNotice.show = (...args) => { window.__composerNotices += 1; return show(...args); };
+        }""")
         page.locator("#sendButton").click()
         page.wait_for_timeout(300)
-        # Exactly one notice: the click and the send path no longer both check.
-        assert len(dialogs) == 1 and "longer than 8,000 characters (it has 8,001)" in dialogs[0]
+        # Said under the field, not in a browser window (Apple audit E1), and
+        # exactly once: the click and the send path no longer both check.
+        expect(page.locator("#composerInputNotice")).to_contain_text("longer than 8,000 characters (it has 8,001)")
+        assert page.evaluate("window.__composerNotices") == 1
+        assert dialogs == []
         assert requests == []
         expect(page.locator("#questionInput")).to_have_value("x" * 8001)
     finally:

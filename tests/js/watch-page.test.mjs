@@ -14,13 +14,13 @@ const SHELL = `
     <button id="viewSwitchWatches" class="view-switch-btn"><span>Watches</span></button>
   </nav>
   <div class="container"><div id="bookmarksContainer"></div></div>
-  <div id="shareModal" class="modal">
+  <dialog id="shareModal" class="modal">
     <div class="modal-content share-modal-content">
-      <button type="button" class="close" id="closeShareModal">×</button>
+      <button type="button" class="close close-button" id="closeShareModal" aria-label="Close dialog"></button>
       <h2 id="shareModalTitle"></h2>
       <div id="shareModalBody"></div>
     </div>
-  </div>
+  </dialog>
   <div id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
       <header class="wd-head">
@@ -47,7 +47,8 @@ function watch(extra = {}) {
 function boot({ watches = [], limits = null, user = true, path = "/app/watches", patch = null, captureIntervals = false } = {}) {
   const server = { watches, limits, calls: [] };
   const harness = loadScripts(
-    ["static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
+    ["static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js", "static/js/notices.js",
+      "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
     {
       body: SHELL,
       before(window) {
@@ -59,6 +60,7 @@ function boot({ watches = [], limits = null, user = true, path = "/app/watches",
           window.setInterval = fn => { window.__intervals.push(fn); return window.__intervals.length; };
         }
         window.App = { watch: {}, showPopup: vi.fn(), trackAppEvent: vi.fn(), openAuthModal: vi.fn() };
+        window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
         window.auth = user ? { currentUser: { uid: "watch-user", getIdToken: async () => "token" } } : { currentUser: null };
         window.__consensioAuthState = { known: true, uid: user ? "watch-user" : null };
         window.fetch = vi.fn(async (input, options = {}) => {
@@ -129,9 +131,13 @@ describe("Esc closes one layer (J1)", () => {
     document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(document.getElementById("watchDashboard").hidden).toBe(false);
     window.openWatchDialog("create");
-    expect(document.getElementById("shareModal").style.display).toBe("flex");
-    document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-    expect(document.getElementById("shareModal").style.display).toBe("none");
+    expect(document.getElementById("shareModal").open).toBe(true);
+    // The key goes to what has focus, inside the dialog; the dialog keeps it.
+    const pageEscape = vi.fn();
+    document.addEventListener("keydown", pageEscape);
+    document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(document.getElementById("shareModal").open).toBe(false);
+    expect(pageEscape).not.toHaveBeenCalled();
     expect(document.getElementById("watchDashboard").hidden).toBe(false);
     expect(window.location.pathname).toBe("/app/watches");
     expect(details.value).toBe("Only from a shop");
@@ -184,12 +190,12 @@ describe("New watch dialog", () => {
     const { window, document } = boot({ user: false, path: "/app" });
     window.openWatchDialog("create", { question: "Is the new iPhone out in Germany?" });
     expect(window.App.openAuthModal).toHaveBeenCalledWith("login", expect.anything(), "watch", expect.anything());
-    expect(document.getElementById("shareModal").style.display).not.toBe("flex");
+    expect(document.getElementById("shareModal").open).toBe(false);
     expect(JSON.parse(window.localStorage.getItem("consensio.watchAfterLogin.v1")).question)
       .toBe("Is the new iPhone out in Germany?");
     window.auth.currentUser = { uid: "new-user", getIdToken: async () => "token" };
     window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: { uid: "new-user" } }));
-    expect(document.getElementById("shareModal").style.display).toBe("flex");
+    expect(document.getElementById("shareModal").open).toBe(true);
     expect(document.querySelector(".watch-question-preview strong").textContent).toBe("Is the new iPhone out in Germany?");
     expect(window.localStorage.getItem("consensio.watchAfterLogin.v1")).toBeNull();
   });
@@ -283,15 +289,16 @@ describe("Cards change in place (D6, J8, J13, J14)", () => {
     expect(card.closest(".wd-section").dataset.section).toBe("active");
     expect(card.classList.contains("is-open")).toBe(true);
     expect(card.querySelector('[data-action="resume"]')).not.toBeNull();
-    const toast = document.getElementById("wdUndoToast");
-    expect(toast.textContent).toContain("Watch paused");
-    toast.querySelector(".wd-toast-undo").click();
+    // The app's one notice line (App.toast): a new line for every step.
+    const toast = () => document.querySelector("#appToasts .toast.is-shown");
+    expect(toast().textContent).toContain("Watch paused");
+    toast().querySelector(".toast-action").click();
     await vi.waitFor(() => expect(card.dataset.state).not.toBe("paused"));
 
     card.querySelector('.wd-settings-footer [data-action="delete"]').click();
-    expect(toast.textContent).toContain("Watch deleted");
+    expect(toast().textContent).toContain("Watch deleted");
     expect(server.calls.some(call => call[0] === "DELETE")).toBe(false);
-    toast.querySelector(".wd-toast-undo").click();
+    toast().querySelector(".toast-action").click();
     expect(server.calls.some(call => call[0] === "DELETE")).toBe(false);
     card.querySelector('.wd-settings-footer [data-action="delete"]').click();
     window.App.watchDashboard.commitPending();

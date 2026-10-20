@@ -124,8 +124,8 @@
 
   function closeConsensusActionsMenu() {
     if (!consensusMenuEl) return;
+    window.App?.popover?.closed(consensusMenuEl);
     consensusMenuEl.classList.remove("open");
-    consensusMenuEl.style.display = "none";
     document.querySelectorAll(".consensus-actions-wrapper.open").forEach(el => {
       el.classList.remove("open");
     });
@@ -153,7 +153,7 @@
       showPopup(successMessage);
       trackAppEvent("app_consensus_copied", { type: eventType });
     }).catch(() => {
-      alert("Copy to clipboard failed.");
+      window.App?.toast?.({ message: "Copy to clipboard failed.", tone: "error" });
     });
   }
 
@@ -210,7 +210,7 @@
 
       if (!mainText) {
         closeConsensusActionsMenu();
-        alert("No consensus available yet.");
+        showPopup("No consensus available yet.");
         return;
       }
 
@@ -234,7 +234,7 @@
 
       if (!citation) {
         closeConsensusActionsMenu();
-        alert("No citation available yet.");
+        showPopup("No citation available yet.");
         return;
       }
 
@@ -347,10 +347,21 @@
       closeConsensusActionsMenu();
     }
 
-    function openMenu() {
+    // One of the app's popovers (App.popover): it closes every other menu,
+    // comes out of "…" and goes back (overlays.css), and the keyboard moves
+    // through it like the account menu.
+    window.App?.popover?.register(menu, { close: () => closeMenu() });
+    window.App?.popover?.menuKeys(menu, {
+      items: () => Array.from(menu.querySelectorAll('[role="menuitem"]'))
+        .filter(item => item.getClientRects().length > 0),
+      close: () => closeMenu(),
+      opener: () => toggleBtn,
+    });
+
+    function openMenu({ focusFirst = false } = {}) {
       closeMenu();
 
-      menu.style.display = "block";
+      window.App?.popover?.opened(menu, { trigger: toggleBtn });
       menu.style.visibility = "hidden";
       menu.classList.add("open");
       actionsWrapper.classList.add("open");
@@ -366,6 +377,7 @@
       menu.style.left = `${left}px`;
       menu.style.visibility = "visible";
       toggleBtn.setAttribute("aria-expanded", "true");
+      if (focusFirst) window.App?.popover?.focusItem(menu, null, 0);
     }
 
     toggleBtn.addEventListener("click", (evt) => {
@@ -374,7 +386,7 @@
       if (isOpen) {
         closeMenu();
       } else {
-        openMenu();
+        openMenu({ focusFirst: evt.detail === 0 });
       }
     });
 

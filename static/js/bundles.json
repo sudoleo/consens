@@ -57,7 +57,28 @@
       "name": "auth",
       "kind": "classic",
       "defer": true,
+      "note": "The layers every module opens (dialogs, popovers, notices, App.confirm) and the auth watchdog. Before firebase.js, which opens the login dialog while it evaluates (a Google redirect coming back) and builds the account menu.",
       "files": [
+        {
+          "file": "static/js/motion.js",
+          "note": "App.motion: the motion tokens of foundation.css for script (ms, ease, reduced, leave). First: the overlay modules read it."
+        },
+        {
+          "file": "static/js/modal-dialog.js",
+          "note": "App.modalDialog: native <dialog> helper (focus in, Tab wrap, focus back, Escape, deliberate backdrop clicks) and App.closeIcon. Before app-ui.js (Settings, Help), feedback-dialog.js and firebase.js (login), which bind their dialogs at load time."
+        },
+        {
+          "file": "static/js/popover.js",
+          "note": "App.popover: one open popover at a time, direction from the trigger, menu keyboard. firebase.js (account menu) registers at load time."
+        },
+        {
+          "file": "static/js/notices.js",
+          "note": "App.toast (the one notice line; App.undoNotice forwards here), App.composerNotice (input mistakes at the composer)."
+        },
+        {
+          "file": "static/js/confirm-dialog.js",
+          "note": "App.confirm: the app's own question before something final, instead of window.confirm. Uses App.modalDialog."
+        },
         {
           "file": "static/js/auth-bootstrap.js",
           "note": "Same-origin watchdog: stays active even when the Firebase CDN modules cannot be imported. Must run before firebase.js."
@@ -81,10 +102,6 @@
       "defer": true,
       "note": "Everything deferred. app-init.js and app-dom-events.js used to sit at the end of <body>; deferred scripts only run after parsing, so their position in the document does not change execution order.",
       "files": [
-        {
-          "file": "static/js/modal-dialog.js",
-          "note": "App.modalDialog: native <dialog> helper (focus in and back, Escape, deliberate backdrop clicks). Before app-ui.js (Settings, Help) and feedback-dialog.js, which bind their dialogs with it at load time."
-        },
         "static/app-ui.js",
         {
           "file": "static/js/app-core.js",
@@ -96,8 +113,8 @@
         },
         "static/js/chat-scroll.js",
         {
-          "file": "static/js/undo-notice.js",
-          "note": "App.undoNotice: the shared \"… · Undo\" line (chat deletion, firebase.js). Used at call time only."
+          "file": "static/js/disclosure.js",
+          "note": "App.disclosure: every <details> opens and closes its height softly (one delegated click listener). Modules that move their own <details> stop the click."
         },
         "static/js/feature-access.js",
         "static/js/model-picker.js",
@@ -201,6 +218,10 @@
         {
           "file": "static/js/letter-clouds.js",
           "note": "App.letterClouds: the drifting letter clouds behind the empty start screen. Self-contained; follows body.is-hero and stops outside it."
+        },
+        {
+          "file": "static/js/tooltip.js",
+          "note": "App.tooltip: the one tooltip (title and data-tooltip; pointer, keyboard, tap on a mark). app-init.js calls init() last."
         },
         {
           "file": "static/js/app-init.js",

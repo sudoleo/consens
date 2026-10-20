@@ -122,8 +122,8 @@
     });
     $("feedbackButton")?.addEventListener("click", open);
     $("closeFeedbackModal")?.addEventListener("click", () => window.App.modalDialog?.close(dialog));
-    // The login dialog is not a <dialog> and would sit under this one:
-    // close first, then open it with the feedback button as its opener.
+    // One dialog at a time: close this one first, then open the login with
+    // the feedback button as its opener.
     $("feedbackLoginButton")?.addEventListener("click", () => {
       window.App.modalDialog?.close(dialog);
       window.App.openAuthModal?.("login", $("feedbackButton"), "feedback");

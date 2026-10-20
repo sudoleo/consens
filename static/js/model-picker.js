@@ -141,7 +141,8 @@
   }
 
   function animateResponseReorder(box, applyStateChange) {
-    if (!box || typeof box.animate !== "function") {
+    // "Reduce motion" moves nothing: the boxes change places at once (C10).
+    if (!box || typeof box.animate !== "function" || window.App.motion?.reduced?.()) {
       applyStateChange();
       return;
     }
@@ -160,8 +161,8 @@
         { transform: "translate(0, 0)", opacity: box.classList.contains("excluded") ? 0.72 : 1 }
       ],
       {
-        duration: 180,
-        easing: "cubic-bezier(0.2, 0, 0, 1)"
+        duration: window.App.motion?.ms?.("state") ?? 200,
+        easing: window.App.motion?.ease?.("standard") ?? "cubic-bezier(0.2, 0, 0, 1)"
       }
     );
   }
@@ -230,7 +231,10 @@
         box.title = checked ? "" : `${pref.key} is excluded. Click the checkmark to include it again.`;
         const excludeBtn = box.querySelector(".exclude-btn");
         if (excludeBtn) {
-          excludeBtn.textContent = checked ? "×" : "✓";
+          // Drawn marks, not the glyphs of a fallback font (Apple audit G3).
+          excludeBtn.innerHTML = checked
+            ? '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg>'
+            : '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 8.5l3 3 6-7"/></svg>';
           excludeBtn.title = checked ? "Exclude answer" : "Include answer";
           excludeBtn.setAttribute("aria-label", checked ? "Exclude answer" : "Include answer");
         }
@@ -1267,6 +1271,7 @@
       }
     }
 
+    if (state.menu.classList.contains("is-open")) window.App.popover?.closed(state.menu);
     state.menu.classList.remove("is-open");
     state.host.classList.remove("is-expanded", "is-open");
     state.host.setAttribute("aria-expanded", "false");
@@ -1360,6 +1365,11 @@
 
     if (state.companion && level === "companion") enterCompanion(state);
     else renderCustomModelPicker(select);
+    // One of the app's popovers (App.popover): every other menu closes, and
+    // the menu comes out of its chip (overlays.css).
+    if (!state.menu.classList.contains("is-open")) {
+      window.App.popover?.opened(state.menu, { trigger: state.displayButton || state.host });
+    }
     state.host.classList.add("is-expanded", "is-open");
     state.host.setAttribute("aria-expanded", "true");
     state.menu.classList.add("is-open");
@@ -1473,6 +1483,7 @@
     }
 
     host.appendChild(menu);
+    window.App.popover?.register(menu, { close: () => collapseExpandedModelPicker(select) });
     select._customModelPicker = {
       host,
       menu,

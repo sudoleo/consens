@@ -18,8 +18,11 @@ import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 
 const bundles = JSON.parse(readFileSync(path.join(ROOT, "static/js/bundles.json"), "utf8"));
 const APP_SCRIPTS = bundles.groups
-  .filter((group) => group.kind === "classic" && ["head", "app"].includes(group.name))
-  .flatMap((group) => group.files.map((entry) => (typeof entry === "string" ? entry : entry.file)));
+  .filter((group) => group.kind === "classic" && ["head", "auth", "app"].includes(group.name))
+  .flatMap((group) => group.files.map((entry) => (typeof entry === "string" ? entry : entry.file)))
+  // The overlay modules of the auth group (dialogs, popovers, notices) are
+  // part of the app; the auth watchdog needs the Firebase module it watches.
+  .filter((file) => !file.endsWith("auth-bootstrap.js"));
 
 // Nur die Stellen aus templates/index.html, die initApp ohne "?." anfasst
 // oder die hier geprueft werden.

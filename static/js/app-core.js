@@ -394,23 +394,12 @@
     );
   }
 
-  // Kurzlebiges Hinweis-Popup (cross-cutting UI-Helfer, von vielen Clustern genutzt).
-  function showPopup(message) {
-    const popup = document.createElement('div');
-    popup.className = 'explanation-popup';
-    popup.innerText = message;
-    document.body.appendChild(popup);
-
-    setTimeout(() => {
-      popup.style.opacity = '1';
-    }, 100);
-
-    setTimeout(() => {
-      popup.style.opacity = '0';
-      setTimeout(() => {
-        popup.remove();
-      }, 300);
-    }, 3000);
+  // The short notice of ~100 callers: a thin forward to the one notice line
+  // (App.toast, notices.js), which queues, reads out and stays as long as it
+  // takes to read. `options` passes on tone, action, duration.
+  function showPopup(message, options = {}) {
+    if (typeof window.App.toast === "function") return window.App.toast({ ...options, message });
+    return null;
   }
 
   // The centered hero hides answer targets. The direct-comparison preview
@@ -469,7 +458,7 @@
       composerGlide = composer.animate([
         { translate: `${dx}px ${dy}px` },
         { translate: "0px 0px" }
-      ], { duration: 420, easing: "cubic-bezier(.22, 1, .36, 1)" });
+      ], { duration: window.App.motion?.ms("layer") ?? 320, easing: window.App.motion?.ease("out") ?? "cubic-bezier(0.22, 1, 0.36, 1)" });
     });
   }
 

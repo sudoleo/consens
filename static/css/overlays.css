@@ -1,0 +1,415 @@
+/* ==========================================================================
+   Overlays — every layer above the page, and how it comes and goes
+   (Apple audit C1, C4, E3, G1)
+
+   1. Scrim     one colour behind every modal layer (--scrim), never a blur
+   2. Dialog    one surface and one way in and out for every
+                <dialog class="modal"> (App.modalDialog, modal-dialog.js)
+   3. Popovers  menus and cards at a control come out of it and go back
+                (App.popover, popover.js)
+   4. Toast     the one notice line (App.toast, notices.js)
+   5. Confirm   App.confirm's question (confirm-dialog.js)
+
+   Entrances run from @starting-style; exits keep the layer painted with
+   `display`/`overlay` transitions (allow-discrete), so script opens and
+   closes synchronously and the motion is CSS's alone. Engines without
+   these features show and hide at once, as before.
+   Loaded after every component layer.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Scrim
+   -------------------------------------------------------------------------- */
+dialog.modal,
+.memory-edit-backdrop,
+.agent-google-overlay,
+.claim-sheet-backdrop {
+  background: var(--scrim);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+dialog.modal::backdrop {
+  background: transparent;
+}
+
+.answer-reader-dialog::backdrop {
+  background: var(--scrim, rgba(18, 19, 21, 0.32));
+}
+
+/* --------------------------------------------------------------------------
+   2. Dialog
+
+   The <dialog> is the full-screen layer and carries the scrim itself (its
+   ::backdrop stays clear), so the scrim fades with it, also in engines that
+   take a closing dialog out of the top layer at once. The surface inside is
+   the same for every dialog: raised, lifted, one radius, one hairline.
+   -------------------------------------------------------------------------- */
+dialog.modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-state) var(--ease-in),
+    display var(--dur-state) allow-discrete,
+    overlay var(--dur-state) allow-discrete;
+}
+
+dialog.modal[open] {
+  display: block;
+  opacity: 1;
+  pointer-events: auto;
+  transition-duration: var(--dur-layer);
+  transition-timing-function: var(--ease-out);
+}
+
+:is(dialog.modal, .memory-edit-backdrop, .agent-google-overlay) > :is(.modal-content, .memory-edit-dialog, .agent-google-sheet) {
+  box-sizing: border-box;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--raise);
+  box-shadow: var(--lift);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+dialog.modal > .modal-content {
+  translate: 0 8px;
+  scale: 0.98;
+  transition:
+    translate var(--dur-state) var(--ease-in),
+    scale var(--dur-state) var(--ease-in);
+}
+
+dialog.modal[open] > .modal-content {
+  translate: none;
+  scale: none;
+  transition-duration: var(--dur-layer);
+  transition-timing-function: var(--ease-out);
+}
+
+@starting-style {
+  dialog.modal[open] { opacity: 0; }
+  dialog.modal[open] > .modal-content { translate: 0 8px; scale: 0.98; }
+}
+
+/* The close cross (foundation.css .close-button) sits in the same corner of
+   every dialog that has no header row for it. */
+dialog.modal > .modal-content { position: relative; }
+
+dialog.modal > .modal-content > .close-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+}
+
+/* The same way in and out for the layers that are not (yet) a <dialog>:
+   the Memory dialog, the Gmail & Calendar sheet and the sheet behind a
+   sentence card on a phone. */
+.memory-edit-backdrop,
+.agent-google-overlay,
+.claim-sheet-backdrop {
+  animation: none;
+  opacity: 1;
+  transition:
+    opacity var(--dur-layer) var(--ease-out),
+    display var(--dur-layer) allow-discrete;
+}
+
+.memory-edit-backdrop[hidden],
+.agent-google-overlay[hidden],
+.claim-sheet-backdrop[hidden] {
+  opacity: 0;
+  transition-duration: var(--dur-state);
+  transition-timing-function: var(--ease-in);
+}
+
+:is(.memory-edit-backdrop > .memory-edit-dialog, .agent-google-overlay > .agent-google-sheet) {
+  animation: none;
+  transition:
+    translate var(--dur-layer) var(--ease-out),
+    scale var(--dur-layer) var(--ease-out);
+}
+
+:is(.memory-edit-backdrop[hidden] > .memory-edit-dialog, .agent-google-overlay[hidden] > .agent-google-sheet) {
+  translate: 0 8px;
+  scale: 0.98;
+  transition-duration: var(--dur-state);
+  transition-timing-function: var(--ease-in);
+}
+
+@starting-style {
+  .memory-edit-backdrop:not([hidden]),
+  .agent-google-overlay:not([hidden]),
+  .claim-sheet-backdrop:not([hidden]) { opacity: 0; }
+  .memory-edit-backdrop:not([hidden]) > .memory-edit-dialog,
+  .agent-google-overlay:not([hidden]) > .agent-google-sheet { translate: 0 8px; scale: 0.98; }
+}
+
+/* The answer reader: a dialog over the page, or docked at the side. */
+.answer-reader-dialog {
+  opacity: 0;
+  translate: var(--reader-enter-x, 0px) var(--reader-enter-y, 8px);
+  transition:
+    opacity var(--dur-state) var(--ease-in),
+    translate var(--dur-state) var(--ease-in),
+    display var(--dur-state) allow-discrete,
+    overlay var(--dur-state) allow-discrete;
+}
+
+.answer-reader-dialog[open] {
+  animation: none;
+  opacity: 1;
+  translate: none;
+  transition-duration: var(--dur-layer);
+  transition-timing-function: var(--ease-out);
+}
+
+.answer-reader-dialog.is-docked {
+  --reader-enter-x: 16px;
+  --reader-enter-y: 0px;
+}
+
+.answer-reader-dialog::backdrop {
+  animation: none;
+  opacity: 0;
+  transition:
+    opacity var(--dur-state) var(--ease-in),
+    display var(--dur-state) allow-discrete,
+    overlay var(--dur-state) allow-discrete;
+}
+
+.answer-reader-dialog[open]::backdrop {
+  opacity: 1;
+  transition-duration: var(--dur-layer);
+  transition-timing-function: var(--ease-out);
+}
+
+@starting-style {
+  .answer-reader-dialog[open] { opacity: 0; translate: var(--reader-enter-x, 0px) var(--reader-enter-y, 8px); }
+  .answer-reader-dialog[open]::backdrop { opacity: 0; }
+}
+
+/* --------------------------------------------------------------------------
+   3. Popovers
+
+   They come out of their control: 4px from its side and from 98 %, the
+   side and origin set by App.popover.aim() (above or below the control).
+   In with --ease-out, back faster with --ease-in. A menu that is removed
+   when it closes leaves through .is-leaving (App.popover.leave).
+   -------------------------------------------------------------------------- */
+:is(.attach-menu, .email-popup, .model-picker-menu, .sidebar-quota,
+  .consensus-actions-menu, .claim-popover, .bookmark-menu, .agent-files-menu,
+  .memory-selection-menu) {
+  transform-origin: var(--popover-origin-x, 50%) var(--popover-origin-y, 0%);
+  transition-property: opacity, translate, scale, display, overlay;
+  transition-duration: var(--dur-state);
+  transition-timing-function: var(--ease-out);
+  transition-behavior: allow-discrete;
+}
+
+:is(.attach-menu[hidden], .email-popup[hidden], .model-picker-menu:not(.is-open),
+  .sidebar-quota:not(.is-open), .consensus-actions-menu:not(.open),
+  .claim-popover[hidden], .agent-files-menu[hidden], .memory-selection-menu[hidden],
+  [data-popover].is-leaving) {
+  opacity: 0;
+  translate: 0 var(--popover-shift, -4px);
+  scale: 0.98;
+  pointer-events: none;
+  transition-duration: var(--dur-press);
+  transition-timing-function: var(--ease-in);
+}
+
+@starting-style {
+  :is(.attach-menu:not([hidden]), .email-popup:not([hidden]), .model-picker-menu.is-open,
+    .sidebar-quota.is-open, .consensus-actions-menu.open, .claim-popover:not([hidden]),
+    .bookmark-menu, .agent-files-menu:not([hidden]), .memory-selection-menu:not([hidden])) {
+    opacity: 0;
+    translate: 0 var(--popover-shift, -4px);
+    scale: 0.98;
+  }
+}
+
+/* On a phone the sentence card is a sheet in the middle of the screen; it
+   rises like a dialog. */
+.claim-popover.is-modal {
+  --popover-shift: 8px;
+  --popover-origin-y: 50%;
+}
+
+/* --------------------------------------------------------------------------
+   4. Toast (notices.js)
+
+   Ink on the page colour, inverted; above the composer, the keyboard and
+   the safe area (--toast-lift). One at a time; it rises 8px in and goes
+   the same way out. Inside an open dialog (notices.js moves the region
+   there) it stays above the scrim and its buttons stay usable.
+   -------------------------------------------------------------------------- */
+.toast-region {
+  position: fixed;
+  left: 50%;
+  bottom: max(calc(var(--toast-lift, 0px) + 8px), calc(env(safe-area-inset-bottom, 0px) + 16px));
+  z-index: calc(var(--z-modal) + 10);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  translate: -50% 0;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 4px 12px;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 9px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--ink);
+  color: var(--ground);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  box-shadow: var(--lift);
+  opacity: 0;
+  translate: 0 8px;
+  pointer-events: auto;
+  transition:
+    opacity var(--dur-state) var(--ease-in),
+    translate var(--dur-state) var(--ease-in);
+}
+
+.toast.is-shown {
+  opacity: 1;
+  translate: none;
+  transition-timing-function: var(--ease-out);
+}
+
+.toast:has(> .toast-action:not([hidden]), > .toast-close:not([hidden])) {
+  padding-block: 4px;
+  padding-right: 4px;
+}
+
+.toast[data-tone="error"]::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--dispute);
+}
+
+.toast-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toast-action {
+  flex: none;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.toast-action[hidden],
+.toast-close[hidden] {
+  display: none;
+}
+
+.toast-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.toast .close-button {
+  color: color-mix(in srgb, var(--ground) 72%, transparent);
+}
+
+@media (hover: hover) {
+  .toast-action:hover:not(:disabled),
+  .toast .close-button:hover {
+    background: color-mix(in srgb, var(--ground) 14%, transparent);
+    color: var(--ground);
+  }
+}
+
+.toast :is(.toast-action, .close-button):focus-visible {
+  outline: 2px solid var(--ground);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .toast-action { min-height: 44px; }
+}
+
+@media (forced-colors: active) {
+  .toast { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+}
+
+/* An input mistake, said at the composer (App.composerNotice). */
+.composer-input-notice[hidden] {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   5. Confirm (App.confirm)
+   -------------------------------------------------------------------------- */
+.confirm-dialog .confirm-modal-content {
+  margin: clamp(24px, 18vh, 160px) auto;
+}
+
+.confirm-dialog p {
+  white-space: pre-line;
+}
+
+.confirm-dialog .confirm-accept.is-danger {
+  border-color: var(--dispute);
+  background: var(--dispute);
+  color: #fff;
+}
+
+.dark-mode .confirm-dialog .confirm-accept.is-danger {
+  color: var(--ground);
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion: the layers still fade (a fade is not a journey), they
+   only stop travelling and growing.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  dialog.modal > .modal-content,
+  .memory-edit-backdrop > .memory-edit-dialog,
+  .agent-google-overlay > .agent-google-sheet,
+  .answer-reader-dialog,
+  .toast,
+  :is(.attach-menu, .email-popup, .model-picker-menu, .sidebar-quota,
+    .consensus-actions-menu, .claim-popover, .bookmark-menu, .agent-files-menu,
+    .memory-selection-menu) {
+    translate: none !important;
+    scale: none !important;
+  }
+}

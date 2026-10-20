@@ -54,7 +54,7 @@
 }
 
 .theme-toggle:active {
-  transform: translateY(1px);
+  transform: scale(var(--press-scale));
 }
 
 .theme-icon {
@@ -136,7 +136,7 @@
   right: 0;
   bottom: 0;
   background-color: var(--slider-bg);
-  transition: var(--dur-layer);
+  transition: var(--dur-layer) var(--ease-standard);
   border-radius: var(--radius-xl);
 }
 
@@ -148,7 +148,7 @@
   left: 3px;
   bottom: 3px;
   background-color: white;
-  transition: var(--dur-layer);
+  transition: var(--dur-layer) var(--ease-standard);
   border-radius: 50%;
 }
 
@@ -163,33 +163,35 @@ input:checked+.slider:before {
 /* --------------------------------------------------------------------------
    Tooltips
    -------------------------------------------------------------------------- */
+/* The one tooltip (tooltip.js): the notice line's material, small; it fades
+   in beside its mark and out again. */
 .global-tooltip {
   position: fixed;
   z-index: var(--z-tooltip);
-  background-color: #222;
-  color: #fff;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+  max-width: min(260px, calc(100vw - 16px));
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--ink);
+  color: var(--ground);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
   font-weight: var(--font-weight-regular);
-  max-width: 220px;
-  pointer-events: none;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-  border: 1px solid #444;
-  opacity: 0;
-  transition: opacity var(--dur-state) var(--ease-standard);
+  line-height: var(--line-height-ui);
   white-space: normal;
+  box-shadow: var(--lift);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-press) var(--ease-in);
 }
 
 .global-tooltip.visible {
   opacity: 1;
+  transition-duration: var(--dur-state);
+  transition-timing-function: var(--ease-out);
 }
 
-.dark-mode .global-tooltip {
-  background-color: #333;
-  border-color: #666;
-  color: #eee;
+@media (forced-colors: active) {
+  .global-tooltip { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
 }
 
 h2[data-tooltip] {

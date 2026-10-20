@@ -191,7 +191,7 @@
       // ist Ehrlichkeit ueber die Benachrichtigung: nur bei einer echten
       // Aenderung, sonst nie. Genau das steht neben dem Knopf.
       nudge.innerHTML = `
-        <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&#10005;</button>
+        <button type="button" class="watch-feature-nudge-close close-button" aria-label="Dismiss new feature tip"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
         <span class="watch-feature-nudge-label">New</span>
         <strong>Keep this answer current</strong>
         <span class="watch-feature-nudge-copy">We re-check it across model families and write only when a source moves the answer.</span>
@@ -295,7 +295,7 @@
     const nudge = document.getElementById("watchFeatureNudge");
     if (!nudge) return;
     nudge.innerHTML = `
-      <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss">&#10005;</button>
+      <button type="button" class="watch-feature-nudge-close close-button" aria-label="Dismiss"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       <span class="watch-feature-nudge-label is-active">Watching</span>
       <strong>You are set</strong>
       <span class="watch-feature-nudge-copy">First check: ${escapeHtml(formatWatchSchedule(watch))}. We only write when a source moves the answer.</span>
@@ -328,7 +328,7 @@
       return;
     }
     const { modal } = els();
-    if (modal) modal.style.display = "none";
+    if (modal?.open) modal.close();
   }
 
   function popup(message) {
@@ -340,7 +340,7 @@
       return window.App.sharedModal.isCurrent(intent);
     }
     const { modal } = els();
-    return modal?.style.display === "flex"
+    return Boolean(modal?.open)
       && modal.classList.contains("is-watch-dialog");
   }
 
@@ -867,7 +867,7 @@
       modalIntent = window.App.sharedModal.open("watch");
     } else {
       modal.classList.add("is-watch-dialog");
-      modal.style.display = "flex";
+      if (!modal.open) modal.showModal?.();
     }
     // The state belongs to the button, not to an error after the form (J17):
     // a question that is already watched opens as the watch it is.

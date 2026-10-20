@@ -909,13 +909,14 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         expect(page.locator("#agentModelDropdown")).to_have_value(CATALOG["default_model_id"])
         page.evaluate("() => { App.agentChat.render(); App.agentChat.render(); }")
         assert page.evaluate("() => App.userSettings.get('agent_model').model_id") == CATALOG["default_model_id"]
-        expect(page.locator(".explanation-popup")).to_have_count(1)
+        # One line in the app's notice system (App.toast), gone once read.
+        expect(page.locator("#appToasts .toast")).to_have_count(1)
         expect(page.locator("#agentModelNotice")).to_have_count(0)
         label = page.locator(".agent-model-picker .model-picker-display-text")
         expect(label).to_have_text("DeepSeek V4.1 Flash")
         assert label.evaluate("el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth + 1")
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
-        expect(page.locator(".explanation-popup")).to_have_count(0)
+        expect(page.locator("#appToasts .toast")).to_have_count(0, timeout=12000)
         _snapshot(page, f"agent-repaired-selection-{width}")
         page.locator("#questionInput").fill(turn["question"])
         page.locator("#sendButton").click()

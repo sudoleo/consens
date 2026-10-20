@@ -363,7 +363,7 @@
   transform: rotate(-90deg);
 }
 .chat-input-container .attach-menu .attach-menu-switch { grid-column: 3; width: 34px; height: 20px; }
-.chat-input-container .attach-menu .attach-menu-switch .slider::before { width: 16px; height: 16px; left: 1px; bottom: 1px; }
+.chat-input-container .attach-menu .attach-menu-switch .slider::before { width: 16px; height: 16px; left: 2px; bottom: 2px; }
 .chat-input-container .attach-menu .attach-menu-switch input:checked + .slider::before { transform: translateX(14px); }
 .chat-input-container .attach-menu .attach-menu-divider { height: 1px; margin: 5px 10px; background: var(--line); }
 
@@ -434,38 +434,38 @@ body.is-hero:not(.direct-comparison-active) .composer-starters {
 .input-section:has(#questionInput:not(:placeholder-shown)) > .composer-starters {
   visibility: hidden;
   pointer-events: none;
-  transition: visibility 0s linear 340ms;
+  transition: visibility 0s var(--ease-linear) var(--dur-layer);
 }
 body.is-hero:not(.direct-comparison-active) .composer-starter {
   transition:
-    opacity 220ms var(--ease-out) calc(130ms + var(--starter-k, 0) * 35ms),
-    transform 220ms var(--ease-out) calc(130ms + var(--starter-k, 0) * 35ms),
+    opacity var(--dur-state) var(--ease-out) calc(var(--dur-press) + var(--starter-k, 0) * var(--dur-press) / 4),
+    transform var(--dur-state) var(--ease-out) calc(var(--dur-press) + var(--starter-k, 0) * var(--dur-press) / 4),
     background-color var(--dur-state) var(--ease-standard),
     color var(--dur-state) var(--ease-standard);
 }
 .input-section:has(#questionInput:not(:placeholder-shown)) > .composer-starters > .composer-starter {
   opacity: 0;
   transform: translateY(-4px) scale(0.98);
-  transition-duration: 140ms;
+  transition-duration: var(--dur-press);
   transition-timing-function: var(--ease-out);
-  transition-delay: calc(var(--starter-k, 0) * 20ms);
+  transition-delay: calc(var(--starter-k, 0) * var(--dur-press) / 6);
 }
 .composer-starter:nth-child(2 of :not([hidden])) { --starter-k: 1; }
 .composer-starter:nth-child(3 of :not([hidden])) { --starter-k: 2; }
 .composer-starter:nth-child(4 of :not([hidden])) { --starter-k: 3; }
 .composer-starter:nth-child(n + 5 of :not([hidden])) { --starter-k: 4; }
 body.is-hero:not(.direct-comparison-active) .input-section > .app-footer {
-  transition: transform 340ms var(--ease-standard);
+  transition: transform var(--dur-layer) var(--ease-standard);
 }
 body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .app-footer {
   transform: translateY(calc(-1 * var(--starters-room, 0px)));
-  transition-delay: 120ms;
+  transition-delay: var(--dur-press);
 }
 /* Reduced motion: the examples only fade; the note jumps, after they are gone. */
 @media (prefers-reduced-motion: reduce) {
   .input-section:has(#questionInput:not(:placeholder-shown)) > .composer-starters > .composer-starter { transform: none; }
   body.is-hero:not(.direct-comparison-active) .input-section > .app-footer { transition-duration: 0s; }
-  body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .app-footer { transition-delay: 220ms; }
+  body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .app-footer { transition-delay: var(--dur-state); }
 }
 .composer-starter {
   padding: 7px 14px;

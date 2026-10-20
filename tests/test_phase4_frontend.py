@@ -217,12 +217,15 @@ def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
     firebase = read("static/firebase.js")
     landing = read("templates/landing.html")
 
-    assert 'id="loginModal" class="modal" role="dialog" aria-modal="true"' in template
-    assert 'aria-labelledby="authTitle"' in template
+    # A native <dialog> through App.modalDialog: the page behind is inert,
+    # Escape closes it, Tab wraps inside and focus goes back to the opener.
+    modal_dialog = read("static/js/modal-dialog.js")
+    assert '<dialog id="loginModal" class="modal" aria-labelledby="authTitle">' in template
     assert 'id="closeLoginModal" aria-label="Close login dialog"' in template
-    assert 'if (event.key === "Escape")' in firebase
-    assert "authModalReturnFocus.focus" in firebase
-    assert 'event.key !== "Tab"' in firebase
+    assert "window.App.modalDialog.open(modal, { opener: trigger || null, focus: initialFocus })" in firebase
+    assert "keepOpen: authDialogHasTyping" in firebase
+    assert "function trapTab(dialog, event)" in modal_dialog
+    assert "opener.focus({ preventScroll: true })" in modal_dialog
     # Seit 2026-08-15 sind die Marken farbige Textmarker statt Linien unter
     # dem Satz (User-Vorgabe: eine Unterstreichung liest sich wie ein Link).
     # Die Legende muss von Farben sprechen, nicht mehr von Linienstaerken.

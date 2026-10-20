@@ -29,16 +29,18 @@ const BODY = `
 <span id="proBadge" class="pro-badge"></span>
 <a id="upgradeLink"></a>
 <label class="switch attach-menu-switch"><input type="checkbox" id="reasoningToggle"></label>
-<div id="loginModal" style="display:none"><input id="loginEmail"></div>
-<div id="proFeatureModal" style="display:none">
+<dialog id="loginModal" class="modal"><input id="loginEmail"></dialog>
+<dialog id="proFeatureModal" class="modal">
   <span id="proModalFeatureName"></span><p id="proModalDescription"></p>
-</div>
+</dialog>
 `;
 
 function boot() {
   const harness = loadScripts(
     [
       "static/js/app-state.js",
+      "static/js/motion.js",
+      "static/js/modal-dialog.js",
       "static/js/app-core.js",
       "static/js/attachments.js",
       "static/js/user-tier.js"
@@ -96,7 +98,7 @@ describe("attachment gate per tier", () => {
     expect(harness.window.isUserPlus).toBe(false);
     clickUpload(harness);
     expect(harness.gated).toEqual([]);
-    expect(harness.document.getElementById("loginModal").style.display).toBe("none");
+    expect(harness.document.getElementById("loginModal").open).toBe(false);
   });
 
   it("asks a guest to sign in instead of opening the picker", () => {
@@ -104,7 +106,7 @@ describe("attachment gate per tier", () => {
     harness.window.auth = { currentUser: null };
     clickUpload(harness);
     expect(harness.gated).toEqual([]);
-    expect(harness.document.getElementById("loginModal").style.display).toBe("block");
+    expect(harness.document.getElementById("loginModal").open).toBe(true);
   });
 
   it("names the tier on the badge and drops the Free-only upgrade link", () => {
