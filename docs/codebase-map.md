@@ -1931,8 +1931,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nur den DOM, nicht Markdown oder Review-Hash; `agent-review.js` liest die
   Quellen einer Pille über `sourceGroup` zurück.
   Hover/Fokus auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
-  Snippet); bei einer Gruppen-Pille eine Zeile je Quelle. Klick öffnet die
-  (erste) Quelle. Copy consensus/Copy citation lesen Pillen über
+  Snippet); bei einer Gruppen-Pille eine Zeile je Quelle. Der Teaser ist ein
+  Tooltip; zum Öffnen gibt es seit 2026-10-20 (Apple-Audit F6)
+  `window.App.sourceSheet` (`sources.js`, `#sourceSheet`, `{open(pill,
+  {asModal}), close, isOpen}`): auf Touch öffnet schon der erste Tipp auf
+  jede Pille die Liste aller Quellen dahinter (eine einzelne mit Auszug),
+  jede Zeile ein Link in neuem Tab, 44 px hoch; am Handy (≤ 768 px) als Karte
+  in der Bildmitte über dem Scrim (Backdrop mit `.claim-sheet-backdrop`, also
+  dieselbe Bewegung, Scroll-Sperre und `touch-action`), sonst als Popover an
+  der Pille. Mit Maus oder Tastatur öffnet eine Gruppen-Pille dieselbe Liste
+  an der Pille (erste Quelle fokussiert, Pfeile, Escape gibt den Fokus an die
+  Pille zurück); eine einzelne Pille öffnet ihre Quelle wie bisher. Teil von
+  `App.popover` (ein offener Layer), Bewegung aus `overlays.css`.
+  Copy consensus/Copy citation lesen Pillen über
   `window.App.sourceRefs.plainText/urls` („ (uci.org, pcs.com)“). Share- und
   Topic-Seiten rendern serverseitig aus Markdown und sind nicht betroffen.
   `normalizeTerminalSourceTagOrder` korrigiert Modell-Output der Form

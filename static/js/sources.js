@@ -999,12 +999,214 @@ const sourceTeaser = (function () {
   return { hide };
 })();
 
+// ---- Every source behind a pill, to open (Apple audit F6) ----------------
+// The teaser above is a tooltip: it names, it cannot be clicked. A grouped
+// pill ("uci.org +2") opened only its first source, and on a phone the
+// teaser never showed at all: a tap went straight to a new tab. Now
+//   - on touch the first tap on any pill opens this list of every source
+//     behind it (a single one with its excerpt), each one a link;
+//   - with a mouse or the keyboard a grouped pill opens the same list at the
+//     pill; a single pill still opens its source, the teaser previews it.
+// On a phone it is a card in the middle of the screen over the scrim, like
+// the sentence card (the same backdrop, so the page behind holds still:
+// foundation.css), elsewhere a popover at the pill. It is one of
+// App.popover's layers: opening another closes it; Escape, a tap beside it
+// or the cross close it, and focus goes back to the pill.
+const sourceSheet = (function () {
+  let root = null;
+  let backdrop = null;
+  let opener = null;
+  let modal = false;
+  let lastPointer = "";
+
+  const phone = () => Boolean(window.matchMedia?.("(max-width: 768px)").matches);
+
+  function ensure() {
+    if (root?.isConnected) return root;
+    backdrop = document.createElement("div");
+    backdrop.className = "claim-sheet-backdrop source-sheet-backdrop";
+    backdrop.hidden = true;
+    backdrop.addEventListener("click", () => close());
+    root = document.createElement("div");
+    root.id = "sourceSheet";
+    root.className = "source-sheet";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-labelledby", "sourceSheetTitle");
+    root.hidden = true;
+    root.addEventListener("keydown", onKeyDown);
+    // A source chosen opens in its own tab; the list has done its job.
+    root.addEventListener("click", event => {
+      if (event.target.closest?.(".source-sheet-link")) close({ restoreFocus: false });
+    });
+    document.body.append(backdrop, root);
+    window.App?.popover?.register(root, { close: () => close({ restoreFocus: false }) });
+    return root;
+  }
+
+  function entriesOf(ref) {
+    const group = (ref.sourceGroup || []).filter(entry => entry && entry.src);
+    if (group.length) return group;
+    const src = Object.prototype.hasOwnProperty.call(ref, "sourceData") ? ref.sourceData : null;
+    const number = sourceNumberFromToken(ref.dataset.sourceNumber);
+    return src ? [{ src, number, token: String(number || "") }] : [];
+  }
+
+  function item(entry, single) {
+    const li = document.createElement("li");
+    li.className = "source-sheet-item";
+    const href = getSafeSourceHref(entry.src);
+    const box = document.createElement(href ? "a" : "div");
+    box.className = href ? "source-sheet-link" : "source-sheet-entry";
+    if (href) {
+      box.href = href;
+      box.target = "_blank";
+      box.rel = "noopener noreferrer";
+    }
+    const label = getSourcePillLabel(entry.src, entry.token);
+    const meta = document.createElement("span");
+    meta.className = "source-sheet-meta";
+    const icon = createSourceRefIcon(entry.src, label);
+    icon.classList.add("source-sheet-icon");
+    const host = document.createElement("span");
+    host.className = "source-sheet-host";
+    host.textContent = label;
+    meta.append(icon, host);
+    const title = document.createElement("span");
+    title.className = "source-sheet-name";
+    title.textContent = getSourceTitle(entry.src, label);
+    box.append(meta, title);
+    const snippet = single && (entry.src.snippet || entry.src.text);
+    if (snippet) {
+      const text = document.createElement("span");
+      text.className = "source-sheet-snippet";
+      text.textContent = String(snippet);
+      box.append(text);
+    }
+    li.append(box);
+    return li;
+  }
+
+  function focusables() {
+    return root ? Array.from(root.querySelectorAll(".source-sheet-close, .source-sheet-link")) : [];
+  }
+
+  function place(ref) {
+    root.style.left = root.style.top = root.style.width = "";
+    if (modal) return;
+    const rect = ref.getBoundingClientRect();
+    const width = Math.min(320, window.innerWidth - 24);
+    root.style.width = width + "px";
+    const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12));
+    root.style.left = Math.round(left + window.scrollX) + "px";
+    const height = root.offsetHeight;
+    const below = rect.bottom + 8 + height <= window.innerHeight - 12 || rect.top - 8 - height < 12;
+    root.style.top = Math.round((below ? rect.bottom + 8 : rect.top - 8 - height) + window.scrollY) + "px";
+    root.style.setProperty("--popover-shift", below ? "-4px" : "4px");
+    root.style.setProperty("--popover-origin-y", below ? "0%" : "100%");
+  }
+
+  function open(ref, { asModal = false } = {}) {
+    const entries = entriesOf(ref);
+    if (!entries.length) return false;
+    ensure();
+    if (!root.hidden) close({ restoreFocus: false });
+    sourceTeaser.hide();
+    opener = ref;
+    modal = asModal;
+    root.replaceChildren();
+    const head = document.createElement("div");
+    head.className = "source-sheet-head";
+    const heading = document.createElement("span");
+    heading.id = "sourceSheetTitle";
+    heading.className = "source-sheet-heading";
+    heading.textContent = entries.length > 1 ? `${entries.length} sources` : "Source";
+    const cross = document.createElement("button");
+    cross.type = "button";
+    cross.className = "close-button source-sheet-close";
+    cross.setAttribute("aria-label", "Close sources");
+    cross.innerHTML = window.App?.closeIcon?.() || "";
+    cross.addEventListener("click", () => close());
+    head.append(heading, cross);
+    const list = document.createElement("ul");
+    list.className = "source-sheet-list";
+    entries.forEach(entry => list.append(item(entry, entries.length === 1)));
+    root.append(head, list);
+    root.classList.toggle("is-modal", modal);
+    if (modal) root.setAttribute("aria-modal", "true");
+    else root.removeAttribute("aria-modal");
+    window.App?.popover?.opened(root, { trigger: modal ? null : ref });
+    root.hidden = false;
+    backdrop.hidden = !modal;
+    place(ref);
+    ref.setAttribute("aria-expanded", "true");
+    // In a card over the page the cross takes focus (like the sentence
+    // card); at the pill the first source does, as in a menu.
+    (modal ? cross : root.querySelector(".source-sheet-link") || cross).focus({ preventScroll: true });
+    setTimeout(() => document.addEventListener("pointerdown", onOutside, true), 0);
+    return true;
+  }
+
+  function close({ restoreFocus = true } = {}) {
+    if (!root || root.hidden) return;
+    window.App?.popover?.closed(root);
+    root.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    document.removeEventListener("pointerdown", onOutside, true);
+    const back = opener;
+    opener = null;
+    back?.removeAttribute("aria-expanded");
+    if (restoreFocus && back?.isConnected) back.focus({ preventScroll: true });
+  }
+
+  function onOutside(event) {
+    if (!root || root.hidden || modal) return;
+    if (root.contains(event.target) || event.target === opener || opener?.contains(event.target)) return;
+    close({ restoreFocus: false });
+  }
+
+  function onKeyDown(event) {
+    if (event.defaultPrevented || event.isComposing) return;
+    const items = focusables();
+    const index = items.indexOf(document.activeElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      items[(index + step + items.length) % items.length]?.focus();
+    } else if (event.key === "Tab") {
+      // The card keeps the focus inside; at the pill Tab moves on and closes.
+      if (!modal) { close({ restoreFocus: false }); return; }
+      event.preventDefault();
+      items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length]?.focus();
+    }
+  }
+
+  document.addEventListener("pointerdown", event => { lastPointer = event.pointerType || ""; }, true);
+  document.addEventListener("keydown", () => { lastPointer = ""; }, true);
+  document.addEventListener("click", event => {
+    const ref = event.target.closest?.(".src-ref");
+    if (!ref || event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const touch = lastPointer === "touch" || lastPointer === "pen";
+    const group = (ref.sourceGroup || []).filter(entry => entry && entry.src);
+    if (!touch && group.length < 2) return;
+    if (open(ref, { asModal: touch && phone() })) event.preventDefault();
+  });
+  window.addEventListener("resize", () => { if (root && !root.hidden && !modal) close({ restoreFocus: false }); });
+
+  return { open, close, isOpen: () => Boolean(root && !root.hidden) };
+})();
+
 window.mergeEvidenceSources = mergeEvidenceSources;
 window.rewriteSourceTags = rewriteSourceTags;
 window.registerResponseSources = registerResponseSources;
 window.prepareResponseSources = prepareResponseSources;
 window.renderModelResponseWithSources = renderModelResponseWithSources;
 window.App.sourceTeaser = sourceTeaser;
+window.App.sourceSheet = sourceSheet;
 // Copy paths (Copy consensus, citation) read pills through these helpers:
 // a pill's text in the DOM is "domain +2", which is no plain-text citation.
 window.App.sourceRefs = Object.freeze({ plainText: sourceRefPlainText, urls: sourceRefUrls });

@@ -61,11 +61,11 @@ def _agent_answer_with_sources(page):
         body += "event: final\ndata: " + json.dumps(final) + "\n\n"
         route.fulfill(content_type="text/event-stream", body=body)
     page.route("**/agent", respond)
-    page.locator("#attachTrigger").tap()
-    page.locator('#runModeControl [data-value="agent"]').tap()
+    page.locator("#attachTrigger").click()
+    page.locator('#runModeControl [data-value="agent"]').click()
     page.keyboard.press("Escape")
     page.locator("#questionInput").fill(turn["question"])
-    page.locator("#sendButton").tap()
+    page.locator("#sendButton").click()
     page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
     expect(page.locator("#agentAnswerBody .src-ref")).to_have_count(2)
 
