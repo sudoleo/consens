@@ -1472,7 +1472,7 @@ class MailerTests(unittest.TestCase):
             unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
         )
         rendered = message.as_string()
-        self.assertTrue(message["Subject"].startswith("Resolved: "))
+        self.assertEqual(message["Subject"], "Reached: An official date is announced · A question")
         self.assertIn("15 September", rendered)
         self.assertIn("https://example.com/press", rendered)
         self.assertIn("The launch is scheduled", rendered)
@@ -2121,7 +2121,7 @@ class TelegramWatchTests(unittest.TestCase):
             {"question": "Q?", "condition": "A date is set"},
             {"condition_reason": "The date is 15 September."},
         )
-        self.assertIn("Resolved", text)
+        self.assertIn("What you were waiting for happened", text)
         self.assertIn("A date is set", text)
         self.assertIn("15 September", text)
 

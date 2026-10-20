@@ -67,11 +67,13 @@ async def _send_mail(message) -> tuple:
     return (outbox.SENT, "") if accepted else (outbox.RETRY, "smtp")
 
 
-def _watch_version_consensus(payload: dict, run_id: str, db) -> str:
+def _watch_version_answer(payload: dict, run_id: str, db) -> tuple[str, list]:
+    """The answer of the run's immutable version and the sources its [S1]
+    citations point to."""
     version = share_snapshots.get_watch_version(
         payload.get("share_id") or "", run_id, db=db,
-    )
-    return str((version or {}).get("consensus_md") or "")
+    ) or {}
+    return str(version.get("consensus_md") or ""), list(version.get("sources") or [])
 
 
 def _watch_gate(item: dict, watch: dict | None, *, channel_field: str):
@@ -105,7 +107,8 @@ def _delta(payload: dict) -> dict:
     }
 
 
-def _owner_message(item: dict, payload: dict, recipient: str, consensus: str):
+def _owner_message(item: dict, payload: dict, recipient: str, answer: tuple):
+    consensus, answer_sources = answer
     share_url = SITE_URL + mailer.owner_page_path(
         _share_path(payload, private_aware=True),
         private=payload.get("visibility") == "private",
@@ -119,6 +122,10 @@ def _owner_message(item: dict, payload: dict, recipient: str, consensus: str):
         return mailer.build_paused_message(
             recipient=recipient, question=question,
             share_url=share_url, unsubscribe_url=unsubscribe_url,
+            resume_url=(
+                SITE_URL + "/watch/resume?token="
+                + watch_service.make_resume_token(item["resource_id"])
+            ),
         )
     alert = payload.get("alert")
     delta = _delta(payload)
@@ -127,6 +134,7 @@ def _owner_message(item: dict, payload: dict, recipient: str, consensus: str):
             recipient=recipient, question=question, delta=delta,
             moved=bool(payload.get("moved")), consensus=consensus,
             share_url=share_url, unsubscribe_url=unsubscribe_url,
+            answer_sources=answer_sources,
         )
     if alert == "condition":
         return mailer.build_condition_message(
@@ -135,6 +143,7 @@ def _owner_message(item: dict, payload: dict, recipient: str, consensus: str):
             reason=payload.get("condition_reason") or "The goal is met by the new answer.",
             sources=payload.get("condition_sources") or [],
             consensus=consensus, share_url=share_url, unsubscribe_url=unsubscribe_url,
+            answer_sources=answer_sources,
         )
     return mailer.build_change_message(
         recipient=recipient, question=question, delta=delta,
@@ -155,12 +164,12 @@ async def _deliver_watch_email(item: dict, db) -> tuple:
     recipient, blocked = await _verified_email(item["uid"])
     if blocked:
         return blocked
-    consensus = ""
+    answer = ("", [])
     if payload.get("alert") in {"every_run", "condition"}:
-        consensus = await asyncio.to_thread(
-            _watch_version_consensus, payload, item.get("run_id") or "", db,
+        answer = await asyncio.to_thread(
+            _watch_version_answer, payload, item.get("run_id") or "", db,
         )
-    return await _send_mail(_owner_message(item, payload, recipient, consensus))
+    return await _send_mail(_owner_message(item, payload, recipient, answer))
 
 
 def _telegram_outcome(status: dict) -> tuple:
@@ -207,9 +216,13 @@ def _deliver_watch_telegram_sync(item: dict, db, now: datetime) -> tuple:
         "delta": _delta(payload),
         "moved": bool(payload.get("moved")),
         "condition_reason": payload.get("condition_reason") or "",
+        # The same sources as the "Why" of the goal-reached mail.
+        "condition_sources": payload.get("condition_sources") or [],
     }
-    if kind == "every_run":
-        result["consensus"] = _watch_version_consensus(payload, item.get("run_id") or "", db)
+    if kind in {"every_run", "condition"}:
+        result["consensus"], result["consensus_sources"] = _watch_version_answer(
+            payload, item.get("run_id") or "", db,
+        )
     status = telegram_watch.send_watch_message(
         connection["chat_id"], watch_id, kind, view, result,
     )
@@ -315,6 +328,7 @@ async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
         changes_count=changes, site_url=SITE_URL,
         unsubscribe_url=SITE_URL + "/watch/brief/unsubscribe?token="
         + watch_brief.make_brief_unsubscribe_token(uid),
+        brief_timezone=timezone_name,
     )
     outcome = await _send_mail(message)
     if outcome[0] == outbox.SENT:

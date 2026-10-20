@@ -597,7 +597,7 @@ def test_owner_mails_for_private_watches_go_through_the_app_sign_in():
                        "question": "Private question?", "alert": alert,
                        "delta": {"summary": "Something moved."}}
             item = {"kind": kind, "resource_id": "watch-1"}
-            message = notification_delivery._owner_message(item, payload, "owner@example.test", "Answer.")
+            message = notification_delivery._owner_message(item, payload, "owner@example.test", ("Answer.", []))
             plain = message.get_body(preferencelist=("plain",)).get_content()
             html_part = message.get_body(preferencelist=("html",)).get_content()
             assert notification_delivery.SITE_URL + expected in plain, (kind, alert, visibility)

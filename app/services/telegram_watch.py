@@ -16,8 +16,10 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
-from app.core.security import db_firestore
+from app.core.security import db_firestore, get_user_tier
 from app.services import (
+    mailer,
+    notification_markdown,
     persistence_guard,
     share_snapshots,
     telegram_notifier,
@@ -296,11 +298,13 @@ def _connection_by_chat(chat_id, db=None) -> dict | None:
 
 
 def _watch_url(watch: dict) -> str:
-    if watch.get("visibility") == "private":
-        return SITE_URL + "/app/watches"
-    return SITE_URL + share_snapshots.share_path(
-        watch.get("share_slug") or "", watch["share_id"],
+    """The watch itself, like the mails link it: a private page goes through
+    the app's sign-in and comes back to it (mailer.owner_page_path)."""
+    private = watch.get("visibility") == "private"
+    path = share_snapshots.share_path(
+        "" if private else watch.get("share_slug") or "", watch.get("share_id") or "",
     )
+    return SITE_URL + mailer.owner_page_path(path, private=private)
 
 
 def _escape(value, *, limit: int = 1_200) -> str:
@@ -329,10 +333,11 @@ _CAUSE_LINES = {
 }
 
 
-def _why_block(delta: dict) -> str:
-    line = _CAUSE_LINES.get(str(delta.get("cause") or ""), "")
+def _why_block(delta: dict, *, reason: str = "", sources=None) -> str:
+    """One "Why": the reason, then the sources that carry it."""
+    line = reason or _CAUSE_LINES.get(str(delta.get("cause") or ""), "")
     sources = [
-        item for item in delta.get("sources") or []
+        item for item in (delta.get("sources") if sources is None else sources) or []
         if isinstance(item, dict) and str(item.get("url") or "").startswith(("http://", "https://"))
     ][:3]
     if not line and not sources:
@@ -350,31 +355,51 @@ def _strip_markup(text: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", str(text or "")))
 
 
+def _answer_block(result: dict) -> str:
+    """The answer as Telegram can show it (bold, italic, links, lists),
+    folded behind "expand" in the chat."""
+    consensus = str(result.get("consensus") or "").strip()
+    if not consensus:
+        return ""
+    rendered = notification_markdown.answer_telegram(
+        consensus, sources=result.get("consensus_sources") or [], limit=ANSWER_MARKUP_LIMIT,
+    )
+    if not rendered:
+        return ""
+    return f"<b>The answer</b>\n<blockquote expandable>{rendered}</blockquote>"
+
+
+# Markup budget of the answer: with the other blocks the message stays
+# under Telegram's 4,096 characters, so it is never cut inside a tag.
+ANSWER_MARKUP_LIMIT = 1_500
+
+
 def _notification_text(kind: str, watch: dict, result: dict) -> str:
     """Headline, what changed, why, what held, the goal, then the question.
 
-    Same order as the e-mails: the first lines carry the news, the question
-    sits at the bottom in a quote that Telegram folds when long. No agreement
-    score: it is not a reason to message anyone.
+    Same order and words as the e-mails: the first lines carry the news, the
+    question sits at the bottom in a quote that Telegram folds when long. No
+    agreement score: it is not a reason to message anyone.
     """
     question = str(watch.get("question") or "Consensus Watch")
     delta = result.get("delta") or {}
     blocks = []
     if kind == "condition":
-        blocks.append("<b>🎯 Resolved: what you were waiting for happened</b>")
-        blocks.append("<b>Goal</b>\n" + _escape(watch.get("condition") or ""))
-        blocks.append("<b>Why</b>\n" + _escape(
-            result.get("condition_reason") or "The new answer reports the goal as met."
+        blocks.append("<b>What you were waiting for happened</b>")
+        blocks.append("<b>You were waiting for</b>\n" + _escape(watch.get("condition") or ""))
+        blocks.append(_why_block(
+            {}, reason=str(result.get("condition_reason") or "The new answer reports the goal as met."),
+            sources=result.get("condition_sources") or [],
         ))
     elif kind == "paused_error":
-        blocks.append("<b>⚠️ Consensus Watch paused</b>")
+        blocks.append("<b>This watch was paused</b>")
         blocks.append(
-            "<b>What happened</b>\nThree consecutive checks failed. Open the "
-            "dashboard to review or resume this watch."
+            "Three checks in a row could not be completed. Nothing was lost: "
+            "resume it here or on consens.io and it continues the same history."
         )
     else:
         moved = kind == "change" or bool(result.get("moved"))
-        blocks.append("<b>🔄 The answer moved</b>" if moved else "<b>🧭 Checked again</b>")
+        blocks.append("<b>The answer moved</b>" if moved else "<b>Checked again</b>")
         blocks.append("<b>What changed</b>\n" + _escape(
             delta.get("summary") if moved else "Nothing moved on evidence in this check."
         ))
@@ -385,20 +410,33 @@ def _notification_text(kind: str, watch: dict, result: dict) -> str:
             blocks.append("<b>What held</b>\n" + _escape(delta["held"], limit=400))
         if delta.get("goal"):
             blocks.append("<b>Waiting for</b>\n" + _escape(delta["goal"], limit=400))
-    if kind == "every_run" and str(result.get("consensus") or "").strip():
-        blocks.append("<b>The answer</b>\n" + _quote_block(result["consensus"]))
+    if kind in {"every_run", "condition"}:
+        answer = _answer_block(result)
+        if answer:
+            blocks.append(answer)
     blocks.append("<b>Question</b>\n" + _quote_block(question, limit=900))
-    return "\n\n".join(blocks)
+    return "\n\n".join(block for block in blocks if block)
 
 
-def _watch_keyboard(watch_id: str, watch: dict) -> dict:
-    return {"inline_keyboard": [
-        [{"text": "Open watch", "url": _watch_url(watch)}],
-        [
-            {"text": "Mute 24h", "callback_data": f"wm:{watch_id}"},
-            {"text": "Pause", "callback_data": f"wp:{watch_id}"},
-        ],
-    ]}
+def _action_row(watch_id: str, *, paused: bool) -> list[dict]:
+    if paused:
+        return [{"text": "Resume watch", "callback_data": f"wr:{watch_id}"}]
+    return [
+        {"text": "Mute 24h", "callback_data": f"wm:{watch_id}"},
+        {"text": "Pause", "callback_data": f"wp:{watch_id}"},
+    ]
+
+
+def _watch_keyboard(watch_id: str, watch: dict, kind: str = "change") -> dict:
+    """Open the watch, plus what the message calls for: a paused watch is
+    resumed, a reached goal needs nothing more, everything else can be
+    muted or paused."""
+    rows = [[{"text": "Open watch", "url": _watch_url(watch)}]]
+    if kind == "paused_error":
+        rows.insert(0, _action_row(watch_id, paused=True))
+    elif kind != "condition":
+        rows.append(_action_row(watch_id, paused=False))
+    return {"inline_keyboard": rows}
 
 
 def send_watch_message(chat_id, watch_id: str, kind: str, watch: dict,
@@ -411,7 +449,7 @@ def send_watch_message(chat_id, watch_id: str, kind: str, watch: dict,
     markers that the metadata cleanup removes.
     """
     text = _notification_text(kind, watch, result)
-    keyboard = _watch_keyboard(watch_id, watch)
+    keyboard = _watch_keyboard(watch_id, watch, kind)
     status = telegram_notifier.send_bot_message(
         chat_id, text, reply_markup=keyboard, parse_mode="HTML",
     )
@@ -433,7 +471,7 @@ def send_test(uid: str, db=None) -> dict:
         raise watch_service.WatchError("telegram_not_linked", "Connect Telegram first.")
     result = telegram_notifier.send_bot_message(
         data["chat_id"],
-        "✅ consens.io is connected\n\nFuture Consensus Watch alerts will arrive here.",
+        "consens.io is connected\n\nWatch alerts will arrive here.",
         reply_markup={"inline_keyboard": [[{"text": "Open Watches", "url": SITE_URL + "/app/watches"}]]},
     )
     if result.get("status") != "sent":
@@ -450,10 +488,71 @@ def mute_watch(uid: str, watch_id: str, *, now=None, db=None) -> datetime:
     return until
 
 
-def _answer_callback(callback_id: str, text: str) -> None:
-    telegram_notifier.call_bot_api("answerCallbackQuery", {
-        "callback_query_id": callback_id, "text": text[:200],
+def _answer_callback(callback_id: str, text: str = "") -> None:
+    payload = {"callback_query_id": callback_id}
+    if text:
+        payload["text"] = text[:200]
+    telegram_notifier.call_bot_api("answerCallbackQuery", payload)
+
+
+# What the message itself says after a tap, as its last line: the
+# confirmation sits where the tap was, not in a new message (Audit K7).
+STATUS_PAUSED = "Paused. Resume it here or on consens.io any time."
+STATUS_RESUMED = "Resumed. It checks again on its usual schedule."
+_STATUS_LINES = (STATUS_PAUSED, STATUS_RESUMED)
+
+
+def _utf16_len(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _link_rows(message: dict) -> list:
+    """The message's own link buttons (Open watch), kept on every edit."""
+    keyboard = ((message.get("reply_markup") or {}).get("inline_keyboard")) or []
+    return [row for row in keyboard if row and all("url" in button for button in row)]
+
+
+def _edit_markup(message: dict, rows: list) -> dict:
+    return telegram_notifier.call_bot_api("editMessageReplyMarkup", {
+        "chat_id": str((message.get("chat") or {}).get("id")),
+        "message_id": message.get("message_id"),
+        "reply_markup": {"inline_keyboard": rows},
     })
+
+
+def _edit_status(message: dict, status: str, rows: list) -> None:
+    """Replace the message's status line and buttons; buttons only when the
+    text cannot be rewritten (no text, too long, or Telegram refuses)."""
+    text = str(message.get("text") or "")
+    for line in _STATUS_LINES:
+        if text.endswith("\n\n" + line):
+            text = text[: -len(line) - 2]
+    base = _utf16_len(text)
+    entities = [
+        entity for entity in message.get("entities") or []
+        if isinstance(entity, dict)
+        and int(entity.get("offset", 0)) + int(entity.get("length", 0)) <= base
+    ]
+    new_text = f"{text}\n\n{status}"
+    first_word = status.split(" ", 1)[0]
+    entities.append({"type": "bold", "offset": base + 2, "length": _utf16_len(first_word)})
+    if text and len(new_text) <= 4_096:
+        edited = telegram_notifier.call_bot_api("editMessageText", {
+            "chat_id": str((message.get("chat") or {}).get("id")),
+            "message_id": message.get("message_id"),
+            "text": new_text,
+            "entities": entities,
+            "link_preview_options": {"is_disabled": True},
+            "reply_markup": {"inline_keyboard": rows},
+        })
+        if edited.get("status") == "sent":
+            return
+    _edit_markup(message, rows)
+
+
+def _watch_question(watch: dict, db) -> str:
+    share = share_snapshots.get_share(str(watch.get("share_id") or ""), db=db) or {}
+    return " ".join(str(share.get("question") or "").split())
 
 
 def _handle_callback(callback: dict, db) -> None:
@@ -471,28 +570,58 @@ def _handle_callback(callback: dict, db) -> None:
     if not separator or not watch_id:
         _answer_callback(callback_id, "Unknown action.")
         return
+    # Telegram answers taps on old messages it no longer shows without the
+    # message; then a short reply stands in for the edit.
+    editable = bool(message.get("message_id"))
+    links = _link_rows(message)
     try:
         if action == "wm":
             mute_watch(uid, watch_id, db=db)
             _answer_callback(callback_id, "Telegram alerts muted for 24 hours.")
         elif action == "wp":
-            watch_service._owned_watch(uid, watch_id, db)
-            _answer_callback(callback_id, "Confirm pause below.")
-            telegram_notifier.send_bot_message(chat["id"], "Pause this Consensus Watch?", reply_markup={
-                "inline_keyboard": [[
-                    {"text": "Confirm pause", "callback_data": f"wpc:{watch_id}"},
-                    {"text": "Cancel", "callback_data": f"wx:{watch_id}"},
-                ]]
-            })
+            _ref, watch = watch_service._owned_watch(uid, watch_id, db)
+            confirm = [
+                {"text": "Confirm pause", "callback_data": f"wpc:{watch_id}"},
+                {"text": "Cancel", "callback_data": f"wx:{watch_id}"},
+            ]
+            if editable:
+                _answer_callback(callback_id)
+                _edit_markup(message, links + [confirm])
+            else:
+                _answer_callback(callback_id)
+                question = _watch_question(watch, db)
+                telegram_notifier.send_bot_message(
+                    chat["id"],
+                    "Pause this watch?" + (f"\n\n{question[:900]}" if question else ""),
+                    reply_markup={"inline_keyboard": [confirm]},
+                )
         elif action == "wpc":
             watch_service.pause_watch(uid, watch_id, db=db)
             _answer_callback(callback_id, "Watch paused.")
+            if editable:
+                _edit_status(message, STATUS_PAUSED, links + [_action_row(watch_id, paused=True)])
         elif action == "wx":
-            _answer_callback(callback_id, "Pause canceled.")
+            _answer_callback(callback_id)
+            if editable:
+                _edit_markup(message, links + [_action_row(watch_id, paused=False)])
+        elif action == "wr":
+            _ref, watch = watch_service._owned_watch(uid, watch_id, db)
+            if watch.get("status") != "active":
+                watch_service.update_watch(uid, watch_id, {"status": "active"}, get_user_tier(uid), db=db)
+            _answer_callback(callback_id, "Watch resumed.")
+            if editable:
+                _edit_status(message, STATUS_RESUMED, links + [_action_row(watch_id, paused=False)])
         else:
             _answer_callback(callback_id, "Unknown action.")
     except watch_service.WatchError as exc:
-        _answer_callback(callback_id, exc.message)
+        _answer_callback(callback_id, {
+            "limit_reached": "No free watch slot. Pause another watch on consens.io first.",
+            "goal_reached": "This watch reached its goal. Set a new goal on consens.io to watch on.",
+        }.get(exc.code, exc.message))
+    except Exception as exc:
+        # The tap must never hang on a spinner (e.g. the tier lookup failed).
+        logging.warning("Telegram watch action failed category=%s", safe_exception(exc))
+        _answer_callback(callback_id, "That did not work. Please try again on consens.io.")
 
 
 def handle_update(update: dict, db=None) -> None:
@@ -509,7 +638,9 @@ def handle_update(update: dict, db=None) -> None:
     if len(parts) != 2 or not parts[1].strip():
         telegram_notifier.send_bot_message(
             (message.get("chat") or {}).get("id"),
-            "Open consens.io Settings or the Watches dashboard to connect this bot.",
+            "To connect this bot, open Watches on consens.io and choose "
+            "Connect Telegram under Delivery.",
+            reply_markup={"inline_keyboard": [[{"text": "Open Watches", "url": SITE_URL + "/app/watches"}]]},
         )
         return
     try:
@@ -522,6 +653,6 @@ def handle_update(update: dict, db=None) -> None:
     name = connection.get("telegram_first_name") or "there"
     telegram_notifier.send_bot_message(
         (message.get("chat") or {}).get("id"),
-        f"✅ Telegram connected\n\nHi {name}. You can now enable Telegram on any Consensus Watch.",
+        f"Telegram connected\n\nHi {name}. You can now turn on Telegram for any watch.",
         reply_markup={"inline_keyboard": [[{"text": "Open Watches", "url": SITE_URL + "/app/watches"}]]},
     )

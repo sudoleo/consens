@@ -6483,7 +6483,8 @@ app/services/
   seo_pulse.py              Wöchentlicher deterministischer SEO-Puls (Lease, Bericht, Dormant-Noindex, Telegram-Notiz)
   telegram_notifier.py      Gemeinsamer Bot-API-Client, Critical-Alerts (Fingerprint, Budgets, fix-context) + Admin-Notiz (send_admin_note)
   error_alerts.py           report_server_exception: abgefangene Programmierfehler in Streams als Alert
-  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + ein Watch-Nachrichtenversuch (send_watch_message)
+  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen (Bestätigung per editMessage* in der Meldung) + ein Watch-Nachrichtenversuch (send_watch_message)
+  notification_markdown.py  Antwort-Markdown aus der Public-Pipeline neu geschrieben: Mail-HTML mit Inline-Stilen, Klartext, Telegram-Subset
   notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus
   notification_delivery.py   Ein Zustellversuch je Outbox-Item mit Abmelde-/Pause-/Kanalprüfung + Retry-Pass run_outbox_tick
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
@@ -7804,14 +7805,55 @@ Button. Es gibt bewusst keine Agreement-Zeile mehr. Die Outbox trägt dafür
 sources, goal, goal_status, goal_reason); Items ohne `delta` (vor 2026-10-01
 eingereiht, durch `deliver_until` begrenzt) rendern nur den Summary. Bausteine
 liegen zentral in `mailer.py` (`_delta_parts`, `_change_block_html`,
-`_why_html`, `_question_html`, `_shell_html` inkl. Preheader für die
-Inbox-Vorschau); eine abgeschlossene Watch schickt genau eine „Resolved“-Mail
-(sie passiert das Pause-Gate der Zustellung als einzige); lange Fragen werden auf ~200 Zeichen gekürzt und verlinken auf
-die Seite. Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
+`_why_html`, `_question_html`, `_answer_html`, `_button_html`, `_shell_html`
+inkl. Preheader für die Inbox-Vorschau); eine abgeschlossene Watch schickt
+genau eine Ziel-erreicht-Mail (sie passiert das Pause-Gate der Zustellung als
+einzige; Betreff „Reached: <Ziel> · <Frage>“, ein „Why“ mit Grund und Quellen,
+Label „You were waiting for“); lange Fragen werden auf ~200 Zeichen am Wortende
+gekürzt und verlinken auf die Seite, Betreffe enden ebenfalls an einem Wort.
+Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
 komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
-Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
-Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
-(HTTP 400), geht dieselbe Nachricht als Klartext raus.
+**Aussehen der Mails (seit 2026-10-20, Apple-Audit K2/K8):** Jede Mail sieht aus
+wie die App: die Tokens aus `public-tokens.css` als feste Farben
+(`mailer.GROUND/INK/INK_SOFT/MUTED/BORDER/RAISE`, `MAIL_PALETTE`), Wortmarke
+„consens.io“ oben, Labels in Satzschreibung, ein schwarzer Pill-Knopf als
+Tabellen-Button (Outlook), keine farbigen Randstriche, Footer-Links mit eigener
+Farbe. `<head>` trägt `lang`, `viewport`, `color-scheme`/`supported-color-schemes`,
+`<title>` und `MAIL_DARK_CSS`: ein `@media (prefers-color-scheme: dark)`-Block
+(plus `[data-ogsc]`/`[data-ogsb]` für Outlook.com), der über die Rollen-Klassen
+`cx-bg|ink|soft|muted|raise|line|line-soft|btn|btn-label` die dunklen App-Tokens
+setzt. Neue Elemente bekommen Inline-Stil UND die passende `cx-*`-Klasse. Der
+Preheader endet in unsichtbaren Füllzeichen (`_PREHEADER_FILL`), damit die
+Inbox-Vorschau nicht die ersten Zeilen der Mail wiederholt.
+**Die Antwort in Benachrichtigungen (Apple-Audit K1):** Every-run- und
+Ziel-erreicht-Mail sowie Telegram (every_run und condition) zeigen die Antwort
+gerendert, nie als escaptes Markdown. `app/services/notification_markdown.py`
+nimmt dafür das HTML der öffentlichen Seiten (`public_markdown.render_public_markdown`,
+markdown-it ohne HTML + nh3, vorher `strip_chat_framing`) und schreibt es neu:
+`answer_mail_html(md, palette=mailer.MAIL_PALETTE, sources=…)` mit Inline-Stilen
+(Überschriften, Listen, Tabellen in einer Scrollbox, Links, Code) und
+`cx-*`-Klassen; `answer_plain` für den Textteil (Absätze, `- `-Listen,
+`a | b`-Zeilen, „Text (URL)“); `answer_telegram(md, limit=…)` im erlaubten
+Telegram-Subset (b, i, s, code, a; Listen als „•“-Zeilen), innerhalb eines
+Markup-Budgets, das nie in einem Tag schneidet. `[S1]`-Verweise werden in der
+Mail zu kleinen Links auf die Quelle der Version (`get_watch_version(...).sources`,
+`notification_delivery._watch_version_answer`), in Text und Telegram entfallen sie;
+Bilder aus Antworten werden nie übernommen (eine Modell-URL lädt nie im Mailprogramm).
+Telegram sendet dieselbe Struktur und dieselben Wörter als HTML
+(`parse_mode=HTML`, keine Emojis); Frage und Antwort stehen in
+`<blockquote expandable>`; wird die Auszeichnung abgelehnt (HTTP 400), geht
+dieselbe Nachricht als Klartext raus. Knöpfe je Art: „Open watch“ (private
+Watches über `mailer.owner_page_path`, also `/app?next=/s/<id>`) plus
+„Mute 24h“/„Pause“; eine pausierte Watch bekommt „Resume watch“ (`wr:`), eine
+erreichte nur „Open watch“. **Bestätigung am Ort der Aktion (K7):** „Pause“
+ersetzt per `editMessageReplyMarkup` die Knöpfe der Meldung durch
+„Confirm pause“/„Cancel“; „Confirm pause“ pausiert und schreibt per
+`editMessageText` (Text + `entities` der Meldung, neue Statuszeile
+`STATUS_PAUSED`) und „Resume watch“ an dieselbe Meldung; „Resume watch“ setzt
+`STATUS_RESUMED`. Lehnt Telegram die Textänderung ab, werden nur die Knöpfe
+getauscht; ohne zugängliche Meldung kommt wie früher eine Rückfrage, jetzt mit
+der Frage der Watch. `/start` ohne Token verweist auf „Watches → Connect
+Telegram“.
 **Links in Mails (seit 2026-10-19):** Ein Link aus einer Mail fragt nur, der
 Button auf der geöffneten Seite handelt. Mail-Scanner, Linkvorschauen und
 Link-Checker öffnen jeden Link einer Nachricht (auch per HEAD); vorher
