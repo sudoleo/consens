@@ -249,10 +249,16 @@
       const turnId = String(turnData?.turn_id || turnData?.id || "").trim();
       const question = window.App.normalizeQuestionText?.(turnData?.question)
         ?? String(turnData?.question || "").replace(/\s+/g, " ").trim();
-      // A turn whose saved state moved on (its check finished later) is
-      // built again when the chat is opened anew.
+      // A turn whose saved state moved on is built again: its check finished
+      // later, or its differences, sources or model answers arrived after the
+      // follow-up had already moved it up (the footer then gains its tabs).
+      const differences = turnData?.differences_data;
       return JSON.stringify([turnId, question, turnData?.status || "", turnData?.agent_review?.status || "",
-        String(turnData?.consensus || "").length]);
+        String(turnData?.consensus || "").length,
+        Array.isArray(differences?.differences) ? differences.differences.length : -1,
+        differences?.agreement?.score ?? "",
+        Array.isArray(turnData?.sources) ? turnData.sources.length : 0,
+        Object.keys(turnData?.model_answers || {}).length]);
     },
 
     isStorableTurn(turnData) {

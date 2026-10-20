@@ -36,6 +36,27 @@ describe("thread history", () => {
     }));
   });
 
+  it("builds a kept turn again once its differences, sources or answers arrive later", () => {
+    const { followup, history, dom } = historyApp();
+    const first = turn("a", "First"), second = turn("b", "Second");
+    followup.renderStoredTurns([first, second]);
+    const [oldFirst, oldSecond] = history.children;
+    // The follow-up already moved the first turn up; its check lands now.
+    first.differences_data = { differences: [{ claim: "A number differs", type: "contradiction" }] };
+    followup.renderStoredTurns([first, second]);
+    expect(history.children).toHaveLength(2);
+    expect(history.children[0]).not.toBe(oldFirst);
+    expect(history.children[1]).not.toBe(oldSecond);
+    const rebuilt = history.children[0];
+    first.sources = [{ id: "S1", url: "https://example.invalid/a" }];
+    followup.renderStoredTurns([first, second]);
+    expect(history.children[0]).not.toBe(rebuilt);
+    const settled = [...history.children];
+    followup.renderStoredTurns([first, second]);
+    expect([...history.children]).toEqual(settled);
+    dom.window.close();
+  });
+
   it("replaces another chat's history in one step and drops a turn that went back to the answer", () => {
     const { followup, history, window, dom } = historyApp();
     followup.renderStoredTurns([turn("a", "First"), turn("b", "Second")]);
