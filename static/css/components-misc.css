@@ -12,70 +12,8 @@
   font-size: var(--font-size-sm);
 }
 
-.source-link {
-  display: inline-flex;
-  align-items: center;
-  max-width: min(180px, 100%);
-  margin: 0 2px;
-  padding: 1px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: color-mix(in srgb, var(--accent) 70%, var(--text-color));
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-normal);
-  line-height: var(--line-height-ui);
-  text-decoration: none;
-  vertical-align: baseline;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 36%, transparent);
-  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
-}
-
-.source-link.has-favicon {
-  gap: 5px;
-}
-
-.source-favicon {
-  flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
-  border-radius: 3px;
-  object-fit: contain;
-  /* White backing keeps dark/transparent logos legible in both themes. */
-  background: #fff;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #000 8%, transparent);
-}
-
-.source-link:hover,
-.source-link:focus-visible {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
-  color: color-mix(in srgb, var(--accent) 50%, var(--text-color));
-  text-decoration: none;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 40%, transparent), 0 3px 9px color-mix(in srgb, var(--accent) 11%, transparent);
-  opacity: 1;
-}
-
-.source-link:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.dark-mode .source-link {
-  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: color-mix(in srgb, var(--accent) 70%, var(--text-color));
-}
-
-.dark-mode .source-link:hover,
-.dark-mode .source-link:focus-visible {
-  background: color-mix(in srgb, var(--accent) 17%, transparent);
-}
+/* .source-link (raw model answers) wears the shared citation pill and
+   site icon of source-pill.css (Apple-Audit G9). */
 
 .source-list-cluster {
   display: block;

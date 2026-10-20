@@ -486,17 +486,18 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 /* Eigener Pfeil, damit er in beiden Themes zum Text passt */
 .consensus-differences-summary::before {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 1.4px solid currentColor;
-  border-bottom: 1.4px solid currentColor;
-  transform: rotate(-45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
   transition: transform var(--dur-state) var(--ease-standard);
   flex-shrink: 0;
 }
 
 .consensus-differences-panel[open] > .consensus-differences-summary::before {
-  transform: rotate(45deg);
+  transform: none;
 }
 
 .consensus-differences-summary:hover,
@@ -1230,14 +1231,15 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-model .select-wrapper::after {
   content: "";
   position: absolute;
-  right: 11px;
+  right: 9px;
   top: 50%;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--sidebar-text-muted);
-  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
   pointer-events: none;
 }
 

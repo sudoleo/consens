@@ -839,25 +839,22 @@ body:has(.sidebar.active) .brand-float {
   color: var(--accent);
 }
 
+/* The chevron of foundation.css: down while the list is open, right when
+   it is folded; its tone comes from the colour, not from opacity. */
 .sidebar-toggle-arrow {
-  display: inline-block;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-solid);
-  opacity: 0.45;
-  transform: rotate(90deg); /* points down when open */
-  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-state) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
+  transition: transform var(--dur-state) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .sidebar-toggle-btn:hover .sidebar-toggle-arrow,
 .sidebar-toggle-btn:focus-visible .sidebar-toggle-arrow {
-  opacity: 0.85;
-  color: var(--accent);
+  color: var(--ink);
 }
 
 /* Collapsed state */
 .sidebar-section.is-collapsed .sidebar-toggle-arrow {
-  transform: rotate(0deg); /* points right when collapsed */
+  --chevron-turn: -90deg;
 }
 
 /* Commit + GitHub-Mark als ein Ziel. Die Mark ist bewusst winzig und traegt
@@ -1183,7 +1180,7 @@ body:has(.sidebar.active) .brand-float {
   max-width: 78px;
   overflow: hidden;
   color: var(--sidebar-text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-size-xs);
   /* overflow:hidden clips at the line box: with line-height 1 the
      descenders of "Working" (g, p) were cut off. */
   line-height: 1.35;

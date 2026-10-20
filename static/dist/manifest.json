@@ -1,5 +1,5 @@
 {
-  "sources": "c8747ebff11a",
+  "sources": "0b0cd221b033",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -47,6 +47,7 @@
     "static/css/send-glow.css",
     "static/css/shell.css",
     "static/css/skeleton.css",
+    "static/css/source-pill.css",
     "static/css/status-palette.css",
     "static/css/topics.css",
     "static/css/typography.css",
@@ -221,20 +222,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.956a75ce06b5.js",
+      "src": "/static/dist/app.da6c6e6743ef.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.a6c0cac48d82.css",
-    "landing": "/static/dist/landing.20cb31ae3790.css",
-    "public": "/static/dist/public.48be9b462f2d.css"
+    "app": "/static/dist/app.ff2ed75c0450.css",
+    "landing": "/static/dist/landing.9a57d392f317.css",
+    "public": "/static/dist/public.64c5c186cdc0.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "7338037eeaab",
+      "hash": "9ad6f681c58c",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -265,6 +266,7 @@
         "static/css/send-glow.css",
         "static/css/shell.css",
         "static/css/skeleton.css",
+        "static/css/source-pill.css",
         "static/css/status-palette.css",
         "static/css/typography.css",
         "static/css/undo-notice.css",
@@ -274,7 +276,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "cd6168d7a21b",
+      "hash": "221373eec703",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -290,22 +292,23 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "37e1f6489bf3",
+      "hash": "efceacc6372e",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
         "static/css/public-pages.css",
         "static/css/public-tokens.css",
+        "static/css/source-pill.css",
         "static/css/status-palette.css",
         "static/css/typography.css"
       ]
     }
   },
   "previous_assets": [
+    "app.a6c0cac48d82.css",
     "app.8e492a388a50.css",
-    "app.f40d4e3cd7ae.css",
+    "app.956a75ce06b5.js",
     "app.1a0a96c00b97.js",
-    "app.4f741ddb98e5.js",
     "auth.5e487d1e2570.js",
     "demo.9cb7e261a771.js",
     "demo.f96893d39783.js",
@@ -313,9 +316,9 @@
     "firebase.02d5cd4749ea.js",
     "head.4d50a0d52b68.js",
     "head.9076e14a6904.js",
+    "landing.20cb31ae3790.css",
     "landing.5f0cf8ef7b9c.css",
-    "landing.44d4411e76b0.css",
-    "public.135df4f49325.css",
-    "public.7adfd7c44c2d.css"
+    "public.48be9b462f2d.css",
+    "public.135df4f49325.css"
   ]
 }

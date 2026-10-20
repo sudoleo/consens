@@ -532,16 +532,16 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-model-copy strong {
   color: currentColor;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
 }
 
 .sidebar-model-copy span {
   overflow: hidden;
-  color: var(--ink);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-medium);
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
   line-height: var(--line-height-heading);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -552,17 +552,17 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .sidebar-model-chevron {
+  --chevron-turn: -90deg;
   justify-self: end;
   color: var(--ink-3);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-solid);
+  font-size: var(--font-size-sm);
   transition: transform var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .sidebar-model-entry:hover .sidebar-model-chevron,
 .sidebar-model-entry:focus-visible .sidebar-model-chevron {
   color: currentColor;
-  transform: translateX(2px);
+  transform: translateX(2px) rotate(var(--chevron-turn));
 }
 
 /* Bookmarks read as a flat list: hover is a tint, the active row a tint that
@@ -2933,18 +2933,16 @@ body:not(.is-hero) .consensus-section::before {
 
 .thread-ask-bubble .thread-ask-more::after {
   content: "";
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
 
 .thread-ask.is-open .thread-ask-more::after,
 .thread-history-question.is-open .thread-ask-more::after {
-  margin-top: 3px;
-  transform: rotate(-135deg);
+  transform: rotate(180deg);
 }
 
 .thread-ask.is-long .thread-ask-more,
@@ -3386,16 +3384,16 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
 
 .response-answer-more::after {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 1.4px solid currentColor;
-  border-bottom: 1.4px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
   transition: transform var(--dur-state) var(--ease-standard);
 }
 
 .response-answer-more[aria-expanded="true"]::after {
-  transform: translateY(1px) rotate(225deg);
+  transform: rotate(180deg);
 }
 
 /* The verdict was a filled, bordered banner. It says the same thing as a
@@ -3523,115 +3521,8 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
    citation, the pill shrinks to its favicon (.is-compact) instead of
    repeating it. The `.source-link` chips stay in the raw model answers.
    -------------------------------------------------------------------------- */
-.src-ref {
-  --src-ref-bg: var(--well);
-  display: inline-flex;
-  /* The label carries the baseline, so the pill sits on the line of text
-     instead of floating above it; the icon centres itself. */
-  align-items: baseline;
-  gap: 4px;
-  box-sizing: border-box;
-  max-width: min(15em, 100%);
-  margin-inline: 0.25em 0;
-  padding: 1px 7px 1px 3px;
-  border-radius: var(--radius-pill);
-  background: var(--src-ref-bg);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.45;
-  letter-spacing: var(--tracking-normal);
-  color: var(--ink-2);
-  text-decoration: none;
-  white-space: nowrap;
-  vertical-align: baseline;
-  /* On the baseline the smaller label pulls the pill's middle below the
-     middle of the prose letters; lifted optically, without changing the
-     line box (a raised vertical-align would open up the line spacing). */
-  position: relative;
-  top: -0.14em;
-  cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
-}
-
-.src-ref:hover,
-.src-ref:focus-visible {
-  --src-ref-bg: color-mix(in srgb, var(--ink) 7%, var(--well));
-  color: var(--ink);
-  text-decoration: none;
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-
-.src-ref:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 1px;
-}
-
-.src-ref-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.src-ref-more {
-  flex: 0 0 auto;
-  color: var(--ink-3);
-}
-
-.src-ref:is(:hover, :focus-visible) .src-ref-more {
-  color: var(--ink-2);
-}
-
-.src-ref-favicon,
-.src-ref-glyph {
-  flex: 0 0 auto;
-  align-self: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-}
-
-.src-ref-favicon {
-  object-fit: contain;
-  /* White backing keeps dark/transparent logos legible in both themes. */
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--line-soft);
-}
-
-/* Missing or failed favicon: a neutral monogram, never a broken image. */
-.src-ref-glyph {
-  display: inline-grid;
-  place-items: center;
-  background: var(--line);
-  color: var(--ink-2);
-  font-size: 8.5px;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1;
-}
-
-/* The domain is already in the sentence: favicon only (plus "+N"). */
-.src-ref.is-compact {
-  /* Without a label there is no text baseline to sit on; centre the icon
-     on the x-height instead of letting it ride above the line. */
-  vertical-align: -0.3em;
-  top: 0;
-  margin-inline-start: 0.1em;
-  padding-inline: 2px;
-}
-
-.src-ref.is-compact.is-group {
-  padding-inline-end: 6px;
-}
-
-.src-ref.is-compact .src-ref-label {
-  display: none;
-}
-
-/* Legacy separator from saved HTML; pills need no comma between them. */
-.src-ref-sep {
-  display: none;
-}
+/* The pill itself (.src-ref and its parts) lives in source-pill.css, shared
+   with the public pages (Apple-Audit G9). */
 
 /* Hover teaser: enough of the source to decide whether to leave the page. */
 .source-teaser {
@@ -4244,11 +4135,12 @@ body .theme-toggle:is(:hover, :focus-visible) {
   width: 24px;
   height: 24px;
   margin-left: -8px;
-  border: 2px solid var(--app-surface);
+  /* The cut-out ring is the mode bar's own surface (the raised field). */
+  border: 2px solid var(--composer-surface);
   border-radius: 50%;
-  background: var(--app-surface);
+  background: var(--composer-surface);
   box-sizing: border-box;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
 }
 /* Provider marks rest monochrome, so the only colour in the composer is the
    state it reports; they take their own colours while you point at them.

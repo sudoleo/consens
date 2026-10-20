@@ -121,8 +121,8 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-context summary { cursor: pointer; display: flex; align-items: start; gap: 10px; list-style: none; }
 .answer-reader-context summary::-webkit-details-marker { display: none; }
 .answer-reader-context summary span { flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.answer-reader-context summary::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid var(--ink-2); border-bottom: 1.5px solid var(--ink-2); transform: rotate(45deg); margin: 5px 2px 0; flex-shrink: 0; }
-.answer-reader-context details[open] summary::after { transform: rotate(225deg); margin-top: 8px; }
+.answer-reader-context summary::after { content: ''; width: 1em; height: 1em; color: var(--ink-2); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; margin: 0.25em 0 0; flex-shrink: 0; }
+.answer-reader-context details[open] summary::after { transform: rotate(180deg); }
 .answer-reader-context details[open] summary span { -webkit-line-clamp: 1; color: var(--ink-2); }
 .answer-reader-context p { max-height: 22dvh; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .answer-reader-models { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
@@ -244,8 +244,8 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-picker { display: block; min-width: 0; width: 100%; }
 .model-answer-reader .answer-reader-picker-button { width: 100%; min-height: 42px; justify-content: flex-start; padding: 10px 12px; background: var(--well); border: 1px solid var(--line); text-align: left; }
 .answer-reader-picker-button > span:not(.answer-reader-model-mark):not(.answer-reader-chevron) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.answer-reader-chevron { display: inline-block; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); flex-shrink: 0; margin: -4px 3px 0 auto; color: var(--ink-2); }
-.answer-reader-picker-button[aria-expanded="true"] .answer-reader-chevron { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-chevron { display: inline-block; width: 1em; height: 1em; background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; flex-shrink: 0; margin: 0 0 0 auto; color: var(--ink-2); transition: transform var(--dur-state) var(--ease-standard); }
+.answer-reader-picker-button[aria-expanded="true"] .answer-reader-chevron { transform: rotate(180deg); }
 .answer-reader-context-top .answer-reader-picker { width: auto; margin-left: auto; }
 .answer-reader-context-top .answer-reader-picker-button { width: auto; min-height: 32px; padding: 5px 10px; font-size: var(--font-size-xs); background: transparent; border-color: transparent; gap: 16px; }
 .answer-reader-pair .answer-reader-picker { margin-top: 6px; }
@@ -253,16 +253,16 @@ body.answer-reader-modal { overflow: hidden; }
 .model-answer-reader .answer-reader-picker-menu > button { display: flex; width: 100%; min-height: 44px; padding: 10px; gap: 10px; text-align: left; justify-content: flex-start; border-radius: var(--radius-2xs); font-size: var(--font-size-ui); }
 .answer-reader-option-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .answer-reader-option-text small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; margin-top: 4px; }
-.model-answer-reader .answer-reader-picker-menu > button:is(:hover,:focus-visible) { outline: none; background: var(--raise); }
-.model-answer-reader .answer-reader-picker-menu > button[aria-selected="true"] { background: var(--app-surface-selected, var(--raise)); }
-.answer-reader-option-check { color: var(--ink-2); margin-left: auto; visibility: hidden; }
+.model-answer-reader .answer-reader-picker-menu > button:is(:hover,:focus-visible) { outline: none; background: var(--hover); }
+.model-answer-reader .answer-reader-picker-menu > button[aria-selected="true"] { background: var(--selected); }
+.answer-reader-option-check { color: var(--ink); margin-left: auto; visibility: hidden; }
 [aria-selected="true"] > .answer-reader-option-check { visibility: visible; }
 .answer-reader-context details[open] summary span { -webkit-line-clamp: unset; color: var(--ink); }
 .answer-reader-context details > p { display: none; }
 .answer-reader-sources summary { display: flex; align-items: center; list-style: none; gap: 10px; }
 .answer-reader-sources summary::-webkit-details-marker { display: none; }
-.answer-reader-sources summary::after { content: ''; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); margin: -4px 3px 0 auto; }
-.answer-reader-sources[open] summary::after { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-sources summary::after { content: ''; width: 1em; height: 1em; background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; margin: 0 0 0 auto; }
+.answer-reader-sources[open] summary::after { transform: rotate(180deg); }
 @media (pointer: coarse) { .model-answer-reader .answer-reader-picker-button { min-height: 44px; } }
 /* Shared detail sidebar: a readable overview before the supporting detail. */
 .answer-reader-context details:not(.is-truncated) summary::after { display: none; }
@@ -281,8 +281,8 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-inspector .consensus-source-host { display: block; font-size: var(--font-size-xs); color: var(--ink-2); margin-top: 5px; }
 .answer-reader-source-excerpt { margin-top: 10px; font-size: var(--font-size-xs); color: var(--ink-2); }
 .answer-reader-source-excerpt summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; }
-.answer-reader-source-excerpt summary::after { content: ''; width: 6px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); }
-.answer-reader-source-excerpt[open] summary::after { transform: rotate(225deg); }
+.answer-reader-source-excerpt summary::after { content: ''; width: 1em; height: 1em; background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; }
+.answer-reader-source-excerpt[open] summary::after { transform: rotate(180deg); }
 .answer-reader-source-excerpt summary::-webkit-details-marker { display: none; }
 .answer-reader-inspector .consensus-source-snippet { margin-top: 8px; font-size: var(--font-size-ui); line-height: 1.75; }
 .answer-reader-inspector .thread-history-sources > li { display: flex; align-items: baseline; gap: 14px; }
@@ -306,16 +306,14 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-sources ol { display: grid; gap: 12px; padding: 0; margin: 0; }
 .model-answer-reader li.answer-reader-source-card { position: relative; display: flex; align-items: flex-start; gap: 14px; margin: 0; padding: 20px 48px 20px 20px; background: var(--well); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); list-style: none; }
 .answer-reader-inspector .thread-history-sources > li::before { display: none; }
-.answer-reader-site-icon { position: relative; display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--ground); color: var(--ink-2); font-size: var(--font-size-sm); font-weight: 500; }
-.answer-reader-site-icon img { position: absolute; width: 20px; height: 20px; object-fit: contain; }
-/* Site favicons can contain black pixels on transparency, including the
-   generic globe. A light tile preserves both their contrast and brand colours. */
-.dark-mode .answer-reader-site-icon:has(img) { background: #f4f4f5; border-color: transparent; }
+/* The site icon itself (20 px, light plate, globe when missing) comes from
+   source-pill.css; here it only meets the host line. */
+.answer-reader-site-icon { margin-top: -1px; }
 .model-answer-reader li.answer-reader-source-card .consensus-source-body { flex: 1; min-width: 0; }
 .model-answer-reader li.answer-reader-source-card .consensus-source-host { display: block; margin: 0 0 6px; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; overflow-wrap: anywhere; }
 .model-answer-reader li.answer-reader-source-card .consensus-source-title { display: inline; font-size: var(--font-size-sm); line-height: 1.65; font-weight: 500; overflow-wrap: anywhere; }
 .model-answer-reader li.answer-reader-source-card a:hover { text-decoration: underline !important; text-underline-offset: 3px; }
-.model-answer-reader li.answer-reader-source-card .consensus-source-index { position: absolute; top: 18px; right: 20px; display: block; min-width: 0; height: auto; background: transparent; font-size: 10px; color: var(--ink-2); }
+.model-answer-reader li.answer-reader-source-card .consensus-source-index { position: absolute; top: 18px; right: 20px; display: block; min-width: 0; height: auto; background: transparent; font-size: var(--font-size-xs); color: var(--ink-2); }
 .answer-reader-source-out { position: absolute; right: 19px; top: 38px; color: var(--ink-2); font-size: var(--font-size-base); }
 .answer-reader-source-excerpt { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 14px; }
 .answer-reader-source-excerpt summary { width: fit-content; font-size: var(--font-size-xs); }
@@ -441,7 +439,7 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-dialog .diff-resolve-pro-chip {
   margin-left: 2px;
   padding: 1px 4px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   background: var(--well);
   color: var(--ink-2);
   border: 1px solid var(--line);
@@ -613,28 +611,30 @@ body.comparison-layout-changing .input-section { transition: none; }
 .answer-reader-inspector .diff-card-summary::after {
   content: '';
   position: absolute;
-  right: 6px;
-  top: 18px;
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid var(--ink-3);
-  border-bottom: 1.5px solid var(--ink-3);
-  transform: rotate(45deg);
+  right: 2px;
+  top: 16px;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
-.answer-reader-inspector .diff-card[open] > .diff-card-summary::after { transform: rotate(225deg); top: 21px; }
-.answer-reader-inspector .diff-card-summary:hover::after { border-color: var(--ink-2); }
+.answer-reader-inspector .diff-card[open] > .diff-card-summary::after { transform: rotate(180deg); }
+.answer-reader-inspector .diff-card-summary:hover::after { color: var(--ink-2); }
 /* The smaller differences: one quiet row with the same chevron as a card. */
 .answer-reader-inspector .diff-more { border-top: 0; border-bottom: 1px solid var(--line-soft); }
 .answer-reader-inspector .diff-more-summary { position: relative; padding: 14px 28px 14px 0; font-size: var(--font-size-sm); }
 .answer-reader-inspector .diff-more-summary::after {
   position: absolute;
-  right: 6px;
-  top: 20px;
+  right: 2px;
+  top: 18px;
+  width: 14px;
+  height: 14px;
   margin: 0;
-  border-color: var(--ink-3);
-  transform: rotate(45deg);
+  color: var(--ink-3);
 }
-.answer-reader-inspector .diff-more[open] > .diff-more-summary::after { transform: rotate(225deg); top: 23px; }
+.answer-reader-inspector .diff-more[open] > .diff-more-summary::after { transform: rotate(180deg); }
 .answer-reader-inspector .diff-more-body > .diff-card:last-child { border-bottom: 0; }
 .answer-reader-inspector .diff-card-tags { gap: 6px; font-size: var(--font-size-xs); line-height: 1.4; }
 .answer-reader-inspector .sev-dot { width: 6px; height: 6px; }
@@ -714,14 +714,13 @@ body.comparison-layout-changing .input-section { transition: none; }
 .answer-reader-inspector details.agent-evidence-status > summary::-webkit-details-marker { display: none; }
 .answer-reader-inspector details.agent-evidence-status > summary::after {
   content: '';
-  width: 5px;
-  height: 5px;
-  margin-top: -3px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
-.answer-reader-inspector details.agent-evidence-status[open] > summary::after { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-inspector details.agent-evidence-status[open] > summary::after { transform: rotate(180deg); }
 .answer-reader-inspector details.agent-evidence-status > summary:hover { color: var(--ink); }
 .answer-reader-inspector .agent-evidence-status-detail { display: grid; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink-2); }
 .answer-reader-inspector .agent-evidence-panel > .agent-review-note { margin: 0 0 4px; font-size: var(--font-size-xs); color: var(--ink-2); }
@@ -738,14 +737,13 @@ body.comparison-layout-changing .input-section { transition: none; }
 .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary::-webkit-details-marker { display: none; }
 .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary::after {
   content: '';
-  width: 5px;
-  height: 5px;
-  margin-top: -3px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
-.answer-reader-inspector .agent-evidence-footer .agent-evidence-context[open] > summary::after { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context[open] > summary::after { transform: rotate(180deg); }
 .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary:hover { color: var(--ink-2); }
 .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > p { margin: 4px 0 0; font-size: var(--font-size-xs); color: var(--ink-2); }
 /* An empty footer (no earlier answer version) leaves no band below the findings. */

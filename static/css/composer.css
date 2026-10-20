@@ -120,13 +120,12 @@
 }
 .chat-input-container .model-picker-display-count[hidden] { display: none; }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::after {
-  content: ''; flex: 0 0 5px; width: 5px; height: 5px; margin-top: -3px;
-  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg); opacity: .65;
+  content: ''; flex: 0 0 1em; width: 1em; height: 1em; color: var(--ink-3);
+  background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
 }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:hover:not(:disabled),
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display[aria-expanded="true"] {
-  background: var(--raise); color: var(--ink); border-color: transparent; box-shadow: none;
+  background: var(--hover); color: var(--ink); border-color: transparent; box-shadow: none;
 }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:disabled { opacity: .6; cursor: default; }
@@ -356,11 +355,12 @@
 }
 .chat-input-container .attach-menu .attach-menu-item[aria-haspopup] .attach-menu-value::after {
   content: "";
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid currentColor;
-  border-top: 1.5px solid currentColor;
-  transform: rotate(45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
 }
 .chat-input-container .attach-menu .attach-menu-switch { grid-column: 3; width: 34px; height: 20px; }
 .chat-input-container .attach-menu .attach-menu-switch .slider::before { width: 16px; height: 16px; left: 1px; bottom: 1px; }

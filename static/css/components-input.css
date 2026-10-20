@@ -890,9 +890,18 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink-2);
-  font-size: 9px;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
+  /* A document glyph instead of a 9-px type label (Apple-Audit G10); the
+     label stays in the markup, the file name beside it carries the type. */
+  font-size: 0;
+}
+
+.attachment-chip-icon::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask: var(--file-mask) center / contain no-repeat;
+  mask: var(--file-mask) center / contain no-repeat;
 }
 
 .attachment-chip-meta {

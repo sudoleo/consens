@@ -187,7 +187,7 @@
           {% endfor %}
         </ol>
         {% if sources | length > 8 %}
-        <button type="button" id="shareSourcesToggle" class="wp-disclosure-toggle share-sources-toggle" aria-expanded="false" aria-controls="shareSources">Show all {{ sources | length }} sources<svg class="wp-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg></button>
+        <button type="button" id="shareSourcesToggle" class="wp-disclosure-toggle share-sources-toggle" aria-expanded="false" aria-controls="shareSources">Show all {{ sources | length }} sources<span class="wp-chevron chevron" aria-hidden="true"></span></button>
         {% endif %}
       </section>
       {% endif %}

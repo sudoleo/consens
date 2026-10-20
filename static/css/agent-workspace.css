@@ -59,8 +59,8 @@
   cursor: pointer; list-style: none; border-radius: var(--radius-2xs);
 }
 .agent-doc-earlier > summary::-webkit-details-marker { display: none; }
-.agent-doc-earlier > summary::before { content: ''; width: 6px; height: 6px; margin: 0 8px 2px 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform var(--dur-press) var(--ease-standard); }
-.agent-doc-earlier[open] > summary::before { transform: rotate(45deg); margin-bottom: 4px; }
+.agent-doc-earlier > summary::before { content: ''; width: 1em; height: 1em; margin: 0 6px 0 0; background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transform: rotate(-90deg); transition: transform var(--dur-press) var(--ease-standard); }
+.agent-doc-earlier[open] > summary::before { transform: none; }
 .agent-doc-earlier > summary:hover { color: var(--ink); }
 .agent-doc-version { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
 .agent-doc-version:first-of-type { margin-top: 6px; }
@@ -111,16 +111,23 @@
 .dark-mode .agent-files-danger { color: #1a1a1a; }
 .agent-files-danger:disabled { opacity: .7; cursor: default; }
 .agent-files-ghost { border: 1px solid var(--line); background: var(--well); color: var(--ink); font-weight: 500; }
-.agent-files-ghost:hover { background: var(--raise); }
+.agent-files-ghost:hover { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); }
 
 /* Per-file upload progress, above the answer while the run starts. */
 .agent-uploads { display: grid; gap: 6px; }
 .agent-upload-row, .agent-file-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .agent-upload-row { padding: 8px 10px; border-radius: var(--radius-sm, 10px); background: var(--raise); }
+/* The file's type is a document glyph, not an 8-px "PDF" (Apple-Audit
+   G10): the name beside it already ends in the extension. The label stays
+   in the markup for scripts; it is not drawn. A mail origin keeps its icon. */
 .agent-file-type {
   display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px;
   border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink-2);
-  font-size: 8px; font-weight: 700; letter-spacing: .02em; overflow: hidden;
+  font-size: 0; overflow: hidden;
+}
+.agent-file-type:not(:has(svg))::before {
+  content: ""; width: 16px; height: 16px; background: currentColor;
+  -webkit-mask: var(--file-mask) center / contain no-repeat; mask: var(--file-mask) center / contain no-repeat;
 }
 .agent-file-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
 .agent-file-name { color: var(--ink); font-size: var(--font-size-ui); font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
@@ -168,7 +175,7 @@
 }
 .attachment-chip-warning {
   align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: var(--radius-pill, 999px);
-  background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: 10px; font-weight: 600; line-height: 1.6;
+  background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: var(--font-size-xs); font-weight: 600; line-height: 1.5;
 }
 
 :is(.agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost, .agent-doc-earlier > summary):focus-visible {

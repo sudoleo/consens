@@ -4,6 +4,8 @@
 
 @import url('./public-tokens.css');
 @import url('./public-nav.css');
+/* Site icons and citation pills: the same component as in /app. */
+@import url('./source-pill.css');
 
 *,
 *::before,
@@ -1029,53 +1031,8 @@ canvas {
 .share-differences-md { margin-bottom: 4px; }
 .share-differences-md > :last-child { margin-bottom: 0; }
 
-/* Inline-Citations: gleiche Chip-Sprache wie .source-link in der App */
-.share-md a[href^="#src-"] {
-  display: inline-flex;
-  align-items: center;
-  max-width: min(200px, 100%);
-  margin: 0 2px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: color-mix(in srgb, var(--accent) 64%, var(--text));
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-normal);
-  line-height: var(--line-height-ui);
-  text-decoration: none;
-  /* Sits with the middle of the line rather than on the baseline, so the chip
-     reads as part of the sentence instead of hovering above it. */
-  vertical-align: middle;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 36%, transparent);
-  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
-}
-
-.share-md a[href^="#src-"]:hover,
-.share-md a[href^="#src-"]:focus-visible {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  color: color-mix(in srgb, var(--accent) 48%, var(--text));
-}
-
-.share-md a[href^="#src-"].has-favicon {
-  gap: 5px;
-}
-
-.share-md .cite-favicon {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-  border-radius: 2px;
-  object-fit: contain;
-  /* White backing keeps dark/transparent logos legible in both themes. */
-  background: #fff;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #000 8%, transparent);
-}
+/* Inline-Citations: dasselbe Bauteil wie .src-ref in der App
+   (source-pill.css, Apple-Audit G9). */
 
 /* Quellenliste: kompakte einzeilige Eintraege (Nummer + Titel + Domain),
    ab Tablet zweispaltig, lange Listen starten eingeklappt. */
@@ -1974,23 +1931,13 @@ canvas {
 .wp-event-text { max-width: 66ch; }
 
 /* I7, L5 — A site icon has its box before it loads and keeps it if it fails
-   (check-page.js puts a globe in), and it fades in instead of popping. In
-   the dark theme every icon sits on a small light plate, so a black mark
-   (GitHub) does not vanish into the page. */
+   (check-page.js puts a globe in), and it fades in instead of popping. Its
+   shape and its light plate in the dark come from source-pill.css. */
 @media (scripting: enabled) {
   .site-icon { opacity: 0; transition: opacity var(--dur-state) var(--ease-standard); }
   .site-icon.is-loaded,
   .site-icon.is-missing { opacity: 1; }
 }
-.dark-mode .site-icon,
-.dark-mode .share-md .wp-ref-icon {
-  box-sizing: border-box;
-  padding: 2px;
-  border-radius: 4px;
-  background: #ecece9;
-}
-.dark-mode .share-md .cite-favicon { background: #ecece9; box-shadow: none; }
-.site-icon.is-missing { background: none; padding: 0; }
 
 /* L5, I8 — Pictures on a white ground are a step softer in the dark theme,
    and nothing waits on white while it loads. */

@@ -512,15 +512,16 @@ body.is-view-settle.is-watch-view .watch-page {
 .wd-explainer > summary::-webkit-details-marker { display: none; }
 .wd-explainer > summary::after {
   content: "";
-  width: 7px;
-  height: 7px;
+  width: 1em;
+  height: 1em;
   margin-left: 6px;
-  border-right: 1.5px solid var(--ink-3);
-  border-bottom: 1.5px solid var(--ink-3);
-  transform: translateY(-2px) rotate(45deg);
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
   transition: transform var(--dur-state) var(--ease-standard);
 }
-.wd-explainer[open] > summary::after { transform: translateY(2px) rotate(225deg); }
+.wd-explainer[open] > summary::after { transform: rotate(180deg); }
 .wd-explainer-title { color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
 .wd-explainer-hint { margin-left: auto; color: var(--ink-3); font-size: var(--font-size-xs); }
 .wd-explainer-grid {
@@ -789,7 +790,7 @@ body.is-view-settle.is-watch-view .watch-page {
   text-decoration: none;
 }
 .wd-sources a:hover { box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
-.wd-source-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-right: -2px; border-radius: 3px; }
+.wd-source-icon { margin-right: -2px; }
 .wd-source-icon.is-missing { visibility: hidden; }
 .wd-source-host { flex: 0 0 auto; color: var(--ink); font-weight: var(--font-weight-semibold); }
 .wd-source-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30ch; }
@@ -848,20 +849,19 @@ body.is-view-settle.is-watch-view .watch-page {
   text-decoration: none;
   cursor: pointer;
 }
-.wd-action:hover { background: var(--well); color: var(--ink); opacity: 1; }
-.wd-action.is-strong { background: var(--ink); color: var(--ground); }
-.wd-action.is-strong:hover { background: color-mix(in srgb, var(--ink) 86%, var(--ground)); color: var(--ground); }
+.wd-action:hover { background: var(--hover); color: var(--ink); }
+/* .wd-action.is-strong wears the .btn material (components-input.css). */
 .wd-action-toggle::after {
   content: "";
-  width: 6px;
-  height: 6px;
-  margin-left: 8px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
+  width: 1em;
+  height: 1em;
+  margin-left: 6px;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
   transition: transform var(--dur-layer) var(--ease-standard);
 }
-.wd-action-toggle[aria-expanded="true"]::after { transform: translateY(1px) rotate(225deg); }
+.wd-action-toggle[aria-expanded="true"]::after { transform: rotate(180deg); }
 
 /* What an action on this card just did, said on the card. */
 .wd-card-note { grid-area: note; margin: 8px 0 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.45; }

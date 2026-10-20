@@ -62,7 +62,7 @@
   font-size: var(--font-size-xs);
   font-weight: 500;
 }
-#attachmentBar .attachment-chip-size { font-size: 10px; line-height: 1.4; }
+#attachmentBar .attachment-chip-size { font-size: var(--font-size-xs); line-height: 1.4; }
 #attachmentBar .attachment-chip-remove {
   width: 32px;
   height: 38px;

@@ -10,22 +10,30 @@
    Loaded last on every page that has such a select, after the component CSS.
    ========================================================================== */
 
+/* The one chevron (Apple-Audit G11), as a background image because a select
+   cannot carry a masked child: the same path as --chevron-mask, painted in
+   --ink-3 of each theme. */
+:root {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 5.5l5 5 5-5' fill='none' stroke='%23606369' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.dark-mode {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 5.5l5 5 5-5' fill='none' stroke='%2394979b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select,
 :root select:is(.watch-interval-select, .wd-select) {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 34px;
-  background-image:
-    linear-gradient(45deg, transparent 50%, currentColor 50%),
-    linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%;
-  background-size: 5px 5px, 5px 5px;
+  background-image: var(--select-chevron);
+  background-position: right 11px center;
+  background-size: 14px 14px;
   background-repeat: no-repeat;
   cursor: pointer;
   text-overflow: ellipsis;
 }
 
-/* Settings draws its own triangle; one chevron is enough. */
+/* The wrapper of a settings select has a chevron of its own; one is enough. */
 :root .settings-select::after { display: none; }
 
 @supports (appearance: base-select) {

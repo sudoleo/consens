@@ -300,7 +300,7 @@
 }
 
 .model-picker-preset-mark {
-  --mark-ring: var(--app-surface, var(--raise));
+  --mark-ring: var(--well);
   display: grid;
   place-items: center;
   width: 18px;
@@ -329,11 +329,11 @@
 .model-picker-preset-mark .model-mark-fallback {
   width: auto;
   height: auto;
-  font-size: 9px;
+  font-size: var(--font-size-xs);
 }
 
 .model-picker-preset-option:is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]):not(.is-selected) .model-picker-preset-mark {
-  --mark-ring: var(--app-surface-hover, var(--raise));
+  --mark-ring: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix));
 }
 
 .model-picker-preset-option:is(:hover, :focus-visible):not(:disabled) .model-picker-preset-mark {
@@ -374,21 +374,24 @@
   border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 }
 
-/* Chevron (›) fuer die Custom-Zeile bzw. (‹) fuer die Back-Zeile. */
+/* Chevron fuer die Custom-Zeile (nach rechts) bzw. die Back-Zeile (nach
+   links): dasselbe Symbol wie ueberall (--chevron-mask, Apple-Audit G11). */
 .model-picker-option-chevron {
   flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  margin-right: 6px;
-  border-right: 2px solid var(--sidebar-text-muted);
-  border-top: 2px solid var(--sidebar-text-muted);
-  transform: rotate(45deg);
+  width: 1em;
+  height: 1em;
+  margin-right: 2px;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
 }
 
 .model-picker-option-chevron.is-back {
-  margin-right: 2px;
-  margin-left: 2px;
-  transform: rotate(-135deg);
+  margin-right: 0;
+  margin-left: 0;
+  transform: rotate(90deg);
 }
 
 /* Der aktive Haken (::after) kollidiert mit dem Chevron der Custom-Zeile —

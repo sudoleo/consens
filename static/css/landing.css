@@ -180,15 +180,26 @@ img { display: block; max-width: 100%; }
   font-weight: var(--font-weight-medium);
 }
 
+/* The chevron of foundation.css, pointing on. */
 .lp-link::after {
-  content: "›";
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-solid);
-  transform: translateY(-0.04em);
+  content: "";
+  width: 0.8em;
+  height: 0.8em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
   transition: transform var(--dur-state) var(--ease-standard);
 }
 
-.lp-link:hover::after { transform: translate(3px, -0.04em); }
+.lp-link:hover::after { transform: translateX(3px) rotate(-90deg); }
+
+/* Inline "go on" marks after link text: the same chevron. */
+.link-chevron {
+  --chevron-turn: -90deg;
+  --chevron-size: 0.8em;
+  margin-left: 0.15em;
+}
 
 /* --------------------------------------------------------------------------
    Navigation — an opaque bar with a horizon, not a pane of glass
@@ -919,14 +930,12 @@ img { display: block; max-width: 100%; }
 .lp-run-chip-count { margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums; transition: color var(--dur-state) var(--ease-standard); }
 
 .lp-run-chip i {
-  width: 5px;
-  height: 5px;
-  margin-top: -3px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.65;
-  transition: opacity var(--dur-state) var(--ease-standard);
+  width: 1em;
+  height: 1em;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
 
 /* Its step lights the text, never a frame: the picker in /app has none. */
@@ -1011,13 +1020,12 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-agent-clock i {
-  width: 5px;
-  height: 5px;
-  margin-top: -3px;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.6;
+  width: 1em;
+  height: 1em;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
 }
 
 /* Once the check is back the log folds into the clock line (Apple-Audit I1):
@@ -1492,17 +1500,18 @@ img { display: block; max-width: 100%; }
 
 .consensus-differences-summary::before {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 1.4px solid currentColor;
-  border-bottom: 1.4px solid currentColor;
-  transform: rotate(-45deg);
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
   transition: transform var(--dur-state) var(--ease-standard);
   flex-shrink: 0;
 }
 
 .consensus-differences-panel[open] > .consensus-differences-summary::before {
-  transform: rotate(45deg);
+  transform: none;
 }
 
 .consensus-differences-summary:hover { color: var(--text-color); }

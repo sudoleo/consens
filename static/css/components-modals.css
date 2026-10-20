@@ -561,14 +561,15 @@ dialog.modal::backdrop {
 .settings-select::after {
   content: "";
   position: absolute;
-  right: 11px;
+  right: 9px;
   top: 50%;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--sidebar-text-muted);
-  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  color: var(--ink-3);
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
   pointer-events: none;
 }
 
@@ -1076,12 +1077,18 @@ dialog.modal::backdrop {
 }
 
 .settings-note > summary::before {
-  content: "▸";
-  font-size: var(--font-size-micro);
+  content: "";
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
+  transition: transform var(--dur-state) var(--ease-standard);
 }
 
 .settings-note[open] > summary::before {
-  content: "▾";
+  transform: none;
 }
 
 .settings-note > summary:hover {

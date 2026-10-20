@@ -94,11 +94,11 @@
 .agent-session[open] > summary:hover { background-color: var(--agent-panel-bg); }
 .agent-session > summary::-webkit-details-marker { display: none; }
 /* The fold mark shows where it can act: on hover, focus, or an open row. */
-.agent-session > summary::after { content: ''; width: 5px; height: 5px; flex: 0 0 5px; color: var(--ink-3); margin: 7px 2px 0 0;
-  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); opacity: 0;
+.agent-session > summary::after { content: ''; width: 1em; height: 1em; flex: 0 0 1em; color: var(--ink-3); margin: 2px 0 0;
+  background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; opacity: 0;
   transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-press) var(--ease-standard); }
 .agent-session > summary:is(:hover, :focus-visible)::after, .agent-session[open] > summary::after { opacity: 1; }
-.agent-session[open] > summary::after { transform: rotate(225deg); }
+.agent-session[open] > summary::after { transform: rotate(180deg); }
 @media (hover: none) { .agent-session > summary::after { opacity: 1; } }
 .agent-session > summary > :is(img, .model-mark-fallback) { margin-top: 2px; }
 .agent-session img, .agent-inline-model img { width: 15px; height: 15px; object-fit: contain; flex-shrink: 0; }
@@ -124,7 +124,7 @@
 .agent-session-detail .agent-judge-purpose { color: var(--ink-2); line-height: 1.7; }
 .agent-session-detail .agent-judge-note { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.6; }
 .agent-token-breakdown { display: flex; gap: 28px; margin: 14px 0; padding: 10px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
-.agent-token-breakdown dt { color: var(--ink-3); font-size: 10px; }
+.agent-token-breakdown dt { color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-token-breakdown dd { margin: 3px 0 0; font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-detail-skeleton { display: grid; gap: 9px; padding: 8px 0 16px; min-height: 50px; }
 .agent-detail-skeleton span { display: block; height: 8px; border-radius: var(--radius-2xs); background: var(--line); animation: agent-detail-pulse 1.5s ease-in-out infinite; }
@@ -402,9 +402,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-time { display: inline-block; text-align: left; }
 .agent-activity-time[data-unit="seconds"] { min-width: 3ch; }
 .agent-activity-time[data-unit="minutes"] { min-width: 6.4ch; }
-.agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform var(--dur-state) var(--ease-standard); opacity: .6; }
-.agent-activity[open] .agent-activity-chevron { transform: rotate(225deg); }
-.agent-activity.is-closing .agent-activity-chevron { transform: rotate(45deg); }
+.agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
+.agent-activity[open] .agent-activity-chevron { transform: rotate(180deg); }
+.agent-activity.is-closing .agent-activity-chevron { transform: none; }
 .agent-activity-history { display: flow-root; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
 .agent-activity-run-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0 0 18px; font-size: var(--font-size-xs); line-height: 1.65; }
 .agent-activity-run-details[hidden] { display: none; }
