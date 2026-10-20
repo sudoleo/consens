@@ -20,7 +20,7 @@ def test_missing_markdown_dependencies_render_plaintext_instead_of_throwing():
     assert 'typeof window.marked?.parse !== "function"' in markdown
     assert 'typeof window.DOMPurify?.sanitize !== "function"' in markdown
     assert 'message: "Markdown renderer unavailable; displaying unformatted text."' in markdown
-    assert markdown.count("return escapeHtml(prepared);") >= 2
+    assert markdown.count("return plainTextFragment(prepared);") >= 2
 
 
 def test_usage_storage_busy_is_retried_and_stops_before_model_fanout():

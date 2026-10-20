@@ -70,8 +70,11 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         assert busy.evaluate('el => getComputedStyle(el).animationName') == 'agent-segment-breathe'
         assert busy.evaluate('el => getComputedStyle(el, "::after").content') in ('none', 'normal')
         icon = page.locator('.agent-inline-model').first
-        assert icon.evaluate('el => getComputedStyle(el).animationName') == 'agent-icon-enter'
-        assert icon.evaluate('el => getComputedStyle(el).animationIterationCount') == '1'
+        # An icon that arrives during the run enters once (is-arriving, taken
+        # off at its end), so a turn moved into the history never replays it.
+        assert icon.evaluate("""el => { const had = el.classList.contains('is-arriving'); el.classList.add('is-arriving');
+          const style = getComputedStyle(el), entry = [style.animationName, style.animationIterationCount];
+          if (!had) el.classList.remove('is-arriving'); return entry; }""") == ['agent-icon-enter', '1']
         event = {"version": 1, "chat_id": chat, "turn_id": turn, "agent_id": aid, "session_seq": 1,
             "seq": 1, "chars": 120, "usage": None, "streaming": True, "duration_ms": 8200}
         page.evaluate("e => window.__agentPush('delegation_progress',e)", event)

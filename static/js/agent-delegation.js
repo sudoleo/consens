@@ -115,6 +115,15 @@
         expanded: [...view.expanded], scroll: view.scroll }));
     } catch (_) { /* Storage may be unavailable. */ }
   }
+  // The panel the reader opened stays open for the chat, also over its next
+  // messages (Apple audit A9): a new turn starts with the chat's choice.
+  const chatKey = chatId => `agent-panel:${uid()}:${chatId}`;
+  function chatPanelOpen(chatId) {
+    try { return chatId ? sessionStorage.getItem(chatKey(chatId)) : null; } catch (_) { return null; }
+  }
+  function rememberChatPanel(view) {
+    try { sessionStorage.setItem(chatKey(view.chatId), view.closed ? "closed" : "open"); } catch (_) { /* Storage may be unavailable. */ }
+  }
   function resetOwner() {
     if (owner === uid() && ownerUser === window.auth?.currentUser && ownerGeneration === App.authState?.generation) return;
     owner = uid();
@@ -134,6 +143,8 @@
     if (!views.has(key)) {
       let saved = {};
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
+      const chatChoice = chatPanelOpen(chatId);
+      if (typeof saved.closed !== 'boolean' && chatChoice) saved.closed = chatChoice === "closed";
       views.set(key, { key, uid: owner, user: ownerUser, authGeneration: ownerGeneration, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
         controller: new AbortController(), expanded: new Set(saved.expanded || []),
         closed: typeof saved.closed === 'boolean' ? saved.closed : true, manual: typeof saved.closed === 'boolean',
@@ -347,10 +358,37 @@
     sidebar._rows = new Map();
     document.body.append(sidebar);
   }
+  // The panel leaves the way it came (Apple audit C5): it slides and fades
+  // out, the sheet's scrim with it, and is hidden only then. Asked to show
+  // again while leaving, it simply stays.
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  let leaveTimer = 0;
+  function setPanelVisible(visible) {
+    if (!sidebar) return;
+    if (visible) {
+      clearTimeout(leaveTimer); leaveTimer = 0;
+      sidebar.classList.remove("is-leaving"); scrim?.classList.remove("is-leaving");
+      sidebar.hidden = false;
+      return;
+    }
+    if (sidebar.hidden || sidebar.classList.contains("is-leaving")) {
+      if (sidebar.hidden && scrim) scrim.hidden = true;
+      return;
+    }
+    if (reducedMotion?.matches) { sidebar.hidden = true; if (scrim) scrim.hidden = true; return; }
+    sidebar.classList.add("is-leaving");
+    if (scrim && !scrim.hidden) scrim.classList.add("is-leaving");
+    leaveTimer = setTimeout(() => {
+      leaveTimer = 0;
+      if (!sidebar.classList.contains("is-leaving")) return;
+      sidebar.classList.remove("is-leaving"); scrim?.classList.remove("is-leaving");
+      sidebar.hidden = true;
+      if (scrim) scrim.hidden = true;
+    }, 200);
+  }
   function hide(manual = false) {
-    if (manual && current) { current.closed = true; current.manual = true; prefs(current); }
-    if (sidebar) sidebar.hidden = true;
-    if (scrim) scrim.hidden = true;
+    if (manual && current) { current.closed = true; current.manual = true; prefs(current); rememberChatPanel(current); }
+    setPanelVisible(false);
     document.body.classList.remove("agent-sidebar-open", "agent-sidebar-sheet");
     if (manual) {
       render();
@@ -368,7 +406,7 @@
     returnFocus = trigger;
     current.closed = false;
     current.manual = true;
-    prefs(current); render();
+    prefs(current); rememberChatPanel(current); render();
     const row = sidebar._rows.get(agentId);
     (row?.summary || sidebar.querySelector(".agent-sidebar-close")).focus({ preventScroll: true });
     if (row) { reveal(row.root); point(row.summary); }
@@ -493,8 +531,8 @@
   function renderOverview(view, rows) {
     const done = rows.filter(agent => settled.has(agent.status)).length;
     const out = rows.filter(agent => ended.has(agent.status)).length;
-    setText(sidebar.querySelector(".agent-sidebar-progress"),
-      `${done} of ${rows.length} done${out ? ` · ${out} without result` : ""}`);
+    setText(sidebar.querySelector(".agent-sidebar-progress"), !rows.length && view.running ? "Starting…"
+      : `${done} of ${rows.length} done${out ? ` · ${out} without result` : ""}`);
     const segments = sidebar.querySelector(".agent-sidebar-segments");
     while (segments.children.length > rows.length) segments.lastElementChild.remove();
     while (segments.children.length < rows.length) segments.append(node("i"));
@@ -532,7 +570,8 @@
       inline?.remove(); inline = node("span", "agent-inline-models"); inlineHost.append(inline);
       inline.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
     }
-    const inlineSignature = JSON.stringify([view.key, view.closed, [...view.agents.values()].map(a => [a.id, a.title, a.status, a.model?.model, a.model?.label])]);
+    const inlineSignature = JSON.stringify([view.key, view.closed, (view.seed || []).length,
+      [...view.agents.values()].map(a => [a.id, a.title, a.status, a.model?.model, a.model?.label])]);
     if (inline && inline.dataset.signature !== inlineSignature) {
       inline.dataset.signature = inlineSignature;
       if (inline._viewKey !== view.key) {
@@ -560,13 +599,28 @@
         if (!models.has(key)) models.set(key, []);
         models.get(key).push(agent);
       }
+      // A saved turn's icons stand at once, from its review (Apple audit
+      // A10); the agent list arrives later and only completes them.
+      if (!view.agents.size) {
+        for (const seed of view.seed || []) {
+          const key = seed.model?.model || seed.model?.label;
+          if (key && !models.has(key)) models.set(key, [{ id: "", status: "completed", model: seed.model }]);
+        }
+      }
       let added = 0;
       for (const [key, calls] of models) {
         const agent = calls.find(a => activeStates.has(a.status)) || calls[0];
         let button = inline._buttons.get(key);
         if (!button) {
           button = node("button", "agent-inline-model"); button.type = "button";
-          button.style.setProperty('--agent-icon-delay', `${Math.min(added++, 4) * 24}ms`);
+          // Only a model joining a live run settles in; a saved turn's
+          // icons are simply there (Apple audit A10). The class goes once the
+          // entry ran, so moving the turn into the history replays nothing.
+          if (view.running) {
+            button.classList.add("is-arriving");
+            button.style.setProperty('--agent-icon-delay', `${Math.min(added++, 4) * 24}ms`);
+            button.addEventListener("animationend", () => button.classList.remove("is-arriving"), { once: true });
+          }
           button.append(mark(agent));
           button.addEventListener("click", () => show(button.dataset.agentId, button));
           inline._buttons.set(key, button); inline._stack.append(button);
@@ -579,18 +633,22 @@
       for (const [key, button] of inline._buttons) {
         if (!models.has(key)) { button.remove(); inline._buttons.delete(key); }
       }
-      inline._toggle.hidden = !view.agents.size;
+      inline._toggle.hidden = !view.agents.size && !(view.seed || []).length;
       const activityLabel = `Activity · ${rowsFor(view).length}`;
       inline._toggle.setAttribute("aria-label", activityLabel);
       inline._toggle.title = activityLabel;
       inline._toggle.setAttribute("aria-expanded", String(!view.closed));
     }
-    sidebar.hidden = view.closed || !view.agents.size;
-    const sheet = !sidebar.hidden && !wide();
-    scrim.hidden = !sheet;
+    // A running turn of a chat whose panel is open shows it before its first
+    // call arrives ("Starting…"), so a follow-up never closes it in between.
+    const panelVisible = !view.closed && (view.agents.size > 0 || view.running);
+    setPanelVisible(panelVisible);
+    const sheet = panelVisible && !wide();
+    if (sheet) scrim.hidden = false;
+    else if (!sidebar.classList.contains("is-leaving")) scrim.hidden = true;
     if (sheet) sidebar.setAttribute('aria-modal', 'true'); else sidebar.removeAttribute('aria-modal');
     sidebar.setAttribute('role', sheet ? 'dialog' : 'complementary');
-    document.body.classList.toggle("agent-sidebar-open", !sidebar.hidden);
+    document.body.classList.toggle("agent-sidebar-open", panelVisible);
     document.body.classList.toggle("agent-sidebar-sheet", sheet);
     const usageEl = sidebar.querySelector(".agent-sidebar-usage");
     setText(usageEl, tokens(view.usage, view.running));
@@ -669,8 +727,39 @@
       if (row.root.open) { if (agent.kind !== "check") loadDetail(view, agent.id); renderDetail(row, view, agent); }
     }
   }
+  // A follow-up moves the live turn into the history (agent-chat.js
+  // liveTurn.take): its icons go with it as they are and from then on open
+  // that turn's answers in the reader, like the icons of any earlier turn.
+  // The panel glyph stays with the live turn, which gets new icons.
+  function release() {
+    if (!inline) return;
+    const view = current, old = inline;
+    inline = null;
+    old._toggle?.remove();
+    old.addEventListener("click", event => {
+      const button = event.target.closest?.(".agent-inline-model");
+      event.preventDefault(); event.stopPropagation();
+      const agent = button && view?.agents.get(button.dataset.agentId);
+      if (agent) openInReader(view, agent);
+    }, true);
+  }
   function project(spec) {
     resetOwner();
+    // A new message of a chat whose panel is open: the panel waits for the
+    // new turn's calls instead of closing and opening again (Apple audit A9).
+    if (spec?.chatId && !spec.turnId && spec.running && owner && chatPanelOpen(spec.chatId) === "open"
+        && sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving")) {
+      if (current) prefs(current);
+      current = null; inline?.remove(); inline = null;
+      sidebar._rows.clear(); sidebar._list.replaceChildren();
+      setText(sidebar.querySelector(".agent-sidebar-progress"), "Starting…");
+      setText(sidebar.querySelector(".agent-sidebar-usage"), "");
+      sidebar.querySelector(".agent-sidebar-segments")?.replaceChildren();
+      setText(sidebar.querySelector(".agent-sidebar-status"), "");
+      sidebar.querySelector(".agent-sidebar-stop").hidden = true;
+      syncTimer();
+      return;
+    }
     if (!spec?.chatId || !spec?.turnId || !owner) { current = null; inline?.remove(); inline = null; hide(); syncTimer(); return; }
     const view = get(spec.chatId, spec.turnId);
     const changed = current !== view;
@@ -680,6 +769,7 @@
       current = view; ensure(); sidebar._rows.clear(); sidebar.querySelector(".agent-session-list").replaceChildren();
     }
     mergeUsage(view, spec.usage);
+    if (Array.isArray(spec.models)) view.seed = spec.models;
     if (wasRunning && !spec.running) { stopClock(view); view.settling = true; }
     view.running = !!spec.running && !view.ended;
     if (!view.running) view.progress.clear();
@@ -765,5 +855,5 @@
       .filter(Boolean).at(-1);
     return text ? { id: latest.id, label: latest.model?.label || "", text } : null;
   }
-  App.agentDelegation = { receive, receiveProgress, project, demo, tokens, liveHighlight, isTicking: () => Boolean(timer) };
+  App.agentDelegation = { receive, receiveProgress, project, release, demo, tokens, liveHighlight, isTicking: () => Boolean(timer) };
 })();

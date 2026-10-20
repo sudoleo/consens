@@ -48,7 +48,10 @@ def test_bookmark_writes_and_views_are_bound_to_auth_and_intent_generations():
         assert "requestUid" in save and "requestGeneration" in save
         assert save.count("isCurrentAuthenticatedUser(requestUid, requestGeneration)") >= 3
     assert "const requestEpoch = ++bookmarkViewEpoch" in open_bookmark
-    assert open_bookmark.count("viewIsCurrent()") >= 4
+    # After the one (parallel) load and in its failure path; the background
+    # check of a remembered chat has its own epoch.
+    assert open_bookmark.count("viewIsCurrent()") >= 2
+    assert "shownEpoch === bookmarkViewEpoch && isCurrentAuthenticatedUser(requestUid, requestGeneration)" in open_bookmark
 
 
 def test_bookmark_save_failures_are_visible_and_deduplicated():

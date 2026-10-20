@@ -129,9 +129,9 @@ def test_the_bundle_keeps_the_window_contracts_addressable():
     for global_name in (
         "sendQuestion",
         "getConsensus",
-        "escapeHtml",
         "injectMarkdown",
-        "renderMarkdownHtml",
+        "morphMarkdown",
+        "renderMarkdownFragment",
     ):
         assert global_name in code, global_name
 

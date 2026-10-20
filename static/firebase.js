@@ -103,6 +103,9 @@ async function performLogout() {
     // sent beside the session cleanup, waited for at most 3 s. What does not
     // arrive is dropped with the account's values on sign-out.
     const settingsSent = window.App.userSettings.flush({ timeoutMs: 3000 });
+    // A chat deleted a moment ago (its Undo still offered) is deleted now,
+    // with this account's token.
+    const deletesSent = Promise.race([settleUndoableBookmarkDeletes(), new Promise(resolve => setTimeout(resolve, 3000))]);
     // Clear the HttpOnly server session before dropping the Firebase identity.
     // If this request fails, keeping Firebase signed in avoids presenting a
     // false "logged out" state while the cookie could still authorize calls.
@@ -118,6 +121,7 @@ async function performLogout() {
     // bound token; clearAll after signOut removes the remaining projections.
     window.App?.runRegistry?.cancelAll?.("logout");
     await settingsSent;
+    await deletesSent;
     await signOut(auth);
     setActiveAuthIdentity(null);
     resetLoadedRunAfterLogout();
@@ -211,6 +215,11 @@ let bookmarksLoading = false;
 let bookmarksLoadRequestId = 0;
 let openedBookmarkId = null;
 const bookmarkDetailCache = new Map();
+// The chats opened last, as they were shown (detail plus transcript), newest
+// last: switching back shows one at once and checks it in the background
+// (openBookmark). Every save of a chat drops its entry.
+const bookmarkViewCache = new Map();
+const BOOKMARK_VIEW_CACHE_SIZE = 10;
 const authState = window.App.authState;
 let bookmarkViewEpoch = 0;
 let accountMenuDocumentClickHandler = null;
@@ -221,6 +230,8 @@ let accountMenuDocumentClickHandler = null;
 window.addEventListener("consensio:run-registry-change", event => {
   if (["created", "visible", "visible-cleared", "saved-view", "cleared"].includes(event.detail?.type)) {
     bookmarkViewEpoch += 1;
+    // Whatever the view shows now, it is no longer a chat still loading.
+    hideChatOpening();
     // Share/Watch rehydration is view-owned just like bookmark detail loading.
     // A late result from saved view A must not replace the result id projected
     // by live run B.
@@ -323,6 +334,7 @@ function clearAuthenticatedUiState() {
   bookmarksLoadRequestId += 1;
   openedBookmarkId = null;
   bookmarkDetailCache.clear();
+  bookmarkViewCache.clear();
   window.bookmarksData = [];
   window.App?.composerStarters?.clear?.();
   setBookmarksAccess(false);
@@ -1917,7 +1929,8 @@ function bookmarkMeta(bookmark) {
     id: bookmark?.id || "",
     query: bookmarkDisplayQuestion(bookmark),
     title: bookmarkDisplayTitle(bookmark),
-    title_source: bookmark?.title_source === "generated" ? "generated" : "",
+    // Generated, or given by the person (Rename): either one stays.
+    title_source: ["generated", "user"].includes(bookmark?.title_source) ? bookmark.title_source : "",
     mode: bookmark?.mode || "",
     timestamp: bookmark?.timestamp || null,
     has_consensus: bookmark?.responses && typeof bookmark.responses === "object"
@@ -1953,6 +1966,8 @@ function upsertBookmarkMeta(bookmark, {
   }
   if (!window.bookmarksData) window.bookmarksData = [];
   const existingIndex = window.bookmarksData.findIndex(item => item.id === meta.id);
+  // A saved write changed the chat: its remembered view is out of date.
+  if (nameIt) bookmarkViewCache.delete(meta.id);
   if (existingIndex >= 0) {
     window.bookmarksData[existingIndex] = meta;
     updateBookmarkDOM(meta);
@@ -1964,7 +1979,7 @@ function upsertBookmarkMeta(bookmark, {
   if (runId) window.App.bookmarkUi?.finalizeRun?.(window.App.runRegistry?.get?.(runId));
   // A save confirmed by the server names its conversation once; the list
   // load never does (older chats keep their question as the name).
-  if (nameIt && meta.title_source !== "generated") requestBookmarkTitle(meta.id, requestUid);
+  if (nameIt && !KEPT_TITLE_SOURCES.has(meta.title_source)) requestBookmarkTitle(meta.id, requestUid);
   // A saved chat may change what the next new chat suggests.
   if (nameIt) window.App.composerStarters?.refresh?.();
 }
@@ -1994,27 +2009,33 @@ async function requestBookmarkTitle(bookmarkId, requestUid) {
   }
 }
 
-function applyBookmarkTitle(named) {
+// A name that outlives later saves: generated, or given by the person
+// (Rename in the row menu).
+const KEPT_TITLE_SOURCES = new Set(["generated", "user"]);
+
+function applyBookmarkTitle(named, source = "generated") {
   if (!bookmarkWriteAllowed(auth.currentUser?.uid || null, named.id)) return;
   const title = bookmarkDisplayTitle(named);
   const entry = (window.bookmarksData || []).find(item => item.id === named.id);
-  if (entry) Object.assign(entry, { title, title_source: "generated" });
+  if (entry) Object.assign(entry, { title, title_source: source });
   for (const context of window.App.runRegistry?.list?.() || []) {
     if (context.bookmark?.id !== named.id) continue;
     window.App.runRegistry.update(context.runId, run => {
       run.bookmark.title = title;
-      if (run.bookmark.latestMeta) Object.assign(run.bookmark.latestMeta, { title, title_source: "generated" });
+      if (run.bookmark.latestMeta) Object.assign(run.bookmark.latestMeta, { title, title_source: source });
     }, { render: false });
   }
-  window.App.bookmarkSession?.noteSavedMeta?.({ ...(entry || bookmarkMeta(named)), title, title_source: "generated" });
+  window.App.bookmarkSession?.noteSavedMeta?.({ ...(entry || bookmarkMeta(named)), title, title_source: source });
   // The name settles in place of the question instead of switching.
   for (const label of document.querySelectorAll(`.bookmark[data-id="${named.id}"] > p`)) {
     if (label.textContent === bookmarkLabelText(title)) continue;
     label.textContent = bookmarkLabelText(title);
-    if (label.animate && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    if (source === "generated" && label.animate && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       label.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
     }
   }
+  document.querySelectorAll(`.bookmark[data-id="${named.id}"] .bookmark-menu-button`)
+    .forEach(control => labelBookmarkMenu(control, bookmarkLabelText(title)));
   window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
 }
 
@@ -2579,8 +2600,14 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
   };
 }
 
-async function loadBookmarkConversationOnce(bookmark) {
-  if (!bookmark?.chat_id || !auth.currentUser) return [];
+// The transcript of a chat bookmark, by bookmark ID alone: it loads beside
+// the bookmark detail instead of after it (Apple audit D2). The caller checks
+// `chatId` against the detail's chat. A bookmark without a chat answers with
+// no chat and no turns.
+async function loadBookmarkConversationOnce(bookmarkId) {
+  if (!auth.currentUser) return { chatId: "", turns: [] };
+  const bookmark = { id: bookmarkId };
+  let chatId = null;
   const requestUser = auth.currentUser;
   const requestUid = requestUser.uid;
   const requestGeneration = authState.generation;
@@ -2611,9 +2638,11 @@ async function loadBookmarkConversationOnce(bookmark) {
       error.retryable = response.status === 429 || response.status >= 500;
       throw error;
     }
-    if (String(data.chat_id || "") !== String(bookmark.chat_id || "")) {
+    const pageChat = String(data.chat_id || "");
+    if (chatId !== null && pageChat !== chatId) {
       throw new Error("Bookmark conversation did not match the saved chat");
     }
+    chatId = pageChat;
     (Array.isArray(data.turns) ? data.turns : []).forEach(turn => {
       const turnId = String(turn?.id || turn?.turn_id || "");
       if (turnId && seenTurnIds.has(turnId)) return;
@@ -2630,15 +2659,15 @@ async function loadBookmarkConversationOnce(bookmark) {
     if (nextCursor) seenCursors.add(nextCursor);
     cursor = nextCursor;
   } while (cursor);
-  return turns;
+  return { chatId: chatId || "", turns };
 }
 
-async function loadBookmarkConversation(bookmark) {
+async function loadBookmarkConversation(bookmarkId) {
   try {
-    return await loadBookmarkConversationOnce(bookmark);
+    return await loadBookmarkConversationOnce(bookmarkId);
   } catch (error) {
     if (!error?.retryable) throw error;
-    return await loadBookmarkConversationOnce(bookmark);
+    return await loadBookmarkConversationOnce(bookmarkId);
   }
 }
 
@@ -2662,13 +2691,12 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     }
     window.App?.followup?.reset?.();
     window.App?.chatSession?.reset?.();
-    window.App?.followup?.clearHistory?.();
     window.App?.bookmarkSession?.restore?.(sourceBookmark?.id);
-    if (materialized.historyTurns.length) {
-        window.App?.followup?.renderStoredTurns?.(materialized.historyTurns);
-    } else if (bookmark?.previous_turn) {
-        window.App?.followup?.renderStoredTurn?.(bookmark.previous_turn);
-    }
+    // One step, never emptied first: turns already on the page stay
+    // (consensus-run.js renderStoredTurns).
+    window.App?.followup?.renderStoredTurns?.(materialized.historyTurns.length
+        ? materialized.historyTurns
+        : (bookmark?.previous_turn ? [bookmark.previous_turn] : []));
     const continuationTurn = materialized.currentTurn;
     const authoritativeChatRestored = continuationTurn && bookmark.chat_id
       ? window.App?.chatSession?.restoreCompletedChat?.(
@@ -2991,6 +3019,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       cursor = bookmarksNextCursor;
     } while (loadAll && cursor);
     renderBookmarksLoadMore();
+    syncActiveBookmark();
     window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
     // The example questions predicted from the newest chats (composer-starters.js).
     if (!append) window.App.composerStarters?.refresh?.();
@@ -3062,8 +3091,116 @@ async function loadBookmarkDetail(bookmarkId) {
   return data.bookmark;
 }
 
+// The chat on screen is marked in the list (shell.css .bookmark.is-active):
+// at once when its row is chosen, and from then on by what the view shows.
+function activeBookmarkId() {
+  const registry = window.App.runRegistry;
+  const visible = registry?.visible?.();
+  if (visible) return visible.bookmark?.id || "";
+  return registry?.getSelectedConversationIdentity?.()?.bookmarkId || "";
+}
+function syncActiveBookmark(bookmarkId = activeBookmarkId()) {
+  document.querySelectorAll("#bookmarksContainer .bookmark").forEach(row => {
+    const active = Boolean(bookmarkId) && row.dataset.id === bookmarkId;
+    if (row.classList.contains("is-active") === active) return;
+    row.classList.toggle("is-active", active);
+    if (active) row.setAttribute("aria-current", "true"); else row.removeAttribute("aria-current");
+  });
+}
+window.addEventListener("consensio:run-registry-change", () => syncActiveBookmark());
+
+// While a chat that is not in memory loads, the thread already shows it:
+// its question and a quiet answer skeleton (Apple audit D2). The view of the
+// chat before is only hidden (body.chat-opening), so a failed load gives it
+// back unchanged.
+function showChatOpening(bookmarkId) {
+  const column = document.querySelector(".container");
+  if (!column) return null;
+  hideChatOpening();
+  const meta = (window.bookmarksData || []).find(item => item.id === bookmarkId);
+  const block = document.createElement("div");
+  block.className = "thread-opening";
+  block.setAttribute("role", "status");
+  block.setAttribute("aria-label", "Opening chat");
+  const question = String(meta?.query || "").replace(/\s+/g, " ").trim();
+  if (question) {
+    const ask = document.createElement("div");
+    ask.className = "thread-ask";
+    const bubble = document.createElement("div");
+    bubble.className = "thread-ask-bubble";
+    const text = document.createElement("div");
+    text.className = "thread-ask-text thread-opening-question";
+    text.textContent = question;
+    bubble.append(text);
+    ask.append(bubble);
+    block.append(ask);
+  }
+  const lines = document.createElement("div");
+  lines.className = "answer-skeleton skeleton-group";
+  lines.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 4; i += 1) {
+    const line = document.createElement("span");
+    line.className = "skeleton";
+    lines.append(line);
+  }
+  block.append(lines);
+  column.prepend(block);
+  const wasHero = document.body.classList.contains("is-hero");
+  window.exitHeroMode?.();
+  document.body.classList.add("chat-opening");
+  window.scrollTo({ top: 0, left: window.scrollX, behavior: "instant" });
+  return { block, wasHero };
+}
+function hideChatOpening(opening = null, { restore = false } = {}) {
+  document.body.classList.remove("chat-opening");
+  document.querySelectorAll(".container > .thread-opening").forEach(block => block.remove());
+  if (restore && opening?.wasHero) {
+    document.body.classList.add("is-hero");
+    window.syncHeroResponseAccess?.();
+  }
+}
+
+// Detail and transcript of one chat, requested side by side. A transcript
+// that is missing, broken or belongs to another chat falls back to the saved
+// continuation data, as before.
+async function loadBookmarkView(bookmarkId) {
+  const conversation = loadBookmarkConversation(bookmarkId).catch(error => ({ error }));
+  const bookmark = await loadBookmarkDetail(bookmarkId);
+  const result = await conversation;
+  let turns = [];
+  let conversationLoadFailed = false;
+  if (bookmark?.chat_id) {
+    if (result.error || String(result.chatId || "") !== String(bookmark.chat_id)) {
+      conversationLoadFailed = true;
+      console.warn("Could not load full bookmark conversation; using saved continuation data.",
+        result.error || new Error("Bookmark conversation did not match the saved chat"));
+    } else {
+      turns = result.turns;
+    }
+  }
+  return { bookmark, turns, conversationLoadFailed };
+}
+function rememberBookmarkView(bookmarkId, view) {
+  bookmarkViewCache.delete(bookmarkId);
+  if (view.conversationLoadFailed) return;
+  bookmarkViewCache.set(bookmarkId, view);
+  while (bookmarkViewCache.size > BOOKMARK_VIEW_CACHE_SIZE) {
+    bookmarkViewCache.delete(bookmarkViewCache.keys().next().value);
+  }
+}
+// What a chat's view is made of, to tell whether a background check found
+// anything new.
+function bookmarkViewSignature(view) {
+  return JSON.stringify([view.bookmark?.timestamp || null, view.bookmark?.title || "", view.bookmark?.responses?.consensus?.length || 0,
+    (view.turns || []).map(turn => [turn.id || turn.turn_id, turn.status, turn.agent_review?.status, String(turn.consensus || "").length])]);
+}
+
 window.openBookmark = async function (bookmarkId) {
   if (!bookmarkWriteAllowed(auth.currentUser?.uid, bookmarkId)) return;
+  // The tap is answered at once: the phone menu closes and the row is
+  // marked before anything loads (Apple audit D2).
+  window.App.chatScroll?.closeMenu?.();
+  syncActiveBookmark(bookmarkId);
   const requestEpoch = ++bookmarkViewEpoch;
   const liveContext = window.App.runRegistry?.findByBookmarkId?.(bookmarkId);
   if (liveContext) {
@@ -3077,32 +3214,55 @@ window.openBookmark = async function (bookmarkId) {
   const viewIsCurrent = () => requestEpoch === bookmarkViewEpoch
     && isCurrentAuthenticatedUser(requestUid, requestGeneration)
     && bookmarkWriteAllowed(requestUid, bookmarkId);
+  const show = view => {
+    hideChatOpening();
+    openedBookmarkId = bookmarkId;
+    loadSingleBookmarkUI(view.bookmark, view.turns, { conversationLoadFailed: view.conversationLoadFailed });
+    window.App.chatScroll?.opened?.();
+  };
+  // A chat seen a moment ago is there at once and checked in the background;
+  // only a change since then redraws it, without moving the reader.
+  const cached = bookmarkViewCache.get(bookmarkId);
+  if (cached) {
+    bookmarkViewCache.delete(bookmarkId);
+    bookmarkViewCache.set(bookmarkId, cached);
+    show(cached);
+    trackAppEvent("app_bookmark_opened", { source: "cache" });
+    const shownEpoch = bookmarkViewEpoch;
+    bookmarkDetailCache.delete(bookmarkId);
+    try {
+      const fresh = await loadBookmarkView(bookmarkId);
+      const stillShown = shownEpoch === bookmarkViewEpoch && isCurrentAuthenticatedUser(requestUid, requestGeneration)
+        && bookmarkWriteAllowed(requestUid, bookmarkId);
+      if (!stillShown) return;
+      if (bookmarkViewSignature(fresh) !== bookmarkViewSignature(cached)) {
+        loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed });
+      }
+      rememberBookmarkView(bookmarkId, fresh);
+    } catch (error) {
+      console.warn("Could not check the opened chat for changes.", error);
+    }
+    return;
+  }
   const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmarkId}"]`);
   row?.classList.add("is-loading");
+  const opening = showChatOpening(bookmarkId);
   try {
-    const bookmark = await loadBookmarkDetail(bookmarkId);
+    const view = await loadBookmarkView(bookmarkId);
     if (!viewIsCurrent()) return;
-    let conversationTurns = [];
-    let conversationLoadFailed = false;
-    try {
-      conversationTurns = await loadBookmarkConversation(bookmark);
-      if (!viewIsCurrent()) return;
-    } catch (conversationError) {
-      if (!viewIsCurrent()) return;
-      conversationLoadFailed = Boolean(bookmark?.chat_id);
-      console.warn("Could not load full bookmark conversation; using saved continuation data.", conversationError);
-    }
-    if (!viewIsCurrent()) return;
-    openedBookmarkId = bookmarkId;
-    loadSingleBookmarkUI(bookmark, conversationTurns, { conversationLoadFailed });
-    window.App.chatScroll?.opened?.();
+    show(view);
+    rememberBookmarkView(bookmarkId, view);
     trackAppEvent("app_bookmark_opened");
   } catch (error) {
     if (!viewIsCurrent()) return;
+    hideChatOpening(opening, { restore: true });
+    syncActiveBookmark();
     console.error("Error opening bookmark:", error);
     window.App?.showPopup?.("Could not load this bookmark.");
   } finally {
     row?.classList.remove("is-loading");
+    // A newer choice took over the view: its own opening stays.
+    if (requestEpoch !== bookmarkViewEpoch && !document.querySelector(".container > .thread-opening")) syncActiveBookmark();
   }
 };
 
@@ -3153,7 +3313,7 @@ async function deleteBookmark(bookmarkId) {
     }
     rows.forEach(({ row, parent, next, animation }) => {
       if (animation) { animation.onfinish = null; animation.cancel(); }
-      row.classList.remove('is-deleting');
+      row.classList.remove('is-deleting', 'is-undo-pending');
       if (!document.querySelector(`.bookmark[data-id="${bookmarkId}"]`) && parent?.isConnected) {
         parent.insertBefore(row, next?.parentNode === parent ? next : null);
       }
@@ -3208,6 +3368,7 @@ async function deleteBookmark(bookmarkId) {
       // A deleted chat's topic must not stay among the predicted examples.
       window.App.composerStarters?.refresh?.();
       bookmarkDetailCache.delete(bookmarkId);
+      bookmarkViewCache.delete(bookmarkId);
       if (openedBookmarkId === bookmarkId) openedBookmarkId = null;
       (window.App.runRegistry?.list?.() || [])
         .filter(context => context.bookmark?.id === bookmarkId)
@@ -3251,56 +3412,35 @@ window.deleteBookmark = deleteBookmark;
 
 function updateBookmarkDOM(bookmark) {
   const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmark.id}"]`);
-  const label = row?.querySelector("p");
+  const label = row?.querySelector(":scope > p");
   if (label) label.textContent = bookmarkLabelText(bookmarkDisplayTitle(bookmark));
-  const control = row?.querySelector(".delete-bookmark");
-  if (control && !control.classList.contains("is-armed")) labelDeleteControl(control, label?.textContent);
+  const control = row?.querySelector(".bookmark-menu-button");
+  if (control) labelBookmarkMenu(control, label?.textContent);
 }
 
-// Deleting a chat cannot be undone, so the first activation only arms the
-// control: it turns into "Delete" and only a second activation deletes. It
-// disarms by itself, on Escape and on a click anywhere else (a tap on the row
-// still opens the chat). The second click of a double-click, or any
-// activation right after arming, never counts as that confirmation.
-const BOOKMARK_DELETE_ARM_MS = 5000;
-const BOOKMARK_DELETE_CONFIRM_DELAY_MS = 400;
-const BOOKMARK_DELETE_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>';
-let armedBookmarkDelete = null;
+// ---- A chat row --------------------------------------------------------
+// The title is the row's control (role="button", Enter or Space opens it,
+// Apple audit E5); a pointer may press anywhere on the row. "…" opens a
+// small menu with Rename, Share and Delete (E2); a deleted chat can be taken
+// back for a few seconds. One delegated listener serves every row, so a run
+// row that turns into a saved one in place keeps working.
+const BOOKMARK_MENU_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>';
+const BOOKMARK_MENU_ITEMS = [
+  ["rename", "Rename", "M4 20h4L19 9l-4-4L4 16v4ZM14 6l4 4"],
+  ["share", "Share", "M12 15V4m-4 4 4-4 4 4M5 13v6h14v-6"],
+  ["delete", "Delete", "M5 7h14M10 7V5h4v2m-6 0 1 12h6l1-12"],
+];
+const BOOKMARK_UNDO_MS = 5000;
 
-function labelDeleteControl(control, title) {
-  const label = title ? `Delete chat: ${title}` : "Delete chat";
-  control.setAttribute("aria-label", label);
-  control.title = "Delete chat";
+function labelBookmarkMenu(control, title) {
+  control.setAttribute("aria-label", title ? `Chat options: ${title}` : "Chat options");
+  control.title = "More";
 }
 
-function disarmBookmarkDelete() {
-  if (!armedBookmarkDelete) return;
-  const { control, row, timer } = armedBookmarkDelete;
-  armedBookmarkDelete = null;
-  clearTimeout(timer);
-  row.classList.remove("is-confirming-delete");
-  control.classList.remove("is-armed");
-  control.innerHTML = BOOKMARK_DELETE_ICON;
-  labelDeleteControl(control, row.querySelector("p")?.textContent);
+function setBookmarkTitleControl(label) {
+  label.setAttribute("role", "button");
+  label.tabIndex = 0;
 }
-
-function armBookmarkDelete(control, row) {
-  disarmBookmarkDelete();
-  row.classList.add("is-confirming-delete");
-  control.classList.add("is-armed");
-  control.textContent = "Delete";
-  control.setAttribute("aria-label", `Confirm: delete chat ${row.querySelector("p")?.textContent || ""}`.trim());
-  control.title = "Click again to delete this chat";
-  armedBookmarkDelete = { control, row, at: performance.now(),
-    timer: setTimeout(disarmBookmarkDelete, BOOKMARK_DELETE_ARM_MS) };
-}
-
-document.addEventListener("click", event => {
-  if (armedBookmarkDelete && !armedBookmarkDelete.control.contains(event.target)) disarmBookmarkDelete();
-}, true);
-document.addEventListener("keydown", event => {
-  if (event.key === "Escape") disarmBookmarkDelete();
-});
 
 function createReadyBookmarkRow(bookmark, runId = null) {
   const div = document.createElement("div");
@@ -3311,31 +3451,293 @@ function createReadyBookmarkRow(bookmark, runId = null) {
   // werden - deshalb textContent statt Template-Interpolation in innerHTML.
   const label = document.createElement("p");
   label.textContent = bookmarkLabelText(bookmarkDisplayTitle(bookmark));
-  const deleteControl = document.createElement("button");
-  deleteControl.type = "button";
-  deleteControl.className = "delete-bookmark";
-  deleteControl.innerHTML = BOOKMARK_DELETE_ICON;
-  labelDeleteControl(deleteControl, label.textContent);
-  div.append(label, deleteControl);
-
-  deleteControl.addEventListener("click", e => {
-    e.stopPropagation();
-    if (!deleteControl.classList.contains("is-armed")) {
-      armBookmarkDelete(deleteControl, div);
-      return;
-    }
-    if (e.detail > 1 || performance.now() - (armedBookmarkDelete?.at || 0) < BOOKMARK_DELETE_CONFIRM_DELAY_MS) return;
-    disarmBookmarkDelete();
-    deleteBookmark(bookmark.id);
-  });
-
-  // Click-Event -> Ruft jetzt die ausgelagerte Funktion auf
-  div.addEventListener("click", () => {
-    window.openBookmark(bookmark.id);
-  });
-
+  setBookmarkTitleControl(label);
+  div.append(label, createBookmarkMenuButton(label.textContent));
+  if (bookmark.id && bookmark.id === activeBookmarkId()) {
+    div.classList.add("is-active");
+    div.setAttribute("aria-current", "true");
+  }
+  // A chat whose deletion can still be taken back stays out of sight.
+  if (undoableBookmarkDeletes.has(bookmark.id)) div.classList.add("is-undo-pending");
   return div;
 }
+
+function createBookmarkMenuButton(title) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "bookmark-menu-button";
+  button.innerHTML = BOOKMARK_MENU_ICON;
+  button.setAttribute("aria-haspopup", "menu");
+  button.setAttribute("aria-expanded", "false");
+  labelBookmarkMenu(button, title);
+  return button;
+}
+
+document.addEventListener("click", event => {
+  const container = document.getElementById("bookmarksContainer");
+  if (!container?.contains(event.target)) return;
+  const menuButton = event.target.closest(".bookmark-menu-button");
+  if (menuButton) {
+    event.stopPropagation();
+    if (openBookmarkMenu?.button === menuButton) closeBookmarkMenu();
+    else showBookmarkMenu(menuButton, { keyboard: event.detail === 0 });
+    return;
+  }
+  if (event.target.closest(".bookmark-rename-input")) return;
+  const row = event.target.closest(".bookmark");
+  if (!row || row.classList.contains("run-entry") || row.classList.contains("is-pending")
+      || row.classList.contains("is-deleting") || row.classList.contains("is-renaming") || !row.dataset.id) return;
+  window.openBookmark(row.dataset.id);
+});
+document.addEventListener("keydown", event => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const label = event.target.closest?.("#bookmarksContainer .bookmark:not(.run-entry, .is-pending) > p[role='button']");
+  if (!label || label.closest(".is-renaming")) return;
+  event.preventDefault();
+  window.openBookmark(label.parentElement.dataset.id);
+});
+
+// The menu lives on <body>, so the list's scrolling and soft edge never cut
+// it; it sits at the "…" it came from and closes like any menu: Escape, a
+// press elsewhere, Tab, or the list scrolling away under it.
+let openBookmarkMenu = null;
+function showBookmarkMenu(button, { keyboard = false } = {}) {
+  closeBookmarkMenu();
+  const row = button.closest(".bookmark");
+  if (!row?.dataset.id) return;
+  const menu = document.createElement("div");
+  menu.className = "bookmark-menu";
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", button.getAttribute("aria-label") || "Chat options");
+  for (const [action, label, path] of BOOKMARK_MENU_ITEMS) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `bookmark-menu-item${action === "delete" ? " is-destructive" : ""}`;
+    item.setAttribute("role", "menuitem");
+    item.tabIndex = -1;
+    item.dataset.action = action;
+    item.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+    const text = document.createElement("span");
+    text.textContent = label;
+    item.append(text);
+    menu.append(item);
+  }
+  document.body.append(menu);
+  const bounds = button.getBoundingClientRect();
+  const width = menu.offsetWidth, height = menu.offsetHeight;
+  const below = bounds.bottom + 4 + height <= window.innerHeight - 8;
+  menu.style.left = `${Math.max(8, Math.min(bounds.right - width, window.innerWidth - width - 8))}px`;
+  menu.style.top = `${below ? bounds.bottom + 4 : Math.max(8, bounds.top - 4 - height)}px`;
+  menu.classList.toggle("opens-up", !below);
+  button.setAttribute("aria-expanded", "true");
+  row.classList.add("has-menu");
+  openBookmarkMenu = { menu, button, row };
+  const items = [...menu.querySelectorAll(".bookmark-menu-item")];
+  const focusItem = index => items[(index + items.length) % items.length]?.focus({ preventScroll: true });
+  menu.addEventListener("keydown", event => {
+    const index = items.indexOf(document.activeElement);
+    if (event.key === "ArrowDown") { event.preventDefault(); focusItem(index + 1); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); focusItem(index - 1); }
+    else if (event.key === "Home") { event.preventDefault(); focusItem(0); }
+    else if (event.key === "End") { event.preventDefault(); focusItem(items.length - 1); }
+    else if (event.key === "Escape") { event.preventDefault(); closeBookmarkMenu({ focus: true }); }
+    else if (event.key === "Tab") closeBookmarkMenu();
+  });
+  menu.addEventListener("click", event => {
+    const item = event.target.closest(".bookmark-menu-item");
+    if (!item) return;
+    event.stopPropagation();
+    const bookmarkId = row.dataset.id;
+    closeBookmarkMenu({ focus: item.dataset.action !== "rename" && item.dataset.action !== "delete" });
+    if (item.dataset.action === "rename") startBookmarkRename(row);
+    else if (item.dataset.action === "share") shareBookmark(bookmarkId);
+    else if (item.dataset.action === "delete") deleteBookmarkWithUndo(bookmarkId);
+  });
+  // Keyboard users land on the first item; after a pointer press the menu
+  // itself holds focus, so the arrow keys still reach the items.
+  menu.tabIndex = -1;
+  if (keyboard) focusItem(0);
+  else menu.focus({ preventScroll: true });
+}
+function closeBookmarkMenu({ focus = false } = {}) {
+  if (!openBookmarkMenu) return;
+  const { menu, button, row } = openBookmarkMenu;
+  openBookmarkMenu = null;
+  menu.remove();
+  button.setAttribute("aria-expanded", "false");
+  row.classList.remove("has-menu");
+  if (focus && button.isConnected) button.focus({ preventScroll: true });
+}
+document.addEventListener("pointerdown", event => {
+  if (openBookmarkMenu && !openBookmarkMenu.menu.contains(event.target) && !openBookmarkMenu.button.contains(event.target)) {
+    closeBookmarkMenu();
+  }
+}, true);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && openBookmarkMenu && !openBookmarkMenu.menu.contains(event.target)) closeBookmarkMenu({ focus: true });
+});
+window.addEventListener("resize", () => closeBookmarkMenu(), { passive: true });
+document.addEventListener("scroll", event => {
+  if (openBookmarkMenu && event.target instanceof Element && event.target.contains(openBookmarkMenu.row)) closeBookmarkMenu();
+}, { passive: true, capture: true });
+
+// Rename in place: the title becomes a field of the same size; Enter or
+// leaving it saves, Escape keeps the old name.
+function startBookmarkRename(row) {
+  const label = row.querySelector(":scope > p");
+  const bookmarkId = row.dataset.id;
+  if (!label || !bookmarkId || row.classList.contains("is-renaming")) return;
+  const previous = label.textContent;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "bookmark-rename-input";
+  input.value = previous;
+  input.maxLength = 120;
+  input.setAttribute("aria-label", "Chat name");
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  row.classList.add("is-renaming");
+  label.hidden = true;
+  label.after(input);
+  input.focus({ preventScroll: true });
+  input.select();
+  let finished = false;
+  const finish = save => {
+    if (finished) return;
+    finished = true;
+    const value = input.value.replace(/\s+/g, " ").trim();
+    input.remove();
+    label.hidden = false;
+    row.classList.remove("is-renaming");
+    if (document.activeElement === document.body || !document.activeElement) label.focus({ preventScroll: true });
+    if (!save || !value || value === previous) return;
+    label.textContent = bookmarkLabelText(value);
+    renameBookmark(bookmarkId, value).then(named => {
+      if (named) applyBookmarkTitle(named, "user");
+    }).catch(error => {
+      console.warn("Bookmark rename failed:", error);
+      if (label.isConnected && label.textContent === bookmarkLabelText(value)) label.textContent = previous;
+      window.App?.showPopup?.("Could not rename this chat. Please try again.");
+    });
+  };
+  input.addEventListener("keydown", event => {
+    event.stopPropagation();
+    if (event.key === "Enter") { event.preventDefault(); finish(true); }
+    else if (event.key === "Escape") { event.preventDefault(); finish(false); }
+  });
+  input.addEventListener("blur", () => finish(true));
+}
+
+async function renameBookmark(bookmarkId, title) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Authentication required");
+  const requestUid = user.uid, generation = authState.generation;
+  const idToken = await user.getIdToken(false);
+  if (!isCurrentAuthenticatedUser(requestUid, generation)) return null;
+  const response = await fetch("/bookmarks/" + encodeURIComponent(bookmarkId) + "/title", {
+    method: "PATCH",
+    headers: { "Authorization": "Bearer " + idToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ title })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `Rename failed (${response.status})`);
+  if (!isCurrentAuthenticatedUser(requestUid, generation)) return null;
+  bookmarkViewCache.delete(bookmarkId);
+  return data.bookmark || null;
+}
+
+// Share works on the chat on screen: it opens first (at once when it was
+// seen a moment ago), then the share dialog.
+async function shareBookmark(bookmarkId) {
+  await window.openBookmark(bookmarkId);
+  if (activeBookmarkId() === bookmarkId) window.openShareDialog?.();
+}
+
+// A deleted chat leaves the list at once and "Chat deleted · Undo" offers
+// it back for a few seconds; only then is it deleted on the server. Nothing
+// is fenced or cancelled while it can still come back. A new run, a hidden
+// page or signing out deletes it at once, so the chat limit and the page
+// lifetime never hold it back.
+const undoableBookmarkDeletes = new Map();
+function collapseBookmarkRow(row) {
+  const done = () => { row.classList.add("is-undo-pending"); row.style.removeProperty("overflow"); };
+  if (!row.animate || matchMedia("(prefers-reduced-motion: reduce)").matches || !row.getClientRects().length) { done(); return; }
+  const height = row.getBoundingClientRect().height;
+  const style = getComputedStyle(row);
+  row.style.overflow = "hidden";
+  const animation = row.animate([
+    { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, marginBottom: style.marginBottom },
+    { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginBottom: "0px" }
+  ], { duration: 180, easing: "ease-out" });
+  animation.onfinish = done;
+  row._collapse = animation;
+}
+function expandBookmarkRow(row) {
+  row._collapse?.cancel();
+  row._collapse = null;
+  row.classList.remove("is-undo-pending");
+  row.style.removeProperty("overflow");
+  insertBookmarkRowSoftly(row);
+}
+// A row that joins the list opens its place instead of pushing the rows
+// below by a whole row in one frame (Apple audit A11, C12).
+function insertBookmarkRowSoftly(row) {
+  if (!row.animate || matchMedia("(prefers-reduced-motion: reduce)").matches || !row.isConnected || !row.getClientRects().length) return;
+  const height = row.getBoundingClientRect().height;
+  if (!height) return;
+  const style = getComputedStyle(row);
+  row.animate([
+    { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", overflow: "hidden" },
+    { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, overflow: "hidden" }
+  ], { duration: 200, easing: "cubic-bezier(.22, 1, .36, 1)" });
+}
+function leaveDeletedChat() {
+  window.App.runRegistry?.clearVisible?.();
+  window.clearResponseBoxes?.({ silent: true });
+  window.App?.setAppTitle?.();
+  window.App?.setThreadQuestion?.("");
+  const enterHero = () => { document.body.classList.add("is-hero"); window.syncHeroResponseAccess?.(); };
+  if (window.App?.glideComposer) window.App.glideComposer(enterHero);
+  else enterHero();
+}
+function deleteBookmarkWithUndo(bookmarkId) {
+  if (!auth.currentUser || !bookmarkId || undoableBookmarkDeletes.has(bookmarkId)) return;
+  if (!window.App?.undoNotice?.show) { deleteBookmark(bookmarkId); return; }
+  const rows = [...document.querySelectorAll(`#bookmarksContainer .bookmark[data-id="${bookmarkId}"]`)];
+  const wasOpen = activeBookmarkId() === bookmarkId;
+  const entry = { promise: null };
+  undoableBookmarkDeletes.set(bookmarkId, entry);
+  rows.forEach(collapseBookmarkRow);
+  if (wasOpen) leaveDeletedChat();
+  window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
+  entry.notice = window.App.undoNotice.show({
+    text: "Chat deleted",
+    actionLabel: "Undo",
+    duration: BOOKMARK_UNDO_MS,
+    onAction() {
+      undoableBookmarkDeletes.delete(bookmarkId);
+      document.querySelectorAll(`#bookmarksContainer .bookmark[data-id="${bookmarkId}"]`).forEach(expandBookmarkRow);
+      window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
+      if (wasOpen && !window.App.runRegistry?.visible?.() && document.body.classList.contains("is-hero")) window.openBookmark(bookmarkId);
+    },
+    onExpire() {
+      undoableBookmarkDeletes.delete(bookmarkId);
+      entry.promise = deleteBookmark(bookmarkId);
+    },
+  });
+}
+// Settles every deletion still waiting for its Undo; resolves once each was sent.
+function settleUndoableBookmarkDeletes() {
+  const entries = [...undoableBookmarkDeletes.values()];
+  entries.forEach(entry => entry.notice?.settle());
+  return Promise.allSettled(entries.map(entry => entry.promise).filter(Boolean));
+}
+window.addEventListener("consensio:run-registry-change", event => {
+  if (event.detail?.type === "created" && undoableBookmarkDeletes.size) settleUndoableBookmarkDeletes();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && undoableBookmarkDeletes.size) settleUndoableBookmarkDeletes();
+});
 
 function ensurePendingBookmarkDOM(pending) {
   const container = document.getElementById("bookmarksContainer");
@@ -3374,9 +3776,41 @@ function replacePendingBookmarkWithReady(bookmark, runId = null) {
   const row = runId
     ? document.querySelector(`.bookmark.run-entry[data-run-id="${runId}"]`)
     : document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
+  if (row?.classList.contains("run-entry")) { settleRunRow(row, bookmark, runId); return; }
   const readyRow = createReadyBookmarkRow(bookmark, runId);
   if (row) row.replaceWith(readyRow);
-  else document.getElementById("bookmarksContainer")?.prepend(readyRow);
+  else {
+    document.getElementById("bookmarksContainer")?.prepend(readyRow);
+    insertBookmarkRowSoftly(readyRow);
+  }
+}
+
+// A finished run's row becomes the saved row in place: same node, same
+// height, its title kept; the status words fade and the title takes their
+// room in one glide (layout.css). Replacing it moved the list by 2 px and
+// switched colour and length in one frame (Apple audit C7, A11).
+function settleRunRow(row, bookmark, runId) {
+  const hadFocus = row === document.activeElement;
+  row.classList.remove("run-entry", "is-pending", ...[...row.classList].filter(name => name.startsWith("run-status-")));
+  ["role", "tabindex", "aria-label", "title"].forEach(name => row.removeAttribute(name));
+  row.dataset.id = bookmark.id;
+  if (runId) row.dataset.runId = runId;
+  let label = row.querySelector(":scope > p");
+  if (!label) { label = document.createElement("p"); row.prepend(label); }
+  const title = bookmarkLabelText(bookmarkDisplayTitle(bookmark));
+  if (label.textContent !== title) label.textContent = title;
+  setBookmarkTitleControl(label);
+  const status = row.querySelector(":scope > .run-entry-status");
+  if (status) {
+    const quiet = !status.animate || matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (quiet) status.remove();
+    else status.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" })
+      .finished.catch(() => {}).then(() => status.remove());
+  }
+  if (!row.querySelector(":scope > .bookmark-menu-button")) row.append(createBookmarkMenuButton(title));
+  if (undoableBookmarkDeletes.has(bookmark.id)) row.classList.add("is-undo-pending");
+  syncActiveBookmark();
+  if (hadFocus) label.focus({ preventScroll: true });
 }
 
 function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
@@ -3393,9 +3827,9 @@ function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
   if (prepend) container.prepend(div);
   else container.appendChild(div);
 
-  // Animation
-  div.classList.add("fade-in");
-  setTimeout(() => div.classList.remove("fade-in"), 500);
+  // A chat saved while the list is open opens its place softly; the first
+  // page of a list load has its own fade (revealLoadedBookmarks).
+  if (prepend) insertBookmarkRowSoftly(div);
 }
 
 function finalizeRegistryRunBookmark(context) {
@@ -3420,10 +3854,12 @@ function finalizeRegistryRunBookmark(context) {
 window.App.bookmarkUi = Object.freeze({
   finalizeRun: finalizeRegistryRunBookmark,
   replacePendingBookmarkWithReady,
+  insertSoftly: insertBookmarkRowSoftly,
   versionForParts: bookmarkShareVersion,
   versionParts: bookmarkShareVersionParts,
   invalidate(bookmarkId) {
     bookmarkDetailCache.delete(String(bookmarkId || ""));
+    bookmarkViewCache.delete(String(bookmarkId || ""));
   },
   canWrite(bookmarkId, uid = auth.currentUser?.uid) {
     return bookmarkWriteAllowed(uid, bookmarkId);

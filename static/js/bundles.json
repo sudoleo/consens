@@ -95,6 +95,10 @@
           "note": "App.feedback: the Send feedback dialog (guest hint, inline status, POST /feedback). Uses App.modalDialog, window.auth and App.openAuthModal at call time."
         },
         "static/js/chat-scroll.js",
+        {
+          "file": "static/js/undo-notice.js",
+          "note": "App.undoNotice: the shared \"… · Undo\" line (chat deletion, firebase.js). Used at call time only."
+        },
         "static/js/feature-access.js",
         "static/js/model-picker.js",
         {

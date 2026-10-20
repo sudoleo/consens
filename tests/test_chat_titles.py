@@ -217,3 +217,60 @@ def test_later_saves_of_the_run_keep_the_generated_name():
     assert response.status_code == 200
     assert response.json()["bookmark"]["title"] == "Opening topic"
     assert bookmark_ref.data["title"] == "Opening topic"
+
+
+def test_a_renamed_chat_keeps_its_name_on_the_chat_through_later_saves_and_title_requests():
+    """Rename in the sidebar row menu (Apple audit E2)."""
+    chat_id = "c" * 32
+    bookmark_ref = FakeBookmarkRef("renamed_bookmark", {
+        "query": "First question", "title": "Opening topic", "title_source": "generated",
+        "chat_id": chat_id, "responses": {},
+    })
+    store = FakeChatStore(chat_id)
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+        patch.object(bookmarks_router, "_chat_store", return_value=store),
+        patch.object(bookmarks_router, "generate_title", side_effect=AssertionError("no model call")),
+        patch.object(
+            bookmarks_router,
+            "_authoritative_consensus_payload",
+            return_value={
+                "question": "First question", "consensus": "Consensus", "differences": "",
+                "differences_data": None, "sources": [], "result_id": "",
+            },
+        ),
+    ):
+        client = _client()
+        headers = {"Authorization": "Bearer token"}
+        renamed = client.patch("/bookmarks/renamed_bookmark/title", headers=headers,
+                               json={"title": "  Our   heat pump\nplan  "})
+        named = client.post("/bookmarks/renamed_bookmark/title", headers=headers)
+        saved = client.post("/bookmark/consensus", json={
+            "id_token": "token", "bookmarkId": "renamed_bookmark", "question": "First question",
+            "consensusText": "Consensus", "differencesText": "",
+        })
+        empty = client.patch("/bookmarks/renamed_bookmark/title", headers=headers, json={"title": "   "})
+
+    assert renamed.status_code == 200
+    assert renamed.json()["bookmark"]["title"] == "Our heat pump plan"
+    assert renamed.json()["bookmark"]["title_source"] == "user"
+    assert store.ref.updates == [{"title": "Our heat pump plan"}]
+    assert named.json()["bookmark"]["title"] == "Our heat pump plan"
+    assert saved.json()["bookmark"]["title"] == "Our heat pump plan"
+    assert bookmark_ref.data["title"] == "Our heat pump plan"
+    assert bookmark_ref.data["title_source"] == "user"
+    assert empty.status_code == 400
+
+
+def test_renaming_a_missing_chat_creates_nothing():
+    bookmark_ref = FakeBookmarkRef("gone_bookmark", None)
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+    ):
+        response = _client().patch("/bookmarks/gone_bookmark/title", headers={"Authorization": "Bearer token"},
+                                   json={"title": "New name"})
+
+    assert response.status_code == 404
+    assert bookmark_ref.data is None

@@ -589,7 +589,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   background: transparent;
   box-shadow: none;
   color: var(--ink);
-  /* Right side stays free for the delete X (layout.css); on touch it is
+  /* Right side stays free for the "…" menu (layout.css); on touch it is
      always shown with a row-high tap target. */
   padding: 6px 34px 6px 8px;
 }
@@ -1025,7 +1025,8 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
     animation: send-fan-out 0.6s ease-out;
   }
 
-  .input-action-btn-primary.is-cancel-action svg {
+  .input-action-btn-primary.is-cancel-action svg,
+  .input-action-btn-primary.is-returning svg {
     animation: send-stop-in 0.22s ease-out 0.06s backwards;
   }
 }
@@ -2991,6 +2992,28 @@ body:not(.is-hero) .consensus-section::before {
   display: none;
 }
 
+/* A chat that is still loading (firebase.js showChatOpening): its question
+   and a quiet answer skeleton stand where the chat will be, the moment its
+   row is chosen. The chat before is only hidden, so a failed load gives it
+   back unchanged. */
+.thread-opening {
+  display: none;
+  order: 1;
+}
+
+body.chat-opening:not(.is-hero) .thread-opening {
+  display: block;
+}
+
+body.chat-opening:not(.is-hero) .container > :not(.thread-opening, .input-section, .chat-scroll-reserve) {
+  display: none !important;
+}
+
+/* Where the answer will start: below the question as in a live turn. */
+.thread-opening .answer-skeleton {
+  margin-top: 38px;
+}
+
 .thread-history-turn {
   display: flex;
   flex-direction: column;
@@ -3032,6 +3055,24 @@ body:not(.is-hero) .consensus-section::before {
 
 .thread-history-answer {
   margin: 0 6px;
+}
+
+/* An Agent turn in the history keeps the live turn's boxes to the pixel:
+   when a follow-up starts, the live question and answer move up into the
+   history as they are (agent-chat.js liveTurn), and a reopened chat builds
+   the same boxes. The question keeps .thread-ask's margins; the answer keeps
+   .agent-answer's padding, and its 16px top margin stands in for the empty
+   .consensus-section (order 3) that separates them in the live turn. */
+.thread-history-turn.is-agent-turn {
+  gap: 0;
+}
+
+.thread-history-turn.is-agent-turn > .thread-history-question {
+  margin: 10px 6px 18px;
+}
+
+.thread-history-turn.is-agent-turn > .thread-history-answer {
+  margin: 16px 0 0;
 }
 
 .thread-history-answer-label {
@@ -4763,15 +4804,12 @@ body .theme-toggle:is(:hover, :focus-visible) {
   .sidebar .bookmark p { flex: 1; min-width: 0; line-height: var(--line-height-tight); }
   .sidebar .bookmark:hover { background: var(--drawer-tint); }
   .sidebar .bookmark.is-active { background: var(--drawer-tint-strong); }
-  .sidebar .bookmark .delete-bookmark {
+  .sidebar .bookmark .bookmark-menu-button {
     right: 2px !important; min-width: 40px; height: 40px; max-height: none;
-    border-radius: var(--radius-xs); opacity: 1;
+    border-radius: var(--radius-xs); opacity: 1; color: var(--ink-3);
   }
-  /* Grey only at rest: the armed "Delete" keeps its red (layout.css). */
-  .sidebar .bookmark .delete-bookmark:not(.is-armed) { color: var(--ink-3); }
-  .sidebar .bookmark .delete-bookmark:not(.is-armed):hover { background: transparent; color: var(--ink); }
-  .sidebar .bookmark .delete-bookmark.is-armed { right: 6px !important; height: 28px; min-width: 0; }
-  .sidebar .bookmark.is-confirming-delete { padding-right: 84px; background: var(--drawer-tint); }
+  .sidebar .bookmark .bookmark-menu-button:is(:hover, [aria-expanded="true"]) { background: transparent; color: var(--ink); }
+  .sidebar .bookmark.has-menu { background: var(--drawer-tint); }
 
   /* Account: one row, no rule above it; the list simply ends. */
   .sidebar-settings { border-top: 0; padding-top: 6px; gap: 0; }

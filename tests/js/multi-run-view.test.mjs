@@ -255,6 +255,27 @@ describe("selected RunContext projection", () => {
     expect(document.querySelector(".diff-card")).toBe(diff);
     dom.window.close();
   });
+  it("builds a run's row once and changes only its words, so its pulse runs on (Apple audit C7)", () => {
+    const { registry, document, dom } = boot();
+    const run = createRunning(registry, "Pulse");
+    const row = document.querySelector(`[data-run-id="${run.runId}"]`);
+    const label = row.querySelector("p"), status = row.querySelector(".run-entry-status");
+    const writes = [];
+    new dom.window.MutationObserver(records => writes.push(...records)).observe(label, { childList: true, characterData: true, subtree: true });
+    registry.update(run.runId, context => { context.phase = "consensus"; });
+    for (let i = 0; i < 5; i += 1) registry.update(run.runId, () => {});
+    expect(row.querySelector("p")).toBe(label);
+    expect(row.querySelector(".run-entry-status")).toBe(status);
+    expect(status.textContent).toBe("Writing consensus");
+    expect(row.classList.contains("is-pending")).toBe(true);
+    return new Promise(resolve => setTimeout(() => {
+      // The unchanged title was never written again.
+      expect(writes).toHaveLength(0);
+      dom.window.close();
+      resolve();
+    }));
+  });
+
   it("keeps late background updates out of the visible DOM and restores either run from its row", () => {
     const { registry, document, dom } = boot();
     const runA = createRunning(registry, "A");

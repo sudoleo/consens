@@ -1083,9 +1083,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Watch-Seite), Watches bei offener Watch-Seite, der offene Chat (`.is-active`).
   „Chats“ (vorher „Bookmarks“, auch auf Desktop) ist eine leise Überschrift
   ohne Symbol, der Pfeil erscheint nur bei eingeklappter Liste. Chat-Zeilen sind
-  40 px hoch, rechts steht statt des × ein gedämpftes ··· (`BOOKMARK_DELETE_ICON`
-  in `firebase.js`, auch für Desktop-Hover); Antippen schaltet wie bisher auf
-  „Delete“ um, erst das zweite Antippen löscht. Die Liste läuft oben und unten
+  40 px hoch, rechts steht ein gedämpftes ··· (`.bookmark-menu-button`,
+  `BOOKMARK_MENU_ICON` in `firebase.js`, auch für Desktop-Hover); es öffnet seit
+  2026-10-20 ein echtes Menü (Rename, Share, Delete, siehe „Chatliste:
+  Zeilen, Menü, Löschen mit Undo“). Die Liste läuft oben und unten
   per `mask-image` weich aus statt eine Zeile anzuschneiden; Trennlinien
   (Reiter-Unterstrich, Linie über dem Konto) entfallen, der Tarif im Fuß ist
   grau (Gold bleibt am Kürzel). Imprint · Privacy · Terms bleiben bewusst
@@ -1670,7 +1671,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Läufen, in denen die Zeile *zwischen* den `$$` als eigener „Satz" landete:
   nur wenn außer LaTeX nichts im Anker steht, wird er nachträglich als Formel
   gesetzt — ein einziges Wort Text lässt ihn Text bleiben.
-- **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
+- **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`, `morphMarkdown`,
+  `renderMarkdownStream`, `keepTextSelection`, ein Parse je Render über
+  `renderMarkdownFragment`) + SSE-Helfer
   (`createStreamRenderer`, `streamSSERequest`; eine `id:`-Zeile wird als zweites
   Argument an `renderer.receive(data, id)` gereicht, nur wenn vorhanden); setzt LaTeX nach jedem
   gedrosselten Streaming-Render über `window.ConsensusMath`. Fehlt `marked`
@@ -2003,6 +2006,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   pro Animationsframe hoechstens einmal nach. Reine Hoehenmeldungen werden
   ignoriert, damit eigene Schreibzugriffe keine Schleife erzeugen. So bleibt
   nach einer schmalen Zwischenbreite kein ueberhohes leeres Feld stehen.
+  Gemessen wird bei Hoehe 0, aber der Elternblock haelt dabei seine Hoehe
+  (`min-height`, danach geloest): die Seite wird fuer die Messung nie kuerzer,
+  sonst zog die Scroll-Klammer des Browsers am Chatende den Text beim ersten
+  Tastendruck hoch (seit 2026-10-20, Apple-Audit A12).
   `tests/js/composer-autosize.test.mjs` prueft diese Ereignisgrenzen; der Smoke-
   Browserfall prueft echtes Layout inklusive der abgeschlossenen Transition.
 - **Hero ↔ Thread gleitet (2026-10-03)** — `.input-section` hat keine
@@ -2125,10 +2132,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   das gerundete `scrollHeight`, und sie rundet ab: sonst tauschten Reserve und
   Seitenhöhe bei gebrochener Lage (Frage bei 292,625 px, Full-HD-Fenster) in
   jedem Frame 1 px, und die Scrollleiste flackerte den ganzen Lauf über.
-  `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` für einen
-  einmaligen sanften Sprung ans Gesprächsende auf (mit Reserve: die letzte
-  Frage oben), auch bei noch lokal vorhandenen Runs; mobil schließt dabei die
-  Sidebar. „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
+  `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` auf, auch
+  bei noch lokal vorhandenen Runs: **seit 2026-10-20 ohne Fahrt** (Apple-Audit
+  A2/A3) — die neueste Frage wird synchron vor dem ersten Bild an ihre
+  Landeposition geschrieben (`behavior: "instant"`, nicht ans absolute Ende,
+  mobil also nie unter dem schwebenden Kopf) und folgt ihr nur noch
+  `OPEN_SETTLE_MS` (600 ms) lang, falls spätes Layout sie verschiebt; jede
+  Leseinteraktion beendet das. Die 420-ms-Fahrt gibt es nur noch für Senden
+  (`sent()`, Frage nach oben) und „Latest message“. `closeMenu()` schließt das
+  Handy-Menü; `openBookmark` ruft es schon beim Antippen.
+  „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
   beim Drücken bestand (gemessen an der Reserve-Unterkante); Text, der während
   des Sprungs ankommt, verlängert ihn nicht, ein wachsender Composer schon.
   Gespeicherte Ansichten binden die
@@ -2908,8 +2921,11 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   direkt darunter „Watched“). Ein geöffnetes Bookmark beendet den Hero-
   Leerzustand sofort. Bookmark-
   Jeder vom Server bestätigte Save (`upsertBookmarkMeta`, nicht das Laden der
-  Liste) fordert für ein Bookmark ohne `title_source: "generated"` einmal pro
-  Sitzung `POST /bookmarks/{id}/title` an (`requestBookmarkTitle`) und blendet
+  Liste) fordert für ein Bookmark ohne `title_source` `"generated"`/`"user"`
+  (`KEPT_TITLE_SOURCES`) einmal pro
+  Sitzung `POST /bookmarks/{id}/title` an (`requestBookmarkTitle`); ein vom
+  Nutzer gesetzter Name kommt über `PATCH /bookmarks/{id}/title` (`{title}`,
+  `rename_bookmark`, schreibt auch den Chat-Titel) und bleibt. `requestBookmarkTitle` blendet
   den Namen in Sidebar-Zeile, Run-Zeile und `bookmarksData` weich ein
   (`applyBookmarkTitle`); ältere Unterhaltungen bekommen ihn beim nächsten
   Turn. Liste, Saves und Löschen stoßen außerdem
@@ -3679,8 +3695,8 @@ tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Sta
 eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
 Laufs, sobald er `succeeded`/`partial` ist;
 davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
-`#agentAnswerBody`. `renderAnswer` zählt `_agentRenderSerial` hoch, damit ein
-neu injizierter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
+`#agentAnswerBody`. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
+neu gerenderter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
 beim ersten Auftreten je `answer_hash` (`evidence.reveal`). Veraltete
 Antwort-/Grundlagenbindungen werden nicht angezeigt.
 Seit 2026-10-18 legt der Handler `coverage_preview` das neueste Event je
@@ -4550,6 +4566,52 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Ein Klick auf `.bookmark.run-entry[data-run-id]` setzt `visibleRunId` und
   projiziert den exakten Zwischen-/Endstand dieses Contexts zurück. Nur Logout
   beziehungsweise ein Auth-Reset cancelt und verwirft alle Runs.
+- **Chat öffnen (`firebase.js` `openBookmark`, seit 2026-10-20, Apple-Audit
+  D2):** Das Antippen antwortet sofort: Handy-Menü zu
+  (`App.chatScroll.closeMenu`), Zeile markiert (`syncActiveBookmark` setzt
+  `.bookmark.is-active` + `aria-current` für den Chat auf dem Schirm, nachgeführt
+  bei jedem Registry-Ereignis und neuen Zeilen). Ein Chat aus dem Speicher
+  (`bookmarkViewCache`, die letzten 10 geöffneten, LRU; jeder Save über
+  `upsertBookmarkMeta`, Löschen und `bookmarkUi.invalidate` werfen ihn raus)
+  steht sofort da und wird im Hintergrund geprüft; nur eine echte Änderung
+  (`bookmarkViewSignature`) rendert ihn neu, ohne die Leseposition zu bewegen.
+  Sonst zeigt `showChatOpening` sofort Frage (aus der Listen-Meta) und
+  `.answer-skeleton` (`.thread-opening`, `body.chat-opening` blendet den
+  vorigen Chat nur aus; ein Fehler gibt ihn unverändert zurück), und
+  `loadBookmarkView` lädt Detail (`/bookmarks/{id}`) und Transkript
+  (`/bookmarks/{id}/conversation`, jetzt nur per Bookmark-ID) **parallel**; ein
+  fehlendes, fehlerhaftes oder fremdes Transkript (`chat_id` ≠ Detail) fällt wie
+  bisher auf die gespeicherten Fortsetzungsdaten zurück. Jedes Registry-
+  Sichtereignis räumt eine noch stehende Öffnung weg.
+- **Chatliste: Zeilen, Menü, Löschen mit Undo (seit 2026-10-20, Apple-Audit
+  E2/E5/H11/C7/A11/C12).** Eine gespeicherte Zeile ist `div.bookmark[data-id]`
+  mit `p[role=button][tabindex=0]` (Titel = Tastatur-Bedienelement, Enter/Leertaste
+  öffnet, der Fokusring liegt um die ganze Zeile) und `.bookmark-menu-button`
+  („…“, `aria-haspopup="menu"`). Klicks und Tasten laufen über je **einen
+  delegierten Listener** (`firebase.js` für gespeicherte Zeilen, `run-view.js`
+  für `.run-entry`). Das Menü (`.bookmark-menu`, auf `<body>`, Material des
+  Composer-Menüs) bietet Rename (Titel wird zum gleich großen Feld; Enter/
+  Verlassen speichert über `PATCH /bookmarks/{id}/title`, `title_source:
+  "user"`, das wie `generated` spätere Saves und Namensgenerierung übersteht,
+  `persistence_guard.KEPT_TITLE_SOURCES`), Share (öffnet den Chat, dann den
+  Share-Dialog) und Delete. **Löschen** blendet die Zeile sofort aus
+  (`.is-undo-pending`), verlässt einen offenen Chat sofort und zeigt
+  `App.undoNotice` „Chat deleted · Undo“ (5 s, Hover/Fokus pausieren); erst
+  danach läuft das unveränderte `deleteBookmark` (Fence, Run-Abbruch, DELETE).
+  Ein neuer Lauf (Registry `created`), eine verdeckte Seite und Logout löschen
+  sofort (`settleUndoableBookmarkDeletes`), damit Chat-Limit und Seitenende nie
+  warten. Die Lauf-Zeile (`ensureRunRow`) wird einmal gebaut und schreibt
+  danach nur geänderte Wörter (Puls läuft durch), hat die Höhe einer
+  gespeicherten Zeile und wird am Ende **an Ort und Stelle** zur gespeicherten
+  Zeile (`settleRunRow`: Status blendet aus, `padding-right` gleitet).
+  Neue Zeilen öffnen ihren Platz weich (`bookmarkUi.insertSoftly`). Eine Suche
+  ohne Treffer sagt „No chats match …“ (`#bookmarksSearchEmpty`, `app-init.js`
+  `filterBookmarks`); die leere Liste eines neuen Kontos bleibt leer.
+- **`App.undoNotice` (`static/js/undo-notice.js`, `css/undo-notice.css`) —
+  gemeinsamer Baustein** für jeden rücknehmbaren Schritt, bis Welle 2 das
+  gemeinsame Hinweis-System baut: `show({text, actionLabel, onAction, onExpire,
+  duration})` → `{settle(), cancel()}`; eine neue Zeile erledigt die vorige
+  (ihr `onExpire` läuft). Eine Zeile unten mittig, `role=status`.
 - Jeder asynchrone Callback prüft Run- und Auth-Identität, mutiert ausschließlich
   den eigenen Context und rendert den Haupt-DOM nur, wenn dessen `runId` gerade
   sichtbar ist. Quellen-Mapping arbeitet auf expliziten Listen statt
@@ -4664,8 +4726,8 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   davon einen Snapshot und eine eigene `ChatSession`. `window.App.followup`
   (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
   sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
-  `run-view.js` baut ihn bei jedem Sichtwechsel aus `historyTurns` und der
-  completed Basis des gewählten Contexts neu auf. **Seit 2026-08-07 hat der
+  `run-view.js` gleicht ihn bei jedem Sichtwechsel mit `historyTurns` und der
+  completed Basis des gewählten Contexts ab (Verlauf: nur anhängen, siehe unten). **Seit 2026-08-07 hat der
   Composer überhaupt keine
   Follow-up-Affordance mehr** (User-Vorgabe: „Das Follow-up-Feature ist
   überflüssig, Chats sollten standardmäßig fortführbar sein"): der frühere
@@ -4696,10 +4758,30 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   `{chat_id, turn_id, context_version_id}` an alle sechs `/ask_*` sowie später
   an `/consensus`. `ready` und `degraded` sind gleichermaßen verwendbare,
   autoritative Versionen; `202 building` wird begrenzt wiederholt.
-  Der Context übernimmt den vorherigen completed Turn in `historyTurns`; der
-  Projektor rendert ihn als statischen Turn in `#threadHistory` und die neue
-  Frage in `#threadAsk`. Sichtwechsel bauen beide Bereiche vollständig aus dem
-  gewählten Context neu auf; der alte Live-Renderbaum ist nie die Datenquelle.
+  Der Context übernimmt den vorherigen completed Turn in `historyTurns` schon
+  bei `registry.create({historyTurns})` (Agent und Consensus), damit seine
+  erste Projektion den Turn bereits im Verlauf zeigt; der Projektor rendert ihn
+  in `#threadHistory` und die neue Frage in `#threadAsk`.
+  **Verlauf wird nie verkürzt (seit 2026-10-20, Apple-Audit A1/A4):**
+  `followup.renderStoredTurns(turns, {adopt})` vergleicht die Turns auf der
+  Seite per `turnKey` (Turn-ID, Frage, Status, Review-Status, Textlänge), lässt
+  den passenden Anfang stehen, entfernt nur Nachfolgendes, das nicht mehr
+  dazugehört, und hängt Fehlendes an; ein anderer Chat ersetzt den Verlauf in
+  einem Schritt (`replaceChildren`, außerhalb der Seite gebaut,
+  `buildHistoryTurn` → `{node, attached}`). Vorher leerte jeder Lauf/Chatwechsel
+  den Verlauf zuerst: die Seite war kurz zu kurz, der Browser kappte scrollY,
+  und eine Folgefrage sprang nach oben und fuhr zurück. Im Agent-Modus wandert
+  der Live-Turn beim Start der Folgefrage **als DOM-Knoten** in den Verlauf
+  (`agent-chat.js` `liveTurn.owns/take`, nur wenn `#agentAnswer[data-turn-key]`
+  genau den fortgesetzten Turn zeigt): `#threadAsk` und `#agentAnswer` samt
+  Aufgeklapptem, Karten, Marken und Logos ziehen um, ihre Vertrags-IDs werden
+  entfernt, und frische Kopien des Seiten-Originals (`pristine`, beim Laden
+  geklont) übernehmen die IDs. `agentDelegation.release()` lässt die Logos am
+  umgezogenen Turn (Klick öffnet dann dessen Antworten im Leser). Agent-Turns
+  im Verlauf (`.thread-history-turn.is-agent-turn`, Antwort zusätzlich
+  `.agent-answer`, Aktivität `.agent-answer-activity`) haben exakt die Boxen
+  des Live-Turns; frisch gebaute ebenso. Consensus-Turns werden weiter frisch
+  gebaut (kein Umzug des Live-Consensus), aber nur angehängt.
   Interaktive Marker der Archivkopie werden zu reinen Anzeigeelementen. Das
   archivierte Agreement
   nutzt mit einem wachsenden `.verdict-main` die volle Threadbreite; die
@@ -5498,7 +5580,11 @@ Versionsdaten ersetzen niemals den bekannten Familiennamen.
 Ab 1400px ist der einfache Leser rechts angedockt, mit entsprechend schmalerer
 Chatspalte. Die Dockbreite waechst zwischen 520 und 720px (36vw); der Chat bleibt in der
 Restflaeche zwischen linker Navigation und Leser zentriert, auch bei eingeklappter
-Navigation. Die Textbreite des Chats bleibt auf 900px begrenzt.
+Navigation. Die Textbreite des Chats bleibt auf 900px begrenzt. Andocken und
+Lösen halten die Zeile fest, die den Leser öffnete (sonst den ersten Textblock
+oben im Bild): `modeLayout` misst sie vor dem Klassenwechsel und scrollt im
+selben Bild um die Verschiebung zurück (`readingAnchor`, seit 2026-10-20,
+Apple-Audit A8).
 Auf kleineren Viewports sowie beim erweiterten Zweiervergleich oeffnet er modal
 (native Fokusbegrenzung/Escape); bis 1099px bildschirmfuellend
 inklusive Safe-Area-Abstaenden. Im Dialog stehen zwei Antworten erst ab 760px tatsaechlicher
@@ -8355,7 +8441,9 @@ ersten Check statt eines leeren Consensus-Panels.
   Follow-up-Kompatibilitäts- und Verlauf-State der sichtbaren Projektion
   (`offer/consume/reset/render`,
   `isArmed/hasContinuableExchange/markContinuationUnavailable/
-  archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory`).
+  archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory/
+  turnKey/buildHistoryTurn`; `renderStoredTurns` hängt nur an, siehe
+  „Follow-up-Fragen“).
   `run-view.js` speist ihn aus dem gewählten Context; `query-send.js` darf ihn
   nicht als Fortsetzungsquelle verwenden. `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
@@ -8750,6 +8838,14 @@ gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
 dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
 Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18) zeichnet
 `project` schon, während die feste Antwort geprüft wird.
+Seit 2026-10-20 (Apple-Audit D4) malt `follow()` gestreamten Text einmal pro
+Frame (`schedulePaint` → `renderAnswerBody(..., 'stream')`, nur in eine Antwort,
+die dieser sichtbare Lauf schon streamt), getrennt vom 100-ms-Takt der übrigen
+Projektion; ein Frame über 8 ms rückt den nächsten um das Doppelte hinaus.
+Sobald die Review den gestreamten Text als Version hält („settled“), rendert
+`project` ihn vollständig (`morphMarkdown` mit `streamSourcePills`, in die
+gezeigten Knoten und mit `keepTextSelection`) – auch eine Antwort, die mit
+einer Tabelle endet, zeigt sie so schon während der Prüfung.
 Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
 (`LOADING_NOTICE_DELAY_MS`); vorher schob ihr kurzes Aufblitzen den zentrierten
 Composer beim Reload hoch und wieder runter. Erstes Zeichnen: Endete die letzte
@@ -8774,9 +8870,38 @@ offene neu. Listen/Zitate über Leerzeilen bleiben zusammen, eine Grenze gilt er
 mit vollständiger Folgezeile. Ein im offenen Block begonnenes, noch nicht
 geschlossenes `**` rendert `closeOpenStrong` schon fett statt mit rohen
 Sternchen (nicht in Code-Fences). Fremde Schreibzugriffe oder nicht nur wachsender
-Text starten neu. Die finale Antwort rendert einmal vollständig mit
-`injectMarkdown` (gleiche Sanitisierung). `resetMarkdownStream(el)` verwirft den
-Zustand. Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
+Text starten neu. Seit 2026-10-20 (Apple-Audit D4/A5/A6) wird der offene Block
+nicht mehr ersetzt, sondern in die gezeigten Knoten **gemorpht**
+(`morphNodes`: gleiche Knotenart bleibt dasselbe Objekt, Text wächst per
+`appendData`, Attribute und `sourceData`/`sourceGroup` der Pills wandern mit;
+anderes wird aus dem neuen Render übernommen, das Ergebnis gleicht ihm Knoten für
+Knoten) – ein Link im entstehenden Absatz bleibt klickbar, eine Auswahl darin
+bleibt; wird der Block fertig, morpht sein endgültiger Render in dieselben Knoten.
+Eine noch einströmende Tabelle (Zeile mit führendem `|` außerhalb von Fences)
+steht als `.stream-table-pending` da: je angekommener Zeile ein leiser
+`.skeleton`-Balken in Zeilenhöhe (`aria-hidden`), die Tabelle erscheint erst
+vollständig – vorher rutschten die Spaltenköpfe mit jeder Zeile seitlich.
+Markdown wird einmal geparst: `renderMarkdownFragment(md)` lässt DOMPurify
+(`RETURN_DOM_FRAGMENT`) seinen eigenen DOM liefern, entschärft entfernte Bilder,
+solange die Knoten noch in DOMPurifys inertem Dokument stehen (ein `<img>` lädt
+ab der Übernahme ins Seitendokument), und übernimmt sie erst dann
+(`document.adoptNode`). `window.morphMarkdown(el, md, { decorate })` rendert den
+festen Text vollständig wie `injectMarkdown(el, md, [])`, aber in die gezeigten
+Knoten. `window.keepTextSelection(root, change)` hält eine Auswahl über `change`
+hinweg als Position im Fließtext (Claim-Badges und Pills zählen nicht) und
+setzt sie nur zurück, wenn sie verloren ging. Jeder Markdown-Schreibvorgang zählt
+`el._markdownWrites` hoch; Marken-Renderer erkennen daran (zusammen mit dem
+ersten Knoten) einen neuen Render, denn ein Morph behält den ersten Knoten.
+`resetMarkdownStream(el)` verwirft den Zustand. `injectMarkdown(el, md, [])`
+merkt sich, was es geschrieben hat (`el._plainMarkdown`);
+`window.isPlainMarkdown(el, md)` ist wahr, solange `el` genau das noch
+unmarkiert zeigt. `agent-review.js` `mark()` markiert dann direkt statt
+denselben Text ein zweites Mal zu rendern (Apple-Audit D5: jeder geöffnete
+Agent-Turn lief zweimal durch Markdown). Vorläufige und endgültige Marken
+(`preview()`, `mark()`) und das Abnehmen der Marken legen sich über den Text
+(`overText`): Rückmorph auf den schlichten Render, Marken, Pills, Auswahl
+zurück – vorher ersetzte jede Prüf-Aktualisierung die ganze Antwort (A6).
+Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
 gibt jedem Block vor dem Einhängen seine endgültige Inline-Form; Agent nutzt das
 für Quellen-Pills (`agent-chat.js::streamSourcePills` → `linkifyAgentSources`
 mit den Links des Blocks). Pills zeigen den Host, ihre Breite hängt also nicht
@@ -8873,8 +8998,26 @@ bei Platz neben der Spalte). Das Panel-Symbol neben den Modell-Icons
 `aria-controls="agentSidebar"`) oder ein Modell-Icon öffnet sie: unter 1200 px
 als Sheet mit Scrim, Fokusfalle und Escape, ab 1200 px daneben; offen rückt
 die Spalte nach links (`body.agent-sidebar-open`), statt unter der Leiste zu
-liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
+liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt, **und seit
+2026-10-20 auch pro Chat** (`agent-panel:{uid}:{chatId}` in sessionStorage,
+Apple-Audit A9): ein neuer Turn übernimmt die Wahl des Chats, und solange eine
+Folgefrage ihren Turn noch nicht kennt (`project({chatId, running})` ohne
+`turnId`), bleibt eine offene Leiste mit „Starting…“ stehen, statt zu- und
+wieder aufzugehen. Sie geht auf demselben Weg, wie sie kam
+(`setPanelVisible`, `.is-leaving` gleitet/blendet samt Scrim aus, erst danach
+`hidden`; C5). Logo-Einflug (`.agent-inline-model.is-arriving`) nur für Modelle,
+die während eines laufenden Turns dazukommen; ein gespeicherter Turn zeigt seine
+Logos sofort aus `agent_review` (`project({models})`, `agent-chat.js`
+`reviewModels`), die spätere Agent-Liste ergänzt dieselben Knöpfe (A10). Der
+2,5-s-Takt existiert nur
 während eines laufenden bzw. abschließenden Laufs und endet danach.
+Die Kopfzeile tickt in einem Feld fester Breite (A7): `.agent-activity-verb`
+reserviert die Breite des breiteren Verbs („Working for“/„Thought for“, das
+andere unsichtbar per `data-ghost`), `.agent-activity-time[data-unit]` die des
+größten Werts seiner Einheit; eine live tickende Uhr hält von der ersten Sekunde
+an den Minuten-Platz und behält ihn fürs Endlabel. Pfeil und Logos stehen still
+(gemessen: Chevron bei 9 s, 10 s, 1 min und „Thought for“ auf demselben Pixel),
+der Wortlaut bleibt.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
 Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:
 `checkRow` fasst alle Versuche, Wiederholungen und Backup-Judges zu einer Zeile

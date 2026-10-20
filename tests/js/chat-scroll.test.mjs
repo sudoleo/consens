@@ -119,20 +119,39 @@ describe("conversation scroll", () => {
     app.dom.window.close();
   });
 
-  it.each(['agent', 'consensus'])('opens a saved %s conversation with one cancellable smooth jump to its end', mode => {
+  it.each(['agent', 'consensus'])('opens a saved %s conversation at its newest question before the first frame, without a ride', mode => {
     const app = boot({ mode });
-    app.saved(); app.window.App.chatScroll.opened(); app.tick(8);
-    expect(app.window.scrollY).toBeGreaterThan(0);
-    expect(app.window.scrollY).toBeLessThan(2400);
-    app.grow(500); app.tick();
-    expect(app.window.scrollY).toBe(2900);
-    app.grow(500); app.tick();
-    expect(app.window.scrollY).toBe(2900);
-    app.scroll(0); app.window.App.chatScroll.opened(); app.wheel(); app.tick();
-    expect(app.window.scrollY).toBe(0);
-    app.window.App.chatScroll.opened(); app.saved('different'); app.tick();
-    expect(app.window.scrollY).toBe(0);
-    app.window.App.chatScroll.opened(); app.window.App.runRegistry.isAuthCurrent = () => false; app.tick();
+    app.saved(); app.window.App.chatScroll.opened();
+    // Written at once, as one instant scroll: no frame shows the top first.
+    expect(app.window.scrollY).toBe(2000);
+    expect(app.window.scrollTo).toHaveBeenCalledTimes(1);
+    expect(app.window.scrollTo.mock.calls[0][0].behavior).toBe('instant');
+    // More content below (late layout) does not pull it to the end.
+    app.grow(500); app.tick(4);
+    expect(app.window.scrollY).toBe(2000);
+    // The question settling a little is followed while the view settles ...
+    app.moveAsk(2060); app.tick(4);
+    expect(app.window.scrollY).toBe(2060);
+    expect(app.window.scrollTo.mock.calls.every(([value]) => value.behavior === 'instant')).toBe(true);
+    // ... and never after it.
+    app.tick(40); app.moveAsk(2300); app.tick();
+    expect(app.window.scrollY).toBe(2060);
+    // The reader takes over at once; another view or account writes nothing.
+    app.scroll(0); app.moveAsk(2000); app.window.App.chatScroll.opened(); app.wheel(); app.moveAsk(2100); app.tick();
+    expect(app.window.scrollY).toBe(2000);
+    app.scroll(0); app.window.scrollTo.mockClear();
+    app.saved('different'); app.window.App.runRegistry.isAuthCurrent = () => false; app.window.App.chatScroll.opened(); app.tick();
+    expect(app.window.scrollTo).not.toHaveBeenCalled();
+    app.dom.window.close();
+  });
+
+  it('opens a short chat with its question below the header, not cut off at the end', () => {
+    // A phone: the question sits right under the column's top padding.
+    const app = boot({ askAt: 88 });
+    app.document.querySelector('.container').style.paddingTop = '46px';
+    app.document.getElementById('threadAsk').style.marginTop = '10px';
+    app.document.querySelector('.container').getBoundingClientRect = () => ({ top: 32 - app.window.scrollY, bottom: 3200 - app.window.scrollY });
+    app.saved(); app.window.App.chatScroll.opened(); app.tick();
     expect(app.window.scrollY).toBe(0);
     app.dom.window.close();
   });

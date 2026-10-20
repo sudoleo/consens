@@ -461,6 +461,7 @@
       setAnswerChecking(document.getElementById("agentAnswerBody"), false, { fade: false });
       renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure, basis.currentTurn?.agent_review, basis.consensus || "")
         : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
+      markLiveTurn(basis.currentTurn);
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
@@ -476,9 +477,11 @@
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_settings_proposal : null });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
-        usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
+        usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending",
+        models: reviewModels(basis.currentTurn?.agent_review) } : null);
     }
     if (!agent || (!context && !basis)) {
+      markLiveTurn(null);
       App.agentDelegation?.project(null);
       // A saved Consensus turn or a new chat: no check of a pasted text.
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
@@ -487,6 +490,19 @@
     }
     window.updateQuestionInputAccess?.();
     syncPendingReview();
+  }
+  // The models a saved turn compared, from its review: its icons stand at
+  // once, before the activity list loads (agent-delegation.js, Apple audit A10).
+  function reviewModels(review) {
+    const models = new Map();
+    for (const comparison of review?.comparisons || []) {
+      for (const answer of comparison.answers || []) {
+        const label = answer.model?.label || answer.provider_label || answer.provider;
+        const key = answer.model?.model || label;
+        if (key && !models.has(key)) models.set(key, { model: { model: answer.model?.model, label, provider: answer.provider } });
+      }
+    }
+    return [...models.values()];
   }
   // Links become the same source pills the finished answer shows while their
   // block streams in. Turning them into pills only when the check arrived
@@ -499,36 +515,43 @@
     if (sources.length) window.linkifyAgentSources?.(holder, sources);
   }
   // While a run streams, only the growing last Markdown block is parsed again
-  // (markdown-stream.js). The final text is rendered once in full, like a
-  // saved answer, so review markers and cross-block Markdown are exact.
-  function renderAnswer(text, error, { streaming = false } = {}) {
-    const body = document.getElementById("agentAnswerBody");
-    const mode = streaming && window.renderMarkdownStream ? 'stream' : 'full';
+  // (markdown-stream.js). Once the text is fixed it is rendered in full, like
+  // a saved answer, so review markers and cross-block Markdown are exact.
+  // Both morph into the nodes on screen: a link in the answer stays the same
+  // link and a selection stays (Apple audit D4, A6).
+  function renderAnswerBody(body, text, mode) {
+    if (!body) return;
     // The run ends with the same text the review already rendered in full
     // with its claim marks: switching to 'full' must keep that DOM. Rendering
     // it again dropped every mark and rebuilt it, a visible flicker.
-    if (body && mode === 'full' && body.dataset.markdown === text && body.dataset.renderMode === 'stream'
+    if (mode === 'full' && body.dataset.markdown === text && body.dataset.renderMode === 'stream'
         && body._markSignature && body.querySelector('.cx-claim')) {
       body.dataset.renderMode = mode;
       window.resetMarkdownStream?.(body);
     }
-    if (body && (body.dataset.markdown !== text || body.dataset.renderMode !== mode)) {
-      const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
-      // Provisional marks the reader saw belong to one text (agent-review.js).
-      if (body.dataset.markdown !== text) body._shownMarks = null;
-      body.dataset.markdown = text;
-      body.dataset.renderMode = mode;
-      if (mode === 'stream') window.renderMarkdownStream(body, text, { decorate: streamSourcePills });
-      else {
-        window.resetMarkdownStream?.(body);
-        window.injectMarkdown?.(body, text, []);
-      }
-      // A fresh DOM has no claim marks; the review renderer re-applies them.
-      body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
-      // Animate the start of an answer once, never each streamed text chunk.
-      if (!text.trim()) body._agentReveal?.cancel();
-      else if (entering) body._agentReveal = App.agentActivity?.reveal(body, { lift: false });
+    if (body.dataset.markdown === text && body.dataset.renderMode === mode) return;
+    const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
+    // Provisional marks the reader saw belong to one text (agent-review.js).
+    if (body.dataset.markdown !== text) body._shownMarks = null;
+    body.dataset.markdown = text;
+    body.dataset.renderMode = mode;
+    if (mode === 'stream') window.renderMarkdownStream(body, text, { decorate: streamSourcePills });
+    else if (window.morphMarkdown) {
+      const morph = () => window.morphMarkdown(body, text, { decorate: streamSourcePills });
+      window.keepTextSelection ? window.keepTextSelection(body, morph) : morph();
+    } else {
+      window.resetMarkdownStream?.(body);
+      window.injectMarkdown?.(body, text, []);
     }
+    // A new render has no claim marks; the review renderer re-applies them.
+    body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
+    // Animate the start of an answer once, never each streamed text chunk.
+    if (!text.trim()) body._agentReveal?.cancel();
+    else if (entering) body._agentReveal = App.agentActivity?.reveal(body, { lift: false });
+  }
+  function renderAnswer(text, error, { streaming = false } = {}) {
+    renderAnswerBody(document.getElementById("agentAnswerBody"), text,
+      streaming && window.renderMarkdownStream ? 'stream' : 'full');
     renderError(typeof error === 'string' ? { text: error } : error);
   }
   // While the judges check the fixed answer a quiet sheen passes over it, so
@@ -615,6 +638,17 @@
     document.body.classList.remove("direct-comparison-active", "thread-message-pending");
     App.consensusPipeline?.dismiss?.();
     window.projectAgentModeRun?.(null);
+    // First the history, while the live surface still shows the turn this
+    // run continues: that turn moves up into the history as it is.
+    const history = document.getElementById("threadHistory");
+    // Agent history is fixed for a run after its initial previous-turn append.
+    // Avoid serializing and duplicating all saved reasoning in a DOM attribute
+    // on every streamed activity update.
+    const signature = `${context.runId}:${context.historyTurns.length}`;
+    if (history && history.dataset.agentHistory !== signature) {
+      App.followup?.renderStoredTurns?.(context.historyTurns, { adopt: liveTurn });
+      history.dataset.agentHistory = signature;
+    }
     App.setAppTitle?.(context.question);
     App.setThreadQuestion?.(context.question);
     App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
@@ -629,17 +663,62 @@
     App.state?.set?.("consensusCitationMeta", null, "consensus");
     App.state?.set?.("currentEvidenceSources", [], "evidence");
     window.lastConsensusBookmarkPayload = null;
-    const history = document.getElementById("threadHistory");
-    // Agent history is fixed for a run after its initial previous-turn append.
-    // Avoid serializing and duplicating all saved reasoning in a DOM attribute
-    // on every streamed activity update.
-    const signature = `${context.runId}:${context.historyTurns.length}`;
-    if (history && history.dataset.agentHistory !== signature) {
-      App.followup?.renderStoredTurns?.(context.historyTurns);
-      history.dataset.agentHistory = signature;
-    }
     return true;
   }
+  // The live surface as the page first had it (#threadAsk, #agentAnswer and
+  // their IDs, a JS contract). When a follow-up starts, the turn on screen
+  // moves into the history as it is: the same nodes, with what the reader
+  // opened, the cards under it and its marks (Apple audit A4); a fresh copy
+  // of the live surface takes its place for the new message. Rebuilding the
+  // turn instead shifted it sideways, closed "Thought for …" and let its
+  // logos fly in again.
+  const pristine = { ask: null, answer: null };
+  function capturePristine() {
+    pristine.ask ||= document.getElementById("threadAsk")?.cloneNode(true) || null;
+    pristine.answer ||= document.getElementById("agentAnswer")?.cloneNode(true) || null;
+  }
+  capturePristine();
+  // Which turn the live surface shows, in the history's own key
+  // (consensus-run.js turnKey); only that turn can move up.
+  function markLiveTurn(turn) {
+    const panel = document.getElementById("agentAnswer");
+    if (!panel) return;
+    const key = turn && App.followup?.turnKey?.(turn);
+    if (key) panel.dataset.turnKey = key;
+    else delete panel.dataset.turnKey;
+  }
+  const liveTurn = {
+    owns(turn) {
+      const panel = document.getElementById("agentAnswer"), ask = document.getElementById("threadAsk");
+      return Boolean(pristine.ask && pristine.answer && panel && ask && !panel.hidden && !ask.hidden
+        && panel.dataset.turnKey && panel.dataset.turnKey === App.followup?.turnKey?.(turn));
+    },
+    take(turn) {
+      const panel = document.getElementById("agentAnswer"), ask = document.getElementById("threadAsk");
+      const contract = new Set([pristine.ask, pristine.answer].flatMap(root => [root, ...root.querySelectorAll("[id]")]).map(el => el.id));
+      // Its model icons stay with it (agent-delegation.js) and open its answers.
+      App.agentDelegation?.release?.();
+      const freshAsk = pristine.ask.cloneNode(true), freshPanel = pristine.answer.cloneNode(true);
+      freshPanel.hidden = false;
+      ask.replaceWith(freshAsk);
+      panel.replaceWith(freshPanel);
+      for (const el of [ask, ...ask.querySelectorAll("[id]"), panel, ...panel.querySelectorAll("[id]")]) {
+        if (contract.has(el.id)) el.removeAttribute("id");
+      }
+      ask.classList.add("thread-history-question");
+      ask.querySelector(".thread-ask-text")?.classList.add("thread-history-question-text");
+      panel.classList.add("thread-history-answer");
+      panel.removeAttribute("aria-label");
+      delete panel.dataset.turnKey;
+      const node = document.createElement("article");
+      node.className = "thread-history-turn is-agent-turn";
+      const turnId = String(turn.turn_id || turn.id || "").trim();
+      if (turnId) node.dataset.turnId = turnId;
+      node.dataset.turnKey = App.followup.turnKey(turn);
+      node.append(ask, panel);
+      return node;
+    },
+  };
   function project(context) {
     renderShell();
     const framed = projectFrame(context);
@@ -648,9 +727,16 @@
     const failure = state.error || state.completedTurn?.agent_failure;
     // A message refused before it started is back in the composer instead.
     const retry = !running && context.metadata.requestSent && !context.metadata.restoreDraft;
+    // The streamed text is fixed once the review holds it as a version: from
+    // then on it is shown in full, so an answer that ends in a table shows
+    // the table while the judges still check it.
+    const settled = running && !state.text && Boolean(state.streamText)
+      && Boolean(context.metadata.agentReview?.versions?.some(version => version?.text === state.streamText));
     renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure,
       state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "", { retry }) : "",
-      { streaming: running && !state.text });
+      { streaming: running && !state.text && !settled });
+    // A finished turn is what the next message continues (setCompletedBasis).
+    markLiveTurn(running ? null : state.completedTurn);
     App.agentActivity?.render(activityHost(context.runId), {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
         ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
@@ -718,9 +804,13 @@
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
     App.syncSendButtonRunning?.();
     if (!running) syncPendingReview();
-    App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
+    const delegated = context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation;
+    // Before the server named the new turn, a chat whose activity panel is
+    // open keeps it open, waiting (agent-delegation.js, Apple audit A9).
+    App.agentDelegation?.project(delegated ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
-      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId) } : null);
+      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running }
+      : running ? { chatId: context.metadata.chatId || context.basis?.chatId, running: true } : null);
   }
   function apiError(data) {
     const error = data?.error || data?.detail;
@@ -1206,6 +1296,30 @@
   // turn that is already running (after a reload) without sending anything.
   async function follow(context, body, signal, { headers = null, post = true } = {}) {
     let timer = null, resumeTracked = false, lastByte = Date.now();
+    // Streamed text is painted once per frame, apart from the rest of the
+    // projection (every 100 ms): the answer flows instead of jumping on by a
+    // bundle of words ten times a second (Apple audit D4). A frame that took
+    // long (a long table or list still growing) spaces out the next ones.
+    let paintFrame = 0, paintTimer = 0, paintAfter = 0;
+    const paint = () => {
+      paintFrame = 0;
+      if (!registry.isExecuting(context.runId) || !registry.isVisible(context.runId)
+          || !registry.isAuthCurrent(context) || context.consensus.text) return;
+      const answer = document.getElementById("agentAnswerBody");
+      // Only into an answer this run already streams: its first text, errors
+      // and the activity line are projected (project()).
+      if (answer?.dataset.renderMode !== 'stream' || !answer.dataset.markdown) return;
+      const started = performance.now();
+      renderAnswerBody(answer, context.consensus.streamText || "", 'stream');
+      const cost = performance.now() - started;
+      paintAfter = cost > 8 ? performance.now() + cost * 2 : 0;
+    };
+    const schedulePaint = () => {
+      if (paintFrame || paintTimer || typeof requestAnimationFrame !== "function") return;
+      const wait = paintAfter - performance.now();
+      if (wait > 0) paintTimer = setTimeout(() => { paintTimer = 0; schedulePaint(); }, wait);
+      else paintFrame = requestAnimationFrame(paint) || 0;
+    };
     const authHeaders = async () => {
       const user = window.auth?.currentUser;
       if (!user || !registry.isAuthCurrent(context)) throw new DOMException("Account changed", "AbortError");
@@ -1288,6 +1402,7 @@
         const text = typeof event.text === "string" ? event.text : "";
         if (!text) return;
         context.consensus.streamText += text;
+        schedulePaint();
         if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
       } },
     };
@@ -1390,6 +1505,8 @@
       document.removeEventListener("visibilitychange", revive);
       window.removeEventListener("online", revive);
       clearTimeout(timer);
+      if (paintFrame) cancelAnimationFrame(paintFrame);
+      clearTimeout(paintTimer);
       context.metadata.reconnecting = false;
       context.metadata.offline = false;
     }
@@ -1473,6 +1590,7 @@
     try {
       context = registry.create({
         question, mode: "Agent", basis, followup: Boolean(basis),
+        historyTurns: [...(basis?.historyTurns || []), ...(basis?.currentTurn ? [basis.currentTurn] : [])],
         attachments: retry ? [] : window.getAttachmentsPayload?.() || [],
         attachmentMeta: retry ? retry.attachmentMeta : App.attachments?.messageMeta?.() || [],
         requestIdentity: recovery?.requestIdentity,
@@ -1496,7 +1614,6 @@
       document.querySelector(`.bookmark.run-entry[data-run-id="${cssId(retry.runId)}"]`)?.remove();
     }
     if (context.config.googleDataConsent) App.agentGoogle?.resetConsent();
-    if (basis?.currentTurn) context.historyTurns.push(basis.currentTurn);
     context.controllers.query = new AbortController();
     const signal = context.controllers.query.signal;
     context.consensus.status = "pending";

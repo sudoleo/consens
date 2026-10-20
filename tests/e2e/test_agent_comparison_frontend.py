@@ -329,6 +329,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.locator('.agent-session', has_text='Answer check').locator('summary').click()
         expect(page.locator('#answerReaderInspector')).to_contain_text('Whether the smaller plan includes five seats')
         page.keyboard.press('Escape')
+        # The panel leaves with a short animation; ask once it has settled.
+        page.wait_for_function("() => !document.getElementById('agentSidebar').classList.contains('is-leaving')")
         if page.locator('#agentSidebar').is_visible():
             page.locator('.agent-sidebar-close').click()
         page.mouse.move(0, 0)

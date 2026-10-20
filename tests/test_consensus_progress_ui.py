@@ -188,16 +188,17 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     assert "archiveCurrentExchange()" in run
     assert 'clone.removeAttribute("id")' in run
     assert "renderStoredTurn(turnData)" in run
-    assert "renderStoredTurns(turns)" in run
+    assert "renderStoredTurns(turns, options = {})" in run
     assert 'node.querySelector?.(".thread-history-question-text")' in run
     assert "buildStoredAgreement(differencesData)" in run
     assert "const insightRoot = window.App.consensusBodyEl?.() || document" in read(
         "static/js/consensus-insights.js"
     )
-    # Der RunContext uebernimmt die frozen completed Basis in seinen Verlauf;
-    # run-view projiziert erst den Verlauf und danach die neue aktive Frage.
-    append_at = query.index("context.historyTurns.push(basis.currentTurn)")
-    assert append_at < query.index("registry.update(context.runId", append_at)
+    # Der RunContext uebernimmt die frozen completed Basis schon beim Anlegen
+    # in seinen Verlauf (Apple-Audit A1): seine erste Projektion zeigt sie.
+    append_at = query.index("historyTurns.push(basis.currentTurn)")
+    create_at = query.index("registry.create({", append_at)
+    assert "historyTurns," in query[create_at:query.index("});", create_at)]
     view = read("static/js/run-view.js")
     assert "followup?.renderStoredTurns?.(context.historyTurns || [])" in view
     # Auch der Direktvergleich zeigt seine Frage: er fuehrt keinen Thread,

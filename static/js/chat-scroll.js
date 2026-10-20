@@ -129,10 +129,23 @@
   function finish() {
     jump = null; started = null; syncButton();
   }
+  // How long an opened conversation keeps its newest question in place while
+  // late layout settles (fonts, marks, the activity line, file rows).
+  const OPEN_SETTLE_MS = 600;
   function step(now) {
     frame = 0;
     if (!valid() || !jump || occupied()) { pause(); return; }
     updateReserve();
+    if (jump === "open") {
+      // No ride: the position is written as it is, in every frame of the
+      // short settle, and only when the question actually moved.
+      const target = Math.min(headTop() ?? maxTop(), maxTop());
+      if (Math.abs(target - window.scrollY) > .5) write(target);
+      if (started === null) started = now;
+      if (now - started < OPEN_SETTLE_MS) frame = window.requestAnimationFrame(step);
+      else finish();
+      return;
+    }
     // Re-measured every frame: the question settles, history is appended and
     // the composer collapses while the jump runs.
     // "Latest message" keeps the content end it was pressed for in view: text
@@ -217,12 +230,29 @@
     });
   }
   function sent() { start("head"); }
-  function opened() {
+  // The phone menu goes with the tap that chose a chat, not once it loaded.
+  function closeMenu() {
     if (window.innerWidth < 1100 && document.querySelector('.sidebar.active')) {
       document.getElementById('sidebarToggleInner')?.click();
     }
+  }
+  // An opened conversation stands at its newest question before its first
+  // frame (Apple audit A2/A3): no ride from the top through every answer,
+  // and on a phone the question is never left under the floating header,
+  // as it was at the absolute end. Only "Latest message" and Send move.
+  function opened() {
+    closeMenu();
     project(App.runRegistry?.visible());
-    start("end");
+    if (!valid() || occupied()) return;
+    cancelFrame();
+    jump = "open";
+    destination = null;
+    updateReserve();
+    const target = Math.min(headTop() ?? maxTop(), maxTop());
+    if (Math.abs(target - window.scrollY) > .5) write(target);
+    started = window.performance.now();
+    syncButton();
+    frame = window.requestAnimationFrame(step);
   }
   function interrupt(event) {
     if (event.target?.closest?.(".chat-scroll-latest")) return;
@@ -238,5 +268,5 @@
   document.addEventListener("selectionchange", () => { if (!window.getSelection()?.isCollapsed) pause(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
   window.addEventListener("consensio:run-registry-change", () => { if (!valid()) project(null); else changed(); });
-  App.chatScroll = { project, changed, sent, opened, latest: () => start("latest"), preserveAbove };
+  App.chatScroll = { project, changed, sent, opened, closeMenu, latest: () => start("latest"), preserveAbove };
 })();

@@ -240,7 +240,11 @@
         providers: new Map(),
         consensus: null
       },
-      historyTurns: cloneValue(basis?.historyTurns || []),
+      // A follow-up passes its complete history, the continued turn included,
+      // so the run's first projection already shows that turn in the
+      // history: a view without it was briefly shorter than the page and
+      // snapped the reader to the top (Apple audit A1).
+      historyTurns: cloneValue(Array.isArray(spec.historyTurns) ? spec.historyTurns : basis?.historyTurns || []),
       previousExchange: basis && basis.question && basis.consensus
         ? {
             question: basis.question,

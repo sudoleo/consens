@@ -86,6 +86,7 @@ describe("loading lifecycle", () => {
       const ensurePendingBookmarkDOM = () => {};
       const restoreRegistryRunRows = () => {};
       const renderBookmarksLoadMore = () => {};
+      const syncActiveBookmark = () => {};
       const upsertBookmarkMeta = item => { const row = document.createElement('div'); row.className = 'bookmark'; row.textContent = item.id; document.getElementById('bookmarksContainer').append(row); };
       const renderBookmarksLoadError = () => { throw new Error('Unexpected load failure'); };
       ${load}

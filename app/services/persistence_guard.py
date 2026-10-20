@@ -176,14 +176,19 @@ def _bookmark_bootstrap(bookmarks) -> tuple[int, int]:
     return count, total_bytes
 
 
+# Sidebar names that outlive later saves: generated (chat_titles.py) or
+# given by the person (rename in the sidebar, bookmarks.py rename_bookmark).
+KEPT_TITLE_SOURCES = ("generated", "user")
+
+
 def _keep_generated_title(current: dict, patch: dict) -> dict:
-    """A generated sidebar title (chat_titles.py) outlives later saves.
+    """A generated or user-given sidebar title outlives later saves.
 
     Every save of a run merges the opening question as ``title`` again; the
     title request can land between them. Checked inside the write so no
     interleaving can put the question back.
     """
-    if current.get("title_source") == "generated" and "title" in patch and "title_source" not in patch:
+    if current.get("title_source") in KEPT_TITLE_SOURCES and "title" in patch and "title_source" not in patch:
         return {key: value for key, value in patch.items() if key != "title"}
     return patch
 

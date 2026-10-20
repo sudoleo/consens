@@ -409,7 +409,9 @@ def _bookmark_meta(bookmark_id, data, summary=None):
         "title": _bookmark_title(data),
         # "generated" once chat_titles.py named the conversation; the
         # browser asks for a name only while it is missing.
-        "title_source": "generated" if data.get("title_source") == "generated" else "",
+        # "user" once the person renamed it in the sidebar; either way the
+        # browser asks for no generated name any more.
+        "title_source": data.get("title_source") if data.get("title_source") in persistence_guard.KEPT_TITLE_SOURCES else "",
         "mode": str(data.get("mode") or ""),
         "timestamp": data.get("timestamp"),
         **summary,
@@ -566,7 +568,8 @@ def name_bookmark(request: Request, bookmark_id: str):
     if not snap.exists:
         raise HTTPException(status_code=404, detail="Bookmark not found")
     data = snap.to_dict() or {}
-    if data.get("title_source") == "generated":
+    # Named already, by the model or by the person (rename in the sidebar).
+    if data.get("title_source") in persistence_guard.KEPT_TITLE_SOURCES:
         return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, data)}
 
     try:
@@ -596,6 +599,61 @@ def name_bookmark(request: Request, bookmark_id: str):
     except Exception as exc:
         logging.warning("Bookmark title write skipped category=%s", safe_exception(exc))
         return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
+    return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
+
+
+class BookmarkRenameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    title: StrictStr = Field(min_length=1, max_length=1_000)
+
+
+@router.patch("/bookmarks/{bookmark_id}/title")
+@limiter.limit("30/minute")
+# Sync like the other bookmark routes: the Firestore writes block.
+def rename_bookmark(request: Request, bookmark_id: str, payload: BookmarkRenameRequest):
+    """The name the person gives a chat (Rename in the sidebar row menu).
+
+    Stored as ``title_source: "user"``: later saves of the chat keep it
+    (persistence_guard) and no generated name replaces it. The chat carries
+    the same name, which later Agent and follow-up saves copy.
+    """
+    uid = _bookmark_uid(request)
+    if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    title = derive_title(payload.title)
+    if not title:
+        raise HTTPException(status_code=400, detail="A chat needs a name.")
+    doc_ref = (
+        db_firestore.collection("users").document(uid)
+        .collection("bookmarks").document(bookmark_id)
+    )
+    try:
+        snap = doc_ref.get()
+    except Exception as exc:
+        logging.error("Error loading bookmark for rename category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Error loading bookmark") from exc
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    data = snap.to_dict() or {}
+    chat_id = str(data.get("chat_id") or "")
+    if CHAT_ID_RE.fullmatch(chat_id):
+        try:
+            _chat_store()._chat_ref(uid, chat_id).update({"title": title})
+        except Exception as exc:
+            logging.warning("Chat rename skipped category=%s", safe_exception(exc))
+    try:
+        bookmark = persistence_guard.write_bookmark(
+            uid=uid, db=db_firestore, doc_ref=doc_ref,
+            # Never recreate a bookmark deleted while it was renamed.
+            current_guard=lambda current: bool(current),
+            patch={"title": title, "title_source": "user"},
+        )
+    except persistence_guard.PersistenceConflictError as exc:
+        raise HTTPException(status_code=404, detail="Bookmark not found") from exc
+    except Exception as exc:
+        logging.error("Bookmark rename failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="The chat could not be renamed.") from exc
     return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
 
 

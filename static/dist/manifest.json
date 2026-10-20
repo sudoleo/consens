@@ -1,5 +1,5 @@
 {
-  "sources": "86a67b75a492",
+  "sources": "c790bbb96f22",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -50,6 +50,7 @@
     "static/css/status-palette.css",
     "static/css/topics.css",
     "static/css/typography.css",
+    "static/css/undo-notice.css",
     "static/css/variables.css",
     "static/demo.js",
     "static/firebase.js",
@@ -114,6 +115,7 @@
     "static/js/sources.js",
     "static/js/tab-status.js",
     "static/js/token-budget.js",
+    "static/js/undo-notice.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
     "static/js/user-settings.js",
@@ -195,7 +197,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.4d50a0d52b68.js",
+      "src": "/static/dist/head.66cfc7d3a03d.js",
       "module": false,
       "defer": false
     },
@@ -207,7 +209,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.0a46d0f4756b.js",
+      "src": "/static/dist/firebase.f6127136ade9.js",
       "module": true,
       "defer": false
     },
@@ -219,20 +221,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.1a0a96c00b97.js",
+      "src": "/static/dist/app.956a75ce06b5.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.778da87e40d9.css",
+    "app": "/static/dist/app.f40d4e3cd7ae.css",
     "landing": "/static/dist/landing.44d4411e76b0.css",
     "public": "/static/dist/public.7adfd7c44c2d.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "717792ea7aa2",
+      "hash": "1cf12cab1eb4",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -265,6 +267,7 @@
         "static/css/skeleton.css",
         "static/css/status-palette.css",
         "static/css/typography.css",
+        "static/css/undo-notice.css",
         "static/css/variables.css",
         "static/style.css"
       ]
@@ -299,17 +302,17 @@
     }
   },
   "previous_assets": [
+    "app.778da87e40d9.css",
     "app.74495e3f7918.css",
-    "app.fc2a55cdac17.css",
+    "app.1a0a96c00b97.js",
     "app.4f741ddb98e5.js",
-    "app.06a65bcaa6a4.js",
     "auth.5e487d1e2570.js",
     "demo.9cb7e261a771.js",
     "demo.f96893d39783.js",
+    "firebase.0a46d0f4756b.js",
     "firebase.02d5cd4749ea.js",
-    "firebase.7bbd8d7ca369.js",
+    "head.4d50a0d52b68.js",
     "head.9076e14a6904.js",
-    "head.b8a4fe4a421c.js",
     "landing.272588d29602.css",
     "landing.a49e221e792e.css",
     "public.a64e7193f6a4.css",

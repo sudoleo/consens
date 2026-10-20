@@ -1559,6 +1559,46 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('paints streamed text once per frame, and in full into the same nodes once the review holds it', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    const frames = [];
+    w.requestAnimationFrame = fn => frames.push(fn);
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    handlers.delta.append('First part.');
+    w.App.agentChat.project(run);
+    frames.splice(0).forEach(frame => frame(16));
+    // Two chunks in one frame are painted together, without waiting for the
+    // next projection (Apple audit D4).
+    handlers.delta.append(' More.');
+    handlers.delta.append(' Last.');
+    expect(frames).toHaveLength(1);
+    frames.shift()(32);
+    expect(body.textContent).toBe('First part. More. Last.');
+    expect(w.renderMarkdownStream).toHaveBeenLastCalledWith(body, 'First part. More. Last.', { decorate: expect.any(Function) });
+    // The fixed text (the review holds it as its version) is rendered in full,
+    // into the nodes on screen, while the judges still check it.
+    const version = { id: 1, text: 'First part. More. Last.', hash: 'h' };
+    handlers.review.receive({ review: { status: 'running', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
+    w.App.agentChat.project(run);
+    expect(body.dataset.renderMode).toBe('full');
+    expect(w.morphMarkdown).toHaveBeenLastCalledWith(body, 'First part. More. Last.', { decorate: expect.any(Function) });
+    resolve({ ok: true, data: { response: 'First part. More. Last.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'First part. More. Last.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    dom.window.close();
+  });
+
   it('keeps the marked answer DOM when the run ends with the text the review already rendered', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
