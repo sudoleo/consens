@@ -345,3 +345,20 @@ def test_telegram_speaks_like_the_app_and_links_to_the_watch():
     text = send.call_args.args[1]
     assert "Connect Telegram" in text and "Settings" not in text and not emoji.search(text)
     assert send.call_args.kwargs["reply_markup"]["inline_keyboard"][0][0]["url"].endswith("/app/watches")
+
+
+def test_an_expired_source_is_never_linked_from_the_answer():
+    version = {
+        "consensus_md": "Live in the EU [S1] and the US [S2].",
+        "sources": [
+            {"id": "S1", "title": "EU", "url": "https://www.reuters.com/eu"},
+            {"id": "S2", "title": "US", "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/x"},
+        ],
+        "expired_source_ids": ["S2"],
+    }
+    with patch.object(notification_delivery.share_snapshots, "get_watch_version", return_value=version):
+        consensus, sources = notification_delivery._watch_version_answer({"share_id": "A" * 16}, "run", None)
+    assert [source["id"] for source in sources] == ["S1"]
+    markup = notification_markdown.answer_mail_html(consensus, palette=mailer.MAIL_PALETTE, sources=sources)
+    assert "https://www.reuters.com/eu" in markup and "vertexaisearch" not in markup
+    assert "[S2]" not in markup and "the US." in markup

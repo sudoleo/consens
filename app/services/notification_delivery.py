@@ -69,11 +69,17 @@ async def _send_mail(message) -> tuple:
 
 def _watch_version_answer(payload: dict, run_id: str, db) -> tuple[str, list]:
     """The answer of the run's immutable version and the sources its [S1]
-    citations point to."""
+    citations point to. Expired redirects are left out, like on the page:
+    their citations drop instead of linking nowhere."""
     version = share_snapshots.get_watch_version(
         payload.get("share_id") or "", run_id, db=db,
     ) or {}
-    return str(version.get("consensus_md") or ""), list(version.get("sources") or [])
+    expired = {str(source_id) for source_id in version.get("expired_source_ids") or []}
+    sources = [
+        source for source in version.get("sources") or []
+        if isinstance(source, dict) and str(source.get("id") or "") not in expired
+    ]
+    return str(version.get("consensus_md") or ""), sources
 
 
 def _watch_gate(item: dict, watch: dict | None, *, channel_field: str):
