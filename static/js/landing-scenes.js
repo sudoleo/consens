@@ -148,28 +148,48 @@
     const marks = Array.from(scene.querySelectorAll("[data-mark]"));
 
     let lastChars = -1;
+    let lastP = 0;
+    const slot = run.parentElement;
 
     function show(el, visible) {
       if (el && el.hidden === visible) el.hidden = !visible;
     }
 
-    // The panel must not change size while the run plays: the log grows and
-    // folds away, the answer grows, but inside a body locked to its tallest
-    // state, so nothing below the mock moves and the scroll progress keeps a
-    // fixed reference. Measured, because that state depends on the width.
+    // Nothing around the mock may move while the run plays, and nothing in
+    // it may jump (Apple-Audit I1). The SLOT the card sits in is locked to
+    // the card's tallest state, so the heading beside it and the page below
+    // keep their place and the scroll progress keeps a fixed reference. The
+    // card itself follows its content: the log grows, and once the check is
+    // back it FOLDS into the clock line with a height transition
+    // (.lp-agent-log.is-folded) instead of vanishing in one frame, which
+    // dropped the answer 204 px (277 on a phone) and left a blank card. The
+    // comparison label keeps the width of its wider wording, so the model
+    // icons after it never slide when "Comparing" turns into "Compared".
+    // Measured with transitions off, because both depend on the width.
     function remeasureRun() {
       if (!body) return;
-      body.style.minHeight = "";
+      run.classList.add("is-measuring");
+      if (slot) slot.style.minHeight = "";
+      if (compareLabel) compareLabel.style.minWidth = "";
       let tallest = 0;
-      for (const p of [CHECK_AT + 0.01, 1]) {
+      let label = 0;
+      for (const p of [COMPARE_AT + 0.01, COMPARED_AT, CHECK_AT + 0.01, 1]) {
         renderRun(p);
-        tallest = Math.max(tallest, body.offsetHeight);
+        tallest = Math.max(tallest, run.offsetHeight);
+        if (compareLabel) label = Math.max(label, compareLabel.getBoundingClientRect().width);
       }
-      if (tallest) body.style.minHeight = tallest + "px";
+      if (slot && tallest) slot.style.minHeight = tallest + "px";
+      if (compareLabel && label) compareLabel.style.minWidth = Math.ceil(label) + "px";
       lastChars = -1;
+      // Back to the frame the reader is on before transitions return, or the
+      // log would fold open from the last measured state.
+      renderRun(lastP);
+      void run.offsetHeight;
+      run.classList.remove("is-measuring");
     }
 
     function renderRun(p) {
+      lastP = p;
       const done = p >= DONE_AT;
       const seconds = done ? RUN_SECONDS : Math.floor(span(p, 0, DONE_AT) * RUN_SECONDS);
       if (clock) {
@@ -178,9 +198,12 @@
       }
       run.classList.toggle("is-running", !done);
 
-      // The log: notes and steps appear as they happen and fold away into
-      // the clock line once the run is over, as in /app.
-      show(log, !done);
+      // The log: notes and steps appear as they happen and fold into the
+      // clock line once the run is over, as in /app -- a fold, not a cut.
+      if (log) {
+        log.classList.toggle("is-folded", done);
+        log.setAttribute("aria-hidden", String(done));
+      }
       show(items.plan, p >= PLAN_AT);
       show(items.compare, p >= COMPARE_AT);
       show(items.compared, p >= COMPARED_AT);
@@ -203,8 +226,9 @@
         if (count.textContent !== text) count.textContent = text;
       }
 
-      // One live status row: writing, then checking the fixed text.
-      show(items.status, p >= WRITE_AT && !done);
+      // One live status row: writing, then checking the fixed text. It stays
+      // in the log while the log folds, so the fold has one height to close.
+      show(items.status, p >= WRITE_AT);
       if (status) {
         const text = p >= CHECK_AT ? "Checking the answer…" : "Writing answer…";
         if (status.textContent !== text) status.textContent = text;

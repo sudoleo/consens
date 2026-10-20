@@ -1024,8 +1024,23 @@ img { display: block; max-width: 100%; }
   opacity: 0.6;
 }
 
-.lp-agent-log { display: grid; gap: 12px; margin: 8px 0 20px; }
-.lp-agent-log[hidden], .lp-agent-log > [hidden] { display: none; }
+/* Once the check is back the log folds into the clock line (Apple-Audit I1):
+   a height transition over the one wrapper inside it (grid rows 1fr -> 0fr),
+   so the answer below rises with it instead of dropping 200 px in a frame.
+   landing-scenes.js toggles .is-folded and measures with .is-measuring. */
+.lp-agent-log {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin: 8px 0 20px;
+  /* Longer than a layer: the fold carries 200-290 px, and at 320 ms its middle
+     frames moved 40-55 px each. */
+  transition: grid-template-rows calc(var(--dur-layer) * 1.6) var(--ease-standard), margin calc(var(--dur-layer) * 1.6) var(--ease-standard), opacity var(--dur-layer) var(--ease-standard);
+}
+.lp-agent-log-items { display: grid; gap: 12px; min-height: 0; overflow: hidden; }
+.lp-agent-log.is-folded { grid-template-rows: 0fr; margin-block: 0; opacity: 0; }
+.lp-agent-log [hidden] { display: none; }
+.lp-agent.is-measuring,
+.lp-agent.is-measuring * { transition: none !important; animation: none !important; }
 
 .lp-agent-note {
   margin: 0;
@@ -1308,6 +1323,7 @@ img { display: block; max-width: 100%; }
   .lp-agent-answer.is-checking,
   .lp-prompt-text.is-typing::after,
   .lp-composer-text.is-typing::after { animation: none; }
+  .lp-agent-log { transition: none; }
 }
 
 /* --------------------------------------------------------------------------
