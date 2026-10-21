@@ -360,6 +360,8 @@
       // a numeric [1] in it never picks up a citation (as in the live run).
       // Older answers with [S1] tags and Agent prose keep their citations.
       answerBody.dataset.sourceReferences = agentTurn || /\[S\d/i.test(turnData.consensus || '') ? 'legacy' : 'none';
+      // Its checklists keep their ticks on the turn (task-checks.js).
+      window.App.taskChecks?.scope(answerBody, { turnId, checked: turnData.task_checks });
       if (typeof window.injectMarkdown === "function") {
         window.injectMarkdown(answerBody, turnData.consensus,
           turnData.execution_mode === "agent" || turnData.mode === "Agent" ? [] : turnSources);

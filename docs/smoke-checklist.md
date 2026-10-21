@@ -127,6 +127,17 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Gegenprobe „Fasse diesen Text zusammen: …“ → keine Karte.
       Automatisiert: `test_agent_passage_check.py`, `passage-check.test.mjs`,
       `test_passage_check_frontend.py`.
+- [ ] Checklisten (2026-10-21, echter Provider): Agent um eine Packliste mit
+      Kästchen bitten. Während die Antwort einströmt, stehen die Kästchen an
+      der Stelle der Spiegelstriche, kein `[` blitzt auf, nichts rutscht zur
+      Seite. Nach dem Ende ein Kästchen anhaken → Network zeigt nach ~0,6 s
+      `PUT /chats/…/turns/…/task-checks`; die Chatliste ordnet sich nicht um.
+      Neu laden und den Chat am Handy öffnen → dieselben Häkchen. Eine
+      Folgefrage stellen → die Häkchen der vorigen Antwort bleiben im
+      Verlauf anklickbar. Die Prüfmarken sitzen auch auf Sätzen in
+      Listenpunkten mit Kästchen. Einzelantworten im Leser zeigen Kästchen,
+      lassen sich aber nicht anhaken. Automatisiert: `task-lists.test.mjs`,
+      `test_chat_history.py` (`task_checks`), `test_public_markdown.py`.
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,

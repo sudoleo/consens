@@ -499,6 +499,9 @@
       App.agentGoogle?.refreshActions?.(basis.chatId);
       const failure = basis.currentTurn?.agent_failure;
       setAnswerChecking(document.getElementById("agentAnswerBody"), false, { fade: false });
+      App.taskChecks?.scope(document.getElementById("agentAnswerBody"), { chatId: basis.chatId,
+        turnId: basis.currentTurn?.status === 'completed' ? basis.currentTurn.id || basis.turnId : '',
+        checked: basis.currentTurn?.task_checks });
       renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure, basis.currentTurn?.agent_review, basis.consensus || "")
         : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
       markLiveTurn(basis.currentTurn);
@@ -779,6 +782,10 @@
     // the table while the judges still check it.
     const settled = running && !state.text && Boolean(state.streamText)
       && Boolean(context.metadata.agentReview?.versions?.some(version => version?.text === state.streamText));
+    // Its checklists can be ticked once the answer is saved as a turn.
+    const savedTurn = !running && state.completedTurn?.status === 'completed' ? state.completedTurn : null;
+    App.taskChecks?.scope(document.getElementById("agentAnswerBody"), { chatId: context.metadata.chatId,
+      turnId: savedTurn ? savedTurn.id || savedTurn.turn_id : '', checked: savedTurn?.task_checks });
     renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure,
       state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "", { retry }) : "",
       { streaming: running && !state.text && !settled });

@@ -9,7 +9,7 @@
 // (readSSEStream bleibt modul-privat.)
 // Call-time-Abhaengigkeiten: DOMPurify, marked (CDN), window.ConsensusMath,
 // window.addCopyButtons, window.addNewTabToLinks, window.linkifySourceTags,
-// window.currentEvidenceSources.
+// window.currentEvidenceSources, window.App.taskChecks (task-checks.js).
 // =====================================================================
 
 function reportMarkdownFallback(missingDependency) {
@@ -61,6 +61,62 @@ function plainTextFragment(text) {
   return fragment;
 }
 
+// --- Checklists ---------------------------------------------------------
+// "- [ ] Pack the passport" is a checklist item. marked draws its box as a
+// form field, which MODEL_HTML_CONFIG rightly forbids, so the box vanished
+// and the item read as a plain bullet. marked now leaves a marker instead;
+// the box itself is a button made here, never by the model's markup.
+// task-checks.js (App.taskChecks) decides which boxes can be ticked and
+// keeps the ticks of a saved answer.
+const taskReadyParsers = new WeakSet();
+
+function ensureTaskMarkers(marked) {
+  if (typeof marked?.use !== "function" || taskReadyParsers.has(marked)) return;
+  taskReadyParsers.add(marked);
+  marked.use({ renderer: {
+    checkbox(checked) {
+      return `<span class="md-task" data-checked="${checked ? "true" : "false"}"></span>`;
+    }
+  } });
+}
+
+// The item's own words, without the lists nested in it.
+function taskLabel(item) {
+  const copy = item.cloneNode(true);
+  copy.querySelectorAll("ul, ol").forEach(list => list.remove());
+  return copy.textContent.replace(/\s+/g, " ").trim().slice(0, 200) || "Checklist item";
+}
+
+// A marker becomes a box only where marked puts one: first in its list item
+// (or in the item's first paragraph). Any other is dropped.
+function enhanceTaskLists(root) {
+  root.querySelectorAll?.("span.md-task").forEach(marker => {
+    const host = marker.parentElement;
+    const item = host?.tagName === "LI" ? host
+      : host?.tagName === "P" && host.parentElement?.tagName === "LI" && host === host.parentElement.firstElementChild
+        ? host.parentElement : null;
+    if (!item || marker !== host.firstChild) {
+      marker.remove();
+      return;
+    }
+    const box = (root.ownerDocument || document).createElement("button");
+    box.type = "button";
+    box.className = "md-task-box";
+    box.setAttribute("role", "checkbox");
+    box.setAttribute("aria-checked", marker.dataset.checked === "true" ? "true" : "false");
+    // Only the answer of a saved turn can be ticked (App.taskChecks.apply).
+    box.disabled = true;
+    marker.replaceWith(box);
+    box.setAttribute("aria-label", taskLabel(item));
+    item.classList.add("md-task-item");
+    item.parentElement?.classList.add("md-task-list");
+  });
+}
+
+function syncTaskBoxes(el) {
+  if (el?.querySelector?.(".md-task-box")) window.App?.taskChecks?.apply?.(el);
+}
+
 // Markdown -> sanitized nodes of this document, parsed once: DOMPurify hands
 // over its own DOM instead of a string that would be parsed again for the
 // media check and once more for the page (Apple audit D4).
@@ -80,6 +136,7 @@ function renderMarkdownFragment(md) {
     return plainTextFragment(prepared);
   }
   try {
+    ensureTaskMarkers(window.marked);
     let fragment = window.DOMPurify.sanitize(window.marked.parse(prepared),
       { ...MODEL_HTML_CONFIG, RETURN_DOM_FRAGMENT: true });
     if (typeof fragment === "string") {
@@ -89,7 +146,9 @@ function renderMarkdownFragment(md) {
       fragment = template.content;
     }
     neutralizeRemoteMedia(fragment);
-    return fragment.ownerDocument === document ? fragment : document.adoptNode(fragment);
+    const adopted = fragment.ownerDocument === document ? fragment : document.adoptNode(fragment);
+    enhanceTaskLists(adopted);
+    return adopted;
   } catch (error) {
     reportMarkdownFallback("render error");
     return plainTextFragment(prepared);
@@ -167,6 +226,7 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);
   noteMarkdownWrite(el, linked ? null : md);
+  syncTaskBoxes(el);
 }
 
 // Every write of rendered Markdown into `el` counts up `el._markdownWrites`:
@@ -262,6 +322,9 @@ function morphMarkdown(el, md, { decorate } = {}) {
   morphNodes(el, Array.from(el.childNodes), Array.from(next.childNodes));
   delete el._markdownStream;
   noteMarkdownWrite(el, decorate ? null : md);
+  // The morph gave each box the state written in the text; a ticked box
+  // gets its tick back before the frame is drawn.
+  syncTaskBoxes(el);
 }
 
 // --- A selection that outlives a re-render ------------------------------
@@ -443,9 +506,24 @@ function pendingTable(rows) {
   return box;
 }
 
+// A checklist item whose box is still arriving showed "[" for a moment, or a
+// bullet that then turned into a box. "- [ ]" already stands as its box;
+// "- [" and "- [x" wait for the next chunk, because they may still become a
+// link ("- [Title](url)").
+const OPEN_TASK = /(^|\n)([ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)\[([ xX]?)(\]?)[ \t]*$/;
+
+function holdOpenTask(text) {
+  if (/(^|\n)\s{0,3}(```|~~~)/.test(text)) return text;
+  const match = text.match(OPEN_TASK);
+  if (!match) return text;
+  const start = match.index + match[1].length;
+  // An item needs a word after its box to be one; a zero-width space is it.
+  return match[4] ? `${text.slice(0, start)}${match[2]}[${match[3] || " "}] ​` : text.slice(0, start);
+}
+
 function renderStreamTail(text, decorate) {
   const table = pendingTableStart(text);
-  if (table === -1) return renderStreamFragment(closeOpenStrong(text), decorate);
+  if (table === -1) return renderStreamFragment(closeOpenStrong(holdOpenTask(text)), decorate);
   const before = text.slice(0, table);
   const nodes = before.trim() ? renderStreamFragment(closeOpenStrong(before), decorate) : [];
   const rows = text.slice(table).split("\n").filter(line => TABLE_ROW.test(line) && !TABLE_RULE.test(line)).length;
@@ -484,6 +562,7 @@ function renderMarkdownStream(el, md, { decorate } = {}) {
   if (parsed) {
     el._markdownWrites = (el._markdownWrites || 0) + 1;
     el._plainMarkdown = null;
+    syncTaskBoxes(el);
   }
   state.nodeCount = el.childNodes.length;
   return parsed;
@@ -526,6 +605,7 @@ function createStreamRenderer(outputEl, isActiveFn) {
     outputEl.replaceChildren(renderMarkdownFragment(text));
     enhanceMarkdownTables(outputEl);
     if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
+    syncTaskBoxes(outputEl);
   }
 
   return {

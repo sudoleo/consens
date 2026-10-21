@@ -3387,6 +3387,66 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
 .consensus-answer-body li::marker { color: var(--ink-3); }
 .consensus-answer-body li > :is(ul, ol) { margin-block: .375em; }
 .consensus-answer-body li > p { margin-block: .375em; }
+
+/* Checklists ("- [ ] item", markdown-stream.js). In a bulleted list the box
+   stands where the bullet stood, so the words keep their column and a box
+   that arrives while the answer streams moves nothing. A numbered list
+   keeps its numbers; the box leads the words. Ticked: the box fills with
+   ink and the item's own words step back to the secondary ink. */
+ul.md-task-list > .md-task-item { list-style: none; position: relative; }
+.md-task-box {
+  --task-box: 0.95em;
+  box-sizing: border-box;
+  display: inline-block;
+  inline-size: var(--task-box);
+  block-size: var(--task-box);
+  margin: 0 0.45em 0 0;
+  padding: 0;
+  border: 1.5px solid var(--ink-3);
+  border-radius: 0.24em;
+  background: transparent;
+  color: var(--ground);
+  vertical-align: -0.12em;
+  cursor: pointer;
+  position: relative;
+  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
+}
+ul.md-task-list > .md-task-item > .md-task-box,
+ul.md-task-list > .md-task-item > p:first-child > .md-task-box {
+  position: absolute;
+  inset-inline-start: -1.25em;
+  /* First line: half the leading above the box, so it sits on the words. */
+  top: 0.38em;
+  top: calc((1lh - var(--task-box)) / 2);
+  margin: 0;
+}
+.md-task-box:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* 44px to the finger without growing the drawn box (foundation.css). */
+@media (pointer: coarse) {
+  .md-task-box::before { content: ""; position: absolute; inset: var(--hit-slop); }
+}
+.md-task-box[aria-checked="true"] { background: var(--ink); border-color: var(--ink); }
+.md-task-box[aria-checked="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  -webkit-mask: var(--task-check-mask) center / 78% no-repeat;
+  mask: var(--task-check-mask) center / 78% no-repeat;
+}
+/* A box that cannot be ticked (yet) looks the same: an answer that finishes
+   streaming must not change the look of its boxes. */
+.md-task-box:disabled { opacity: 1; cursor: default; }
+@media (hover: hover) and (pointer: fine) {
+  .md-task-box:not(:disabled):hover { border-color: var(--ink); }
+}
+.md-task-item:is(:has(> .md-task-box[aria-checked="true"]), :has(> p:first-child > .md-task-box[aria-checked="true"])) {
+  color: var(--ink-3);
+}
+.md-task-item :is(ul, ol) { color: var(--ink); }
+:root {
+  --task-check-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.4l3 3 6-6.8' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 .consensus-answer-body :is(h1, h2, h3, h4, h5, h6) {
   margin: 1.5em 0 .6em;
   padding: 0;

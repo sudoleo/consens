@@ -313,8 +313,9 @@
           function inlineMarkdownSource(value) {
             return String(value || "")
               // Ein Anker aus einem Listenelement enthaelt haeufig dessen
-              // Markdown-Zaehler. Im gerenderten <li> ist er kein Textknoten.
-              .replace(/(^|\n)[ \t]*(?:>[ \t]*)*(?:[-*+][ \t]+|\d+[.)][ \t]+|#{1,6}[ \t]+)?/g, "$1")
+              // Markdown-Zaehler (und das Kaestchen eines Checklistenpunkts).
+              // Im gerenderten <li> ist er kein Textknoten.
+              .replace(/(^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}[ \t]+)?/g, "$1")
               .trim();
           }
 
