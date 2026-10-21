@@ -728,6 +728,11 @@
       freshPanel.hidden = false;
       ask.replaceWith(freshAsk);
       panel.replaceWith(freshPanel);
+      // Retry, "Choose another model" and "Recover saved answer" act on the
+      // run on screen: the turn in the history keeps its words, not these
+      // buttons (review B2; a saved failure there reads as one, consensus-run.js).
+      panel.querySelector("#agentAnswerErrorActions")?.remove();
+      panel.querySelector("#agentRecover")?.remove();
       for (const el of [ask, ...ask.querySelectorAll("[id]"), panel, ...panel.querySelectorAll("[id]")]) {
         if (contract.has(el.id)) el.removeAttribute("id");
       }
@@ -1787,11 +1792,20 @@
   // Google selection/consent changes (chips, sheet, consent box) change the
   // send blocker, so the notice and Send state must follow immediately.
   window.addEventListener('consensio:agent-google-change', () => { syncComposer(); window.updateQuestionInputAccess?.(); });
-  document.addEventListener("DOMContentLoaded", () => {
-    document.getElementById("agentRecover")?.addEventListener("click", () => {
+  // The buttons under a failed answer live on the live surface, which a
+  // follow-up replaces by a fresh copy (liveTurn.take). A listener bound to
+  // the first copy went with it: after the first follow-up Retry & Co. did
+  // nothing (review B2). One listener on the document reaches every copy.
+  document.addEventListener("click", event => {
+    if (event.target.closest?.("#agentRecover")) {
       const context = registry.visible();
       if (["failed", "canceled"].includes(context?.status) && context.metadata.requestSent) send(context);
-    });
+      return;
+    }
+    const button = event.target.closest?.("#agentAnswerErrorActions button[data-action]");
+    if (button) runNoticeAction(button.dataset.action);
+  });
+  document.addEventListener("DOMContentLoaded", () => {
     // The shared picker emits input before change. Commit before other UI
     // listeners can project the previous draft selection back into the select.
     for (const id of ["agentModelDropdown", "agentReasoningEffort"]) {
@@ -1804,12 +1818,6 @@
       // The shared picker's outside-click handler must not close this shortcut's menu.
       event.stopPropagation();
       runNoticeAction(event.currentTarget.dataset.action);
-    });
-    document.getElementById('agentAnswerErrorActions')?.addEventListener('click', event => {
-      const button = event.target.closest('button[data-action]');
-      if (!button) return;
-      event.stopPropagation();
-      runNoticeAction(button.dataset.action);
     });
     document.getElementById('agentReviewAction')?.addEventListener('click', () => revealPendingReview());
     document.getElementById('questionInput')?.addEventListener('input', () => {

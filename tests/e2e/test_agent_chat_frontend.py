@@ -695,6 +695,97 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         context.close()
 
 
+@pytest.mark.parametrize("width", [1280, 390])
+def test_failure_actions_still_work_after_a_follow_up(browser, phase4_server, width):
+    """Review B2: once a follow-up moved the first turn into the history, the
+    live answer is a fresh copy of its surface. Retry, "Choose another model"
+    and "Check saved answer" under a failed follow-up still act; the turn in
+    the history keeps its look and no buttons of the live surface."""
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
+    errors, calls, turns = [], [], []
+    bookmark = {}
+    chat_id = "a" * 32
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/usage", lambda r: _json(r, {"tier": "pro", "is_pro": True, "remaining": 500, "total_limit": 500}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/agent/budget", lambda r: _json(r, {"token_budget": {"limit": 250000, "used": 1000, "remaining": 249000}}))
+        page.route("**/api/my/memory", lambda r: _json(r, {"memory": {"content": "", "revision": 0}}))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": chat_id, "execution_mode": "agent"}}))
+        page.route("**/bookmarks/*/conversation*", lambda r: _json(r, {"chat_id": chat_id, "turns": turns, "next_cursor": None, "has_more": False}))
+        page.route("**/bookmarks/*", lambda r: _json(r, {"bookmark": bookmark}))
+
+        def answer(route):
+            body = route.request.post_data_json
+            calls.append(body)
+            if body["recover_only"]:
+                turn_id = "e" * 32
+                _json(route, {"response": "Recovered saved answer.", "chat_id": chat_id, "turn_id": turn_id,
+                    "turn": {"id": turn_id, "question": body["question"], "status": "completed", "execution_mode": "agent",
+                             "consensus": "Recovered saved answer."}})
+                return
+            if len(calls) > 1:
+                busy = {"error": "This model is busy right now.", "code": "provider_unavailable"}
+                route.fulfill(content_type="text/event-stream", body="event: error\ndata: " + json.dumps(busy) + "\n\n")
+                return
+            turn_id = "b" * 32
+            text = f"First answer to: {body['question']}"
+            turn = {"id": turn_id, "turn_id": turn_id, "question": body["question"], "status": "completed", "position": 1,
+                "mode": "Agent", "execution_mode": "agent", "consensus": text, "differences": "", "model_answers": {}, "sources": [],
+                "agent_settings": {"model_id": body["model_id"], "label": "DeepSeek V4.1 Flash"}, "agent_activity": []}
+            turns.append(turn)
+            bookmark.update(id=body["bookmark_id"], query=body["question"], title=body["question"], mode="Agent",
+                execution_mode="agent", chat_id=chat_id, turn_id=turn_id, responses={"consensus": text, "differences": ""}, sources=[])
+            meta = {"id": body["bookmark_id"], "title": body["question"], "query": body["question"], "mode": "Agent", "has_consensus": True}
+            final = {"chat_id": chat_id, "turn_id": turn_id, "response": text, "turn": turn, "bookmark_meta": meta}
+            route.fulfill(content_type="text/event-stream", body="event: delta\ndata: " + json.dumps({"text": text}) + "\n\n"
+                + "event: final\ndata: " + json.dumps(final) + "\n\n")
+
+        page.route("**/agent", answer)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        page.locator("#questionInput").fill("The first question")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(page.locator("#sendButton")).to_be_disabled()
+        page.locator("#questionInput").fill("The follow-up")
+        expect(page.locator("#sendButton")).to_be_enabled()
+        # Two sends within 450 ms count as one gesture (run-registry.js claimStartAction).
+        page.wait_for_timeout(500)
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.question === 'The follow-up'")
+        retry = page.locator("#agentAnswerErrorActions button[data-action='retry']")
+        expect(retry).to_be_visible()
+        expect(page.locator("#threadHistory")).to_contain_text("First answer to: The first question")
+
+        page.locator("#agentAnswerErrorActions button[data-action='choose-model']").click()
+        expect(page.locator(".agent-model-picker .model-picker-menu")).to_be_visible()
+        page.keyboard.press("Escape")
+        expect(page.locator(".agent-model-picker .model-picker-menu")).not_to_be_visible()
+
+        retry.click()
+        page.wait_for_function("() => document.querySelectorAll('#threadHistory .thread-history-turn').length >= 1")
+        expect(page.locator("#agentAnswerErrorActions button[data-action='retry']")).to_be_visible()
+        assert len(calls) == 3 and calls[2]["question"] == "The follow-up" and not calls[2]["recover_only"]
+        assert calls[2]["chat_id"] == calls[0]["chat_id"]
+
+        recover = page.locator("#agentRecover")
+        expect(recover).to_be_visible()
+        page.wait_for_function("() => !App.runRegistry.visible()?.controllers.query")
+        recover.click()
+        expect(page.locator("#agentAnswerBody")).to_have_text("Recovered saved answer.")
+        expect(recover).not_to_be_visible()
+        assert len(calls) == 4 and calls[3]["recover_only"] is True
+        assert calls[3]["client_request_id"] == calls[2]["client_request_id"]
+        # The turns in the history carry none of the live surface's buttons.
+        expect(page.locator("#threadHistory :is(.agent-answer-error-actions, #agentRecover, .thread-history-answer > .thread-ask-more)")).to_have_count(0)
+        assert not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize('width,dark', [(1280, False), (390, True), (320, False)])
 def test_model_loading_and_unsent_draft_recovery(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)

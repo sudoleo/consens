@@ -5171,7 +5171,13 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Aufgeklapptem, Karten, Marken und Logos ziehen um, ihre Vertrags-IDs werden
   entfernt, und frische Kopien des Seiten-Originals (`pristine`, beim Laden
   geklont) übernehmen die IDs. `agentDelegation.release()` lässt die Logos am
-  umgezogenen Turn (Klick öffnet dann dessen Antworten im Leser). Agent-Turns
+  umgezogenen Turn (Klick öffnet dann dessen Antworten im Leser). Die Knöpfe
+  der Live-Fläche (`#agentAnswerErrorActions`, `#agentRecover`) bleiben nicht
+  am umgezogenen Turn; ihre Klicks sind am `document` delegiert, damit sie auf
+  jeder Kopie wirken (Nachprüfung B2: nach der ersten Folgefrage taten Retry,
+  „Choose another model“ und „Check/Recover saved answer“ nichts). Der Satz
+  eines Fehlschlags ist `.agent-answer-error` (Klasse, nicht ID) und behält im
+  Verlauf sein Aussehen. Agent-Turns
   im Verlauf (`.thread-history-turn.is-agent-turn`, Antwort zusätzlich
   `.agent-answer`, Aktivität `.agent-answer-activity`) haben exakt die Boxen
   des Live-Turns; frisch gebaute ebenso. Consensus-Turns werden weiter frisch
