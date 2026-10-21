@@ -192,6 +192,13 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
     coming."""
     context = _context(browser, width, height, uid=None, mobile=mobile,
                        init_script="localStorage.setItem('id_token', 'cached');")
+    # Firebase answers once every module is ready, as on a real network:
+    # nothing else draws the field after that answer (the later route wins).
+    slow = FIREBASE_AUTH_STUB.replace("queueMicrotask(() => window.__switchE2EUser(window.__E2E_INITIAL_UID));",
+                                      "setTimeout(() => window.__switchE2EUser(window.__E2E_INITIAL_UID), 1500);")
+    assert slow != FIREBASE_AUTH_STUB
+    context.route("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js",
+                  lambda route: route.fulfill(content_type="application/javascript", body=slow))
     page = context.new_page()
     try:
         _routes(page)
