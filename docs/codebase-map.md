@@ -9715,10 +9715,15 @@ während eines laufenden bzw. abschließenden Laufs und endet danach.
 Die Kopfzeile tickt in einem Feld fester Breite (A7): `.agent-activity-verb`
 reserviert die Breite des breiteren Verbs („Working for“/„Thought for“, das
 andere unsichtbar per `data-ghost`), `.agent-activity-time[data-unit]` die des
-größten Werts seiner Einheit; eine live tickende Uhr hält von der ersten Sekunde
-an den Minuten-Platz und behält ihn fürs Endlabel. Pfeil und Logos stehen still
-(gemessen: Chevron bei 9 s, 10 s, 1 min und „Thought for“ auf demselben Pixel),
-der Wortlaut bleibt.
+größten Werts seiner Einheit. Eine live tickende Uhr hält den Platz ihrer
+eigenen Einheit (bis 59 s nur `seconds`; bis 2026-10-21 von der ersten Sekunde
+an den Minuten-Platz, das ließ eine Minute lang eine breite Lücke vor dem
+Pfeil); bei 1 min weitet sich der Platz einmal weich (`setTitle` misst alte
+und neue Breite und animiert `width` mit `overflow: clip`, bei reduced-motion
+sofort). Das Endlabel behält mindestens den Platz, in dem die Uhr zuletzt
+tickte. Pfeil und Logos stehen beim Ticken innerhalb einer Einheit und am
+Laufende still (Chevron bei 9 s und 10 s bzw. bei 1 min und „Thought for“ auf
+demselben Pixel), der Wortlaut bleibt.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
 Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:
 `checkRow` fasst alle Versuche, Wiederholungen und Backup-Judges zu einer Zeile

@@ -429,11 +429,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    verb is as wide as the wider of "Working for" and "Thought for" (the
    other one stands invisibly in the same cell), the time as wide as its
    largest value in its unit. The chevron and the model icons stay put while
-   it ticks and when it ends (Apple audit A7). */
+   it ticks and when it ends; at the first minute they glide once to the
+   wider slot (Apple audit A7). nowrap keeps "1m 0s" on one line while the
+   slot widens. */
 .agent-activity-verb { display: inline-grid; justify-items: start; }
 .agent-activity-verb > .agent-activity-verb-text, .agent-activity-verb::after { grid-area: 1 / 1; }
 .agent-activity-verb::after { content: attr(data-ghost); visibility: hidden; speak: never; }
-.agent-activity-time { display: inline-block; text-align: left; }
+.agent-activity-time { display: inline-block; text-align: left; white-space: nowrap; }
 .agent-activity-time[data-unit="seconds"] { min-width: 3ch; }
 .agent-activity-time[data-unit="minutes"] { min-width: 6.4ch; }
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }

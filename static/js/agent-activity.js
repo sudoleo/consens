@@ -109,11 +109,13 @@
     return `Thought for ${time}`;
   }
   // The clock ticks in a field of fixed width, so the chevron and the model
-  // icons after it never move (Apple audit A7): the time sits in a slot as
-  // wide as its largest value in the same unit ("59s", "9m 59s"), and the
-  // verb ("Working for" / "Thought for") takes the width of the wider of
-  // the two, so the end of the run changes the words, not the line.
+  // icons after it do not move with every second (Apple audit A7): the time
+  // sits in a slot as wide as its largest value in the same unit ("59s",
+  // "9m 59s"), and the verb ("Working for" / "Thought for") takes the width
+  // of the wider of the two, so the end of the run changes the words, not
+  // the line.
   const SETTLED_VERBS = { running: "Working for", done: "Thought for" };
+  const SLOTS = ["seconds", "minutes", "long"];
   function setTitle(view, ms, running, status) {
     const label = durationLabel(ms, running, status);
     if (view.title.dataset.label === label) return;
@@ -122,6 +124,18 @@
     const verb = time ? label.slice(0, label.length - time.length).trimEnd() : label;
     const verbEl = view.title.querySelector(".agent-activity-verb-text");
     const timeEl = view.title.querySelector(".agent-activity-time");
+    const seconds = Math.floor(Math.max(0, ms || 0) / 1000);
+    const unit = !time ? "" : seconds < 60 ? "seconds" : seconds < 600 ? "minutes" : "long";
+    // A live clock holds the slot of its own unit: the minutes slot from
+    // the first second left a wide gap before the chevron for a whole
+    // minute. The label a run ends with keeps at least the slot it ticked
+    // in, so the end of the run does not move the line.
+    if (running && unit) view.liveSlot = unit;
+    const slot = running || !unit || !view.liveSlot ? unit
+      : SLOTS[Math.max(SLOTS.indexOf(view.liveSlot), SLOTS.indexOf(unit))];
+    const resize = Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot && timeEl.isConnected;
+    const from = resize ? timeEl.getBoundingClientRect().width : 0;
+    if (resize) cancelMotion(view.slotMotion);
     if (verbEl.textContent !== verb) verbEl.textContent = verb;
     // The other verb stands invisibly in the same cell (agent-chat.css), so
     // the field is as wide as the wider one; it is no text of the title.
@@ -130,13 +144,16 @@
     if (paired) holder.dataset.ghost = paired; else delete holder.dataset.ghost;
     view.title.querySelector(".agent-activity-gap").textContent = time ? " " : "";
     if (timeEl.textContent !== time) timeEl.textContent = time;
-    const seconds = Math.floor(Math.max(0, ms || 0) / 1000);
-    const unit = !time ? "" : seconds < 60 ? "seconds" : seconds < 600 ? "minutes" : "long";
-    // A live clock reserves the minutes slot from its first second, and the
-    // label it ends with keeps the slot it ticked in: neither the first
-    // minute nor the end of the run moves the line.
-    if (running) view.liveSlot = unit === "long" ? "long" : "minutes";
-    timeEl.dataset.unit = view.liveSlot && unit !== "long" ? view.liveSlot : unit;
+    timeEl.dataset.unit = slot;
+    if (!resize) return;
+    // The first minute widens the slot once: the chevron glides to its new
+    // place while the new time opens up (none with reduced motion, motion()).
+    // min-width moves along: the slot's own min-width would win over width.
+    const to = timeEl.getBoundingClientRect().width;
+    view.slotMotion = from && to && from !== to ? motion(timeEl, [
+      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip' },
+      { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip' },
+    ]) : null;
   }
   function updateClock(view, elapsedMs, running, status) {
     clearInterval(view.clockTimer);
