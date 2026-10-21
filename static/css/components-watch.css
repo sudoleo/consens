@@ -1000,16 +1000,18 @@ body.is-view-settle.is-watch-view .watch-page {
 .wd-brief-inputs .watch-select { width: auto; max-width: 260px; }
 .wd-switch { flex: 0 0 auto; }
 
-/* --- The Watch pill under an Agent answer (J20), same as under Consensus --- */
-.agent-review > .watch-consensus-pill.agent-watch-pill { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.agent-watch-pill-row { display: flex; margin: 10px 0 0 -8px; }
-.agent-watch-pill-row .agent-watch-pill { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.agent-watch-pill .share-pill-icon { width: 15px; height: 15px; flex: none; }
+/* --- The Watch and Share pills under an Agent answer (J20; Share since
+   2026-10-21), same as under Consensus: Share follows Watch --- */
+.agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.agent-watch-pill-row { display: flex; gap: 0 12px; margin: 10px 0 0 -8px; }
+.agent-watch-pill-row :is(.agent-watch-pill, .agent-share-pill) { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+:is(.agent-watch-pill, .agent-share-pill) .share-pill-icon { width: 15px; height: 15px; flex: none; }
 .watch-consensus-pill.is-watching { color: var(--ink); }
-/* Phones: the evidence links fill their row; the pill starts the next,
+/* Phones: the evidence links fill their row; the pills start the next,
    on the answer's left edge, with a full touch target. */
 @media (max-width: 540px) {
-  .agent-review > .watch-consensus-pill.agent-watch-pill { min-height: 44px; margin-left: -8px; }
+  .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { min-height: 44px; }
+  .agent-review > .agent-watch-pill, .agent-review > .agent-evidence-links + .agent-share-pill { margin-left: -8px; }
 }
 
 /* ==========================================================================

@@ -404,6 +404,10 @@
         window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true,
           eligible: turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim()),
           followUp: options.followUp === true });
+        // Its Share pill shares this turn's answer; the chat is the one on
+        // screen when it is pressed (share-dialog.js).
+        window.App.answerShare?.button?.(answerBody, { turnId: turnId || "",
+          eligible: turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim()) });
         // Documents and mail attachments of this turn stay with its answer;
         // agent-workspace.js fills the row from the chat's file list.
         if (turnId) {

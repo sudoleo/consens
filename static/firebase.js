@@ -2439,6 +2439,16 @@ function prepareBookmarkShareResult(bookmark) {
   if (!auth.currentUser || !bookmarkId || !String(consensusText || "").trim()) {
     return null;
   }
+  // An Agent chat shares the answer on screen by its turn (share-dialog.js):
+  // a finished turn never changes, so no version needs binding.
+  if (bookmark.mode === "Agent" || bookmark.execution_mode === "agent") {
+    window.currentBookmarkShareResultContext = {
+      bookmarkId,
+      chatId: String(bookmark.chat_id || ""),
+      turnId: String(bookmark.turn_id || "")
+    };
+    return window.currentBookmarkShareResultContext;
+  }
   // Bind the exact snapshot on screen. The same bookmark document can advance
   // to a newer follow-up while this saved view remains visible; the server must
   // reject preparing that newer revision for an older view.
@@ -2488,28 +2498,40 @@ async function requestBookmarkShareResult() {
   const requestUid = requestUser.uid;
   const requestGeneration = authState.generation;
   const bookmarkId = context.bookmarkId;
-  const expectedVersion = await bookmarkShareVersion(context.versionParts);
+  const agentTurn = Boolean(context.turnId);
+  const expectedVersion = agentTurn ? "" : await bookmarkShareVersion(context.versionParts);
   if (version !== bookmarkShareResultVersion) return null;
+  // Why it failed, in the server's words: the Share dialog says it.
+  context.error = null;
   const promise = enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
     try {
       if (version !== bookmarkShareResultVersion
           || !bookmarkWriteAllowed(requestUid, bookmarkId)) return null;
       const idToken = await requestUser.getIdToken(false);
       if (!idToken || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return null;
-      const response = await fetch("/bookmark/consensus/share-result", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: idToken, bookmarkId, expectedVersion })
-      });
-      const data = await response.json();
+      const response = agentTurn
+        ? await fetch(`/agent/chats/${encodeURIComponent(context.chatId)}/turns/${encodeURIComponent(context.turnId)}/share-result`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${idToken}` }
+        })
+        : await fetch("/bookmark/consensus/share-result", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_token: idToken, bookmarkId, expectedVersion })
+        });
+      const data = await window.App.readJson(response).catch(() => ({}));
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return null;
-      if (!response.ok) throw new Error(data.detail || "This chat couldn’t be prepared.");
-      if (version === bookmarkShareResultVersion) {
-        window.App.state.set("lastShareResultId", data.result_id || null, "share");
+      if (!response.ok) throw window.App.httpError(response, data, "This chat couldn’t be prepared for sharing. Try again.");
+      const resultId = String(data.result_id || "") || null;
+      // An Agent answer is no Consensus result: votes and the Consensus
+      // Watch keep reading lastShareResultId; the promise keeps the ID.
+      if (version === bookmarkShareResultVersion && !agentTurn) {
+        window.App.state.set("lastShareResultId", resultId, "share");
       }
-      return version === bookmarkShareResultVersion ? window.lastShareResultId : null;
+      return version === bookmarkShareResultVersion ? resultId : null;
     } catch (error) {
       if (version === bookmarkShareResultVersion) {
+        context.error = error;
         console.error("Error preparing bookmarked consensus for share/watch:", error);
       }
       return null;
@@ -3735,7 +3757,15 @@ async function renameBookmark(bookmarkId, title) {
 // seen a moment ago), then the share dialog.
 async function shareBookmark(bookmarkId) {
   await window.openBookmark(bookmarkId);
-  if (activeBookmarkId() === bookmarkId) window.openShareDialog?.();
+  if (activeBookmarkId() !== bookmarkId) return;
+  // A chat whose Agent run is on screen opens no saved view to prepare:
+  // Share takes the answer of that run, by its turn (share-dialog.js).
+  const run = window.App.runRegistry?.visible?.();
+  if (run?.bookmark?.id === bookmarkId && run.config?.executionMode === "agent") {
+    window.App.answerShare?.open({ chatId: run.metadata?.chatId, turnId: run.consensus?.completedTurn?.id });
+    return;
+  }
+  window.openShareDialog?.();
 }
 
 // A deleted chat leaves the list at once and "Chat deleted · Undo" offers

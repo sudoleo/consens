@@ -360,6 +360,67 @@ def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey
     assert version in history and 'Watch revision ' + version in history[version]['data']['consensus_md']
 
 
+def test_j04b_agent_answer_shares_from_under_it_and_from_the_chat_list(journey):
+    """An Agent answer (the default since October) gets a public page: the
+    Share pill under the answer and Share in the chat menu publish the saved
+    turn, both the same link, and the page shows the answer."""
+    j = journey
+    j.open()
+    j.page.locator('#attachTrigger').click()
+    j.page.locator('#runModeControl [data-value="agent"]').click()
+    question = 'Is the James Webb telescope still working ' + j.uid
+    j.page.fill('#questionInput', question)
+    j.page.click('#sendButton')
+    j.page.wait_for_function('q => App.runRegistry.list().some(r => r.question === q && r.status === "succeeded")',
+                             arg=question, timeout=60000)
+    j.producer_finished()
+    state = j.settled()
+    assert len(state['collections']['chats']) == 1
+    [bookmark_id] = state['collections']['bookmarks']
+    pill = j.page.locator('#agentAnswer .agent-share-pill')
+    expect(pill).to_be_visible()
+    j.page.locator('#agentAnswer').screenshot(path='test-results/agent-share-pill.png')
+    pill.click()
+    confirm = j.page.locator('#shareConfirmBtn')
+    expect(confirm).to_have_text('Create public link', timeout=15000)
+    with j.page.expect_response(lambda r: r.url == j.base + '/api/share' and r.request.method == 'POST') as published:
+        confirm.click()
+    assert published.value.ok, published.value.text()
+    share = published.value.json()
+    expect(j.page.locator('#shareModalTitle')).to_have_text('Public link created')
+    stored = j.control('state')['global_owned']['shares'][share['share_id']]['data']
+    assert stored['answer_mode'] == 'agent' and stored['indexed'] is False
+    assert 'Saved partial answer for ' + j.uid in stored['consensus_md']
+    j.page.keyboard.press('Escape')
+
+    # From the chat list, in a fresh page: the same answer, the same link.
+    j.page.reload(wait_until='domcontentloaded')
+    j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
+    j.page.evaluate("() => { const sidebar = document.querySelector('.sidebar');"
+                    " if (sidebar?.classList.contains('collapsed')) document.getElementById('toggleSidebarButton').click(); }")
+    row = j.page.locator(f'.bookmark[data-id="{bookmark_id}"]')
+    row.hover()
+    row.locator('.bookmark-menu-button').click()
+    j.page.locator('.bookmark-menu-item[data-action="share"]').click()
+    expect(j.page.locator('#agentAnswerBody')).to_contain_text('Saved partial answer for ' + j.uid, timeout=15000)
+    expect(confirm).to_have_text('Create public link', timeout=15000)
+    expect(j.page.locator('#shareDialogError')).to_be_hidden()
+    with j.page.expect_response(lambda r: r.url == j.base + '/api/share' and r.request.method == 'POST') as again:
+        confirm.click()
+    assert again.value.ok, again.value.text()
+    assert again.value.json()['share_id'] == share['share_id'] and again.value.json()['created'] is False
+    pending = j.control('state')['global_owned']['pending_results']
+    assert len(pending) == 1 and next(iter(pending.values()))['data']['answer_mode'] == 'agent'
+
+    j.page.goto(j.base + share['path'])
+    expect(j.page.locator('.share-header .eyebrow')).to_have_text('Shared answer')
+    expect(j.page.locator('#consensusView .share-md')).to_contain_text('Saved partial answer for ' + j.uid)
+    expect(j.page.locator('.share-models')).to_contain_text('Models compared')
+    expect(j.page.locator('#shareAboutHeading')).to_have_text('About this answer')
+    assert '<b>0</b>' not in j.page.content()
+    j.page.screenshot(path='test-results/agent-share-page.png', full_page=True)
+
+
 def test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch(journey, browser, journey_server):
     j = journey
     other = Journey(browser, journey_server)

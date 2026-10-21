@@ -47,7 +47,11 @@
 
   <main class="page-shell share-shell" data-math-render>
     <header class="page-header share-header">
-      <p class="eyebrow">Shared consensus{% if is_private %} · Private{% endif %}</p>
+      {#- An Agent answer (share_snapshots.AGENT_ANSWER_MODE) is one model's
+          answer: it names that model, and the comparison, its check and the
+          scoreboard only when the agent compared. What it lacks is left
+          out, never labelled ("0", "off"). -#}
+      <p class="eyebrow">{% if is_agent %}Shared answer{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
       <!-- Lange Fragen kommen schon auf drei Zeilen eingeklappt an (nur mit
            Skript, @media (scripting: enabled)); check-page.js zeigt den Link
            auf der dritten Zeile, wenn wirklich etwas abgeschnitten ist. So
@@ -60,7 +64,7 @@
         {% if date_display %}<span>{{ date_display }}</span>{% endif %}
       </div>
       {% if scoreboard and (scoreboard.score is not none or scoreboard.model_count) %}
-      <div class="share-scoreboard" role="group" aria-label="Consensus verdict at a glance">
+      <div class="share-scoreboard" role="group" aria-label="{% if is_agent %}Answer check{% else %}Consensus verdict{% endif %} at a glance">
         {% if scoreboard.score is not none %}
         <div class="share-scoreboard-score">
           <strong>{{ scoreboard.score }}</strong>
@@ -78,7 +82,7 @@
           {% if scoreboard.coverage_status == "insufficient" %}<li>Insufficient evidence to assess agreement</li>{% endif %}
           {% if scoreboard.coverage_percent is defined and scoreboard.coverage_percent is not none %}<li>Coverage: <b>{{ scoreboard.scored_claims }}/{{ scoreboard.total_claims }}</b> claims ({{ scoreboard.coverage_percent }}%){% if scoreboard.evidence_incomplete %} · evidence incomplete{% endif %}</li>{% endif %}
           {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
-          {% if has_differences_view %}<li{% if scoreboard.contradiction_count %} class="is-contradiction"{% endif %}><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
+          {% if has_differences_view and scoreboard.contradiction_count %}<li class="is-contradiction"><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
           {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
         </ul>
       </div>
@@ -87,8 +91,8 @@
       <div class="share-models">
         {% if consensus_model_view %}
         <div class="share-models-group">
-          <span class="share-models-label">Consensus</span>
-          <span class="share-model-chip is-consensus" title="Consensus model: {{ consensus_model_view.label }}{% if consensus_model_view.model %} – {{ consensus_model_view.model }}{% endif %}">
+          <span class="share-models-label">{% if is_agent %}Answer{% else %}Consensus{% endif %}</span>
+          <span class="share-model-chip is-consensus" title="{% if is_agent %}Answer{% else %}Consensus{% endif %} model: {{ consensus_model_view.label }}{% if consensus_model_view.model %} – {{ consensus_model_view.model }}{% endif %}">
             {% if consensus_model_view.icon %}<img src="{{ consensus_model_view.icon }}" alt="{{ consensus_model_view.label }}" class="share-model-icon{% if consensus_model_view.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM', 'Meta') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
             <span class="share-model-name">{{ consensus_model_view.model or consensus_model_view.label }}{% if consensus_model_view.pro %}<span class="share-model-pro">Pro</span>{% endif %}</span>
           </span>
@@ -96,7 +100,7 @@
         {% endif %}
         {% if consulted_models %}
         <div class="share-models-group">
-          <span class="share-models-label">Models consulted</span>
+          <span class="share-models-label">{% if is_agent %}Models compared{% else %}Models consulted{% endif %}</span>
           <ul class="share-models-list">
             {% for m in consulted_models %}
             <li class="share-model-chip" title="{{ m.label }}{% if m.model %} – {{ m.model }}{% endif %}">
@@ -110,8 +114,8 @@
       </div>
       {% endif %}
       {% if has_differences_view %}
-      <div class="share-toggle has-cue" role="group" aria-label="Switch between consensus and differences">
-        <button type="button" id="toggleConsensusView" aria-pressed="true">Consensus</button>
+      <div class="share-toggle has-cue" role="group" aria-label="Switch between {% if is_agent %}answer{% else %}consensus{% endif %} and differences">
+        <button type="button" id="toggleConsensusView" aria-pressed="true">{% if is_agent %}Answer{% else %}Consensus{% endif %}</button>
         <button type="button" id="toggleDifferencesView" aria-pressed="false">Differences</button>
       </div>
       {% endif %}
@@ -135,7 +139,7 @@
     <div class="page-content">
       <div id="consensusView" class="share-view">
         <section class="legal-panel">
-          <h2>Consensus answer</h2>
+          <h2>{% if is_agent %}Answer{% else %}Consensus answer{% endif %}</h2>
           <div class="share-md">{{ consensus_html | safe }}</div>
         </section>
         {% if has_differences_view and contradiction_count %}
@@ -226,12 +230,27 @@
            bekommen sie eine Ueberschrift statt einer Fussnoten-Optik. Der
            Irrtumshinweis bleibt woertlich erhalten. -->
       <section class="share-about" aria-labelledby="shareAboutHeading">
+        {% if is_agent %}
+        {%- set answer_model = (consensus_model_view.model or consensus_model_view.label) if consensus_model_view else "" -%}
+        <h2 id="shareAboutHeading">About this answer</h2>
+        <p>
+          {% if scoreboard and scoreboard.model_count %}
+          {{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }} answered this question
+          independently{% if date_display %} on {{ date_display }}{% endif %}, and {{ answer_model or "an AI model" }}
+          wrote the answer from what they said.{% if has_judge_check %} A judge model then checked every sentence
+          against their answers and flagged where they differ.{% endif %}
+          {% else %}
+          {{ answer_model or "An AI model" }} answered this question{% if date_display %} on {{ date_display }}{% endif %}.
+          {% endif %}
+        </p>
+        {% else %}
         <h2 id="shareAboutHeading">About this consensus</h2>
         <p>
           {% if scoreboard and scoreboard.model_count %}{{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }}{% else %}Several AI models{% endif %}
           answered this question independently{% if date_display %} on {{ date_display }}{% endif %}. A judge model
           then cross-checked the answers, scored how far they agree and flagged where they differ.
         </p>
+        {% endif %}
         <p class="share-about-caveat">
           AI models can make mistakes &ndash; verify important information against the sources above.
         </p>

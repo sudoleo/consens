@@ -662,6 +662,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       + Modell-Zeilen, Usage-Counter aktualisiert sich, Fehlerfall reaktiviert
       den Button.
 - [ ] Share-Dialog: Link erstellen, Liste anzeigen, Link kopieren.
+- [ ] Agent-Antwort teilen: „Share“ neben „Watch“ unter der Antwort und
+      „Share“ im „…“-Menü des Chats erzeugen denselben Link; die Seite heißt
+      „Shared answer“ und zeigt die Antwort, eine direkte Antwort ohne
+      Modellzeile, Scoreboard oder „0“. Ein Chat mit Google-Daten sagt im
+      Dialog, warum er nicht geteilt werden kann (automatisch:
+      `tests/e2e/test_persisted_journeys.py` j04b, `tests/test_agent_share.py`).
 - [ ] Mobil Share in der Topbar öffnen: Der Dialog erscheint mittig im sichtbaren
       Bildschirm, auch nach dem Scrollen. Auf kleinen Bildschirmen bleiben Titel
       und Schließen sichtbar; lange Inhalte scrollen innerhalb des Dialogs.
