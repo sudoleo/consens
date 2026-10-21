@@ -170,7 +170,11 @@ ohne SDK-Retries, mit 5-s-Timeout). Öffentliche Legacy-Citations werden in
 auf bestehende Quellenanker abgebildet, beschreibende Links und Aussagen bleiben
 erhalten. `share_snapshots.build_citation` verlinkt die Quellenliste der gewählten
 Antwortversion statt alle Redirect-URLs in den kopierbaren Beleg zu schreiben.
-Share-Meta-Descriptions lassen bekannte Citation-Labels weg; die öffentliche
+Share-Meta-Descriptions lassen bekannte Citation-Labels weg; bei Watch-Seiten
+beginnt die Description mit der Zustandszeile („Paused · last checked Oct 1“)
+und nennt weder Score noch Widersprüche, die die Seite nicht zeigt; das Ziel
+einer pausierten Watch heißt „Was waiting for“ (`check.state(goal_label=…)`,
+Zweitprüfung 16). Die öffentliche
 Quellenliste wird erst per JS eingeklappt und ist ohne JS vollständig sichtbar.
 Historische Snapshots und Original-Quellenziele werden nicht migriert.
 

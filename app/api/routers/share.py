@@ -745,6 +745,21 @@ def share_page(request: Request, slug_id: str):
         query_first=bool(data.get("watch_query_only")),
     ) if watch_page else None
 
+    # A Watch page has its own, much quieter template: the state line, the
+    # answer, the changes over time. The one-off share page keeps its
+    # scoreboard, model chips and differences toggle.
+    watch_state = _watch_state_view(
+        watch_page, watch_history, watch_drift,
+        awaiting=watch_awaiting_first_run,
+        version_kind=(
+            "original" if requested_version == "original"
+            else "historical" if requested_version else display_version["kind"]
+        ),
+        selected_run_id=selected_run_id,
+        requested=bool(requested_version),
+        fallback_notice=display_version["fallback_notice"],
+    ) if watch_page else None
+
     date_iso = payload["answered_at"] or payload["created_at"]
     published_iso = date_iso
     # Auch strukturierte Zeitangaben bleiben an die autoritative Anzeigeversion
@@ -795,12 +810,17 @@ def share_page(request: Request, slug_id: str):
 
     # Meta-Description datengeführt statt AI-Textanfang: liest sich im SERP
     # wie ein Datenprodukt, der Konsens-Auszug folgt dahinter.
+    # A Watch page leads with its state ("Paused · last checked Oct 1"), not
+    # a score or a count of contradictions it no longer shows (Apple-Audit
+    # L2/L13, Zweitprüfung 16) -- the search line says what the page says.
     description_bits = []
+    if watch_state and watch_state.get("headline") and not watch_awaiting_first_run:
+        description_bits.append(watch_state["headline"])
     if model_count:
         description_bits.append(f"{model_count} AI models answered independently")
-    if scoreboard["score"] is not None:
+    if scoreboard["score"] is not None and not watch_page:
         description_bits.append(f"agreement {scoreboard['score']}/100")
-    if contradiction_count:
+    if contradiction_count and not watch_page:
         description_bits.append(
             f"{contradiction_count} contradiction{'s' if contradiction_count != 1 else ''}"
         )
@@ -853,20 +873,6 @@ def share_page(request: Request, slug_id: str):
     # "</" escapen, damit Snapshot-Inhalte das <script>-Element nie schließen können.
     jsonld_html = seo_entity.dumps(seo_entity.page_graph(jsonld))
 
-    # A Watch page has its own, much quieter template: the state line, the
-    # answer, the changes over time. The one-off share page keeps its
-    # scoreboard, model chips and differences toggle.
-    watch_state = _watch_state_view(
-        watch_page, watch_history, watch_drift,
-        awaiting=watch_awaiting_first_run,
-        version_kind=(
-            "original" if requested_version == "original"
-            else "historical" if requested_version else display_version["kind"]
-        ),
-        selected_run_id=selected_run_id,
-        requested=bool(requested_version),
-        fallback_notice=display_version["fallback_notice"],
-    ) if watch_page else None
     response = templates.TemplateResponse(request=request, name="watch_share.html" if watch_page else "share.html", context={
         "watch_state": watch_state,
         "share_id": share_id,

@@ -3,6 +3,7 @@
 Each test names its finding; each would fail on the code before it.
 """
 
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -80,6 +81,29 @@ def test_a_paused_watch_leads_with_paused_not_with_a_green_unchanged(client):
     assert "Unchanged since" not in body
     # The facts no longer repeat it.
     assert "Checked 2 times since Sep 24</p>" in body
+
+
+def test_a_paused_watch_neither_waits_nor_scores_in_its_search_line(client):
+    # Zweitprüfung 16: nobody is checking, so the goal is what it WAS waiting
+    # for, and the description leads with the state, never with a score.
+    differences = {"differences": [{"claim": "When", "type": "contradiction", "positions": [
+        {"stance": "May", "models": ["OpenAI"]}, {"stance": "June", "models": ["Gemini"]}]}],
+        "models_compared": ["OpenAI", "Gemini"], "agreement": {"score": 64}}
+    meta = {**PAUSED, "condition": "A launch date is announced"}
+    body = page(client, doc(differences_data=differences), meta=meta,
+                points=[point(24, 64, "r1"), point(1, 66, "r2", month=10)], version=VERSION)
+    assert '<p class="wp-goal"><span>Was waiting for</span> A launch date is announced</p>' in body
+    assert ">Waiting for<" not in body
+    description = re.search(r'<meta name="description" content="([^"]*)"', body).group(1)
+    assert description.startswith("Paused · last checked Oct 1 · 2 AI models answered independently")
+    assert "/100" not in description and "contradiction" not in description
+    # Running again, it waits again.
+    active = {**meta, "status": "active", "next_run_at": datetime(2026, 10, 8, 8, tzinfo=UTC)}
+    body = page(client, doc(differences_data=differences), meta=active,
+                points=[point(24, 64, "r1"), point(1, 66, "r2", month=10)], version=VERSION)
+    assert '<p class="wp-goal"><span>Waiting for</span> A launch date is announced</p>' in body
+    description = re.search(r'<meta name="description" content="([^"]*)"', body).group(1)
+    assert "/100" not in description
 
 
 def test_an_active_watch_keeps_its_state_line():
