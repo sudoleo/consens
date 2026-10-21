@@ -2849,8 +2849,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (Telegram-Verbindung und Morning Brief im `.switch`/`.slider`-Stil des
   Input-Felds, Brief-Uhrzeit beim Verlassen des Feldes gespeichert) und am
   Ende das einklappbare „Why a watch, not a scheduled prompt“
-  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, Offen-Zustand in
-  `consensio.watchExplainer.open.v1`, standardmäßig zu). Jede Karte zeigt
+  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, standardmäßig zu;
+  `consensio.watchExplainer.open.v2` merkt nur, was der Leser selbst
+  umschaltet — v1 speicherte auch das `toggle`-Event des eigenen
+  `open = true` und hielt die Kachel so dauerhaft offen). Jede Karte zeigt
   eine Textspalte über die ganze Breite: Status (Zeit als „checked 3 h ago“ bzw.
   „last check …“; bei „First check pending“ ohne Zeit, die steht im Fuß), Frage
   (3 Zeilen geklemmt), „Waiting for“ + Ziel + Zielstand, darunter „Details“
