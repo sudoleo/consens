@@ -1651,7 +1651,10 @@ def list_due_watch_ids(*, now=None, db=None, max_items=200) -> list[str]:
 
 def earliest_next_run_at(*, db=None) -> datetime | None:
     """When the next active watch is due, or None. One read on the index of
-    list_due_watch_ids; the scheduler sleeps until then (Audit J5)."""
+    list_due_watch_ids; the scheduler sleeps until then (Audit J5).
+
+    No retries and a short deadline: the loop falls back to its normal
+    rhythm when Firestore is slow instead of waiting out a retry series."""
     db = db if db is not None else db_firestore
     query = (
         db.collection(WATCHES_COLLECTION)
@@ -1659,7 +1662,11 @@ def earliest_next_run_at(*, db=None) -> datetime | None:
         .order_by("next_run_at")
         .limit(1)
     )
-    for doc in query.stream():
+    try:
+        docs = query.stream(retry=None, timeout=3.0)
+    except TypeError:  # lightweight test doubles
+        docs = query.stream()
+    for doc in docs:
         value = (doc.to_dict() or {}).get("next_run_at")
         return value if isinstance(value, datetime) else None
     return None

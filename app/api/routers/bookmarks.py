@@ -582,24 +582,57 @@ def name_bookmark(request: Request, bookmark_id: str):
     if not title:
         return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
 
-    chat_id = str(data.get("chat_id") or "")
-    if CHAT_ID_RE.fullmatch(chat_id):
-        try:
-            _chat_store()._chat_ref(uid, chat_id).update({"title": title})
-        except Exception as exc:
-            # A deleted chat keeps its bookmark name; nothing to repair.
-            logging.warning("Chat title update skipped category=%s", safe_exception(exc))
+    # The model takes seconds; the person may rename the chat meanwhile. The
+    # bookmark is written first and only while it still has no name of its
+    # own, never over a rename and never onto a deleted bookmark.
     try:
         bookmark = persistence_guard.write_bookmark(
             uid=uid, db=db_firestore, doc_ref=doc_ref,
-            # Never recreate a bookmark deleted while the title was written.
-            current_guard=lambda current: bool(current),
+            current_guard=lambda current: bool(current)
+            and current.get("title_source") not in persistence_guard.KEPT_TITLE_SOURCES,
             patch={"title": title, "title_source": "generated"},
         )
+    except persistence_guard.PersistenceConflictError:
+        return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, _current_bookmark(doc_ref, data))}
     except Exception as exc:
         logging.warning("Bookmark title write skipped category=%s", safe_exception(exc))
         return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
+    chat_id = str(data.get("chat_id") or "")
+    if CHAT_ID_RE.fullmatch(chat_id):
+        try:
+            _name_chat_as_generated(uid, chat_id, doc_ref, title)
+        except Exception as exc:
+            # A deleted chat keeps its bookmark name; nothing to repair.
+            logging.warning("Chat title update skipped category=%s", safe_exception(exc))
     return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
+
+
+def _current_bookmark(doc_ref, fallback: dict) -> dict:
+    try:
+        snapshot = doc_ref.get()
+        return (snapshot.to_dict() or {}) if snapshot.exists else fallback
+    except Exception:
+        return fallback
+
+
+def _name_chat_as_generated(uid: str, chat_id: str, doc_ref, title: str) -> bool:
+    """The generated name onto the chat -- in one transaction with a look at
+    the bookmark, so a rename that landed in between keeps its name on the
+    chat too (rename_bookmark writes the bookmark before the chat)."""
+    chat_ref = _chat_store()._chat_ref(uid, chat_id)
+
+    def apply(transaction):
+        snapshot = persistence_guard._get(doc_ref, transaction)
+        current = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        if current.get("title_source") != "generated" or current.get("title") != title:
+            return False
+        if transaction is None:
+            chat_ref.update({"title": title})
+        else:
+            transaction.update(chat_ref, {"title": title})
+        return True
+
+    return bool(persistence_guard._run_transaction(db_firestore, apply))
 
 
 class BookmarkRenameRequest(BaseModel):
@@ -636,12 +669,6 @@ def rename_bookmark(request: Request, bookmark_id: str, payload: BookmarkRenameR
     if not snap.exists:
         raise HTTPException(status_code=404, detail="Bookmark not found")
     data = snap.to_dict() or {}
-    chat_id = str(data.get("chat_id") or "")
-    if CHAT_ID_RE.fullmatch(chat_id):
-        try:
-            _chat_store()._chat_ref(uid, chat_id).update({"title": title})
-        except Exception as exc:
-            logging.warning("Chat rename skipped category=%s", safe_exception(exc))
     try:
         bookmark = persistence_guard.write_bookmark(
             uid=uid, db=db_firestore, doc_ref=doc_ref,
@@ -654,6 +681,14 @@ def rename_bookmark(request: Request, bookmark_id: str, payload: BookmarkRenameR
     except Exception as exc:
         logging.error("Bookmark rename failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="The chat could not be renamed.") from exc
+    # After the bookmark: a title request still running sees the user's name
+    # there and leaves the chat alone (name_bookmark).
+    chat_id = str(data.get("chat_id") or "")
+    if CHAT_ID_RE.fullmatch(chat_id):
+        try:
+            _chat_store()._chat_ref(uid, chat_id).update({"title": title})
+        except Exception as exc:
+            logging.warning("Chat rename skipped category=%s", safe_exception(exc))
     return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
 
 

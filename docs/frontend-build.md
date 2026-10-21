@@ -237,7 +237,10 @@ haben – nach einer Änderung ohne `npm run build` liefert es die Quelldatei mi
 `?v=` (kein veraltetes CSS, auch nicht lokal). Mit `FRONTEND_DEV=1` immer die
 Quelldatei. Fonts tragen ihren Hash im Dateinamen
 (`scripts/subset_inter_font.py`) und werden `immutable` ausgeliefert; jede
-Seite lädt den Latein-Teil per `partials/font_preload.html` vor.
+Seite lädt den Latein-Teil per `partials/font_preload.html` vor. Der alte,
+ungehashte Name eines Teils (`InterVariable-latin.woff2`) liefert weiter die
+aktuelle Datei (`static_delivery.legacy_font_target`), damit vor einem Deploy
+geöffnete Tabs ihre Schriftteile finden.
 
 ## Noch offen
 

@@ -136,7 +136,7 @@ describe("memory switch", () => {
  * between loading the newer Memory and keeping the draft deliberately.
  */
 describe("memory save conflicts", () => {
-  function bootWithServer() {
+  function bootWithServer({ flat = false } = {}) {
     const server = { revision: 4, profile: storedProfile(true), puts: [] };
     const { window, document } = loadScripts(["static/js/user-memory.js"], {
       body: SETTINGS,
@@ -150,8 +150,14 @@ describe("memory save conflicts", () => {
               return {
                 ok: false,
                 status: 409,
-                // Production envelope: main.py wraps HTTPException.detail as "error".
-                json: async () => ({
+                // Production envelope: main.py lays the detail flat (since
+                // Zweitprüfung 2); older servers nested it under "error".
+                json: async () => (flat ? {
+                  error: "Memory changed in another tab or through Remember/Correct memory. Your draft was not saved.",
+                  code: "revision_conflict",
+                  error_code: "revision_conflict",
+                  revision: server.revision
+                } : {
                   error: {
                     error_code: "revision_conflict",
                     message: "Memory changed in another tab or through Remember/Correct memory. Your draft was not saved.",
@@ -215,6 +221,24 @@ describe("memory save conflicts", () => {
     ctx.document.getElementById("saveMemoryBtn").click();
     await settle();
 
+    ctx.document.querySelector("[data-memory-conflict='keep']").click();
+    ctx.document.getElementById("saveMemoryBtn").click();
+    await settle();
+
+    expect(ctx.server.puts.map(put => put.expected_revision)).toEqual([4, 5]);
+    expect(ctx.server.profile.role).toBe("My unsaved draft");
+  });
+
+  it("keeps the newer revision from the flat error shape too", async () => {
+    const ctx = bootWithServer({ flat: true });
+    await openSettings(ctx);
+    ctx.server.revision = 5;
+    type(ctx, "memoryRoleInput", "My unsaved draft");
+    ctx.document.getElementById("saveMemoryBtn").click();
+    await settle();
+
+    const status = ctx.document.getElementById("memoryStatus");
+    expect(status.textContent).toContain("Memory changed in another tab");
     ctx.document.querySelector("[data-memory-conflict='keep']").click();
     ctx.document.getElementById("saveMemoryBtn").click();
     await settle();

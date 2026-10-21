@@ -108,6 +108,26 @@ class ClientIpKeyTests(unittest.TestCase):
             limiter.check("same-user", "create", 1)
         limiter.check("other-user", "create", 1)
 
+    def test_a_crowd_of_favicon_visitors_never_resets_an_hourly_limit(self):
+        # Zweitprüfung 15: more than MAX_KEYS one-minute favicon buckets made
+        # the next check sweep every bucket with ITS one-minute window, and
+        # an hourly limit two minutes old was gone.
+        from unittest.mock import patch
+
+        limiter = ApiUidRateLimiter()
+        clock = [1000.0]
+        with patch("app.core.rate_limit.time.monotonic", side_effect=lambda: clock[0]):
+            limiter.check("owner", "bookmark:title", 1, window_seconds=3600)
+            clock[0] += 120
+            for visitor in range(ApiUidRateLimiter.MAX_KEYS + 1):
+                limiter.check("ip:%d" % visitor, "favicon-lookup", 30)
+            clock[0] += 61
+            limiter.check("ip:late", "favicon-lookup", 30)  # sweeps
+            # The minute buckets are gone, the hourly one still holds.
+            self.assertLess(len(limiter._events), 10)
+            with self.assertRaises(ApiUidRateLimitExceeded):
+                limiter.check("owner", "bookmark:title", 1, window_seconds=3600)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@
 Each test names its finding; each would fail on the code before it.
 """
 
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -80,6 +81,29 @@ def test_a_paused_watch_leads_with_paused_not_with_a_green_unchanged(client):
     assert "Unchanged since" not in body
     # The facts no longer repeat it.
     assert "Checked 2 times since Sep 24</p>" in body
+
+
+def test_a_paused_watch_neither_waits_nor_scores_in_its_search_line(client):
+    # Zweitprüfung 16: nobody is checking, so the goal is what it WAS waiting
+    # for, and the description leads with the state, never with a score.
+    differences = {"differences": [{"claim": "When", "type": "contradiction", "positions": [
+        {"stance": "May", "models": ["OpenAI"]}, {"stance": "June", "models": ["Gemini"]}]}],
+        "models_compared": ["OpenAI", "Gemini"], "agreement": {"score": 64}}
+    meta = {**PAUSED, "condition": "A launch date is announced"}
+    body = page(client, doc(differences_data=differences), meta=meta,
+                points=[point(24, 64, "r1"), point(1, 66, "r2", month=10)], version=VERSION)
+    assert '<p class="wp-goal"><span>Was waiting for</span> A launch date is announced</p>' in body
+    assert ">Waiting for<" not in body
+    description = re.search(r'<meta name="description" content="([^"]*)"', body).group(1)
+    assert description.startswith("Paused · last checked Oct 1 · 2 AI models answered independently")
+    assert "/100" not in description and "contradiction" not in description
+    # Running again, it waits again.
+    active = {**meta, "status": "active", "next_run_at": datetime(2026, 10, 8, 8, tzinfo=UTC)}
+    body = page(client, doc(differences_data=differences), meta=active,
+                points=[point(24, 64, "r1"), point(1, 66, "r2", month=10)], version=VERSION)
+    assert '<p class="wp-goal"><span>Waiting for</span> A launch date is announced</p>' in body
+    description = re.search(r'<meta name="description" content="([^"]*)"', body).group(1)
+    assert "/100" not in description
 
 
 def test_an_active_watch_keeps_its_state_line():
@@ -194,6 +218,47 @@ def test_judge_letters_become_the_families_the_page_names():
     assert named["positions"][0]["models"] == [] and named["positions"][1]["models"] == []
     # A letter nobody can place keeps its text.
     assert named["verify"] == "Ask Model D."
+
+
+def test_judge_letters_are_never_paired_by_list_order():
+    # Zweitprüfung 14: the judge listed A=DeepSeek and B=OpenAI as
+    # ["OpenAI", "DeepSeek"]; pairing by order made the next difference say
+    # "DeepSeek claims it ships in May" although OpenAI did.
+    differences = [
+        {"claim": "Models A and B say June, Model C says May", "positions": [
+            {"stance": "Models A and B say it ships in June.", "models": ["OpenAI", "DeepSeek"]},
+            {"stance": "Model C says it ships in May.", "models": ["Gemini"]},
+        ]},
+        {"claim": "Model B alone names a date", "positions": [
+            {"stance": "Model B claims it ships in May.", "models": ["OpenAI"]},
+            {"stance": "Model A gives no date, unlike Model B.", "models": ["DeepSeek"]},
+        ], "verify": "Compare Model A with Model C."},
+    ]
+    first, second = check_page.named_differences(differences)
+    assert second["positions"][0]["stance"] == "OpenAI claims it ships in May."
+    assert second["positions"][1]["stance"] == "DeepSeek gives no date, unlike OpenAI."
+    assert second["verify"] == "Compare DeepSeek with Gemini."
+    # Each letter is known on its own now, so each gets its own family.
+    assert first["positions"][0]["stance"] == "DeepSeek and OpenAI say it ships in June."
+
+    # Only the pair is known: the pair is named, a single letter of it is not.
+    pair = [{"claim": "Ask Model A", "positions": [
+        {"stance": "Models A and B say June.", "models": ["OpenAI", "DeepSeek"]},
+    ]}]
+    named = check_page.named_differences(pair)[0]
+    assert named["positions"][0]["stance"] == "OpenAI and DeepSeek say June."
+    assert named["claim"] == "Ask Model A"
+
+    # Evidence that contradicts itself names nobody; a label later in a
+    # stance ("unlike Model B") is about the other side and no evidence.
+    conflict = [{"claim": "Model B says May", "positions": [
+        {"stance": "Model B says May.", "models": ["OpenAI"]},
+        {"stance": "Model B says June.", "models": ["Gemini"]},
+        {"stance": "It says July, unlike Model C.", "models": ["Grok"]},
+    ]}]
+    named = check_page.named_differences(conflict)[0]
+    assert named["claim"] == "Model B says May"
+    assert named["positions"][2]["stance"] == "It says July, unlike Model C."
 
 
 # --- L13: the card of a Watch -----------------------------------------------------------
@@ -327,6 +392,32 @@ def test_the_landing_links_a_live_watch_and_never_a_paused_one():
 
     landing = read("templates/landing.html")
     assert '{% if live_watch_path %}<a class="lp-watch-live" href="{{ live_watch_path }}"' in landing
+
+
+def test_the_landing_never_links_a_watch_page_nobody_curated():
+    # "Public" means anyone with the link; only an indexed page may stand on
+    # the start page (Zweitprüfung B1). An uncurated live Watch is no stand-in.
+    curated, uncurated = snapshots.generate_share_id(), snapshots.generate_share_id()
+    shares = [
+        {"_id": curated, "status": "active", "visibility": "public", "slug": "curated-question", "indexed": True},
+        {"_id": uncurated, "status": "active", "visibility": "public", "slug": "someones-own-question"},
+    ]
+    watches = [
+        {"share_id": uncurated, "status": "active", "visibility": "public",
+         "last_run_at": datetime(2026, 10, 20, tzinfo=UTC)},
+        {"share_id": curated, "status": "paused", "visibility": "public",
+         "last_run_at": datetime(2026, 10, 15, tzinfo=UTC)},
+    ]
+    # The curated Watch is paused, the only live one is nobody's showcase.
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
+    shares[1]["indexed"] = False
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
+    # A curated live Watch wins although the uncurated one ran later.
+    watches[1]["status"] = "active"
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == snapshots.share_path("curated-question", curated)
+    # Unindexed after curation (or blocked): gone from the landing as well.
+    shares[0]["indexed"] = False
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
 
 
 # --- I14, I4: one grid, one material, no sideways panning ---------------------------

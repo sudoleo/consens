@@ -18,6 +18,12 @@ Two narrow jobs, both applied as one ASGI middleware:
   compressed or buffered: an SSE frame must reach the browser the moment the
   route yields it, and a compressor would hold it back until its window fills.
 
+* A font part asked for under its name from before the content hash
+  (``InterVariable-latin.woff2``) gets its current hashed file. A tab opened
+  before a deploy still runs the old stylesheet and loads italic or
+  latin-ext only at its first such character -- otherwise that text fell
+  back to a system font until the next reload (Zweitprüfung, Schriften).
+
 The middleware decides per response, from the request path and the response
 headers, before a single body byte is sent. Anything it does not explicitly
 recognise passes through unchanged, message by message.
@@ -25,6 +31,8 @@ recognise passes through unchanged, message by message.
 import mimetypes
 import re
 import zlib
+from functools import lru_cache
+from pathlib import Path
 from starlette.datastructures import Headers, MutableHeaders
 
 # StaticFiles takes the type from the platform's table, and Windows (and some
@@ -52,6 +60,36 @@ MINIMUM_SIZE = 1024
 
 def is_hashed_dist_path(path: str) -> bool:
     return bool(_HASHED_DIST.match(path or ""))
+
+
+STATIC_ROOT = Path(__file__).resolve().parents[2] / "static"
+_HASHED_FONT_FILE = re.compile(r"^(?P<part>[A-Za-z0-9_-]+)\.[0-9a-f]{12}\.woff2$")
+
+
+@lru_cache(maxsize=4)
+def _legacy_font_aliases(static_root: Path) -> dict[str, str]:
+    """``/static/fonts/.../<part>.woff2`` -> ``/static/fonts/.../<part>.<hash>.woff2``
+    for every hashed font file whose old, unhashed name no longer exists.
+    Read once per process: fonts change only with a deploy."""
+    aliases: dict[str, str] = {}
+    for file in sorted((static_root / "fonts").rglob("*.woff2")):
+        match = _HASHED_FONT_FILE.match(file.name)
+        if not match:
+            continue
+        legacy = file.with_name(match["part"] + ".woff2")
+        if legacy.exists():
+            continue
+        aliases["/static/" + legacy.relative_to(static_root).as_posix()] = (
+            "/static/" + file.relative_to(static_root).as_posix()
+        )
+    return aliases
+
+
+def legacy_font_target(path: str, static_root: Path = STATIC_ROOT) -> "str | None":
+    """The hashed file an old font URL stands for, or None."""
+    if not (path or "").startswith("/static/fonts/") or not path.endswith(".woff2"):
+        return None
+    return _legacy_font_aliases(static_root).get(path)
 
 
 def static_cache_control(path: str, query_string: str = "") -> "str | None":
@@ -98,7 +136,12 @@ class StaticDeliveryMiddleware:
         path = str(scope.get("path") or "")
         accepts_gzip = "gzip" in Headers(scope=scope).get("accept-encoding", "").lower()
         query = (scope.get("query_string") or b"").decode("latin-1")
+        # Cache policy of the URL asked for: an old name is no content hash
+        # and keeps revalidating.
         cache_control = static_cache_control(path, query)
+        font = legacy_font_target(path)
+        if font:
+            scope = {**scope, "path": font, "raw_path": font.encode("latin-1")}
         state = {"mode": None, "start": None, "compressor": None}
 
         async def wrapped_send(message):

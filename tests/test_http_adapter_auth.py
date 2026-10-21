@@ -119,6 +119,66 @@ def test_user_status_rejects_auth_and_tier_outage(http_adapter, identity, expect
     assert "private" not in response.text
 
 
+def test_a_structured_refusal_reaches_the_app_flat(http_adapter):
+    # Zweitprüfung 2: {"error": {"error_code", "message"}} hid the sentence
+    # and the code from every client reader; the app gets {error, code, ...}.
+    h = http_adapter
+    response = h.client.post("/api/my/memory/changes/not-an-id/undo", headers=login("owner"))
+    assert response.status_code == 404
+    body = response.json()
+    assert body == {"error": "This memory change is no longer available.",
+                    "code": "not_found", "error_code": "not_found"}
+
+
+def test_the_flat_shape_keeps_every_field_and_spares_the_public_api():
+    import main
+
+    detail = {"error": "Today’s allowance doesn’t cover another run. It resets at 00:00 UTC.",
+              "error_code": "token_budget_exhausted", "required_tokens": 900,
+              "token_budget": {"used": 10}, "tier": "free"}
+    assert main.error_body("/consensus", detail) == {
+        "error": detail["error"], "code": "token_budget_exhausted", "error_code": "token_budget_exhausted",
+        "required_tokens": 900, "token_budget": {"used": 10}, "tier": "free"}
+    conflict = {"error_code": "revision_conflict", "message": "Memory changed.", "revision": 7}
+    assert main.error_body("/api/my/memory", conflict)["revision"] == 7
+    # A sentence alone, or extra fields (watch errors), stay as they were.
+    assert main.error_body("/api/watches", "Watch not found.", {"code": "not_found"}) == {
+        "error": "Watch not found.", "code": "not_found"}
+    # The documented public API shape does not move.
+    scoped = {"code": "insufficient_scope", "message": "API key requires scope: run:create"}
+    assert main.error_body("/api/v1/runs", scoped) == {"error": scoped}
+    # A throttle is "rate_limited" with its wait, unless it names itself.
+    assert main.error_body("/agent", "Too many agent requests. Please wait.", status=429,
+                           headers={"Retry-After": "30"}) == {
+        "error": "Too many agent requests. Please wait.", "code": "rate_limited", "retry_after": 30}
+    chats = {"error": "Too many chat requests. Please slow down.", "error_code": "chat_rate_limited"}
+    assert main.error_body("/api/chats", chats, status=429)["code"] == "chat_rate_limited"
+
+
+@pytest.mark.parametrize("method,path", [("GET", "/user_status"), ("POST", "/usage")])
+def test_an_account_check_outage_is_no_rejected_login(http_adapter, monkeypatch, method, path):
+    # Zweitprüfung 12: the deletion check could not be read. A 401 made the
+    # browser turn Agent off for the session; a 503 makes it ask again.
+    from app.core import security
+
+    h = http_adapter
+    collection = h.db.collection
+
+    def unavailable(name):
+        if name == security.ACCOUNT_DELETION_JOBS_COLLECTION:
+            raise RuntimeError("private database diagnostic")
+        return collection(name)
+
+    monkeypatch.setattr(h.db, "collection", unavailable)
+    response = h.client.request(
+        method, path, headers=login("owner"),
+        json={"id_token": "owner"} if method == "POST" else None,
+    )
+    assert response.status_code == 503, response.text
+    assert response.headers["Retry-After"] == "5"
+    assert "private" not in response.text
+
+
 def test_registration_create_race_has_same_public_response_and_no_duplicate_notification(
     http_adapter, monkeypatch
 ):

@@ -128,10 +128,11 @@
     if (!response.ok) {
       // FastAPI meldet Schema-Fehler als Liste von Objekten. Als Fehlertext
       // stand dort sonst "[object Object]" im Statusstreifen.
-      // main.py wraps HTTPException.detail as {"error": ...}; plain FastAPI
-      // uses {"detail": ...}. Accept both so conflicts work in production.
+      // main.py lays the detail flat ({error, code, revision}); older servers
+      // nested it as {"error": {...}}, plain FastAPI as {"detail": {...}}.
+      // Accept all three so conflicts work in production.
       const isObject = value => value && typeof value === "object" && !Array.isArray(value);
-      const structured = isObject(data.detail) ? data.detail : (isObject(data.error) ? data.error : null);
+      const structured = isObject(data.detail) ? data.detail : (isObject(data.error) ? data.error : data);
       const detail = [data.detail, structured?.message, data.error]
         .find(value => typeof value === "string" && value.trim());
       const error = window.App.httpError(response, data);

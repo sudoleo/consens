@@ -59,7 +59,9 @@
         "checked weekly" (Apple-Audit L2). -#}
     {% call check.head(watch_page.status, question, watch_page.image) %}Watch{% if watch_page.is_active and watch_page.interval %} · checked {{ watch_page.interval }}{% elif watch_page.status in ('paused', 'paused_error') %} · paused{% elif watch_page.status == 'resolved' %} · resolved{% endif %}{% if is_private %} · private{% endif %}{% endcall %}
 
-    {{ check.state(watch_state, watch_selected_version.current_url, "What this Watch found", watch_page.goal if watch_page.goal and not watch_page.resolution else "") }}
+    {#- Nobody waits on a paused Watch: its goal says what it was waiting for
+        (Apple-Audit L2, Zweitprüfung 16). -#}
+    {{ check.state(watch_state, watch_selected_version.current_url, "What this Watch found", watch_page.goal if watch_page.goal and not watch_page.resolution else "", goal_label="Was waiting for" if watch_page.status in ('paused', 'paused_error') else "Waiting for") }}
 
     {% if not watch_awaiting_first_run %}{{ check.direct_links(watch_key_links) }}{% endif %}
 

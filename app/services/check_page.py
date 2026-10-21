@@ -165,13 +165,64 @@ def watch_summary(status, points, *, last_run=None, resolved_at=None):
 _JUDGE_LABEL = re.compile(r"\bModels?\s+([A-Z](?:\s*(?:,|/|&|\band\b|\bor\b)\s*[A-Z])*)\b")
 
 
-def _label_letters(text: str) -> list[str]:
+def _leading_letters(stance) -> list[str]:
+    """The letters a stance opens with ("Models A and B state ..."): the
+    position's own models. A label later in the sentence ("..., unlike
+    Model B") names the other side and is no evidence."""
+    match = _JUDGE_LABEL.match(str(stance or "").strip())
+    if not match:
+        return []
     letters: list[str] = []
-    for match in _JUDGE_LABEL.finditer(str(text or "")):
-        for letter in re.findall(r"[A-Z]", match.group(1)):
-            if letter not in letters:
-                letters.append(letter)
+    for letter in re.findall(r"[A-Z]", match.group(1)):
+        if letter not in letters:
+            letters.append(letter)
     return letters
+
+
+def _judge_letter_blocks(differences) -> dict[str, tuple[frozenset, list[str]]]:
+    """Letter -> (its block of letters, the block's families).
+
+    Evidence: a position whose stance opens with exactly as many letters as
+    it lists families says that SET of letters is that set of families --
+    never which letter is which, the judge's list order is no pairing. A
+    letter's candidates are what all its pieces of evidence share; letters
+    with the same candidates form a block once they are as many as their
+    families (one letter, one family: placed alone). Contradicting evidence
+    leaves a letter without candidates, and it keeps its text.
+    """
+    candidates: dict[str, set[str]] = {}
+    first_order: dict[str, list[str]] = {}
+    for diff in differences:
+        for position in diff.get("positions") or []:
+            if not isinstance(position, dict):
+                continue
+            letters = _leading_letters(position.get("stance"))
+            models = list(dict.fromkeys(str(model) for model in position.get("models") or [] if model))
+            if not letters or len(letters) != len(models):
+                continue
+            for letter in letters:
+                candidates[letter] = candidates.get(letter, set(models)) & set(models)
+                first_order.setdefault(letter, models)
+    blocks: dict[str, tuple[frozenset, list[str]]] = {}
+    progress = True
+    while progress:
+        progress = False
+        for letter in sorted(candidates):
+            if letter in blocks or not candidates[letter]:
+                continue
+            group = frozenset(other for other in candidates
+                              if other not in blocks and candidates[other] == candidates[letter])
+            if len(group) != len(candidates[letter]):
+                continue
+            families = [model for model in first_order[letter] if model in candidates[letter]]
+            for member in group:
+                blocks[member] = (group, families)
+            for other in candidates:
+                if other not in blocks:
+                    candidates[other] = candidates[other] - set(families)
+            progress = True
+            break
+    return blocks
 
 
 def named_differences(differences):
@@ -181,32 +232,30 @@ def named_differences(differences):
     themselves.
 
     The letters are one judge call's anonymization, so one mapping holds for
-    every difference on the page. It is read off the positions: a stance that
-    names exactly as many letters as the position lists families pairs them in
-    order. A letter that cannot be placed keeps its text.
+    every difference on the page (_judge_letter_blocks). A label is named
+    only when it covers whole blocks: "Models A and B" becomes "OpenAI and
+    Gemini" when the page says that pair is those two, "Model A" alone only
+    when A is known on its own. Anything less certain keeps its letters --
+    a wrong family is worse than a letter (Zweitprüfung 14).
     """
     differences = [diff for diff in differences or [] if isinstance(diff, dict)]
-    mapping: dict[str, str] = {}
-    for _round in range(2):
-        for diff in differences:
-            for position in diff.get("positions") or []:
-                if not isinstance(position, dict):
-                    continue
-                letters = _label_letters(position.get("stance"))
-                models = [str(model) for model in position.get("models") or [] if model]
-                if not letters or len(letters) != len(models):
-                    continue
-                for letter, model in zip(letters, models):
-                    if letter in mapping or model in mapping.values():
-                        continue
-                    mapping[letter] = model
+    blocks = _judge_letter_blocks(differences)
 
     def name(text):
         def replace(match):
             letters = re.findall(r"[A-Z]", match.group(1))
-            if not all(letter in mapping for letter in letters):
+            if not letters or not all(letter in blocks for letter in letters):
                 return match.group(0)
-            return re.sub(r"[A-Z]", lambda found: mapping[found.group(0)], match.group(1))
+            named = set(letters)
+            if any(not blocks[letter][0] <= named for letter in letters):
+                return match.group(0)
+            # Each block's families in turn, onto its letters in span order.
+            queues = {group: list(families) for group, families in (blocks[letter] for letter in letters)}
+            used: dict[str, str] = {}
+            for letter in letters:
+                if letter not in used:
+                    used[letter] = queues[blocks[letter][0]].pop(0)
+            return re.sub(r"[A-Z]", lambda found: used[found.group(0)], match.group(1))
         return _JUDGE_LABEL.sub(replace, str(text or ""))
 
     named = []

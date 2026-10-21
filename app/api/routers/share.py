@@ -554,7 +554,7 @@ def share_page(request: Request, slug_id: str):
             # already has) and comes straight back (static/firebase.js).
             return _unavailable_response(
                 request, 403, "Private watch page",
-                "This page is private. Sign in with the account that created it to view it.",
+                "This page is private. Log in with the account that created it to view it.",
                 # The canonical path, not the requested one: it always
                 # matches what the app accepts as a return target.
                 sign_in_href="/app?next=" + quote(snapshots.share_path("", share_id), safe="/"),
@@ -562,7 +562,7 @@ def share_page(request: Request, slug_id: str):
         if viewer_uid != data.get("owner_uid"):
             return _unavailable_response(
                 request, 403, "Private watch page",
-                "This page is private and belongs to another account. Sign in with the account that created it to view it.",
+                "This page is private and belongs to another account. Log in with the account that created it to view it.",
             )
 
     canonical_slug = data.get("slug") or ""
@@ -599,7 +599,7 @@ def share_page(request: Request, slug_id: str):
         if not re.fullmatch(r"[A-Za-z0-9]{8,64}", requested_version):
             return _unavailable_response(
                 request, 404, "Version not found",
-                "This Consensus Watch version does not exist.",
+                "This Watch version does not exist.",
             )
     try:
         display_version = _resolve_display_version(
@@ -614,7 +614,7 @@ def share_page(request: Request, slug_id: str):
         if requested_version:
             return _unavailable_response(
                 request, 404, "Version not found",
-                "This Consensus Watch version does not exist.",
+                "This Watch version does not exist.",
             )
         display_version = {
             "id": "original", "kind": "fallback", "data": data, "snapshot": None,
@@ -745,6 +745,21 @@ def share_page(request: Request, slug_id: str):
         query_first=bool(data.get("watch_query_only")),
     ) if watch_page else None
 
+    # A Watch page has its own, much quieter template: the state line, the
+    # answer, the changes over time. The one-off share page keeps its
+    # scoreboard, model chips and differences toggle.
+    watch_state = _watch_state_view(
+        watch_page, watch_history, watch_drift,
+        awaiting=watch_awaiting_first_run,
+        version_kind=(
+            "original" if requested_version == "original"
+            else "historical" if requested_version else display_version["kind"]
+        ),
+        selected_run_id=selected_run_id,
+        requested=bool(requested_version),
+        fallback_notice=display_version["fallback_notice"],
+    ) if watch_page else None
+
     date_iso = payload["answered_at"] or payload["created_at"]
     published_iso = date_iso
     # Auch strukturierte Zeitangaben bleiben an die autoritative Anzeigeversion
@@ -795,12 +810,17 @@ def share_page(request: Request, slug_id: str):
 
     # Meta-Description datengeführt statt AI-Textanfang: liest sich im SERP
     # wie ein Datenprodukt, der Konsens-Auszug folgt dahinter.
+    # A Watch page leads with its state ("Paused · last checked Oct 1"), not
+    # a score or a count of contradictions it no longer shows (Apple-Audit
+    # L2/L13, Zweitprüfung 16) -- the search line says what the page says.
     description_bits = []
+    if watch_state and watch_state.get("headline") and not watch_awaiting_first_run:
+        description_bits.append(watch_state["headline"])
     if model_count:
         description_bits.append(f"{model_count} AI models answered independently")
-    if scoreboard["score"] is not None:
+    if scoreboard["score"] is not None and not watch_page:
         description_bits.append(f"agreement {scoreboard['score']}/100")
-    if contradiction_count:
+    if contradiction_count and not watch_page:
         description_bits.append(
             f"{contradiction_count} contradiction{'s' if contradiction_count != 1 else ''}"
         )
@@ -820,7 +840,7 @@ def share_page(request: Request, slug_id: str):
         meta_description = prefix + excerpt
     else:
         meta_description = (
-            f"Scheduled Consensus Watch for: {payload['question']}"[:160]
+            f"A Watch on: {payload['question']}"[:160]
             if watch_awaiting_first_run
             else markdown_to_plaintext(payload["consensus_md"], limit=160, sources=payload["sources"])
         )
@@ -853,20 +873,6 @@ def share_page(request: Request, slug_id: str):
     # "</" escapen, damit Snapshot-Inhalte das <script>-Element nie schließen können.
     jsonld_html = seo_entity.dumps(seo_entity.page_graph(jsonld))
 
-    # A Watch page has its own, much quieter template: the state line, the
-    # answer, the changes over time. The one-off share page keeps its
-    # scoreboard, model chips and differences toggle.
-    watch_state = _watch_state_view(
-        watch_page, watch_history, watch_drift,
-        awaiting=watch_awaiting_first_run,
-        version_kind=(
-            "original" if requested_version == "original"
-            else "historical" if requested_version else display_version["kind"]
-        ),
-        selected_run_id=selected_run_id,
-        requested=bool(requested_version),
-        fallback_notice=display_version["fallback_notice"],
-    ) if watch_page else None
     response = templates.TemplateResponse(request=request, name="watch_share.html" if watch_page else "share.html", context={
         "watch_state": watch_state,
         "share_id": share_id,

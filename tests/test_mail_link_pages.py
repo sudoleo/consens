@@ -92,3 +92,16 @@ def test_resume_link_respects_the_owner_limit_and_a_reached_goal(watch_http, mon
     # The pause link of an old mail does not turn a reached goal into "paused".
     h.client.post("/watch/unsubscribe", params={"token": watch_service.make_unsubscribe_token(watch_id)})
     assert h.watch_db.stores[watch_service.WATCHES_COLLECTION][watch_id]["status"] == "resolved"
+
+
+def test_the_mail_link_pages_call_the_thing_a_watch(watch_http):
+    # Zweitprüfung (Namen): the head of every page was "Consensus Watch".
+    h = watch_http
+    pages = [
+        h.client.get("/watch/unsubscribe", params={"token": watch_service.make_unsubscribe_token(h.watch["id"])}),
+        h.client.get("/watch/resume", params={"token": watch_service.make_resume_token(h.watch["id"])}),
+        h.client.get("/watch/unsubscribe", params={"token": "broken"}),
+    ]
+    for page in pages:
+        assert "Consensus Watch" not in page.text
+        assert '<p class="eyebrow">Watch</p>' in page.text

@@ -302,14 +302,54 @@ app.state.limiter = limiter
 # Mount static directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# The public Consensus API keeps its documented {"error": {"code", "message"}}
+# (docs/consensus-api.md); scripts parse it.
+PUBLIC_API_PREFIX = "/api/v1/"
+
+
+def error_body(path: str, detail, fields=None, *, status: int = 0, headers=None) -> dict:
+    """One shape for every refusal the app reads: ``{error: "<sentence>",
+    code, ...}`` (Apple-Audit H6, Zweitprüfung 2).
+
+    A structured detail (``{error|message, error_code|code, ...}``) is laid
+    flat: the sentence is ``error``, the code ``code``, every other field
+    (``retry_after``, ``revision``, ``token_budget`` ...) stands next to them.
+    Nested as ``{error: {...}}`` the clients found neither the sentence nor
+    the code: an empty allowance read "You don't have access to this."
+    ``error_code`` stays as an alias for readers written before ``code``.
+    A throttle (429) without a code of its own is ``rate_limited`` with the
+    ``retry_after`` of its Retry-After header, like every slowapi limit.
+    """
+    if not isinstance(detail, dict) or path.startswith(PUBLIC_API_PREFIX):
+        content = {"error": detail}
+    else:
+        content = {key: value for key, value in detail.items()
+                   if key not in {"error", "message", "error_code", "code"}}
+        sentence = next((value for value in (detail.get("error"), detail.get("message"))
+                         if isinstance(value, str) and value.strip()), "")
+        code = next((value for value in (detail.get("code"), detail.get("error_code"))
+                     if isinstance(value, str) and value.strip()), "")
+        content["error"] = sentence
+        if code:
+            content["code"] = code
+            content["error_code"] = code
+    content.update(fields or {})
+    if status == 429 and isinstance(content, dict) and not path.startswith(PUBLIC_API_PREFIX):
+        content.setdefault("code", RATE_LIMITED_CODE)
+        retry_after = str((headers or {}).get("Retry-After") or "")
+        if retry_after.isdigit() and int(retry_after) > 0:
+            content.setdefault("retry_after", int(retry_after))
+    return content
+
+
 # Exception Handlers
 @app.exception_handler(HTTPException)
 async def handle_http_exception(request, exc: HTTPException):
     # Routen setzen bewusst Header (Retry-After bei 429/503, WWW-Authenticate
     # bei 401); das JSON-Fehlerformat darf sie nicht verschlucken.
     # ``error_fields`` (z. B. ``code``, ``watch_id``) stehen neben dem Satz.
-    content = {"error": exc.detail}
-    content.update(getattr(exc, "error_fields", None) or {})
+    content = error_body(request.url.path, exc.detail, getattr(exc, "error_fields", None),
+                         status=exc.status_code, headers=exc.headers)
     return JSONResponse(
         status_code=exc.status_code,
         content=content,

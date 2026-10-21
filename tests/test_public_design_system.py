@@ -111,7 +111,7 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     # Every page fetches Inter with the HTML, at the exact URL @font-face
     # resolves to (B3): /app and each public template include the partial.
     assert '{% include "partials/font_preload.html" %}' in read("templates/index.html")
-    for template_name in PUBLIC_TEMPLATES + ("not_found.html", "questions.html", "watch_share.html"):
+    for template_name in PUBLIC_TEMPLATES + ("not_found.html", "questions.html", "watch_share.html", "notice.html"):
         template = read(f"templates/{template_name}")
         head = template.split("</head>", 1)[0]
         assert '{% include "partials/font_preload.html" %}' in head, template_name

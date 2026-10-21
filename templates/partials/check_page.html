@@ -47,7 +47,7 @@
 {# The one line the page leads with: did the answer move, and since when
    (app/services/check_page.state_view). ``compact`` (Topic pages) keeps it to
    one quiet line; what changed and the counts stand in the history. #}
-{% macro state(page_state, current_url, label, goal="", compact=false, detail="", more_href="") %}
+{% macro state(page_state, current_url, label, goal="", compact=false, detail="", more_href="", goal_label="Waiting for") %}
 {% if compact %}
 <section class="wp-state is-compact is-{{ page_state.tone }}" aria-label="{{ label }}">
   {#- The headline itself leads to what changed, so the line stays one line. -#}
@@ -67,7 +67,7 @@
   </ul>
   {% endif %}
   {% if page_state.back %}<a class="wp-back" href="{{ current_url }}">See the current answer &rarr;</a>{% endif %}
-  {% if goal %}<p class="wp-goal"><span>Waiting for</span> {{ goal }}</p>{% endif %}
+  {% if goal %}<p class="wp-goal"><span>{{ goal_label }}</span> {{ goal }}</p>{% endif %}
   {% if page_state.note %}<p class="wp-note">{{ page_state.note }}</p>{% endif %}
   {% if page_state.facts %}<p class="wp-facts">{{ page_state.facts | join(" · ") }}</p>{% endif %}
 </section>
