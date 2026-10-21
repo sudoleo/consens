@@ -3676,6 +3676,22 @@ Aufrufart Anteil `cached_input_tokens/input_tokens`, Writes/Reads und für
 Anthropic die Netto-Ersparnis in vollen Input-Tokens; `--exclude-own` lässt
 Max' Konten weg).
 
+**Such-Tool und Cache (live gemessen 2026-10-21).** Die Probe bestand aus sechs
+Sonnet-5.5-Calls über OpenRouter, alle auf dem Anthropic-Endpunkt in einer Session,
+mit gleichem Präfix von 8,8k Tokens. Ergebnis:
+- `max_uses` 3 → 1 (samt `max_total_results`) und `max_tool_calls` lesen den Cache
+  voll, 8806 von 8810 Tokens. Der Wechsel 3 → 1 Runden zwischen Recherche und
+  Folgeschritten kostet also nichts.
+- Fehlt `openrouter:web_search` ganz, gibt es einen vollen Miss. Die Definition des
+  Such-Tools selbst sind rund 2,5k Prompt-Tokens.
+
+Den Präfix brechen also nur Schritte mit `searches_enabled=False`: der Schritt nach
+`_consensus_search_handoff` (Recherche am Such-Cap) und der Abschluss am Turn-Limit
+(`_wrap_up`). Beide lassen das Tool bewusst weg, denn `tool_choice: none` würde
+auch `compare_models` sperren. Ungeprüft ist, ob `max_tool_calls: 0` bei stehendem
+Tool die Suche zuverlässig sperrt. Erst prüfen, wenn `cache_hit_rate.py` nach dem
+Deploy diese Schritte als Kostenposten zeigt.
+
 **Sticky Endpunkt (seit 2026-10-21).** Jeder Endpunkt cacht nur für sich
 (Claude läuft bei Anthropic, Vertex und Bedrock mit getrennten Caches). Ohne
 Session hält OpenRouter ein Gespräch erst nach einem gesehenen Cache-Treffer
