@@ -581,6 +581,7 @@ class ComparisonTools:
         # Review saves (checkpoint): one at a time, newest snapshot wins.
         self._save_lock = threading.Lock()
         self._snapshots = self._saved = 0
+        self._latest = None
         # Comparison answers run all at once; judges have their own slots.
         # The loop's slots stay with delegated workers.
         self.judge_slots = threading.BoundedSemaphore(JUDGE_PARALLEL)
@@ -774,21 +775,23 @@ class ComparisonTools:
         """Saves the review as it is now, and returns once it (or a newer
         one) is saved. The snapshot is taken under ``self.lock``, the database
         write only holds it when the caller does: a write no longer stops the
-        other answers and the judges from using the comparison. A snapshot
-        that a newer one has overtaken is not written any more; the newer one
-        holds everything it held (six answers arriving together used to be six
-        writes in a row)."""
+        other answers and the judges from using the comparison. Whoever saves
+        next saves the newest snapshot, which holds everything the older ones
+        held; a caller whose snapshot is saved that way returns without a
+        write of its own (six answers arriving together used to be six writes
+        in a row, until 2026-10-22 still each its own snapshot)."""
         with self.lock:
             data = self._checkpoint(status)
-            text = self.text
             self._snapshots += 1
             number = self._snapshots
+            self._latest = (number, data, self.text)
         with self._save_lock:
             if number <= self._saved:
                 return
+            newest, data, text = self._latest
             self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id, self.loop.run_token,
                                         data, text)
-            self._saved = number
+            self._saved = newest
             self.loop.outgoing.put_nowait({"type": "review", "review": data})
 
     def _checkpoint(self, status=None):

@@ -84,7 +84,8 @@ DB-Ausfälle verursachen keinen sofortigen Stopp. Nach Prozessverlust werden off
 als abgebrochen/unbekannt abgeschlossen; bereits bezahlte Schritte werden nie
 neu gestartet. Sitzungsstände (Status, Live-Zeile, Ergebnis) schreibt seit
 2026-10-21 das Journal des Laufs im Hintergrund (`agent_journal.py`, je Sitzung
-in Reihenfolge); nur eine neue Sitzung vor ihrem Claim und Nachrichten fürs
+in Reihenfolge, seit 10-22 alles Fällige in einer Transaktion,
+`publish_agents`); nur eine neue Sitzung vor ihrem Claim und Nachrichten fürs
 Postfach des Orchestrators warten darauf. Beim Laufende ist alles geschrieben.
 Reload lädt gespeicherte Sitzungen. Ein verlorener HTTP-Stream
 wird aus Sicherheitsgründen abgebrochen, nicht als Hintergrundjob fortgesetzt.

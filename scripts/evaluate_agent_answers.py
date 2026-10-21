@@ -158,7 +158,7 @@ class Timing:
     def watch_store(self, store):
         """Claims, settlements and worker sessions of this turn's store."""
         from app.services.agent_quota import AgentTokenBudgetExceeded
-        claim, settle, publish = store.claim, store.settle, store.publish_agent
+        claim, settle, publish = store.claim, store.settle, store.publish_agents
 
         def timed_claim(*args, **kwargs):
             try:
@@ -187,16 +187,18 @@ class Timing:
                           reasoning_tokens=usage.get("reasoning_tokens"))
             return settled
 
-        def timed_publish(*args, agent_id=None, patch=None, **kwargs):
-            if patch:
-                with self.lock:
-                    known = self.agents.setdefault(agent_id, {"created": self.clock()})
-                    for key in ("kind", "title"):
-                        if patch.get(key):
-                            known.setdefault(key, patch[key])
-            return publish(*args, agent_id=agent_id, patch=patch, **kwargs)
+        def timed_publish(*args, updates, **kwargs):
+            # The run's journal saves the sessions' updates in batches.
+            for agent_id, patch, _message, _event_id in updates:
+                if patch:
+                    with self.lock:
+                        known = self.agents.setdefault(agent_id, {"created": self.clock()})
+                        for key in ("kind", "title"):
+                            if patch.get(key):
+                                known.setdefault(key, patch[key])
+            return publish(*args, updates=updates, **kwargs)
 
-        store.claim, store.settle, store.publish_agent = timed_claim, timed_settle, timed_publish
+        store.claim, store.settle, store.publish_agents = timed_claim, timed_settle, timed_publish
 
     def completion(self, base):
         """``base`` with its stream timed (first progress, first text, end)

@@ -277,54 +277,88 @@ class AgentSessionStore:
 
     def publish_agent(self, uid, chat_id, turn_id, *, run_token, agent_id, patch=None, message=None, event_id=None):
         """Atomically mutate a session and append one deduplicated event/message."""
+        [result] = self.publish_agents(uid, chat_id, turn_id, run_token=run_token,
+                                       updates=[(agent_id, patch, message, event_id or uuid4().hex)])
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def publish_agents(self, uid, chat_id, turn_id, *, run_token, updates):
+        """Several session updates of one run in one transaction (agent_journal).
+
+        ``updates``: ``(agent_id, patch, message, event_id)`` in the order
+        their events get their sequence numbers. Returns one entry per update:
+        its event, or the exception that refused this update alone (a limit,
+        a missing assignment, a stopped run for a status that does not end
+        its session); the others are saved all the same, as if written one
+        by one. An event id saved before (a retried ambiguous commit) returns
+        its first commit. A deleted account, chat or closed run refuses the
+        whole call. Until 2026-10-22 every update was its own transaction:
+        six comparison answers starting together queued six writes behind
+        the account lock, each before its model call could be claimed."""
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
-        agent_ref = self.agent_ref(uid, chat_id, turn_id, agent_id)
-        event_id = event_id or uuid4().hex
-        event_ref = turn_ref.collection("agent_events").document(event_id)
+        agent_refs = [self.agent_ref(uid, chat_id, turn_id, agent_id) for agent_id, *_ in updates]
+        event_refs = [turn_ref.collection("agent_events").document(event_id) for *_, event_id in updates]
         def operation(tx):
-            tombstone, root, agent, event, chat, turn = self._read_all(tx, (
-                persistence_guard.deletion_ref(self.db, uid), root_ref, agent_ref, event_ref, chat_ref, turn_ref))
+            tombstone, root, chat, turn, *snapshots = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), root_ref, chat_ref, turn_ref, *agent_refs, *event_refs))
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
             data = root.to_dict() or {}
             if not chat.exists or not turn.exists or (chat.to_dict() or {}).get("status") != "active":
                 raise ChatNotFound("Chat not found")
             if data.get("run_token") != run_token:
                 raise TurnStatusConflict("Agent session is closed")
-            if event.exists:
-                return event.to_dict()
-            if data.get("run_status") != "running":
-                raise TurnStatusConflict("Agent session is closed")
-            ending = (patch or {}).get("status") in {"stopped", "failed"}
-            if (data.get("cancel_requested") or data["lease_until"] <= datetime.now(timezone.utc)) and not ending:
-                raise ProviderCancelled("Agent run stopped")
-            seq = data.get("event_seq", 0) + 1
-            if not data["policy"].get("account_budget_only") and seq > 1024:
-                raise AnalysisBudgetExceeded("Agent event limit reached")
-            session = {**(agent.to_dict() or {}), **(patch or {}), "id": agent_id, "seq": seq,
-                       "updated_at": datetime.now(timezone.utc).isoformat()}
-            if not agent.exists:
-                if not data["policy"].get("account_budget_only") and data.get("agent_count", 0) >= 64:
-                    raise AnalysisBudgetExceeded("Agent limit reached")
-                if not session.get("assignment"):
-                    raise TurnStatusConflict("Agent assignment is missing")
-            if message:
-                count = data.get("message_count", 0) + 1
-                if not data["policy"].get("account_budget_only") and count > data["policy"]["max_messages"]:
-                    raise AnalysisBudgetExceeded("Agent message limit reached")
-                if len(message["text"]) > max(data["policy"]["message_chars"], data["policy"]["result_chars"]):
-                    raise ValueError("Agent message is too long")
-                tx.set(agent_ref.collection("messages").document(event_id),
-                       {**message, "id": event_id, "seq": seq, "created_at": session["updated_at"]})
-                session["message_seq"] = seq
-            public = {key: value for key, value in session.items() if key != "assignment"}
-            result = {"type": "delegation", "version": 1, "id": event_id, "seq": seq,
-                      "run_id": root_ref.id, "chat_id": chat_id, "turn_id": turn_id, "agent": public}
-            tx.set(agent_ref, session)
-            tx.set(event_ref, result)
-            tx.update(root_ref, {"event_seq": seq, "agent_count": data.get("agent_count", 0) + int(not agent.exists),
-                                "message_count": data.get("message_count", 0) + int(bool(message))})
-            return result
+            seq, agents, messages = data.get("event_seq", 0), data.get("agent_count", 0), data.get("message_count", 0)
+            # Sessions as this call leaves them: one updated twice reads its own first update.
+            sessions = {}
+            results = []
+            for (agent_id, patch, message, event_id), agent_ref, event_ref, agent, event in zip(
+                    updates, agent_refs, event_refs, snapshots[:len(updates)], snapshots[len(updates):]):
+                if event.exists:
+                    results.append(event.to_dict())
+                    continue
+                current = sessions[agent_id] if agent_id in sessions else agent.to_dict() if agent.exists else None
+                try:
+                    if data.get("run_status") != "running":
+                        raise TurnStatusConflict("Agent session is closed")
+                    ending = (patch or {}).get("status") in {"stopped", "failed"}
+                    if (data.get("cancel_requested") or data["lease_until"] <= datetime.now(timezone.utc)) and not ending:
+                        raise ProviderCancelled("Agent run stopped")
+                    if not data["policy"].get("account_budget_only") and seq + 1 > 1024:
+                        raise AnalysisBudgetExceeded("Agent event limit reached")
+                    session = {**(current or {}), **(patch or {}), "id": agent_id, "seq": seq + 1,
+                               "updated_at": datetime.now(timezone.utc).isoformat()}
+                    if current is None:
+                        if not data["policy"].get("account_budget_only") and agents >= 64:
+                            raise AnalysisBudgetExceeded("Agent limit reached")
+                        if not session.get("assignment"):
+                            raise TurnStatusConflict("Agent assignment is missing")
+                    if message:
+                        if not data["policy"].get("account_budget_only") and messages + 1 > data["policy"]["max_messages"]:
+                            raise AnalysisBudgetExceeded("Agent message limit reached")
+                        if len(message["text"]) > max(data["policy"]["message_chars"], data["policy"]["result_chars"]):
+                            raise ValueError("Agent message is too long")
+                except (TurnStatusConflict, ProviderCancelled, AnalysisBudgetExceeded, ValueError) as exc:
+                    results.append(exc)
+                    continue
+                seq += 1
+                agents += current is None
+                if message:
+                    messages += 1
+                    tx.set(agent_ref.collection("messages").document(event_id),
+                           {**message, "id": event_id, "seq": seq, "created_at": session["updated_at"]})
+                    session["message_seq"] = seq
+                public = {key: value for key, value in session.items() if key != "assignment"}
+                result = {"type": "delegation", "version": 1, "id": event_id, "seq": seq,
+                          "run_id": root_ref.id, "chat_id": chat_id, "turn_id": turn_id, "agent": public}
+                tx.set(agent_ref, session)
+                tx.set(event_ref, result)
+                sessions[agent_id] = session
+                results.append(result)
+            if seq != data.get("event_seq", 0):
+                tx.update(root_ref, {"event_seq": seq, "agent_count": agents, "message_count": messages})
+            return results
         return self._agent_transaction(uid, operation)
 
     def check_delegation(self, uid, chat_id, turn_id, run_token):

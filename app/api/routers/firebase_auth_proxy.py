@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 import httpx
 from fastapi import APIRouter, Request, Response
@@ -32,6 +33,7 @@ from app.core.observability import safe_exception
 router = APIRouter()
 
 PROXY_TIMEOUT_SECONDS = 10.0
+_HELPER_SEGMENT = re.compile(r"[A-Za-z0-9_.-]+")
 _FORWARDED_REQUEST_HEADERS = (
     "accept",
     "accept-language",
@@ -93,8 +95,19 @@ async def _forward(request: Request, path: str) -> Response:
     return response
 
 
+def _is_helper_path(helper: str) -> bool:
+    """Firebase's helpers are plain names (handler, iframe.js, ...). The
+    server has already decoded %2F, and httpx resolves dot segments, so a
+    ``..`` segment or a leftover escape would reach any page of the Hosting
+    site, served here without the app's CSP."""
+    segments = helper.split("/")
+    return all(_HELPER_SEGMENT.fullmatch(segment) and segment not in (".", "..") for segment in segments)
+
+
 @router.api_route("/__/auth/{helper:path}", methods=["GET", "HEAD", "POST"])
 async def firebase_auth_helper(helper: str, request: Request) -> Response:
+    if not _is_helper_path(helper):
+        return Response(status_code=404)
     return await _forward(request, f"/__/auth/{helper}")
 
 

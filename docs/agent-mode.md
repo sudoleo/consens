@@ -308,9 +308,12 @@ Median ~88 s) kostete das 15–20 s, je Aufruf 2–5 s vor der Anfrage.
 Seitdem (Details codebase-map „Wartezeit im Server“): Statusmeldungen schreibt
 ein Journal je Lauf (`agent_journal.py`) im Hintergrund, Live-Zeilen gebündelt;
 nur eine neue Sitzung vor ihrem Claim wartet auf ihren Eintrag, und sie geht vor.
-Jede Transaktion liest ihre Dokumente in einem Rundgang (`get_all`). Streams
-und die SSE-Weitergabe brauchen die Lauf-Condition nicht mehr. Review-Speicherungen
-schreiben außerhalb des Vergleichs-Locks, ein überholter Stand entfällt. Hängt
+Seit 2026-10-22 schreibt das Journal alles Fällige aller Sitzungen in einer
+Transaktion (sechs startende Antworten: eine statt sechs, die Live-Zeilen aller
+Modelle zusammen). Jede Transaktion liest ihre Dokumente in einem Rundgang
+(`get_all`). Streams und die SSE-Weitergabe brauchen die Lauf-Condition nicht
+mehr. Review-Speicherungen schreiben außerhalb des Vergleichs-Locks, und wer
+als Nächster schreibt, nimmt den neuesten Stand mit; überholte entfallen. Hängt
 ein Prüfer trotzdem, fragt `_hedged_judge_call` nach 15 s dasselbe Modell noch
 einmal und nach 30 s die nächste Familie (Chat: Gemini); die erste Antwort
 gewinnt, statt 90 s bis zum Familienwechsel.
@@ -319,7 +322,10 @@ gewinnt, statt 90 s bis zum Familienwechsel.
 Datenbank mit Latenz je Rundgang und einem Konto-Lock; er schlägt an, sobald ein
 Stream auf die Datenbank wartet, die letzte Anfrage spät rausgeht oder der
 Server zu viel Zeit addiert (gemessen 2026-10-21 auf Windows: vorher 9,2 s auf
-1,6 s Modellzeit, nachher 2,3 s). Zeiten immer gegen OpenRouters eigene Zeiten
+1,6 s Modellzeit, nachher 2,3 s). Der Server-Anteil wächst linear mit der
+Rundgangszeit; mit dem gebündelten Journal (2026-10-22) bei 10 ms je Rundgang
+1,7 → 1,15 s, bei 20 ms 3,6 → 2,3 s, die Journal-Transaktionen je Lauf 28 → 16,
+Review-Speicherungen 12 → 9. Zeiten immer gegen OpenRouters eigene Zeiten
 legen, bevor ein Modell oder Anbieter als langsam gilt.
 Mit `balanced` wartet sie seit 2026-10-06 bei `full` auf
 jedes Modell: Das sorgfältigste Modell recherchiert oft am längsten und darf

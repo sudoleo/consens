@@ -166,7 +166,9 @@ def run_turn(store):
 def test_six_models_and_the_check_are_not_held_up_by_a_slow_database(slow_store):
     """Measured 2026-10-21 on Windows (sleeps of 15.6 ms): before the journal
     9.2 s added to 1.6 s of model time, streams held up to 0.9 s, the last
-    request out after 2.2 s; after it 2.3 s, 0.02 s and 0.6 s."""
+    request out after 2.2 s; after it 2.3 s, 0.02 s and 0.6 s. With the
+    journal's batches (2026-10-22, same machine, 1.7 s before) 1.15 s and the
+    last request out after 0.25 s."""
     loop, timeline, events, wall = run_turn(slow_store)
     turn = slow_store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert turn["status"] == "completed"
@@ -194,17 +196,17 @@ def test_six_models_and_the_check_are_not_held_up_by_a_slow_database(slow_store)
 def test_the_live_reasoning_lines_are_saved_without_queueing_up(slow_store, monkeypatch):
     """The newest line of each model still reaches its saved session, but
     lines are written at most every half THINKING_UPDATE_SECONDS for the
-    whole run, never one per model and line."""
+    whole run, all models' lines in one write, never one write per model and
+    line."""
     lines = []
-    publish = slow_store.publish_agent
+    publish = slow_store.publish_agents
 
-    def counted(*args, **kwargs):
-        patch = kwargs.get("patch") or {}
-        if "progress_text" in patch and "status" not in patch:
+    def counted(*args, updates, **kwargs):
+        if any("progress_text" in (patch or {}) and "status" not in (patch or {}) for _, patch, _, _ in updates):
             lines.append(time.monotonic())
-        return publish(*args, **kwargs)
+        return publish(*args, updates=updates, **kwargs)
 
-    monkeypatch.setattr(slow_store, "publish_agent", counted)
+    monkeypatch.setattr(slow_store, "publish_agents", counted)
     loop, timeline, events, wall = run_turn(slow_store)
     sessions = slow_store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     answers = [s for s in sessions if s.get("kind") == "comparison"]

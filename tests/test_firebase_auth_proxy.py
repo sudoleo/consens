@@ -127,3 +127,22 @@ def test_upstream_failure_is_a_neutral_502(monkeypatch):
 
     assert response.status_code == 502
     assert "boom" not in response.text
+
+
+def test_helper_paths_cannot_leave_the_auth_helpers(monkeypatch):
+    # The server decodes %2F, and httpx resolves the dot segments: without a
+    # check, /__/auth/..%2F..%2Fpage.html fetched /page.html of the project's
+    # Hosting site and served it on consens.io without the app's CSP.
+    client = _client(monkeypatch)
+    with patch.object(firebase_auth_proxy.httpx, "AsyncClient", _RecordingClient):
+        responses = [
+            client.get("/__/auth/..%2F..%2Fpage.html"),
+            client.get("/__/auth/%2E%2E%2Fpage.html"),
+            client.get("/__/auth/%252E%252E%252Fpage.html"),
+            client.post("/__/auth/handler%2F..%2F..%2Fpage", content=b"x=1"),
+        ]
+        handler = client.get("/__/auth/handler.js")
+
+    assert [response.status_code for response in responses] == [404, 404, 404, 404]
+    assert [call["url"] for call in _RecordingClient.calls] == ["https://consensai.firebaseapp.com/__/auth/handler.js"]
+    assert handler.status_code == 200

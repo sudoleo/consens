@@ -91,3 +91,14 @@ def test_notifications_draw_a_checklist_box_as_a_character():
     assert "☐ Renew the passport" in mail and "☑ Book the train" in mail
     plain = answer_plain(md)
     assert "☐ Renew the passport" in plain and "☑ Book the train" in plain
+
+
+def test_plain_text_is_text_not_html():
+    # Templates escape it once more: "AT&amp;T" stood on the Topic hub cards
+    # and in every meta and og:description ("AT&amp;amp;T" in the markup).
+    from app.services.public_markdown import lead_sentences, markdown_to_plaintext
+
+    assert markdown_to_plaintext("**AT&T** and R&D: 5 < 7 > 3, \"quoted\" `<b>`") == (
+        'AT&T and R&D: 5 < 7 > 3, "quoted" <b>'
+    )
+    assert lead_sentences("AT&T cut prices. More follows here.", limit=20, min_sentence=5) == "AT&T cut prices."

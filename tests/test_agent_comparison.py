@@ -861,12 +861,11 @@ def test_answer_cut_off_at_the_output_limit_is_kept_as_marked_evidence(store):
 
 def test_output_limit_without_text_names_the_cause_without_retry_advice(store, monkeypatch):
     notes = []
-    publish = store.publish_agent
-    def capture(*args, message=None, **kwargs):
-        if message and message.get("kind") == "failure":
-            notes.append(message["text"])
-        return publish(*args, message=message, **kwargs)
-    monkeypatch.setattr(store, "publish_agent", capture)
+    publish = store.publish_agents
+    def capture(*args, updates, **kwargs):
+        notes.extend(message["text"] for _, _, message, _ in updates if message and message.get("kind") == "failure")
+        return publish(*args, updates=updates, **kwargs)
+    monkeypatch.setattr(store, "publish_agents", capture)
     script = Script(length_model="")
     loop = make_loop(store, script)
     list(loop.run())
@@ -1419,19 +1418,23 @@ def test_text_next_to_a_failed_comparison_is_never_an_unchecked_answer(store):
 @pytest.mark.parametrize("outage", [1, 2])
 def test_a_database_outage_while_saving_a_failed_answer_does_not_stop_the_turn(store, monkeypatch, outage):
     """Audit A12: a transient error while recording one model's failure
-    cancelled the whole turn ("This response was stopped")."""
+    cancelled the whole turn ("This response was stopped"). Since 2026-10-22
+    the record can share its write with other sessions' updates (the run's
+    journal batches them): an outage that outlasts the retry still costs no
+    other answer, each update then tries on its own."""
     from google.api_core.exceptions import ServiceUnavailable
     from app.services import agent_delegation
     monkeypatch.setattr(agent_delegation, "TERMINAL_RETRY_SECONDS", 0)
     script = Plan([{"tools": [compare()]}, {"text": ANSWER}], fail_model=True)
     loop = make_loop(store, script)
-    publish, failures = store.publish_agent, []
-    def flaky(*args, **kwargs):
-        if (kwargs.get("message") or {}).get("kind") == "failure" and len(failures) < outage:
-            failures.append(kwargs["agent_id"])
+    publish, failures = store.publish_agents, []
+    def flaky(*args, updates, **kwargs):
+        failing = [agent_id for agent_id, _, message, _ in updates if (message or {}).get("kind") == "failure"]
+        if failing and len(failures) < outage:
+            failures.append(failing[0])
             raise ServiceUnavailable("Firestore unavailable")
-        return publish(*args, **kwargs)
-    monkeypatch.setattr(store, "publish_agent", flaky)
+        return publish(*args, updates=updates, **kwargs)
+    monkeypatch.setattr(store, "publish_agents", flaky)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert len(failures) == outage

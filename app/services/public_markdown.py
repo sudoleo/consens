@@ -16,6 +16,7 @@ Gespeicherte Antworten und Quellenziele werden dabei nicht verändert.
 """
 
 import re
+from html import unescape
 from urllib.parse import quote, urlsplit
 
 import nh3
@@ -373,7 +374,9 @@ def markdown_to_plaintext(md_text, limit=None, sources=None):
     tokens = _MD.parse(text)
     _normalize_citation_links(tokens, sources, strip=True)
     html = _MD.renderer.render(tokens, _MD.options, {})
-    text = nh3.clean(html, tags=set())
+    # nh3 leaves the entities of the rendered HTML ("AT&amp;T"); the templates
+    # escape the text themselves.
+    text = unescape(nh3.clean(html, tags=set()))
     text = re.sub(r"\s+", " ", text).strip()
     if limit is not None and len(text) > limit:
         text = text[: limit - 1].rstrip() + "…"

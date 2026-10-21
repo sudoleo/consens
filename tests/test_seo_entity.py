@@ -92,6 +92,15 @@ class SeoEntityTests(unittest.TestCase):
         self.assertEqual(types, ["Organization", "WebSite", "Article"])
         self.assertNotIn("@context", document["@graph"][-1])
 
+    def test_dumps_keeps_markup_in_text_from_ending_the_script_element(self):
+        # Page text is plain text: "<!--<script" would switch the HTML parser
+        # into a state where the closing tag no longer ends the element.
+        text = "a </script> b <!--<script> c"
+        value = seo_entity.dumps({"headline": text})
+
+        self.assertNotIn("<", value)
+        self.assertEqual(json.loads(value)["headline"], text)
+
 
 if __name__ == "__main__":
     unittest.main()

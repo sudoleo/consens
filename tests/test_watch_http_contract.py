@@ -278,3 +278,16 @@ def test_watch_adapters_project_storage_failure_safely(
     assert {k: v for k, v in h.watch_db.stores.items() if v} == {
         k: v for k, v in before.items() if v
     }
+
+
+def test_watch_page_follow_form_shows_the_servers_error(watch_http):
+    # Errors come back as {"error": ...} (main.py); the inline form on the
+    # Watch page read data.detail and only ever said "HTTP 400".
+    from pathlib import Path
+
+    response = watch_http.client.post(f"/api/share/{watch_http.share_id}/follow", json={"email": "a@b"})
+    assert response.status_code == 400
+    assert response.json()["error"] == "Enter a valid email address."
+    page = Path(__file__).resolve().parents[1].joinpath("templates", "watch_share.html").read_text(encoding="utf-8")
+    form = page[page.index("/api/share/{{ share_id }}/follow"):page.index("Follow request failed")]
+    assert "throw new Error(data.error || data.detail ||" in form

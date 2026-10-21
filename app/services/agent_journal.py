@@ -1,26 +1,30 @@
 """The run's agent-session journal, written on one thread (since 2026-10-21).
 
 Every status of every model call of a run (waiting, working, the live
-reasoning line, completed, its result) is one ``publish_agent`` Firestore
-transaction. Until 2026-10-21 the calling thread wrote it itself, holding the
-run's lock: a comparison answer stopped reading its stream for every line it
-saved, and every other call waited behind it. With six comparison models,
-two Differences passes, Coverage windows and their hedges the transactions
-queued up faster than Firestore (0.4-1 s each) could take them; in prod a
-request left 77 s after the decision and finished judge answers were
-cancelled after 90 s (docs/agent-mode.md "Wartezeit im Server").
+reasoning line, completed, its result) is saved by ``publish_agents`` in a
+Firestore transaction. Until 2026-10-21 the calling thread wrote it itself,
+holding the run's lock: a comparison answer stopped reading its stream for
+every line it saved, and every other call waited behind it. With six
+comparison models, two Differences passes, Coverage windows and their hedges
+the transactions queued up faster than Firestore (0.4-1 s each) could take
+them; in prod a request left 77 s after the decision and finished judge
+answers were cancelled after 90 s (docs/agent-mode.md "Wartezeit im Server").
 
 Now a call hands its status to this journal and goes on. One writer thread
 saves them in order per session:
 
+- Everything due when the writer is free goes into one transaction (since
+  2026-10-22): six answers starting together are one write, not six writes
+  in a row, each ahead of a model call's receipt behind the account lock.
 - A caller that needs the saved event (a new session must exist before its
-  receipt is claimed, a worker's message carries its event id) waits, and its
-  session goes before every other one.
-- Statuses of the same session that are still waiting merge into one write
-  (``completed`` and the result become one transaction).
+  receipt is claimed, a worker's message carries its event id) waits; its
+  session goes first when a batch is full.
+- Statuses of the same session that are still waiting merge into one update
+  (``completed`` and the result become one).
 - A live reasoning line replaces the line still waiting; lines are written at
-  most every ``progress_gap`` seconds across the whole run, so they never
-  fill the database queue ahead of a model call's receipt.
+  most every ``progress_gap`` seconds across the whole run (all sessions'
+  lines together), so they never fill the database queue ahead of a model
+  call's receipt.
 """
 from __future__ import annotations
 
@@ -28,6 +32,10 @@ import threading
 import time
 from collections import deque
 from uuid import uuid4
+
+# Updates per transaction: a few documents each, far below Firestore's 500
+# writes per commit, and a batch never waits for a full one.
+BATCH_LIMIT = 32
 
 
 class JournalJob:
@@ -61,9 +69,11 @@ class JournalJob:
 class AgentJournal:
     """Saves session updates in order per session, on one writer thread.
 
-    ``write(job)`` saves one job and returns its event (runs on the writer
-    thread, never under a caller's lock). ``failed(job, exc)`` hears about a
-    job nobody waited for that could not be saved."""
+    ``write(jobs)`` saves jobs of different sessions together and returns one
+    entry per job, its event or the exception that refused it alone; an
+    exception it raises refuses them all. It runs on the writer thread,
+    never under a caller's lock. ``failed(job, exc)`` hears about a job
+    nobody waited for that could not be saved."""
 
     def __init__(self, write, *, failed, progress_gap, clock=time.monotonic):
         self._write, self._failed = write, failed
@@ -126,44 +136,50 @@ class AgentJournal:
             self._thread.start()
 
     def _next(self):
-        """The next job to write and, without one, how long to wait."""
+        """The jobs to write together next (the head of each session's queue
+        that is due) and, without any, how long to wait."""
         heads = [queue[0] for queue in self._queues.values()]
-        urgent = [job for job in heads if job.urgent]
-        if urgent:
-            return min(urgent, key=lambda job: job.order), None
-        statuses = [job for job in heads if not job.progress]
-        if statuses:
-            return min(statuses, key=lambda job: job.order), None
         if not heads:
-            return None, None
-        wait = self._last_progress + self._gap - self._clock()
-        if wait <= 0 or self._closing:
-            return min(heads, key=lambda job: job.order), None
-        return None, wait
+            return [], None
+        lines_due = self._closing or self._clock() >= self._last_progress + self._gap
+        due = [job for job in heads if lines_due or job.urgent or not job.progress]
+        if not due:
+            return [], self._last_progress + self._gap - self._clock()
+        # A full batch leaves the rest for the next one: waiting callers first.
+        return sorted(due, key=lambda job: (not job.urgent, job.order))[:BATCH_LIMIT], None
 
     def _run(self):
         while True:
             with self._condition:
                 while True:
-                    job, wait = self._next()
-                    if job is not None:
+                    jobs, wait = self._next()
+                    if jobs:
                         break
                     if self._closing and not self._queues:
                         return
                     self._condition.wait(wait)
-                job.started = True
+                for job in jobs:
+                    job.started = True
             try:
-                job.event = self._write(job)
+                results = self._write(jobs)
             except BaseException as exc:
-                job.error = exc
+                results = [exc] * len(jobs)
+            for job, result in zip(jobs, results):
+                if isinstance(result, BaseException):
+                    job.error = result
+                else:
+                    job.event = result
             with self._condition:
-                queue = self._queues[job.worker.id]
-                queue.popleft()
-                if not queue:
-                    del self._queues[job.worker.id]
-                if job.progress:
+                for job in jobs:
+                    queue = self._queues[job.worker.id]
+                    queue.popleft()
+                    if not queue:
+                        del self._queues[job.worker.id]
+                if any(job.progress for job in jobs):
                     self._last_progress = self._clock()
                 self._condition.notify_all()
-            job.done.set()
-            if job.error is not None and not job.urgent:
-                self._failed(job, job.error)
+            for job in jobs:
+                job.done.set()
+            for job in jobs:
+                if job.error is not None and not job.urgent:
+                    self._failed(job, job.error)
