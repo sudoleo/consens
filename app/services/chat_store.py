@@ -117,6 +117,11 @@ MODEL_ANSWER_BATCH_SIZE = 100
 MAX_CHATS_PER_OWNER = 200
 MAX_TURNS_PER_CHAT = 500
 
+# Ticked checklist boxes of an answer ("- [ ] item"): their positions in the
+# answer, kept on the turn (static/js/task-checks.js). Absent until the reader
+# ticks one; the boxes then show what the answer wrote ("[x]" ticked).
+MAX_TASK_ITEMS = 200
+
 # A chat no bookmark points to is out of reach: the bookmark is its only
 # handle in the app. The browser creates the chat before the first turn, so an
 # Agent message refused up front (premium model, rate limit, Stop right after
@@ -442,6 +447,19 @@ def _agreement_score(differences_data: object) -> int | None:
     return score if 0 <= score <= 100 else None
 
 
+def normalize_task_checks(value: object) -> list[int]:
+    if not isinstance(value, list):
+        raise ValueError("Task checks must be a list")
+    if len(value) > MAX_TASK_ITEMS:
+        raise ValueError(f"At most {MAX_TASK_ITEMS} task checks")
+    checks = set()
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int) or not 0 <= item < MAX_TASK_ITEMS:
+            raise ValueError("Task checks are item positions")
+        checks.add(item)
+    return sorted(checks)
+
+
 def chat_metadata(chat_id: object, data: object, *, compact: bool = False) -> dict:
     source = data if isinstance(data, dict) else {}
     result = {
@@ -600,6 +618,11 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
             stored_result_id = None
         if stored_result_id is not None:
             result["result_id"] = stored_result_id
+    if "task_checks" in source:
+        try:
+            result["task_checks"] = normalize_task_checks(source.get("task_checks"))
+        except ValueError:
+            pass
     result["model_answers"] = {
         provider: model_answers[provider]
         for provider in PROVIDER_ORDER
@@ -1155,6 +1178,34 @@ class ChatStore:
         if not snapshot.exists:
             raise ChatNotFound("Chat not found")
         return turn_metadata(snapshot.id, snapshot.to_dict() or {})
+
+    def set_task_checks(self, uid: str, chat_id: str, turn_id: str, checks: object) -> list[int]:
+        """Keep which checklist boxes of a completed turn's answer are ticked.
+
+        The whole list replaces the stored one, so a repeated or late request
+        cannot toggle a box twice. Neither the chat's nor the turn's
+        `updated_at` moves: ticking a box does not reorder the chat list.
+        """
+        checks = normalize_task_checks(checks)
+        chat_ref = self._chat_ref(uid, chat_id)
+        turn_ref = self._turn_ref(uid, chat_id, turn_id)
+
+        def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid,
+                db=self.db,
+                transaction=transaction,
+            )
+            chat_snapshot = chat_ref.get(transaction=transaction)
+            turn_snapshot = turn_ref.get(transaction=transaction)
+            if not _is_live_chat(chat_snapshot) or not turn_snapshot.exists:
+                raise ChatNotFound("Chat not found")
+            if (turn_snapshot.to_dict() or {}).get("status") != TURN_STATUS_COMPLETED:
+                raise TurnStatusConflict("Only a completed answer has checklists to tick")
+            transaction.update(turn_ref, {"task_checks": checks})
+
+        self._transaction(operation)
+        return checks
 
     def list_turns(
         self,

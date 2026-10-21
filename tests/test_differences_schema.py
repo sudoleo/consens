@@ -895,6 +895,19 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
             self.assertIn(sentence, text, "Anker muss ein Substring des Konsens sein")
         return numbered, sentences
 
+    def test_checklist_box_stays_out_of_the_anchor(self):
+        # The box of "- [ ] item" is a button without text in the rendered
+        # answer: an anchor starting with "[ ]" would never be found there.
+        numbered, sentences = self.sentences(
+            "- [ ] Renew the passport before you book.\n"
+            "1. [x] The visa takes four weeks.\n"
+        )
+        self.assertEqual(sentences, [
+            "Renew the passport before you book.",
+            "The visa takes four weeks.",
+        ])
+        self.assertIn("- [ ] [1] Renew", numbered)
+
     def test_plain_sentences_are_split(self):
         _numbered, sentences = self.sentences(
             "The tower is 330 metres tall. It was finished in 1889."

@@ -1,5 +1,5 @@
 {
-  "sources": "db8e027f21a4",
+  "sources": "57f268c44835",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -122,6 +122,7 @@
     "static/js/sidebar-resize.js",
     "static/js/sources.js",
     "static/js/tab-status.js",
+    "static/js/task-checks.js",
     "static/js/token-budget.js",
     "static/js/tooltip.js",
     "static/js/usage-limit.js",
@@ -229,20 +230,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.cbcfa51342ea.js",
+      "src": "/static/dist/app.63bb6e5a5521.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.3aa2372caae0.css",
+    "app": "/static/dist/app.20fe6e8a4028.css",
     "landing": "/static/dist/landing.a2f18c50b9d9.css",
-    "public": "/static/dist/public.1ae3994a4727.css"
+    "public": "/static/dist/public.9c984e4eab77.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "794477915420",
+      "hash": "ed9cb74689c8",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -300,7 +301,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "a3600f910cc1",
+      "hash": "c22d5695da0d",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",

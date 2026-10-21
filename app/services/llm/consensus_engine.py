@@ -642,10 +642,14 @@ CHAT_MAX_CONSENSUS_SENTENCES = 320
 MIN_SENTENCE_WORDS = 3
 
 # Zeilenpraefix, das zur Markdown-Struktur gehoert und nicht zum Satz:
-# Einrueckung, Blockquote-Pfeile, Aufzaehlungs- und Nummerierungszeichen.
+# Einrueckung, Blockquote-Pfeile, Aufzaehlungs- und Nummerierungszeichen und
+# das Kaestchen eines Checklistenpunkts ("- [ ] "), das im gerenderten Text ein
+# Button ohne Text ist.
 # Spiegelt inlineMarkdownSource() in consensus-insights.js - was dort vom
 # Anker abgeschnitten wird, darf hier gar nicht erst hineingeraten.
-_LINE_PREFIX_RE = re.compile(r"^[ \t]*(?:>[ \t]*)*(?:[-*+][ \t]+|\d+[.)][ \t]+)?")
+_LINE_PREFIX_RE = re.compile(
+    r"^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)?"
+)
 # Quellentags stehen zwischen Satzzeichen und Leerzeichen ("…330 m.[S1] Der
 # naechste…") und wuerden die Trennung sonst verhindern - ausgerechnet an den
 # zentralen Faktensaetzen, an die der Consensus-Prompt sie haengt. Sie liegen

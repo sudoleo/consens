@@ -63,3 +63,31 @@ def test_lead_sentences_cut_at_a_sentence_end_and_skip_headings():
     long = "First sentence is here. " + "word " * 60
     assert lead_sentences(long, limit=60) == "First sentence is here."
     assert lead_sentences("word " * 60, limit=40).endswith("…")
+
+
+def test_checklist_items_show_a_box_instead_of_their_brackets():
+    from app.services.public_markdown import render_public_markdown
+    html = render_public_markdown(
+        "- [ ] Renew the passport\n- [x] Book **the train**\n- Bring snacks\n\n1. [ ] Numbered step\n\n"
+        "- [ ]\n\n```\n- [ ] code stays\n```\n"
+    )
+    assert '<ul class="md-task-list">' in html
+    assert ('<li class="md-task-item"><span class="md-task-box" role="img" aria-label="Open" '
+            'data-checked="false"></span>Renew the passport</li>') in html
+    assert 'aria-label="Done" data-checked="true"></span>Book <strong>the train</strong>' in html
+    assert "<li>Bring snacks</li>" in html
+    # A numbered list keeps its numbers; the box leads the words.
+    assert '<ol>\n<li class="md-task-item"><span class="md-task-box"' in html
+    # No words after the box: not an item. Code stays code.
+    assert "<li>[ ]</li>" in html
+    assert "- [ ] code stays" in html
+
+
+def test_notifications_draw_a_checklist_box_as_a_character():
+    from app.services.mailer import MAIL_PALETTE
+    from app.services.notification_markdown import answer_mail_html, answer_plain
+    md = "- [ ] Renew the passport\n- [x] Book the train\n"
+    mail = answer_mail_html(md, palette=MAIL_PALETTE)
+    assert "☐ Renew the passport" in mail and "☑ Book the train" in mail
+    plain = answer_plain(md)
+    assert "☐ Renew the passport" in plain and "☑ Book the train" in plain
