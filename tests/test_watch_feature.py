@@ -1536,7 +1536,7 @@ class MailerTests(unittest.TestCase):
     def test_admin_test_mail_is_multipart_and_does_not_claim_a_watch(self):
         message = mailer.build_test_message(recipient="admin@example.test")
         self.assertTrue(message.is_multipart())
-        self.assertEqual(message["Subject"], "Consensus Watch email test")
+        self.assertEqual(message["Subject"], "consens.io email test")
         self.assertIn("No watch was executed", message.as_string())
 
     def test_public_watch_meta_contains_run_schedule_but_no_owner(self):
@@ -3090,7 +3090,7 @@ class FollowerTests(unittest.TestCase):
             watch_followers.request_follow(private_id, "a@example.com", db=self.db)
         unwatched_id = "U" * 16
         self.db.stores["shares"][unwatched_id] = share(slug="unwatched")
-        with self.assertRaisesRegex(WatchError, "no Consensus Watch"):
+        with self.assertRaisesRegex(WatchError, "no Watch to follow"):
             watch_followers.request_follow(unwatched_id, "a@example.com", db=self.db)
 
     def test_delete_followers_for_share(self):
@@ -3163,7 +3163,7 @@ class FollowerTests(unittest.TestCase):
 
         pending = watch_followers.request_follow(self.share_id, email, db=self.db)
         self.db.stores[watch_service.WATCHES_COLLECTION].pop("w1")
-        with self.assertRaisesRegex(WatchError, "no Consensus Watch"):
+        with self.assertRaisesRegex(WatchError, "no Watch to follow"):
             watch_followers.confirm_follow(pending["token"], db=self.db)
         self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {})
 

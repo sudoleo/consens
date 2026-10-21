@@ -362,3 +362,15 @@ def test_an_expired_source_is_never_linked_from_the_answer():
     markup = notification_markdown.answer_mail_html(consensus, palette=mailer.MAIL_PALETTE, sources=sources)
     assert "https://www.reuters.com/eu" in markup and "vertexaisearch" not in markup
     assert "[S2]" not in markup and "the US." in markup
+
+
+def test_mails_call_the_thing_a_watch():
+    # Zweitprüfung (Namen): "Consensus" names a mode, never the product
+    # (Apple-Audit H3); the mails said "Your Consensus Watch ...".
+    mails = dict(_all_mails(), test=mailer.build_test_message(recipient="admin@example.test"))
+    for name, message in mails.items():
+        markup, plain = _parts(message)
+        for text in (_visible(markup), plain, str(message["Subject"])):
+            assert "Consensus Watch" not in text, name
+    assert _parts(mails["change"])[1].startswith("Your Watch found a change backed by evidence.")
+    assert _parts(mails["brief"])[1].startswith("Your morning brief – Tuesday")

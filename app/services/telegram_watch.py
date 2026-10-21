@@ -381,7 +381,7 @@ def _notification_text(kind: str, watch: dict, result: dict) -> str:
     question sits at the bottom in a quote that Telegram folds when long. No
     agreement score: it is not a reason to message anyone.
     """
-    question = str(watch.get("question") or "Consensus Watch")
+    question = str(watch.get("question") or "Your Watch")
     delta = result.get("delta") or {}
     blocks = []
     if kind == "condition":

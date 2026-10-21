@@ -554,7 +554,7 @@ def share_page(request: Request, slug_id: str):
             # already has) and comes straight back (static/firebase.js).
             return _unavailable_response(
                 request, 403, "Private watch page",
-                "This page is private. Sign in with the account that created it to view it.",
+                "This page is private. Log in with the account that created it to view it.",
                 # The canonical path, not the requested one: it always
                 # matches what the app accepts as a return target.
                 sign_in_href="/app?next=" + quote(snapshots.share_path("", share_id), safe="/"),
@@ -562,7 +562,7 @@ def share_page(request: Request, slug_id: str):
         if viewer_uid != data.get("owner_uid"):
             return _unavailable_response(
                 request, 403, "Private watch page",
-                "This page is private and belongs to another account. Sign in with the account that created it to view it.",
+                "This page is private and belongs to another account. Log in with the account that created it to view it.",
             )
 
     canonical_slug = data.get("slug") or ""
@@ -599,7 +599,7 @@ def share_page(request: Request, slug_id: str):
         if not re.fullmatch(r"[A-Za-z0-9]{8,64}", requested_version):
             return _unavailable_response(
                 request, 404, "Version not found",
-                "This Consensus Watch version does not exist.",
+                "This Watch version does not exist.",
             )
     try:
         display_version = _resolve_display_version(
@@ -614,7 +614,7 @@ def share_page(request: Request, slug_id: str):
         if requested_version:
             return _unavailable_response(
                 request, 404, "Version not found",
-                "This Consensus Watch version does not exist.",
+                "This Watch version does not exist.",
             )
         display_version = {
             "id": "original", "kind": "fallback", "data": data, "snapshot": None,
@@ -840,7 +840,7 @@ def share_page(request: Request, slug_id: str):
         meta_description = prefix + excerpt
     else:
         meta_description = (
-            f"Scheduled Consensus Watch for: {payload['question']}"[:160]
+            f"A Watch on: {payload['question']}"[:160]
             if watch_awaiting_first_run
             else markdown_to_plaintext(payload["consensus_md"], limit=160, sources=payload["sources"])
         )

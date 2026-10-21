@@ -517,7 +517,7 @@ def build_change_message(*, recipient: str, question: str, delta: dict,
     lead, _rest = _split_lead(delta.get("summary"))
     delta_html, delta_plain = _delta_parts(delta)
     plain = (
-        "Your Consensus Watch found a change backed by evidence.\n\n"
+        "Your Watch found a change backed by evidence.\n\n"
         + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
         f"See what changed: {share_url}\nPause this watch: {unsubscribe_url}\n"
@@ -533,7 +533,7 @@ def build_change_message(*, recipient: str, question: str, delta: dict,
         preheader=lead or "A watched question moved on new evidence.",
         body=body,
         footer=(
-            "Consensus Watch only writes when a change is backed by a source or "
+            "A Watch only writes when a change is backed by a source or "
             "confirmed by a second check. "
             f'{_link_html(unsubscribe_url, "Pause this watch", muted=True)}.'
         ),
@@ -554,7 +554,7 @@ def build_run_message(*, recipient: str, question: str, delta: dict, moved: bool
         delta = {**delta, "summary": "Nothing moved on evidence in this check.", "cause": "", "sources": []}
     delta_html, delta_plain = _delta_parts(delta, notable=moved)
     plain = "\n\n".join(part for part in (
-        "Consensus Watch completed a new check.",
+        "Your Watch completed a new check.",
         delta_plain,
         _question_plain(question),
         _answer_plain(consensus_text, answer_sources),
@@ -595,7 +595,7 @@ def build_condition_message(*, recipient: str, question: str, goal: str, reason:
     consensus_text = str(consensus or "").strip()
     items = _clean_sources(sources)
     plain = "\n\n".join(part for part in (
-        "The goal your Consensus Watch was waiting for is met. The watch is complete.",
+        "The goal your Watch was waiting for is met. The watch is complete.",
         _goal_plain(clipped_goal, "", label="YOU WERE WAITING FOR"),
         _why_plain(clipped_reason, items),
         _question_plain(question),
@@ -892,7 +892,7 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
             f"{html.escape(meta)}</p>{news_html}</div>"
         )
     plain = (
-        f"Your Consensus Watch morning brief - {date_label}\n\n"
+        f"Your morning brief – {date_label}\n\n"
         + ("\n".join(plain_rows) if plain_rows else "You have no watches yet.\n")
         + f"\nOpen your watches: {watches_url}\nUnsubscribe from this brief: {unsubscribe_url}\n"
     )
@@ -989,7 +989,7 @@ def build_test_message(*, recipient: str) -> EmailMessage:
     """Small delivery probe used only by the authenticated admin endpoint."""
     sent_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     plain = (
-        "Consensus Watch email delivery is configured correctly.\n\n"
+        "Watch email delivery is configured correctly.\n\n"
         f"This test was requested from the admin dashboard at {sent_at}.\n"
         "No watch was executed and no schedule was changed.\n"
     )
@@ -1002,9 +1002,9 @@ def build_test_message(*, recipient: str) -> EmailMessage:
     )
     html_body = _shell_html(
         eyebrow="Mail test",
-        heading="Consensus Watch test successful",
+        heading="Watch email test successful",
         preheader="SMTP delivery works.",
         body=body,
         footer="Sent from the admin dashboard.",
     )
-    return _base_message(recipient, "Consensus Watch email test", plain, html_body)
+    return _base_message(recipient, "consens.io email test", plain, html_body)

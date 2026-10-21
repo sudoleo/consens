@@ -347,16 +347,20 @@ _LINK_ERROR_MESSAGES = {
 }
 
 
+# What the mail-link pages are about: the thing is a Watch (Apple-Audit H3).
+_WATCH_EYEBROW = "Watch"
+
+
 def _token_url(path: str, token: str) -> str:
     return f"{path}?token={quote(token, safe='')}"
 
 
 def _link_error(request: Request, exc: watch_service.WatchError, *,
-                eyebrow: str = "Consensus Watch", links=(WATCHES_LINK,)):
+                eyebrow: str = _WATCH_EYEBROW, links=(WATCHES_LINK,)):
     gone = exc.code == "not_found"
     return notice_page(
         request, status_code=_STATUS_BY_CODE.get(exc.code, 400), eyebrow=eyebrow,
-        heading="This watch no longer exists" if gone and eyebrow == "Consensus Watch"
+        heading="This watch no longer exists" if gone and eyebrow == _WATCH_EYEBROW
         else "This link no longer works",
         message=_LINK_ERROR_MESSAGES.get(exc.code, exc.message), links=links,
     )
@@ -367,7 +371,7 @@ def _watch_state_page(request: Request, view: dict, *, paused_now: bool = False,
     """The page for a watch reached by a mail link, by its current state."""
     watch_id = view["watch_id"]
     common = {
-        "eyebrow": "Consensus Watch", "subject_label": "Watch", "subject": view["question"],
+        "eyebrow": _WATCH_EYEBROW, "subject_label": "Watch", "subject": view["question"],
     }
     if view["status"] == watch_service.WATCH_STATUS_RESOLVED:
         return notice_page(
@@ -412,7 +416,7 @@ def _view_or_error(request: Request, watch_id: str):
     except Exception as exc:
         logging.error("watch link lookup failed category=%s", safe_exception(exc))
         return None, notice_page(
-            request, status_code=503, eyebrow="Consensus Watch",
+            request, status_code=503, eyebrow=_WATCH_EYEBROW,
             heading="This page could not load",
             message="Your watch is unchanged. Please try the link again in a moment.",
             links=[WATCHES_LINK],
@@ -535,7 +539,7 @@ def unsubscribe_page(request: Request, token: str = ""):
     if view["status"] != "active":
         return _watch_state_page(request, view)
     return notice_page(
-        request, eyebrow="Consensus Watch", heading="Pause this watch?",
+        request, eyebrow=_WATCH_EYEBROW, heading="Pause this watch?",
         message="Pausing stops its checks and its emails. You can resume it any time.",
         subject_label="Watch", subject=view["question"],
         action=_token_url("/watch/unsubscribe", token), button="Pause watch",
@@ -567,7 +571,7 @@ def resume_page(request: Request, token: str = ""):
     if view["status"] not in {"paused", "paused_error"}:
         return _watch_state_page(request, view)
     return notice_page(
-        request, eyebrow="Consensus Watch", heading="Resume this watch?",
+        request, eyebrow=_WATCH_EYEBROW, heading="Resume this watch?",
         message="It checks again on its usual schedule and writes when something moves.",
         subject_label="Watch", subject=view["question"],
         action=_token_url("/watch/resume", token), button="Resume watch",
@@ -583,7 +587,7 @@ def resume(request: Request, token: str = ""):
     except watch_service.WatchError as exc:
         if exc.code == "limit_reached":
             return notice_page(
-                request, status_code=409, eyebrow="Consensus Watch",
+                request, status_code=409, eyebrow=_WATCH_EYEBROW,
                 heading="No free watch slot",
                 message="All your active watch slots are in use. Pause or delete another watch, then resume this one.",
                 links=[WATCHES_LINK],
@@ -592,7 +596,7 @@ def resume(request: Request, token: str = ""):
     except Exception as exc:
         logging.error("resume watch failed category=%s", safe_exception(exc))
         return notice_page(
-            request, status_code=500, eyebrow="Consensus Watch",
+            request, status_code=500, eyebrow=_WATCH_EYEBROW,
             heading="The watch could not be resumed",
             message="Nothing changed. Please try again, or resume it on your Watches page.",
             links=[WATCHES_LINK],

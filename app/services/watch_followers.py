@@ -48,7 +48,7 @@ def _followable_share(share_id: str, db) -> tuple[dict, str]:
         raise WatchError("not_found", "This page cannot be followed.")
     watch = watch_service.find_watch_for_share(share_id, db=db, share=share)
     if not watch or watch.get("status") not in {"active", "paused", "paused_error"}:
-        raise WatchError("not_watched", "This page has no Consensus Watch to follow.")
+        raise WatchError("not_watched", "This page has no Watch to follow.")
     return share, str(watch.get("id") or "")
 
 
@@ -143,7 +143,7 @@ def confirm_follow(token: str, db=None, *, now=None) -> dict:
             or str(watch.get("share_id") or "") != share_id
             or watch.get("status") not in {"active", "paused", "paused_error"}
         ):
-            raise WatchError("not_watched", "This page has no Consensus Watch to follow.")
+            raise WatchError("not_watched", "This page has no Watch to follow.")
 
         follower_snapshot = ref.get(transaction=transaction)
         followers = _stream_in_transaction(
