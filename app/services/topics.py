@@ -1243,7 +1243,7 @@ def list_indexed_topic_urls(*, db=None) -> list[dict]:
 def normalize_email(value) -> str:
     email = str(value or "").strip().lower()
     if not email or len(email) > 254 or not _EMAIL_RE.fullmatch(email):
-        raise TopicError("invalid_email", "Enter a valid e-mail address.")
+        raise TopicError("invalid_email", "Enter a valid email address.")
     return email
 
 

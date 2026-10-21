@@ -725,7 +725,7 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
         raise HTTPException(status_code=500, detail="Error processing follow request")
     if pending["token"]:
         if not mailer.is_configured():
-            raise HTTPException(status_code=503, detail="E-mail delivery is not configured.")
+            raise HTTPException(status_code=503, detail="Email delivery is not configured.")
         topic_url = f"{SITE_URL}/topics/{pending['slug']}"
         confirm_url = SITE_URL + "/topic-follow/confirm?token=" + pending["token"]
         sent = await mailer.send_message(mailer.build_topic_follow_confirm_message(
@@ -737,7 +737,7 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
         if not sent:
             raise HTTPException(
                 status_code=502,
-                detail="Confirmation e-mail could not be sent. Please try again later.",
+                detail="Confirmation email could not be sent. Please try again later.",
             )
     return {
         "status": "success",
@@ -770,7 +770,7 @@ def topic_follow_confirm_page(request: Request, token: str = ""):
     return _follow_link_step(
         request, "/topic-follow/confirm", token, unsubscribe=False,
         heading="Follow this topic?",
-        message="You get an e-mail when the curated consensus on it changes materially.",
+        message="You get an email when the curated consensus on it changes materially.",
         button="Confirm and follow",
     )
 
@@ -784,7 +784,7 @@ async def topic_follow_confirm(request: Request, token: str = ""):
         return _topic_link_error(request, exc, "This confirmation link is invalid or expired.")
     return notice_page(
         request, eyebrow=_TOPIC_EYEBROW, heading="You're following this topic",
-        message="We e-mail you when the curated consensus on it changes materially.",
+        message="We email you when the curated consensus on it changes materially.",
         subject_label="Topic", subject=result.get("title") or "",
         links=[{"href": f"/topics/{result['slug']}", "label": "Open the topic"}],
     )
@@ -937,7 +937,7 @@ async def admin_create_topic_run(
             "run": topics.run_public_view(run),
             "notifications_queued": should_notify,
             "notification_warning": (
-                "Run saved, but SMTP is not configured; follower e-mails were not queued."
+                "Run saved, but SMTP is not configured; follower emails were not queued."
                 if is_material and not should_notify
                 else ""
             ),

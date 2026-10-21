@@ -44,9 +44,9 @@ class RegisterRequest(BaseModel):
     def validate_email(cls, value: str) -> str:
         normalized = str(value or "").strip().lower()
         if any(ord(char) < 32 or ord(char) == 127 for char in normalized):
-            raise ValueError("Invalid e-mail address")
+            raise ValueError("Invalid email address")
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}", normalized):
-            raise ValueError("Invalid e-mail address")
+            raise ValueError("Invalid email address")
         return normalized
 
 
@@ -160,7 +160,7 @@ def confirm_registration(
 
     if not user.email_verified:
         # Diese Info ist okay, weil sie nichts über Passwort / Existenz aussagt
-        raise HTTPException(status_code=400, detail="E-mail address not yet verified.")
+        raise HTTPException(status_code=400, detail="Email address not yet verified.")
 
     registration_method = _recent_registration_method(user)
     if registration_method:

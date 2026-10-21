@@ -442,7 +442,7 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
         raise HTTPException(status_code=500, detail="Error processing follow request")
     if pending["token"]:
         if not mailer.is_configured():
-            raise HTTPException(status_code=503, detail="E-mail delivery is not configured.")
+            raise HTTPException(status_code=503, detail="Email delivery is not configured.")
         share_url = SITE_URL + "/s/" + share_id
         confirm_url = SITE_URL + "/watch/follow/confirm?token=" + pending["token"]
         sent = await mailer.send_message(mailer.build_follow_confirm_message(
@@ -450,7 +450,7 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
             confirm_url=confirm_url, share_url=share_url,
         ))
         if not sent:
-            raise HTTPException(status_code=502, detail="Confirmation e-mail could not be sent. Please try again later.")
+            raise HTTPException(status_code=502, detail="Confirmation email could not be sent. Please try again later.")
     return {"status": "success", "message": "Check your inbox and confirm to start following."}
 
 
@@ -467,7 +467,7 @@ def follow_confirm_page(request: Request, token: str = ""):
     question, path = _share_question(share_id)
     return notice_page(
         request, eyebrow=_FOLLOW_EYEBROW, heading="Follow this question?",
-        message="You get one e-mail whenever the AI consensus on it shifts materially. No account needed.",
+        message="You get one email whenever this answer changes materially. No account needed.",
         subject_label="Question", subject=question,
         action=_token_url("/watch/follow/confirm", token), button="Confirm and follow",
         links=[{"href": path, "label": "Open the page"}] if path else [],
@@ -483,7 +483,7 @@ def follow_confirm(request: Request, token: str = ""):
         return _link_error(request, exc, eyebrow=_FOLLOW_EYEBROW, links=[{"href": "/", "label": "Open consens.io"}])
     return notice_page(
         request, eyebrow=_FOLLOW_EYEBROW, heading="You're following this question",
-        message="We e-mail you when the AI consensus on it shifts materially.",
+        message="We email you when this answer changes materially.",
         subject_label="Question", subject=result.get("question") or "",
         links=[{"href": result.get("share_path") or "/", "label": "Open the page"}],
     )
@@ -499,7 +499,7 @@ def follow_unsubscribe_page(request: Request, token: str = ""):
     question, path = _share_question(share_id)
     return notice_page(
         request, eyebrow=_FOLLOW_EYEBROW, heading="Unfollow this question?",
-        message="You will no longer get e-mails when the AI consensus on it moves.",
+        message="You will no longer get emails when this answer changes.",
         subject_label="Question", subject=question,
         action=_token_url("/watch/follow/unsubscribe", token), button="Unfollow",
         links=[{"href": path, "label": "Open the page"}] if path else [],
@@ -516,7 +516,7 @@ def follow_unsubscribe(request: Request, token: str = ""):
     question, path = _share_question(result.get("share_id") or "")
     return notice_page(
         request, eyebrow=_FOLLOW_EYEBROW, heading="Unfollowed",
-        message="You will no longer get e-mails about this question. You can follow it again on its page.",
+        message="You will no longer get emails about this question. You can follow it again on its page.",
         subject_label="Question", subject=question,
         links=[{"href": path or "/", "label": "Open the page" if path else "Open consens.io"}],
     )
@@ -536,7 +536,7 @@ def unsubscribe_page(request: Request, token: str = ""):
         return _watch_state_page(request, view)
     return notice_page(
         request, eyebrow="Consensus Watch", heading="Pause this watch?",
-        message="Pausing stops its checks and its e-mails. You can resume it any time.",
+        message="Pausing stops its checks and its emails. You can resume it any time.",
         subject_label="Watch", subject=view["question"],
         action=_token_url("/watch/unsubscribe", token), button="Pause watch",
         links=[WATCHES_LINK],

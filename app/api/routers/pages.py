@@ -66,7 +66,7 @@ class FeedbackRequest(BaseModel):
             return None
         cleaned = value.strip().lower()
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}", cleaned):
-            raise ValueError("Enter a valid e-mail address.")
+            raise ValueError("Enter a valid email address.")
         return cleaned
 
 

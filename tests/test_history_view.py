@@ -64,3 +64,13 @@ def test_quiet_groups_know_their_runs_for_deep_links():
 
 def test_day_label_has_no_leading_zero():
     assert day_label(datetime(2026, 8, 4)) == "Aug 4"
+
+
+def test_chart_ends_name_the_year_only_when_the_history_crosses_one():
+    # Apple-Audit H8: the timeline says "Aug 4"; the axis said "Jul 21, 2026".
+    same_year = build_history_view([_point(0), _point(1), _point(2)])
+    assert (same_year["start_label"], same_year["end_label"]) == ("Jul 21", "Aug 4")
+
+    across = [_point(0), _point(30)]
+    view = build_history_view(across)
+    assert (view["start_label"], view["end_label"]) == ("Jul 21, 2026", "Feb 16, 2027")

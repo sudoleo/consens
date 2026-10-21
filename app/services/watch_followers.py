@@ -32,7 +32,7 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 def normalize_email(value) -> str:
     email = str(value or "").strip().lower()
     if not email or len(email) > 254 or not _EMAIL_RE.fullmatch(email):
-        raise WatchError("invalid_email", "Enter a valid e-mail address.")
+        raise WatchError("invalid_email", "Enter a valid email address.")
     return email
 
 

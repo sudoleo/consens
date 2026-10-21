@@ -630,15 +630,15 @@ def build_follow_confirm_message(*, recipient: str, question: str,
     plain = (
         "Confirm that you want to follow this question on consens.io.\n\n"
         + _question_plain(question) + "\n\n"
-        "You will get one e-mail whenever the AI consensus shifts materially.\n"
+        "You will get one email whenever this answer changes materially.\n"
         f"Confirm: {confirm_url}\n\n"
         f"Page: {share_url}\n"
-        "If you did not request this, simply ignore this e-mail - nothing is stored.\n"
+        "If you did not request this, simply ignore this email - nothing is stored.\n"
     )
     body = (
         _question_html(question, share_url)
         + f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">You will get one '
-        "e-mail whenever the AI consensus shifts materially – no account needed.</p>"
+        "email whenever this answer changes materially – no account needed.</p>"
         + _button_html(confirm_url, "Confirm and follow")
     )
     html_body = _shell_html(
@@ -647,7 +647,7 @@ def build_follow_confirm_message(*, recipient: str, question: str,
         preheader="One click confirms; we only write when the consensus moves.",
         body=body,
         footer=(
-            "If you did not request this, simply ignore this e-mail – nothing is stored. "
+            "If you did not request this, simply ignore this email – nothing is stored. "
             f'{_link_html(share_url, "Open the page", muted=True)}.'
         ),
     )
@@ -662,15 +662,15 @@ def build_topic_follow_confirm_message(*, recipient: str, title: str,
     plain = (
         "Confirm that you want to follow this topic on consens.io.\n\n"
         f"{clipped_title}\n\n"
-        "You will receive an e-mail when the curated consensus changes materially.\n"
+        "You will receive an email when the curated consensus changes materially.\n"
         f"Confirm: {confirm_url}\n\n"
         f"Topic: {topic_url}\n"
-        "If you did not request this, ignore this e-mail; nothing is stored.\n"
+        "If you did not request this, ignore this email; nothing is stored.\n"
     )
     body = (
         _question_html(clipped_title, topic_url, label="Topic")
         + f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">You will receive an '
-        "e-mail when the curated AI consensus changes materially.</p>"
+        "email when the curated AI consensus changes materially.</p>"
         + _button_html(confirm_url, "Confirm and follow")
     )
     html_body = _shell_html(
@@ -679,7 +679,7 @@ def build_topic_follow_confirm_message(*, recipient: str, title: str,
         preheader="One click confirms; we only write when the curated consensus moves.",
         body=body,
         footer=(
-            "If you did not request this, ignore this e-mail; nothing is stored. "
+            "If you did not request this, ignore this email; nothing is stored. "
             f'{_link_html(topic_url, "Open the topic", muted=True)}.'
         ),
     )
@@ -931,7 +931,7 @@ def build_account_setup_message(*, recipient: str, setup_url: str) -> EmailMessa
         "The next page is our login provider's standard page and is titled\n"
         "\"Reset your password\" - that's the right place. Afterwards you are\n"
         "taken straight back to consens.io.\n\n"
-        "The link works for one hour. Didn't sign up? Just ignore this e-mail.\n"
+        "The link works for one hour. Didn't sign up? Just ignore this email.\n"
     )
     body = (
         f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">Thanks for signing up. '
@@ -946,7 +946,7 @@ def build_account_setup_message(*, recipient: str, setup_url: str) -> EmailMessa
         heading="One step left: choose your password",
         preheader="Choose a password and you're in.",
         body=body,
-        footer="The link works for one hour. Didn't sign up? Just ignore this e-mail.",
+        footer="The link works for one hour. Didn't sign up? Just ignore this email.",
     )
     return _base_message(recipient, "Finish setting up your consens.io account", plain, html_body)
 
@@ -960,7 +960,7 @@ def build_existing_account_message(*, recipient: str, login_url: str,
         "but it already has an account.\n\n"
         f"Log in as usual (with Google or your password): {login_url}\n\n"
         f"Forgot your password? Set a new one (link works for one hour):\n{reset_url}\n\n"
-        "Didn't do this? Just ignore this e-mail - nothing has changed.\n"
+        "Didn't do this? Just ignore this email - nothing has changed.\n"
     )
     body = (
         f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">Someone – probably you – '
@@ -975,7 +975,7 @@ def build_existing_account_message(*, recipient: str, login_url: str,
         heading="You already have an account",
         preheader="Log in as usual – or set a new password.",
         body=body,
-        footer="Didn't do this? Just ignore this e-mail – nothing has changed.",
+        footer="Didn't do this? Just ignore this email – nothing has changed.",
     )
     return _base_message(recipient, "You already have a consens.io account", plain, html_body)
 
@@ -989,7 +989,7 @@ def build_test_message(*, recipient: str) -> EmailMessage:
     """Small delivery probe used only by the authenticated admin endpoint."""
     sent_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     plain = (
-        "Consensus Watch e-mail delivery is configured correctly.\n\n"
+        "Consensus Watch email delivery is configured correctly.\n\n"
         f"This test was requested from the admin dashboard at {sent_at}.\n"
         "No watch was executed and no schedule was changed.\n"
     )
@@ -1007,4 +1007,4 @@ def build_test_message(*, recipient: str) -> EmailMessage:
         body=body,
         footer="Sent from the admin dashboard.",
     )
-    return _base_message(recipient, "Consensus Watch e-mail test", plain, html_body)
+    return _base_message(recipient, "Consensus Watch email test", plain, html_body)

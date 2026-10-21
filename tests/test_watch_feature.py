@@ -1536,7 +1536,7 @@ class MailerTests(unittest.TestCase):
     def test_admin_test_mail_is_multipart_and_does_not_claim_a_watch(self):
         message = mailer.build_test_message(recipient="admin@example.test")
         self.assertTrue(message.is_multipart())
-        self.assertEqual(message["Subject"], "Consensus Watch e-mail test")
+        self.assertEqual(message["Subject"], "Consensus Watch email test")
         self.assertIn("No watch was executed", message.as_string())
 
     def test_public_watch_meta_contains_run_schedule_but_no_owner(self):
@@ -3074,7 +3074,7 @@ class FollowerTests(unittest.TestCase):
             watch_followers.unsubscribe_follow(confirm, db=self.db)
 
     def test_invalid_email_and_unfollowable_pages_rejected(self):
-        with self.assertRaisesRegex(WatchError, "valid e-mail"):
+        with self.assertRaisesRegex(WatchError, "valid email"):
             watch_followers.request_follow(self.share_id, "not-an-email", db=self.db)
         private_id = "P" * 16
         self.db.stores["shares"][private_id] = dict(share(slug="priv"), visibility="private")

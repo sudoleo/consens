@@ -50,6 +50,16 @@ def day_label(value) -> str:
     return f"{value:%b} {value.day}"
 
 
+def _axis_label(value, other) -> str:
+    """One end of the chart: the year only when the history crosses one.
+
+    Everything else on a Watch page names a day without its year ("Oct 3");
+    an axis that alone said "Sep 19, 2026" mixed the two forms on one page
+    (Apple-Audit H8). A history across New Year needs the years to read.
+    """
+    return f"{day_label(value)}, {value.year}" if value.year != other.year else day_label(value)
+
+
 def _timeline(coords):
     """What a Watch page lists of its history, newest first.
 
@@ -164,8 +174,8 @@ def build_history_view(points, width=640):
         "events": events,
         "start_date": points[0]["ts"].strftime("%Y-%m-%d"),
         "end_date": points[-1]["ts"].strftime("%Y-%m-%d"),
-        "start_label": f"{day_label(points[0]['ts'])}, {points[0]['ts'].year}",
-        "end_label": f"{day_label(points[-1]['ts'])}, {points[-1]['ts'].year}",
+        "start_label": _axis_label(points[0]["ts"], points[-1]["ts"]),
+        "end_label": _axis_label(points[-1]["ts"], points[0]["ts"]),
         "plot_right": width - right,
         "latest_score": points[-1]["agreement_score"],
         "position_map": position_view,

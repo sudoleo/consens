@@ -516,7 +516,7 @@ async def admin_send_watch_test_email(request: Request, data: dict = Body(defaul
         user = await asyncio.to_thread(auth.get_user, uid)
         recipient = getattr(user, "email", None)
         if not getattr(user, "email_verified", False) or not recipient:
-            raise HTTPException(status_code=409, detail="The admin account needs a verified e-mail address")
+            raise HTTPException(status_code=409, detail="The admin account needs a verified email address")
         accepted = await mailer.send_message(mailer.build_test_message(recipient=recipient))
         if not accepted:
             raise HTTPException(status_code=502, detail="SMTP did not accept the test message")
@@ -526,7 +526,7 @@ async def admin_send_watch_test_email(request: Request, data: dict = Body(defaul
         logging.error(
             "admin_send_watch_test_email failed category=%s", safe_exception(exc)
         )
-        raise HTTPException(status_code=500, detail="Failed to send watch test e-mail")
+        raise HTTPException(status_code=500, detail="Failed to send watch test email")
     return {"status": "success", "recipient": recipient}
 
 

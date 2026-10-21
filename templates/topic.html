@@ -52,10 +52,10 @@
 
     {% if topic.status == "active" %}
     <section class="wp-follow" aria-labelledby="topicFollowHeading">
-      <h2 id="topicFollowHeading">Get an e-mail when this answer changes</h2>
+      <h2 id="topicFollowHeading">Get an email when this answer changes</h2>
       <p>Only when a check moves the answer. No account needed.</p>
       <form id="topicFollowForm" class="share-follow-form" data-slug="{{ topic.slug }}">
-        <label class="visually-hidden" for="topicFollowEmail" hidden>E-mail address</label>
+        <label class="visually-hidden" for="topicFollowEmail" hidden>Email address</label>
         <input id="topicFollowEmail" name="email" type="email" required maxlength="254"
                placeholder="you@example.com" autocomplete="email" inputmode="email">
         <button type="submit" class="button-primary" data-umami-event="topic_follow_submit">Follow</button>
