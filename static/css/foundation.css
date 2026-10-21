@@ -218,11 +218,15 @@
    behind it does not move along with a finger or the wheel. The layers' own
    state is the switch, so there is nothing to hold or to forget to release.
    Scrolling inside a layer stays its own (overscroll-behavior: contain
-   there); a dim with nothing to scroll takes no pan at all (touch-action). */
+   there); a dim with nothing to scroll takes no pan at all (touch-action).
+   Only the root holds still: its overflow is the viewport's, so neither a
+   wheel nor a finger (Safari 16 and later) moves the page. body stays
+   visible on purpose - an overflow of its own would make it a scroll box,
+   and the desktop's sticky composer would stick to the end of the thread
+   behind the dialog instead of the bottom of the window, and come back
+   when it closes (review point 4). */
 html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-sheet-backdrop:not([hidden]),
-  .memory-edit-backdrop:not([hidden]), .agent-google-overlay:not([hidden]))),
-html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-sheet-backdrop:not([hidden]),
-  .memory-edit-backdrop:not([hidden]), .agent-google-overlay:not([hidden]))) body {
+  .memory-edit-backdrop:not([hidden]), .agent-google-overlay:not([hidden]))) {
   overflow: hidden;
   overscroll-behavior: none;
 }

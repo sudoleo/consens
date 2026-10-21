@@ -9123,8 +9123,13 @@ zählen nicht):
   zwischen Passwortfeld und Knopf). Fließtext-Links (Rechtliches im
   Login-Text) und volle Listenzeilen (Chats 40 px) bleiben bewusst so.
   `tests/e2e/test_touch_targets.py` misst mit `elementFromPoint` bei 320/390 px.
-  **Eine Scroll-Sperre (F2):** `foundation.css` hält `html` und `body` auf
-  `overflow: hidden; overscroll-behavior: none`, solange eine deckende Ebene
+  **Eine Scroll-Sperre (F2):** `foundation.css` hält nur `html` auf
+  `overflow: hidden; overscroll-behavior: none` (dessen Overflow ist der des
+  Viewports; Rad und Finger, Safari ab 16, bewegen nichts). `body` bleibt
+  bewusst ohne eigenen Overflow: sonst würde er zur Scroll-Box, und der
+  sticky Composer am Desktop klebte hinter dem Dialog am Threadende statt am
+  Fensterrand (Nachprüfung Punkt 4, `test_touch_layers.py` misst ihn). Die
+  Sperre gilt, solange eine deckende Ebene
   offen ist – erkannt am Zustand der Ebene selbst, per
   `html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet,
   .claim-sheet-backdrop:not([hidden]), .memory-edit-backdrop:not([hidden]),
