@@ -10,6 +10,7 @@ from app.core.observability import safe_exception
 import app.core.config as cfg
 from app.core.entitlements import entitlements_for
 from app.core.security import (
+    AuthenticationUnavailable,
     TierStatusUnavailable,
     verify_user_token,
     extract_id_token,
@@ -58,6 +59,15 @@ def _token_budget(uid: str, tier):
         logging.error("Token budget read failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Token allowance is temporarily unavailable.") from None
 
+def _account_status_unavailable() -> HTTPException:
+    """A token that could not be checked is no rejected token: 503 + Retry-After."""
+    return HTTPException(
+        status_code=503,
+        detail="Account status is temporarily unavailable. Please retry.",
+        headers={"Retry-After": "5"},
+    )
+
+
 @router.get("/user_status")
 @limiter.limit("20/minute")
 def get_user_status(request: Request):
@@ -105,6 +115,11 @@ def get_user_status(request: Request):
 
     except HTTPException:
         raise
+    except AuthenticationUnavailable:
+        # The account check could not be read (a short Firestore outage): no
+        # refusal, or the browser would turn Agent off for the session. A 5xx
+        # makes it ask again (firebase.js checkUserStatusOnLoad).
+        raise _account_status_unavailable() from None
     except Exception as exc:
         logging.error("User status check failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed")
@@ -119,6 +134,8 @@ def get_usage_post(request: Request, data: UsageRequest):
     
     try:
         uid = verify_user_token(token)
+    except AuthenticationUnavailable:
+        raise _account_status_unavailable() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
     

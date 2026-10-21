@@ -119,6 +119,30 @@ def test_user_status_rejects_auth_and_tier_outage(http_adapter, identity, expect
     assert "private" not in response.text
 
 
+@pytest.mark.parametrize("method,path", [("GET", "/user_status"), ("POST", "/usage")])
+def test_an_account_check_outage_is_no_rejected_login(http_adapter, monkeypatch, method, path):
+    # Zweitprüfung 12: the deletion check could not be read. A 401 made the
+    # browser turn Agent off for the session; a 503 makes it ask again.
+    from app.core import security
+
+    h = http_adapter
+    collection = h.db.collection
+
+    def unavailable(name):
+        if name == security.ACCOUNT_DELETION_JOBS_COLLECTION:
+            raise RuntimeError("private database diagnostic")
+        return collection(name)
+
+    monkeypatch.setattr(h.db, "collection", unavailable)
+    response = h.client.request(
+        method, path, headers=login("owner"),
+        json={"id_token": "owner"} if method == "POST" else None,
+    )
+    assert response.status_code == 503, response.text
+    assert response.headers["Retry-After"] == "5"
+    assert "private" not in response.text
+
+
 def test_registration_create_race_has_same_public_response_and_no_duplicate_notification(
     http_adapter, monkeypatch
 ):
