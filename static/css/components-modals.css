@@ -1412,12 +1412,13 @@ dialog#shareModal[open] { display: flex; }
 .share-modal-content p { margin: 0 0 12px; }
 .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: var(--font-size-sm); line-height: var(--line-height-ui); color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
 .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
-/* Why a saved chat could not be prepared (share-dialog.js), the watch
-   dialog's error line in the same words and colour. */
-.share-modal-content .share-modal-error { margin: 12px 0 0; color: var(--dispute); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
-.share-modal-error[hidden] { display: none; }
 .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
 .share-modal-actions .share-link-btn { margin-left: auto; }
+/* Why this answer can't be shared (yet), in the server's words
+   (share-dialog.js): a line of its own above the buttons, in the Watch
+   dialog's error colour. */
+.share-modal-content .share-modal-error { flex: 1 0 100%; margin: 0; color: var(--dispute); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
+.share-modal-error[hidden], .share-modal-actions [hidden] { display: none; }
 .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {
   display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
   border-radius: var(--radius-sm); padding: 0 15px; font: inherit; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);

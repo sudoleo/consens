@@ -348,7 +348,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. das Feld `memory` an `compare_models`/`check_text` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. das Feld `memory` an `compare_models`/`check_text` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail, Turns und neuen Context-Versionen bereits unsichtbar bzw. gesperrt), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Consensus-Turns werden serverseitig über `/consensus`, Agent-Turns über `/agent` finalisiert. |
@@ -2680,6 +2680,20 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   an UID/Auth-Generation und eine Modal-/View-Epoch gebunden; Ansichtswechsel,
   Logout und Schließen aborten laufende Fetches, späte Antworten dürfen den
   gemeinsam mit Watch genutzten DOM-Knoten nicht mehr überschreiben.
+  `openShareDialog(view, {prepare, trigger})`: `prepare(viewEpoch)` nennt die
+  Antwort, wenn es nicht die Standardquelle ist (`lastShareResultId` bzw. der
+  geöffnete Chat-Eintrag). Warum etwas nicht teilbar ist, steht seit
+  2026-10-21 als `#shareDialogError` (`role="alert"`) im Dialog, in den Worten
+  des Servers; bei bleibenden Gründen (4xx) verschwindet der Knopf, bei
+  Netz/5xx/429 heißt er „Try again“ (früher: toter Knopf „Saved consensus
+  unavailable“, Fehler nur in der Konsole). `App.answerShare.button(answerBody,
+  {chatId, turnId, eligible})` setzt unter jede fertige Agent-Antwort (live,
+  wiedergeöffnet, jeder Agent-Turn im Verlauf) die Share-Pille direkt hinter
+  die Watch-Pille (`watch.js`, gleiche Zeile; ohne Evidenzzeile teilen sich
+  beide `.agent-watch-pill-row`, die erst leer verschwindet); ein Turn im
+  Verlauf nimmt beim Klick den Chat auf dem Bildschirm. `App.answerShare.open`
+  öffnet den Dialog für einen Turn (auch aus dem Chat-Menü, wenn der Chat als
+  laufender Agent-Run sichtbar ist, `firebase.js shareBookmark`).
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
 - **`watch-fields.js`** (seit 2026-10-20, vor `watch.js`) —
   `window.App.watchFields`: die Bausteine, aus denen der „New watch“-Dialog
@@ -5268,12 +5282,11 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Verlassen speichert über `PATCH /bookmarks/{id}/title`, `title_source:
   "user"`, das wie `generated` spätere Saves und Namensgenerierung übersteht,
   `persistence_guard.KEPT_TITLE_SOURCES`), Share (öffnet den Chat, dann den
-  Share-Dialog) und Delete. Share steht nur bei einem Chat mit gespeichertem
-  Consensus (`bookmarkShareable`: Listen-Meta `has_consensus` und `mode` ≠
-  `"Agent"`, beides in der Projektion von `GET /bookmarks`); Agent-Chats
-  bekommen es nicht, solange `POST /bookmark/consensus/share-result` ihre
-  Antworten ablehnt (Notlösung seit 2026-10-21, fällt weg, sobald sie teilbar
-  sind). **Löschen** blendet die Zeile sofort aus
+  Share-Dialog) und Delete. Share steht nur bei einem Chat mit gespeicherter
+  Antwort (`bookmarkShareable`: Listen-Meta `has_consensus` aus der Projektion
+  von `GET /bookmarks`, auch für Agent-Chats); ein Direktvergleich ohne
+  Consensus bekommt es nicht. Agent-Chats waren am 2026-10-21 kurz
+  ausgenommen, bis ihre Antworten teilbar wurden (siehe „Sharing“). **Löschen** blendet die Zeile sofort aus
   (`.is-undo-pending`), verlässt einen offenen Chat sofort und zeigt
   `App.undoNotice` „Chat deleted · Undo“ (5 s, Hover/Fokus pausieren); erst
   danach läuft das unveränderte `deleteBookmark` (Fence, Run-Abbruch, DELETE).
@@ -7076,13 +7089,45 @@ keinen Abgleich.
   (Legacy-Bookmarks ohne Chat-Bindung, ~325 aus der Zeit vor August 2026,
   sobald ihr Pending-Verweis nach 24 h abgelaufen ist) antwortet der Endpunkt
   409. Jede Absage legt `requestBookmarkShareResult` mit dem Satz des Servers
-  (`App.userError`) in `window.currentBookmarkShareResultError` ab; Share- und
-  Watch-Dialog zeigen ihn als Fehlerzeile, der Knopf bleibt für einen neuen
-  Versuch (seit 2026-10-21, vorher ein toter Knopf „Saved consensus
-  unavailable“). Share/Watch warten
+  (`App.userError`) in `window.currentBookmarkShareResultError` ab, die Absage
+  selbst (mit Status) in `currentBookmarkShareResultContext.error`. Der
+  Watch-Dialog zeigt den Satz als Fehlerzeile, der Knopf bleibt für einen neuen
+  Versuch; der Share-Dialog zeigt ihn als `#shareDialogError` und bietet „Try
+  again“ nur, wenn ein neuer Versuch helfen kann (seit 2026-10-21, vorher ein
+  toter Knopf „Saved consensus unavailable“). Share/Watch warten
   auf diese Rehydration und können dadurch auch außerhalb der Ursprungssession
   verwendet werden. Ein Versions-Gate verhindert, dass eine verspätete Antwort
   auf ein inzwischen anderes angezeigtes Ergebnis zeigt.
+- **Agent-Antworten (seit 2026-10-21).** Bis dahin lehnte der Endpunkt
+  Agent-Chats ab (400 „Sharing Agent Beta answers is not available yet.“),
+  obwohl Agent seit Oktober der Standard ist. `POST /agent/chats/{chat}/turns/
+  {turn}/share-result` (Share-Pille unter der Antwort) und ein Agent-Eintrag
+  über `POST /bookmark/consensus/share-result` (Chat-Menü; die Antwort des
+  Eintrags muss die seines Turns sein) bauen beide über
+  `bookmarks.prepare_agent_share_result` →
+  `share_snapshots.build_agent_pending_result` den Snapshot nur aus dem
+  completed Agent-Turn: Frage, Agent-Antwort (`assistant_response`), Quellen
+  des Turns, Antwortmodell (`consensus_model` = Modell-Slug,
+  `answer_model_label` aus `agent_settings.label`) und `answer_mode: "agent"`.
+  Hat der Agent verglichen, kommen die Modelle des Vergleichs dazu, mit dem die
+  App die Antwort markiert (der erste, dessen Prüfung dieses Textes Befunde
+  hat, sonst der erste; späte Antworten nicht), und deren Prüfung nur, wenn sie
+  an genau diesen Text und diese Antworten gebunden ist (`answer_hash`/
+  `basis_hash`) und nicht „off“ war. Die Pending-ID ist je Turn stabil
+  (`agent_pending_result_id`, `save_pending_result(result_id=…)` lässt einen
+  gültigen Snapshot stehen): erneutes Teilen derselben Antwort liefert denselben
+  Link, auch nach Reload oder aus dem Chat-Menü; `vote_subject_id` ist
+  `agent:{turn}` wie beim Agent-Pick. Nicht teilbar (409 mit Satz für den
+  Dialog): nicht fertige Turns und Chats mit Google-Daten (Turn-
+  `agent_settings.google_data`/`google_selection` oder Chat-`google_data`, das
+  Gmail-Werkzeuge mitten in der Antwort setzen). `lastShareResultId` bleibt für
+  Agent leer (Votes und Consensus-Watch lesen es). Die Share-Seite
+  (`share.html`, `is_agent`) heißt dann „Shared answer“/„Answer“/„Models
+  compared“/„About this answer“, zitiert „Answer to … Answer model: …“, und
+  lässt weg, was eine direkte Antwort nicht hat (keine Modellzeile, kein
+  Scoreboard, kein Differences-Umschalter, keine Judge-Zeile); die OG-Karte
+  nennt dann keine Modelle statt „Several AI models“. Für alle Shares gilt
+  seitdem: „0 contradictions“ wird nicht mehr gezählt.
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
   macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit
   Slug. Pending-Backlink, Tagesquote und Share-Anlage bilden eine einzige

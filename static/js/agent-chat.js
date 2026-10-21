@@ -522,6 +522,9 @@
         question: basis.currentTurn?.question || basis.question,
         eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch,
         followUp: Boolean(document.querySelector('#threadHistory > .thread-history-turn')) });
+      App.answerShare?.button?.(document.getElementById('agentAnswerBody'), {
+        chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId,
+        eligible: basis.currentTurn?.status === 'completed' && Boolean(String(basis.consensus || '').trim()) });
       App.agentSettings?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_settings_proposal : null });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
@@ -536,6 +539,7 @@
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
       App.agentWatch?.render(document.getElementById("agentAnswerBody"), {});
       App.watch?.answerButton?.(document.getElementById("agentAnswerBody"), {});
+      App.answerShare?.button?.(document.getElementById("agentAnswerBody"), {});
       App.agentSettings?.render(document.getElementById("agentAnswerBody"), {});
     }
     window.updateQuestionInputAccess?.();
@@ -874,6 +878,9 @@
     App.watch?.answerButton?.(answerBody, { question: context.question,
       eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch,
       followUp: context.historyTurns.length > 0 });
+    // Share beside it, for every finished answer (share-dialog.js).
+    App.answerShare?.button?.(answerBody, { chatId: context.metadata.chatId, turnId: state.completedTurn?.id,
+      eligible: !running && state.completedTurn?.status === 'completed' && Boolean(String(state.text || '').trim()) });
     // A settings change the Agent prepared: its card, applied with one click.
     // Keyed like the saved chat's view (chat:turn), so applying or dismissing
     // holds when the chat is opened again.

@@ -1961,9 +1961,12 @@
     if (!history) {
       document.querySelectorAll("#" + LIVE_PILL_ID).forEach(node => { if (node !== button) node.removeAttribute("id"); });
     }
+    // The row under an answer without an evidence row also holds its Share
+    // pill (share-dialog.js): it goes only once it is empty.
+    const ownRow = button?.closest(".agent-watch-pill-row");
     if (!eligible || text.length < WATCH_QUESTION_MIN_CHARS) {
-      button?.closest(".agent-watch-pill-row")?.remove();
       button?.remove();
+      if (ownRow && !ownRow.children.length) ownRow.remove();
       answerButtons.delete(button);
       answerBody._watchPill = null;
       return;
@@ -1982,8 +1985,8 @@
       ? answerBody._agentReview : null;
     const nav = review ? review.querySelector(".agent-evidence-links") : null;
     if (nav) {
-      button.closest(".agent-watch-pill-row")?.remove();
       if (nav.nextElementSibling !== button) nav.after(button);
+      if (ownRow && !ownRow.children.length) ownRow.remove();
     } else {
       let row = button.closest(".agent-watch-pill-row");
       if (!row) {

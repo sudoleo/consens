@@ -1054,6 +1054,59 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
     }
 
 
+AGENT_SHARE_UNAVAILABLE = "This answer can’t be shared any more. Open the chat again and share it from there."
+
+
+def prepare_agent_share_result(uid: str, chat_id: str, turn_id: str, *, answer: str | None = None) -> dict:
+    """The pending share result of one owned, completed Agent answer.
+
+    Built from the server-written turn alone (share_snapshots.
+    build_agent_pending_result). Its ID is stable per turn, so sharing the
+    same answer again reuses the snapshot and its public link. ``answer`` is
+    the text a chat entry shows: it must still be this turn's answer.
+    """
+    store = _chat_store()
+    try:
+        turn = store.get_turn(uid, chat_id, turn_id)
+    except ChatNotFound:
+        raise HTTPException(status_code=404, detail="This chat no longer exists.") from None
+    if turn.get("execution_mode") != "agent":
+        raise HTTPException(status_code=409, detail=AGENT_SHARE_UNAVAILABLE)
+    if turn.get("status") != "completed":
+        raise HTTPException(status_code=409, detail="This answer didn’t finish, so it can’t be shared.")
+    if answer is not None and not _same_consensus(turn.get("consensus"), answer):
+        raise HTTPException(status_code=409, detail=AGENT_SHARE_UNAVAILABLE)
+    settings = turn.get("agent_settings") if isinstance(turn.get("agent_settings"), dict) else {}
+    try:
+        chat = store._chat_ref(uid, chat_id).get().to_dict() or {}
+    except Exception as exc:
+        logging.error("agent share chat read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Sharing is unavailable right now. Try again.") from exc
+    # Gmail, Calendar and Drive content stays private: a tool marks the chat
+    # when it brings Google data in mid-answer, the turn when it was chosen.
+    if settings.get("google_data") or settings.get("google_selection") or chat.get("google_data"):
+        raise HTTPException(
+            status_code=409,
+            detail="Answers in a chat with your Google data can’t be shared publicly.",
+        )
+    payload = share_snapshots.build_agent_pending_result(uid, turn)
+    if payload is None:
+        raise HTTPException(status_code=409, detail="This answer is empty, so there is nothing to share.")
+    # Agent votes count once per turn (persistence_guard.write_agent_vote).
+    payload["vote_subject_id"] = f"agent:{turn_id}"
+    try:
+        result_id = share_snapshots.save_pending_result(
+            payload, db=db_firestore,
+            result_id=share_snapshots.agent_pending_result_id(uid, chat_id, turn_id),
+        )
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=409, detail="This account is being deleted.") from None
+    except Exception as exc:
+        logging.error("prepare_agent_share_result failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="This answer couldn’t be prepared for sharing. Try again.") from exc
+    return {"status": "success", "result_id": result_id}
+
+
 @router.post("/bookmark/consensus/share-result")
 @limiter.limit("10/minute")
 def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
@@ -1075,8 +1128,6 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     if not snap.exists:
         raise HTTPException(status_code=404, detail="Bookmark not found.")
     bookmark = snap.to_dict() or {}
-    if bookmark.get("execution_mode") == "agent" or bookmark.get("mode") == "Agent":
-        raise HTTPException(status_code=400, detail="Sharing Agent Beta answers is not available yet.")
     expected_version = str(data.get("expectedVersion") or "").strip().lower()
     if expected_version and (
         not re.fullmatch(r"[0-9a-f]{64}", expected_version)
@@ -1089,6 +1140,15 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     responses = bookmark.get("responses")
     responses = responses if isinstance(responses, dict) else {}
     consensus_text = str(responses.get("consensus") or "").strip()
+    if bookmark.get("execution_mode") == "agent" or bookmark.get("mode") == "Agent":
+        # An Agent chat's entry names its latest turn; the share is that
+        # turn's answer (pages still open from before 2026-10-21 ask here).
+        binding = _stored_chat_binding(bookmark)
+        if not binding:
+            raise HTTPException(status_code=409, detail=AGENT_SHARE_UNAVAILABLE)
+        return prepare_agent_share_result(
+            uid, binding["chat_id"], binding["turn_id"], answer=consensus_text
+        )
     if not consensus_text:
         raise HTTPException(status_code=400, detail="This bookmark has no consensus result.")
 

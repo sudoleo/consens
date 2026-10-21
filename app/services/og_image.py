@@ -266,8 +266,10 @@ def render_brand_card() -> bytes:
     return buffer.getvalue()
 
 
-def share_facts(model_count: int, contradiction_count: int) -> list[str]:
-    facts = [f"{model_count} AI models" if model_count else "Several AI models"]
+def share_facts(model_count: int, contradiction_count: int, *, agent: bool = False) -> list[str]:
+    # An Agent answer that compared nothing rests on its own model: the card
+    # names no models then rather than "Several" (share_snapshots).
+    facts = [f"{model_count} AI models" if model_count else "" if agent else "Several AI models"]
     if contradiction_count:
         facts.append(f"{contradiction_count} contradiction{'s' if contradiction_count != 1 else ''}")
     return facts
@@ -315,8 +317,9 @@ def watch_card_png(share_id: str, *, question: str, state_line: str,
 
 
 def share_card_png(share_id: str, *, question: str, score, model_count: int,
-                   contradiction_count: int, checked_label: str = "") -> bytes | None:
+                   contradiction_count: int, checked_label: str = "", agent: bool = False) -> bytes | None:
     return card_png(
         share_id, question=question, score=score,
-        facts=share_facts(model_count, contradiction_count), dateline=checked_label,
+        facts=[fact for fact in share_facts(model_count, contradiction_count, agent=agent) if fact],
+        dateline=checked_label,
     )

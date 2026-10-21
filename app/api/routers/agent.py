@@ -15,7 +15,7 @@ from app.core import config as cfg
 from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
 from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin, is_user_pro
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
-from app.api.routers.bookmarks import _bookmark_meta
+from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
 from app.services.agent_memory import FirestoreAgentMemoryRepository
@@ -631,6 +631,21 @@ def stop_agent_run(request: Request, chat_id: str, turn_id: str):
         return JSONResponse({"status": "stopping"}, headers={"Cache-Control": "private, no-store"})
     except Exception as exc:
         _raise_store_error(exc, operation="stop agent sessions", uid=uid)
+
+
+@router.post("/agent/chats/{chat_id}/turns/{turn_id}/share-result")
+@limiter.limit("10/minute")
+def prepare_agent_share(request: Request, chat_id: str, turn_id: str):
+    """The pending share result of one finished Agent answer (Share under it).
+
+    Any answer of the chat, not only its latest; ``POST /api/share`` then
+    publishes it like a Consensus result. Sharing needs no Agent quota.
+    """
+    uid = _chat_uid(request)
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[0-9a-f]{32}", turn_id):
+        raise HTTPException(status_code=404, detail="This chat no longer exists.")
+    return JSONResponse(prepare_agent_share_result(uid, chat_id, turn_id),
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/stop")

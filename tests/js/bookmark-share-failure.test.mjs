@@ -8,8 +8,9 @@ import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 /**
  * Share and Watch of a saved chat never end at a dead "Saved consensus
  * unavailable" button (Apple-Audit follow-up): the sidebar menu offers Share
- * only for a chat with a saved consensus, which Agent chats cannot share yet,
- * and a preparation the server refuses is shown with the server's reason.
+ * only for a chat with a saved answer (a Consensus or, since 2026-10-21, an
+ * Agent answer), and a preparation the server refuses is shown with the
+ * server's reason.
  */
 const FIREBASE = readFileSync(path.join(ROOT, "static/firebase.js"), "utf8");
 
@@ -22,10 +23,11 @@ describe("Share in the chat menu", () => {
   const shareable = Function(`${slice("function bookmarkShareable(", "function labelBookmarkMenu(")}
     return bookmarkShareable;`)();
 
-  it("is offered for a saved consensus only", () => {
+  it("is offered for a saved answer only", () => {
     expect(shareable({ id: "c", mode: "Standard", has_consensus: true })).toBe(true);
-    // Stopgap: the server refuses Agent answers (bookmarks.py share-result).
-    expect(shareable({ id: "a", mode: "Agent", has_consensus: true })).toBe(false);
+    // An Agent answer is shared by its turn (share-dialog.js, agent.py).
+    expect(shareable({ id: "a", mode: "Agent", has_consensus: true })).toBe(true);
+    // A direct comparison has no answer to share.
     expect(shareable({ id: "d", mode: "Standard", has_consensus: false })).toBe(false);
     expect(shareable(undefined)).toBe(false);
   });
@@ -114,11 +116,11 @@ describe("a refused preparation in the dialogs", () => {
   it("Share says why and lets the reader try again", async () => {
     const { window, document, resolve } = dialogs();
     window.openShareDialog();
-    await vi.waitFor(() => expect(document.getElementById("shareConfirmError").hidden).toBe(false));
+    await vi.waitFor(() => expect(document.getElementById("shareDialogError").hidden).toBe(false));
 
     const button = document.getElementById("shareConfirmBtn");
-    expect(document.getElementById("shareConfirmError").textContent).toBe(REASON);
-    expect(button.textContent).toBe("Create public link");
+    expect(document.getElementById("shareDialogError").textContent).toBe(REASON);
+    expect(button.textContent).toBe("Try again");
     expect(button.disabled).toBe(false);
     expect(document.getElementById("shareModalBody").textContent).not.toContain("unavailable");
 
@@ -127,6 +129,17 @@ describe("a refused preparation in the dialogs", () => {
     expect(resolve).toHaveBeenCalledTimes(2);
     expect(button.disabled).toBe(false);
     expect(window.App.showPopup).not.toHaveBeenCalled();
+  });
+
+  it("Share offers no button a refusal that stays cannot pass", async () => {
+    const { window, document } = dialogs();
+    window.currentBookmarkShareResultContext.error = Object.assign(new Error(REASON),
+      { name: "HttpError", status: 409, serverMessage: REASON });
+    window.openShareDialog();
+    await vi.waitFor(() => expect(document.getElementById("shareDialogError").hidden).toBe(false));
+
+    expect(document.getElementById("shareDialogError").textContent).toBe(REASON);
+    expect(document.getElementById("shareConfirmBtn").hidden).toBe(true);
   });
 
   it("Watch says why and lets the reader try again", async () => {

@@ -499,6 +499,7 @@ def share_og_card(request: Request, slug_id: str):
             model_count=model_count,
             contradiction_count=contradiction_count,
             checked_label=checked_label,
+            agent=display_payload["answer_mode"] == snapshots.AGENT_ANSWER_MODE,
         )
     if png is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -911,7 +912,13 @@ def share_page(request: Request, slug_id: str):
         "included_models": payload["included_models"],
         "consulted_models": snapshots.consulted_models_view(payload["included_models"]),
         "consensus_model": payload["consensus_model"],
-        "consensus_model_view": snapshots.consensus_model_view(payload["consensus_model"]),
+        "consensus_model_view": snapshots.consensus_model_view(
+            payload["consensus_model"], payload["answer_model_label"]
+        ),
+        # An Agent answer: one model wrote it, a comparison and its check
+        # are there only when the agent compared (share_snapshots).
+        "is_agent": payload["answer_mode"] == snapshots.AGENT_ANSWER_MODE,
+        "has_judge_check": bool(differences_data),
         "date_display": date_iso[:10] if date_iso else "",
         "canonical_url": canonical_url,
         "page_url": page_url,

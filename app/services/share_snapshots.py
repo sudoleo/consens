@@ -119,23 +119,42 @@ def generate_share_id():
     return "".join(secrets.choice(_ID_ALPHABET) for _ in range(SHARE_ID_LENGTH))
 
 
-def share_id_for_api_run(run_id):
-    """Stable, non-reversible public ID for one API run.
+def _stable_id(seed):
+    """A share-shaped ID derived from ``seed``: same seed, same ID.
 
-    The run ID itself stays private. Modulo 62^16 retains the same roughly
-    95-bit public-ID space as randomly generated browser shares.
+    Modulo 62^16 retains the same roughly 95-bit space as randomly generated
+    browser shares; the seed itself cannot be read back from it.
     """
-    value = str(run_id or "").strip().lower()
-    if len(value) != 32 or any(char not in "0123456789abcdef" for char in value):
-        raise ShareError("not_found", "Run not found.")
     number = int.from_bytes(
-        hashlib.sha256(("api-run-share:" + value).encode("ascii")).digest(), "big"
+        hashlib.sha256(seed.encode("utf-8")).digest(), "big"
     ) % (len(_ID_ALPHABET) ** SHARE_ID_LENGTH)
     chars = []
     for _ in range(SHARE_ID_LENGTH):
         number, remainder = divmod(number, len(_ID_ALPHABET))
         chars.append(_ID_ALPHABET[remainder])
     return "".join(reversed(chars))
+
+
+def share_id_for_api_run(run_id):
+    """Stable, non-reversible public ID for one API run.
+
+    The run ID itself stays private.
+    """
+    value = str(run_id or "").strip().lower()
+    if len(value) != 32 or any(char not in "0123456789abcdef" for char in value):
+        raise ShareError("not_found", "Run not found.")
+    return _stable_id("api-run-share:" + value)
+
+
+def agent_pending_result_id(uid, chat_id, turn_id):
+    """The pending result of one Agent answer, the same on every Share.
+
+    A second Share of the answer (after a reload, from the chat list or from
+    under the answer) finds the snapshot of the first one and with it its
+    public link, instead of publishing the answer twice. The chat ID is the
+    owner's secret, so nobody else can derive it.
+    """
+    return _stable_id(f"agent-turn-share:{uid}:{chat_id}:{turn_id}")
 
 
 def is_valid_share_id(share_id):
@@ -255,18 +274,23 @@ def sanitize_model_labels(model_labels, included_providers=None):
     for provider in PROVIDER_ORDER:
         if provider not in allowed:
             continue
-        label = model_labels.get(provider)
-        if not isinstance(label, str):
-            continue
-        cleaned = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", "", label)).strip()
-        # Der Option-Text aus dem Frontend trägt teils ein Badge-Suffix
-        # (" · New", "• Pro"). Für die Zitation nur den reinen Modellnamen
-        # behalten – sonst scheitert die Whitelist am "·" und der Name fiele
-        # ganz auf den Provider-Namen zurück.
-        cleaned = re.split(r"\s*[·•]\s*", cleaned, maxsplit=1)[0].strip()
-        if _MODEL_LABEL_RE.match(cleaned):
+        cleaned = clean_model_label(model_labels.get(provider))
+        if cleaned:
             sanitized[provider] = cleaned
     return sanitized
+
+
+def clean_model_label(label):
+    """A model name fit for a public page and a citation, or ""."""
+    if not isinstance(label, str):
+        return ""
+    cleaned = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", "", label)).strip()
+    # Der Option-Text aus dem Frontend trägt teils ein Badge-Suffix
+    # (" · New", "• Pro"). Für die Zitation nur den reinen Modellnamen
+    # behalten – sonst scheitert die Whitelist am "·" und der Name fiele
+    # ganz auf den Provider-Namen zurück.
+    cleaned = re.split(r"\s*[·•]\s*", cleaned, maxsplit=1)[0].strip()
+    return cleaned if _MODEL_LABEL_RE.match(cleaned) else ""
 
 
 def build_included_models(included_providers, model_labels=None):
@@ -307,13 +331,15 @@ _CONSENSUS_ENGINE_MODELS = {
 }
 
 
-def consensus_model_view(consensus_model):
+def consensus_model_view(consensus_model, model_label=""):
     """Strukturierte Ansicht des Konsens-Modells (Icon + konkretes Modell).
 
     Der gespeicherte Wert ist ein Engine-Key wie "Anthropic" oder
     "Gemini-Pro"; daraus werden Provider (für das Logo), das konkrete Modell
     (lesbares Label) und das Pro-Flag rekonstruiert. Unbekannte Werte bleiben
-    ohne Icon erhalten.
+    ohne Icon erhalten. Agent-Shares speichern den Namen ihres Modells mit
+    (``answer_model_label``): ihr Modell-Slug ("anthropic/claude-sonnet-5.5")
+    steht in keiner der beiden Tabellen.
     """
     raw = str(consensus_model or "").strip()
     if not raw:
@@ -328,7 +354,7 @@ def consensus_model_view(consensus_model):
                 provider = key
                 break
     model_id = _CONSENSUS_ENGINE_MODELS.get(raw)
-    model_label = cfg.get_model_label(model_id) if model_id else ""
+    model_label = clean_model_label(model_label) or (cfg.get_model_label(model_id) if model_id else "")
     if not model_label and raw in cfg.MODEL_CONFIGS:
         # Agent runs store the model id itself ("gpt-5.6-luna"); the page
         # printed it raw above the list that names the same model "GPT-5.6
@@ -638,9 +664,107 @@ def build_pending_result(uid, question, consensus_md, differences_data,
     return payload
 
 
-def save_pending_result(payload, db=None):
+# Shares of an Agent answer (since 2026-10-21) carry this mode; Consensus
+# shares have no `answer_mode` at all, old ones included.
+AGENT_ANSWER_MODE = "agent"
+
+
+def _agent_share_basis(review, text):
+    """The comparison an Agent share shows, and its check of this exact text.
+
+    The app marks an answer with its first comparison (agent-review.js); the
+    share takes the first one whose check of this text found something to
+    show, else the first one. A check bound to another text or to other
+    answers (review_is_bound) counts as none.
+    """
+    review = review if isinstance(review, dict) else {}
+    comparisons = [
+        comparison for comparison in review.get("comparisons") or []
+        if isinstance(comparison, dict) and comparison.get("answers")
+    ]
+    if not comparisons:
+        return None, None
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    checks = {
+        str(check.get("comparison_id")): check
+        for check in review.get("checks") or [] if isinstance(check, dict)
+    }
+
+    def bound(comparison):
+        check = checks.get(str(comparison.get("id")))
+        if (check and review.get("answer_hash") == digest
+                and check.get("answer_hash") == digest
+                and check.get("basis_hash") == comparison.get("basis_hash")):
+            return check
+        return None
+
+    chosen = next(
+        (c for c in comparisons if isinstance((bound(c) or {}).get("differences_data"), dict)),
+        comparisons[0],
+    )
+    return chosen, bound(chosen)
+
+
+def build_agent_pending_result(uid, turn):
+    """The pending result of one completed Agent turn; None without an answer.
+
+    Everything comes from the server-written turn: the question, the agent's
+    answer, the sources it and its comparison models cited, and, if it
+    compared, the models of that comparison and their check of this exact
+    text. A direct answer, or one whose check was off, has none of these, and
+    the page leaves them out.
+    """
+    if (not isinstance(turn, dict) or turn.get("execution_mode") != "agent"
+            or turn.get("status") != "completed"):
+        return None
+    text = turn.get("consensus") if isinstance(turn.get("consensus"), str) else ""
+    comparison, check = _agent_share_basis(turn.get("agent_review"), text)
+    providers, labels, responses = [], {}, {}
+    for answer in (comparison or {}).get("answers") or []:
+        # A late answer arrived after the agent started writing: it is no
+        # part of the answer, nor of its check.
+        if not isinstance(answer, dict) or answer.get("late"):
+            continue
+        provider = str(answer.get("provider_label") or "")
+        if provider not in PROVIDER_ORDER or provider in providers:
+            continue
+        providers.append(provider)
+        model = answer.get("model") if isinstance(answer.get("model"), dict) else {}
+        if model.get("label"):
+            labels[provider] = model["label"]
+        responses[provider] = str(answer.get("text") or "")
+    differences_data = None
+    if check and check.get("status") in {"succeeded", "partial"}:
+        differences_data = check.get("differences_data")
+    payload = build_pending_result(
+        uid, turn.get("question"), text, differences_data, "",
+        turn.get("sources") or [], providers, labels,
+        turn.get("consensus_model"), model_responses=responses,
+    )
+    if payload is None:
+        return None
+    payload["answer_mode"] = AGENT_ANSWER_MODE
+    settings = turn.get("agent_settings") if isinstance(turn.get("agent_settings"), dict) else {}
+    label = clean_model_label(settings.get("label"))
+    if label:
+        payload["answer_model_label"] = label
+    completed_at = turn.get("completed_at")
+    if isinstance(completed_at, datetime):
+        payload["answered_at"] = completed_at.isoformat()
+    return payload
+
+
+def save_pending_result(payload, db=None, result_id=None):
+    """Store a pending result; returns its ID.
+
+    With a given ``result_id`` (``agent_pending_result_id``) a still valid
+    result of the same owner stays as it is, together with the public link
+    it already backs.
+    """
     db = db if db is not None else db_firestore
-    result_id = generate_share_id()
+    # A random ID is new by construction and costs no read.
+    stable = bool(result_id)
+    result_id = result_id or generate_share_id()
     doc = dict(payload)
     doc["vote_subject_id"] = str(doc.get("vote_subject_id") or result_id)
     doc["created_at"] = firestore.SERVER_TIMESTAMP
@@ -656,6 +780,12 @@ def save_pending_result(payload, db=None):
             db=db,
             transaction=transaction,
         )
+        if stable:
+            current = result_ref.get(transaction=transaction)
+            existing = current.to_dict() if current.exists else None
+            if (existing and existing.get("owner_uid") == owner_uid
+                    and _pending_expiry_is_valid(existing.get("expires_at"))):
+                return
         transaction.set(result_ref, doc)
 
     _run_transaction(db, persist)
@@ -883,6 +1013,10 @@ def _build_share_document(
         "indexed": False,
         "reports_count": 0,
     }
+    if payload.get("answer_mode") == AGENT_ANSWER_MODE:
+        document["answer_mode"] = AGENT_ANSWER_MODE
+        if payload.get("answer_model_label"):
+            document["answer_model_label"] = clean_model_label(payload["answer_model_label"])
     if source_result_id:
         document["source_result_id"] = source_result_id
     if source_api_run_id:
@@ -2223,15 +2357,22 @@ def public_share_payload(data):
         "expired_sources": [{"id": source_id} for source_id in _expired_ids(data)],
         "included_models": data.get("included_models") or [],
         "consensus_model": data.get("consensus_model") or "",
+        "answer_mode": AGENT_ANSWER_MODE if data.get("answer_mode") == AGENT_ANSWER_MODE else "",
+        "answer_model_label": clean_model_label(data.get("answer_model_label")),
         "answered_at": data.get("answered_at") or "",
         "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
     }
 
 
 def build_citation(payload, canonical_url):
-    """Server-Pendant zu buildConsensusCitation() – mit kanonischer Share-URL."""
+    """Server-Pendant zu buildConsensusCitation() – mit kanonischer Share-URL.
+
+    An Agent answer is cited by its own model; the compared models follow
+    only when it compared.
+    """
     included_models = payload.get("included_models") or []
-    if not included_models:
+    agent = payload.get("answer_mode") == AGENT_ANSWER_MODE
+    if not included_models and not agent:
         return ""
 
     date_iso = payload.get("answered_at") or payload.get("created_at") or ""
@@ -2239,10 +2380,19 @@ def build_citation(payload, canonical_url):
 
     parts = ["consens.io. (%s)." % date_str]
     question = (payload.get("question") or "").strip()
-    parts.append('Consensus answer to "%s".' % question if question else "Consensus answer.")
-    parts.append("Models consulted: %s." % ", ".join(included_models))
+    kind = "Answer" if agent else "Consensus answer"
+    parts.append('%s to "%s".' % (kind, question) if question else "%s." % kind)
+    if agent:
+        view = consensus_model_view(payload.get("consensus_model"), payload.get("answer_model_label"))
+        model = (view or {}).get("model") or (view or {}).get("label") or ""
+        if model:
+            parts.append("Answer model: %s." % model)
+        if included_models:
+            parts.append("Models compared: %s." % ", ".join(included_models))
+    else:
+        parts.append("Models consulted: %s." % ", ".join(included_models))
     consensus_model = (payload.get("consensus_model") or "").strip()
-    if consensus_model:
+    if consensus_model and not agent:
         parts.append("Consensus model: %s." % consensus_model)
     if payload.get("sources"):
         # Cite the answer's versioned bibliography, not a wall of expiring
