@@ -195,7 +195,7 @@
   function dispose(host) {
     if (!host) return;
     clearInterval(host._agentActivity?.clockTimer);
-    if (host._agentActivity) host._agentActivity.clockTimer = null;
+    if (host._agentActivity) { host._agentActivity.clockTimer = null; dropLine(host._agentActivity); }
     for (const animation of [...activeMotion]) {
       if (host.contains(animation.effect?.target)) cancelMotion(animation);
     }
@@ -257,13 +257,111 @@
       view.disclosureMotion = null;
     }
   }
+  // Where a sentence ends: its punctuation, then whitespace or the end of the
+  // line, never inside "e.g.", "U.S.", "Dr.", "J. Smith" or "am 3. Oktober"
+  // (the server's rule, agent_progress.py _ends_sentence).
+  const ABBREVIATIONS = new Set(['approx', 'ca', 'cf', 'co', 'corp', 'dept', 'dr', 'esp', 'est', 'etc', 'fig', 'inc',
+    'jr', 'ltd', 'mr', 'mrs', 'ms', 'no', 'nos', 'nr', 'prof', 'sr', 'st', 'vol', 'vs', 'jan', 'feb', 'mar', 'apr',
+    'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec', 'bzw', 'evtl', 'ggf', 'inkl', 'usw', 'vgl', 'zzgl', 'abs',
+    'bd', 'bzgl', 'hr', 'fr', 'mio', 'mrd', 'tsd']);
+  const ORDINAL_AFTER = new Set(['am', 'vom', 'zum', 'zur', 'im', 'beim', 'bis', 'ab', 'seit', 'der', 'die', 'das',
+    'den', 'dem', 'des', 'ein', 'eine', 'einem', 'einen', 'einer', 'jeden', 'jedem', 'jeder', 'ihrem', 'seinem']);
+  function sentences(line) {
+    const found = [];
+    let start = 0;
+    for (const match of line.matchAll(/[.!?]+["'”’)\]]*(?=\s|$)/g)) {
+      const marks = match[0].replace(/["'”’)\]]+$/, '');
+      if (!/[!?]/.test(marks)) {
+        // An ellipsis trails off; it ends nothing.
+        if (marks !== '.') continue;
+        const before = line.slice(Math.max(0, match.index - 40), match.index).split(/\s+/).filter(Boolean);
+        const word = (before.at(-1) || '').replace(/^[(["'“‘]+/, '');
+        if (word.includes('.') || ABBREVIATIONS.has(word.toLowerCase()) || /^\p{L}$/u.test(word)) continue;
+        if (/^\d{1,2}$/.test(word) && before.length > 1 && ORDINAL_AFTER.has(before.at(-2).toLowerCase())) continue;
+      }
+      const end = match.index + match[0].length;
+      const sentence = line.slice(start, end).trim();
+      if (sentence) found.push(sentence);
+      start = end;
+    }
+    return found;
+  }
+  // Reasoning highlights as complete statements only (2026-10-21): each of
+  // the last three lines gives its first complete sentence that fits, or
+  // stands as it is when it is a title without punctuation. Nothing is cut:
+  // a line whose sentences are all too long, or one that an older turn
+  // stored cut off ("…"), is left out.
   function compactReasoning(text) {
-    const paragraphs = String(text || "").split(/\n\s*\n|\n/).filter(Boolean);
-    return paragraphs.slice(-3).map(p => {
-      const sentence = p.match(/[^.!?]+[.!?](?=\s|$)/)?.[0] || p;
-      const clean = sentence.replace(/^[#*>\s-]+/, "").replace(/\*\*|__|`/g, '').replace(/\s+/g, " ").trim();
-      return clean.length > 180 ? clean.slice(0, 177).replace(/\s+\S*$/, "") + "…" : clean;
-    }).join("\n");
+    const lines = String(text || "").split("\n");
+    const excerpts = [];
+    for (let index = lines.length - 1; index >= 0 && excerpts.length < 3; index -= 1) {
+      const line = lines[index].replace(/^[#*>\s-]+/, "").replace(/^\d{1,3}[.)]\s+/, "")
+        .replace(/\*\*|__|`/g, '').replace(/\s+/g, " ").trim();
+      if (!line) continue;
+      const found = sentences(line);
+      const excerpt = found.length ? found.find(sentence => sentence.length <= 180)
+        : line.length <= 180 && !/(?:…|\.\.)$/.test(line) ? line : '';
+      if (excerpt) excerpts.unshift(excerpt);
+    }
+    return excerpts.join("\n");
+  }
+  // A line that changes in place fades out and back in with its new words
+  // (at once with reduced motion, motion()): one quiet change, not a jump.
+  function crossfade(p, text) {
+    if ((p._fadeText ?? p.textContent) === text) return;
+    const previous = p.textContent;
+    p._fadeText = text;
+    cancelMotion(p._fadeMotion);
+    if (!previous) { p.textContent = text; return; }
+    p._fadeMotion = motion(p, [{ opacity: 1 }, { opacity: 0 }], () => {
+      p.textContent = p._fadeText;
+      p._fadeMotion = motion(p, [{ opacity: 0 }, { opacity: 1 }], () => {}, 220);
+    }, 140);
+  }
+  // While the comparison models answer, one quiet line quotes them in turn
+  // (2026-10-21): an excerpt stands at least LINE_DWELL_MS, then the next
+  // model in order with something new to say takes the line. Before, the
+  // model that reported last always won, and the line changed model every
+  // half second.
+  const LINE_DWELL_MS = 2500;
+  function comparisonLine(view, highlights) {
+    const lines = (Array.isArray(highlights) ? highlights : []).filter(item => item?.id && item.text)
+      .map((item, index) => ({ ...item, order: Number.isFinite(item.order) ? item.order : index + 1 }));
+    view.highlights = lines;
+    if (!lines.length) return dropLine(view);
+    const now = performance.now();
+    const shown = view.line;
+    if (shown && now - shown.at < LINE_DWELL_MS) return shown;
+    const seen = view.lineSeen ||= new Map();
+    const after = shown?.order ?? 0;
+    const turn = [...lines.filter(item => item.order > after), ...lines.filter(item => item.order <= after)];
+    // Nothing new anywhere: the model on the line keeps it while it answers.
+    const next = turn.find(item => seen.get(item.id) !== item.text)
+      || (shown && lines.some(item => item.id === shown.id) ? null : turn[0]);
+    if (!next) return shown;
+    seen.set(next.id, next.text);
+    view.line = { id: next.id, order: next.order, at: now, text: next.label ? `${next.label}: ${next.text}` : next.text };
+    return view.line;
+  }
+  function dropLine(view) {
+    clearTimeout(view.lineTimer);
+    view.line = view.lineTimer = null;
+    return null;
+  }
+  // The line moves on by itself when its time is up, also when no new
+  // report arrives to render the activity again.
+  function scheduleLine(view) {
+    clearTimeout(view.lineTimer);
+    view.lineTimer = null;
+    const wait = view.line ? view.line.at + LINE_DWELL_MS - performance.now() : 0;
+    if (wait > 0) view.lineTimer = setTimeout(() => {
+      view.lineTimer = null;
+      const node = view.previewNodes.get('comparison-highlight');
+      if (!view.running || !node?.isConnected) return;
+      const line = comparisonLine(view, view.highlights);
+      if (line) crossfade(node, line.text);
+      scheduleLine(view);
+    }, wait + 20);
   }
 
   function receive(events, event) {
@@ -335,7 +433,7 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlight = null, reconnecting = false } = {}) {
+    highlights = [], reconnecting = false } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -438,13 +536,14 @@
             ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
     if (running && (!activeTool || waiting || reconnecting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
     // While the comparison models answer, the main model is silent: one quiet
-    // line quotes the reasoning of the model that reported last.
+    // line quotes their reasoning in turn (comparisonLine).
     const comparing = reviewStage === 'Comparing perspectives…' || ['compare_models', 'check_text'].includes(activeTool?.name);
-    if (running && !waiting && !reconnecting && comparing && highlight?.text) {
-      // quiet: true keeps the frequent changes out of the screen reader log;
-      // the agent panel offers the same highlights per model.
-      paragraphs.push({ id: 'comparison-highlight', kind: 'progress', quiet: true,
-        text: highlight.label ? `${highlight.label}: ${highlight.text}` : highlight.text });
+    const line = running && !waiting && !reconnecting && comparing ? comparisonLine(view, highlights) : dropLine(view);
+    if (line) {
+      // quiet: true keeps the changes out of the screen reader log; the
+      // agent panel offers the same highlights per model.
+      paragraphs.push({ id: 'comparison-highlight', kind: 'progress', quiet: true, text: line.text });
+      scheduleLine(view);
     }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
     // A hidden or still empty preview is 0 tall without asking the layout (a
@@ -495,10 +594,13 @@
       p.classList.toggle('agent-current-status', Boolean(item.current));
       if (item.current) p.setAttribute('role', 'status'); else p.removeAttribute('role');
       if (item.status) p.dataset.status = item.status;
-      if (p.textContent !== item.text) {
+      // A reasoning line that changes in place (a comparison model's quote,
+      // the chat model's thinking) cross-fades; a step only brightens.
+      if (item.kind === 'progress') crossfade(p, item.text);
+      else if (p.textContent !== item.text) {
         const previous = p.textContent;
         p.textContent = item.text;
-        if (previous && item.kind === 'step') motion(p, [{opacity:.65}, {opacity:1}], () => {}, 160);
+        if (previous) motion(p, [{opacity:.65}, {opacity:1}], () => {}, 160);
       }
       // A fallback Thinking/Writing row moves after a newly received insight.
       const position = view.preview.children[previewIds.size - 1];

@@ -799,7 +799,7 @@
       review: state.completedTurn?.agent_review || context.metadata.agentReview,
       answerText: state.text || state.streamText || '',
       settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
-      highlight: running ? App.agentDelegation?.liveHighlight?.(context.metadata.chatId, context.metadata.agentTurnId) : null,
+      highlights: running ? App.agentDelegation?.liveHighlights?.(context.metadata.chatId, context.metadata.agentTurnId) : [],
       reconnecting: context.metadata.reconnecting === true && context.metadata.offline === true,
     });
     // Evidence links and Copy belong to a finished answer. While the run

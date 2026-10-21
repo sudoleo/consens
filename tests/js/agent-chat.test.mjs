@@ -444,9 +444,10 @@ describe("single-model agent chat", () => {
     w.App.agentActivity.render(host, {events});
     expect(host.textContent).toContain('Text check · Completed');
     expect(host.textContent).not.toContain('Tool ·');
-    const highlight = {id:'h', label:'Gemini', text:'Checking the figures.'};
-    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'c',name:'check_text',status:'running'}], highlight});
+    const highlights = [{id:'h', label:'Gemini', text:'Checking the figures.'}];
+    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'c',name:'check_text',status:'running'}], highlights});
     expect(host.querySelector('.agent-progress').textContent).toContain('Gemini: Checking the figures.');
+    w.App.agentActivity.dispose(host);
     dom.window.close();
   });
 
@@ -460,23 +461,65 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('details').open).toBe(false);
     dom.window.close();
   });
-  it('fills the quiet comparison phase with one compact reasoning line of a comparison model', () => {
+  it('fills the quiet comparison phase with one line that quotes the comparison models in turn', () => {
     const {window:w,document:d,dom} = boot();
+    // The line's own clock and timer: each excerpt stands 2.5 s.
+    let now = 1000;
+    Object.defineProperty(w.performance, 'now', { configurable: true, value: () => now });
+    const timers = [];
+    w.setTimeout = (fn, ms) => timers.push({ fn, ms });
     const host = d.querySelector('#agentAnswerActivity');
     const events = [{kind:'tool',id:'t1',name:'compare_models',status:'running'}];
-    const highlight = {id:'a', label:'Gemini', text:'Checking the 2026 figures.'};
-    w.App.agentActivity.render(host, {running:true, events, highlight});
+    const gemini = {id:'a', order:1, label:'Gemini', text:'Checking the 2026 figures.'};
+    const gpt = {id:'b', order:2, label:'GPT', text:'Weighing both sources.'};
+    const render = highlights => w.App.agentActivity.render(host, {running:true, events, highlights});
+    const quotes = () => [...host.querySelectorAll('.agent-progress p:not(.agent-progress-step)')].map(p => p.textContent);
+    render([gemini]);
     const preview = host.querySelector('.agent-progress');
     expect(preview.textContent).toContain('Comparing perspectives…');
-    expect(preview.textContent).toContain('Gemini: Checking the 2026 figures.');
+    expect(quotes()).toEqual(['Gemini: Checking the 2026 figures.']);
     // Frequent changes stay out of the screen reader log.
     expect([...preview.querySelectorAll('p')].find(p => p.textContent.startsWith('Gemini:')).getAttribute('aria-hidden')).toBe('true');
-    w.App.agentActivity.render(host, {running:true, events, highlight:{...highlight, label:'GPT', text:'Weighing both sources.'}});
-    expect(preview.querySelectorAll('p:not(.agent-progress-step)')).toHaveLength(1);
-    expect(preview.textContent).toContain('GPT: Weighing both sources.');
+    // GPT reports a moment later: Gemini's excerpt stands its time first.
+    now += 1000;
+    render([gemini, gpt]);
+    expect(quotes()).toEqual(['Gemini: Checking the 2026 figures.']);
+    // When it is up, the line moves on by itself, without a new report.
+    now += 1600;
+    timers.at(-1).fn();
+    expect(quotes()).toEqual(['GPT: Weighing both sources.']);
+    // Both have something new: the turn goes back to Gemini, whatever reported last.
+    const gemini2 = {...gemini, text:'Comparing the seat limits.'}, gpt2 = {...gpt, text:'Rechecking the price.'};
+    now += 2600;
+    render([gemini2, gpt2]);
+    expect(quotes()).toEqual(['Gemini: Comparing the seat limits.']);
+    now += 2600;
+    render([gemini2, gpt2]);
+    expect(quotes()).toEqual(['GPT: Rechecking the price.']);
+    // Nothing new anywhere: the line stays where it is.
+    now += 5000;
+    render([gemini2, gpt2]);
+    expect(quotes()).toEqual(['GPT: Rechecking the price.']);
+    // A model that finished leaves the line to the next one at once when its time is up.
+    render([gemini2]);
+    expect(quotes()).toEqual(['Gemini: Comparing the seat limits.']);
     // Other steps and finished runs never show it.
-    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'t2',name:'web_search',status:'running'}], highlight});
+    render([]);
+    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'t2',name:'web_search',status:'running'}], highlights:[gemini2]});
     expect(host.querySelector('.agent-progress').textContent).not.toContain('Gemini:');
+    w.App.agentActivity.dispose(host);
+    dom.window.close();
+  });
+  it('quotes only complete statements of the reasoning, never a cut one', () => {
+    const {window:w,document:d,dom} = boot();
+    const host = d.querySelector('#agentAnswerActivity');
+    const long = 'This sentence keeps going ' + 'and going '.repeat(20) + 'until it ends.';
+    const text = ['We compare e.g. the U.S. figures from am 3. Oktober. Then the rest.',
+      'An older highlight that the server once cut off at its limit and then…', `${long} Short point here.`,
+      '**Checking the sources**'].join('\n');
+    w.App.agentActivity.render(host, {running:true, events:[{id:'r', kind:'reasoning', format:'summary', text}]});
+    expect(host.querySelector('.agent-progress p').textContent).toBe(
+      'We compare e.g. the U.S. figures from am 3. Oktober.\nShort point here.\nChecking the sources');
     dom.window.close();
   });
   it('keeps the newest status and usage after long runs exceed the activity window', () => {

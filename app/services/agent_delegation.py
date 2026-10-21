@@ -1015,12 +1015,12 @@ class DelegationLoop(AgentLoop):
                                 if self.comparison and event["kind"] == "reasoning":
                                     # ...except in a step that may write the answer:
                                     # minutes of silent thinking look like a stalled
-                                    # run. Short verbatim excerpts, one updated line.
+                                    # run. One updated line: the newest verbatim excerpt.
                                     compact = thinking.update(event) if thinking else None
                                     if not compact:
                                         continue
                                     event = {"step_id": step, "id": "thinking", "kind": "progress",
-                                             "text": compact["text"]}
+                                             "text": compact["text"].rsplit("\n", 1)[-1]}
                                 event = self.activity(event)
                             if event and event["type"] == "delta" and stream_answer:
                                 event = self._candidate_delta(value, research)
