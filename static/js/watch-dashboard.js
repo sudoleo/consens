@@ -804,10 +804,13 @@
     content.appendChild(goals.root);
     function syncGoals(current) {
       if (dirty.has("condition") && document.activeElement === goals.input) return;
+      // A goal typed and not saved yet (its save failed, or it is on its
+      // way) stays in its field and chosen; a failed save never wipes it.
+      const typed = dirty.has("condition") && goals.input.value.trim() !== "";
       goals.setOffered(goalOptionsFor(current));
       goals.offered.classList.toggle("is-empty", !current.condition);
-      goals.select(current.condition ? String(current.condition).trim() : "none");
-      if (document.activeElement !== goals.input) goals.input.value = "";
+      goals.select(typed ? "custom" : current.condition ? String(current.condition).trim() : "none");
+      if (!typed && document.activeElement !== goals.input) goals.input.value = "";
       goals.hint.textContent = current.condition
         ? "Checked on every run. When a source confirms it, the watch ends and tells you."
         : "You hear from us whenever a source changes the answer.";
@@ -822,6 +825,9 @@
       saver.queue(changes, goals.root, 0);
     }
     goals.root.addEventListener("change", event => {
+      if (event.target === goals.input) return;
+      // Another choice drops what was typed for "Something else".
+      if (event.target !== goals.customChoice) dirty.delete("condition");
       if (event.target === goals.anyChoice && goals.anyChoice.checked) {
         if (entry.watch.condition) saveGoal("");
       } else if (event.target === goals.customChoice) {
@@ -840,6 +846,8 @@
       saveGoal(text);
     }
     goals.input.addEventListener("change", commitGoalText);
+    // Leaving the field again tries a failed save once more ("Try again").
+    goals.input.addEventListener("blur", () => { if (dirty.has("condition")) commitGoalText(); });
     goals.input.addEventListener("keydown", event => {
       if (event.key !== "Enter" || window.App.isComposingKey?.(event) || event.isComposing) return;
       event.preventDefault();
@@ -967,7 +975,8 @@
       ruledOut.hidden = !ruled;
       if (!keep(interval)) interval.value = ["daily", "monthly"].includes(current.interval) ? current.interval : "weekly";
       if (!keep(weekday) && current.run_weekday) weekday.value = current.run_weekday;
-      if (!keep(time) && (force || !dirty.has("run_time"))) time.value = current.run_time || "";
+      // A typed time and typed details stay through a failed save, like the goal.
+      if (!keep(time) && !dirty.has("run_time")) time.value = current.run_time || "";
       const zone = fields.timezoneNote(current.timezone);
       timeNote.textContent = zone ? "In " + zone : "";
       timeNote.hidden = !zone;
@@ -1225,6 +1234,10 @@
       const data = await patchWatch(entry.watch, { status });
       updateCard(entry.id, data.watch);
       refreshLimits();
+      // Deleted while the pause was on its way: the deletion's Undo stays
+      // on screen; a "Watch paused · Undo" now would end it, and the watch
+      // would be gone before the reader could take it back.
+      if (page.pendingDeletes.has(entry.id) || !page.cards.has(entry.id)) return;
       if (undoable) {
         showUndoToast(status === "active" ? "Watching again" : "Watch paused", {
           undo: () => setStatus(entry, previous === "active" ? "active" : "paused", { undoable: false })
@@ -1277,8 +1290,37 @@
     return parseFloat(getComputedStyle(list).rowGap || getComputedStyle(list).gap) || 0;
   }
 
+  // One fold at a time per node. A newer one (Undo right after Delete, or
+  // Delete again right after Undo) takes over from where the running one
+  // stands, and the older one's end never lands on it: a quick Undo used to
+  // leave the card hidden for good once the fold-away finished.
+  const folds = new WeakMap();
+
+  function startFold(node, direction) {
+    const fold = { direction };
+    folds.set(node, fold);
+    return fold;
+  }
+
+  function foldIsCurrent(node, fold) {
+    return folds.get(node) === fold;
+  }
+
+  function endFold(node, fold) {
+    if (!foldIsCurrent(node, fold)) return false;
+    folds.delete(node);
+    return true;
+  }
+
+  // Folding away right now (and not yet hidden).
+  function leaving(node) {
+    return folds.get(node)?.direction === "out";
+  }
+
   function collapse(node, done) {
+    const fold = startFold(node, "out");
     const finish = () => {
+      if (!endFold(node, fold)) return;
       node.hidden = true;
       node.style.cssText = "";
       done?.();
@@ -1291,6 +1333,10 @@
     const gap = gapOf(node);
     const sideways = node.nextElementSibling && !node.nextElementSibling.hidden ? "marginBottom" : "marginTop";
     node.style.overflow = "hidden";
+    // The measured height includes the padding; so does the height the fold
+    // starts from (a card is content-box: it grew by its padding in the
+    // first frame).
+    node.style.boxSizing = "border-box";
     node.style.height = height + "px";
     void node.offsetHeight;
     // Leaving starts slowly (--ease-in), so a tall card never jumps in its
@@ -1301,34 +1347,59 @@
     node.style.marginTop = node.style.marginBottom = "0px";
     node.style.opacity = "0";
     if (gap && (node.previousElementSibling || node.nextElementSibling)) node.style[sideways] = -gap + "px";
-    let finished = false;
-    const end = () => { if (!finished) { finished = true; finish(); } };
-    node.addEventListener("transitionend", event => { if (event.target === node && event.propertyName === "height") end(); });
+    const onEnd = event => { if (event.target === node && event.propertyName === "height") end(); };
+    const end = () => {
+      node.removeEventListener("transitionend", onEnd);
+      finish();
+    };
+    node.addEventListener("transitionend", onEnd);
     setTimeout(end, 500);
   }
 
+  // Where a fold stands in this frame, to go on from there.
+  function foldState(node) {
+    const style = getComputedStyle(node);
+    return {
+      height: node.getBoundingClientRect().height + "px",
+      opacity: style.opacity,
+      paddingTop: style.paddingTop,
+      paddingBottom: style.paddingBottom,
+      marginTop: style.marginTop,
+      marginBottom: style.marginBottom
+    };
+  }
+
   function expand(node) {
+    // An Undo while the card still folds away turns it around where it is.
+    const from = leaving(node) && !node.hidden && node.isConnected ? foldState(node) : null;
+    const fold = startFold(node, "in");
     node.hidden = false;
-    if (reducedMotion()) {
-      node.style.cssText = "";
+    node.style.cssText = "";
+    if (reducedMotion() || !node.isConnected) {
+      endFold(node, fold);
       return;
     }
     const height = node.getBoundingClientRect().height;
     const gap = gapOf(node);
     const sideways = node.nextElementSibling && !node.nextElementSibling.hidden ? "marginBottom" : "marginTop";
     node.style.overflow = "hidden";
-    node.style.height = "0px";
-    node.style.opacity = "0";
-    node.style.paddingTop = node.style.paddingBottom = "0px";
-    node.style.marginTop = node.style.marginBottom = "0px";
-    if (gap && (node.previousElementSibling || node.nextElementSibling)) node.style[sideways] = -gap + "px";
+    node.style.boxSizing = "border-box";
+    if (from) {
+      Object.assign(node.style, from);
+    } else {
+      node.style.height = "0px";
+      node.style.opacity = "0";
+      node.style.paddingTop = node.style.paddingBottom = "0px";
+      node.style.marginTop = node.style.marginBottom = "0px";
+      if (gap && (node.previousElementSibling || node.nextElementSibling)) node.style[sideways] = -gap + "px";
+    }
     void node.offsetHeight;
     node.style.transition = "height var(--dur-layer) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), margin var(--dur-layer) var(--ease-standard), padding var(--dur-layer) var(--ease-standard)";
     node.style.height = height + "px";
     node.style.opacity = "1";
     node.style.paddingTop = node.style.paddingBottom = "";
     node.style.marginTop = node.style.marginBottom = "";
-    setTimeout(() => { node.style.cssText = ""; }, 500);
+    setTimeout(() => { if (endFold(node, fold)) node.style.cssText = ""; }, 500);
   }
 
   // ------------------------------------------------------------------
@@ -1338,13 +1409,29 @@
   // as a thin forward for the cards.
   // ------------------------------------------------------------------
   let dashToast = null;
+  // Commits on their way (a DELETE whose Undo has passed): the logout waits
+  // for them while the account's token is still there.
+  const committing = new Set();
+
+  function runCommit(commit) {
+    let running;
+    try {
+      running = Promise.resolve(commit());
+    } catch (error) {
+      running = Promise.reject(error);
+    }
+    const tracked = running.catch(error => console.error("Watch change failed:", error))
+      .finally(() => committing.delete(tracked));
+    committing.add(tracked);
+    return tracked;
+  }
 
   function showUndoToast(message, { undo = null, commit = null, timeout = UNDO_MS } = {}) {
     dashToast?.settle();
     const handle = window.App.toast({
       message,
       action: typeof undo === "function" ? { label: "Undo", onAction: () => { undo(); } } : null,
-      onExpire: typeof commit === "function" ? commit : null,
+      onExpire: typeof commit === "function" ? () => { runCommit(commit); } : null,
       duration: timeout,
     });
     dashToast = handle;
@@ -1354,11 +1441,18 @@
     };
   }
 
-  // Leaving the page (or the tab) lets every pending Undo happen now.
+  // Leaving the page (or the tab) or logging out lets every pending Undo
+  // happen now and saves what is typed in an open card. Resolves once all of
+  // it was sent (the logout waits for that before it drops the token).
   function commitPending() {
     dashToast?.settle();
     dashToast = null;
-    page.cards.forEach(entry => entry.panel?.flush?.());
+    const saving = [];
+    page.cards.forEach(entry => {
+      const flushed = entry.panel?.flush?.();
+      if (flushed && typeof flushed.then === "function") saving.push(flushed);
+    });
+    return Promise.allSettled([...committing, ...saving]).then(() => undefined);
   }
 
   // ------------------------------------------------------------------
@@ -1625,8 +1719,10 @@
     page.sections.forEach(({ section, list, count }) => {
       const visible = Array.from(list.children).filter(item => !item.hidden).length;
       count.textContent = String(visible);
-      if (!visible && !section.hidden) collapse(section);
-      else if (visible && section.hidden) expand(section);
+      // A section still folding away comes back with an Undo, from where
+      // it stands; it never ends hidden around a card that came back.
+      if (!visible && !section.hidden && !leaving(section)) collapse(section);
+      else if (visible && (section.hidden || leaving(section))) expand(section);
     });
   }
 

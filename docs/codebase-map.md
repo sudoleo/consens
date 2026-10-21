@@ -2678,7 +2678,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   the schedule“ öffnet den vollen Dialog, ein 429 ebenfalls.
   `openWatchDialog("create", options)` nimmt `question`, `goal` (vorgewählt),
   `goals` (Vorschläge des Aufrufers, dann kein `goal-suggestions`-Call),
-  `interval` und `source` (Analytics). `receiveWatchList` (aus
+  `interval` und `source` (Analytics). „Edit“ (`#watchQuestionEdit`) ändert
+  seit 2026-10-21 nur die Frage: Zeitplan, Benachrichtigung, Kanäle,
+  Sichtbarkeit, Details und der offene Einstellungsblock kommen als
+  `settings` zurück (nur das Ziel gehört zur Frage; ohne Ziel wird „Only when
+  it is reached“ zur ersten Regel). Der Login-Hinweis für Gäste sagt „Your
+  question waits for you.“ nur, wenn eine Frage wartet. `receiveWatchList` (aus
   `loadWatchLimits` und dem Dashboard) hält neben den Limits die Watch-Liste
   (`watchState.watches`) und meldet `consensio:watches-changed`;
   `App.watch.watchedFor(question)` vergleicht wie `question_hash`
@@ -2708,7 +2713,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `showUndoToast(message, {undo, commit, timeout})` leitet seit 2026-10-20
   an die gemeinsame Hinweis-Zeile weiter (`App.toast`, `notices.js`): eine
   zur Zeit, pausiert bei Hover/Fokus, ein Kontowechsel verwirft sie ohne
-  Commit.
+  Commit. `commitPending()` lässt das offene Undo geschehen, speichert
+  Getipptes offener Karten und liefert seit 2026-10-21 ein Promise, das
+  erfüllt ist, wenn alles gesendet wurde: `firebase.js` `performLogout`
+  wartet darauf (neben den Chat-Löschungen, zusammen höchstens 3 s), bevor
+  das Token geht. Vorher lief eine gerade gelöschte Watch nach dem Logout
+  weiter. Ändernde Watch-Anfragen (`watchUi.api`, alles außer GET) und das
+  Chat-Löschen (`DELETE /bookmark`) gehen mit `keepalive`, damit ein Undo, das
+  beim Schließen des Tabs abläuft, noch ankommt. Eine Pause, deren Antwort
+  nach einem Delete kommt, zeigt kein eigenes Undo (es hätte das des Deletes
+  beendet). Falten (`collapse`/`expand`): eins pro Knoten (`folds`), ein
+  späteres übernimmt dort, wo das laufende steht, das Ende des älteren landet
+  nie (schnelles Undo ließ die Karte sonst für immer versteckt; dasselbe für
+  die Sektion um die letzte Karte); gefaltet wird in `border-box`, sonst wuchs
+  die Karte im ersten Bild um ihr Padding. Ein fehlgeschlagenes Speichern
+  lässt getipptes Ziel, Uhrzeit und Details im Feld (Auswahlfelder zeigen
+  wieder den gespeicherten Wert); Verlassen des Zielfelds versucht es erneut.
   Einstellungen klappen über `grid-template-rows` 0fr→1fr in `--dur-layer`
   auf (geschlossen `inert`). **Speichermodell** (J7, J9, J11): jede Änderung
   landet sofort und sagt „Saved“ am Feld — Auswahl nach 350 ms (mehrere
@@ -2728,7 +2748,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   weg, „Why a watch, not a scheduled prompt“ steht zugeklappt am Seitenende
   (J29). Zeiten werden alle 30 s neu gelesen (J5). Ein Ladefehler lässt die
   Liste stehen und zeigt „Try again“ (`.wd-alert`, J6). Eine neue Watch steht
-  nach „Done“ oben in „Watching“ und ist kurz markiert (`addCreated`, J15). Es präsentiert nur das Server-Signal aus
+  nach dem Erfolgsschritt oben in „Watching“ und ist kurz markiert
+  (`addCreated`, J15) – egal ob „Done“, Kreuz, Esc oder Backdrop ihn schließt
+  (`close`-Event des Dialogs, nicht nach einem Logout). Es präsentiert nur das Server-Signal aus
   `drift_signal` (siehe `docs/watch-evidence-model.md`), leitet nichts selbst ab:
   `cardState` liefert pro Watch Ton/Label/Satz/Quellen — *Moved* (mit
   `evidence_sources` und „Held: …“), *Re-checking* (`confirming`), *Answer

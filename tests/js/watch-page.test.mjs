@@ -44,7 +44,24 @@ function watch(extra = {}) {
   };
 }
 
-function boot({ watches = [], limits = null, user = true, path = "/app/watches", patch = null, captureIntervals = false } = {}) {
+// jsdom has no showModal()/close(); a browser's dialog fires "close" a task
+// after close(), and Escape closes it through its own cancel step.
+function nativeDialogs(window) {
+  const proto = window.HTMLDialogElement.prototype;
+  proto.showModal = function () {
+    this.setAttribute("open", "");
+    if (this.__escape) return;
+    this.__escape = event => { if (event.key === "Escape" && !event.defaultPrevented) this.close(); };
+    this.addEventListener("keydown", this.__escape);
+  };
+  proto.close = function () {
+    if (!this.hasAttribute("open")) return;
+    this.removeAttribute("open");
+    window.setTimeout(() => this.dispatchEvent(new window.Event("close")), 0);
+  };
+}
+
+function boot({ watches = [], limits = null, user = true, path = "/app/watches", patch = null, captureIntervals = false, dialogs = false } = {}) {
   const server = { watches, limits, calls: [] };
   const harness = loadScripts(
     ["static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js", "static/js/notices.js",
@@ -52,6 +69,7 @@ function boot({ watches = [], limits = null, user = true, path = "/app/watches",
     {
       body: SHELL,
       before(window) {
+        if (dialogs) nativeDialogs(window);
         window.history.replaceState(null, "", path);
         // jsdom has no scrolling; the page restores the chat's position.
         window.scrollTo = () => {};
@@ -85,6 +103,12 @@ function boot({ watches = [], limits = null, user = true, path = "/app/watches",
             }
           } else if (url === "/api/my/telegram") {
             data = { telegram: { configured: false, connected: false } };
+          } else if (method === "POST" && url === "/api/watch") {
+            const created = watch({ id: "created", question: body.question, condition: body.condition,
+              interval: body.interval, run_weekday: body.run_weekday, run_time: body.run_time,
+              visibility: body.visibility, history: [], awaiting_first_run: true });
+            server.watches.unshift(created);
+            data = { watch: created };
           }
           return { ok: status < 400, status, json: async () => data, headers: { get: () => null } };
         });
@@ -392,5 +416,174 @@ describe("First frame of /app/watches (J6)", () => {
     expect(document.querySelectorAll("#watchDashBody .wd-skeleton-card").length).toBe(3);
     expect(document.getElementById("viewSwitch").dataset.active).toBe("watches");
     expect(document.getElementById("viewSwitchWatches").getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+/**
+ * After the second review of the Apple audit (finding 8): an Undo that is
+ * offered stays true until it passes, a logout does what the Undo let happen
+ * before the token goes, the new watch shows however its dialog is closed,
+ * "Edit" changes only the question, and a failed save keeps what was typed.
+ */
+describe("Undo, logout and failed saves (Apple-Audit second review 8)", () => {
+  const toast = document => document.querySelector("#appToasts .toast.is-shown");
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  it("lets the logout wait until a watch deleted a moment ago is deleted", async () => {
+    const { window, document, server } = boot({ watches: [watch()] });
+    await window.App.watchDashboard.render();
+    const card = document.querySelector(".wd-item");
+    card.querySelector(".wd-action-toggle").click();
+    card.querySelector('.wd-settings-footer [data-action="delete"]').click();
+    expect(toast(document).textContent).toContain("Watch deleted");
+    // The DELETE answers late: the logout must not drop the token before.
+    const original = window.fetch;
+    let answer;
+    window.fetch = vi.fn((input, options = {}) => (options.method === "DELETE"
+      ? new Promise(resolve => { answer = () => resolve(original(input, options)); })
+      : original(input, options)));
+    let sent = false;
+    const pending = window.App.watchDashboard.commitPending();
+    expect(typeof pending?.then).toBe("function");
+    pending.then(() => { sent = true; });
+    await vi.waitFor(() => expect(typeof answer).toBe("function"));
+    expect(window.fetch.mock.calls.find(call => call[1]?.method === "DELETE")[1].keepalive).toBe(true);
+    await wait(5);
+    expect(sent).toBe(false);
+    answer();
+    await vi.waitFor(() => expect(sent).toBe(true));
+    expect(server.calls.some(call => call[0] === "DELETE" && call[1] === "/api/watch/w1")).toBe(true);
+  });
+
+  it("keeps the deletion's Undo when a pause lands after it", async () => {
+    const { window, document, server } = boot({ watches: [watch(), watch({ id: "w2", question: "Second?" })] });
+    await window.App.watchDashboard.render();
+    const card = document.querySelector('.wd-item[data-watch-id="w1"]');
+    card.querySelector(".wd-action-toggle").click();
+    const original = window.fetch;
+    let land;
+    window.fetch = vi.fn((input, options = {}) => (options.method === "PATCH"
+      ? new Promise(resolve => { land = () => resolve(original(input, options)); })
+      : original(input, options)));
+    card.querySelector('.wd-settings-footer [data-action="pause"]').click();
+    await vi.waitFor(() => expect(typeof land).toBe("function"));
+    card.querySelector('.wd-settings-footer [data-action="delete"]').click();
+    expect(toast(document).textContent).toContain("Watch deleted");
+    land();
+    await vi.waitFor(() => expect(server.calls.some(call => call[0] === "PATCH")).toBe(true));
+    await wait(5);
+    // Still the deletion's line with its Undo, and nothing deleted yet.
+    expect(toast(document).textContent).toContain("Watch deleted");
+    expect(server.calls.some(call => call[0] === "DELETE")).toBe(false);
+    toast(document).querySelector(".toast-action").click();
+    await vi.waitFor(() => expect(card.hidden).toBe(false));
+    expect(server.calls.some(call => call[0] === "DELETE")).toBe(false);
+  });
+
+  it("brings a card and its section back for good with a quick Undo", async () => {
+    const { window, document } = boot({ watches: [watch()] });
+    await window.App.watchDashboard.render();
+    const card = document.querySelector(".wd-item");
+    const section = card.closest(".wd-section");
+    card.querySelector(".wd-action-toggle").click();
+    // Undo while the card still folds away.
+    card.querySelector('.wd-settings-footer [data-action="delete"]').click();
+    toast(document).querySelector(".toast-action").click();
+    await wait(700);
+    expect(card.hidden).toBe(false);
+    expect(card.style.height).toBe("");
+    // Undo while its section (the card was the last one) folds away.
+    card.querySelector('.wd-settings-footer [data-action="delete"]').click();
+    await vi.waitFor(() => expect(card.hidden).toBe(true), { timeout: 1500 });
+    toast(document).querySelector(".toast-action").click();
+    await wait(700);
+    expect(card.hidden).toBe(false);
+    expect(section.hidden).toBe(false);
+  });
+
+  it("shows the new watch on the page when the success step is closed with Esc or the cross", async () => {
+    for (const way of ["escape", "cross"]) {
+      const { window, document } = boot({ watches: [watch({ id: "old" })], dialogs: true });
+      await window.App.watchDashboard.render();
+      window.openWatchDialog("create", { question: "Will the EU pass the AI liability rules?" });
+      await settle();
+      document.getElementById("watchConfirmBtn").click();
+      await vi.waitFor(() => expect(document.getElementById("watchDoneBtn")).not.toBeNull());
+      if (way === "escape") {
+        document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      } else {
+        document.getElementById("closeShareModal").click();
+      }
+      expect(document.getElementById("shareModal").open).toBe(false);
+      await vi.waitFor(() => expect(document.querySelector('.wd-item[data-watch-id="created"]')).not.toBeNull());
+      const first = document.querySelector('.wd-section[data-section="active"] .wd-item');
+      expect(first.dataset.watchId).toBe("created");
+    }
+  });
+
+  it("keeps time, alerts, page, details and the open settings when the question is edited", async () => {
+    const { window, document } = boot({ watches: [] });
+    window.openWatchDialog("create", { question: "Will the EU pass the AI liability rules?" });
+    await settle();
+    document.querySelector("#watchAdvancedSettings summary").click();
+    const set = (id, value) => {
+      const node = document.getElementById(id);
+      node.value = value;
+      node.dispatchEvent(new window.Event(node.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+    };
+    set("watchInterval", "monthly");
+    set("watchRunTime", "07:30");
+    set("watchEmailMode", "every_run");
+    set("watchVisibility", "public");
+    set("watchDetails", "Only the official journal counts.");
+    document.getElementById("watchQuestionEdit").click();
+    const input = document.getElementById("watchQuestion");
+    expect(input.value).toBe("Will the EU pass the AI liability rules?");
+    input.value = "Will the EU pass the AI liability rules in 2027?";
+    document.getElementById("watchQuestionNext").click();
+    await settle();
+    expect(document.querySelector(".watch-question-preview strong").textContent).toBe("Will the EU pass the AI liability rules in 2027?");
+    expect(document.getElementById("watchInterval").value).toBe("monthly");
+    expect(document.getElementById("watchRunTime").value).toBe("07:30");
+    expect(document.getElementById("watchEmailMode").value).toBe("every_run");
+    expect(document.getElementById("watchVisibility").value).toBe("public");
+    expect(document.getElementById("watchDetails").value).toBe("Only the official journal counts.");
+    expect(document.getElementById("watchAdvancedSettings").open).toBe(true);
+    expect(document.getElementById("watchSettingsSummary").textContent).toContain("07:30");
+  });
+
+  it("keeps a typed goal and a typed time in their fields when saving them fails", async () => {
+    const { window, document } = boot({ watches: [watch({ condition: "" })],
+      patch: () => ({ status: 500, data: { error: "Something went wrong on our side. Try again." } }) });
+    await window.App.watchDashboard.render();
+    const card = document.querySelector(".wd-item");
+    card.querySelector(".wd-action-toggle").click();
+    const goal = card.querySelector(".wd-goal-input.is-goal");
+    goal.focus();
+    goal.value = "The rules are published in the official journal";
+    goal.dispatchEvent(new window.Event("input", { bubbles: true }));
+    goal.dispatchEvent(new window.Event("change", { bubbles: true }));
+    goal.blur();
+    const goalField = goal.closest(".watch-goal");
+    await vi.waitFor(() => expect(goalField.querySelector(".watch-field-error").hidden).toBe(false));
+    expect(goal.value).toBe("The rules are published in the official journal");
+    expect(goalField.querySelector('input[value="custom"]').checked).toBe(true);
+
+    const time = card.querySelector('input[type="time"]');
+    time.focus();
+    time.value = "10:15";
+    time.dispatchEvent(new window.Event("input", { bubbles: true }));
+    time.blur();
+    const timeField = time.closest(".watch-field");
+    await vi.waitFor(() => expect(timeField.querySelector(".watch-field-error").hidden).toBe(false));
+    expect(time.value).toBe("10:15");
+  });
+
+  it("says a question waits only when there is one", () => {
+    const { window } = boot({ user: false, path: "/app" });
+    window.openWatchDialog("create");
+    expect(window.App.openAuthModal.mock.calls.at(-1)[3].lead).toBe("Log in to start watching.");
+    window.openWatchDialog("create", { question: "Is the new iPhone out in Germany?" });
+    expect(window.App.openAuthModal.mock.calls.at(-1)[3].lead).toBe("Log in to start watching. Your question waits for you.");
   });
 });
