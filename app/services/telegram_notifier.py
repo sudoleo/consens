@@ -160,6 +160,11 @@ def visible_length(markup: str) -> int:
     return _units(html.unescape(re.sub(r"<[^>]*>", "", str(markup or ""))))
 
 
+def plain_length(text: str) -> int:
+    """What Telegram counts against TEXT_LIMIT for a text without parse_mode."""
+    return _units(str(text or ""))
+
+
 def clip_plain(text: str, limit: int = TEXT_LIMIT) -> str:
     text = str(text or "")
     if _units(text) <= limit:

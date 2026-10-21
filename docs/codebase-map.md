@@ -8682,7 +8682,10 @@ nur noch über `clip_html` (zählt sichtbare Zeichen in UTF-16 wie Telegram,
 schneidet nie in Tag oder Entity, schließt offene Tags, „…“) statt die
 Auszeichnung roh bei 4.096 abzuschneiden. Wird die Auszeichnung trotzdem
 abgelehnt (HTTP 400), geht dieselbe Nachricht als Klartext raus, Links als
-„Titel (URL)“. Knöpfe je Art: „Open watch“ (private
+„Titel (URL)“ (`_notification_text(..., plain=True)`): der Platz wird dann am
+Klartext gemessen (`telegram_notifier.plain_length`), die Antwort bekommt nur
+den Rest, die Meldungsblöcke werden notfalls gekürzt, die Frage unten nie
+(Nachprüfung 2 N3; vorher schnitt `clip_plain` sie ab). Knöpfe je Art: „Open watch“ (private
 Watches über `mailer.owner_page_path`, also `/app?next=/s/<id>`) plus
 „Mute 24h“/„Pause“; eine pausierte Watch bekommt „Resume watch“ (`wr:`), eine
 erreichte nur „Open watch“. **Bestätigung am Ort der Aktion (K7):** „Pause“
