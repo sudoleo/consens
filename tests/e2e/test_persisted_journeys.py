@@ -371,8 +371,9 @@ def test_j04b_agent_answer_shares_from_under_it_and_from_the_chat_list(journey):
     question = 'Is the James Webb telescope still working ' + j.uid
     j.page.fill('#questionInput', question)
     j.page.click('#sendButton')
+    # Comparison, answer and both judges: on a busy machine over a minute.
     j.page.wait_for_function('q => App.runRegistry.list().some(r => r.question === q && r.status === "succeeded")',
-                             arg=question, timeout=60000)
+                             arg=question, timeout=180000)
     j.producer_finished()
     state = j.settled()
     assert len(state['collections']['chats']) == 1
