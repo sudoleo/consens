@@ -1,6 +1,7 @@
 """Bounded model/tool orchestration, independent of HTTP and provider transport."""
 from uuid import uuid4
 
+from app.core.openrouter_contract import provider_session_id
 from app.services.agent_costs import RunCosts
 from app.services.agent_progress import ReasoningProgress
 from app.services.agent_policy import AgentPolicy, supports_client_tools, tools_for_model
@@ -25,6 +26,10 @@ class AgentLoop:
         self.completion = AgentCompletion()
         self.completion.step_id = "run"
         self.run_token = uuid4().hex
+        # The chat model's steps stay on one endpoint, where their prefix is
+        # cached. Comparison answers and judges keep the fastest endpoint:
+        # they share no prefix with each other.
+        self.provider_session = provider_session_id(uid, chat_id)
         self.claimed = False
         self.costs = RunCosts(self.policy)
         self.remaining_tools = self.policy.max_tools
@@ -99,7 +104,8 @@ class AgentLoop:
                         else:
                             provider_attempted = True
                             provider_stream = value.stream(model=self.model, messages=self.messages, api_key=self.api_key,
-                                                           tools=tools, native_searches=searches, allow_tool_calls=allow_client)
+                                                           tools=tools, native_searches=searches, allow_tool_calls=allow_client,
+                                                           session_id=self.provider_session)
                             try:
                                 for event in provider_stream:
                                     self.check(budget)

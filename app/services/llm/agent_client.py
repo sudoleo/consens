@@ -522,7 +522,9 @@ def prompt_cache_control(model):
     block and moves it along as a turn's steps grow. Every Agent step re-sends
     the system prompt, memory and history, so later steps and the next message
     read them from cache (about a tenth of the input price) instead of paying
-    full price each time. The default five-minute lifetime matches chat pacing.
+    full price each time, as long as they reach the same endpoint (the chat
+    model's steps carry a session, openrouter_contract.provider_session_id).
+    The default five-minute lifetime matches chat pacing.
     """
     name = str(getattr(model, "model", "") or "")
     if name.startswith(("anthropic/", "qwen/")):
@@ -841,7 +843,10 @@ class AgentCompletion:
             record_metric("search_overrun", model.model, processed=count - limit)
 
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
-               native_searches=0, allow_tool_calls=False, prompt_cache=True):
+               native_searches=0, allow_tool_calls=False, prompt_cache=True, session_id=None):
+        """``session_id`` keeps the request on the endpoint of the chat's
+        earlier steps (openrouter_contract.provider_session_id). The adapter
+        owns it: a ``session_id`` in the registry config never reaches the body."""
         payload = {
             "model": model.model, "messages": messages,
             "max_tokens": model.max_output_tokens,
@@ -856,8 +861,14 @@ class AgentCompletion:
         payload["provider"] = provider_routing(model.request_config.get("provider"))
         # All execution-affecting fields are owned by this adapter, never model
         # arguments, user settings or arbitrary registry configuration.
-        for field in ("tools", "tool_choice", "plugins", "parallel_tool_calls", "max_tool_calls", "stop_server_tools_when"):
+        for field in ("tools", "tool_choice", "plugins", "parallel_tool_calls", "max_tool_calls", "stop_server_tools_when",
+                      "session_id"):
             payload.pop(field, None)
+        headers = openrouter_headers(api_key)
+        if session_id:
+            # OpenRouter reads the header like the body field; a header can
+            # never make a request invalid.
+            headers["x-session-id"] = session_id
         if any(isinstance(m.get("content"), list) and any(b.get("type") == "file" for b in m["content"]) for m in messages):
             payload["plugins"] = [{"id": "file-parser", "pdf": {"engine": "native"}}]
         if tools:
@@ -875,7 +886,7 @@ class AgentCompletion:
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
             lines = cancellable_sse_lines(
                 OPENROUTER_CHAT_COMPLETIONS_URL, json=payload,
-                headers=openrouter_headers(api_key),
+                headers=headers,
                 progress=progress,
             )
             text_capped = False

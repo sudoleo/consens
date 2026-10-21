@@ -3444,6 +3444,26 @@ Cache (`prompt_cache=False`) und las Gespräch und Vergleichsantworten ein zweit
 Mal. Gemessene `cached_input_tokens`/`cache_write_tokens` laufen wie bisher über
 `measured_usage` in Kosten und Kontingent.
 
+**Sticky Endpunkt (seit 2026-10-21).** Jeder Endpunkt cacht nur für sich
+(Claude läuft bei Anthropic, Vertex und Bedrock mit getrennten Caches). Ohne
+Session hält OpenRouter ein Gespräch erst nach einem gesehenen Cache-Treffer
+auf einem Endpunkt, der Durchsatz-Sort konnte den nächsten Schritt also auf
+einen kalten Endpunkt schicken (2026-10-17: Sonnet schrieb den Cache in 93 von
+134 Calls, las ihn in 32). Deshalb trägt jeder Schritt des Chatmodells
+(`AgentLoop.run`, `DelegationLoop._step` ohne `worker`) OpenRouters
+Session als Header `x-session-id` (gleichwertig zum Body-Feld `session_id`,
+kann den Request aber nie ungültig machen) aus
+`openrouter_contract.provider_session_id`: ein SHA-256-Präfix über uid und
+Chat-ID, gleich für alle Nachrichten eines Chats, ohne beide im Klartext. OpenRouter bleibt damit ab dem ersten erfolgreichen
+Aufruf beim selben Endpunkt (pro Modell, Fallback bei Ausfall, vergessen nach
+10 min Leerlauf). Vergleichsantworten, Judges und Seitenlesungen (`worker`)
+senden keine Session und behalten den schnellsten Endpunkt: Sie teilen keinen
+Präfix. Die Session gehört dem Adapter (`AgentCompletion.stream`), ein
+Registry-Feld `session_id` wird verworfen. Ob OpenRouter die Session auch
+neben `sort: throughput` beachtet, sagt die Doku nicht (nur `order` schaltet
+sie ab): nach dem Deploy am Anteil `cached_input_tokens` der Sonnet-Schritte
+in den Receipts nachmessen.
+
 **Zugang seit 2026-10-02: jedes angemeldete Konto.** `require_agent_access`
 verlangt nur noch eine UID (`/user_status` meldet `agent_access: true`); das
 Tageskonto begrenzt Agent pro Stufe. Pro bleiben die Premium-Modelle:
@@ -7987,7 +8007,9 @@ unter denen, die Prompts nicht sammeln. Gesetzt in `AgentCompletion.stream`,
 Consensus-Stream und `memory_edit`; Registry-Felder des Modells (Kimi
 `only`) kommen obendrauf. Ein `service_tier` im `request_config` geht als
 Top-Level-Feld mit (Agent-Judges der OpenAI-Familie: `priority`, siehe
-`JUDGE_SERVICE_TIER_BY_PROVIDER`). Zero Data Retention gilt nur noch in Chats mit
+`JUDGE_SERVICE_TIER_BY_PROVIDER`). Die Schritte des Chatmodells senden dazu eine
+Session pro Chat (`x-session-id`), damit sie beim Endpunkt mit ihrem Prompt-Cache bleiben
+(siehe „Sticky Endpunkt“ im Agent-Abschnitt). Zero Data Retention gilt nur noch in Chats mit
 Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
 `deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
 ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR
