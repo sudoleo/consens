@@ -8,8 +8,8 @@ const sources = [
   {id: 'S3', title: 'Race report', url: 'https://news.example.com/report'},
 ];
 
-function boot(text = 'The race starts in Monaco [S1][S2][S3]. Watch the traffic [S2].') {
-  const env = loadScripts(['static/js/sources.js'], {body: '<div id="consensusAnswerBody"></div>'});
+function boot(text = 'The race starts in Monaco [S1][S2][S3]. Watch the traffic [S2].', {markup} = {}) {
+  const env = loadScripts(['static/js/sources.js'], {body: markup || '<div id="consensusAnswerBody"></div>'});
   const body = env.document.getElementById('consensusAnswerBody');
   body.textContent = text;
   env.window.linkifySourceTags(body, sources);
@@ -58,6 +58,35 @@ describe('source sheet', () => {
     expect(env.sheet().hidden).toBe(true);
     expect(env.document.activeElement).toBe(env.group);
     expect(env.group.hasAttribute('aria-expanded')).toBe(false);
+    env.dom.window.close();
+  });
+});
+
+describe('source sheet in the answer reader', () => {
+  // Review 5: the reader is a modal <dialog>; a list on <body> lay under it,
+  // inert and out of sight, so a tap on a pill there did nothing at all.
+  it('opens inside the open dialog of its pill, and on the page again for a pill there', () => {
+    const env = boot('Monaco [S1][S2][S3].', {markup:
+      '<dialog id="reader" class="answer-reader-dialog" open><div id="consensusAnswerBody"></div></dialog><p id="page" class="consensus-answer-body">Elsewhere [S1][S2].</p>'});
+    const page = env.document.getElementById('page');
+    env.window.linkifySourceTags(page, sources);
+    const pagePill = page.querySelector('.src-ref');
+    expect(pagePill).not.toBeNull();
+    env.press(env.group, 'touch');
+    const sheet = env.sheet();
+    expect(sheet.hidden).toBe(false);
+    expect(sheet.parentElement.id).toBe('reader');
+    expect(env.document.querySelector('.source-sheet-backdrop').parentElement.id).toBe('reader');
+    env.window.App.sourceSheet.close();
+    // With a mouse a grouped pill lists at the pill, in the window's frame.
+    env.press(env.group, 'mouse');
+    expect(sheet.parentElement.id).toBe('reader');
+    expect(sheet.style.position).toBe('fixed');
+    env.window.App.sourceSheet.close();
+    // A pill on the page takes the list back to <body>.
+    env.press(pagePill, 'touch');
+    expect(sheet.parentElement).toBe(env.document.body);
+    expect(sheet.style.position).toBe('');
     env.dom.window.close();
   });
 });

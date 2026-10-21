@@ -1043,6 +1043,17 @@ const sourceSheet = (function () {
     return root;
   }
 
+  // A pill inside an open dialog (the answer reader is a modal <dialog>)
+  // gets its list inside that dialog: everything outside the top dialog is
+  // inert and painted under it, so a list on <body> never showed there
+  // (review 5). Elsewhere the list lives on <body>.
+  function hostFor(ref) {
+    return ref.closest?.("dialog[open]") || document.body;
+  }
+  function inDialog() {
+    return root?.parentElement?.localName === "dialog";
+  }
+
   function entriesOf(ref) {
     const group = (ref.sourceGroup || []).filter(entry => entry && entry.src);
     if (group.length) return group;
@@ -1092,15 +1103,20 @@ const sourceSheet = (function () {
 
   function place(ref) {
     root.style.left = root.style.top = root.style.width = "";
+    // In a dialog the list stands in the window's frame (the dialog does
+    // not scroll with the page); on the page it moves with the page.
+    const fixed = inDialog() && !modal;
+    root.style.position = fixed ? "fixed" : "";
     if (modal) return;
     const rect = ref.getBoundingClientRect();
     const width = Math.min(320, window.innerWidth - 24);
     root.style.width = width + "px";
+    const scrollX = fixed ? 0 : window.scrollX, scrollY = fixed ? 0 : window.scrollY;
     const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12));
-    root.style.left = Math.round(left + window.scrollX) + "px";
+    root.style.left = Math.round(left + scrollX) + "px";
     const height = root.offsetHeight;
     const below = rect.bottom + 8 + height <= window.innerHeight - 12 || rect.top - 8 - height < 12;
-    root.style.top = Math.round((below ? rect.bottom + 8 : rect.top - 8 - height) + window.scrollY) + "px";
+    root.style.top = Math.round((below ? rect.bottom + 8 : rect.top - 8 - height) + scrollY) + "px";
     root.style.setProperty("--popover-shift", below ? "-4px" : "4px");
     root.style.setProperty("--popover-origin-y", below ? "0%" : "100%");
   }
@@ -1110,6 +1126,8 @@ const sourceSheet = (function () {
     if (!entries.length) return false;
     ensure();
     if (!root.hidden) close({ restoreFocus: false });
+    const host = hostFor(ref);
+    if (root.parentElement !== host) host.append(backdrop, root);
     sourceTeaser.hide();
     opener = ref;
     modal = asModal;
