@@ -841,7 +841,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     Satz des Servers bzw. dieselbe Warte-Regel aus `retry_after`; 401 →
     „Your session has ended. Log in again.“; ein Satz des Servers
     (`{error|detail|message, code}`, auch `already_watched`, `limit_reached`)
-    oder unserer (`new Error("…")`) bleibt; Programmfehler (TypeError …) →
+    oder unserer (`new Error("…")`) bleibt — bei 5xx nur, wenn er einen `code`
+    trägt oder wie ein Satz endet (`.`/`?`/`!`/`…`); Log-Etiketten wie „Error
+    updating watch“ oder „Chat storage error“ werden „Something went wrong on
+    our side. …“ (Nachprüfung 2026-10-21); Programmfehler (TypeError …) →
     `fallback`; `AbortError` → „“. `context: "send"` endet mit „Your message
     is back in the box.“ (die Nachricht ging zurück ins Feld), weitere
     Kontexte `load|save|upload|delete` liefern den Fallback.
@@ -855,6 +858,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     App.readJson(response); if (!response.ok) throw App.httpError(response,
     data);` und beim Anzeigen `App.userError(error, {fallback})` über
     `App.toast`/`App.composerNotice`/`App.watchFields.setError`.
+    **`App.errorFields(data)`** (seit 2026-10-21): die Felder einer Ablehnung
+    flach, gleich in welcher Form der Server sie schickt — vereinbart ist
+    `{error: "<Satz>", code, retry_after}`, `main.py` verpackt ein Detail-
+    Objekt einer Route aber als `{error: {error, error_code, …}}`, FastAPI als
+    `{detail: {…}}`. `error` ist danach der Satz, Felder oben schlagen
+    verschachtelte. `httpError`, `userError`, `usageLimit.isLimitError`/`show`,
+    `query-send.js` (`unwrapApiError`), `agent-chat.js` (`failRun`) und der
+    Resolve-Teaser lesen darüber; sonst erkannte Consensus/Compare ein leeres
+    Tageskontingent nicht (Karte fehlte, „You don’t have access to this.“).
     `streamSSERequest` gibt keinen HTML-Body mehr als `data.error` weiter.
     `request-deadline.js` wirft bei Zeitüberschreitung einen `TimeoutError`.
   - **`App.words`**: das Glossar (Apple-Audit H9), ein Wort je Zustand:

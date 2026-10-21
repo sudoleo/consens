@@ -51,6 +51,10 @@ describe("App.format", () => {
     expect(App.format.relative(now - 12 * 60_000, now)).toBe("12m ago");
     expect(App.format.relative(now - 3 * 3_600_000, now)).toBe("3h ago");
     expect(App.format.relative(new Date(2026, 9, 19, 9, 0), now)).toBe("yesterday");
+    // Earlier the same day is never "yesterday" (review F, 2026-10-21).
+    const lateEvening = new Date(2026, 9, 20, 23, 50).getTime();
+    expect(App.format.relative(new Date(2026, 9, 20, 0, 10), lateEvening)).toBe("23h ago");
+    expect(App.format.relative(new Date(2026, 9, 19, 23, 40), new Date(2026, 9, 20, 1, 0).getTime())).toBe("1h ago");
     expect(App.format.relative(new Date(2026, 9, 16, 9, 0), now)).toBe("4 days ago");
     expect(App.format.relative(new Date(2026, 9, 3, 9, 0), now)).toBe("on Oct 3");
     expect(App.format.upcoming(new Date(2026, 9, 20, 18, 30), now)).toBe("today, 18:30");
@@ -118,6 +122,51 @@ describe("App.userError", () => {
     // FastAPI's validation list is no sentence.
     expect(App.userError(App.httpError(response(422, ""), { detail: [{ msg: "field required" }] }), { context: "save" }))
       .toBe("This couldn’t be saved. Try again.");
+  });
+
+  // Review 2 (2026-10-21): main.py wraps a route's detail object, so a
+  // refusal arrives as {error: {error, error_code, …}}; the agreed flat form
+  // {error: "<sentence>", code, retry_after} reads the same.
+  it("reads a refusal whose error is an object as well as the flat form", () => {
+    const { App } = boot();
+    const sentence = "Today’s allowance doesn’t cover another run. It resets at 00:00 UTC.";
+    const nested = { error: { error: sentence, error_code: "token_budget_exhausted", required_tokens: 9000,
+      token_budget: { remaining: 10 } } };
+    const refused = App.httpError(response(403, ""), nested);
+    expect(refused.code).toBe("token_budget_exhausted");
+    expect(refused.serverMessage).toBe(sentence);
+    expect(App.userError(refused)).toBe(sentence);
+    expect(App.userError(nested)).toBe(sentence);
+    expect(App.errorFields(nested)).toMatchObject({ error: sentence, error_code: "token_budget_exhausted",
+      required_tokens: 9000, token_budget: { remaining: 10 } });
+    const flat = { error: sentence, code: "token_budget_exhausted", retry_after: 0 };
+    expect(App.errorFields(flat)).toMatchObject({ error: sentence, code: "token_budget_exhausted" });
+    expect(App.errorFields({ detail: { error: "Delete a chat to make room.", code: "bookmark_count_limit" } }))
+      .toMatchObject({ error: "Delete a chat to make room.", code: "bookmark_count_limit" });
+    expect(App.errorFields({ detail: { error: "x" } }).detail).toBeUndefined();
+    expect(App.errorFields({ detail: "Not Found" })).toMatchObject({ error: "Not Found", detail: "Not Found" });
+    expect(App.errorFields(null)).toEqual({});
+    const wait = App.httpError(response(429, ""), { error: { error: "Wait a moment.", code: "rate_limited", retry_after: 120 } });
+    expect(wait.retryAfter).toBe(120);
+    expect(App.userError.kind(wait)).toBe("rate_limited");
+  });
+
+  // Review F: a 5xx label from the server's log ("Error updating watch") is
+  // no sentence for a reader; a coded refusal or a real sentence still is.
+  it("never shows a server error label as the sentence", () => {
+    const { App } = boot();
+    const ours = "Something went wrong on our side. Try again in a moment.";
+    expect(App.userError(App.httpError(response(500, ""), { error: "Error updating watch" }), { context: "save" })).toBe(ours);
+    expect(App.userError(App.httpError(response(500, ""), { error: "Chat storage error" }))).toBe(ours);
+    expect(App.userError(App.httpError(response(503, ""), { detail: "Chat context unavailable" }))).toBe(ours);
+    expect(App.userError(App.httpError(response(503, ""), { detail: "Could not start your chat. Please try again." })))
+      .toBe("Could not start your chat. Please try again.");
+    expect(App.userError(App.httpError(response(503, ""),
+      { error: { error: "The allowance service is busy right now", error_code: "usage_storage_busy" } })))
+      .toBe("The allowance service is busy right now");
+    // A 4xx keeps its words as before.
+    expect(App.userError(App.httpError(response(409, ""), { error: "You already watch this question", code: "already_watched" })))
+      .toBe("You already watch this question");
   });
 
   it("keeps our own sentences, hides bugs and says nothing for a cancel", () => {

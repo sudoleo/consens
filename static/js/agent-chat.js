@@ -1577,8 +1577,9 @@
   // engine's ("Failed to fetch", "Load failed", Apple-Audit H1).
   const NOT_SENT_ALREADY_SAYS = new Set(["offline", "unreachable", "timeout", "unknown"]);
   function failRun(context, error) {
-    const failure = error.failure || {};
-    const code = failure.code || failure.error_code || failure.detail?.code;
+    // Flat ({error, code}) or wrapped ({error: {error, error_code}}, {detail}).
+    const failure = App.errorFields?.(error.failure) || error.failure || {};
+    const code = failure.code || failure.error_code;
     const notSent = Boolean(error.notDispatched || !context.metadata.requestSent);
     const reason = App.userError(error, { context: notSent ? "send" : undefined,
       fallback: notSent ? undefined : "The answer couldn’t be completed. Try again." });
