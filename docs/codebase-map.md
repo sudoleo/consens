@@ -8659,8 +8659,12 @@ Produktnamen (`_SITE_ALIASES`: „- ChatGPT“ auf openai.com) und kurzer Marken
 Namensanfang („- Amp“ auf ampcode.com) fallen weg; am Handy auf allen
 `.wp-shell`-Seiten eine Wischreihe, am Desktop nimmt eine ungerade letzte Kachel
 die ganze Zeile. *Modellvergleich:* `check_page.named_differences` ersetzt die
-„Model A/B/C“ alter Judge-Texte durch die Familien der Positionen (Zuordnung
-aus Positionen mit gleich vielen Buchstaben wie Familien) und lässt die
+„Model A/B/C“ alter Judge-Texte durch die Familien der Positionen (Beleg:
+eine Haltung, die mit so vielen Buchstaben beginnt, wie die Position Familien
+nennt, sagt „diese Buchstaben sind diese Familien“ – als Menge, nie nach
+Listenreihenfolge; `_judge_letter_blocks` schneidet die Belege, ein Label wird
+nur ersetzt, wenn es ganze Blöcke abdeckt; Widersprüche lassen den Buchstaben
+stehen) und lässt die
 Familienzeile weg, wenn der Satz sie schon nennt; `consulted_models_view`
 liefert `display` ohne doppelte Familie („Gemini 3.5 Flash-Lite“);
 `consensus_model_view` löst gespeicherte Modell-IDs (`gpt-5.6-luna`) zum Namen

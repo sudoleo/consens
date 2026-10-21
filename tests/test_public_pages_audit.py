@@ -196,6 +196,47 @@ def test_judge_letters_become_the_families_the_page_names():
     assert named["verify"] == "Ask Model D."
 
 
+def test_judge_letters_are_never_paired_by_list_order():
+    # Zweitprüfung 14: the judge listed A=DeepSeek and B=OpenAI as
+    # ["OpenAI", "DeepSeek"]; pairing by order made the next difference say
+    # "DeepSeek claims it ships in May" although OpenAI did.
+    differences = [
+        {"claim": "Models A and B say June, Model C says May", "positions": [
+            {"stance": "Models A and B say it ships in June.", "models": ["OpenAI", "DeepSeek"]},
+            {"stance": "Model C says it ships in May.", "models": ["Gemini"]},
+        ]},
+        {"claim": "Model B alone names a date", "positions": [
+            {"stance": "Model B claims it ships in May.", "models": ["OpenAI"]},
+            {"stance": "Model A gives no date, unlike Model B.", "models": ["DeepSeek"]},
+        ], "verify": "Compare Model A with Model C."},
+    ]
+    first, second = check_page.named_differences(differences)
+    assert second["positions"][0]["stance"] == "OpenAI claims it ships in May."
+    assert second["positions"][1]["stance"] == "DeepSeek gives no date, unlike OpenAI."
+    assert second["verify"] == "Compare DeepSeek with Gemini."
+    # Each letter is known on its own now, so each gets its own family.
+    assert first["positions"][0]["stance"] == "DeepSeek and OpenAI say it ships in June."
+
+    # Only the pair is known: the pair is named, a single letter of it is not.
+    pair = [{"claim": "Ask Model A", "positions": [
+        {"stance": "Models A and B say June.", "models": ["OpenAI", "DeepSeek"]},
+    ]}]
+    named = check_page.named_differences(pair)[0]
+    assert named["positions"][0]["stance"] == "OpenAI and DeepSeek say June."
+    assert named["claim"] == "Ask Model A"
+
+    # Evidence that contradicts itself names nobody; a label later in a
+    # stance ("unlike Model B") is about the other side and no evidence.
+    conflict = [{"claim": "Model B says May", "positions": [
+        {"stance": "Model B says May.", "models": ["OpenAI"]},
+        {"stance": "Model B says June.", "models": ["Gemini"]},
+        {"stance": "It says July, unlike Model C.", "models": ["Grok"]},
+    ]}]
+    named = check_page.named_differences(conflict)[0]
+    assert named["claim"] == "Model B says May"
+    assert named["positions"][2]["stance"] == "It says July, unlike Model C."
+
+
 # --- L13: the card of a Watch -----------------------------------------------------------
 
 def test_a_watch_card_tells_its_state_not_a_score(monkeypatch):
