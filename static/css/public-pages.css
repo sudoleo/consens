@@ -809,10 +809,8 @@ canvas {
   font-size: var(--font-size-sm);
 }
 
-.share-follow-form input[type="email"]:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 1px;
-}
+/* Focused, the field wears the one field look (public-shell.css, G12);
+   an outline here drew a second ring around it. */
 
 .share-follow-note {
   margin: 10px 0 0;

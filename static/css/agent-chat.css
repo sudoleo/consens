@@ -212,7 +212,9 @@
     margin-left: calc((var(--app-sidebar-offset) + 100% - 346px - var(--agent-chat-width)) / 2);
   }
 }
-.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); touch-action: none; }
+/* The one scrim (foundation.css). An --ink tint dimmed in light mode but
+   laid a pale veil over the chat in dark mode. */
+.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: var(--scrim); touch-action: none; }
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
   /* A sheet over the chat is a floating layer: the one place it lifts. */

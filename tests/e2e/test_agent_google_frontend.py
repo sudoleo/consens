@@ -56,6 +56,12 @@ def test_selected_calendar_and_exact_confirmation(browser,phase4_server,width):
         assert not any('/agent/google/connections' in url for url in seen)
         _choose_mode(page,'agent')
         sheet=open_google(page)
+        if width<700:
+            # Flush with a phone's bottom edge: square there, no line under it.
+            # The shared layer material (overlays.css) used to round it again.
+            shape=page.evaluate("""()=>{const s=getComputedStyle(document.querySelector('.agent-google-sheet'));
+                return [s.borderBottomLeftRadius,s.borderBottomRightRadius,s.borderBottomWidth]}""")
+            assert shape==['0px','0px','0px']
         _snapshot(page,f'calendar-sheet-{width}')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         sheet.get_by_label('Use selected calendars',exact=True).check()

@@ -911,11 +911,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Seite liegt (`static/css/overlays.css`, nach allen Komponenten geladen):
   - **Scrim:** ein Token `--scrim` (`foundation.css`, hell/dunkel) hinter
     jedem modalen Fenster, dem Antwortleser (`::backdrop`), dem Memory-Dialog,
-    dem Gmail-/Calendar-Sheet, dem Satzkarten-Sheet und der Handy-Schublade;
+    dem Gmail-/Calendar-Sheet, dem Satzkarten-Sheet (auch auf der Startseite,
+    `landing.css`), dem Agent-Aktivitäts-Sheet und der Handy-Schublade;
     nirgends mehr `backdrop-filter` (`tests/js/overlays.test.mjs` verbietet
     jeden Wert außer `none`, Admin ausgenommen).
   - **Dialogfläche:** `--raise`, `--lift`, `--radius-lg`, eine Haarlinie
-    `--line-soft` für `.modal-content` (und Memory-/Google-Sheet).
+    `--line-soft` für `.modal-content` (und Memory-/Google-Sheet). Der
+    Elternteil des Selektors steht in `:where()`, die Regel wiegt also nur
+    eine Klasse: Eine Ebene mit eigener Form schreibt sie mit einer etwas
+    spezifischeren Regel (am Handy das bündige Gmail-&-Calendar-Sheet,
+    `.agent-google-overlay > .agent-google-sheet`, unten eckig, ohne Linie).
     Bewegung: Dialog blendet in `--dur-layer`/`--ease-out` ein, die Fläche
     steigt 8px aus 98 % (`@starting-style`); Ausgang `--dur-state`/`--ease-in`.
   - **Popover (`popover.js`, `App.popover`):** (+)-Menü, Modellwahl,

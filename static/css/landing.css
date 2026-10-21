@@ -1691,7 +1691,8 @@ img { display: block; max-width: 100%; }
   position: fixed;
   inset: 0;
   z-index: 1399;
-  background: rgba(18, 19, 21, 0.42);
+  /* The one scrim, as in the app (foundation.css; darker in dark mode). */
+  background: var(--scrim);
   /* Nothing behind the dim scrolls (Apple-Audit F2; the lock itself is in
      foundation.css). */
   touch-action: none;

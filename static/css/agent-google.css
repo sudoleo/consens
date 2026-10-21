@@ -168,7 +168,9 @@
 
 @media (max-width: 699px) {
   .agent-google-overlay { align-items: flex-end; padding: 0; }
-  .agent-google-sheet { width: 100%; max-height: 92dvh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; border-bottom: 0; }
+  /* Flush with the bottom edge: square there, no line under it. Through the
+     overlay, so it outweighs the shared layer material (overlays.css). */
+  .agent-google-overlay > .agent-google-sheet { width: 100%; max-height: 92dvh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; border-bottom: 0; }
   .agent-google-sheet-head { padding: 12px 10px 8px 16px; }
   .agent-google-sheet-body { padding: 0 16px 16px; }
   .agent-google-sheet-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); }
