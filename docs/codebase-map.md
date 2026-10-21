@@ -5108,7 +5108,12 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Verlassen speichert über `PATCH /bookmarks/{id}/title`, `title_source:
   "user"`, das wie `generated` spätere Saves und Namensgenerierung übersteht,
   `persistence_guard.KEPT_TITLE_SOURCES`), Share (öffnet den Chat, dann den
-  Share-Dialog) und Delete. **Löschen** blendet die Zeile sofort aus
+  Share-Dialog) und Delete. Share steht nur bei einem Chat mit gespeichertem
+  Consensus (`bookmarkShareable`: Listen-Meta `has_consensus` und `mode` ≠
+  `"Agent"`, beides in der Projektion von `GET /bookmarks`); Agent-Chats
+  bekommen es nicht, solange `POST /bookmark/consensus/share-result` ihre
+  Antworten ablehnt (Notlösung seit 2026-10-21, fällt weg, sobald sie teilbar
+  sind). **Löschen** blendet die Zeile sofort aus
   (`.is-undo-pending`), verlässt einen offenen Chat sofort und zeigt
   `App.undoNotice` „Chat deleted · Undo“ (5 s, Hover/Fokus pausieren); erst
   danach läuft das unveränderte `deleteBookmark` (Fence, Run-Abbruch, DELETE).
@@ -6896,7 +6901,11 @@ keinen Abgleich.
   Consensus des Bookmarks der des Turns ist. Ohne passenden completed Turn
   (Legacy-Bookmarks ohne Chat-Bindung, ~325 aus der Zeit vor August 2026,
   sobald ihr Pending-Verweis nach 24 h abgelaufen ist) antwortet der Endpunkt
-  409 und der Dialog zeigt „Saved consensus unavailable“. Share/Watch warten
+  409. Jede Absage legt `requestBookmarkShareResult` mit dem Satz des Servers
+  (`App.userError`) in `window.currentBookmarkShareResultError` ab; Share- und
+  Watch-Dialog zeigen ihn als Fehlerzeile, der Knopf bleibt für einen neuen
+  Versuch (seit 2026-10-21, vorher ein toter Knopf „Saved consensus
+  unavailable“). Share/Watch warten
   auf diese Rehydration und können dadurch auch außerhalb der Ursprungssession
   verwendet werden. Ein Versions-Gate verhindert, dass eine verspätete Antwort
   auf ein inzwischen anderes angezeigtes Ergebnis zeigt.
@@ -9043,6 +9052,7 @@ zählen nicht):
   `window.consensusCitationMeta`, `window.lastShareResultId`,
   `window.currentBookmarkShareResultContext`,
   `window.currentBookmarkShareResultPromise`,
+  `window.currentBookmarkShareResultError`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`.
