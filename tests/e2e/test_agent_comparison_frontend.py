@@ -547,11 +547,21 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         expect(cards.first).to_have_attribute('open', '')
         for index in (1, 2):
             expect(cards.nth(index)).not_to_have_attribute('open', '')
-        claim_weight = cards.first.locator('.diff-card-claim').evaluate('el => getComputedStyle(el).fontWeight')
-        assert claim_weight == '400'
-        tag_color = cards.first.locator('.diff-type-tag').evaluate('el => getComputedStyle(el).color')
-        status_color = status.evaluate('el => getComputedStyle(el).color')
-        assert tag_color == status_color  # the dot carries the colour, not the word
+        # The chat's type, three steps: a semibold title, the claims at the
+        # answer's 17px, one meta size and grey for everything else.
+        type_steps = cards.first.evaluate("""card => {
+          const style = el => { const s = getComputedStyle(el); return [s.fontSize, s.fontWeight, s.color]; };
+          return {title: style(card.querySelector('.diff-card-claim')), claim: style(card.querySelector('.diff-position-stance')),
+            tag: style(card.querySelector('.diff-type-tag')), meta: style(card.querySelector('.diff-position-meta')),
+            versus: style(card.querySelector('.diff-versus-mark')),
+            status: style(document.querySelector('#answerReaderInspector .agent-evidence-status')),
+            more: style(document.querySelector('#answerReaderInspector .diff-more-summary'))};
+        }""")
+        assert type_steps['title'][:2] == ['17px', '600']
+        assert type_steps['claim'][:2] == ['17px', '400']
+        # The dot carries the colour, not the word, and "vs" is no warning sign.
+        assert type_steps['tag'] == type_steps['meta'] == type_steps['versus'] == type_steps['status'] == type_steps['more']
+        assert type_steps['meta'][0] == '13px'
         _snapshot(page, f'differences-calm-overview-{width}-{theme}')
         status.locator('summary').click()
         detail = status.locator('.agent-evidence-status-detail')

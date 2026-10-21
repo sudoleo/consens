@@ -2507,6 +2507,41 @@
             });
           }
 
+          // Eine Behauptung ist eine Seite (Live-Befund 2026-10-21): der Judge
+          // nannte den Satz der Antwort einmal fuer Luna und einmal fuer zwei
+          // weitere Modelle, und die Karte zeigte ihn zweimal mit "vs"
+          // dazwischen. Dieselbe Regel wie _normalize_differences im Backend,
+          // damit auch gespeicherte Chats jede Behauptung nur einmal zeigen:
+          // gleiche Aussage = eine Seite, jedes Modell nur auf seiner ersten.
+          function claimKey(text) {
+            return String(text || "").replace(/\s+/g, " ").trim().toLowerCase()
+              .replace(/[\s.!?;:,…。！？]+$/u, "");
+          }
+
+          function mergedPositions(positions) {
+            const merged = [];
+            const taken = new Set();
+            positions.forEach(function (pos) {
+              const models = [];
+              (pos.models || []).forEach(function (model) {
+                if (!taken.has(model)) models.push(model);
+              });
+              const key = claimKey(pos.stance || pos.quote);
+              const same = key && merged.find(function (side) {
+                return claimKey(side.stance || side.quote) === key;
+              });
+              models.forEach(function (model) { taken.add(model); });
+              if (same) {
+                same.models = same.models.concat(models);
+                if (!same.quote && pos.quote) same.quote = pos.quote;
+                if (pos.in_answer === true) same.in_answer = true;
+                return;
+              }
+              if (models.length) merged.push(Object.assign({}, pos, { models: models }));
+            });
+            return merged;
+          }
+
           function readableDifference(diff, labelFor, names) {
             names = names || legacyModelNames([diff], labelFor);
             const hasAnswer = diff.positions.some(function (pos) { return pos.in_answer === true; });
@@ -2541,7 +2576,7 @@
             });
             // Eine kurze Themenzeile ("Tesla Model S") ist keine Erzaehlung.
             const narrative = String(diff.claim || "").length > 60 && LEGACY_NARRATIVE.test(diff.claim);
-            return { claim: withModelNames(diff.claim, names), narrative: narrative, positions: positions };
+            return { claim: withModelNames(diff.claim, names), narrative: narrative, positions: mergedPositions(positions) };
           }
 
           function buildDifferenceCards(cards, differences, modelCount, options) {
@@ -2664,12 +2699,6 @@
                   }
                   const posEl = document.createElement("div");
                   posEl.className = "diff-position" + (pos.in_answer === true ? " is-answer" : "");
-                  if (pos.in_answer === true) {
-                    const answerTag = document.createElement("span");
-                    answerTag.className = "diff-position-answer";
-                    answerTag.textContent = "In the answer";
-                    posEl.appendChild(answerTag);
-                  }
                   const claimText = pos.stance || pos.quote;
                   if (claimText) {
                     const stance = document.createElement("div");
@@ -2677,6 +2706,11 @@
                     renderInlineMarkdown(stance, claimText);
                     posEl.appendChild(stance);
                   }
+                  // Unter der Behauptung eine leise Zeile (2026-10-21): wer das
+                  // sagt, ob die Antwort diese Seite vertritt, und das Zitat
+                  // auf Wunsch. Vorher stand jedes davon in eigener Zeile.
+                  const meta = document.createElement("div");
+                  meta.className = "diff-position-meta";
 
                   // Wer das sagt: Icon + Name; bei mehreren Modellen nur die
                   // Icons und die Anzahl (die Namen bleiben Linktext und
@@ -2732,7 +2766,14 @@
                     count.textContent = pos.models.length + " models";
                     label.appendChild(count);
                   }
-                  posEl.appendChild(label);
+                  meta.appendChild(label);
+                  if (pos.in_answer === true) {
+                    const answerTag = document.createElement("span");
+                    answerTag.className = "diff-position-answer";
+                    answerTag.textContent = "In the answer";
+                    meta.appendChild(answerTag);
+                  }
+                  posEl.appendChild(meta);
 
                   // Das Zitat belegt die Behauptung, es wiederholt sie: erst
                   // auf Wunsch (Klick-Delegation unten, auch fuer Kopien).
@@ -2746,7 +2787,8 @@
                     quote.className = "diff-position-quote";
                     quote.hidden = true;
                     renderInlineMarkdown(quote, pos.quote);
-                    posEl.append(toggle, quote);
+                    meta.appendChild(toggle);
+                    posEl.appendChild(quote);
                   }
                   sides.appendChild(posEl);
                 });
@@ -2926,8 +2968,8 @@
           // Antwort-Leser die Karten verschiebt und Kopien davon zeigt.
           document.addEventListener("click", function (event) {
             const toggle = event.target.closest?.(".diff-quote-toggle");
-            const quote = toggle?.nextElementSibling;
-            if (!quote?.matches(".diff-position-quote")) return;
+            const quote = toggle?.closest(".diff-position")?.querySelector(".diff-position-quote");
+            if (!quote) return;
             quote.hidden = !quote.hidden;
             toggle.setAttribute("aria-expanded", String(!quote.hidden));
             toggle.textContent = quote.hidden ? "Show quote" : "Hide quote";

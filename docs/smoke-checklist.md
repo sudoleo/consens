@@ -285,9 +285,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       und 390 px): kein Untertitel, Frage als eine abgeschnittene Zeile ohne
       Label; im Agent-Chat eine Statuszeile `N of M models answered · Checked`,
       fehlende Modelle erst nach Aufklappen. Karten: Punkt + `Critical`/
-      `Minor`/`Emphasis`, kritische zuerst, Titel in normalem Gewicht, keine
-      Positionszahl; nur eine Karte gleichzeitig offen. Pro Position eine Zeile
-      Icon + Modellname (Klick öffnet die Originalantwort), Zitat leiser.
+      `Minor`/`Emphasis`, kritische zuerst, keine Positionszahl; nur eine
+      Karte gleichzeitig offen. Drei Schriftstufen wie im Chat: Titel 17px
+      halbfett, Behauptungen 17px normal, alles Übrige 13px in einem Grau;
+      „vs“ leise ohne Farbe und Linien, Farbe nur auf dem Punkt. Pro Position
+      unter der Behauptung eine Metazeile Icon + Modellname (Klick öffnet die
+      Originalantwort) · „In the answer“ · „Show quote“. Chevrons von Karte
+      und „smaller differences“ auf einer Linie am rechten Rand.
       Inline-Marker öffnen weiterhin die richtige Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,

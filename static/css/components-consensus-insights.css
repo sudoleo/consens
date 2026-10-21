@@ -344,52 +344,24 @@
 }
 
 /* Ein Widerspruch: Behauptungen stehen sich gegenueber, immer untereinander
-   (zwei und drei Seiten sehen gleich aus), das "vs" auf einer Haarlinie
-   dazwischen. Die Ampelfarbe traegt das "vs", keine Flaeche. */
+   (zwei und drei Seiten sehen gleich aus), dazwischen ein leises "vs". */
 .diff-sides {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   padding-top: 4px;
 }
 
-.diff-sides.is-versus {
-  gap: 16px;
-}
-
-/* Das "vs" ist das Zeichen des Widerspruchs: halbfett, in der Ampelfarbe der
-   Schwere, auf einer Haarlinie derselben Farbe, die nach aussen auslaeuft. */
+/* Das "vs" ist ein Wort in der Groesse und dem Grau der Metazeilen, ohne
+   Haarlinien und ohne Ampelfarbe: die Schwere traegt allein der Punkt im
+   Kartenkopf (2026-10-21; vorher halbfett und rot auf roten Linien). */
 .diff-versus-mark {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.02em;
-  line-height: 1;
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-ui);
   color: var(--ink-2);
 }
-
-.diff-versus-mark::before,
-.diff-versus-mark::after {
-  content: "";
-  flex: 1;
-  border-top: 1px solid currentColor;
-  opacity: 0.45;
-}
-
-.diff-versus-mark::before {
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 75%);
-  mask-image: linear-gradient(to right, transparent, #000 75%);
-}
-
-.diff-versus-mark::after {
-  -webkit-mask-image: linear-gradient(to left, transparent, #000 75%);
-  mask-image: linear-gradient(to left, transparent, #000 75%);
-}
-
-.diff-card.is-major .diff-versus-mark { color: var(--dispute); }
-.diff-card.is-contradiction:not(.is-major) .diff-versus-mark { color: var(--partial); }
 
 /* Alte Daten: die Ueberschrift erzaehlt beide Seiten. Offen sagen es die
    Seiten selbst, also steht sie nur im zugeklappten Zustand. */
@@ -454,20 +426,33 @@
 .diff-position {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
 }
 
-.diff-position-answer {
+/* Eine Metazeile je Seite: wer, "In the answer", "Show quote" - durch
+   Mittelpunkte getrennt, die Screenreader nicht vorlesen. */
+.diff-position-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
   font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: var(--line-height-ui);
   color: var(--ink-2);
 }
 
-.diff-sides.is-versus .diff-position-stance {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.45;
+.diff-position-meta > :not(:first-child)::before {
+  content: "·";
+  content: "·" / "";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--ink-2);
+}
+
+.diff-position-answer {
+  color: inherit;
 }
 
 .diff-position-label {
@@ -499,14 +484,12 @@
 }
 
 .diff-quote-toggle {
-  align-self: flex-start;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: inherit;
   font: inherit;
-  font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: inherit;
   cursor: pointer;
 }
 

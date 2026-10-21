@@ -3107,9 +3107,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   **Gegenüberstellung (seit 2026-10-16):** Ein Widerspruch sind Behauptungen,
   die sich gegenüberstehen. Der Kartenkopf trägt nur noch das Thema
   (`claim`), der Körper ist `.diff-sides`: jede Position als Satz
-  (`.diff-position-stance`, beim Widerspruch 16px/500), darunter wer das sagt,
-  zwischen den Seiten ein `.diff-versus-mark` „vs“ in der Ampelfarbe der
-  Schwere (`--dispute`/`--partial`, keine Fläche). Die Seiten stehen **immer
+  (`.diff-position-stance`), darunter eine Metazeile `.diff-position-meta`
+  (wer das sagt, „In the answer“, „Show quote“, durch Mittelpunkte getrennt),
+  zwischen den Seiten ein leises `.diff-versus-mark` „vs“ in Metagröße und
+  -grau. Seit 2026-10-21 hat das „vs“ weder Ampelfarbe noch Haarlinien: die
+  Schwere trägt allein der `.sev-dot`. Im Leser (`model-answer-reader.css`)
+  setzt der Tab die Chat-Typografie fort, drei Stufen: Thema als Titel
+  (17px/600), Behauptungen in Antwortgröße (17px/400), alles Übrige eine
+  Metastufe (13px, `--ink-2`); Abstände im 4px-Raster, ein Chevron für Karte
+  und „smaller differences“ am rechten Inhaltsrand. Die Seiten stehen **immer
   untereinander** (seit dem Nachschliff am selben Tag: nebeneinander bei zwei,
   untereinander bei drei Seiten wirkte in derselben Frage willkürlich). Die
   Seite mit `in_answer` steht vorn und trägt „In the answer“. Eine andere
@@ -3122,11 +3128,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   zeigen nur Icons + Anzahl („4 models“, Namen bleiben Linktext/Tooltip),
   ein Modell Icon + Name; ist die Originalantwort erreichbar, ist genau das
   Icon/Name-Paar der `.diff-jump-link`. Das Zitat steht hinter
-  `.diff-quote-toggle` („Show quote“, per Dokument-Delegation, damit es auch
-  in den in den Leser verschobenen Karten greift); ohne `stance` ist das
-  Zitat selbst die Behauptung und erscheint nur einmal. Das „vs“ ist
-  halbfett in der Ampelfarbe auf einer gleichfarbigen, nach außen
-  auslaufenden Haarlinie.
+  `.diff-quote-toggle` („Show quote“ in der Metazeile, per
+  Dokument-Delegation über `closest(".diff-position")`, damit es auch in den
+  in den Leser verschobenen Karten greift); ohne `stance` ist das Zitat
+  selbst die Behauptung und erscheint nur einmal.
   **Alte Daten (vor 2026-10-16)** bereitet `readableDifference` für Karte und
   Hover-Vorschau auf, ohne die Daten zu ändern: die Zuschreibung am
   Satzanfang („Model F sagt, …“, „Die Synthese sagt, dass …“) fällt weg,
@@ -5789,6 +5794,18 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   (Schema-Pflichtfeld, boolean) markiert die Seite, die die Konsensantwort
   selbst vertritt; `_normalize_differences` speichert es nur als `true` und
   höchstens einmal je Differenz, der Share-Sanitizer reicht es durch.
+  **Eine Behauptung = eine Seite (seit 2026-10-21):** `_normalize_differences`
+  führt Positionen mit gleicher Behauptung zusammen (`_stance_key`: Groß-/
+  Kleinschreibung, Whitespace, Satzzeichen am Ende): Modelle werden vereinigt,
+  `in_answer` geht mit, das erste vorhandene Zitat bleibt. Ein Modell steht nur
+  in seiner ersten Position; eine Position ohne verbleibendes Modell entfällt.
+  Fallen so alle Seiten zu einer zusammen, ist es kein Unterschied mehr und die
+  Differenz entfällt (eine vom Judge einseitig gelieferte Differenz bleibt wie
+  bisher). Der Prompt verlangt dasselbe. `readableDifference`
+  (`consensus-insights.js`) wendet die Regel beim Anzeigen an, ohne die Daten
+  zu ändern, damit gespeicherte Chats dieselbe Behauptung nicht zweimal mit
+  „vs“ zeigen. Live-Befund: Lunas Satz „In the answer“, darunter derselbe Satz
+  für zwei weitere Modelle, dann Grok.
   `_named_models` ersetzt übrig gebliebene Judge-Labels in `claim`/`stance`/
   `verify` („Model F“, „Modell F“, „Models A and C“) durch die echten
   Modellnamen; unbekannte Labels bleiben stehen. Auslöser war ein Live-Befund
