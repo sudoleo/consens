@@ -2216,8 +2216,10 @@
               const data = await window.App.readJson(response).catch(() => ({}));
               if (!authIsCurrent()) return;
               if (!response.ok) {
-                const detail = data?.detail && typeof data.detail === "object" ? data.detail : null;
-                if (detail?.error_code === "pro_required" || detail?.error_code === "plus_required") {
+                // Any form of the refusal ({detail}, {error: {…}}, flat; App.errorFields).
+                const refusal = window.App.errorFields?.(data) || data?.detail || {};
+                const refusalCode = refusal.error_code || refusal.code;
+                if (refusalCode === "pro_required" || refusalCode === "plus_required") {
                   // Tier-Status war veraltet: Button in den Teaser-Zustand
                   // zurücksetzen und das Pro-Modal zeigen.
                   button.disabled = false;

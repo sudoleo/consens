@@ -16,6 +16,9 @@
 //                  read a response without ever throwing the engine's JSON
 //                  error, and turn a refusal into an Error that carries its
 //                  status, code and the server's sentence.
+//   App.errorFields  a refusal's fields in one flat object, whether the
+//                  server sent {error: "<sentence>", code, retry_after} or
+//                  {error: {error, error_code, …}} / {detail: {…}}.
 //   App.words      the glossary: one word per state of a run and of the
 //                  answer check, the same everywhere.
 //
@@ -150,9 +153,10 @@
     if (minutes < 1) return "just now";
     if (minutes < 60) return minutes + "m ago";
     const hours = Math.round(minutes / 60);
-    if (hours < 24) return hours + "h ago";
     const days = Math.round((startOfDay(new Date(now)) - startOfDay(day)) / DAY);
-    if (days <= 1) return "yesterday";
+    // Earlier the same day stays in hours, even 23h40m ago (never "yesterday").
+    if (hours < 24 || days < 1) return Math.min(hours, 23) + "h ago";
+    if (days === 1) return "yesterday";
     if (days < 7) return days + " days ago";
     return "on " + date(day, { now });
   }
@@ -226,28 +230,44 @@
     return typeof value === "string" && value.trim() ? value.trim() : "";
   }
 
+  const isRecord = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
   // The sentence a refusal carries: {error}, {detail} (FastAPI), {message},
-  // nested {detail: {error|message}} or {error: {message}}. A list of
+  // nested {detail: {error|message}} or {error: {error|message}} (main.py
+  // wraps a route's detail object that way, review 2026-10-21). A list of
   // validation errors is no sentence for a reader.
   function serverSentence(data) {
     if (!data || typeof data !== "object") return plainText(data);
     const detail = data.detail;
+    const error = isRecord(data.error) ? data.error : null;
     return plainText(data.error)
-      || plainText(data.error?.message)
+      || (error ? plainText(error.error) || plainText(error.message) : "")
       || plainText(detail)
-      || (detail && typeof detail === "object" && !Array.isArray(detail)
-        ? plainText(detail.error) || plainText(detail.message) : "")
+      || (isRecord(detail) ? plainText(detail.error) || plainText(detail.message) : "")
       || plainText(data.message);
   }
 
+  // A refusal's fields in one flat object, whichever form the server used:
+  // {error: "<sentence>", code, retry_after, …} (the agreed form),
+  // {error: {error, error_code, …}} (a route's detail object, wrapped by
+  // main.py) or {detail: {…}} (FastAPI). `error` is the sentence ("" when
+  // there is none); top-level fields win over nested ones.
+  function errorFields(data) {
+    if (!isRecord(data)) return {};
+    const nested = [data.detail, data.error].filter(isRecord);
+    const flat = Object.assign({}, ...nested, data);
+    flat.error = serverSentence(data);
+    if (isRecord(flat.detail) || Array.isArray(flat.detail)) delete flat.detail;
+    return flat;
+  }
+
   function codeOf(data) {
-    if (!data || typeof data !== "object") return "";
-    const detail = data.detail && typeof data.detail === "object" && !Array.isArray(data.detail) ? data.detail : {};
-    return String(data.code || data.error_code || detail.code || detail.error_code || "");
+    const fields = errorFields(data);
+    return String(fields.code || fields.error_code || "");
   }
 
   function retryAfterOf(response, data) {
-    const fromBody = Number(data?.retry_after ?? data?.detail?.retry_after);
+    const fromBody = Number(errorFields(data).retry_after);
     if (Number.isFinite(fromBody) && fromBody > 0) return fromBody;
     const header = Number(response?.headers?.get?.("Retry-After"));
     return Number.isFinite(header) && header > 0 ? header : 0;
@@ -278,6 +298,8 @@
   const UNREADABLE = /did not match the expected pattern|unexpected token|json\.parse|not valid json|unexpected end of (?:json|input|data)|json parse error|unexpected character|unexpected identifier|<!doctype|<html|<\/?body/i;
   // ... for a bug in the page, never a sentence for a reader.
   const ENGINE = /cannot read propert|is not a function|is not defined|undefined is not an object|null is not an object|is not iterable|cannot set propert|maximum call stack|^script error|out of memory|quotaexceeded|the operation was aborted|the user aborted|signal is aborted|^firebase: |\(auth\/[a-z-]+\)|traceback|exception:|internal server error|^not found$|^method not allowed$|^request failed \(\d+\)\.?$|\bhttp ?\d{3}\b|request failed with http/i;
+  // ... and how a sentence ends: a full stop, a question, an ellipsis.
+  const SENTENCE_END = /[.!?…]["’”)]?$/;
   const ENGINE_NAMES = new Set(["TypeError", "SyntaxError", "ReferenceError", "RangeError", "EvalError", "URIError", "InternalError"]);
 
   const OFFLINE = "You’re offline.";
@@ -321,7 +343,7 @@
       if ("message" in error && !("error" in error) && !("detail" in error)) return error;
       return {
         name: "HttpError", message: serverSentence(error), serverMessage: serverSentence(error),
-        code: codeOf(error), retryAfter: Number(error.retry_after) || 0, status: Number(error.status) || 0, data: error
+        code: codeOf(error), retryAfter: retryAfterOf(null, error), status: Number(error.status) || 0, data: error
       };
     }
     return { message: "" };
@@ -359,6 +381,10 @@
     // A gateway's bare refusal; our own server's 503 carries its sentence.
     if ((status === 502 || status === 503 || status === 504) && !error.serverMessage) return offlineNow() ? "offline" : "unreachable";
     if (status === 401) return "session";
+    // A 5xx says the server's words only when they are meant for a reader:
+    // a refusal with a code, or a sentence. "Error updating watch" or
+    // "Chat storage error" are labels for the log (review 2026-10-21).
+    if (status >= 500 && error.serverMessage && !code && !SENTENCE_END.test(error.serverMessage.trim())) return "server";
     if (error.serverMessage && !ENGINE.test(error.serverMessage)) return "message";
     if (status >= 500) return "server";
     if (status >= 400) return STATUS_WORDS[status] ? "status" : "unknown";
@@ -407,4 +433,5 @@
   App.userError = userError;
   App.readJson = readJson;
   App.httpError = httpError;
+  App.errorFields = errorFields;
 })();

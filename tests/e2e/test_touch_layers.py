@@ -111,6 +111,39 @@ def test_open_menu_holds_the_page_and_follows_the_finger(browser, phase4_server)
         context.close()
 
 
+def test_a_second_finger_never_leaves_the_menu_hanging(browser, phase4_server):
+    """Review 13: a second finger during the swipe dropped it; the menu hung
+    half way out, dimmed, with no finger left to end it."""
+    context, page, cdp = _reading_page(browser, phase4_server)
+    try:
+        _open_menu(page)
+        width = page.locator("#appSidebar").bounding_box()["width"]
+        x = 250 - 0.2 * width
+        swipe(cdp, page, (250, 400), (x, 404))
+        assert page.evaluate(STATE)["x"] < -0.1 * width
+        # A second finger touches the page and lifts again.
+        first = {"x": x, "y": 404, "id": 1}
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [first, {"x": 120, "y": 640, "id": 2}]})
+        page.wait_for_timeout(50)
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": [first]})
+        page.wait_for_timeout(50)
+        # The first finger goes on to the left and lifts.
+        far = 250 - 0.6 * width
+        for step in range(1, 5):
+            cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x + (far - x) * step / 4, "y": 404, "id": 1}]})
+            page.wait_for_timeout(16)
+        page.wait_for_timeout(120)
+        lift(cdp)
+        # Wherever the gesture ended, the menu is not left between open and closed.
+        page.wait_for_function("""() => { const menu = document.getElementById('appSidebar');
+          return !menu.classList.contains('is-dragging') && !menu.style.transform; }""", timeout=3000)
+        page.wait_for_timeout(500)
+        state = page.evaluate(STATE)
+        assert (state["open"] and state["x"] == 0 and state["dim"] == 1) or (not state["open"] and state["dim"] == 0), state
+    finally:
+        context.close()
+
+
 def test_every_covering_layer_holds_the_page(browser, phase4_server):
     context, page, cdp = _reading_page(browser, phase4_server)
     try:

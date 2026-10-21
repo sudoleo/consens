@@ -390,6 +390,7 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const picked = catalogStatus === 'ready' ? selection() : null;
     return JSON.stringify([selectedMode(), App.runMode?.preference?.(), canUse(), window.auth?.currentUser?.uid || '', App.authState?.generation,
+      Boolean(window.__consensioAuthState?.known),
       expectingAgent(), App.agentAccessCheck?.attempt,
       catalogStatus, catalogOwner, loadGeneration, catalog?.models?.length, picked?.model_id, picked?.reasoning_effort,
       context?.runId, context?.status, registry.isExecuting(context?.runId),
@@ -735,6 +736,11 @@
       freshPanel.hidden = false;
       ask.replaceWith(freshAsk);
       panel.replaceWith(freshPanel);
+      // Retry, "Choose another model" and "Recover saved answer" act on the
+      // run on screen: the turn in the history keeps its words, not these
+      // buttons (review B2; a saved failure there reads as one, consensus-run.js).
+      panel.querySelector("#agentAnswerErrorActions")?.remove();
+      panel.querySelector("#agentRecover")?.remove();
       for (const el of [ask, ...ask.querySelectorAll("[id]"), panel, ...panel.querySelectorAll("[id]")]) {
         if (contract.has(el.id)) el.removeAttribute("id");
       }
@@ -770,7 +776,11 @@
       { streaming: running && !state.text && !settled });
     // A finished turn is what the next message continues (setCompletedBasis).
     markLiveTurn(running ? null : state.completedTurn);
-    App.agentActivity?.render(activityHost(context.runId), {
+    // A message that never left (offline, refused before it started) is
+    // back in the box and says so: no "Failed after 0s" above that line.
+    const unsent = !running && context.status === "failed" && !context.metadata.requestSent;
+    if (unsent) activityHost(`${context.runId}:unsent`);
+    else App.agentActivity?.render(activityHost(context.runId), {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
         ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
@@ -1578,8 +1588,9 @@
   // engine's ("Failed to fetch", "Load failed", Apple-Audit H1).
   const NOT_SENT_ALREADY_SAYS = new Set(["offline", "unreachable", "timeout", "unknown"]);
   function failRun(context, error) {
-    const failure = error.failure || {};
-    const code = failure.code || failure.error_code || failure.detail?.code;
+    // Flat ({error, code}) or wrapped ({error: {error, error_code}}, {detail}).
+    const failure = App.errorFields?.(error.failure) || error.failure || {};
+    const code = failure.code || failure.error_code;
     const notSent = Boolean(error.notDispatched || !context.metadata.requestSent);
     const reason = App.userError(error, { context: notSent ? "send" : undefined,
       fallback: notSent ? undefined : "The answer couldn’t be completed. Try again." });
@@ -1774,6 +1785,10 @@
   // a no-op when nothing the shell shows has changed.
   window.addEventListener("consensio:run-registry-change", () => renderShell());
   window.addEventListener("consensio:run-mode-change", () => renderShell());
+  // The session is known (signed in, or ended): the look the page expected
+  // gives way to the real one, e.g. no Agent chip for a session that ended
+  // while the page still expected it (review 1).
+  window.addEventListener("consensio:auth-state", () => renderShell());
   // The account's model pick arrived (server, another tab, sign-out). A pick
   // this tab's model list does not know comes from a newer list (a tab or
   // device opened after a deploy): the list is fetched again before anything
@@ -1794,11 +1809,20 @@
   // Google selection/consent changes (chips, sheet, consent box) change the
   // send blocker, so the notice and Send state must follow immediately.
   window.addEventListener('consensio:agent-google-change', () => { syncComposer(); window.updateQuestionInputAccess?.(); });
-  document.addEventListener("DOMContentLoaded", () => {
-    document.getElementById("agentRecover")?.addEventListener("click", () => {
+  // The buttons under a failed answer live on the live surface, which a
+  // follow-up replaces by a fresh copy (liveTurn.take). A listener bound to
+  // the first copy went with it: after the first follow-up Retry & Co. did
+  // nothing (review B2). One listener on the document reaches every copy.
+  document.addEventListener("click", event => {
+    if (event.target.closest?.("#agentRecover")) {
       const context = registry.visible();
       if (["failed", "canceled"].includes(context?.status) && context.metadata.requestSent) send(context);
-    });
+      return;
+    }
+    const button = event.target.closest?.("#agentAnswerErrorActions button[data-action]");
+    if (button) runNoticeAction(button.dataset.action);
+  });
+  document.addEventListener("DOMContentLoaded", () => {
     // The shared picker emits input before change. Commit before other UI
     // listeners can project the previous draft selection back into the select.
     for (const id of ["agentModelDropdown", "agentReasoningEffort"]) {
@@ -1811,12 +1835,6 @@
       // The shared picker's outside-click handler must not close this shortcut's menu.
       event.stopPropagation();
       runNoticeAction(event.currentTarget.dataset.action);
-    });
-    document.getElementById('agentAnswerErrorActions')?.addEventListener('click', event => {
-      const button = event.target.closest('button[data-action]');
-      if (!button) return;
-      event.stopPropagation();
-      runNoticeAction(button.dataset.action);
     });
     document.getElementById('agentReviewAction')?.addEventListener('click', () => revealPendingReview());
     document.getElementById('questionInput')?.addEventListener('input', () => {

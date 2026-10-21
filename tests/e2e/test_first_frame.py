@@ -183,6 +183,44 @@ def test_a_failed_status_check_keeps_agent_says_so_and_asks_again(browser, phase
 
 
 @pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
+def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser, phase4_server, width, height, mobile):
+    """Review 1 (regression of B4): this browser remembers an account, but
+    Firebase answers that the session has ended (password changed elsewhere,
+    account disabled, a Google sign-in that came back without a user). The
+    page turns into the guest page: the field takes typing, the guest buttons
+    stand, and no Agent chip or Watches dot waits for an account that is not
+    coming."""
+    context = _context(browser, width, height, uid=None, mobile=mobile,
+                       init_script="localStorage.setItem('id_token', 'cached');")
+    # Firebase answers once every module is ready, as on a real network:
+    # nothing else draws the field after that answer (the later route wins).
+    slow = FIREBASE_AUTH_STUB.replace("queueMicrotask(() => window.__switchE2EUser(window.__E2E_INITIAL_UID));",
+                                      "setTimeout(() => window.__switchE2EUser(window.__E2E_INITIAL_UID), 1500);")
+    assert slow != FIREBASE_AUTH_STUB
+    context.route("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js",
+                  lambda route: route.fulfill(content_type="application/javascript", body=slow))
+    page = context.new_page()
+    try:
+        _routes(page)
+        page.goto(phase4_server + "/app")
+        page.wait_for_function("() => window.__consensioAuthState?.known === true && typeof window.openShareDialog === 'function'")
+        page.wait_for_timeout(600)
+        field = page.locator("#questionInput")
+        expect(field).to_be_enabled()
+        expect(field).to_have_attribute("aria-disabled", "false")
+        expect(field).to_have_attribute("placeholder", re.compile("AI answer"))
+        assert not page.evaluate("document.documentElement.classList.contains('agent-shell-expected')")
+        assert page.evaluate("document.body.classList.contains('is-guest')")
+        last = _frames(page)[-1]
+        assert last["guestButtons"] and last["agent"] == "hidden", last
+        assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
+        field.type("Still here")
+        expect(field).to_have_value("Still here")
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
 def test_a_guest_sees_the_demo_offer_from_the_first_frame_and_it_fades_once(browser, phase4_server, width, height, mobile):
     context = _context(browser, width, height, uid=None, mobile=mobile)
     page = context.new_page()
@@ -195,6 +233,8 @@ def test_a_guest_sees_the_demo_offer_from_the_first_frame_and_it_fades_once(brow
         assert len(frames) == 1, frames
         assert frames[0]["demo"] == "demo" and frames[0]["send"] == "hidden" and frames[0]["guestButtons"], frames
         assert frames[0]["tab"] == "Chat" and frames[0]["switchInHeader"] is not mobile
+        # No Watches dot for a guest, on the phone's menu button neither (H2, review 3).
+        assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         # The first keystroke retires the offer for good: it fades where it
         # stood while Send comes in (B13), then it is gone.
         page.evaluate("""() => { window.__leaving = false; const chip = document.querySelector('.demo-chip');

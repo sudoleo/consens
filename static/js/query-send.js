@@ -113,7 +113,9 @@
       && authIsCurrent(context);
   }
 
+  // One flat refusal, whichever form the server used (App.errorFields).
   function unwrapApiError(data) {
+    if (window.App.errorFields) return window.App.errorFields(data);
     const detail = data?.detail;
     if (detail && typeof detail === "object") {
       return { ...detail, error: detail.error || detail.message || "Request failed." };

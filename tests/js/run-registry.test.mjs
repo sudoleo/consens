@@ -104,6 +104,26 @@ describe("App.runRegistry", () => {
     dom.window.close();
   });
 
+  // Review F (2026-10-21): a renamed chat showed its old name in the sidebar
+  // while a follow-up ran, because the next run took it from the basis.
+  it("gives the open chat's bases the new name of a renamed chat", () => {
+    const { registry, dom } = bootRegistry();
+    registry.selectConversationBasis({ chatId: "c1", bookmarkId: "b1", question: "First", title: "Old name",
+      bookmarkMeta: { id: "b1", title: "Old name" } });
+    registry.retitle("b1", "Renamed");
+    expect(registry.getSelectedConversationBasis()).toMatchObject({ title: "Renamed", bookmarkMeta: { title: "Renamed" } });
+    const run = registry.create(spec("Second", { bookmarkId: "b1", basis: registry.getSelectedConversationBasis() }));
+    registry.setCompletedBasis(run.runId, { chatId: "c1", bookmarkId: "b1", question: "Second", title: "Old name" });
+    registry.retitle("b1", "New name");
+    expect(registry.getSelectedConversationBasis().title).toBe("New name");
+    expect(registry.get(run.runId).completedBasis.title).toBe("New name");
+    expect(registry.get(run.runId).basis.title).toBe("New name");
+    // Another chat keeps its own name.
+    registry.retitle("other", "Something else");
+    expect(registry.getSelectedConversationBasis().title).toBe("New name");
+    dom.window.close();
+  });
+
   it("keeps execution, visible view, and selected follow-up basis independent", () => {
     const { registry, dom } = bootRegistry();
     const runA = registry.create(spec("A"));

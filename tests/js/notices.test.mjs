@@ -94,6 +94,80 @@ describe("App.toast", () => {
     window.App.toast({ message: "Memory deleted", undo: () => {} });
     expect(document.getElementById("appToasts").parentElement.id).toBe("settings");
   });
+
+  // Review 7: an Undo cut in while two lines were waiting; the one that
+  // stepped up behind it was never taken away again.
+  it("lets an Undo cut in without leaving a line behind for good", () => {
+    vi.useFakeTimers();
+    const { window, document } = boot();
+    window.App.toast({ message: "First info." });
+    window.App.toast({ message: "Second info." });
+    window.App.toast({ message: "Chat deleted", undo: () => {} });
+    expect(document.querySelectorAll("#appToasts .toast.is-shown")).toHaveLength(1);
+    expect(line(document).textContent).toContain("Chat deleted");
+    // The Undo first, then what still waited.
+    vi.advanceTimersByTime(5100);
+    expect(line(document).textContent).toContain("Second info.");
+    vi.advanceTimersByTime(20000);
+    expect(window.App.toast.current()).toBeNull();
+    expect(document.querySelectorAll("#appToasts .toast")).toHaveLength(0);
+  });
+
+  it("replaces a line with the same key in its place", () => {
+    vi.useFakeTimers();
+    const { window, document } = boot();
+    window.App.toast({ message: "Saving…", key: "save" });
+    window.App.toast({ message: "Something else." });
+    window.App.toast({ message: "Saved.", key: "save" });
+    expect(document.querySelectorAll("#appToasts .toast.is-shown")).toHaveLength(1);
+    expect(line(document).textContent).toContain("Saved.");
+    vi.advanceTimersByTime(30000);
+    expect(document.querySelectorAll("#appToasts .toast")).toHaveLength(0);
+  });
+
+  // Apple audit E3 (review): an error stays until it is closed, also when
+  // another line comes; that one waits behind it.
+  it("keeps an error when another line comes, which then waits", () => {
+    vi.useFakeTimers();
+    const { window, document } = boot();
+    window.App.toast({ message: "The chat couldn’t be saved.", tone: "error" });
+    window.App.toast({ message: "Link copied." });
+    vi.advanceTimersByTime(30000);
+    expect(line(document).textContent).toContain("couldn’t be saved");
+    line(document).querySelector(".toast-close").click();
+    vi.advanceTimersByTime(10);
+    expect(line(document).textContent).toContain("Link copied.");
+  });
+
+  it("brings an error back after an Undo that cut in", () => {
+    vi.useFakeTimers();
+    const { window, document } = boot();
+    const onExpire = vi.fn();
+    window.App.toast({ message: "The chat couldn’t be saved.", tone: "error", onExpire });
+    window.App.toast({ message: "Chat deleted", undo: () => {} });
+    expect(line(document).textContent).toContain("Chat deleted");
+    vi.advanceTimersByTime(5100);
+    expect(line(document).textContent).toContain("couldn’t be saved");
+    expect(document.querySelectorAll("#appToasts .toast.is-shown")).toHaveLength(1);
+    expect(onExpire).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(60000);
+    expect(line(document).dataset.tone).toBe("error");
+  });
+
+  // Review (E3): a line on screen when a dialog opens goes into it, and back
+  // out when it closes; it never sits under the open dialog.
+  it("follows a dialog that opens or closes while it is on screen", async () => {
+    const { window, document } = boot('<dialog id="help" class="modal"><button>x</button></dialog>');
+    window.App.toast({ message: "Link copied.", duration: Infinity });
+    const region = document.getElementById("appToasts");
+    expect(region.parentElement).toBe(document.body);
+    document.getElementById("help").setAttribute("open", "");
+    await Promise.resolve();
+    expect(region.parentElement.id).toBe("help");
+    document.getElementById("help").removeAttribute("open");
+    await Promise.resolve();
+    expect(region.parentElement).toBe(document.body);
+  });
 });
 
 describe("App.undoNotice (forwards to App.toast)", () => {
@@ -176,6 +250,47 @@ describe("App.composerNotice", () => {
     document.getElementById("questionInput").dispatchEvent(new window.Event("input", { bubbles: true }));
     expect(notice.hidden).toBe(true);
     expect(document.getElementById("questionInput").hasAttribute("aria-describedby")).toBe(false);
+  });
+});
+
+describe("App.composerNotice while it folds", () => {
+  // Review 6: a second notice that came while the first was folding away
+  // was taken away with it a moment later.
+  it("keeps a second notice that comes while the first one closes", () => {
+    const animations = [];
+    const ctx = loadScripts(
+      ["static/js/motion.js", "static/js/notices.js"],
+      {
+        body: '<textarea id="questionInput"></textarea><div id="agentComposerNotice" hidden></div>',
+        before(window) {
+          window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+          window.Element.prototype.animate = function (frames) {
+            const animation = {
+              frames, cancelled: false, onfinish: null, oncancel: null,
+              cancel() { this.cancelled = true; this.oncancel?.(); },
+              finish() { if (!this.cancelled) this.onfinish?.(); },
+            };
+            animations.push(animation);
+            return animation;
+          };
+        },
+      }
+    );
+    contexts.push(ctx);
+    const { window, document } = ctx;
+    window.App.composerNotice.show("This file is too large.");
+    animations.at(-1).finish();
+    window.App.composerNotice.clear();
+    const closing = animations.at(-1);
+    expect(closing.frames.at(-1).opacity).toBe(0);
+    window.App.composerNotice.show("This file type can’t be attached.");
+    closing.finish();
+    animations.at(-1).finish();
+    const notice = document.getElementById("composerInputNotice");
+    expect(closing.cancelled).toBe(true);
+    expect(notice.hidden).toBe(false);
+    expect(notice.textContent).toBe("This file type can’t be attached.");
+    expect(document.getElementById("questionInput").getAttribute("aria-describedby")).toContain("composerInputNotice");
   });
 });
 

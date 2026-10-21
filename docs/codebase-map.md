@@ -865,7 +865,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     Satz des Servers bzw. dieselbe Warte-Regel aus `retry_after`; 401 →
     „Your session has ended. Log in again.“; ein Satz des Servers
     (`{error|detail|message, code}`, auch `already_watched`, `limit_reached`)
-    oder unserer (`new Error("…")`) bleibt; Programmfehler (TypeError …) →
+    oder unserer (`new Error("…")`) bleibt — bei 5xx nur, wenn er einen `code`
+    trägt oder wie ein Satz endet (`.`/`?`/`!`/`…`); Log-Etiketten wie „Error
+    updating watch“ oder „Chat storage error“ werden „Something went wrong on
+    our side. …“ (Nachprüfung 2026-10-21); Programmfehler (TypeError …) →
     `fallback`; `AbortError` → „“. `context: "send"` endet mit „Your message
     is back in the box.“ (die Nachricht ging zurück ins Feld), weitere
     Kontexte `load|save|upload|delete` liefern den Fallback.
@@ -879,6 +882,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     App.readJson(response); if (!response.ok) throw App.httpError(response,
     data);` und beim Anzeigen `App.userError(error, {fallback})` über
     `App.toast`/`App.composerNotice`/`App.watchFields.setError`.
+    **`App.errorFields(data)`** (seit 2026-10-21): die Felder einer Ablehnung
+    flach, gleich in welcher Form der Server sie schickt — vereinbart ist
+    `{error: "<Satz>", code, retry_after}`, `main.py` verpackt ein Detail-
+    Objekt einer Route aber als `{error: {error, error_code, …}}`, FastAPI als
+    `{detail: {…}}`. `error` ist danach der Satz, Felder oben schlagen
+    verschachtelte. `httpError`, `userError`, `usageLimit.isLimitError`/`show`,
+    `query-send.js` (`unwrapApiError`), `agent-chat.js` (`failRun`) und der
+    Resolve-Teaser lesen darüber; sonst erkannte Consensus/Compare ein leeres
+    Tageskontingent nicht (Karte fehlte, „You don’t have access to this.“).
     `streamSSERequest` gibt keinen HTML-Body mehr als `data.error` weiter.
     `request-deadline.js` wirft bei Zeitüberschreitung einen `TimeoutError`.
   - **`App.words`**: das Glossar (Apple-Audit H9), ein Wort je Zustand:
@@ -920,7 +932,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nutzt `showModal()` (Top-Layer, Hintergrund inert, Stapeln ohne z-index),
   schließt offene Popover (`App.popover.closeAll`), merkt den Auslöser
   (aktives Element, sonst `opener`, weil Safari geklickte Buttons nicht
-  fokussiert) und setzt den Fokus auf `focus` bzw. `[autofocus]`; Tab bleibt
+  fokussiert; liegt das aktive Element in einem Popover oder hat gerade ein
+  Popover geschlossen, ist es dessen Auslöser — ein Dialog aus einem Menü
+  gibt den Fokus an den Menüknopf zurück, nicht ins Leere) und setzt den Fokus auf `focus` bzw. `[autofocus]`; Tab bleibt
   im Dialog (letztes → erstes Element, Shift umgekehrt); jedes Schließen
   (Button, Escape, `close()`) gibt den Fokus an den Auslöser zurück. Der
   Hintergrund schließt nur einen Klick, der auch dort begann (Audit F5),
@@ -949,7 +963,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     `--popover-origin-y` vom Auslöser aus), `closed(el)`, `closeAll`,
     `anyOpen`, `menuKeys(el, {items, close, opener})` (Pfeile mit Umlauf,
     Home/End, Escape mit Rückgabe, Tab verlässt), `focusItem`, `leave(el,
-    done)` für Menüs, die beim Schließen entfernt werden (`.is-leaving`).
+    done)` für Menüs, die beim Schließen entfernt werden (`.is-leaving`),
+    `triggerOf(el)` (Auslöser des Popovers um `el`) und `recentTrigger()`
+    (Auslöser des in der letzten Sekunde geschlossenen Popovers;
+    `modal-dialog.js` nimmt beide für die Fokus-Rückgabe).
     Rein: 4px + 98 % in `--dur-state`/`--ease-out`; raus `--dur-press`/
     `--ease-in`. Die Bewegung kommt aus CSS (`display` allow-discrete), das
     Öffnen/Schließen der Module bleibt synchron.
@@ -957,11 +974,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     onExpire, duration, key})` → `{update, settle, cancel, dismiss,
     focusAction}`; eine Zeile über dem Composer (`--toast-lift`: Composer,
     Tastatur, Safe Area), immer nur eine, weitere warten (eine mit Aktion
-    verdrängt sofort, die vorige wird „expired“), `role=status`, Dauer nach
-    Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`) bleiben bis
-    zum Schließen, Hover/Fokus pausieren, asynchrone Aktionen zeigen ihren
-    Fortgang und melden über `update()`. Ist ein modaler Dialog offen, zieht
-    die Zeile in ihn (sonst läge sie inert darunter). `App.toast.current()`,
+    verdrängt sofort, die vorige wird „expired“; ein Fehler tritt dagegen
+    nur zurück und kommt danach wieder; Ersetzen — Aktion oder gleicher
+    `key` — schaltet die Warteschlange nicht weiter), `role=status`, Dauer
+    nach Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`,
+    allgemein `duration: Infinity`) bleiben bis zum Schließen, auch wenn
+    eine weitere Zeile kommt (die wartet), Hover/Fokus pausieren, asynchrone
+    Aktionen zeigen ihren Fortgang und melden über `update()`. Ist ein
+    modaler Dialog offen, zieht die Zeile in ihn (sonst läge sie inert
+    darunter); öffnet oder schließt einer, während sie steht, folgt sie ihm
+    (MutationObserver auf `open`). `App.toast.current()`,
     `App.toast.settleAll()`. Dünne Weiterleitungen: `App.showPopup(message,
     options)` (`app-core.js`, ~100 Aufrufer), `App.undoNotice.show({text,
     actionLabel, onAction, onExpire, duration})` (Chat löschen),
@@ -972,7 +994,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     duration})` / `.clear()` sagt Eingabefehler (zu lange Nachricht, zu viele
     Wörter, falsche/zu große/zu viele Dateien – eine Zeile pro Wurf) als
     `#composerInputNotice` unter `#agentComposerNotice`, faltet weich auf und
-    zu und verschwindet beim nächsten Tippen.
+    zu und verschwindet beim nächsten Tippen; ein neuer Hinweis während des
+    Zufaltens dreht die Faltung um, statt mit ihr zu verschwinden.
   - **Bestätigung (`confirm-dialog.js`):** `App.confirm({title, body,
     confirmLabel, cancelLabel, danger})` → `Promise<boolean>`; ein
     `#appConfirmDialog`, bei `danger` Fokus auf Cancel. Ersetzt jedes
@@ -2017,7 +2040,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   der Pille. Mit Maus oder Tastatur öffnet eine Gruppen-Pille dieselbe Liste
   an der Pille (erste Quelle fokussiert, Pfeile, Escape gibt den Fokus an die
   Pille zurück); eine einzelne Pille öffnet ihre Quelle wie bisher. Teil von
-  `App.popover` (ein offener Layer), Bewegung aus `overlays.css`.
+  `App.popover` (ein offener Layer), Bewegung aus `overlays.css`. Steht die
+  Pille in einem offenen `<dialog>` (der Antwortleser ist modal), hängen Liste
+  und Backdrop in diesem Dialog, das Popover dann `position: fixed`; auf
+  `<body>` lagen sie inert unter dem Top-Layer (Nachprüfung 2026-10-21).
   Copy consensus/Copy citation lesen Pillen über
   `window.App.sourceRefs.plainText/urls` („ (uci.org, pcs.com)“). Share- und
   Topic-Seiten rendern serverseitig aus Markdown und sind nicht betroffen.
@@ -2348,7 +2374,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `App.expectedSession()` → `{known, account, verified, uid}` (vor Firebase aus
   `id_token`, Firebases eigenem `localStorage`-Nutzer
   `firebase:authUser:<apiKey>:[DEFAULT]` und `consensio.googleRedirectPending`;
-  danach die Antwort; `app-init.js` nutzt es für Gast-Composer und Sidebar);
+  danach die Antwort; `app-init.js` nutzt es für Gast-Composer und Sidebar.
+  Endet die erwartete Sitzung (Firebase meldet `null`), zeichnet `firebase.js`
+  das Feld nach `publishAuthState(null)` neu und `agent-chat.js` die Shell
+  bei `consensio:auth-state`; vorher blieb das Feld gesperrt mit Agent-Chip
+  unter „Log in“ stehen, Nachprüfung 1);
   `App.expectsAgent()`; `App.firstFrame` `{look(), remember(), agentModel(),
   agentEffort(), forget()}` — bei `pagehide`/verborgen merkt es pro Konto, was
   der Composer zeigte (`localStorage consensio.firstFrame.v1`: Agent-Modellname
@@ -5176,7 +5206,11 @@ weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
 Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Version.
 - Frontend: Die autoritative Fortsetzungsbasis liegt getrennt von der Ansicht
   in `runRegistry.selectedConversationBasis`; ein neuer `RunContext` erhält
-  davon einen Snapshot und eine eigene `ChatSession`. `window.App.followup`
+  davon einen Snapshot und eine eigene `ChatSession`. `runRegistry.retitle(
+  bookmarkId, title)` gibt einem umbenannten Chat den neuen Namen auch in den
+  Basen (gewählte, `basis`/`completedBasis` jedes Laufs), aus denen die
+  nächste Nachricht ihren Seitenleisten-Namen nimmt (`firebase.js`
+  `applyBookmarkTitle`). `window.App.followup`
   (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
   sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
   `run-view.js` gleicht ihn bei jedem Sichtwechsel mit `historyTurns` und der
@@ -5230,7 +5264,13 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Aufgeklapptem, Karten, Marken und Logos ziehen um, ihre Vertrags-IDs werden
   entfernt, und frische Kopien des Seiten-Originals (`pristine`, beim Laden
   geklont) übernehmen die IDs. `agentDelegation.release()` lässt die Logos am
-  umgezogenen Turn (Klick öffnet dann dessen Antworten im Leser). Agent-Turns
+  umgezogenen Turn (Klick öffnet dann dessen Antworten im Leser). Die Knöpfe
+  der Live-Fläche (`#agentAnswerErrorActions`, `#agentRecover`) bleiben nicht
+  am umgezogenen Turn; ihre Klicks sind am `document` delegiert, damit sie auf
+  jeder Kopie wirken (Nachprüfung B2: nach der ersten Folgefrage taten Retry,
+  „Choose another model“ und „Check/Recover saved answer“ nichts). Der Satz
+  eines Fehlschlags ist `.agent-answer-error` (Klasse, nicht ID) und behält im
+  Verlauf sein Aussehen. Agent-Turns
   im Verlauf (`.thread-history-turn.is-agent-turn`, Antwort zusätzlich
   `.agent-answer`, Aktivität `.agent-answer-activity`) haben exakt die Boxen
   des Live-Turns; frisch gebaute ebenso. Consensus-Turns werden weiter frisch

@@ -86,7 +86,7 @@ async function refreshVerificationState() {
 }
 
 // Logging out asks first, with the app's own question (App.confirm,
-// confirm-dialog.js); the Logout entry of the account menu only calls
+// confirm-dialog.js); the "Log out" entry of the account menu only calls
 // openLogoutConfirm().
 async function performLogout() {
   if (performLogout.inProgress) return;
@@ -667,7 +667,7 @@ onIdTokenChanged(auth, async (user) => {
             </span>
             <button type="button" id="sharedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Shared links</button>
             <button type="button" id="watchedLinksButton" class="top-bar-about" role="menuitem" tabindex="-1">Watches</button>
-            <button type="button" id="logoutButton" class="top-bar-about" role="menuitem" tabindex="-1">Logout</button>
+            <button type="button" id="logoutButton" class="top-bar-about" role="menuitem" tabindex="-1">Log out</button>
           </div>
         </div>
       </div>
@@ -876,6 +876,15 @@ onIdTokenChanged(auth, async (user) => {
         window.App?.accountTier?.set?.("free");
         document.body.classList.remove("viewer-is-admin");
         publishAuthState(null);
+        // Only now is the session known to be gone. The field was drawn
+        // above while the page still expected the account this browser
+        // remembered (app-bootstrap.js expectedSession): an ended session
+        // (password changed elsewhere, account disabled, a Google sign-in
+        // that came back without a user) left it grey and locked under
+        // "Log in" until a reload (review 1, regression of B4).
+        if (typeof window.updateQuestionInputAccess === "function") {
+          window.updateQuestionInputAccess();
+        }
       }
     });
 
@@ -2081,6 +2090,9 @@ function applyBookmarkTitle(named, source = "generated") {
     }, { render: false });
   }
   window.App.bookmarkSession?.noteSavedMeta?.({ ...(entry || bookmarkMeta(named)), title, title_source: source });
+  // The open chat's basis too: a follow-up sent next takes its name from
+  // there and showed the old one in the sidebar while it ran (review F).
+  window.App.runRegistry?.retitle?.(named.id, title);
   // The name settles in place of the question instead of switching.
   for (const label of document.querySelectorAll(`.bookmark[data-id="${named.id}"] > p`)) {
     if (label.textContent === bookmarkLabelText(title)) continue;

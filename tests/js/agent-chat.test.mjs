@@ -378,6 +378,35 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Review B2: a follow-up replaces the live surface by a fresh copy
+  // (liveTurn.take). Its buttons acted only on the first copy.
+  it('runs Retry and "Choose another model" from a fresh copy of the live surface', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_u, _p, _s, handlers) => {
+      handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'c'.repeat(32) });
+      return { ok: false, status: 200, streamed: true, data: { error: 'This model is busy right now.', code: 'provider_unavailable' } };
+    });
+    d.getElementById('questionInput').value = 'Rate this site';
+    await w.App.agentChat.send();
+    const failed = w.App.runRegistry.visible();
+    w.App.agentChat.project(failed);
+    for (const id of ['agentAnswerErrorActions', 'agentRecover']) {
+      const live = d.getElementById(id);
+      live.replaceWith(live.cloneNode(true));
+    }
+    w.App.agentChat.project(failed);
+    w.App.openModelPicker = vi.fn();
+    d.querySelector('#agentAnswerErrorActions button[data-action="choose-model"]').click();
+    expect(w.App.openModelPicker).toHaveBeenCalledWith(d.getElementById('agentModelDropdown'), { level: 'models' });
+    d.querySelector('#agentAnswerErrorActions button[data-action="retry"]').click();
+    await vi.waitFor(() => expect(w.App.runRegistry.visible().status).toBe('succeeded'));
+    expect(w.streamSSERequest).toHaveBeenCalledTimes(2);
+    expect(w.streamSSERequest.mock.calls[1][1]).toMatchObject({ question: 'Rate this site', recover_only: false });
+    dom.window.close();
+  });
+
   it('names the steps of a turn that only checked a pasted text', () => {
     const {window:w,document:d,dom} = boot();
     const host = d.querySelector('#agentAnswerActivity');
@@ -1803,6 +1832,9 @@ describe("single-model agent chat", () => {
     expect(error).not.toMatch(/Load failed|Failed to fetch|expected pattern|doctype|gateway|Wi-Fi/i);
     expect(w.streamSSERequest).not.toHaveBeenCalled();
     expect(d.getElementById('questionInput').value).toBe('Sent from a tunnel');
+    // Nothing ran, so nothing "failed after 0s" above that sentence (review F).
+    expect(d.getElementById('agentAnswerActivity').textContent).not.toMatch(/Failed after/);
+    expect(d.getElementById('agentAnswerActivity').childElementCount).toBe(0);
     dom.window.close();
   });
 

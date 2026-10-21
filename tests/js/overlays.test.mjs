@@ -145,6 +145,36 @@ describe("App.modalDialog", () => {
     expect(window.App.popover.isOpen(menu)).toBe(false);
   });
 
+  // Review F (2026-10-21): a dialog chosen in a menu ("Shared links", "Log
+  // out") gave focus back to nothing, as its menu item was gone by then.
+  it("gives focus back to the menu's control after a dialog chosen in that menu", () => {
+    const { window, document } = boot(`
+      <button id="avatar">A</button>
+      <div id="menu" hidden><button id="item" role="menuitem">Shared links</button></div>
+      <dialog id="d" class="modal"><button id="inside">x</button></dialog>`);
+    const menu = document.getElementById("menu");
+    const avatar = document.getElementById("avatar");
+    const close = () => { menu.hidden = true; window.App.popover.closed(menu); };
+    window.App.popover.register(menu, { close });
+    // The item opens the dialog while its menu is still open ...
+    menu.hidden = false;
+    window.App.popover.opened(menu, { trigger: avatar });
+    document.getElementById("item").focus();
+    window.App.modalDialog.open(document.getElementById("d"));
+    window.App.modalDialog.close(document.getElementById("d"));
+    expect(document.activeElement).toBe(avatar);
+    // ... or closes the menu first, and focus has fallen to <body>.
+    menu.hidden = false;
+    window.App.popover.opened(menu, { trigger: avatar });
+    document.getElementById("item").focus();
+    close();
+    document.activeElement.blur();
+    expect(document.activeElement).toBe(document.body);
+    window.App.modalDialog.open(document.getElementById("d"));
+    window.App.modalDialog.close(document.getElementById("d"));
+    expect(document.activeElement).toBe(avatar);
+  });
+
   it("hands out the one drawn close cross (G3)", () => {
     const { window } = boot("");
     expect(window.App.closeIcon()).toContain('class="close-icon"');

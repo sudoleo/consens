@@ -37,10 +37,13 @@
   }
 
   // --- Erkennung -------------------------------------------------------
-  // FastAPI verpackt HTTPException-Details in {detail: {...}}; die Streams
-  // reichen das Objekt teils schon ausgepackt weiter. Beides muss hier
-  // ankommen duerfen.
+  // FastAPI verpackt HTTPException-Details in {detail: {...}}, main.py in
+  // {error: {...}}; die Streams reichen das Objekt teils schon ausgepackt
+  // weiter, die vereinbarte Form ist flach ({error: "<Satz>", code}). Alle
+  // muessen hier ankommen duerfen (App.errorFields, app-text.js; ohne das
+  // erkannte Consensus/Compare ein leeres Kontingent nicht, Review 2).
   function unwrap(data) {
+    if (window.App.errorFields) return window.App.errorFields(data);
     var detail = data && data.detail;
     if (detail && typeof detail === "object") {
       var merged = {};

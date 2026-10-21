@@ -133,8 +133,13 @@
     const active = document.activeElement;
     // Safari does not focus a clicked button, so the active element can be
     // <body>; the caller's opener is the fallback.
-    const from = active && active !== document.body && !dialog.contains(active) ? active : opener;
-    openers.set(dialog, from || null);
+    let from = active && active !== document.body && !dialog.contains(active) ? active : null;
+    // A dialog chosen in a menu ("Shared links", "Log out"): the menu goes
+    // as the dialog comes, so focus goes back to the control that opened
+    // the menu, not into nothing (review F, 2026-10-21).
+    if (from?.closest?.("[data-popover]")) from = window.App.popover?.triggerOf?.(from) || null;
+    from = from || opener || window.App.popover?.recentTrigger?.() || null;
+    openers.set(dialog, from);
     // One layer at a time: a menu left open would sit under the dialog.
     window.App.popover?.closeAll?.({ reason: "dialog" });
     if (native(dialog)) dialog.showModal();

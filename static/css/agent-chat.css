@@ -241,8 +241,10 @@
 :is(#agentModelsRetry, #agentRecover):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-answer { width: 100%; min-width: 0; padding: 22px 0; order: 4; }
 .agent-answer[hidden] { display: none; }
-#agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: var(--font-size-ui); line-height: 1.6; }
-#agentAnswerError:has(+ .agent-answer-error-actions:not([hidden])) { margin-bottom: 4px; }
+/* A class, not the ID: a failed turn that moved into the history (agent-chat.js
+   liveTurn.take) keeps the look of its stop note (review B2). */
+.agent-answer-error { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: var(--font-size-ui); line-height: 1.6; }
+.agent-answer-error:has(+ .agent-answer-error-actions:not([hidden])) { margin-bottom: 4px; }
 .agent-answer-error-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-left: 14px; margin: 0 0 12px; }
 .agent-answer-error-actions[hidden] { display: none; }
 .agent-answer-error-actions button, .agent-review-notice button, .agent-progress-review-jump {
