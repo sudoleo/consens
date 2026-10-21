@@ -252,6 +252,10 @@ class FakeTransaction:
         self.database.read_log.append(ref.path)
         return FakeSnapshot(ref, self.database.documents.get(ref.path))
 
+    def get_all(self, refs):
+        # Firestore's batched read: one round trip, snapshots in any order.
+        return [self.get(ref) for ref in reversed(list(refs))]
+
     def _stage(self, operation, ref, data):
         self.writes_started = True
         self.operations.append((operation, ref, dict(data)))

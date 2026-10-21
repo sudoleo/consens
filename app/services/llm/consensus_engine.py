@@ -8,7 +8,7 @@ import logging
 import math
 import random
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Mapping
@@ -2307,6 +2307,14 @@ JUDGE_ATTEMPT_SECONDS = 90.0
 # and a stalled provider then costs the check these seconds instead of
 # JUDGE_ATTEMPT_SECONDS (chat review 2026-10-18: Luna judge timeouts in prod).
 JUDGE_HEDGE_SECONDS = 15.0
+# Still no answer after this long (and the duplicate above none either): the
+# same check also goes to the plan's next family, and the first answer wins.
+# Before 2026-10-21 the next family was only asked once a request had used up
+# JUDGE_ATTEMPT_SECONDS: a provider that hung for every request (Luna via
+# Azure, 2026-10-17) cost every check 90 s. Luna answers judge calls in about
+# 8 s (p90 16 s at OpenRouter, 2026-10-18 to 10-21), so the next family only
+# answers when Luna really hangs.
+JUDGE_FALLBACK_SECONDS = 30.0
 # The Agent's judge calls (ComparisonTools.judge_transport) ask for this
 # service tier, per family. Chat review 2026-10-19: a check still took 25 s
 # after the answer because every Luna judge call needed 20-24 s on OpenAI's
@@ -2321,27 +2329,36 @@ JUDGE_HEDGE_SECONDS = 15.0
 JUDGE_SERVICE_TIER_BY_PROVIDER = {"openai": "priority"}
 
 
+def _next_family(plan, index, provider):
+    """The first entry after ``index`` of an attempt plan (entries start with
+    their engine tuple) whose judge is another family than ``provider``."""
+    return next((entry for entry in plan[index + 1:] if entry[0][0] != provider), None)
+
+
 def _spare_judge_call(budget) -> bool:
     """A duplicate request never takes the call the fallback judge needs."""
     return budget is None or not math.isfinite(budget.max_calls) or budget.max_calls - budget.calls >= 2
 
 
-def _hedged_judge_call(call):
+def _hedged_judge_call(call, fallback=None, won=None):
     """Runs ``call()``; still running after JUDGE_HEDGE_SECONDS, an identical
-    request starts alongside and the first one to answer is returned.
+    request starts alongside, and after JUDGE_FALLBACK_SECONDS ``fallback``
+    (the same check on the next family's judge) does too. The first answer is
+    returned and the other requests stop; ``won["fallback"]`` says whether
+    it came from ``fallback``.
 
     The first request stays in the calling thread, so a call that answers in
-    time runs exactly as without hedging. The duplicate runs in its own thread;
-    both requests have their own cancellation, linked to the caller's: a user
-    stop or the attempt's time limit reaches both, and the slower one is
-    stopped alone. A failed request waits for the other; only when both fail
-    does the first request's error propagate."""
+    time runs exactly as without hedging. Each further request runs in its
+    own thread; all have their own cancellation, linked to the caller's: a
+    user stop or the attempt's time limit reaches every one. A failed request
+    waits for the others; only when all fail does the first request's error
+    propagate."""
     from contextvars import copy_context
     from app.services.llm.task_transport import task_transport
 
     parent = current_provider_cancellation()
     budget = current_analysis_budget()
-    # The duplicate starts from the timer's thread with the caller's context
+    # Further requests start from a timer's thread with the caller's context
     # (task transport), captured here.
     context = copy_context()
     name = threading.current_thread().name
@@ -2349,9 +2366,16 @@ def _hedged_judge_call(call):
     unlink_own = parent.register(own) if parent is not None else (lambda: None)
     lock = threading.Lock()
     settled = threading.Event()
-    duplicate = {}
+    extras = []
 
-    def start_duplicate():
+    def stop_others(keep):
+        if keep is not own:
+            own.cancel()
+        for extra in extras:
+            if extra["stop"] is not keep:
+                extra["stop"].cancel()
+
+    def start(extra_call, is_fallback):
         with lock:
             if settled.is_set() or not _spare_judge_call(budget) or (parent is not None and parent.cancelled):
                 return
@@ -2361,45 +2385,57 @@ def _hedged_judge_call(call):
             def work():
                 try:
                     with bind_analysis_budget(budget), bind_provider_cancellation(stop):
-                        result = call()
-                    # The duplicate won: the first request is stopped.
-                    own.cancel()
+                        result = extra_call()
+                    # This one answered first: the others stop.
+                    with lock:
+                        stop_others(stop)
                     return result
                 finally:
                     unlink()
 
-            logging.info("Judge call hedged after %.0f s", JUDGE_HEDGE_SECONDS)
+            logging.info("Judge call %s after its wait", "handed to the fallback judge too" if is_fallback else "hedged")
             pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{name}-judge-hedge")
-            duplicate.update(pool=pool, stop=stop, future=pool.submit(context.run, work))
+            # A context runs in one thread at a time: each request its own copy.
+            extras.append({"pool": pool, "stop": stop, "fallback": is_fallback,
+                           "future": pool.submit(context.copy().run, work)})
 
-    timer = threading.Timer(JUDGE_HEDGE_SECONDS, start_duplicate)
-    timer.daemon = True
-    timer.start()
+    timers = [threading.Timer(JUDGE_HEDGE_SECONDS, start, args=(call, False))]
+    if fallback is not None:
+        timers.append(threading.Timer(JUDGE_FALLBACK_SECONDS, start, args=(fallback, True)))
+    for timer in timers:
+        timer.daemon = True
+        timer.start()
     try:
         try:
             with bind_provider_cancellation(own):
-                return call()
+                result = call()
+            with lock:
+                stop_others(own)
+            return result
         except Exception as exc:
             first_error = exc
         with lock:
             settled.set()
-        future = duplicate.get("future")
-        if future is not None:
+            started = list(extras)
+        for future in as_completed([extra["future"] for extra in started]):
             try:
-                return future.result()
+                result = future.result()
             except Exception:
-                pass
+                continue
+            if won is not None:
+                won["fallback"] = next(extra["fallback"] for extra in started if extra["future"] is future)
+            return result
         raise first_error
     finally:
-        timer.cancel()
+        for timer in timers:
+            timer.cancel()
         with lock:
             settled.set()
         unlink_own()
-        future = duplicate.get("future")
-        if future is not None:
-            if not future.done():
-                duplicate["stop"].cancel()
-            duplicate["pool"].shutdown(wait=task_transport.get() is not None)
+        for extra in extras:
+            if not extra["future"].done():
+                extra["stop"].cancel()
+            extra["pool"].shutdown(wait=task_transport.get() is not None)
 
 
 class _AttemptTimedOut(Exception):
@@ -2797,16 +2833,23 @@ def _run_coverage_window(context, api_keys, attempts, ids):
     skip_retries_for = set()
     total_started = time.monotonic()
     executed = 0
-    for engine, is_retry in attempts:
+    for index, (engine, is_retry) in enumerate(attempts):
         provider, api_model, _model_ref = engine
         attempt_key = (provider, api_model)
         if is_retry and attempt_key in skip_retries_for:
             continue
         executed += 1
         started = time.monotonic()
+        # A hanging judge: the next family checks the same window alongside.
+        following = _next_family(attempts, index, provider)
+        fallback = following[0] if following else None
+        won = {}
         try:
             with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
-                raw = _hedged_judge_call(lambda: _call_coverage_engine(engine, api_keys, prompt, schema, is_retry))
+                raw = _hedged_judge_call(
+                    lambda: _call_coverage_engine(engine, api_keys, prompt, schema, is_retry),
+                    fallback=(lambda: _call_coverage_engine(fallback, api_keys, prompt, schema, False)) if fallback else None,
+                    won=won)
         except (ProviderCancelled, AnalysisBudgetExceeded):
             break
         except _AttemptTimedOut:
@@ -2828,6 +2871,10 @@ def _run_coverage_window(context, api_keys, attempts, ids):
                 int((time.monotonic() - started) * 1000), safe_exception(exc),
             )
             continue
+        if won.get("fallback"):
+            # The repair and the record name the judge that answered.
+            engine = fallback
+            provider, api_model, _model_ref = engine
         duration_ms = int((time.monotonic() - started) * 1000)
         parsed = coverage.parse_coverage_payload(raw, labels, ids)
         if not parsed:
@@ -3223,7 +3270,19 @@ def query_differences(
         skip_retries_for = set()
         executed_attempts = 0
         judge_started = time.monotonic()
-        for (provider, api_model, model_ref), is_retry, judge_tier in plan:
+        def ask(provider, api_model, model_ref, judge_tier, prompt):
+            return _call_engine_text(
+                provider, api_model, model_ref, api_keys,
+                system=_differences_system_prompt(output_language),
+                prompt=prompt,
+                max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
+                temperature=DIFFERENCES_TEMPERATURE,
+                json_mode=True,
+                effort=_judge_effort(provider, api_model, judge_tier),
+                json_schema=DIFFERENCES_JSON_SCHEMA,
+            )
+
+        for index, ((provider, api_model, model_ref), is_retry, judge_tier) in enumerate(plan):
             attempt_key = (provider, api_model, judge_tier)
             if is_retry and attempt_key in skip_retries_for:
                 continue
@@ -3231,18 +3290,16 @@ def query_differences(
             attempt_no = executed_attempts
             attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
             attempt_started = time.monotonic()
+            # A hanging judge: the plan's next family judges alongside. The
+            # second pass has no other family in its plan (see below).
+            following = _next_family(plan, index, provider)
+            won = {}
             try:
                 with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
-                    raw = _hedged_judge_call(lambda: _call_engine_text(
-                        provider, api_model, model_ref, api_keys,
-                        system=_differences_system_prompt(output_language),
-                        prompt=attempt_prompt,
-                        max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                        temperature=DIFFERENCES_TEMPERATURE,
-                        json_mode=True,
-                        effort=_judge_effort(provider, api_model, judge_tier),
-                        json_schema=DIFFERENCES_JSON_SCHEMA,
-                    ))
+                    raw = _hedged_judge_call(
+                        lambda: ask(provider, api_model, model_ref, judge_tier, attempt_prompt),
+                        fallback=(lambda: ask(*following[0], following[2], differences_prompt)) if following else None,
+                        won=won)
             except (ProviderCancelled, AnalysisBudgetExceeded):
                 break
             except _AttemptTimedOut:
@@ -3266,6 +3323,9 @@ def query_differences(
                     int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
                 )
                 continue
+            if won.get("fallback"):
+                # The record names the judge that answered.
+                (provider, api_model, model_ref), _, judge_tier = following
             duration_ms = int((time.monotonic() - attempt_started) * 1000)
             if not raw:
                 last_error = "empty result from differences engine."
