@@ -90,7 +90,8 @@ a {
   gap: 9px;
   color: var(--heading);
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-bold);
+  /* The same mark in the same bar as on the landing page (I14). */
+  font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-tight);
   line-height: var(--line-height-solid);
 }
@@ -467,36 +468,10 @@ canvas {
     background-attachment: fixed;
   }
 
-  .page-shell,
-  .footer-inner {
-    width: min(100% - 24px, var(--maxw));
-  }
-
-  .site-nav {
-    min-height: 50px;
-    padding-inline: 14px;
-  }
-
-  .brand {
-    font-size: var(--font-size-base);
-  }
-
-  .brand img {
-    width: 21px;
-  }
-
-  .nav-cta {
-    min-height: 33px;
-    padding-inline: 14px;
-    border-radius: var(--radius-pill);
-    font-size: var(--font-size-sm);
-    box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent);
-  }
-
-  .nav-links {
-    gap: 10px;
-    font-size: var(--font-size-sm);
-  }
+  /* The column, the footer and the bar keep the shared page grid on a phone
+     too (--page-gutter, 16 px from public-nav.css): the legal pages, /questions
+     and the Watch and Topic pages used to stand 12 px from the edge under a
+     smaller bar than the landing page's (Apple-Audit I14). */
 
   .nav-links a:not(.nav-cta) {
     display: none;
@@ -1356,7 +1331,7 @@ canvas {
 
 .share-header .share-scoreboard {
   box-sizing: border-box;
-  width: min(var(--maxw), calc(100vw - 40px));
+  width: min(var(--maxw), calc(100vw - 2 * var(--page-gutter)));
 }
 
 /* Den Zustand tragen der Punkt und die Schiene links (public-shell.css), nicht

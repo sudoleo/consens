@@ -2,18 +2,21 @@
 {#- One bar for every public page: the same links, the same single CTA
     ("Open app" everywhere since 2026-10-20, Apple-Audit I14; a page may only
     name its analytics event), and public-nav.js for the menu, the section you
-    are in and smooth scrolling that starts after arrival (I3, L1). -#}
+    are in and smooth scrolling that starts after arrival (I3, L1).
+    data-label repeats each bar link's text: the link keeps the width of its
+    semibold self (public-tokens.css), so marking another section moves
+    nothing. -#}
 <nav class="site-nav lp-nav" aria-label="Primary">
   <a href="/" class="brand lp-brand" aria-label="consens.io home">
     <img src="{{ asset_url('/static/favicon.png') }}" alt="" width="24" height="17">
     <span>consens.io</span>
   </a>
   <div class="nav-links lp-nav-links">
-    <a href="/#product"{% if public_path == '/' %} aria-current="page"{% endif %}>Product</a>
-    <a href="/#watch">Watches</a>
-    <a href="/topics"{% if public_path == '/topics' or public_path.startswith('/topics/') %} aria-current="page"{% endif %}>Topics</a>
-    <a href="/questions"{% if public_path == '/questions' %} aria-current="page"{% endif %}>Questions</a>
-    <a href="/benchmark"{% if public_path == '/benchmark' %} aria-current="page"{% endif %}>Benchmark</a>
+    <a data-label="Product" href="/#product"{% if public_path == '/' %} aria-current="page"{% endif %}>Product</a>
+    <a data-label="Watches" href="/#watch">Watches</a>
+    <a data-label="Topics" href="/topics"{% if public_path == '/topics' or public_path.startswith('/topics/') %} aria-current="page"{% endif %}>Topics</a>
+    <a data-label="Questions" href="/questions"{% if public_path == '/questions' %} aria-current="page"{% endif %}>Questions</a>
+    <a data-label="Benchmark" href="/benchmark"{% if public_path == '/benchmark' %} aria-current="page"{% endif %}>Benchmark</a>
     <details class="nav-menu">
       <summary aria-label="Menu" title="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">

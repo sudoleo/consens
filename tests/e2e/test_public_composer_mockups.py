@@ -125,3 +125,35 @@ def test_landing_never_pans_sideways_while_scrolling(browser, phase4_server, wid
         assert widest <= width
     finally:
         context.close()
+
+
+@pytest.mark.parametrize('width', [1440, 900])
+def test_landing_bar_holds_still_when_it_marks_another_section(browser, phase4_server, width):
+    # Semibold is wider: when the bar marked Watches instead of Product while
+    # scrolling, Product and Watches moved by up to 1.8 px. Every link now keeps
+    # the width of its semibold self.
+    context = browser.new_context(viewport={'width': width, 'height': 900})
+    context.route('https://cloud.umami.is/**', lambda route: route.fulfill(body=''))
+    page = context.new_page()
+    try:
+        page.goto(phase4_server + '/', wait_until='networkidle')
+        boxes = page.evaluate("""async () => {
+            const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            const read = () => ({
+                current: [...document.querySelectorAll('.site-nav .nav-links > a[aria-current]')].map(a => a.textContent),
+                boxes: [...document.querySelectorAll('.site-nav .nav-links > a')].map(a => {
+                    const r = a.getBoundingClientRect(); return [a.textContent.trim(), r.left, r.width]; }),
+            });
+            const top = read();
+            const watch = document.getElementById('watch');
+            window.scrollTo({top: watch.getBoundingClientRect().top + scrollY, behavior: 'instant'});
+            await frame(); await frame();
+            return [top, read()];
+        }""")
+        top, watch = boxes
+        assert top['current'] == ['Product'] and watch['current'] == ['Watches']
+        assert watch['boxes'] == top['boxes']
+        # The invisible second line does not reach the accessible name.
+        expect(page.get_by_role('link', name='Product', exact=True)).to_have_count(1)
+    finally:
+        context.close()
