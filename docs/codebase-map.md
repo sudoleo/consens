@@ -4241,13 +4241,30 @@ null, previews, evidence)`: Sie markiert nur bei exakt gebundenem Text
 (`answer_hash`, Versionstext = `dataset.markdown`, Status `required`/`running`)
 die Claims des Vergleichs, den die Evidenzzeile zeigen wird
 (`_selectedBasis` oder der erste), mit `differences: []`, losgelöster
-Fallback-Box (keine „Key claims“) und ohne Score; neue Marken bekommen
-`.is-mark-arriving` (Einblenden), `body._shownMarks` merkt Farbe+Text je
-`answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand. Ohne
-passende Vorschau nimmt `preview` die Marken einmal wieder ab
-(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark` setzt
-den Zustand zurück; `revealMarks` setzt Marken aus `_shownMarks` auf
-`.is-mark-shown` (samt Badge) und lässt nur neue oder umgefärbte anstreichen.
+Fallback-Box (keine „Key claims“) und ohne Score. **Neutral seit 2026-10-21**
+(Max: erst wurde ein Satz gelb, das Gelb verschwand, dann wurde ein ganz
+anderer rot): `renderStoredConsensusClaims(…, { provisional: true })` setzt
+jeden verankerten Claim als `.cx-claim.is-provisional` ohne Stufenklasse,
+Badge, `.cx-spot` und „Key claims“; der Highlights-Filter lässt sie immer
+stehen (außer „No highlights“). Aussehen: nur eine leise gepunktete Linie in
+Tinte (`--cx-provisional-line`, hell/dunkel, `forced-colors`: `GrayText`),
+keine Fläche, kein Platzbedarf. Hover (nur echter Zeiger) zeigt kein Urteil
+(„Compared with N model answers“ / „The result appears once the whole answer
+is checked“), Klick öffnet nichts, kein Tabstopp. Neue Marken bekommen
+`.is-mark-arriving` (die Linie blendet ein), `body._shownMarks` merkt die
+Satztexte je `answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand.
+Ohne passende Vorschau nimmt `preview` die Marken einmal wieder ab
+(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark`
+ersetzt sie im selben Task durch die finalen (nie ein Moment ohne Marken) und
+setzt den Zustand zurück; finale Marken auf vorher vorläufigen Sätzen tragen
+kurz `.was-provisional` (`handOver`): die Linie bleibt, bis ihre Farbe per
+`revealMarks` anstreicht (`--cx-reveal-delay`), und blendet dann aus; ein Satz,
+den das Ergebnis nicht färbt, verliert sie sofort weich. Weil die vorläufigen
+Marken keine Farbe zeigten, streicht `revealMarks` jede farbige Marke an
+(kein `.is-mark-shown` mehr). Bei `prefers-reduced-motion` (und
+`forced-colors`) gibt es keine Animation: die Farben stehen sofort da.
+`settleHandOver` räumt die Klasse am Ende des Anstreichens bzw. nach
+`HAND_OVER_MS` ab.
 
 Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
 Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
@@ -9558,8 +9575,9 @@ Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
 genau dem Text, den die Live-Prüfung schon vollständig samt Claim-Marken
 gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
 dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
-Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18) zeichnet
-`project` schon, während die feste Antwort geprüft wird.
+Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18, seit
+2026-10-21 neutral ohne Urteil) zeichnet `project` schon, während die feste
+Antwort geprüft wird.
 Seit 2026-10-20 (Apple-Audit D4) malt `follow()` gestreamten Text einmal pro
 Frame (`schedulePaint` → `renderAnswerBody(..., 'stream')`, nur in eine Antwort,
 die dieser sichtbare Lauf schon streamt), getrennt vom 100-ms-Takt der übrigen

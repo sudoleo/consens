@@ -344,28 +344,17 @@
   }
   // The first time a live answer receives its marks they stroke on in reading
   // order, like a marker pen going over the text (the landing page's gesture).
-  // Later re-renders of the same answer show them at once.
+  // Later re-renders of the same answer show them at once. Provisional marks
+  // carry no colour (preview()), so every coloured mark is new to the reader.
   const MARKS = '.cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major)';
-  // A mark as the reader sees it: its colour and its words.
-  const markKey = el => `${el.className.match(/\bis-(?:thin|unanimous|minor|split|major)\b/)?.[0] || ''}|${el.textContent}`;
   // A re-render during the reveal (a fresh DOM when the run ends) continues
   // the stroke where it was, through negative delays, instead of restarting.
   function revealMarks(body, hash) {
     // Marks hidden by the highlight setting (all markers off, or e.g. green
     // ones filtered out) neither animate nor take a place in the sequence.
     const visible = el => !el.classList.contains('is-marker-filtered');
-    // Marks the reader already saw as provisional marks of this answer, in
-    // the same colour, stay still with their badges: only new or changed
-    // marks (a contradiction, a sentence checked last) stroke on (preview()).
-    // Without a hash (an answer that failed before its review) nothing was shown.
-    const shown = hash && body._shownMarks?.hash === hash ? body._shownMarks.keys : null;
-    let still = false;
-    const moving = (document.body.classList.contains('consensus-markers-hidden') ? []
-      : [...body.querySelectorAll(`${MARKS}, .claim-badge`)].filter(visible)).filter(el => {
-      if (el.matches(MARKS)) still = Boolean(shown?.has(markKey(el)));
-      el.classList.toggle('is-mark-shown', still);
-      return !still;
-    });
+    const moving = document.body.classList.contains('consensus-markers-hidden') ? []
+      : [...body.querySelectorAll(`${MARKS}, .claim-badge`)].filter(visible);
     const marks = moving.filter(el => el.matches(MARKS));
     if (!marks.length) return;
     const now = performance.now();
@@ -392,6 +381,7 @@
       // background must not run the marks' hover transition: every mark
       // blinked out and faded in again at once, like a second, faster reveal.
       body.classList.add('is-marks-settling');
+      settleHandOver(body);
       body.classList.remove('is-marks-revealing');
       for (const el of body.querySelectorAll('[style*="--cx-reveal-delay"]')) el.style.removeProperty('--cx-reveal-delay');
       void body.offsetWidth;
@@ -425,13 +415,33 @@
   }
   // Provisional marks (since 2026-10-18): while the judges check the fixed
   // answer, the Coverage windows that are done send their verdicts
-  // (coverage_preview, never saved). They appear quietly, without the stroke,
-  // and only on the exact answer they were checked on; the final review
-  // replaces them (render), and only marks that are new or changed then
-  // stroke on (revealMarks). Anything else (no preview, another answer, a
-  // check that ended without a result) takes them off again. `previews`
-  // holds the newest preview of each comparison; the marks belong to the
-  // comparison the evidence row will show.
+  // (coverage_preview, never saved). Since 2026-10-21 they show only THAT a
+  // sentence was compared: one quiet neutral line under every such sentence,
+  // no colour, no count, a hover card without a verdict (Max: a sentence
+  // turned amber, the amber went, then another one turned red). They appear
+  // only on the exact answer they were checked on and fade in, each once.
+  // The final review replaces them in the same frame (render, context.mark):
+  // each sentence keeps its line until its colour strokes on (handOver).
+  // Anything else (no preview, another answer, a check that ended without a
+  // result) takes them off again. `previews` holds the newest preview of
+  // each comparison; the marks belong to the comparison the evidence row
+  // will show.
+  const PROVISIONAL = '.cx-claim.is-provisional';
+  // The hand-over takes at most the reveal (900 ms plus the stroke of the
+  // last mark); afterwards the class leaves no trace.
+  const HAND_OVER_MS = 2400;
+  function handOver(body, texts) {
+    if (!texts?.size) return;
+    for (const el of body.querySelectorAll('.cx-claim')) {
+      if (texts.has(el.textContent)) el.classList.add('was-provisional');
+    }
+    clearTimeout(body._handOverTimer);
+    body._handOverTimer = setTimeout(() => settleHandOver(body), HAND_OVER_MS);
+  }
+  function settleHandOver(body) {
+    clearTimeout(body._handOverTimer);
+    for (const el of body.querySelectorAll('.was-provisional')) el.classList.remove('was-provisional');
+  }
   function preview(body, review, previews, evidence = {}) {
     if (!body?.parentElement) return;
     const applied = body._previewMarks;
@@ -464,19 +474,15 @@
       // list for sentences without an anchor while the check is incomplete.
       window.renderStoredConsensusClaims?.(body, { claims, differences: [],
         models_compared: Array.isArray(data.models_compared) ? data.models_compared : [] },
-      document.createElement('div'), sources, { answerNavigation: { canOpen: () => false, open() {} }, focusDifference() {} });
+      document.createElement('div'), sources, { answerNavigation: { canOpen: () => false, open() {} }, focusDifference() {},
+        provisional: true });
       window.linkifyAgentSources?.(body, sources);
     });
-    // What the reader has seen; a mark not seen before fades in, once.
+    // The sentences the reader has seen marked; one not seen before fades in, once.
     const shown = review.answer_hash && body._shownMarks?.hash === review.answer_hash ? body._shownMarks.keys : new Set();
-    let arriving = false;
-    for (const el of body.querySelectorAll(`${MARKS}, .claim-badge`)) {
-      if (el.matches(MARKS)) {
-        const key = markKey(el);
-        arriving = !shown.has(key);
-        shown.add(key);
-      }
-      el.classList.toggle('is-mark-arriving', arriving);
+    for (const el of body.querySelectorAll(PROVISIONAL)) {
+      el.classList.toggle('is-mark-arriving', !shown.has(el.textContent));
+      shown.add(el.textContent);
     }
     body._shownMarks = { hash: review.answer_hash, keys: shown };
     // The final review draws its marks anew (context.mark).
@@ -628,6 +634,10 @@
         body._markSignature = markSignature;
         body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
+        // The sentences that carry a provisional line now hand it over to
+        // their final mark, in this same frame (no moment without marks).
+        const provisional = body._previewMarks
+          ? new Set([...body.querySelectorAll(PROVISIONAL)].map(el => el.textContent)) : null;
         // A body that already shows exactly this text, unmarked (a saved turn
         // just rendered), is marked as it is: rendering it a second time cost
         // every opened chat a second Markdown pass per turn (Apple audit D5).
@@ -640,6 +650,7 @@
         });
         // Provisional marks went with the old render.
         body._previewMarks = null; body.classList.remove('has-provisional-marks');
+        handOver(body, provisional);
         body._markedWrites = body._markdownWrites;
         body._markedFirst = body.firstChild;
       };

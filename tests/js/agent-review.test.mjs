@@ -446,9 +446,11 @@ function previewSetup() {
   const body = d.getElementById('answer');
   body.dataset.markdown = 'Exact answer.';
   w.matchMedia = () => ({ matches: false });
-  // The real marker sets one span per anchored claim and a badge behind it.
-  w.renderStoredConsensusClaims = vi.fn((el, data) => {
-    el.innerHTML = data.claims.map(c => `<span class="cx-claim is-${c.major ? 'major' : c.coverage === 'split' ? 'split' : 'unanimous'}">${c.anchor}</span>`
+  // The real marker sets one span per anchored claim and a badge behind it;
+  // provisional marks are one neutral span each (consensus-insights.js).
+  w.renderStoredConsensusClaims = vi.fn((el, data, _fallback, _sources, options = {}) => {
+    el.innerHTML = data.claims.map(c => options.provisional ? `<span class="cx-claim is-provisional">${c.anchor}</span>`
+      : `<span class="cx-claim is-${c.major ? 'major' : c.coverage === 'split' ? 'split' : 'unanimous'}">${c.anchor}</span>`
       + ' <span class="claim-badge">2/2</span>').join(' ');
   });
   const running = { ...snapshot(), status: 'running' };
@@ -460,17 +462,19 @@ it('marks the exact answer quietly with the Coverage windows that are done, and 
   const {window: w, dom, body, running} = previewSetup();
   const previews = { c1: { answer_hash: 'answer-hash', comparison_id: 'c1', claims: [claim('One.')], models_compared: ['GPT'] } };
   w.App.agentReview.preview(body, running, previews);
-  // Coverage only: no contradictions, no "Key claims" list, no score row.
-  const [marked, data, fallback, sources] = w.renderStoredConsensusClaims.mock.lastCall;
+  // Coverage only: no contradictions, no "Key claims" list, no score row,
+  // and neutral marks without a verdict (provisional).
+  const [marked, data, fallback, sources, options] = w.renderStoredConsensusClaims.mock.lastCall;
   expect(marked).toBe(body);
   expect(JSON.parse(JSON.stringify(data))).toEqual({ claims: [claim('One.')], differences: [], models_compared: ['GPT'] });
   expect(fallback.isConnected).toBe(false);
   expect(Array.isArray(sources)).toBe(true);
+  expect(options.provisional).toBe(true);
   expect(body._agentReview).toBeUndefined();
   expect(body.classList.contains('has-provisional-marks')).toBe(true);
-  // No marker stroke: the mark and its badge fade in once.
+  // No marker stroke: the neutral line fades in once.
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
-  expect([...body.querySelectorAll('.cx-claim, .claim-badge')].every(el => el.classList.contains('is-mark-arriving'))).toBe(true);
+  expect([...body.querySelectorAll('.cx-claim')].every(el => el.classList.contains('is-mark-arriving'))).toBe(true);
   // An unchanged preview keeps the DOM (the page projects every 100 ms).
   const first = body.querySelector('.cx-claim');
   w.App.agentReview.preview(body, structuredClone(running), structuredClone(previews));
@@ -499,30 +503,35 @@ it('marks the exact answer quietly with the Coverage windows that are done, and 
   }
   dom.window.close();
 });
-it('strokes on only new or changed marks when the final review replaces provisional ones', () => {
+it('hands the provisional lines over to the final marks in the same frame, each until its colour strokes on', () => {
   vi.useFakeTimers();
   const {window: w, dom, body, running} = previewSetup();
   w.performance.now = () => 1000;
   w.App.agentReview.preview(body, running, { c1: { answer_hash: 'answer-hash', comparison_id: 'c1',
     claims: [claim('One.'), claim('Two.')], models_compared: ['GPT'] } });
+  expect(body.querySelectorAll('.cx-claim.is-provisional')).toHaveLength(2);
   const review = snapshot();
   // Two. turned out to be contested, Three. was checked last.
   review.checks[0].differences_data.claims = [claim('One.'), claim('Two.', { major: true }), claim('Three.')];
   w.App.agentReview.render(body, review, { reveal: true });
+  // No moment without marks: the final ones stand in place of the provisional ones.
   expect(body.classList.contains('has-provisional-marks')).toBe(false);
+  expect(body.querySelectorAll('.cx-claim.is-provisional')).toHaveLength(0);
   expect(body.classList.contains('is-marks-revealing')).toBe(true);
   const [one, two, three] = body.querySelectorAll('.cx-claim');
-  const [oneBadge] = body.querySelectorAll('.claim-badge');
   const delay = el => el.style.getPropertyValue('--cx-reveal-delay');
-  for (const el of [one, oneBadge]) {
-    expect(el.classList.contains('is-mark-shown')).toBe(true);
-    expect(delay(el)).toBe('');
-  }
-  expect(two.classList.contains('is-mark-shown')).toBe(false);
-  expect(delay(two)).toBe('0ms');
-  expect(parseInt(delay(three))).toBeGreaterThan(0);
+  // The provisional marks had no colour: every coloured mark strokes on, in
+  // reading order, and the sentences that had a line keep it until then.
+  expect(delay(one)).toBe('0ms');
+  expect(parseInt(delay(two))).toBeGreaterThan(0);
+  expect(parseInt(delay(three))).toBeGreaterThan(parseInt(delay(two)));
+  expect([one, two, three].map(el => el.classList.contains('was-provisional'))).toEqual([true, true, false]);
   vi.runAllTimers();
-  // A final review that only confirms what the reader saw strokes nothing.
+  // The hand-over leaves no trace.
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  expect(body.querySelectorAll('.was-provisional')).toHaveLength(0);
+  // Without a reveal (reduced motion) the colours stand at once, the lines go.
+  w.matchMedia = () => ({ matches: true });
   const same = snapshot();
   same.answer_hash = same.versions[0].hash = 'same-hash';
   same.checks.forEach(c => { c.answer_hash = 'same-hash'; });
@@ -530,8 +539,10 @@ it('strokes on only new or changed marks when the final review replaces provisio
   w.App.agentReview.preview(body, { ...running, answer_hash: 'same-hash', versions: same.versions },
     { c1: { answer_hash: 'same-hash', comparison_id: 'c1', claims: [claim('One.')], models_compared: ['GPT'] } });
   w.App.agentReview.render(body, same, { reveal: true });
-  expect(body.querySelector('.cx-claim').classList.contains('is-mark-shown')).toBe(true);
+  expect(body.querySelector('.cx-claim').className).toBe('cx-claim is-unanimous was-provisional');
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  vi.runAllTimers();
+  expect(body.querySelectorAll('.was-provisional')).toHaveLength(0);
   vi.useRealTimers();
   dom.window.close();
 });

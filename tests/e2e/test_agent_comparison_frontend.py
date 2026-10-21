@@ -825,10 +825,12 @@ def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(brow
 
 def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(browser, phase4_server):
     """Coverage windows that are done mark the fixed answer quietly while the
-    Differences judge still runs (coverage_preview, since 2026-10-18). The
-    final review replaces them and strokes on only what is new or changed;
-    the saved turn shows the saved review alone. Green marks show only
-    under "All checks" (the default shows disagreements only)."""
+    Differences judge still runs (coverage_preview, since 2026-10-18). Since
+    2026-10-21 a provisional mark is neutral: it says that the sentence was
+    compared, not how. The final review replaces them in the same frame,
+    without a moment without marks, and brings the colours; the saved turn
+    shows the saved review alone. Green marks show only under "All checks"
+    (the default shows disagreements only)."""
     context, page = _real_firebase_page(browser, phase4_server,
         init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','all')")
     chat, turn = "a" * 32, "b" * 32
@@ -892,19 +894,25 @@ def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(bro
         expect(body).to_have_class(re.compile(r"\bis-answer-checking\b"))
         expect(marks).to_have_count(0)
 
-        # The first window is done: its sentence is marked quietly, no score yet.
+        # The first window is done: its sentence is marked quietly and
+        # neutrally, no colour, no count, no score yet.
         preview = {"answer_hash": digest, "comparison_id": "c1", "models_compared": ["Gemini", "OpenAI"], "sentences": 2}
         push("coverage_preview", {**preview, "claims": [supported(seats, 1)], "checked": 1})
         expect(marks).to_have_count(1)
         expect(marks.first).to_have_text(seats)
-        expect(marks.first).to_have_class(re.compile(r"\bis-unanimous\b.*\bis-mark-arriving\b|\bis-mark-arriving\b.*\bis-unanimous\b"))
+        expect(marks.first).to_have_class(re.compile(r"\bis-provisional\b.*\bis-mark-arriving\b|\bis-mark-arriving\b.*\bis-provisional\b"))
+        expect(marks.first).not_to_have_class(re.compile(r"\bis-(thin|unanimous|minor|split|major)\b"))
+        expect(body.locator(".claim-badge")).to_have_count(0)
+        expect(marks.first).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+        expect(marks.first).to_have_css("text-decoration-style", "dotted")
         expect(body).to_have_class(re.compile(r"\bhas-provisional-marks\b"))
         expect(body).to_have_class(re.compile(r"\bis-answer-checking\b"))
         expect(body).not_to_have_class(re.compile(r"\bis-marks-revealing\b"))
         expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
-        # The provisional mark already explains itself.
+        # The provisional mark says that it was compared, not how it came out.
         marks.first.hover()
-        expect(page.locator(".insight-preview")).to_contain_text("2/2")
+        hover_card = page.locator(".insight-preview")
+        expect(hover_card).to_have_text("Compared with 2 model answersThe result appears once the whole answer is checked")
         page.mouse.move(0, 0)
 
         # The next window: the seen mark stays as it is, the new one fades in.
@@ -913,16 +921,26 @@ def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(bro
         expect(marks.first).not_to_have_class(re.compile(r"\bis-mark-arriving\b"))
         expect(marks.nth(1)).to_have_class(re.compile(r"\bis-mark-arriving\b"))
 
-        # Differences is done: the final review takes over. The confirmed mark
-        # stays still; the contradiction strokes on in red; the score appears.
+        # Differences is done: the final review takes over in the same frame
+        # (never a moment without marks) and brings the colours: the
+        # contradiction in red, the score.
+        page.evaluate("""() => {
+          const body = document.getElementById('agentAnswerBody');
+          window.__markGap = false;
+          new MutationObserver(() => { if (!body.querySelector('.cx-claim')) window.__markGap = true; })
+            .observe(body, {subtree: true, childList: true});
+        }""")
         push("review", {"review": review})
         expect(body).not_to_have_class(re.compile(r"\bhas-provisional-marks\b"))
         expect(body).not_to_have_class(re.compile(r"\bis-answer-checking\b"))
         expect(body.locator(".cx-claim.is-major")).to_have_count(1)
         expect(body.locator(".cx-claim.is-major")).to_have_text(billing)
-        expect(body.locator(".cx-claim.is-major")).not_to_have_class(re.compile(r"\bis-mark-shown\b"))
-        expect(body.locator(".cx-claim.is-unanimous")).to_have_class(re.compile(r"\bis-mark-shown\b"))
+        expect(body.locator(".cx-claim.is-unanimous")).to_have_count(1)
+        expect(body.locator(".cx-claim.is-provisional")).to_have_count(0)
+        assert page.evaluate("window.__markGap") is False
         expect(page.locator("#agentAnswer .agent-agreement-num")).to_have_text("72")
+        # The hand-over leaves no trace once the colours have stroked on.
+        expect(body.locator(".was-provisional")).to_have_count(0)
 
         request = page.evaluate("window.__agentRequest")
         bookmark = {"id": request["bookmark_id"], "chat_id": chat, "turn_id": turn, "title": saved["question"],

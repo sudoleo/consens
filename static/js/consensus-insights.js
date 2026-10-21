@@ -157,7 +157,9 @@
           }
 
           function matchesHighlightFilter(mark) {
-            if (highlightMode === "all") return true;
+            // A provisional mark carries no verdict a filter could pick by:
+            // it shows under every setting except "No highlights".
+            if (highlightMode === "all" || mark.classList.contains("is-provisional")) return true;
             if (highlightMode === "contradictions") return !!mark.cxGroup?.hasContradiction;
             // Every contradiction the footer counts, minor ones included.
             if (highlightMode === "concerns" && mark.cxGroup?.hasContradiction) return true;
@@ -1338,8 +1340,9 @@
             }) || group.controls[0] || null;
           }
 
-          // `interactive: false`: hover only. A checked sentence of the user's
-          // text has its own click (passage-check.js).
+          // `interactive: false`: hover only. A provisional mark opens nothing,
+          // and a checked sentence of the user's text has its own click
+          // (passage-check.js).
           function passageGroup(spans, interactive = true) {
             if (spans[0].cxGroup) return spans[0].cxGroup;
             const group = { spans: spans, controls: [], hover: false };
@@ -1572,6 +1575,22 @@
             return frag;
           }
 
+          // A provisional mark (agent-review.js preview) says only that its
+          // sentence was compared, never how it came out: the verdict and its
+          // colour arrive together with the finished check.
+          function buildProvisionalPreview(modelsCompared) {
+            const frag = document.createDocumentFragment();
+            const count = Array.isArray(modelsCompared) ? modelsCompared.length : 0;
+            frag.appendChild(previewHead(count
+              ? "Compared with " + count + " model answer" + (count === 1 ? "" : "s")
+              : "Compared with the model answers"));
+            const foot = document.createElement("div");
+            foot.className = "insight-preview-foot";
+            foot.textContent = "The result appears once the whole answer is checked";
+            frag.appendChild(foot);
+            return frag;
+          }
+
           function buildDiffPreview(diff) {
             const frag = document.createDocumentFragment();
             const isMajor = diff.type === "contradiction" && diff.severity === "major";
@@ -1668,9 +1687,9 @@
             entry.el.tabIndex = -1;
           }
 
-          // Nur die Vorschau, ohne eigenen Klick: fuer die Saetze einer
-          // geprueften Nachricht, deren Klick und Tastatur ihrer eigenen Karte
-          // gehoeren (passage-check.js).
+          // Nur die Vorschau, ohne Klick und ohne Tabstopp: fuer vorlaeufige
+          // Marken und fuer die Saetze einer geprueften Nachricht, deren Klick
+          // und Tastatur ihrer eigenen Karte gehoeren (passage-check.js).
           function attachPreviewOnly(spans, preview, focusable) {
             if (!spans || !spans.length || spans[0].cxGroup) return null;
             const group = passageGroup(spans, false);
@@ -1719,6 +1738,24 @@
               return markSentence(
                 body, anchor, severityClass, marksFor(probe.block), occurrence
               );
+            }
+
+            // Vorlaeufig (agent-review.js preview, seit 2026-10-21 neutral):
+            // jeder schon verglichene Satz traegt dieselbe leise Marke, ohne
+            // Farbe, Quote, Stelle oder Liste und mit einer Vorschau ohne
+            // Urteil. Was die Pruefung ergibt, kommt erst mit der fertigen
+            // Pruefung (Max 2026-10-21: erst ein gelber Satz, dann keiner, dann
+            // ein ganz anderer roter).
+            if (options.provisional) {
+              let anchored = 0;
+              claims.forEach(function (claim) {
+                const result = mark(claim.anchor, "is-provisional", claim.anchor_occurrence);
+                if (!result) return;
+                anchored += 1;
+                attachPreviewOnly(result.spans, function () { return buildProvisionalPreview(modelsCompared); });
+              });
+              applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body, fallbackBox);
+              return { claims_anchored: anchored, claims_unanchored: claims.length - anchored };
             }
 
             // Wenn Claim und Difference denselben Satz meinen, steht dort nur
@@ -1938,7 +1975,8 @@
               // Ein archivierter Turn hat seine eigenen Quellen; die globale
               // Liste gehoert bereits dem naechsten Lauf.
               sources: Array.isArray(sources) ? sources : [],
-              answerNavigation: options.answerNavigation || storedAnswerNavigation(body)
+              answerNavigation: options.answerNavigation || storedAnswerNavigation(body),
+              provisional: options.provisional === true
             });
             return claims.length > 0;
           }

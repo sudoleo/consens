@@ -561,34 +561,38 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
   /* The marks stroke on in reading order; badges settle in behind them. */
-  /* Only marks the reader's highlight setting shows take part, and none the
-     reader already saw as a provisional mark in the same colour. */
+  /* Only marks the reader's highlight setting shows take part. */
   /* A sentence whose disputed words are named strokes only those words
      (.cx-spot inherits the sentence's --cx-reveal-delay). */
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown, .has-spot),
+    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown) .cx-spot {
+    .cx-claim.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered) .cx-spot {
     background-color: transparent;
     background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
     background-repeat: no-repeat;
     box-shadow: none;
     animation: agent-mark-stroke var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
-  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered, .is-mark-shown) {
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered) {
     animation: agent-mark-badge var(--dur-layer) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
   /* Provisional marks (Coverage windows that are done while Differences
-     still runs, agent-review.js preview) arrive quietly: each fades in once,
-     without the stroke. */
-  body:not(.consensus-markers-hidden) #agentAnswerBody
-    .cx-claim.is-mark-arriving:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
-  body:not(.consensus-markers-hidden) #agentAnswerBody
-    .cx-claim.is-mark-arriving.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered) .cx-spot {
-    animation: agent-mark-arrive var(--dur-layer) var(--ease-out) backwards;
+     still runs, agent-review.js preview): each neutral line fades in once. */
+  body:not(.consensus-markers-hidden) #agentAnswerBody .cx-claim.is-provisional.is-mark-arriving {
+    animation: agent-provisional-in var(--dur-layer) var(--ease-out) backwards;
   }
-  body:not(.consensus-markers-hidden) #agentAnswerBody .claim-badge.is-mark-arriving:not(.is-marker-filtered) {
-    animation: agent-mark-badge var(--dur-layer) var(--ease-out) backwards;
+  /* The hand-over to the final marks happens in one frame, without a gap: a
+     sentence keeps its provisional line until its own colour strokes on
+     (its --cx-reveal-delay), then the line fades as the colour comes; a
+     sentence the result leaves unmarked lets it fade at once. */
+  body:not(.consensus-markers-hidden) #agentAnswerBody .cx-claim.was-provisional {
+    animation: agent-provisional-out var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
+  }
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
+    .cx-claim.was-provisional:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot) {
+    animation: agent-mark-stroke var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards,
+      agent-provisional-out var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
@@ -609,7 +613,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
-@keyframes agent-mark-arrive { from { background-color: transparent; box-shadow: none; } }
+@keyframes agent-provisional-in { from { text-decoration-color: transparent; } }
+@keyframes agent-provisional-out {
+  from { text-decoration-color: var(--cx-provisional-line); }
+  to { text-decoration-color: transparent; }
+}
 
 /* ---- Progress at the models ------------------------------------------------
    While the agent works, each comparison model's icon in the summary row
