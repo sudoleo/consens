@@ -2506,6 +2506,41 @@
             });
           }
 
+          // Eine Behauptung ist eine Seite (Live-Befund 2026-10-21): der Judge
+          // nannte den Satz der Antwort einmal fuer Luna und einmal fuer zwei
+          // weitere Modelle, und die Karte zeigte ihn zweimal mit "vs"
+          // dazwischen. Dieselbe Regel wie _normalize_differences im Backend,
+          // damit auch gespeicherte Chats jede Behauptung nur einmal zeigen:
+          // gleiche Aussage = eine Seite, jedes Modell nur auf seiner ersten.
+          function claimKey(text) {
+            return String(text || "").replace(/\s+/g, " ").trim().toLowerCase()
+              .replace(/[\s.!?;:,…。！？]+$/u, "");
+          }
+
+          function mergedPositions(positions) {
+            const merged = [];
+            const taken = new Set();
+            positions.forEach(function (pos) {
+              const models = [];
+              (pos.models || []).forEach(function (model) {
+                if (!taken.has(model)) models.push(model);
+              });
+              const key = claimKey(pos.stance || pos.quote);
+              const same = key && merged.find(function (side) {
+                return claimKey(side.stance || side.quote) === key;
+              });
+              models.forEach(function (model) { taken.add(model); });
+              if (same) {
+                same.models = same.models.concat(models);
+                if (!same.quote && pos.quote) same.quote = pos.quote;
+                if (pos.in_answer === true) same.in_answer = true;
+                return;
+              }
+              if (models.length) merged.push(Object.assign({}, pos, { models: models }));
+            });
+            return merged;
+          }
+
           function readableDifference(diff, labelFor, names) {
             names = names || legacyModelNames([diff], labelFor);
             const hasAnswer = diff.positions.some(function (pos) { return pos.in_answer === true; });
@@ -2540,7 +2575,7 @@
             });
             // Eine kurze Themenzeile ("Tesla Model S") ist keine Erzaehlung.
             const narrative = String(diff.claim || "").length > 60 && LEGACY_NARRATIVE.test(diff.claim);
-            return { claim: withModelNames(diff.claim, names), narrative: narrative, positions: positions };
+            return { claim: withModelNames(diff.claim, names), narrative: narrative, positions: mergedPositions(positions) };
           }
 
           function buildDifferenceCards(cards, differences, modelCount, options) {

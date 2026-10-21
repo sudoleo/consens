@@ -263,6 +263,56 @@ describe("difference cards in the detail panel", () => {
     expect(quote.hidden).toBe(true);
   });
 
+  it("shows the same claim once, with every model on its first side only", () => {
+    // Live 2026-10-21: the answer's claim for Luna, the same claim again for
+    // two models, then the rival claim. Saved chats still carry that shape.
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    const data = {
+      models_compared: ["OpenAI", "Gemini", "Anthropic", "Grok"],
+      differences: [{
+        claim: "Shoe for maximum cushioning", type: "contradiction", severity: "major",
+        positions: [
+          { models: ["OpenAI"], stance: "The Hyperboost Edge is the pick for maximum cushioning.", quote: "", in_answer: true },
+          { models: ["Gemini", "Anthropic", "OpenAI"], stance: "the hyperboost edge is the pick for  maximum cushioning",
+            quote: "Hyperboost Edge" },
+          { models: ["Grok", "Gemini"], stance: "The Supernova Rise 3 is the pick.", quote: "Supernova Rise 3" }
+        ]
+      }]
+    };
+    const saved = structuredClone(data);
+    ctx.window.renderStoredDifferenceCards(cards, data);
+    const sides = cards.querySelector(".diff-sides");
+    expect([...sides.children].map(el => el.className))
+      .toEqual(["diff-position is-answer", "diff-versus-mark", "diff-position"]);
+    const [answer, other] = sides.querySelectorAll(".diff-position");
+    expect(answer.querySelector(".diff-position-stance").textContent)
+      .toBe("The Hyperboost Edge is the pick for maximum cushioning.");
+    expect([...answer.querySelectorAll(".diff-position-name")].map(n => n.textContent))
+      .toEqual(["OpenAI", "Gemini", "Anthropic"]);
+    expect(answer.querySelector(".diff-position-count").textContent).toBe("3 models");
+    // The first quote there is backs the merged side.
+    expect(answer.querySelector(".diff-position-quote").textContent).toBe("Hyperboost Edge");
+    expect([...other.querySelectorAll(".diff-position-name")].map(n => n.textContent)).toEqual(["Grok"]);
+    // The saved data itself stays as it was (Resolve keys on it).
+    expect(data).toEqual(saved);
+  });
+
+  it("gives sides that turn out to be one claim no versus", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, {
+      models_compared: ["OpenAI", "Gemini"],
+      differences: [{ claim: "price", type: "contradiction", severity: "minor",
+        positions: [{ models: ["OpenAI"], stance: "29 euros.", in_answer: true }, { models: ["Gemini"], stance: "29 Euros" }] }]
+    });
+    const sides = cards.querySelector(".diff-sides");
+    expect(sides.className).toBe("diff-sides");
+    expect(sides.querySelector(".diff-versus-mark")).toBe(null);
+    expect(sides.querySelectorAll(".diff-position")).toHaveLength(1);
+    expect(sides.querySelector(".diff-position-count").textContent).toBe("2 models");
+  });
+
   it("says each claim once in differences saved before the versus format", () => {
     const ctx = boot();
     const cards = ctx.document.createElement("div");

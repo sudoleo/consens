@@ -5756,6 +5756,18 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   (Schema-Pflichtfeld, boolean) markiert die Seite, die die Konsensantwort
   selbst vertritt; `_normalize_differences` speichert es nur als `true` und
   höchstens einmal je Differenz, der Share-Sanitizer reicht es durch.
+  **Eine Behauptung = eine Seite (seit 2026-10-21):** `_normalize_differences`
+  führt Positionen mit gleicher Behauptung zusammen (`_stance_key`: Groß-/
+  Kleinschreibung, Whitespace, Satzzeichen am Ende): Modelle werden vereinigt,
+  `in_answer` geht mit, das erste vorhandene Zitat bleibt. Ein Modell steht nur
+  in seiner ersten Position; eine Position ohne verbleibendes Modell entfällt.
+  Fallen so alle Seiten zu einer zusammen, ist es kein Unterschied mehr und die
+  Differenz entfällt (eine vom Judge einseitig gelieferte Differenz bleibt wie
+  bisher). Der Prompt verlangt dasselbe. `readableDifference`
+  (`consensus-insights.js`) wendet die Regel beim Anzeigen an, ohne die Daten
+  zu ändern, damit gespeicherte Chats dieselbe Behauptung nicht zweimal mit
+  „vs“ zeigen. Live-Befund: Lunas Satz „In the answer“, darunter derselbe Satz
+  für zwei weitere Modelle, dann Grok.
   `_named_models` ersetzt übrig gebliebene Judge-Labels in `claim`/`stance`/
   `verify` („Model F“, „Modell F“, „Models A and C“) durch die echten
   Modellnamen; unbekannte Labels bleiben stehen. Auslöser war ein Live-Befund
