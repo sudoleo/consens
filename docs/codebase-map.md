@@ -5244,10 +5244,12 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 - Frontend: Die autoritative Fortsetzungsbasis liegt getrennt von der Ansicht
   in `runRegistry.selectedConversationBasis`; ein neuer `RunContext` erhält
   davon einen Snapshot und eine eigene `ChatSession`. `runRegistry.retitle(
-  bookmarkId, title)` gibt einem umbenannten Chat den neuen Namen auch in den
-  Basen (gewählte, `basis`/`completedBasis` jedes Laufs), aus denen die
-  nächste Nachricht ihren Seitenleisten-Namen nimmt (`firebase.js`
-  `applyBookmarkTitle`). `window.App.followup`
+  bookmarkId, title, {source})` ist der eine Weg, einen umbenannten Chat
+  umzubenennen (`firebase.js` `applyBookmarkTitle` ruft nur ihn): jeder Lauf
+  des Chats, auch ein laufender, bekommt `bookmark.title` (+ `latestMeta`,
+  ein Ereignis, damit seine Seitenleisten-Zeile nachzieht), dazu die Basen
+  (gewählte, `basis`/`completedBasis` jedes Laufs), aus denen die nächste
+  Nachricht ihren Namen nimmt. `window.App.followup`
   (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
   sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
   `run-view.js` gleicht ihn bei jedem Sichtwechsel mit `historyTurns` und der
