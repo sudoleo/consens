@@ -187,7 +187,7 @@ pyjwt==2.15.1
     #   firebase-admin
 pyparsing==3.2.1
     # via httplib2
-pypdf==6.20.1
+pypdf==6.21.2
     # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via -r requirements.in
