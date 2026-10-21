@@ -444,9 +444,10 @@ describe("single-model agent chat", () => {
     w.App.agentActivity.render(host, {events});
     expect(host.textContent).toContain('Text check · Completed');
     expect(host.textContent).not.toContain('Tool ·');
-    const highlight = {id:'h', label:'Gemini', text:'Checking the figures.'};
-    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'c',name:'check_text',status:'running'}], highlight});
+    const highlights = [{id:'h', label:'Gemini', text:'Checking the figures.'}];
+    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'c',name:'check_text',status:'running'}], highlights});
     expect(host.querySelector('.agent-progress').textContent).toContain('Gemini: Checking the figures.');
+    w.App.agentActivity.dispose(host);
     dom.window.close();
   });
 
@@ -460,23 +461,65 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('details').open).toBe(false);
     dom.window.close();
   });
-  it('fills the quiet comparison phase with one compact reasoning line of a comparison model', () => {
+  it('fills the quiet comparison phase with one line that quotes the comparison models in turn', () => {
     const {window:w,document:d,dom} = boot();
+    // The line's own clock and timer: each excerpt stands 2.5 s.
+    let now = 1000;
+    Object.defineProperty(w.performance, 'now', { configurable: true, value: () => now });
+    const timers = [];
+    w.setTimeout = (fn, ms) => timers.push({ fn, ms });
     const host = d.querySelector('#agentAnswerActivity');
     const events = [{kind:'tool',id:'t1',name:'compare_models',status:'running'}];
-    const highlight = {id:'a', label:'Gemini', text:'Checking the 2026 figures.'};
-    w.App.agentActivity.render(host, {running:true, events, highlight});
+    const gemini = {id:'a', order:1, label:'Gemini', text:'Checking the 2026 figures.'};
+    const gpt = {id:'b', order:2, label:'GPT', text:'Weighing both sources.'};
+    const render = highlights => w.App.agentActivity.render(host, {running:true, events, highlights});
+    const quotes = () => [...host.querySelectorAll('.agent-progress p:not(.agent-progress-step)')].map(p => p.textContent);
+    render([gemini]);
     const preview = host.querySelector('.agent-progress');
     expect(preview.textContent).toContain('Comparing perspectives…');
-    expect(preview.textContent).toContain('Gemini: Checking the 2026 figures.');
+    expect(quotes()).toEqual(['Gemini: Checking the 2026 figures.']);
     // Frequent changes stay out of the screen reader log.
     expect([...preview.querySelectorAll('p')].find(p => p.textContent.startsWith('Gemini:')).getAttribute('aria-hidden')).toBe('true');
-    w.App.agentActivity.render(host, {running:true, events, highlight:{...highlight, label:'GPT', text:'Weighing both sources.'}});
-    expect(preview.querySelectorAll('p:not(.agent-progress-step)')).toHaveLength(1);
-    expect(preview.textContent).toContain('GPT: Weighing both sources.');
+    // GPT reports a moment later: Gemini's excerpt stands its time first.
+    now += 1000;
+    render([gemini, gpt]);
+    expect(quotes()).toEqual(['Gemini: Checking the 2026 figures.']);
+    // When it is up, the line moves on by itself, without a new report.
+    now += 1600;
+    timers.at(-1).fn();
+    expect(quotes()).toEqual(['GPT: Weighing both sources.']);
+    // Both have something new: the turn goes back to Gemini, whatever reported last.
+    const gemini2 = {...gemini, text:'Comparing the seat limits.'}, gpt2 = {...gpt, text:'Rechecking the price.'};
+    now += 2600;
+    render([gemini2, gpt2]);
+    expect(quotes()).toEqual(['Gemini: Comparing the seat limits.']);
+    now += 2600;
+    render([gemini2, gpt2]);
+    expect(quotes()).toEqual(['GPT: Rechecking the price.']);
+    // Nothing new anywhere: the line stays where it is.
+    now += 5000;
+    render([gemini2, gpt2]);
+    expect(quotes()).toEqual(['GPT: Rechecking the price.']);
+    // A model that finished leaves the line to the next one at once when its time is up.
+    render([gemini2]);
+    expect(quotes()).toEqual(['Gemini: Comparing the seat limits.']);
     // Other steps and finished runs never show it.
-    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'t2',name:'web_search',status:'running'}], highlight});
+    render([]);
+    w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'t2',name:'web_search',status:'running'}], highlights:[gemini2]});
     expect(host.querySelector('.agent-progress').textContent).not.toContain('Gemini:');
+    w.App.agentActivity.dispose(host);
+    dom.window.close();
+  });
+  it('quotes only complete statements of the reasoning, never a cut one', () => {
+    const {window:w,document:d,dom} = boot();
+    const host = d.querySelector('#agentAnswerActivity');
+    const long = 'This sentence keeps going ' + 'and going '.repeat(20) + 'until it ends.';
+    const text = ['We compare e.g. the U.S. figures from am 3. Oktober. Then the rest.',
+      'An older highlight that the server once cut off at its limit and then…', `${long} Short point here.`,
+      '**Checking the sources**'].join('\n');
+    w.App.agentActivity.render(host, {running:true, events:[{id:'r', kind:'reasoning', format:'summary', text}]});
+    expect(host.querySelector('.agent-progress p').textContent).toBe(
+      'We compare e.g. the U.S. figures from am 3. Oktober.\nShort point here.\nChecking the sources');
     dom.window.close();
   });
   it('keeps the newest status and usage after long runs exceed the activity window', () => {
@@ -1780,6 +1823,97 @@ describe("single-model agent chat", () => {
       turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
     await pending;
     vi.useRealTimers();
+    dom.window.close();
+  });
+
+  it('shows the check from the moment the server announces it, in words where the evidence row will stand', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    // The evidence row replaces the line in the same render: none is left when it is drawn.
+    const linesAtRender = [];
+    w.App.agentReview = { renderActivity: vi.fn(), preview: vi.fn(),
+      render: vi.fn((_body, review) => { if (review) linesAtRender.push(d.querySelectorAll('.agent-check-status').length); }) };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    const line = () => d.querySelector('.agent-check-status');
+    handlers.delta.append('Let me check one more source.');
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(line()).toBeNull();
+    // A text taken back after its announcement drops it, also when the same words come again.
+    handlers.answer_check.receive({ type: 'answer_check' });
+    handlers.activity.receive({ version: 1, id: 'step', kind: 'status', status: 'working', clear_response: true });
+    w.App.agentChat.project(run);
+    handlers.delta.append('Let me check');
+    w.App.agentChat.project(run);
+    handlers.delta.append(' one more source.');
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(line()).toBeNull();
+    // The last word of the answer stands: the check shows before the review holds it.
+    handlers.activity.receive({ version: 1, id: 'step2', kind: 'status', status: 'working', clear_response: true });
+    handlers.delta.append('Answer.');
+    handlers.answer_check.receive({ type: 'answer_check' });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    expect(line().textContent).toBe('Checking the answer…');
+    expect(line().getAttribute('role')).toBe('status');
+    expect(body.nextElementSibling).toBe(line());
+    // The review's checkpoints carry it on: first without a version, then holding the text.
+    handlers.review.receive({ review: { status: 'running', comparisons: [{ id: 'c' }] } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    const version = { id: 1, text: 'Answer.', hash: 'h' };
+    const required = { status: 'required', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] };
+    handlers.review.receive({ review: required });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    expect(d.querySelectorAll('.agent-check-status')).toHaveLength(1);
+    // Checked: the evidence row takes its place.
+    handlers.review.receive({ review: { ...required, status: 'succeeded' } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(line()).toBeNull();
+    expect(linesAtRender.at(-1)).toBe(0);
+    resolve({ ok: true, data: { response: 'Answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    w.App.agentChat.project(run);
+    expect(line()).toBeNull();
+    dom.window.close();
+  });
+
+  it('drops an announced check that never came when the run ends', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    handlers.delta.append('Answer.');
+    handlers.answer_check.receive({ type: 'answer_check' });
+    w.App.agentChat.project(run);
+    expect(d.querySelector('.agent-check-status')).not.toBeNull();
+    resolve({ ok: true, data: { error: 'The answer check could not finish. The answer itself has been saved.' } });
+    await pending;
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(d.querySelector('.agent-check-status')).toBeNull();
     dom.window.close();
   });
 

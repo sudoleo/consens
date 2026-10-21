@@ -429,11 +429,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    verb is as wide as the wider of "Working for" and "Thought for" (the
    other one stands invisibly in the same cell), the time as wide as its
    largest value in its unit. The chevron and the model icons stay put while
-   it ticks and when it ends (Apple audit A7). */
+   it ticks and when it ends; at the first minute they glide once to the
+   wider slot (Apple audit A7). nowrap keeps "1m 0s" on one line while the
+   slot widens. */
 .agent-activity-verb { display: inline-grid; justify-items: start; }
 .agent-activity-verb > .agent-activity-verb-text, .agent-activity-verb::after { grid-area: 1 / 1; }
 .agent-activity-verb::after { content: attr(data-ghost); visibility: hidden; speak: never; }
-.agent-activity-time { display: inline-block; text-align: left; }
+.agent-activity-time { display: inline-block; text-align: left; white-space: nowrap; }
 .agent-activity-time[data-unit="seconds"] { min-width: 3ch; }
 .agent-activity-time[data-unit="minutes"] { min-width: 6.4ch; }
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
@@ -550,6 +552,19 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    reader reads (Apple audit D1). Each pass grows in and shrinks out
    (scaleX), which leaves opacity to the fade at the end. */
 #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
+/* "Checking the answer…" where the evidence row will stand (agent-chat.js
+   setAnswerChecking): that row's margins and height, so the row takes its
+   place without a jump, its quiet ink and size, no motion of its own. The
+   text sits in the row's first line: the agreement score and the links on
+   one row, on phones the score above the grid of links. */
+.agent-check-status { min-height: 36px; margin: 18px 0 8px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 36px; }
+@media (pointer: coarse) {
+  .agent-check-status { min-height: 44px; line-height: 44px; }
+}
+@media (max-width: 540px) {
+  .agent-check-status { min-height: 92px; line-height: 36px; }
+  body.agreement-verdict-hidden .agent-check-status { min-height: 56px; line-height: 56px; }
+}
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
     content: ''; position: absolute; top: -2px; bottom: -2px; left: -6px; width: calc((100% + 12px) * .4);

@@ -3266,13 +3266,20 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   die eigene Farbe über. Kein Rahmen um die Icons (Max). Den Status setzt
   `agent-delegation.js` schon immer auf die `.agent-inline-model`-Buttons.
   Seit 2026-10-08 füllt eine ruhige Zeile die sonst stille Vergleichsphase
-  („Comparing perspectives…“): `agentDelegation.liveHighlight(chatId, turnId)`
-  liefert die letzte Zeile des `progress_text` des Vergleichsmodells, das noch
-  läuft und zuletzt berichtet hat (Judges nie); `agent-chat.js::project` reicht
-  sie als `highlight` an `agentActivity.render`, das sie nur live und nur in
-  dieser Phase als `Modell: Satz` unter den Schritt setzt (ein `<p>` unter dem
-  internen Schlüssel `comparison-highlight`, `aria-hidden`, damit der
-  Screenreader-Log nicht überläuft; nie gespeichert). Damit die Zeile nicht
+  („Comparing perspectives…“): `agentDelegation.liveHighlights(chatId, turnId)`
+  liefert seit 2026-10-21 für jedes noch laufende Vergleichsmodell (Judges nie)
+  die letzte Zeile seines `progress_text` mit `order` (Reihenfolge, in der die
+  Modelle kamen); `agent-chat.js::project` reicht die Liste als `highlights` an
+  `agentActivity.render`, das sie nur live und nur in dieser Phase als
+  `Modell: Satz` unter den Schritt setzt (ein `<p>` unter dem internen Schlüssel
+  `comparison-highlight`, `aria-hidden`, damit der Screenreader-Log nicht
+  überläuft; nie gespeichert). `comparisonLine` lässt jeden Auszug mindestens
+  `LINE_DWELL_MS` (2,5 s) stehen und gibt die Zeile dann reihum an das nächste
+  Modell mit neuem Auszug (ohne Neues behält sie das sprechende Modell); ein
+  eigener Timer (`scheduleLine`) rückt sie auch ohne neues Ereignis weiter, und
+  `crossfade` blendet den Text weich über (bei reduced-motion sofort). Bis
+  2026-10-21 gewann immer das Modell, das zuletzt berichtet hatte: die Zeile
+  wechselte etwa alle 0,5–1 s. Damit die Zeile nicht
   nach wenigen Sätzen einfriert, nutzen Vergleichsantworten
   `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)`
   (andere Worker behalten das Limit), und `comparison_selection` fordert für
@@ -4204,7 +4211,8 @@ Reasoning (vorher `reasoning.exclude=true`): minutenlanges stilles Denken wirkte
 wie ein hängender Lauf. `_step` verdichtet es mit
 `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)` zu
 kurzen wörtlichen Auszügen in EINER Fortschrittszeile `completion:N/thinking`
-(kind `progress`, alle 3 s ersetzt). Seit 2026-10-08 auch über
+(kind `progress`, höchstens alle 3 s ersetzt, seit 2026-10-21 nur der neueste
+vollständige Auszug; im Browser blendet die Zeile weich über). Seit 2026-10-08 auch über
 `REASONING_STORAGE_CHARS` (32.000) hinaus: `reasoning_events` speichert nur bis
 dahin und liefert den Rest als `transient`-Ereignis nur an die Fortschritts-
 anzeigen (nie in `AgentCompletion.activity`). In die Antwort gelangt es nie;
@@ -4284,7 +4292,25 @@ tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Sta
 eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
 Laufs, sobald er `succeeded`/`partial` ist;
 davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
-`#agentAnswerBody`. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
+`#agentAnswerBody`. Seit 2026-10-21 steht dabei an der Stelle der späteren
+Evidenzzeile die leise Statuszeile `p.agent-check-status` („Checking the
+answer…“, `App.words.checking`, `role="status"`; Ränder und Höhe wie
+`.agent-review`: 36 px, 44 px bei `pointer: coarse`, bis 540 px 92 px bzw.
+56 px ohne Agreement-Score), die einzige Anzeige bei reduced-motion und
+forced-colors; die Evidenzzeile ersetzt sie im selben Render. Der Prüfzustand
+beginnt mit dem letzten Wort: `_step` sendet das SSE-Ereignis `answer_check`
+(live, nie gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
+(Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf,
+nach Vergleichen, Answer Check an, keine offenen Worker oder Mailbox), noch vor
+Settlement, Kontingent-Snapshot und den Review-Checkpoints von
+`freeze_for_synthesis`/`capture` (zusammen mehrere Firestore-Schreibvorgänge,
+bis dahin startete der Schimmer erst mit dem Review mit `versions`). Der
+Handler merkt sich den Text (`context.metadata.answerCheckText`); `project`
+zeigt die Prüfung, solange genau dieser Text steht und noch keine Version
+vorliegt, danach übernimmt `review.status` `required`/`running`. Ein
+zurückgenommener oder geänderter Text löscht die Ankündigung, das Laufende
+beendet den Zustand; ein Reload ohne Live-Frames sieht nur den gespeicherten
+Review. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
 neu gerenderter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
 beim ersten Auftreten je `answer_hash` (`evidence.reveal`). Veraltete
 Antwort-/Grundlagenbindungen werden nicht angezeigt.
@@ -4669,8 +4695,20 @@ Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
 `agent_progress.py`/`agent_loop.py` behalten für Legacy-Läufe und Worker drei Zeilen
-à 180 Zeichen und acht Updates je Modellschritt; Provider-Zusammenfassungen haben
-Vorrang. Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
+und acht Updates je Modellschritt; Provider-Zusammenfassungen haben Vorrang.
+Seit 2026-10-21 ist jede Zeile eine vollständige Aussage (`_excerpts`, Tests
+`test_agent_progress.py`): ein Satz endet nur, wenn nach dem Satzzeichen
+wirklich Whitespace angekommen ist, nie in „e.g.“, „U.S.“, „Dr.“, Initialen
+oder deutschen Ordinalzahlen („am 3. Oktober“, `_ends_sentence`); rohes Denken
+zeigt den letzten passenden Satz der neuesten fertigen Zeile (die offene Zeile
+nur, solange keine fertig ist), eine Überschrift („**Comparing options**“,
+OpenAI-/Gemini-Summaries; jeder Summary-Teil mit eigener `id` beginnt einen
+neuen Block) steht für ihren Abschnitt, Summaries ohne Überschrift sprechen mit
+ihrem ersten Satz. Gekürzt wird nichts mehr (vorher 177 Zeichen + „…“): ein Satz
+über 160 Zeichen weicht einem kürzeren, sonst bleibt der alte Auszug stehen.
+`compactReasoning` (agent-activity.js) wendet dieselben Satzgrenzen auf
+gespeicherte Zeilen an (≤ 180 Zeichen, abgeschnittene „…“-Zeilen fallen weg).
+Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
 agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
@@ -9820,10 +9858,15 @@ während eines laufenden bzw. abschließenden Laufs und endet danach.
 Die Kopfzeile tickt in einem Feld fester Breite (A7): `.agent-activity-verb`
 reserviert die Breite des breiteren Verbs („Working for“/„Thought for“, das
 andere unsichtbar per `data-ghost`), `.agent-activity-time[data-unit]` die des
-größten Werts seiner Einheit; eine live tickende Uhr hält von der ersten Sekunde
-an den Minuten-Platz und behält ihn fürs Endlabel. Pfeil und Logos stehen still
-(gemessen: Chevron bei 9 s, 10 s, 1 min und „Thought for“ auf demselben Pixel),
-der Wortlaut bleibt.
+größten Werts seiner Einheit. Eine live tickende Uhr hält den Platz ihrer
+eigenen Einheit (bis 59 s nur `seconds`; bis 2026-10-21 von der ersten Sekunde
+an den Minuten-Platz, das ließ eine Minute lang eine breite Lücke vor dem
+Pfeil); bei 1 min weitet sich der Platz einmal weich (`setTitle` misst alte
+und neue Breite und animiert `width` mit `overflow: clip`, bei reduced-motion
+sofort). Das Endlabel behält mindestens den Platz, in dem die Uhr zuletzt
+tickte. Pfeil und Logos stehen beim Ticken innerhalb einer Einheit und am
+Laufende still (Chevron bei 9 s und 10 s bzw. bei 1 min und „Thought for“ auf
+demselben Pixel), der Wortlaut bleibt.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
 Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:
 `checkRow` fasst alle Versuche, Wiederholungen und Backup-Judges zu einer Zeile

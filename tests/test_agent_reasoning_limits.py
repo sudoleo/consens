@@ -142,7 +142,9 @@ def test_answer_step_thinking_excerpts_keep_updating_past_the_stored_bound(store
     monkeypatch.setattr(agent_delegation, "THINKING_UPDATE_SECONDS", 0)
     chunk = "Some filler about weighing evidence and costs carefully. " * 20
     late = REASONING_STORAGE_CHARS // len(chunk) + 5
-    packets = [packet({"reasoning": f"\n\nThought number {i} checks one more source. " + chunk}) for i in range(late + 3)]
+    # A highlight is the last sentence of a finished paragraph: the number
+    # closes each one, and the last one (late + 2) is never finished.
+    packets = [packet({"reasoning": "\n\n" + chunk + f"Thought number {i} checks one more source. "}) for i in range(late + 3)]
     transport(monkeypatch, [[*packets, packet({"content": "The first option costs 100."}, finish="stop",
                                               usage={"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001})]])
     script = Script()
@@ -151,7 +153,7 @@ def test_answer_step_thinking_excerpts_keep_updating_past_the_stored_bound(store
     events = list(loop.run())
     thinking = [e for e in events if e.get("kind") == "progress" and e["id"].endswith("/thinking")]
     # Previously the line froze at 32,000 characters while the model kept thinking.
-    assert any(f"Thought number {late + 2}" in e["text"] for e in thinking)
+    assert any(e["text"] == f"Thought number {late + 1} checks one more source." for e in thinking)
     assert saved(store, loop)["consensus"] == "The first option costs 100."
 
 

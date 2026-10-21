@@ -653,22 +653,26 @@ describe("Agent sidebar", () => {
     expect(d.querySelector(".agent-light")).toBeNull();
     dom.window.close();
   });
-  it("quotes the latest reasoning line of a comparison model that is still answering", () => {
+  it("lists the newest reasoning line of each comparison model still answering, in the models' order", () => {
     const answer = (id, seq, status, progress_text) => ({ ...agent(seq, status, id), kind: "comparison",
       model: { model: `test/${id[0]}`, label: id === "a".repeat(32) ? "GPT" : "Gemini" }, progress_text });
     const { window: w, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [], status: "running" }) }));
-    const live = () => w.App.agentDelegation.liveHighlight(chatId, turnId);
-    expect(live()).toBeNull();
+    const live = () => w.App.agentDelegation.liveHighlights(chatId, turnId).map(line => [line.label, line.order, line.text]);
+    expect(live()).toEqual([]);
     receive(w, { ...agent(1, "working", "f".repeat(32)), kind: "judge", progress_text: "Judges never speak here." });
     receive(w, answer("a".repeat(32), 1, "working", "Reading the question.\n- Checking the **2026** `figures`."));
-    expect(live()).toMatchObject({ label: "GPT", text: "Checking the 2026 figures." });
+    expect(live()).toEqual([["GPT", 1, "Checking the 2026 figures."]]);
     receive(w, answer("b".repeat(32), 1, "working", "Comparing both sources."));
-    expect(live()).toMatchObject({ label: "Gemini", text: "Comparing both sources." });
+    expect(live()).toEqual([["GPT", 1, "Checking the 2026 figures."], ["Gemini", 2, "Comparing both sources."]]);
+    // A newer report changes the line, not the order (agent-activity.js
+    // quotes the models in turn).
+    receive(w, answer("a".repeat(32), 2, "working", "Weighing the seat limits."));
+    expect(live()[0]).toEqual(["GPT", 1, "Weighing the seat limits."]);
     // A finished model no longer speaks for the running comparison.
+    receive(w, answer("a".repeat(32), 3, "completed", "Done."));
+    expect(live()).toEqual([["Gemini", 2, "Comparing both sources."]]);
     receive(w, answer("b".repeat(32), 2, "completed", "Comparing both sources."));
-    expect(live()).toMatchObject({ label: "GPT" });
-    receive(w, answer("a".repeat(32), 2, "completed", "Done."));
-    expect(live()).toBeNull();
+    expect(live()).toEqual([]);
     dom.window.close();
   });
   it("projects a local demo turn without requests and releases it again", async () => {

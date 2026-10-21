@@ -659,10 +659,11 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
 
 
 @pytest.mark.parametrize("width", [1280, 390])
-def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(browser, phase4_server, width):
-    """The quiet compare_models phase quotes ONE comparison model's latest
-    reasoning sentence from streamed delegation events; it follows the model
-    that reported last, leaves with the comparison and is never saved."""
+def test_live_comparison_quotes_model_reasoning_in_turn_only_while_comparing(browser, phase4_server, width):
+    """The quiet compare_models phase quotes the comparison models' latest
+    reasoning sentences on ONE line from streamed delegation events: each
+    excerpt stands about 2.5 s, then the next model with something new takes
+    the line in turn; it leaves with the comparison and is never saved."""
     context, page = _real_firebase_page(browser, phase4_server)
     chat, turn, gemini, gpt = (c * 32 for c in "abcd")
     text = "Both plans fit; the smaller one is cheaper."
@@ -718,8 +719,10 @@ def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(brow
         expect(quotes).to_have_count(1)
         expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Checking the 2026 figures.")
         delegate(answer(gpt, 1, "working", "GPT-5.4 Mini", "openai/gpt-5.4-mini", "Weighing both sources."))
+        # Gemini's excerpt stands its time before GPT takes the line.
+        expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Checking the 2026 figures.")
         expect(quotes).to_have_text("GPT-5.4 Mini: Weighing both sources.")
-        # Gemini's newer reasoning takes the line back; still exactly one line.
+        # Gemini's newer reasoning takes the line back in turn; still exactly one line.
         delegate(answer(gemini, 2, "working", "Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite",
                         "Checking the 2026 figures.\nComparing the seat limits."))
         expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Comparing the seat limits.")
