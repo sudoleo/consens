@@ -127,7 +127,8 @@ def test_registered_http_exception_handler_preserves_headers():
     busy = client.get("/busy")
     assert busy.status_code == 429
     assert busy.headers["retry-after"] == "15"
-    assert busy.json() == {"error": "busy"}
+    # A throttle names itself and its wait in the body too (Apple-Audit H6).
+    assert busy.json() == {"error": "busy", "code": "rate_limited", "retry_after": 15}
 
     unavailable = client.get("/unavailable")
     assert unavailable.status_code == 503
