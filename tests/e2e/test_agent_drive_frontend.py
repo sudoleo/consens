@@ -118,7 +118,20 @@ def test_drive_file_becomes_an_attachment_with_one_consent_per_chat(browser, pha
         expect(page.locator('#agentGoogleChips')).to_contain_text('Private chat · Google data')
         assert page.evaluate('App.agentGoogle.blocker()') is None
         _snapshot(page, f'drive-followup-{width}')
+        # The mocked first answer lands at once. A second start within 450 ms
+        # of the first is taken for a double click and dropped on purpose
+        # (run-registry.js claimStartAction), and a click on the composer
+        # still gliding into the thread never arrives; no person types a
+        # follow-up that fast. Click once it stands and the guard has passed.
+        page.wait_for_function("() => !document.body.classList.contains('composer-gliding')")
+        page.wait_for_timeout(500)
         page.locator('#sendButton').click()
+        # The first answer stays readable while the follow-up goes out: wait
+        # for its request, not for the words that were already there.
+        for _ in range(100):
+            if len(runs) > 1:
+                break
+            page.wait_for_timeout(100)
         expect(page.locator('#agentAnswerBody')).to_contain_text('cheaper')
         assert runs[1]['google_data_consent'] is True
         assert not errors, errors

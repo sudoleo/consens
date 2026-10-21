@@ -450,7 +450,8 @@ def test_persistence_quota_failure_keeps_answer_visible_and_never_claims_saved(j
     j.page.wait_for_function('() => App.runRegistry.visible()?.status === "succeeded"', timeout=60000)
     j.page.wait_for_function('() => App.runRegistry.visible()?.persistence.status === "error"', timeout=30000)
     expect(j.page.locator('#consensusResponse')).to_contain_text('Mock consensus')
-    expect(j.page.locator('body')).to_contain_text(re.compile('bookmark.*(limit|save)|could not.*sav', re.I))
+    # The notice line names the limit in the chat's own words (Apple-Audit H3).
+    expect(j.page.locator('#appToasts')).to_contain_text(re.compile('chats are full|chat storage is full|couldn.t be saved', re.I))
     native = j.control('state')
     assert native['collections'].get('bookmarks', {}) == {}
     turns = [t['data'] for c in native['collections']['chats'].values() for t in c['children']['turns'].values()]
