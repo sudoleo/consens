@@ -15,7 +15,10 @@ def test_owner_limit_is_atomic_across_different_chats(store):
     gate = threading.Barrier(len(turns))
 
     def claim(item):
-        gate.wait(timeout=3)
+        # The timeout only turns a stuck thread into a failure instead of a
+        # hang; 3 s broke the barrier on a loaded machine (full suite next to
+        # browser runs, 2026-10-21) before all twelve threads had started.
+        gate.wait(timeout=30)
         chat_id, turn = item
         try:
             store.claim(UID, chat_id, turn["id"], AgentModel())
