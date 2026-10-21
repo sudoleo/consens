@@ -624,6 +624,34 @@ def test_anthropic_requests_carry_automatic_cache_control(monkeypatch):
     assert requests[0]["cache_control"] == {"type": "ephemeral"}
 
 
+@pytest.mark.parametrize("one_off,searches,cached", [(False, 0, True), (True, 0, False), (True, 2, True)])
+def test_a_one_off_call_caches_only_for_its_own_search_rounds(monkeypatch, one_off, searches, cached):
+    """A cache write costs a quarter more than plain input. A judge's prompt
+    is never sent again; a comparison answer's search rounds re-read its own
+    (DelegationLoop.worker_completion)."""
+    from app.services.llm import agent_client
+    from app.services.llm.agent_client import AgentCompletion
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    requests, headers = [], []
+    def lines(url, **kwargs):
+        requests.append(kwargs["json"])
+        headers.append(kwargs["headers"])
+        yield "data: " + json.dumps(packet({"content": "Hi"}, finish="stop",
+                                           usage={"prompt_tokens": 5, "completion_tokens": 1}))
+        yield ""
+        yield "data: [DONE]"
+        yield ""
+    monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
+    value = AgentCompletion()
+    value.one_off, value.session_id = one_off, "worker-session"
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=1)):
+        list(value.stream(model=resolve_agent_model("claude-haiku-4-5"), messages=[{"role": "user", "content": "Hi"}],
+                          api_key="test", native_searches=searches))
+    assert ("cache_control" in requests[0]) is cached
+    # A helper call goes out on its own session.
+    assert headers[0]["x-session-id"] == "worker-session"
+
+
 # --- Settings API -------------------------------------------------------------
 
 @pytest.fixture
