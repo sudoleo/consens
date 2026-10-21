@@ -630,7 +630,11 @@ onIdTokenChanged(auth, async (user) => {
     }
     if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
     setBookmarksAccess(true);
-    window.App?.watch?.refreshQuota?.().catch(() => {});
+    // The sidebar's watch count: the list the sign-in already loads (watch.js
+    // on the auth state, the Watches page) is taken as it is; only a missing
+    // one is fetched. A forced reload here was a second list request on
+    // every sign-in (review 2).
+    window.App?.watch?.loadState?.().catch(() => {});
 
     // 4) Usage-UI anzeigen
     if (usageOptions) {
