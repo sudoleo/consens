@@ -149,3 +149,45 @@ def test_static_cache_policy_revalidates_unversioned_and_pins_content_hashes():
     assert manual.headers["cache-control"] == "no-cache"
     revalidated = client.get("/static/css/foundation.css", headers={"if-none-match": plain.headers["etag"]})
     assert revalidated.status_code == 304
+
+
+def test_a_font_under_its_name_from_before_the_hash_still_loads():
+    # Zweitprüfung (Schriften): a tab opened before the deploy runs the old
+    # stylesheet and fetches italic or latin-ext at its first such letter,
+    # under the old name. It gets the same bytes, revalidated, never a 404.
+    from app.core.static_delivery import legacy_font_target
+
+    client = TestClient(_app())
+    hashed = next((ROOT / "static" / "fonts" / "inter").glob("InterVariable-Italic-latin-ext.*.woff2"))
+    old = "/static/fonts/inter/InterVariable-Italic-latin-ext.woff2"
+    assert legacy_font_target(old) == "/static/fonts/inter/" + hashed.name
+    response = client.get(old)
+    assert response.status_code == 200
+    assert response.content == hashed.read_bytes()
+    assert response.headers["content-type"] == "font/woff2"
+    assert "immutable" not in response.headers["cache-control"]
+    # A name that never existed stays a 404; real files are never aliased.
+    assert client.get("/static/fonts/inter/InterVariable-Bold.woff2").status_code == 404
+    assert legacy_font_target("/static/fonts/inter/InterVariable.woff2") is None
+
+
+def test_every_font_a_kept_stylesheet_names_is_served():
+    # The retained bundles (manifest previous_assets: what open tabs of the
+    # live version still run) and the current stylesheets.
+    import json
+    import re
+
+    from app.core.static_delivery import legacy_font_target
+
+    manifest = json.loads((ROOT / "static" / "dist" / "manifest.json").read_text(encoding="utf-8"))
+    sheets = [ROOT / "static" / "dist" / name for name in manifest["previous_assets"] if name.endswith(".css")]
+    sheets += sorted((ROOT / "static" / "css").glob("*.css"))
+    assert any("dist" in sheet.parts for sheet in sheets)
+    checked = 0
+    for sheet in sheets:
+        base = "/" + sheet.parent.relative_to(ROOT).as_posix() + "/"
+        for ref in re.findall(r"url\(\s*['\"]?([^'\")]+\.woff2)['\"]?\s*\)", sheet.read_text(encoding="utf-8")):
+            url = re.sub(r"[^/]+/\.\./", "", base + ref)
+            checked += 1
+            assert (ROOT / url.lstrip("/")).is_file() or legacy_font_target(url), (sheet.name, ref)
+    assert checked >= 6

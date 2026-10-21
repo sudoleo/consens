@@ -29,7 +29,10 @@ URL ``app/core/assets.font_preload_urls`` reads back from that stylesheet.
 Sources: ``InterVariable.woff2`` and ``InterVariable-Italic.woff2`` (Inter
 4.001, rsms/inter, SIL OFL) stay unchanged in ``static/fonts/inter``. No
 stylesheet references them any more; a tab that still runs an older
-stylesheet keeps finding them.
+stylesheet keeps finding them. A part's old, unhashed name
+(``InterVariable-latin.woff2``) is answered with its current hashed file
+(``app/core/static_delivery.legacy_font_target``), so renaming never leaves
+an open tab without its font.
 
 fonttools and brotli are not app dependencies; install them anywhere:
 

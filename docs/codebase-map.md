@@ -619,7 +619,13 @@ die ersten 12 Hex-Stellen seines SHA-256 im Namen
 (`InterVariable-latin.<hash>.woff2`; das Skript schreibt Namen und URL in
 `typography.css` mit, `--check` prüft sie), `StaticDeliveryMiddleware` liefert
 solche Fonts `immutable` (vorher `no-cache`: ein 304 bei jedem Besuch, die
-Schrift kam nach dem ersten Bild). JEDE Seite (`/app` und alle öffentlichen
+Schrift kam nach dem ersten Bild). Den alten, ungehashten Namen eines Teils
+(`InterVariable-latin.woff2`, so in den Bundles von 9cef4a9) beantwortet die
+Middleware mit der aktuellen Hash-Datei (`static_delivery.legacy_font_target`,
+`no-cache`): ein vor dem Deploy geöffneter Tab lädt kursiv/latin-ext erst beim
+ersten solchen Zeichen nach und bekäme sonst eine 404 und die Ersatzschrift
+(Zweitprüfung, Schriften; `tests/test_static_delivery.py` prüft jede
+Font-URL der behaltenen Bundles). JEDE Seite (`/app` und alle öffentlichen
 Templates) bindet als Erstes im `<head>` `partials/font_preload.html` ein; die
 URL liest `app/core/assets.font_preload_urls()` aus `typography.css`, damit
 Preload und `@font-face` nie auseinanderlaufen. Der aufrechte Latein-Teil hat
