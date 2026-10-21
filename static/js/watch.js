@@ -361,7 +361,11 @@
     const response = await fetch(path, {
       method,
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-      body: body ? JSON.stringify(body) : undefined
+      body: body ? JSON.stringify(body) : undefined,
+      // A change outlives the page: a deletion whose Undo the closing tab
+      // let happen (pagehide, commitPending) or a setting typed last still
+      // arrives. The bodies are small (keepalive allows 64 kB).
+      keepalive: method !== "GET"
     });
     const data = await window.App.readJson(response);
     if (requestEpoch !== watchState.sessionEpoch || window.auth?.currentUser?.uid !== userUid) {
@@ -820,14 +824,17 @@
 
   function requireAccount(intent, trigger) {
     if (window.auth?.currentUser) return true;
+    const question = normalizeWatchQuestion(intent?.question).slice(0, 2000);
     writePending({
       at: Date.now(),
-      question: normalizeWatchQuestion(intent?.question).slice(0, 2000),
+      question,
       goal: normalizeWatchQuestion(intent?.goal).slice(0, 500)
     });
     if (window.App?.openAuthModal) {
+      // "Your question waits" only when there is one (not from "Log in to
+      // start watching" on an empty Watches page).
       window.App.openAuthModal("login", trigger || document.activeElement, "watch",
-        { lead: "Log in to start watching. Your question waits for you." });
+        { lead: question ? "Log in to start watching. Your question waits for you." : "Log in to start watching." });
     } else {
       popup("Log in to start watching.");
     }
@@ -975,10 +982,13 @@
         renderAlreadyWatching(existing, modalIntent);
         return;
       }
-      // Goals belong to the question they were written for; schedule and
-      // origin carry over.
+      // Goals belong to the question they were written for; schedule,
+      // alerts, channels, page, details and origin carry over. "Only when
+      // it is reached" needs a goal, so without one it is the first rule.
       const sameQuestion = question === normalizeWatchQuestion(initialQuestion);
-      renderConfirm({ interval: setup.interval, source: setup.source,
+      const settings = setup.settings && !sameQuestion && setup.settings.email_mode === "condition"
+        ? { ...setup.settings, email_mode: "changes_only" } : setup.settings;
+      renderConfirm({ interval: setup.interval, source: setup.source, settings,
         ...(sameQuestion ? { goal: setup.goal, goals: setup.goals } : {}), question }, modalIntent);
     });
     // A question is one line; Enter moves on, Shift+Enter still breaks.
@@ -1023,7 +1033,10 @@
     const presetGoal = normalizeWatchQuestion(options?.goal);
     const suppliedGoals = Array.isArray(options?.goals)
       ? options.goals.map(normalizeWatchQuestion).filter(Boolean) : null;
-    const presetInterval = watchDefaults(options?.interval).interval;
+    // What was set before "Edit" led back to the question (schedule, alerts,
+    // channels, page, details, the open settings) comes back with it.
+    const kept = options?.settings && typeof options.settings === "object" ? options.settings : null;
+    const presetInterval = watchDefaults(kept?.interval || options?.interval).interval;
     const watchedQuestion = directQuestion || normalizeWatchQuestion(window.lastQuestion);
     const { title, body } = els();
     if (!body) return;
@@ -1139,12 +1152,12 @@
     advanced.appendChild(settingsBody);
     body.appendChild(advanced);
 
-    const detailsInput = F.detailsInput("watchDetails", "");
+    const detailsInput = F.detailsInput("watchDetails", kept?.details || "");
     settingsBody.appendChild(F.field({ label: "Details that matter", control: detailsInput, id: "watchDetails",
       hint: "Every check searches with these. The goal only counts when they fit." }));
     const intervalSelect = F.intervalSelect("watchInterval", presetInterval, dailyIntervalAllowed());
-    const weekdaySelect = F.weekdaySelect("watchWeekday", browserTomorrowWeekday());
-    const runTimeInput = F.timeInput("watchRunTime", "09:00");
+    const weekdaySelect = F.weekdaySelect("watchWeekday", kept?.run_weekday || browserTomorrowWeekday());
+    const runTimeInput = F.timeInput("watchRunTime", kept?.run_time || "09:00");
     const grid = document.createElement("div");
     grid.className = "watch-config-grid";
     const weekdayField = F.field({ label: "Day", control: weekdaySelect, id: "watchWeekdayWrap" });
@@ -1155,11 +1168,12 @@
       F.field({ label: "Time", control: runTimeInput, id: "watchRunTime" })
     );
     settingsBody.appendChild(grid);
-    const emailModeSelect = F.alertSelect("watchEmailMode", "changes_only", Boolean(presetGoal));
+    const emailModeSelect = F.alertSelect("watchEmailMode", kept?.email_mode || "changes_only", Boolean(presetGoal));
     settingsBody.appendChild(F.field({ label: "Notify me", control: emailModeSelect, wide: true }));
-    const channels = buildChannels({ idPrefix: "watch", email: true, telegram: false });
+    const channels = buildChannels({ idPrefix: "watch", email: kept ? kept.email_enabled !== false : true,
+      telegram: kept?.telegram_enabled === true });
     settingsBody.appendChild(channels.field);
-    const visibilitySelect = F.visibilitySelect("watchVisibility", "private");
+    const visibilitySelect = F.visibilitySelect("watchVisibility", kept?.visibility || "private");
     visibilitySelect.required = true;
     settingsBody.appendChild(F.field({ label: "Watch page", control: visibilitySelect, id: "watchVisibility" }));
 
@@ -1212,6 +1226,10 @@
     advanced.addEventListener("toggle", () => {
       settingsToggle.textContent = advanced.open ? "Done" : "Change";
     });
+    if (kept?.open) {
+      advanced.open = true;
+      settingsToggle.textContent = "Done";
+    }
 
     renderGoalPlaceholders();
     syncGoalHint();
@@ -1230,9 +1248,11 @@
       renderGoalOptions([]);
     }
 
+    // "Edit" changes only the question: everything set here comes back.
     document.getElementById("watchQuestionEdit")?.addEventListener("click", () => {
       renderQuestionStep(directQuestion, modalIntent,
-        { ...options, goal: selectedGoal() || presetGoal, interval: intervalSelect.value });
+        { ...options, goal: selectedGoal() || presetGoal, interval: intervalSelect.value,
+          settings: { ...currentSettings(), details: detailsInput.value, open: advanced.open } });
     });
 
     bindWatchFieldErrorReset(visibilitySelect, "change");
@@ -1552,10 +1572,26 @@
       note.hidden = false;
     }
     // On the Watch page the new watch appears at the top of the list behind
-    // the dialog, at once and marked, not after a reload far below (J15).
+    // the dialog, at once and marked, not after a reload far below (J15) --
+    // however the dialog is closed: Done, the cross, Esc or a step away.
+    const card = body.querySelector(".watch-success-card");
+    const epoch = watchState.sessionEpoch;
+    let revealed = false;
+    const reveal = () => {
+      if (revealed) return;
+      revealed = true;
+      els().modal?.removeEventListener("close", onClose);
+      // Only the list this dialog stood over ("Open Watches" opens the page
+      // with the watch in focus by itself), and never after a logout closed it.
+      if (!onWatchPage || !onWatchPagePath() || !window.auth?.currentUser || epoch !== watchState.sessionEpoch) return;
+      window.App.watchDashboard?.addCreated?.(watch);
+    };
+    // A later step in the same dialog (another watch) is not this one's close.
+    const onClose = () => { if (card.isConnected) reveal(); else els().modal?.removeEventListener("close", onClose); };
+    els().modal?.addEventListener("close", onClose);
     done.addEventListener("click", () => {
       closeDialog();
-      if (onWatchPagePath()) window.App.watchDashboard?.addCreated?.(watch);
+      reveal();
     });
     document.getElementById("watchListLink")?.addEventListener("click", () => {
       closeDialog();
@@ -1841,8 +1877,9 @@
   const EYE_ICON = '<svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>';
   const answerButtons = new Set();
 
+  // Also off the page: a history turn is built before it is inserted.
   function syncWatchPill(button) {
-    if (!button?.isConnected) return;
+    if (!button) return;
     const watch = watchedFor(button._watchQuestion?.());
     const watching = Boolean(watch);
     const label = button.querySelector("span");
@@ -1898,12 +1935,23 @@
   // The Agent answer's pill, right after its evidence row (Sources ·
   // Answers · Differences) in the same line, on phones on the next one;
   // without an evidence row, on a line of its own under the answer.
-  // agent-chat.js calls this on every projection; a finished answer is
-  // `eligible`, a follow-up opens at the question so it can stand alone.
-  function syncAnswerWatchButton(answerBody, { question = "", eligible = false, followUp = false } = {}) {
+  // Every finished Agent answer has one (Max, Apple-Audit J20): the live
+  // answer (agent-chat.js, on every projection), a reopened chat's answer
+  // and each Agent turn of the history (consensus-run.js, built off the
+  // page, `history: true`). The pill carries the question of its own turn,
+  // set on every call; a follow-up opens at the question so it can stand
+  // alone. Only the live answer's pill is #agentAnswerWatchButton.
+  const LIVE_PILL_ID = "agentAnswerWatchButton";
+
+  function syncAnswerWatchButton(answerBody, { question = "", eligible = false, followUp = false, history = false } = {}) {
     if (!answerBody) return;
     let button = answerBody._watchPill;
     const text = normalizeWatchQuestion(question);
+    // A turn that moved up into the history keeps its pill, but not the
+    // live answer's ID.
+    if (!history) {
+      document.querySelectorAll("#" + LIVE_PILL_ID).forEach(node => { if (node !== button) node.removeAttribute("id"); });
+    }
     if (!eligible || text.length < WATCH_QUESTION_MIN_CHARS) {
       button?.closest(".agent-watch-pill-row")?.remove();
       button?.remove();
@@ -1912,15 +1960,18 @@
       return;
     }
     if (!button) {
-      button = watchPill("agentAnswerWatchButton", () => answerBody._watchPill?._question || text,
+      button = watchPill(history ? "" : LIVE_PILL_ID, () => answerBody._watchPill?._question || text,
         trigger => openWatchDialog("create", { question: button._question, editQuestion: button._followUp, source: "agent_answer", trigger }));
       button.classList.add("agent-watch-pill");
       answerBody._watchPill = button;
     }
     button._question = text;
     button._followUp = followUp;
-    const nav = answerBody._agentReview?.isConnected
-      ? answerBody._agentReview.querySelector(".agent-evidence-links") : null;
+    // The evidence row beside the answer, also while a history turn is still
+    // built off the page.
+    const review = answerBody._agentReview?.parentNode && answerBody._agentReview.parentNode === answerBody.parentNode
+      ? answerBody._agentReview : null;
+    const nav = review ? review.querySelector(".agent-evidence-links") : null;
     if (nav) {
       button.closest(".agent-watch-pill-row")?.remove();
       if (nav.nextElementSibling !== button) nav.after(button);
@@ -1931,13 +1982,17 @@
         row.className = "agent-watch-pill-row";
         row.appendChild(button);
       }
-      const after = answerBody._agentReview?.isConnected ? answerBody._agentReview : answerBody;
+      const after = review || answerBody;
       if (after.nextElementSibling !== row) after.after(row);
     }
     syncWatchPill(button);
   }
 
-  window.addEventListener("consensio:watches-changed", () => answerButtons.forEach(syncWatchPill));
+  window.addEventListener("consensio:watches-changed", () => answerButtons.forEach(button => {
+    // A history replaced by another chat's takes its pills with it.
+    if (button.isConnected) syncWatchPill(button);
+    else answerButtons.delete(button);
+  }));
 
   function initViewSwitch() {
     const consensusButton = document.getElementById("viewSwitchConsensus");

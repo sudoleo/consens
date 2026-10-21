@@ -2291,7 +2291,8 @@ class WatchFrontendContractTests(unittest.TestCase):
                      "watch-goal-chip", "watch-config-assurance"):
             self.assertNotIn(gone, source)
         self.assertIn('option("private", "Private, only you", { selected: value !== "public" })', fields)
-        self.assertIn('F.weekdaySelect("watchWeekday", browserTomorrowWeekday())', source)
+        # Tomorrow by default; after "Edit" the day chosen before.
+        self.assertIn('F.weekdaySelect("watchWeekday", kept?.run_weekday || browserTomorrowWeekday())', source)
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         # The agreement score is not what a watch reports.
         self.assertNotIn("/100", dashboard)

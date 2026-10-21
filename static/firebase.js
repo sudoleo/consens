@@ -97,9 +97,12 @@ async function performLogout() {
     // sent beside the session cleanup, waited for at most 3 s. What does not
     // arrive is dropped with the account's values on sign-out.
     const settingsSent = window.App.userSettings.flush({ timeoutMs: 3000 });
-    // A chat deleted a moment ago (its Undo still offered) is deleted now,
-    // with this account's token.
-    const deletesSent = Promise.race([settleUndoableBookmarkDeletes(), new Promise(resolve => setTimeout(resolve, 3000))]);
+    // A chat or a watch deleted a moment ago (its Undo still offered) is
+    // deleted now, with this account's token; a watch kept running before.
+    const deletesSent = Promise.race([
+      Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.watchDashboard?.commitPending?.()]),
+      new Promise(resolve => setTimeout(resolve, 3000))
+    ]);
     // Clear the HttpOnly server session before dropping the Firebase identity.
     // If this request fails, keeping Firebase signed in avoids presenting a
     // false "logged out" state while the cookie could still authorize calls.
@@ -3385,10 +3388,13 @@ async function deleteBookmark(bookmarkId) {
         return;
       }
       requestStarted = true;
+      // keepalive: a deletion whose Undo the closing tab let happen
+      // (visibilitychange) still arrives.
       const res = await fetch("/bookmark", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token, bookmarkId })
+        body: JSON.stringify({ id_token, bookmarkId }),
+        keepalive: true
       });
       const data = await res.json().catch(() => ({}));
 
