@@ -1215,6 +1215,31 @@ const sourceSheet = (function () {
   });
   window.addEventListener("resize", () => { if (root && !root.hidden && !modal) close({ restoreFocus: false }); });
 
+  // In the answer reader the list lives in the reader's <dialog> and goes
+  // with it. Android's back (a cancel on the dialog) and Escape close the
+  // top layer first, the list; when the reader closes anyway (its cross, a
+  // back the browser does not let us hold, a layout change that closes or
+  // re-opens the dialog), the list closes with it. A list left open in a
+  // closed dialog kept its backdrop, and the backdrop held the page still
+  // (foundation.css, review 2 N1).
+  const inHost = event => Boolean(root && !root.hidden && event.target === root.parentElement);
+  document.addEventListener("cancel", event => {
+    if (!inHost(event) || !event.cancelable) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  }, true);
+  document.addEventListener("close", event => {
+    if (!inHost(event)) return;
+    const active = document.activeElement;
+    const lost = !active || active === document.body || root.contains(active);
+    const back = opener;
+    close({ restoreFocus: false });
+    // The reader gives focus back to its own control when it closes; only a
+    // focus the closing left nowhere goes to the pill, if it is still shown.
+    if (lost && back?.isConnected && back.getClientRects().length) back.focus({ preventScroll: true });
+  }, true);
+
   return { open, close, isOpen: () => Boolean(root && !root.hidden) };
 })();
 

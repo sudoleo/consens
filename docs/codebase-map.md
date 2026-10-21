@@ -2063,6 +2063,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Pille in einem offenen `<dialog>` (der Antwortleser ist modal), hängen Liste
   und Backdrop in diesem Dialog, das Popover dann `position: fixed`; auf
   `<body>` lagen sie inert unter dem Top-Layer (Nachprüfung 2026-10-21).
+  Die Liste geht mit diesem Dialog: ein haltbares `cancel` (Android-Zurück)
+  schließt zuerst nur sie (wie Escape), jedes `close` des Dialogs (Kreuz,
+  nicht haltbares Zurück, Layoutwechsel modal ↔ angedockt ↔ direkt) schließt
+  sie mit; den Fokus gibt dann der Leser an seinen Knopf zurück, nur ein
+  verlorener Fokus geht an die noch sichtbare Pille. Vorher hielt der
+  Backdrop im geschlossenen Dialog die Seite gesperrt (Nachprüfung 2 N1).
   Copy consensus/Copy citation lesen Pillen über
   `window.App.sourceRefs.plainText/urls` („ (uci.org, pcs.com)“). Share- und
   Topic-Seiten rendern serverseitig aus Markdown und sind nicht betroffen.
