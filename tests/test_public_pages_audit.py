@@ -329,6 +329,32 @@ def test_the_landing_links_a_live_watch_and_never_a_paused_one():
     assert '{% if live_watch_path %}<a class="lp-watch-live" href="{{ live_watch_path }}"' in landing
 
 
+def test_the_landing_never_links_a_watch_page_nobody_curated():
+    # "Public" means anyone with the link; only an indexed page may stand on
+    # the start page (Zweitprüfung B1). An uncurated live Watch is no stand-in.
+    curated, uncurated = snapshots.generate_share_id(), snapshots.generate_share_id()
+    shares = [
+        {"_id": curated, "status": "active", "visibility": "public", "slug": "curated-question", "indexed": True},
+        {"_id": uncurated, "status": "active", "visibility": "public", "slug": "someones-own-question"},
+    ]
+    watches = [
+        {"share_id": uncurated, "status": "active", "visibility": "public",
+         "last_run_at": datetime(2026, 10, 20, tzinfo=UTC)},
+        {"share_id": curated, "status": "paused", "visibility": "public",
+         "last_run_at": datetime(2026, 10, 15, tzinfo=UTC)},
+    ]
+    # The curated Watch is paused, the only live one is nobody's showcase.
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
+    shares[1]["indexed"] = False
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
+    # A curated live Watch wins although the uncurated one ran later.
+    watches[1]["status"] = "active"
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == snapshots.share_path("curated-question", curated)
+    # Unindexed after curation (or blocked): gone from the landing as well.
+    shares[0]["indexed"] = False
+    assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
+
+
 # --- I14, I4: one grid, one material, no sideways panning ---------------------------
 
 def test_every_public_page_sits_on_one_grid_of_one_material():

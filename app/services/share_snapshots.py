@@ -1918,14 +1918,25 @@ def _stream_now(query, timeout=3.0):
         return list(query.stream())
 
 
-def live_watch_path(db=None) -> str:
-    """The page of one public Watch that is still checked -- the landing's
-    "See a live watch" link (Apple-Audit L17) -- or "" when there is none.
+# Active public Watches the landing looks at per cache entry. Only curated
+# pages count, so uncurated ones must not crowd a curated one out of the read.
+LIVE_WATCH_SCAN_LIMIT = 20
 
-    Never a paused Watch and never a stand-in: without a live one the link
-    stays away. Newest check first, indexed pages before unindexed ones. One
-    query (at most ten Watch documents) per cache entry (15 min); the landing
-    renders without the link rather than wait on a failing read.
+
+def live_watch_path(db=None) -> str:
+    """The page of one curated public Watch that is still checked -- the
+    landing's "See a live watch" link (Apple-Audit L17) -- or "" when there
+    is none.
+
+    Only a page the operator indexed: "Public" in the app means "anyone with
+    the link", never "show it on the start page". The link draws from the
+    same set as /questions and the sitemap (indexed, active, public); a page
+    nobody curated never reaches the landing, not even as a stand-in.
+    Never a paused Watch either: without a curated live one the link stays
+    away. Newest check first. One query (at most twenty Watch documents)
+    plus one read per page up to the first fit, per cache entry (15 min;
+    moderation clears it); the landing renders without the link rather than
+    wait on a failing read.
     """
     use_cache = db is None
     if use_cache and "path" in _live_watch_cache:
@@ -1933,30 +1944,31 @@ def live_watch_path(db=None) -> str:
     if use_cache and "failed" in _live_watch_failed:
         return ""
     db = db if db is not None else db_firestore
+    path = ""
     try:
         query = _where(_where(db.collection(WATCHES_COLLECTION), "status", "==", "active"),
-                       "visibility", "==", "public").limit(10)
+                       "visibility", "==", "public").limit(LIVE_WATCH_SCAN_LIMIT)
         watches = [snapshot.to_dict() or {} for snapshot in _stream_now(query)]
         oldest = datetime.min.replace(tzinfo=timezone.utc)
         watches.sort(
             key=lambda item: item.get("last_run_at") if isinstance(item.get("last_run_at"), datetime) else oldest,
             reverse=True,
         )
-        pages = []
         for watch in watches:
             share_id = str(watch.get("share_id") or "")
             share = get_share(share_id, db=db) if is_valid_share_id(share_id) else None
-            if (not share or share.get("status") != "active"
+            if (not share or share.get("indexed") is not True
+                    or share.get("status") != "active"
                     or str(share.get("visibility") or "public") != "public"
                     or share.get("awaiting_first_watch_run")):
                 continue
-            pages.append((not share.get("indexed"), share_path(share.get("slug") or "", share_id)))
+            path = share_path(share.get("slug") or "", share_id)
+            break
     except Exception as exc:
         logging.warning("live watch lookup failed category=%s", safe_exception(exc))
         if use_cache:
             _live_watch_failed["failed"] = True
         return ""
-    path = next((page for unindexed, page in pages if not unindexed), pages[0][1] if pages else "")
     if use_cache:
         _live_watch_cache["path"] = path
     return path

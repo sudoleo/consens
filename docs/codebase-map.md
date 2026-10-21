@@ -537,9 +537,11 @@ erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
 ist in der öffentlichen Navigation erreichbar. Seit 2026-10-20 spricht das
 Beispiel die Sprache der echten Watches (Ziel „Waiting for“, Bewegung mit
 Quelle, Telegram-Gliederung, kein Score) und darunter steht „See a live
-watch“ – nur, wenn es eine laufende öffentliche Watch gibt
+watch“ – nur, wenn es eine laufende, kuratierte öffentliche Watch gibt
 (`share_snapshots.live_watch_path`: aktive, öffentliche Watch, neuester Check,
-indexierte Seite zuerst; 15-min-Cache, eine Minute Pause nach einem
+**nur indexierte Seiten** – dieselbe Menge wie `/questions` und Sitemap; eine
+nur per Link öffentliche Seite steht nie auf der Startseite, auch nicht als
+Ersatz; 15-min-Cache, Moderation leert ihn, eine Minute Pause nach einem
 Lesefehler, `stream(retry=None, timeout=3)`, damit die Landing nie auf
 Firestore wartet; `pages.landing_live_watch`). Direkt davor steht seit
 03.10.2026 der Benchmark-Abschnitt mit dem Live-Streifen aus dem Model Pulse
