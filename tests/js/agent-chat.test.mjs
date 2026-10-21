@@ -1826,6 +1826,97 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('shows the check from the moment the server announces it, in words where the evidence row will stand', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    // The evidence row replaces the line in the same render: none is left when it is drawn.
+    const linesAtRender = [];
+    w.App.agentReview = { renderActivity: vi.fn(), preview: vi.fn(),
+      render: vi.fn((_body, review) => { if (review) linesAtRender.push(d.querySelectorAll('.agent-check-status').length); }) };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    const line = () => d.querySelector('.agent-check-status');
+    handlers.delta.append('Let me check one more source.');
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(line()).toBeNull();
+    // A text taken back after its announcement drops it, also when the same words come again.
+    handlers.answer_check.receive({ type: 'answer_check' });
+    handlers.activity.receive({ version: 1, id: 'step', kind: 'status', status: 'working', clear_response: true });
+    w.App.agentChat.project(run);
+    handlers.delta.append('Let me check');
+    w.App.agentChat.project(run);
+    handlers.delta.append(' one more source.');
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(line()).toBeNull();
+    // The last word of the answer stands: the check shows before the review holds it.
+    handlers.activity.receive({ version: 1, id: 'step2', kind: 'status', status: 'working', clear_response: true });
+    handlers.delta.append('Answer.');
+    handlers.answer_check.receive({ type: 'answer_check' });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    expect(line().textContent).toBe('Checking the answer…');
+    expect(line().getAttribute('role')).toBe('status');
+    expect(body.nextElementSibling).toBe(line());
+    // The review's checkpoints carry it on: first without a version, then holding the text.
+    handlers.review.receive({ review: { status: 'running', comparisons: [{ id: 'c' }] } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    const version = { id: 1, text: 'Answer.', hash: 'h' };
+    const required = { status: 'required', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] };
+    handlers.review.receive({ review: required });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    expect(d.querySelectorAll('.agent-check-status')).toHaveLength(1);
+    // Checked: the evidence row takes its place.
+    handlers.review.receive({ review: { ...required, status: 'succeeded' } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(line()).toBeNull();
+    expect(linesAtRender.at(-1)).toBe(0);
+    resolve({ ok: true, data: { response: 'Answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    w.App.agentChat.project(run);
+    expect(line()).toBeNull();
+    dom.window.close();
+  });
+
+  it('drops an announced check that never came when the run ends', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    handlers.delta.append('Answer.');
+    handlers.answer_check.receive({ type: 'answer_check' });
+    w.App.agentChat.project(run);
+    expect(d.querySelector('.agent-check-status')).not.toBeNull();
+    resolve({ ok: true, data: { error: 'The answer check could not finish. The answer itself has been saved.' } });
+    await pending;
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(d.querySelector('.agent-check-status')).toBeNull();
+    dom.window.close();
+  });
+
   it('hands provisional marks to the answer only while its check runs, and forgets them with a taken-back text', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);

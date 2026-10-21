@@ -4215,7 +4215,25 @@ tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Sta
 eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
 Laufs, sobald er `succeeded`/`partial` ist;
 davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
-`#agentAnswerBody`. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
+`#agentAnswerBody`. Seit 2026-10-21 steht dabei an der Stelle der späteren
+Evidenzzeile die leise Statuszeile `p.agent-check-status` („Checking the
+answer…“, `App.words.checking`, `role="status"`; Ränder und Höhe wie
+`.agent-review`: 36 px, 44 px bei `pointer: coarse`, bis 540 px 92 px bzw.
+56 px ohne Agreement-Score), die einzige Anzeige bei reduced-motion und
+forced-colors; die Evidenzzeile ersetzt sie im selben Render. Der Prüfzustand
+beginnt mit dem letzten Wort: `_step` sendet das SSE-Ereignis `answer_check`
+(live, nie gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
+(Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf,
+nach Vergleichen, Answer Check an, keine offenen Worker oder Mailbox), noch vor
+Settlement, Kontingent-Snapshot und den Review-Checkpoints von
+`freeze_for_synthesis`/`capture` (zusammen mehrere Firestore-Schreibvorgänge,
+bis dahin startete der Schimmer erst mit dem Review mit `versions`). Der
+Handler merkt sich den Text (`context.metadata.answerCheckText`); `project`
+zeigt die Prüfung, solange genau dieser Text steht und noch keine Version
+vorliegt, danach übernimmt `review.status` `required`/`running`. Ein
+zurückgenommener oder geänderter Text löscht die Ankündigung, das Laufende
+beendet den Zustand; ein Reload ohne Live-Frames sieht nur den gespeicherten
+Review. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
 neu gerenderter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
 beim ersten Auftreten je `answer_hash` (`evidence.reveal`). Veraltete
 Antwort-/Grundlagenbindungen werden nicht angezeigt.

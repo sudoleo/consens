@@ -603,13 +603,26 @@
   }
   // While the judges check the fixed answer a quiet sheen passes over it, so
   // the reader sees below the fold that something is still happening. It
-  // fades out instead of switching off when the marks arrive.
+  // fades out instead of switching off when the marks arrive. Where the
+  // evidence row will stand, one quiet line says it in words: the only sign
+  // with reduced motion or forced colors, and as tall as that row, so the row
+  // takes its place in the same frame without a jump (agent-chat.css).
   function setAnswerChecking(body, checking, { fade = true } = {}) {
     if (!body || body.classList.contains('is-answer-checking') === checking) return;
     body.classList.toggle('is-answer-checking', checking);
     clearTimeout(body._answerCheckFade);
     body.classList.toggle('is-answer-check-done', !checking && fade);
     if (!checking && fade) body._answerCheckFade = setTimeout(() => body.classList.remove('is-answer-check-done'), 450);
+    body._checkStatus?.remove();
+    body._checkStatus = null;
+    if (!checking) return;
+    const line = document.createElement('p');
+    line.className = 'agent-check-status';
+    line.setAttribute('role', 'status');
+    line.textContent = App.words?.checking || 'Checking the answer…';
+    body.after(line);
+    body._checkStatus = line;
+    App.agentActivity?.reveal(line, { lift: false });
   }
   function renderError(error) {
     const errorEl = document.getElementById("agentAnswerError");
@@ -808,11 +821,18 @@
     // finishes: waiting for the end of the run made them appear late.
     const answerBody = document.getElementById("agentAnswerBody");
     const liveReview = context.metadata.agentReview;
-    const fixed = running && Boolean((state.text || state.streamText || '').trim()) && Boolean(liveReview?.versions?.length);
+    const shownText = state.text || state.streamText || '';
+    const fixed = running && Boolean(shownText.trim()) && Boolean(liveReview?.versions?.length);
+    // The server announces the check of exactly the text on screen the moment
+    // its last word stands (answer_check), before the review holds it as a
+    // version: the check shows from then on. A text taken back or changed
+    // since drops the announcement.
+    if (context.metadata.answerCheckText && context.metadata.answerCheckText !== shownText) context.metadata.answerCheckText = null;
+    const announced = running && !fixed && Boolean(shownText.trim()) && context.metadata.answerCheckText === shownText;
     // With the answer check off the run's fixed answer passes "required" on
     // its way to "off" for a moment; nothing is checked, so no sheen.
-    const checking = fixed && context.config.agentPreferences?.judges !== 'off'
-      && ['required', 'running'].includes(liveReview.status);
+    const checking = announced || (fixed && context.config.agentPreferences?.judges !== 'off'
+      && ['required', 'running'].includes(liveReview.status));
     // "off": the answer check is switched off, the fixed answer is final.
     const checked = fixed && ['succeeded', 'partial', 'off'].includes(liveReview.status);
     setAnswerChecking(answerBody, checking);
@@ -1419,6 +1439,13 @@
       memory: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         context.metadata.agentMemory = App.agentMemory?.receive(context.metadata.agentMemory || [], event) || [];
+        registry.update(context.runId, () => {});
+      } },
+      // The last word stands and the server checks exactly this text next
+      // (agent_delegation._answer_check_follows): bound to the text on screen.
+      answer_check: { receive() {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        context.metadata.answerCheckText = context.consensus.streamText || '';
         registry.update(context.runId, () => {});
       } },
       review: { receive(event) {

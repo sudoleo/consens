@@ -552,6 +552,19 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    reader reads (Apple audit D1). Each pass grows in and shrinks out
    (scaleX), which leaves opacity to the fade at the end. */
 #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
+/* "Checking the answer…" where the evidence row will stand (agent-chat.js
+   setAnswerChecking): that row's margins and height, so the row takes its
+   place without a jump, its quiet ink and size, no motion of its own. The
+   text sits in the row's first line: the agreement score and the links on
+   one row, on phones the score above the grid of links. */
+.agent-check-status { min-height: 36px; margin: 18px 0 8px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 36px; }
+@media (pointer: coarse) {
+  .agent-check-status { min-height: 44px; line-height: 44px; }
+}
+@media (max-width: 540px) {
+  .agent-check-status { min-height: 92px; line-height: 36px; }
+  body.agreement-verdict-hidden .agent-check-status { min-height: 56px; line-height: 56px; }
+}
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
     content: ''; position: absolute; top: -2px; bottom: -2px; left: -6px; width: calc((100% + 12px) * .4);

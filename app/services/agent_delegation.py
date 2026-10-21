@@ -1049,6 +1049,13 @@ class DelegationLoop(AgentLoop):
                     source.close()
             self._check(cancellation)
             status = "succeeded"
+            if stream_answer and self._answer_check_follows(value):
+                # The last word stands and the app checks exactly this text
+                # next: the page shows the check from now on, not only after
+                # settlement, the allowance and two review checkpoints (each a
+                # Firestore write). Live only, never saved; the review that
+                # holds the text as a version takes over (agent-chat.js).
+                yield {"type": "answer_check"}
         except (ProviderCancelled, GeneratorExit) as exc:
             status = "cancelled"
             # Cancelled before the request was dispatched: free.
@@ -1552,6 +1559,21 @@ class DelegationLoop(AgentLoop):
             "through a comparison: call compare_models with a neutral task now (or read_source for a page the user "
             "asked about), then write the answer."})
         return True
+
+    def _answer_check_follows(self, value):
+        """Whether the step that just streamed ``value`` ends the turn with a
+        check of exactly its visible text (_finish_merged, _finish_review): a
+        complete answer, shown in full, without tool calls, after
+        comparisons, with the answer check on and nothing left that would
+        take the text back (_workers_ready, mailbox)."""
+        comparison = self.comparison
+        return bool(comparison is not None and comparison.comparisons and not comparison.text
+                    and not comparison.finalized and comparison.preferences.judges != "off"
+                    and value.text.strip() and getattr(value, "published", "") == value.text
+                    and not value._tool_parts and not value.tool_calls
+                    and value.finish_reason not in {"length", "max_tokens"}
+                    and not getattr(value, "output_limited", False)
+                    and self._workers_ready() and not self.mailbox)
 
     def _finish_merged(self, value):
         """The agent's text is the answer: visible in full, then fixed and,
