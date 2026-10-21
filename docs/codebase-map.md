@@ -3068,8 +3068,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   geschlossener Leser (`model-answer-reader.js` `close()`) oder eine geschlossene
   Claim-Karte geben den Fokus an ihn zurück – auf dem Handy stand die
   Vorschau danach von selbst da. `placeHoverPreview` verankert nur an
-  Spans im Dokument mit Fläche (`getClientRects()`), ohne solche keine Karte.
-  Neu markieren
+  Spans im Dokument mit Fläche (`getClientRects()`), ohne solche keine Karte;
+  solange die Claim-Karte offen ist, keine Vorschau daneben. Neu markieren
   (`renderInlineMarkers`), `resetConsensusInsights` und `agent-review.js::overText`
   nehmen eine Vorschau ihrer Marken mit (`App.claimPopover.hidePreview(root)`).
   Inline-Quoten haben auf Mausgeraeten nur ihre sichtbare Trefferflaeche;
@@ -5062,7 +5062,13 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   (`dissent[].target`) tragen wie in der Antwort allein die Farbe (`.cx-spot`,
   `spotRanges`); der Rest ist
   `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
-  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Klick/Enter auf einen Satz
+  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Seit 2026-10-21 zeigt ein
+  gemalter Satz mit echter Maus (oder per Tab) dieselbe Hover-Vorschau wie ein
+  Satz der Antwort (`App.claimPopover.attachPreview(span, claim, models)` in
+  `mark()`, Hover-only-Gruppe ohne eigenen Klick); `is-quiet` zeigt keine.
+  Der Klick schließt die Vorschau (Dokument-Capture), solange die Karte offen
+  ist, erscheint keine, und die Fokus-Rückgabe beim Schließen bringt sie nicht
+  zurück. Klick/Enter auf einen Satz
   öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
   über `App.agentReview.contextFor`, während des Laufs über einen
   Minimal-Kontext aus `review.comparisons`. Darunter „Checked against N models
@@ -5086,6 +5092,7 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   `normalize_question`) statt der Wortgrenze; der doppelte Klick-Validator in
   `app-init.js` ist entfallen (jede Absage kam zweimal).
 - **Tests:** `tests/test_agent_passage_check.py`, `tests/js/passage-check.test.mjs`,
+  `tests/js/claim-hover-preview.test.mjs` (Hover-Vorschau aller Marken),
   `tests/e2e/test_passage_check_frontend.py`.
 
 ### Browser-Run-Lifecycle und Sichtwechsel
@@ -9023,7 +9030,7 @@ zählen nicht):
   verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
   (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
   stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open,
-  close, hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
+  close, attachPreview, hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
   `syncThreadAskClamp`. Globale `.cx-claim`-Schleifen in `consensus-insights.js`
   schließen `.pc-claim` aus, sonst nähme die Highlights-Einstellung den Marken
   auf der Nachricht Rolle und Label.

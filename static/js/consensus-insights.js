@@ -165,8 +165,12 @@
               || (highlightMode === "concerns" && mark.classList.contains("is-split"));
           }
 
+          // An unpainted sentence of a checked text (passage-check.js,
+          // .is-quiet) still opens its card on a click, but previews nothing.
           function passageIsVisible(group) {
-            return markersVisible && !group.spans[0].classList.contains("is-marker-filtered");
+            const first = group.spans[0];
+            return markersVisible && !first.classList.contains("is-marker-filtered")
+              && !first.classList.contains("is-quiet");
           }
 
           // Marks on a checked user message (passage-check.js, .pc-claim) keep
@@ -1334,14 +1338,17 @@
             }) || group.controls[0] || null;
           }
 
-          function passageGroup(spans) {
+          // `interactive: false`: hover only. A checked sentence of the user's
+          // text has its own click (passage-check.js).
+          function passageGroup(spans, interactive = true) {
             if (spans[0].cxGroup) return spans[0].cxGroup;
             const group = { spans: spans, controls: [], hover: false };
             spans.forEach(function (span) {
               span.cxGroup = group;
-              span.classList.add("is-interactive");
               span.addEventListener("mouseenter", function () { if (canHoverPassages()) setPassageHover(group, true); });
               span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+              if (!interactive) return;
+              span.classList.add("is-interactive");
               span.addEventListener("click", function (event) {
                 if (!passageIsVisible(group)) return;
                 // Quellenchips und [S1]-Links im Satz behalten Vorrang, und wer
@@ -1449,6 +1456,9 @@
 
           function showHoverPreview(group) {
             if (!passageIsVisible(group)) return;
+            // Die offene Karte sagt schon alles: keine zweite daneben.
+            const pop = $("claimPopover");
+            if (pop && !pop.hidden) return;
             const spans = placedSpans(group);
             if (!spans.length) return;
             const active = activeControl(group);
@@ -1656,6 +1666,29 @@
             entry.el.hidden = true;
             entry.el.setAttribute("aria-hidden", "true");
             entry.el.tabIndex = -1;
+          }
+
+          // Nur die Vorschau, ohne eigenen Klick: fuer die Saetze einer
+          // geprueften Nachricht, deren Klick und Tastatur ihrer eigenen Karte
+          // gehoeren (passage-check.js).
+          function attachPreviewOnly(spans, preview, focusable) {
+            if (!spans || !spans.length || spans[0].cxGroup) return null;
+            const group = passageGroup(spans, false);
+            const entry = { el: spans[0], activate: function () {}, preview: preview, isPassage: true };
+            group.controls.push(entry);
+            if (focusable) {
+              spans[0].addEventListener("focus", function () { focusPassage(group, spans[0]); });
+              spans[0].addEventListener("blur", function () { setPassageHover(group, false); });
+            }
+            return entry;
+          }
+
+          // Die Hover-Karte eines geprueften Satzes der Nachricht des Nutzers:
+          // dieselbe Vorschau wie ein Satz der Antwort; ein Klick oeffnet
+          // weiter die Karte (App.claimPopover.open), die die Vorschau ersetzt.
+          function attachClaimPreview(span, claim, modelsCompared) {
+            if (!span || !claim) return;
+            attachPreviewOnly([span], function () { return buildClaimPreview(claim, modelsCompared); }, true);
           }
 
           function renderInlineMarkers(claims, differences, modelsCompared, options) {
@@ -2995,9 +3028,10 @@
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;
           // The same card for a checked sentence of the user's own message
-          // (passage-check.js), so both read and close alike. hidePreview:
-          // marks taken off outside this module (agent-review.js) take their
-          // preview along.
+          // (passage-check.js), so both read and close alike, and the same
+          // hover preview before it (attachPreview). hidePreview: marks taken
+          // off outside this module (agent-review.js) take their preview along.
           window.App = window.App || {};
-          window.App.claimPopover = { open: openClaimPopover, close: closeClaimPopover, hidePreview: hidePreviewWithin };
+          window.App.claimPopover = { open: openClaimPopover, close: closeClaimPopover,
+            attachPreview: attachClaimPreview, hidePreview: hidePreviewWithin };
         })();

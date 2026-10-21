@@ -161,3 +161,56 @@ describe("which devices get the card", () => {
     env.dom.window.close();
   });
 });
+
+describe("the checked sentences of the user's text", () => {
+  const PASTED = "Heat pumps work below 55 degrees. You always need underfloor heating for that.";
+  function check(sentence, agree, dissent) {
+    const start = PASTED.indexOf(sentence);
+    return { anchor: sentence, start, end: start + sentence.length, agree,
+      dissent: dissent.map(model => ({ model, quote: `${model} says otherwise` })),
+      coverage: dissent.length ? "split" : "supported" };
+  }
+  const passage = { status: "succeeded", passage_check: { status: "succeeded", comparison_id: "c1", text: PASTED,
+    answer_to: "Heat pumps?", models_compared: ["Claude", "GPT", "Gemini"], issues: [], claims: [
+      check("Heat pumps work below 55 degrees.", ["Claude", "GPT", "Gemini"], []),
+      check("You always need underfloor heating for that.", ["Gemini"], ["Claude", "GPT"])] } };
+
+  it("preview like an answer sentence; a click swaps it for the card, and closing the card brings none back", async () => {
+    const env = boot({ mode: "concerns" });
+    const { window, document, shown, hover, leave } = env;
+    window.App.passageCheck.apply(env.body, passage);
+    const quoted = document.querySelector(".passage-check-quote .pc-claim");
+    hover(quoted);
+    await wait(160);
+    expect(shown().textContent).toContain("1/3");
+    expect(shown().textContent).toContain("Click for the full breakdown");
+    quoted.click();
+    expect(shown()).toBeNull();
+    const popover = document.getElementById("claimPopover");
+    expect(popover.hidden).toBe(false);
+    // While the card is open, no second card comes up beside it.
+    leave(quoted);
+    hover(quoted);
+    await wait(160);
+    expect(shown()).toBeNull();
+    // Escape closes the card and gives the focus back to the sentence.
+    document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
+    expect(popover.hidden).toBe(true);
+    expect(document.activeElement).toBe(quoted);
+    await wait(160);
+    expect(shown()).toBeNull();
+    env.dom.window.close();
+  });
+
+  it("previews nothing on a sentence the Highlights setting leaves unpainted", async () => {
+    const env = boot({ mode: "concerns" });
+    env.window.App.passageCheck.apply(env.body, passage);
+    env.document.querySelector(".passage-check-toggle").click();
+    const holds = env.document.querySelector('.passage-check-text .pc-claim[data-verdict="holds"]');
+    expect(holds.classList.contains("is-quiet")).toBe(true);
+    env.hover(holds);
+    await wait(160);
+    expect(env.shown()).toBeNull();
+    env.dom.window.close();
+  });
+});

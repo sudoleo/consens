@@ -119,7 +119,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       keine grauen Zeilen dazwischen; die Karte startet zugeklappt, auch unter
       „All checks“; „Show full text“ zeigt alle Sätze
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
-      nur grau, nie grün). Ein Zähler/Satz öffnet die Karte, „View answer“ die
+      nur grau, nie grün). Mit Maus zeigt ein gefärbter Satz die Hover-Vorschau
+      wie in der Antwort; Klick ersetzt sie durch die Karte, nach Escape kommt
+      keine Vorschau von selbst. Ein Zähler/Satz öffnet die Karte, „View answer“ die
       Modellantwort. Die Antwort nennt den Fehler und wird wie jede Antwort
       geprüft (Marken, Score); ein Satz wie „Dein Text sagt X, das stimmt
       nicht“ trägt keine rote Marke für X. Aktivität: Vergleichsfrage enthält

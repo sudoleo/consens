@@ -237,7 +237,7 @@
     }, []);
   }
 
-  function mark(claim, index, text, { quoted = false } = {}) {
+  function mark(claim, index, text, { quoted = false, models = [] } = {}) {
     const span = node("span", `cx-claim pc-claim is-interactive ${MARKS[verdict(claim)]}`);
     const spots = spotRanges(text, claim);
     let cursor = 0;
@@ -256,6 +256,10 @@
     // A button's name replaces its text: the sentence has to be in it.
     // Quoted, the verdict line right below says the rest.
     span.setAttribute("aria-label", quoted ? `“${text}” – Show details` : `“${text}” – ${claimLabel(claim)}. Show details`);
+    // With a mouse, resting on a painted sentence shows the same short
+    // preview as a sentence of the answer; the click (bind) opens the card
+    // and the preview goes (consensus-insights.js).
+    window.App.claimPopover?.attachPreview?.(span, claim, models);
     return span;
   }
 
@@ -267,7 +271,7 @@
     let cursor = 0;
     check.claims.forEach((claim, index) => {
       if (claim.start > cursor) body.append(piece(cursor, claim.start));
-      body.append(mark(claim, index, piece(claim.start, claim.end)));
+      body.append(mark(claim, index, piece(claim.start, claim.end), { models: check.models }));
       cursor = claim.end;
     });
     if (cursor < check.text.length) body.append(piece(cursor, check.text.length));
@@ -305,7 +309,7 @@
       // A quoted list item or heading stands alone: no bullet in front.
       const text = displayText(check.text.slice(claim.start, claim.end), true).replace(/^[\s•]+/, "").replace(/\s+/g, " ").trim();
       const sentence = node("p", "passage-check-sentence");
-      sentence.append(mark(claim, index, text, { quoted: true }));
+      sentence.append(mark(claim, index, text, { quoted: true, models: check.models }));
       const line = node("p", `passage-check-verdict is-${verdict(claim)}`);
       line.dataset.claim = String(index);
       line.append(node("span", "passage-check-who", claimLabel(claim)));
