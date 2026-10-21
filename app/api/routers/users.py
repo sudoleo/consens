@@ -19,6 +19,7 @@ from app.core.security import (
     is_user_admin,
     invalidate_tier_cache,
     db_firestore,
+    auth_unavailable_error,
 )
 from app.services import agent_quota
 from app.services.usage_repository import (
@@ -61,11 +62,7 @@ def _token_budget(uid: str, tier):
 
 def _account_status_unavailable() -> HTTPException:
     """A token that could not be checked is no rejected token: 503 + Retry-After."""
-    return HTTPException(
-        status_code=503,
-        detail="Account status is temporarily unavailable. Please retry.",
-        headers={"Retry-After": "5"},
-    )
+    return auth_unavailable_error()
 
 
 @router.get("/user_status")
@@ -171,6 +168,8 @@ def release_usage_run(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
         uid = verify_user_token(token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -257,6 +256,8 @@ def _account_uid(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
         return verify_user_token(token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed") from None
 
@@ -538,8 +539,9 @@ def patch_user_settings(request: Request, payload: UserSettingsPatchRequest):
     try:
         # Per account, beside the per-address limit above.
         api_uid_limiter.check(uid, "settings:write", 60)
-    except ApiUidRateLimitExceeded:
-        raise HTTPException(status_code=429, detail="Too many settings changes. Please wait.") from None
+    except ApiUidRateLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail="Too many settings changes. Please wait.",
+                            headers=exc.headers) from None
     changes, rejected = user_settings.validate_changes(payload.settings)
     try:
         state = (user_settings_repository.update(uid, changes) if changes
@@ -572,6 +574,8 @@ def delete_account(request: Request, data: dict = Body(default={})):
             allow_unverified=True,
             check_revoked=True,
         )
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
     try:
@@ -674,6 +678,8 @@ def track_interest(request: Request, data: dict = Body(...)):
             "message": "Your Pro beta request has been received.",
         }
 
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except HTTPException:
         raise
     except Exception as exc:

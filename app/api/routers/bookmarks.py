@@ -20,7 +20,10 @@ from app.core.rate_limit import (
     api_uid_limiter,
     limiter,
 )
-from app.core.security import verify_user_token, extract_id_token, db_firestore
+from app.core.security import (
+    verify_user_token, extract_id_token, db_firestore,
+    AuthenticationUnavailable, auth_unavailable_error,
+)
 from app.services.llm.attachments import normalize_attachment_meta
 from app.services import persistence_guard, share_snapshots
 from app.services.chat_store import (
@@ -134,6 +137,7 @@ def _enforce_bookmark_uid_rate_limit(uid: str, operation: str) -> None:
         raise HTTPException(
             status_code=429,
             detail="Too many bookmark saves. Please slow down.",
+            headers=exc.headers,
         ) from exc
 
 
@@ -387,6 +391,8 @@ def _bookmark_uid(request: Request):
         raise HTTPException(status_code=401, detail="Authentication failed")
     try:
         return verify_user_token(auth_header.split(" ", 1)[1])
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as exc:
         logging.error("bookmark auth failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
@@ -842,6 +848,8 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
     
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     _enforce_bookmark_uid_rate_limit(uid, "model_save")
@@ -1041,6 +1049,8 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
 
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
     _enforce_bookmark_uid_rate_limit(uid, "consensus_save")
@@ -1064,6 +1074,8 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Missing or invalid bookmark id.")
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
 
@@ -1176,6 +1188,8 @@ def delete_bookmark(data: BookmarkDeleteRequest):
     
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     

@@ -550,3 +550,22 @@ def test_uploads_are_limited_per_account(setup, monkeypatch):
     client = TestClient(app)
     body = {'name': 'a.txt', 'data': base64.b64encode(b'x').decode()}
     assert [client.post(f'/agent/chats/{chat}/files', json=body).status_code for _ in range(3)] == [200, 200, 429]
+
+
+def test_the_upload_limit_says_how_long_to_wait(monkeypatch):
+    # Nachprüfung 2: a per-account 429 names its wait (Retry-After), which
+    # main.error_body turns into code "rate_limited" and retry_after.
+    from fastapi import HTTPException
+    from app.api.routers import agent_files as uploads
+    from app.core.rate_limit import ApiUidRateLimitExceeded
+
+    def full(*_args, **_kwargs):
+        raise ApiUidRateLimitExceeded(retry_after=240)
+
+    monkeypatch.setattr(uploads, "get_user_tier", lambda uid: "free")
+    monkeypatch.setattr(uploads, "is_user_admin", lambda uid: False)
+    monkeypatch.setattr(uploads.api_uid_limiter, "check", full)
+    with pytest.raises(HTTPException) as caught:
+        uploads.require_uploads("owner")
+    assert caught.value.status_code == 429
+    assert caught.value.headers == {"Retry-After": "240"}

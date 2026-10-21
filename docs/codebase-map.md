@@ -269,7 +269,18 @@ Kontingent las „You don’t have access to this.“). Ausgenommen ist nur die
 "message"}}`. Ein 429 einer Route ohne eigenen Code (Agent-Sendegrenze,
 Provider-Cooldown) bekommt `code: "rate_limited"` und `retry_after` aus seinem
 `Retry-After`-Header; eigene Codes (`chat_rate_limited`, `limit_reached`,
-`usage_run_capacity`) bleiben. Jede
+`usage_run_capacity`, `feedback_cooldown`/`feedback_daily_limit`) bleiben.
+Jede Grenze pro Konto (`api_uid_limiter`: Bookmark-Saves, Agent-Turns,
+Einstellungen, Uploads, Chat-Schreibzugriffe) sendet seit Nachprüfung 2 diesen
+Header: `ApiUidRateLimitExceeded.retry_after` sind die Sekunden, bis der
+älteste gezählte Aufruf das Fenster verlässt, `exc.headers` ist der Header für
+die `HTTPException`; `persistence_guard.PersistenceLimitError.retry_after`
+trägt die Wartezeit des Feedback-Cooldowns (30 s) bzw. bis Mitternacht UTC.
+Kann die Kontoprüfung hinter einem gültigen Token nicht gelesen werden
+(`security.AuthenticationUnavailable`), antwortet jeder Router mit
+`security.auth_unavailable_error()` = 503 + `Retry-After: 5`, nie 401 (der
+Browser hielte die Anmeldung sonst für weg); die private Watch-Seite zeigt
+dann „One moment, please“ statt „Log in“. Jede
 slowapi-Grenze (`RateLimitExceeded`, alle Routen inkl. `/api/v1`) antwortet mit
 429 `{"error": "Too many requests in a short time. …", "code": "rate_limited",
 "retry_after": <s>}` und `Retry-After` (`rate_limit.retry_after_seconds` aus dem

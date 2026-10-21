@@ -284,8 +284,9 @@ def run_agent(request: Request, payload: AgentRequest):
         # with recover_only (above) and must not use up the send limit.
         try:
             api_uid_limiter.check(uid, "agent:turn", 20)
-        except ApiUidRateLimitExceeded:
-            raise HTTPException(status_code=429, detail="Too many agent requests. Please wait.") from None
+        except ApiUidRateLimitExceeded as exc:
+            raise HTTPException(status_code=429, detail="Too many agent requests. Please wait.",
+                                headers=exc.headers) from None
         if agent_background.shutting_down:
             raise AgentShuttingDown("The server is restarting. Please send your message again in a moment.")
         if agent_background.running(uid, payload.chat_id, payload.client_request_id):

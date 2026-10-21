@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
-from app.core.security import verify_user_token
+from app.core.security import verify_user_token, AuthenticationUnavailable, auth_unavailable_error
 from app.services.registration import (
     deliver_password_setup_email,
     find_or_provision_user,
@@ -152,6 +152,8 @@ def confirm_registration(
             check_revoked=True,
         )
         user = auth.get_user(uid)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as exc:
         logging.error(
             "/confirm-registration token error: %s", safe_exception(exc)

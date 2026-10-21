@@ -10,7 +10,10 @@ from app.core.notice_page import WATCHES_LINK, notice_page
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.entitlements import entitlements_for
-from app.core.security import extract_id_token, get_user_tier, verify_user_token
+from app.core.security import (
+    extract_id_token, get_user_tier, verify_user_token,
+    AuthenticationUnavailable, auth_unavailable_error,
+)
 from app.core.site import SITE_URL
 from app.services import (
     mailer, share_snapshots, telegram_watch, watch_brief, watch_followers, watch_images,
@@ -36,6 +39,8 @@ def _uid(request: Request, data: dict) -> str:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
         return verify_user_token(token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
 

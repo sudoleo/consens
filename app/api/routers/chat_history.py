@@ -16,6 +16,8 @@ from app.core.security import (
     extract_id_token,
     is_user_pro,
     verify_user_token,
+    AuthenticationUnavailable,
+    auth_unavailable_error,
 )
 from app.services.chat_store import (
     CHAT_PAGE_SIZE,
@@ -180,6 +182,8 @@ def _chat_uid(request: Request, operation: str = "") -> str:
         raise HTTPException(status_code=401, detail="Authentication failed")
     try:
         uid = verify_user_token(token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as exc:
         logging.warning("chat history authentication failed")
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
@@ -195,6 +199,7 @@ def _chat_uid(request: Request, operation: str = "") -> str:
                     "error": "Too many chat requests. Please slow down.",
                     "error_code": "chat_rate_limited",
                 },
+                headers=exc.headers,
             ) from exc
     return uid
 

@@ -155,8 +155,23 @@ def test_the_flat_shape_keeps_every_field_and_spares_the_public_api():
     assert main.error_body("/api/chats", chats, status=429)["code"] == "chat_rate_limited"
 
 
-@pytest.mark.parametrize("method,path", [("GET", "/user_status"), ("POST", "/usage")])
-def test_an_account_check_outage_is_no_rejected_login(http_adapter, monkeypatch, method, path):
+@pytest.mark.parametrize("method,path,body", [
+    ("GET", "/user_status", None),
+    ("POST", "/usage", {"id_token": "owner"}),
+    # Nachprüfung 2: every other router still answered 401 (signed out).
+    ("GET", "/api/admin/agent-budget", None),                     # admin
+    ("POST", "/confirm-registration", {"id_token": "owner"}),     # auth
+    ("GET", "/bookmarks", None),                                  # bookmarks
+    ("POST", "/prepare", {"id_token": "owner", "question": "Hi"}),  # chat
+    ("GET", "/chats", None),                                      # chat_history (and /agent)
+    ("POST", "/feedback", {"id_token": "owner", "message": "Hi"}),  # pages
+    ("GET", "/api/my/shares", None),                              # share
+    ("GET", "/api/admin/topics", None),                           # topics
+    ("GET", "/api/my/settings", None),                            # users
+    ("POST", "/usage/run/release", {"id_token": "owner", "usage_run_key": "k"}),
+    ("GET", "/api/my/watches", None),                             # watch
+])
+def test_an_account_check_outage_is_no_rejected_login(http_adapter, monkeypatch, method, path, body):
     # Zweitprüfung 12: the deletion check could not be read. A 401 made the
     # browser turn Agent off for the session; a 503 makes it ask again.
     from app.core import security
@@ -170,13 +185,89 @@ def test_an_account_check_outage_is_no_rejected_login(http_adapter, monkeypatch,
         return collection(name)
 
     monkeypatch.setattr(h.db, "collection", unavailable)
-    response = h.client.request(
-        method, path, headers=login("owner"),
-        json={"id_token": "owner"} if method == "POST" else None,
-    )
+    response = h.client.request(method, path, headers=login("owner"), json=body)
     assert response.status_code == 503, response.text
     assert response.headers["Retry-After"] == "5"
+    assert response.json()["error"] == "Account status is temporarily unavailable. Please retry."
     assert "private" not in response.text
+
+
+def test_a_private_watch_page_says_wait_when_the_account_check_is_out(monkeypatch):
+    # The page answered "log in" to an owner who was logged in.
+    from fastapi.testclient import TestClient
+    import main
+    from app.api.routers import share
+    from app.core import security
+
+    SHARE_ID = "a" * share.snapshots.SHARE_ID_LENGTH
+
+    def unavailable(token, **kwargs):
+        raise security.AuthenticationUnavailable("down")
+
+    monkeypatch.setattr(share, "verify_user_token", unavailable)
+    monkeypatch.setattr(share.snapshots, "get_share_cached", lambda share_id: {
+        "status": "active", "visibility": "private", "owner_uid": "owner"})
+    client = TestClient(main.app, raise_server_exceptions=False)
+    response = client.get("/s/" + SHARE_ID, headers={"Authorization": "Bearer owner"})
+    assert response.status_code == 503, response.text[:300]
+    assert response.headers["Retry-After"] == "5"
+    assert "One moment, please" in response.text
+    assert "Log in" not in response.text
+
+
+def test_the_account_limiter_says_how_long_to_wait(monkeypatch):
+    from app.core import rate_limit
+
+    clock = [1000.0]
+    monkeypatch.setattr(rate_limit.time, "monotonic", lambda: clock[0])
+    limiter = rate_limit.ApiUidRateLimiter()
+    limiter.check("owner", "op", 2, window_seconds=60)
+    clock[0] += 20
+    limiter.check("owner", "op", 2, window_seconds=60)
+    clock[0] += 5
+    with pytest.raises(rate_limit.ApiUidRateLimitExceeded) as caught:
+        limiter.check("owner", "op", 2, window_seconds=60)
+    # The first call leaves the window 35 s from now; then one goes through.
+    assert caught.value.retry_after == 35
+    assert caught.value.headers == {"Retry-After": "35"}
+    clock[0] += 35.5
+    limiter.check("owner", "op", 2, window_seconds=60)
+
+
+@pytest.mark.parametrize("method,path,body,code", [
+    ("PATCH", "/api/my/settings", {"settings": {"run_mode": "agent"}}, "rate_limited"),
+    ("POST", "/chats", {}, "chat_rate_limited"),
+])
+def test_every_account_throttle_names_its_wait(http_adapter, monkeypatch, method, path, body, code):
+    # Nachprüfung 2: a per-account 429 came without code, retry_after and
+    # Retry-After, unlike every per-address limit (main.handle_rate_limit).
+    from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter
+
+    def full(*_args, **_kwargs):
+        raise ApiUidRateLimitExceeded(retry_after=17)
+
+    monkeypatch.setattr(api_uid_limiter, "check", full)
+    response = http_adapter.client.request(method, path, headers=login("owner"), json=body)
+    assert response.status_code == 429, response.text
+    assert response.headers["Retry-After"] == "17"
+    data = response.json()
+    assert data["code"] == code and data["retry_after"] == 17 and data["error"]
+
+
+def test_feedback_sent_too_soon_names_its_own_code_and_wait(http_adapter, monkeypatch):
+    from app.api.routers import pages
+    from test_phase5_operations import Database as FeedbackDatabase
+
+    monkeypatch.setattr(pages, "db_firestore", FeedbackDatabase())
+    payload = {"id_token": "owner", "message": "Lovely app"}
+    first = http_adapter.client.post("/feedback", json=payload)
+    assert first.status_code == 200, first.text
+    again = http_adapter.client.post("/feedback", json=payload)
+    assert again.status_code == 429, again.text
+    data = again.json()
+    assert data["code"] == "feedback_cooldown"
+    assert 1 <= data["retry_after"] <= 30
+    assert again.headers["Retry-After"] == str(data["retry_after"])
 
 
 def test_registration_create_race_has_same_public_response_and_no_duplicate_notification(
