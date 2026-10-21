@@ -29,15 +29,22 @@ def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phas
         bookmarks = [{'id': 'first', 'title': 'Delete this bookmark', 'query': 'Question', 'mode': 'Standard',
                       'has_consensus': True},
                      {'id': 'second', 'title': 'Keep this bookmark', 'query': 'Another question', 'mode': 'Agent',
-                      'has_consensus': True}]
+                      'has_consensus': True},
+                     {'id': 'third', 'title': 'Direct comparison', 'query': 'Third question', 'mode': 'Standard',
+                      'has_consensus': False}]
         page.route('**/bookmarks?*', lambda r: _json(r, {'bookmarks': bookmarks, 'next_cursor': None}))
         page.route('**/bookmark', lambda r: requests.append(r))
         page.evaluate('() => window.loadBookmarks()')
         if width < 1100:
             page.locator('#toggleSidebarButton').click()
-        # Agent answers cannot be shared yet: no Share that could only say so.
+        # Agent answers are shared like Consensus ones (since 2026-10-21).
         agent_menu = _open_row_menu(page, page.locator('.bookmark[data-id="second"]'))
-        expect(agent_menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Delete'])
+        expect(agent_menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Share', 'Delete'])
+        page.keyboard.press('Escape')
+        expect(page.locator('.bookmark-menu')).to_have_count(0)
+        # A chat without a saved answer has nothing to share: no Share that could only say so.
+        direct_menu = _open_row_menu(page, page.locator('.bookmark[data-id="third"]'))
+        expect(direct_menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Delete'])
         page.keyboard.press('Escape')
         expect(page.locator('.bookmark-menu')).to_have_count(0)
         row = page.locator('.bookmark[data-id="first"]')
