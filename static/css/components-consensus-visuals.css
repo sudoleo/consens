@@ -380,6 +380,8 @@
   /* Bernstein-Note der Badges und der kurze Aufblitz einer geoeffneten Karte. */
   --cx-major-line: var(--partial);
   --cx-flash: rgba(208, 161, 64, 0.16);
+  /* Die vorlaeufige Marke: neutral, nur Tinte (siehe .is-provisional). */
+  --cx-provisional-line: color-mix(in srgb, var(--ink) 34%, transparent);
 }
 
 .dark-mode {
@@ -399,6 +401,7 @@
   --cx-ink-major: #ffb3ab;
   --cx-major-line: var(--partial);
   --cx-flash: rgba(245, 197, 111, 0.15);
+  --cx-provisional-line: color-mix(in srgb, var(--ink) 38%, transparent);
 }
 
 @supports (color: oklch(from red l c h)) {
@@ -429,6 +432,32 @@
   /* Ohne Stufenklasse (Alt-Snapshots) bleibt der Satz unmarkiert; die Klasse
      ist dann nur der praezise Einhaengepunkt fuer das Badge. */
   text-decoration: none;
+}
+
+/* Die vorlaeufige Marke (agent-review.js preview, seit 2026-10-21): ein
+   schon verglichener Satz, dessen Pruefung noch laeuft. Sie sagt nur DASS er
+   verglichen wurde, nie wie: keine Flaeche, keine Ampelfarbe, nur eine leise
+   gepunktete Linie in Tinte, hell wie dunkel. Eine Flaeche haette fast jeden
+   Satz eingefaerbt; die Farbe kommt erst mit der fertigen Pruefung
+   (Max 2026-10-21). Die Linie braucht keinen Platz (kein Umbruch). Beim
+   Uebergang behaelt die finale Marke die Linie, bis ihre Farbe kommt
+   (.was-provisional, agent-chat.css). */
+.cx-claim:is(.is-provisional, .was-provisional) {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.24em;
+  text-decoration-color: transparent;
+}
+
+body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
+  text-decoration-color: var(--cx-provisional-line);
+}
+
+@media (forced-colors: active) {
+  body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
+    text-decoration-color: GrayText;
+  }
 }
 
 /* Gemeinsame Geometrie aller vier Stufen. Die Marke darf keinen Platz

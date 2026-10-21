@@ -193,13 +193,10 @@
     return PAINTED[document.body?.dataset.consensusHighlightMode] ? document.body.dataset.consensusHighlightMode : "concerns";
   }
 
-  // "All checks" promises every verdict highlighted, so the card opens on the
-  // full text there; the folded card only quotes what other models dispute,
-  // which for a text that holds is nothing to see. Once the reader folds or
-  // unfolds the card, it stays as they left it.
-  function openByDefault() {
-    return highlightMode() === "all";
-  }
+  // The card always starts folded, on what other models dispute, whatever
+  // the Highlights setting (Max 2026-10-21: the differences count first).
+  // Only the reader unfolds it; a change of the setting repaints the full
+  // text but never folds or unfolds the card.
 
   // The quoted sentences are always painted: they are quoted because of
   // their verdict. The full text paints what the Highlights setting paints.
@@ -240,7 +237,7 @@
     }, []);
   }
 
-  function mark(claim, index, text, { quoted = false } = {}) {
+  function mark(claim, index, text, { quoted = false, models = [] } = {}) {
     const span = node("span", `cx-claim pc-claim is-interactive ${MARKS[verdict(claim)]}`);
     const spots = spotRanges(text, claim);
     let cursor = 0;
@@ -259,6 +256,10 @@
     // A button's name replaces its text: the sentence has to be in it.
     // Quoted, the verdict line right below says the rest.
     span.setAttribute("aria-label", quoted ? `“${text}” – Show details` : `“${text}” – ${claimLabel(claim)}. Show details`);
+    // With a mouse, resting on a painted sentence shows the same short
+    // preview as a sentence of the answer; the click (bind) opens the card
+    // and the preview goes (consensus-insights.js).
+    window.App.claimPopover?.attachPreview?.(span, claim, models);
     return span;
   }
 
@@ -270,7 +271,7 @@
     let cursor = 0;
     check.claims.forEach((claim, index) => {
       if (claim.start > cursor) body.append(piece(cursor, claim.start));
-      body.append(mark(claim, index, piece(claim.start, claim.end)));
+      body.append(mark(claim, index, piece(claim.start, claim.end), { models: check.models }));
       cursor = claim.end;
     });
     if (cursor < check.text.length) body.append(piece(cursor, check.text.length));
@@ -308,7 +309,7 @@
       // A quoted list item or heading stands alone: no bullet in front.
       const text = displayText(check.text.slice(claim.start, claim.end), true).replace(/^[\s•]+/, "").replace(/\s+/g, " ").trim();
       const sentence = node("p", "passage-check-sentence");
-      sentence.append(mark(claim, index, text, { quoted: true }));
+      sentence.append(mark(claim, index, text, { quoted: true, models: check.models }));
       const line = node("p", `passage-check-verdict is-${verdict(claim)}`);
       line.dataset.claim = String(index);
       line.append(node("span", "passage-check-who", claimLabel(claim)));
@@ -539,19 +540,16 @@
     card.addEventListener("click", event => {
       const chip = event.target.closest(".passage-check-count");
       if (chip) {
-        card._passageChosen = true;
         focusVerdict(card, chip);
         return;
       }
       const toggle = event.target.closest(".passage-check-toggle");
       if (toggle) {
-        card._passageChosen = true;
         unfold(card, !card.classList.contains("is-full"));
         toggle.focus?.({ preventScroll: true });
         return;
       }
       if (event.target.closest(".passage-check-more")) {
-        card._passageChosen = true;
         unfold(card, true);
         card.querySelector(".passage-check-toggle")?.focus?.({ preventScroll: true });
         return;
@@ -597,7 +595,6 @@
       card = node("section", "passage-check");
       card.setAttribute("aria-label", "Check of your text");
       body._passageCard = card;
-      card.classList.toggle("is-full", openByDefault());
       bind(card);
     }
     // Right above the answer, also after other rows were put there.
@@ -610,20 +607,17 @@
     for (const other of cards) if (!other.isConnected) cards.delete(other);
     cards.add(card);
     if (card._passageSignature === signature) return;
-    // The same card shows another turn's text (a chat switch): back to the
-    // default of the Highlights setting.
+    // The same card shows another turn's text (a chat switch): folded again.
     const previous = card._passageCheck;
     if (previous && (previous.text !== check.text || previous.comparisonId !== check.comparisonId)) {
-      card._passageChosen = false;
-      card.classList.toggle("is-full", openByDefault());
+      card.classList.remove("is-full");
     }
     card._passageSignature = signature;
     card._passageCheck = check;
     render(card, check, live);
   }
 
-  // The Highlights setting changes which verdicts the full text paints, live,
-  // and opens or folds a card the reader has not set themselves.
+  // The Highlights setting changes which verdicts the full text paints, live.
   if (typeof MutationObserver === "function" && document.body) {
     new MutationObserver(() => {
       for (const card of [...cards]) {
@@ -631,11 +625,7 @@
           cards.delete(card);
           continue;
         }
-        if (!card._passageChosen && card._passageCheck && card.classList.contains("is-full") !== openByDefault()) {
-          unfold(card, openByDefault());
-        } else {
-          paint(card);
-        }
+        paint(card);
       }
     }).observe(document.body, { attributes: true, attributeFilter: ["data-consensus-highlight-mode"] });
   }

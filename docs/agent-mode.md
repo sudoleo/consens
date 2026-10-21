@@ -473,13 +473,17 @@ schiebt ihn über einmal gemalten Text. Das frühere Overlay in Antwortgröße m
 wanderndem Hintergrund malte die ganze Antwort in jedem Bild neu (gemessen
 126 Malvorgänge in 3 s, p95-Bildzeit 50 ms; jetzt keiner, 16,7 ms; Apple-Audit D1). Schon unter dem Schimmer erscheinen
 die vorläufigen Marken fertiger Coverage-Fenster (seit 2026-10-18): leise, jede
-neue Marke blendet einmal ein, ohne Textmarker-Strich und ohne Score.
-Mit der fertigen Prüfung erscheinen die endgültigen Markierungen sofort und
-streichen sich beim ersten Mal in
+neue Marke blendet einmal ein, ohne Textmarker-Strich und ohne Score. Seit
+2026-10-21 sind sie neutral: eine gepunktete Linie in Tinte unter jedem schon
+verglichenen Satz, ohne Farbe, Quote oder Urteil, auch nicht im Hover („The
+result appears once the whole answer is checked“). Farbe kommt erst mit dem
+Ergebnis (Max: vorher wurde ein Satz gelb, das Gelb verschwand, dann wurde ein
+anderer rot).
+Mit der fertigen Prüfung ersetzen die endgültigen Markierungen die vorläufigen
+im selben Moment und streichen sich beim ersten Mal in
 Lesereihenfolge an wie ein Textmarker (höchstens etwa 0,9 s Versatz, Badges
-folgen). Marken, die der Leser schon vorläufig in derselben Farbe sah, bleiben
-dabei still; nur neue oder umgefärbte (etwa ein roter Widerspruch) streichen
-sich an, damit keine Marke zweimal erscheint. Erneutes Rendern derselben
+folgen); ein vorläufig markierter Satz behält seine Linie, bis seine Farbe
+kommt, sonst blendet sie weich aus. Erneutes Rendern derselben
 Antwort und gespeicherte Chats zeigen sie ohne
 Animation; Reduced Motion und Forced Colors verzichten auf beides.
 Rund um die Antwort gilt ein Farbsystem: Antworttext `--ink`; Thinking samt

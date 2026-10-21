@@ -56,13 +56,21 @@ function renderContradiction(window) {
 
 it('enables passage hover for a mouse attached after rendering, while touch stays quiet', async () => {
   const {window, document, dom} = boot('true', 'all');
+  // jsdom lays nothing out; the card needs a sentence with a box to stand at.
+  window.HTMLElement.prototype.getClientRects = () => [{width: 10, height: 10}];
   window.renderConsensusInsights({models_compared: ['OpenAI', 'Gemini'], differences: [],
     claims: [{anchor: CLAIM, agree: ['OpenAI', 'Gemini'], dissent: []}]}, 2);
   const mark = document.querySelector('.cx-claim');
   mark.dispatchEvent(new window.MouseEvent('mouseenter'));
   await new Promise(resolve => window.setTimeout(resolve, 160));
   expect(document.querySelector('.insight-preview:not([hidden])')).toBeNull();
+  // A phone that also reports some fine pointer (any-pointer) is no mouse:
+  // only the primary pointer counts, as in the CSS hover capsule.
   window.matchMedia = query => ({matches: query === '(any-hover: hover) and (any-pointer: fine)'});
+  mark.dispatchEvent(new window.MouseEvent('mouseenter'));
+  await new Promise(resolve => window.setTimeout(resolve, 160));
+  expect(document.querySelector('.insight-preview:not([hidden])')).toBeNull();
+  window.matchMedia = query => ({matches: query === '(hover: hover) and (pointer: fine)'});
   mark.dispatchEvent(new window.MouseEvent('mouseenter'));
   await new Promise(resolve => window.setTimeout(resolve, 160));
   expect(document.querySelector('.insight-preview:not([hidden])').textContent).toContain('2/2');

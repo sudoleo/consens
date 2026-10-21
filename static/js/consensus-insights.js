@@ -157,7 +157,9 @@
           }
 
           function matchesHighlightFilter(mark) {
-            if (highlightMode === "all") return true;
+            // A provisional mark carries no verdict a filter could pick by:
+            // it shows under every setting except "No highlights".
+            if (highlightMode === "all" || mark.classList.contains("is-provisional")) return true;
             if (highlightMode === "contradictions") return !!mark.cxGroup?.hasContradiction;
             // Every contradiction the footer counts, minor ones included.
             if (highlightMode === "concerns" && mark.cxGroup?.hasContradiction) return true;
@@ -165,8 +167,12 @@
               || (highlightMode === "concerns" && mark.classList.contains("is-split"));
           }
 
+          // An unpainted sentence of a checked text (passage-check.js,
+          // .is-quiet) still opens its card on a click, but previews nothing.
           function passageIsVisible(group) {
-            return markersVisible && !group.spans[0].classList.contains("is-marker-filtered");
+            const first = group.spans[0];
+            return markersVisible && !first.classList.contains("is-marker-filtered")
+              && !first.classList.contains("is-quiet");
           }
 
           // Marks on a checked user message (passage-check.js, .pc-claim) keep
@@ -229,7 +235,7 @@
                   event.preventDefault();
                   activeControl(group)?.activate(event);
                 });
-                mark.addEventListener("focus", function () { setPassageHover(group, true); });
+                mark.addEventListener("focus", function () { focusPassage(group, mark); });
                 mark.addEventListener("blur", function () { setPassageHover(group, false); });
               }
             });
@@ -406,10 +412,21 @@
             sentenceBounds,
             locateAnchor
           } = window.App.consensusAnchor.create(stripMarkdown);
+          // A link that only shows its address or its site becomes a source
+          // pill after the marks are set (sources.js linkifyAgentSources), and
+          // its text goes. Its words still find the sentence, but they are not
+          // wrapped: a span inside left the page with them, and the hover card
+          // of its sentence opened in the top left corner.
+          function insideBareSourceLink(node) {
+            const link = node.parentElement?.closest("a[href]");
+            return Boolean(link) && Boolean(window.isBareSourceLink?.(link));
+          }
+
           function wrapFlatRange(slices, start, end, className) {
             const spans = [];
             slices.forEach(function (slice) {
               if (slice.end <= start || slice.start >= end) return;
+              if (insideBareSourceLink(slice.node)) return;
               let node = slice.node;
               const from = Math.max(start, slice.start) - slice.start;
               const to = Math.min(end, slice.end) - slice.start;
@@ -1260,6 +1277,9 @@
             const spans = wrapFlatRange(
               hit.slices, bounds.start, bounds.end, "cx-claim " + severityClass
             );
+            // Nothing left to wrap (the sentence is a bare source link): no
+            // mark, the claim goes to the list like any unanchored one.
+            if (!spans.length) return null;
             marked.push({
               start: bounds.start, end: bounds.end, spans: spans, severity: severityClass
             });
@@ -1321,14 +1341,18 @@
             }) || group.controls[0] || null;
           }
 
-          function passageGroup(spans) {
+          // `interactive: false`: hover only. A provisional mark opens nothing,
+          // and a checked sentence of the user's text has its own click
+          // (passage-check.js).
+          function passageGroup(spans, interactive = true) {
             if (spans[0].cxGroup) return spans[0].cxGroup;
             const group = { spans: spans, controls: [], hover: false };
             spans.forEach(function (span) {
               span.cxGroup = group;
-              span.classList.add("is-interactive");
               span.addEventListener("mouseenter", function () { if (canHoverPassages()) setPassageHover(group, true); });
               span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+              if (!interactive) return;
+              span.classList.add("is-interactive");
               span.addEventListener("click", function (event) {
                 if (!passageIsVisible(group)) return;
                 // Quellenchips und [S1]-Links im Satz behalten Vorrang, und wer
@@ -1343,10 +1367,30 @@
             return group;
           }
 
-          // Hover nur auf Geraeten mit echtem Zeiger. Der Klick auf die Passage
-          // bleibt dagegen auch auf Touch aktiv.
+          // Hover nur auf Geraeten mit echtem Zeiger, dieselbe Abfrage wie die
+          // Hover-Kapsel im CSS (codebase-map §8): ein Handy, das irgendeinen
+          // feinen Zeiger meldet (any-pointer), zaehlt nicht. Der Klick auf die
+          // Passage bleibt dagegen auch auf Touch aktiv.
           function canHoverPassages() {
-            return !!window.matchMedia?.("(any-hover: hover) and (any-pointer: fine)").matches;
+            return !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+          }
+
+          // Fokus zeigt die Vorschau nur, wenn der Leser ihn mit der Tastatur
+          // dorthin gebracht hat (Tab, also :focus-visible). Ein Tippen
+          // fokussiert den Satz ebenfalls (tabindex), und ein geschlossenes
+          // Sheet oder eine geschlossene Karte gibt den Fokus an ihn zurueck
+          // (model-answer-reader.js, closeClaimPopover): beides ist keine Bitte
+          // um die Vorschau. Auf dem Handy stand sie sonst nach dem Schliessen
+          // des grossen Fensters von selbst da.
+          let tabbing = false;
+          document.addEventListener("keydown", function (event) { tabbing = event.key === "Tab"; }, true);
+          document.addEventListener("pointerdown", function () { tabbing = false; }, true);
+          function focusShowsPreview(el) {
+            if (!tabbing || !canHoverPassages()) return false;
+            try { return el.matches(":focus-visible"); } catch (_) { return true; }
+          }
+          function focusPassage(group, el) {
+            if (focusShowsPreview(el)) setPassageHover(group, true);
           }
 
           // --- Vorschau beim Hovern -------------------------------------------
@@ -1380,6 +1424,22 @@
             }
           }
 
+          // Marks of `root` are redrawn or taken off: a preview of one of them
+          // (or of a mark already gone) goes too, any other stays.
+          function hidePreviewWithin(root) {
+            const hovered = hoverGroup?.spans[0];
+            if (hovered && (!root || !hovered.isConnected || root.contains(hovered))) hideHoverPreview();
+          }
+
+          // Was die Karte verankern kann: Spans, die im Dokument stehen und
+          // Flaeche haben. Ein abgehaengter Span misst ueberall 0 und setzte
+          // die Karte in die linke obere Ecke.
+          function placedSpans(group) {
+            return group.spans.filter(function (span) {
+              return span.isConnected && span.getClientRects().length > 0;
+            });
+          }
+
           function placeHoverPreview(card, spans) {
             const first = spans[0].getBoundingClientRect();
             const last = spans[spans.length - 1].getBoundingClientRect();
@@ -1400,6 +1460,11 @@
 
           function showHoverPreview(group) {
             if (!passageIsVisible(group)) return;
+            // Die offene Karte sagt schon alles: keine zweite daneben.
+            const pop = $("claimPopover");
+            if (pop && !pop.hidden) return;
+            const spans = placedSpans(group);
+            if (!spans.length) return;
             const active = activeControl(group);
             const build = (active && active.preview) ? active
               : group.controls.find(function (c) { return c.preview && !c.suppressed; });
@@ -1408,24 +1473,25 @@
             card.innerHTML = "";
             card.appendChild(build.preview());
             card.hidden = false;
-            placeHoverPreview(card, group.spans);
+            placeHoverPreview(card, spans);
           }
 
           function scheduleHoverPreview(group) {
             window.clearTimeout(hoverTimer);
             hoverGroup = group;
             hoverTimer = window.setTimeout(function () {
-              if (group.hover && group.spans.some(span => span.isConnected)) showHoverPreview(group);
+              if (group.hover) showHoverPreview(group);
             }, HOVER_DELAY_MS);
           }
 
           // Scrolling can arrive just AFTER mouseenter and cancel its timer.
           // Hide stale geometry immediately, then resume the preview if the
           // pointer/focus is still on this passage when the layout settles.
+          // Only with a real pointer: a tap leaves :hover stuck on touch.
           function refreshHoverPreview() {
             const group = hoverGroup;
             hideHoverPreview();
-            if (!group) return;
+            if (!group || !canHoverPassages()) return;
             requestAnimationFrame(function () {
               if (hoverGroup && hoverGroup !== group) return;
               const targets = [...group.spans, ...group.controls.map(control => control.el)];
@@ -1510,6 +1576,22 @@
             return frag;
           }
 
+          // A provisional mark (agent-review.js preview) says only that its
+          // sentence was compared, never how it came out: the verdict and its
+          // colour arrive together with the finished check.
+          function buildProvisionalPreview(modelsCompared) {
+            const frag = document.createDocumentFragment();
+            const count = Array.isArray(modelsCompared) ? modelsCompared.length : 0;
+            frag.appendChild(previewHead(count
+              ? "Compared with " + count + " model answer" + (count === 1 ? "" : "s")
+              : "Compared with the model answers"));
+            const foot = document.createElement("div");
+            foot.className = "insight-preview-foot";
+            foot.textContent = "The result appears once the whole answer is checked";
+            frag.appendChild(foot);
+            return frag;
+          }
+
           function buildDiffPreview(diff) {
             const frag = document.createDocumentFragment();
             const isMajor = diff.type === "contradiction" && diff.severity === "major";
@@ -1580,7 +1662,7 @@
                 const target = activeControl(group);
                 if (target) target.activate(event);
               });
-              host.addEventListener("focus", function () { setPassageHover(group, true); });
+              host.addEventListener("focus", function () { focusPassage(group, host); });
               host.addEventListener("blur", function () { setPassageHover(group, false); });
             }
             const entry = { el: host, activate: activate, preview: preview, isPassage: true };
@@ -1606,6 +1688,29 @@
             entry.el.tabIndex = -1;
           }
 
+          // Nur die Vorschau, ohne Klick und ohne Tabstopp: fuer vorlaeufige
+          // Marken und fuer die Saetze einer geprueften Nachricht, deren Klick
+          // und Tastatur ihrer eigenen Karte gehoeren (passage-check.js).
+          function attachPreviewOnly(spans, preview, focusable) {
+            if (!spans || !spans.length || spans[0].cxGroup) return null;
+            const group = passageGroup(spans, false);
+            const entry = { el: spans[0], activate: function () {}, preview: preview, isPassage: true };
+            group.controls.push(entry);
+            if (focusable) {
+              spans[0].addEventListener("focus", function () { focusPassage(group, spans[0]); });
+              spans[0].addEventListener("blur", function () { setPassageHover(group, false); });
+            }
+            return entry;
+          }
+
+          // Die Hover-Karte eines geprueften Satzes der Nachricht des Nutzers:
+          // dieselbe Vorschau wie ein Satz der Antwort; ein Klick oeffnet
+          // weiter die Karte (App.claimPopover.open), die die Vorschau ersetzt.
+          function attachClaimPreview(span, claim, modelsCompared) {
+            if (!span || !claim) return;
+            attachPreviewOnly([span], function () { return buildClaimPreview(claim, modelsCompared); }, true);
+          }
+
           function renderInlineMarkers(claims, differences, modelsCompared, options) {
             options = options || {};
             const body = options.body || window.App.consensusBodyEl();
@@ -1615,6 +1720,9 @@
             // gehoert bereits dem naechsten Lauf.
             const focusDifference = options.focusDifference || focusDifferenceCard;
             if (!body || !fallbackBox) return;
+            // Neu markiert: eine offene Vorschau dieses Textes gehoert zu Spans,
+            // die es gleich nicht mehr gibt (oder schon nicht mehr gibt).
+            hidePreviewWithin(body);
 
             // Pro Blockelement eine eigene Liste bereits markierter Bereiche:
             // die flachen Offsets gelten nur innerhalb ihres Blocks.
@@ -1631,6 +1739,24 @@
               return markSentence(
                 body, anchor, severityClass, marksFor(probe.block), occurrence
               );
+            }
+
+            // Vorlaeufig (agent-review.js preview, seit 2026-10-21 neutral):
+            // jeder schon verglichene Satz traegt dieselbe leise Marke, ohne
+            // Farbe, Quote, Stelle oder Liste und mit einer Vorschau ohne
+            // Urteil. Was die Pruefung ergibt, kommt erst mit der fertigen
+            // Pruefung (Max 2026-10-21: erst ein gelber Satz, dann keiner, dann
+            // ein ganz anderer roter).
+            if (options.provisional) {
+              let anchored = 0;
+              claims.forEach(function (claim) {
+                const result = mark(claim.anchor, "is-provisional", claim.anchor_occurrence);
+                if (!result) return;
+                anchored += 1;
+                attachPreviewOnly(result.spans, function () { return buildProvisionalPreview(modelsCompared); });
+              });
+              applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body, fallbackBox);
+              return { claims_anchored: anchored, claims_unanchored: claims.length - anchored };
             }
 
             // Wenn Claim und Difference denselben Satz meinen, steht dort nur
@@ -1850,7 +1976,8 @@
               // Ein archivierter Turn hat seine eigenen Quellen; die globale
               // Liste gehoert bereits dem naechsten Lauf.
               sources: Array.isArray(sources) ? sources : [],
-              answerNavigation: options.answerNavigation || storedAnswerNavigation(body)
+              answerNavigation: options.answerNavigation || storedAnswerNavigation(body),
+              provisional: options.provisional === true
             });
             return claims.length > 0;
           }
@@ -2861,6 +2988,7 @@
           // --- Reset & Haupteinstieg -----------------------------------------
           function resetConsensusInsights() {
             closeClaimPopover();
+            hideHoverPreview();
             const verdict = $("consensusVerdict");
             if (verdict) {
               verdict.hidden = true;
@@ -2981,7 +3109,10 @@
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;
           // The same card for a checked sentence of the user's own message
-          // (passage-check.js), so both read and close alike.
+          // (passage-check.js), so both read and close alike, and the same
+          // hover preview before it (attachPreview). hidePreview: marks taken
+          // off outside this module (agent-review.js) take their preview along.
           window.App = window.App || {};
-          window.App.claimPopover = { open: openClaimPopover, close: closeClaimPopover };
+          window.App.claimPopover = { open: openClaimPopover, close: closeClaimPopover,
+            attachPreview: attachClaimPreview, hidePreview: hidePreviewWithin };
         })();

@@ -45,9 +45,9 @@ function reordered(value) {
 }
 
 // The app always sets the Highlights mode (consensus-insights.js, default
-// "concerns" since 2026-10-19); these cases run the folded "Disagreements &
-// issues" card unless they name another mode. `anchor` loads the text search
-// that finds the disputed words of a sentence (consensus-anchor.js).
+// "concerns" since 2026-10-19); it decides what the full text paints, the
+// card starts folded under every mode (since 2026-10-21). `anchor` loads the
+// text search that finds the disputed words of a sentence (consensus-anchor.js).
 function boot({ mode = "concerns", anchor = false } = {}) {
   const popover = vi.fn();
   const openContext = vi.fn();
@@ -481,29 +481,33 @@ describe("result card of a checked pasted text", () => {
     expect(card().querySelector(".passage-check-who").textContent).toBe("1 of 1 model disagrees");
   });
 
-  it("opens on the full text under All checks, and follows the setting until the reader chooses", async () => {
+  it("starts folded under every Highlights setting, and only the reader unfolds it", async () => {
     const { window, document, body, card } = boot({ mode: "all" });
     const tick = () => new Promise(resolve => setTimeout(resolve, 0));
-    window.App.passageCheck.apply(body, review({ claims: [
-      claim("Heat pumps work in old buildings below 55 degrees.", { agree: ["Claude", "GPT"] }),
-      claim("The state pays up to 70 percent.", { agree: ["Claude", "GPT"] })] }));
-    // Every sentence holds: folded, there would be nothing highlighted at all.
-    expect(card().classList.contains("is-full")).toBe(true);
-    const marks = [...card().querySelectorAll(".passage-check-text .pc-claim")];
-    expect(marks.map(mark => mark.classList.contains("is-quiet"))).toEqual([false, false]);
-    expect(card().querySelector(".passage-check-toggle").textContent).toBe("Show less");
+    window.App.passageCheck.apply(body, review());
+    // The differences count first (Max 2026-10-21), also under All checks.
+    expect(card().classList.contains("is-full")).toBe(false);
+    expect(card().querySelector(".passage-check-text")).toBeNull();
+    expect(card().querySelectorAll(".passage-check-quote")).toHaveLength(1);
+    expect(card().querySelector(".passage-check-toggle").textContent).toBe("Show full text");
+    // A change of the setting repaints, but never folds or unfolds the card.
     document.body.dataset.consensusHighlightMode = "concerns";
+    await tick();
+    document.body.dataset.consensusHighlightMode = "all";
     await tick();
     expect(card().classList.contains("is-full")).toBe(false);
-    document.body.dataset.consensusHighlightMode = "all";
-    await tick();
-    expect(card().classList.contains("is-full")).toBe(true);
-    // The reader folds it: the setting no longer moves it.
     card().querySelector(".passage-check-toggle").click();
+    expect(card().classList.contains("is-full")).toBe(true);
+    const marks = [...card().querySelectorAll(".passage-check-text .pc-claim")];
+    expect(marks.map(mark => mark.classList.contains("is-quiet"))).toEqual([false, false, false]);
     document.body.dataset.consensusHighlightMode = "concerns";
     await tick();
-    document.body.dataset.consensusHighlightMode = "all";
-    await tick();
+    expect(card().classList.contains("is-full")).toBe(true);
+    expect(marks.map(mark => mark.classList.contains("is-quiet"))).toEqual([true, false, true]);
+    // Another turn's text on the same card: folded again.
+    const other = "Paris is the capital of Spain.";
+    window.App.passageCheck.apply(body, review({ text: other, comparison_id: "c2",
+      claims: [claim(other, { agree: ["A", "B"], text: other })] }));
     expect(card().classList.contains("is-full")).toBe(false);
   });
 });

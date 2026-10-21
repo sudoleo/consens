@@ -3073,7 +3073,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `BestModel:`-Zeile wird weiterhin separat als „Best answer“ dargestellt.
   Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
   die Quellenzahl selbst als Satzteil gewrappt und trug die Markierung
-  der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
+  der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Seit
+  2026-10-21 wickelt `wrapFlatRange` auch keinen Text in einem Link, dessen
+  Beschriftung seine eigene Adresse oder nur seine Domain ist
+  (`window.isBareSourceLink`, sources.js): `linkifyAgentSources` setzt nach dem
+  Markieren eine Quellen-Pille an seine Stelle und verwirft die Beschriftung,
+  ein Span darin fiel mit aus dem Dokument, und die Hover-Karte seines Satzes
+  stand oben links (bei Widersprüchen; ein Claim-Badge im Link hielt die
+  Beschriftung bisher zufällig davon ab, als Domain zu gelten). Der Linktext
+  zählt für die Ankersuche weiter mit; ein Satz, der nur aus einem solchen
+  Link besteht, gilt als nicht verankert. Ein Satz wird höchstens einmal dekoriert
   (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
   ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
   existiert nicht mehr.
@@ -3085,6 +3094,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (vertiefte Marke)
   ↔ `.claim-badge.is-linked-hover`. Wo ein Badge steht, ist es das
   fokussierbare Steuerelement und die Passage nur ein zusätzlicher Mausweg.
+  **Hover-Vorschau (`.insight-preview`, seit 2026-10-21 nachgeschärft):**
+  `canHoverPassages` fragt genau die CSS-Kapsel ab (vorher `any-hover`/`any-pointer`,
+  das manches Handy erfüllt); dieselbe Prüfung gilt in `refreshHoverPreview`
+  (Scroll/Resize). Fokus zeigt die Vorschau nur, wenn er per Tab kam
+  (`focusPassage`: Tab-Taste seit dem letzten `pointerdown`, `:focus-visible`,
+  echter Zeiger): ein Tippen fokussiert den Satz ebenfalls, und ein
+  geschlossener Leser (`model-answer-reader.js` `close()`) oder eine geschlossene
+  Claim-Karte geben den Fokus an ihn zurück – auf dem Handy stand die
+  Vorschau danach von selbst da. `placeHoverPreview` verankert nur an
+  Spans im Dokument mit Fläche (`getClientRects()`), ohne solche keine Karte;
+  solange die Claim-Karte offen ist, keine Vorschau daneben. Neu markieren
+  (`renderInlineMarkers`), `resetConsensusInsights` und `agent-review.js::overText`
+  nehmen eine Vorschau ihrer Marken mit (`App.claimPopover.hidePreview(root)`).
   Inline-Quoten haben auf Mausgeraeten nur ihre sichtbare Trefferflaeche;
   auf Touch erweitert `::after` nur die Hoehe auf 44 px. So ueberdeckt das
   Badge keine direkt folgende `.src-ref`-Quelle. Nur alleinstehende Badges
@@ -4322,13 +4344,30 @@ null, previews, evidence)`: Sie markiert nur bei exakt gebundenem Text
 (`answer_hash`, Versionstext = `dataset.markdown`, Status `required`/`running`)
 die Claims des Vergleichs, den die Evidenzzeile zeigen wird
 (`_selectedBasis` oder der erste), mit `differences: []`, losgelöster
-Fallback-Box (keine „Key claims“) und ohne Score; neue Marken bekommen
-`.is-mark-arriving` (Einblenden), `body._shownMarks` merkt Farbe+Text je
-`answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand. Ohne
-passende Vorschau nimmt `preview` die Marken einmal wieder ab
-(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark` setzt
-den Zustand zurück; `revealMarks` setzt Marken aus `_shownMarks` auf
-`.is-mark-shown` (samt Badge) und lässt nur neue oder umgefärbte anstreichen.
+Fallback-Box (keine „Key claims“) und ohne Score. **Neutral seit 2026-10-21**
+(Max: erst wurde ein Satz gelb, das Gelb verschwand, dann wurde ein ganz
+anderer rot): `renderStoredConsensusClaims(…, { provisional: true })` setzt
+jeden verankerten Claim als `.cx-claim.is-provisional` ohne Stufenklasse,
+Badge, `.cx-spot` und „Key claims“; der Highlights-Filter lässt sie immer
+stehen (außer „No highlights“). Aussehen: nur eine leise gepunktete Linie in
+Tinte (`--cx-provisional-line`, hell/dunkel, `forced-colors`: `GrayText`),
+keine Fläche, kein Platzbedarf. Hover (nur echter Zeiger) zeigt kein Urteil
+(„Compared with N model answers“ / „The result appears once the whole answer
+is checked“), Klick öffnet nichts, kein Tabstopp. Neue Marken bekommen
+`.is-mark-arriving` (die Linie blendet ein), `body._shownMarks` merkt die
+Satztexte je `answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand.
+Ohne passende Vorschau nimmt `preview` die Marken einmal wieder ab
+(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark`
+ersetzt sie im selben Task durch die finalen (nie ein Moment ohne Marken) und
+setzt den Zustand zurück; finale Marken auf vorher vorläufigen Sätzen tragen
+kurz `.was-provisional` (`handOver`): die Linie bleibt, bis ihre Farbe per
+`revealMarks` anstreicht (`--cx-reveal-delay`), und blendet dann aus; ein Satz,
+den das Ergebnis nicht färbt, verliert sie sofort weich. Weil die vorläufigen
+Marken keine Farbe zeigten, streicht `revealMarks` jede farbige Marke an
+(kein `.is-mark-shown` mehr). Bei `prefers-reduced-motion` (und
+`forced-colors`) gibt es keine Animation: die Farben stehen sofort da.
+`settleHandOver` räumt die Klasse am Ende des Anstreichens bzw. nach
+`HAND_OVER_MS` ab.
 
 Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
 Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
@@ -5140,21 +5179,28 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
   Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene; mehr
   als 8 widersprochene Sätze → „N more in the full text" (klappt auf). Der
-  Toggle trägt `aria-controls` auf die Schiene. Unter „All checks" öffnet die
-  Karte standardmäßig auf dem Volltext (zugeklappt stünden nur bestrittene
-  Sätze, bei einem haltbaren Text also gar nichts Eingefärbtes); ein Wechsel
-  der Einstellung klappt mit, bis der Nutzer selbst auf-/zuklappt
-  (`card._passageChosen`).
+  Toggle trägt `aria-controls` auf die Schiene. Seit 2026-10-21 startet die
+  Karte immer zugeklappt, unter jeder Highlights-Einstellung (Max: erst
+  zählen die Unterschiede); nur ein Klick des Nutzers klappt sie auf, ein
+  Wechsel der Einstellung malt nur neu (vorher öffnete „All checks“ auf dem
+  Volltext und klappte mit, `card._passageChosen` gibt es nicht mehr). Zeigt
+  dieselbe Karte den Text eines anderen Turns, klappt sie wieder zu.
   „Show full text" zeigt die ganze Passage
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
   als Fürstimmen), gemalt nach der Highlights-Einstellung
-  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19 „concerns";
-  unter „all" öffnet die Karte auf dem ganzen Text); bestrittene Worte
+  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19
+  „concerns"); bestrittene Worte
   (`dissent[].target`) tragen wie in der Antwort allein die Farbe (`.cx-spot`,
   `spotRanges`); der Rest ist
   `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
-  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Klick/Enter auf einen Satz
+  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Seit 2026-10-21 zeigt ein
+  gemalter Satz mit echter Maus (oder per Tab) dieselbe Hover-Vorschau wie ein
+  Satz der Antwort (`App.claimPopover.attachPreview(span, claim, models)` in
+  `mark()`, Hover-only-Gruppe ohne eigenen Klick); `is-quiet` zeigt keine.
+  Der Klick schließt die Vorschau (Dokument-Capture), solange die Karte offen
+  ist, erscheint keine, und die Fokus-Rückgabe beim Schließen bringt sie nicht
+  zurück. Klick/Enter auf einen Satz
   öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
   über `App.agentReview.contextFor`, während des Laufs über einen
   Minimal-Kontext aus `review.comparisons`. Darunter „Checked against N models
@@ -5178,6 +5224,7 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   `normalize_question`) statt der Wortgrenze; der doppelte Klick-Validator in
   `app-init.js` ist entfallen (jede Absage kam zweimal).
 - **Tests:** `tests/test_agent_passage_check.py`, `tests/js/passage-check.test.mjs`,
+  `tests/js/claim-hover-preview.test.mjs` (Hover-Vorschau aller Marken),
   `tests/e2e/test_passage_check_frontend.py`.
 
 ### Browser-Run-Lifecycle und Sichtwechsel
@@ -9142,7 +9189,7 @@ zählen nicht):
   verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
   (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
   stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open,
-  close}` (aus `consensus-insights.js`), `agentReview.contextFor`,
+  close, attachPreview, hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
   `syncThreadAskClamp`. Globale `.cx-claim`-Schleifen in `consensus-insights.js`
   schließen `.pc-claim` aus, sonst nähme die Highlights-Einstellung den Marken
   auf der Nachricht Rolle und Label.
@@ -9398,7 +9445,10 @@ zählen nicht):
   `@media (hover: hover) and (pointer: fine) { … }`. `:focus-visible`,
   `[aria-expanded="true"]`, `.is-open` usw. stehen daneben außerhalb (eine
   gemischte Regel wird geteilt, Werte identisch), damit Tastatur- und
-  Offen-Zustände überall gleich aussehen. Gegenregeln „A tap leaves :hover
+  Offen-Zustände überall gleich aussehen. JS-Hover fragt dieselbe Kapsel ab
+  (`consensus-insights.js::canHoverPassages`, seit 2026-10-21; `any-pointer`
+  erfüllt auch manches Handy), und ein Fokus, der nicht per Tab kam, zeigt
+  keine Hover-Vorschau (§3, Hover-Vorschau). Gegenregeln „A tap leaves :hover
   stuck“ unter `(hover: none)` gibt es nicht mehr. Was auf Touch sichtbar sein
   muss (Chat-Menü „…“, Suche, Faltzeichen), zeigt ein eigener
   `@media (hover: none)`-Block, nie ein Hover. `foundation.css` setzt am
@@ -9668,8 +9718,9 @@ Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
 genau dem Text, den die Live-Prüfung schon vollständig samt Claim-Marken
 gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
 dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
-Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18) zeichnet
-`project` schon, während die feste Antwort geprüft wird.
+Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18, seit
+2026-10-21 neutral ohne Urteil) zeichnet `project` schon, während die feste
+Antwort geprüft wird.
 Seit 2026-10-20 (Apple-Audit D4) malt `follow()` gestreamten Text einmal pro
 Frame (`schedulePaint` → `renderAnswerBody(..., 'stream')`, nur in eine Antwort,
 die dieser sichtbare Lauf schon streamt), getrennt vom 100-ms-Takt der übrigen

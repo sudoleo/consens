@@ -116,9 +116,12 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Etikett), Satzstreifen und Legende mit Farbpunkten, auf einer Schiene nur
       die widersprochenen/geteilten Sätze, jeder mit
       „N of M models disagree – Modell: „…““ darunter (gut lesbar, nicht grau),
-      keine grauen Zeilen dazwischen; „Show full text“ zeigt alle Sätze
+      keine grauen Zeilen dazwischen; die Karte startet zugeklappt, auch unter
+      „All checks“; „Show full text“ zeigt alle Sätze
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
-      nur grau, nie grün). Ein Zähler/Satz öffnet die Karte, „View answer“ die
+      nur grau, nie grün). Mit Maus zeigt ein gefärbter Satz die Hover-Vorschau
+      wie in der Antwort; Klick ersetzt sie durch die Karte, nach Escape kommt
+      keine Vorschau von selbst. Ein Zähler/Satz öffnet die Karte, „View answer“ die
       Modellantwort. Die Antwort nennt den Fehler und wird wie jede Antwort
       geprüft (Marken, Score); ein Satz wie „Dein Text sagt X, das stimmt
       nicht“ trägt keine rote Marke für X. Aktivität: Vergleichsfrage enthält
@@ -1129,6 +1132,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Am Ende eines geprüften Laufs bleiben die Claim-Marken stehen (kein
   erneutes Einblenden); Reload eines Agent-Chats: Bookmarks und Eingabefeld
   springen nicht.
+- [ ] Desktop: Hover über einem roten Satz, dessen Quelle als Pille am
+  Satzende steht → die Hover-Karte steht am Satz, nicht oben links.
+- [ ] Handy: roten Satz antippen, großes Fenster schließen → keine Hover-Karte
+  poppt auf.
+- [ ] Während die Antwort geprüft wird, tragen fertig verglichene Sätze nur
+  eine leise graue gepunktete Linie (hell und dunkel), nie Gelb/Grün/Rot; ihr
+  Hover nennt kein Urteil. Mit dem Ergebnis kommen die Farben, ohne dass die
+  Marken kurz ganz verschwinden.
 - [ ] Handy, Antwortleser „Answers“: Modellauswahl schließt das Dropdown.
 - [ ] Folgefragen direkt im Composer; kein zusätzlicher „Follow up“-Button.
   Contradictions/Review, Answers und Sources haben dezente Icons, lesbare
