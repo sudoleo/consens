@@ -51,8 +51,9 @@ def require_uploads(uid):
         raise HTTPException(403, "Attachments are not available for this account.")
     try:
         api_uid_limiter.check(uid, "agent:upload", UPLOADS_PER_WINDOW, window_seconds=UPLOAD_WINDOW_SECONDS)
-    except ApiUidRateLimitExceeded:
-        raise HTTPException(429, "Too many uploads in a short time. Please wait a few minutes.") from None
+    except ApiUidRateLimitExceeded as exc:
+        raise HTTPException(429, "Too many uploads in a short time. Please wait a few minutes.",
+                            headers=exc.headers) from None
     return UPLOAD_QUOTAS["pro"] if admin else UPLOAD_QUOTAS.get(tier, UPLOAD_QUOTAS["free"])
 
 

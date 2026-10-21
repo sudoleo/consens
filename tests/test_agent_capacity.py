@@ -104,3 +104,22 @@ def test_owner_capacity_failure_unlocks_unclaimed_turn_and_does_not_call_model(a
     assert not calls and totals(store)["calls"] == 2
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
     assert pending(store, chat_id=chat_id, request_id="unlocked")[1]["status"] == "pending"
+
+
+def test_the_per_account_turn_limit_says_how_long_to_wait(api, monkeypatch):
+    # Nachprüfung 2: the 429 came without Retry-After; main.error_body turns
+    # the header into code "rate_limited" and retry_after for the app.
+    from app.core.rate_limit import ApiUidRateLimitExceeded
+
+    client, store, _calls = api
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+
+    def full(uid, operation, limit, **_kwargs):
+        if operation == "agent:turn":
+            raise ApiUidRateLimitExceeded(retry_after=23)
+
+    monkeypatch.setattr(agent.api_uid_limiter, "check", full)
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "busy", "bookmark_id": "bm1"}
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert response.status_code == 429, response.text
+    assert response.headers["Retry-After"] == "23"

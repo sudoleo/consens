@@ -154,6 +154,72 @@ def test_new_watch_shows_on_the_page_when_its_success_step_is_left_with_escape(b
         context.close()
 
 
+def test_the_watch_page_opened_directly_loads_once(browser, phase4_server):
+    # Review 2: /app/watches opened directly loaded the list three times and
+    # brief and Telegram twice: the route's wait and the auth state both
+    # rendered the page, and the sign-in loaded the list beside them.
+    state = {"watches": [_watch("w1", "When will OpenAI release GPT-6?")], "calls": []}
+    counts = {}
+
+    def count(request):
+        path = request.url.split("?")[0]
+        if "/api/my/" in path:
+            name = path.rsplit("/api/my/", 1)[1]
+            counts[name] = counts.get(name, 0) + 1
+
+    def before_goto(page):
+        page.on("request", count)
+        _watch_routes(page, state)
+
+    context, page = _real_firebase_page(browser, phase4_server, path="/app/watches", before_goto=before_goto)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        expect(page.locator('.wd-item[data-watch-id="w1"]')).to_be_visible()
+        # The route polls every 250 ms; whatever else would load has had its turn.
+        page.wait_for_timeout(1500)
+        assert counts.get("watches") == 1, counts
+        assert counts.get("watch-brief") == 1, counts
+        assert counts.get("telegram") == 1, counts
+        expect(page.locator("#watchDashLimit")).to_contain_text("1 of 10 active")
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_the_full_dialog_turns_into_the_form_once_a_deletion_frees_the_slot(browser, phase4_server):
+    # Review 2: "all slots are in use" stood after the watch was deleted.
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    state = {"watches": [_watch("w1", "When will OpenAI release GPT-6?")], "calls": []}
+    try:
+        _watch_routes(page, state)
+        page.route("**/api/my/watches", lambda route: _json(route, {"status": "success", "watches": state["watches"],
+            "limits": {"plan": "pro", "active_count": len(state["watches"]), "active_limit": 1}}))
+        page.click("#viewSwitchWatches")
+        card = page.locator('.wd-item[data-watch-id="w1"]')
+        expect(card).to_be_visible()
+        card.locator(".wd-action-toggle").click()
+        card.locator('.wd-settings-footer [data-action="delete"]').click()
+        expect(page.locator("#appToasts .toast.is-shown")).to_contain_text("Watch deleted")
+        # While its Undo stands the slot is still taken.
+        page.click("#watchDashCreate")
+        expect(page.locator("#watchDialogLimit")).to_contain_text("Your watch slot is in use")
+        expect(page.locator("#watchShowList")).to_be_focused()
+        # The Undo passes, the watch is deleted, and the dialog follows.
+        question = page.locator("#watchQuestion")
+        expect(question).to_be_visible(timeout=12000)
+        assert ("DELETE", "w1") in state["calls"]
+        expect(page.locator("#watchShowList")).to_have_count(0)
+        expect(page.locator("#shareModal")).to_be_visible()
+        question.fill("Will the EU pass the AI liability rules in 2027?")
+        expect(page.locator("#watchQuestionNext")).to_be_enabled()
+        assert not errors, errors
+    finally:
+        context.close()
+
+
 def test_every_agent_answer_has_a_watch_pill_with_its_own_question(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     errors = []

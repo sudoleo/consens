@@ -49,7 +49,19 @@ def api_key_rate_key(request):
 
 
 class ApiUidRateLimitExceeded(Exception):
-    pass
+    """A per-account limit held; ``retry_after`` is the whole seconds until
+    the oldest counted call leaves the window and the next one goes through."""
+
+    def __init__(self, message: str = "API UID rate limit exceeded", *, retry_after: int = 60):
+        super().__init__(message)
+        self.retry_after = max(1, int(retry_after))
+
+    @property
+    def headers(self) -> dict:
+        """Retry-After for the HTTPException a route raises from it: with it
+        main.error_body adds ``code: "rate_limited"`` and ``retry_after``,
+        like every slowapi limit (review 2)."""
+        return {"Retry-After": str(self.retry_after)}
 
 
 class ApiUidRateLimiter:
@@ -103,7 +115,8 @@ class ApiUidRateLimiter:
             while events and events[0] <= cutoff:
                 events.popleft()
             if len(events) >= limit:
-                raise ApiUidRateLimitExceeded("API UID rate limit exceeded")
+                wait = events[-limit] + window_seconds - now if limit > 0 else window_seconds
+                raise ApiUidRateLimitExceeded(retry_after=math.ceil(max(1.0, wait)))
             events.append(now)
 
 

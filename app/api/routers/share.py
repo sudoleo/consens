@@ -12,7 +12,10 @@ from fastapi.templating import Jinja2Templates
 from app.core.assets import register_asset_globals
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
-from app.core.security import verify_user_token, extract_id_token, is_user_admin
+from app.core.security import (
+    verify_user_token, extract_id_token, is_user_admin,
+    AuthenticationUnavailable, auth_unavailable_error,
+)
 from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.services import check_page, og_image, source_links
@@ -223,6 +226,8 @@ def _require_uid(request, data):
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
         return verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -547,6 +552,15 @@ def share_page(request: Request, slug_id: str):
         token = extract_id_token(request, {})
         try:
             viewer_uid = verify_user_token(token) if token else ""
+        except AuthenticationUnavailable:
+            # The account check could not be read: no "log in" for an owner
+            # who is logged in, but a moment and another try (review 2).
+            response = _unavailable_response(
+                request, 503, "One moment, please",
+                "This private page can’t be checked right now. Please try again in a moment.",
+            )
+            response.headers["Retry-After"] = auth_unavailable_error().headers["Retry-After"]
+            return response
         except Exception:
             viewer_uid = ""
         if not viewer_uid:

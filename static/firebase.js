@@ -630,7 +630,11 @@ onIdTokenChanged(auth, async (user) => {
     }
     if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
     setBookmarksAccess(true);
-    window.App?.watch?.refreshQuota?.().catch(() => {});
+    // The sidebar's watch count: the list the sign-in already loads (watch.js
+    // on the auth state, the Watches page) is taken as it is; only a missing
+    // one is fetched. A forced reload here was a second list request on
+    // every sign-in (review 2).
+    window.App?.watch?.loadState?.().catch(() => {});
 
     // 4) Usage-UI anzeigen
     if (usageOptions) {
@@ -2082,17 +2086,11 @@ function applyBookmarkTitle(named, source = "generated") {
   const title = bookmarkDisplayTitle(named);
   const entry = (window.bookmarksData || []).find(item => item.id === named.id);
   if (entry) Object.assign(entry, { title, title_source: source });
-  for (const context of window.App.runRegistry?.list?.() || []) {
-    if (context.bookmark?.id !== named.id) continue;
-    window.App.runRegistry.update(context.runId, run => {
-      run.bookmark.title = title;
-      if (run.bookmark.latestMeta) Object.assign(run.bookmark.latestMeta, { title, title_source: source });
-    }, { render: false });
-  }
+  // Every run of the chat, a running follow-up too, and the open chat's
+  // basis: a follow-up sent next takes its name from there and showed the
+  // old one in the sidebar while it ran (review F, review 2).
+  window.App.runRegistry?.retitle?.(named.id, title, { source });
   window.App.bookmarkSession?.noteSavedMeta?.({ ...(entry || bookmarkMeta(named)), title, title_source: source });
-  // The open chat's basis too: a follow-up sent next takes its name from
-  // there and showed the old one in the sidebar while it ran (review F).
-  window.App.runRegistry?.retitle?.(named.id, title);
   // The name settles in place of the question instead of switching.
   for (const label of document.querySelectorAll(`.bookmark[data-id="${named.id}"] > p`)) {
     if (label.textContent === bookmarkLabelText(title)) continue;

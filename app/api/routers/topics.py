@@ -26,7 +26,10 @@ from app.core.observability import safe_exception
 from app.core.rate_limit import (
     ApiUidRateLimitExceeded, api_uid_limiter, client_ip_key, limiter,
 )
-from app.core.security import TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token
+from app.core.security import (
+    TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token,
+    AuthenticationUnavailable, auth_unavailable_error,
+)
 from app.services import (
     check_page, drift_signal, favicons, mailer, og_image, source_links,
     topic_figures, topic_images, topic_runner, topics,
@@ -204,6 +207,8 @@ def _require_admin(request: Request, data: Optional[dict] = None) -> str:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
         uid = verify_user_token(token, check_revoked=True)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
     try:

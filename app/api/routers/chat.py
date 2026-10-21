@@ -23,6 +23,8 @@ from app.core.security import (
     extract_id_token,
     get_user_tier,
     verify_user_token,
+    AuthenticationUnavailable,
+    auth_unavailable_error,
 )
 import app.core.config as cfg
 from app.services.llm.attachments import parse_attachments
@@ -1020,6 +1022,8 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     if id_token:
         try:
             uid = verify_user_token(id_token)
+        except AuthenticationUnavailable:
+            raise auth_unavailable_error() from None
         except Exception as exc:
             raise HTTPException(status_code=401, detail="Authentication failed")
         try:
@@ -1269,6 +1273,8 @@ def prepare(request: Request, data: dict = Body(...)):
                 status_code=503,
                 detail="Account tier is temporarily unavailable. Please retry.",
             ) from None
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except HTTPException as he:
         raise he
     except Exception as exc:
@@ -1335,6 +1341,8 @@ def consensus(request: Request, data: dict = Body(...)):
 
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
     try:
@@ -2254,6 +2262,8 @@ def resolve(request: Request, data: dict = Body(...)):
         )
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
     try:

@@ -12,6 +12,8 @@ from app.core.security import (
     verify_user_token,
     is_user_admin,
     db_firestore,
+    AuthenticationUnavailable,
+    auth_unavailable_error,
 )
 from app.core.rate_limit import limiter
 import app.core.config as cfg
@@ -149,6 +151,8 @@ def _require_admin(request, data):
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
         uid = verify_user_token(id_token, check_revoked=True)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
     try:

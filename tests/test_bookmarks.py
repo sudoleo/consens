@@ -144,13 +144,16 @@ def test_bookmark_uid_throttle_remains_a_429():
     with patch.object(
         bookmarks_router.api_uid_limiter,
         "check",
-        side_effect=bookmarks_router.ApiUidRateLimitExceeded("full"),
+        side_effect=bookmarks_router.ApiUidRateLimitExceeded("full", retry_after=12),
     ):
         try:
             bookmarks_router._enforce_bookmark_uid_rate_limit("owner-1", "model_save")
         except bookmarks_router.HTTPException as exc:
             assert exc.status_code == 429
             assert exc.detail == "Too many bookmark saves. Please slow down."
+            # Nachprüfung 2: the wait, as every throttle says it (main.error_body
+            # adds code "rate_limited" and retry_after from it).
+            assert exc.headers == {"Retry-After": "12"}
         else:
             raise AssertionError("Expected the bookmark UID budget to reject the write")
 

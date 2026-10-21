@@ -429,3 +429,42 @@ def test_the_answer_takes_only_the_room_the_question_leaves():
 def test_the_plain_resend_keeps_its_links():
     text = '<b>Why</b>\n• <a href="https://openai.com/gpt-6?a=1&amp;b=2">Launch post</a>'
     assert telegram_watch._strip_markup(text) == "Why\n• Launch post (https://openai.com/gpt-6?a=1&b=2)"
+
+
+def test_the_plain_resend_never_cuts_the_question():
+    """Review 2 N3: the plain resend writes every link as "title (url)",
+    longer than the link was; the message then ran over Telegram's limit and
+    the cut took the question at the bottom. Now the answer and the news
+    make room for it, measured on the plain text."""
+    from app.services import telegram_notifier
+
+    question = "Will " + "this very specific policy question " * 25 + "change?"
+    long_url = "https://example.com/" + "deep-path-" * 150
+    sources = [{"id": f"S{i}", "title": f"Source {i}", "url": long_url + str(i)} for i in range(1, 4)]
+    answer = "## Short answer\n\n" + " ".join(f"Point {i} holds [S{i % 3 + 1}]." for i in range(60))
+    result = {"consensus": answer, "consensus_sources": sources, "moved": True,
+              "condition_reason": "The date is set. " * 60,
+              "condition_sources": [{"title": "Notice", "url": long_url + "n"}] * 3,
+              "delta": {"summary": "It moved. " * 115, "cause": "new_evidence",
+                        "sources": [{"title": "Launch post", "url": long_url + "w"}] * 3,
+                        "held": "Held. " * 80, "goal": "Goal. " * 80}}
+    for kind in ("change", "every_run", "condition"):
+        markup = telegram_watch._notification_text(kind, {"question": question, "condition": "A date"}, result)
+        assert telegram_notifier.visible_length(markup) <= telegram_notifier.TEXT_LIMIT, kind
+        # The same message as plain text is longer than Telegram takes.
+        assert telegram_notifier.plain_length(telegram_watch._strip_markup(markup)) > telegram_notifier.TEXT_LIMIT, kind
+        calls = []
+
+        def call_bot_api(method, payload):
+            calls.append(payload)
+            return {"status": "failed", "http_status": 400} if len(calls) == 1 else {"status": "sent"}
+
+        with patch.object(telegram_notifier, "call_bot_api", call_bot_api):
+            telegram_watch.send_watch_message("1", "w1", kind, {"question": question, "condition": "A date"}, result)
+        plain = calls[1]["text"]
+        assert "parse_mode" not in calls[1] and "<b>" not in plain, kind
+        assert telegram_notifier.plain_length(plain) <= telegram_notifier.TEXT_LIMIT, kind
+        assert plain.endswith("Question\n" + question), kind
+        # What the news says first stays, and the links keep their address.
+        assert plain.startswith({"condition": "What you were waiting for happened"}.get(kind, "The answer moved")), kind
+        assert long_url in plain, kind

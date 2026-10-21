@@ -6,7 +6,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 from cachetools import TTLCache
-from fastapi import Request
+from fastapi import HTTPException, Request
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from google.auth.credentials import AnonymousCredentials
@@ -250,7 +250,22 @@ db_firestore = firestore.client()
 
 
 class AuthenticationUnavailable(Exception):
-    pass
+    """The account check behind a valid token could not be read (a short
+    Firestore outage). No rejected login: see auth_unavailable_error."""
+
+
+AUTH_UNAVAILABLE_RETRY_AFTER = 5
+
+
+def auth_unavailable_error() -> HTTPException:
+    """What every route answers for AuthenticationUnavailable: 503 with
+    Retry-After, never 401. A 401 tells the browser the login is gone (it
+    turned Agent off for the session); a 503 makes it ask again."""
+    return HTTPException(
+        status_code=503,
+        detail="Account status is temporarily unavailable. Please retry.",
+        headers={"Retry-After": str(AUTH_UNAVAILABLE_RETRY_AFTER)},
+    )
 
 
 class TierStatusUnavailable(Exception):

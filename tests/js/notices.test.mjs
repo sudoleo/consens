@@ -126,17 +126,47 @@ describe("App.toast", () => {
   });
 
   // Apple audit E3 (review): an error stays until it is closed, also when
-  // another line comes; that one waits behind it.
-  it("keeps an error when another line comes, which then waits", () => {
+  // another line comes. Review 2 N2: it does not block that line either
+  // ("Link copied" waited unseen until the error was closed): the line
+  // shows now for its full time, then the error is back and stays.
+  it("keeps an error when another line comes, which shows first", () => {
+    vi.useFakeTimers();
+    const { window, document } = boot();
+    const onExpire = vi.fn();
+    window.App.toast({ message: "The chat couldn’t be saved.", tone: "error", onExpire });
+    window.App.toast({ message: "Link copied." });
+    expect(line(document).textContent).toContain("Link copied.");
+    expect(document.querySelectorAll("#appToasts .toast.is-shown")).toHaveLength(1);
+    // Its own reading time: the error waiting behind it does not hurry it.
+    vi.advanceTimersByTime(2500);
+    expect(line(document).textContent).toContain("Link copied.");
+    // Two more lines while the error waits: both come before it.
+    window.App.toast({ message: "Share link revoked." });
+    vi.advanceTimersByTime(1700);
+    expect(line(document).textContent).toContain("Share link revoked.");
+    vi.advanceTimersByTime(10000);
+    expect(line(document).textContent).toContain("couldn’t be saved");
+    expect(line(document).dataset.tone).toBe("error");
+    vi.advanceTimersByTime(60000);
+    expect(line(document).textContent).toContain("couldn’t be saved");
+    expect(onExpire).not.toHaveBeenCalled();
+    line(document).querySelector(".toast-close").click();
+    vi.advanceTimersByTime(10);
+    expect(line(document)).toBeNull();
+    expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes an error that came again while it stood aside only once", () => {
     vi.useFakeTimers();
     const { window, document } = boot();
     window.App.toast({ message: "The chat couldn’t be saved.", tone: "error" });
     window.App.toast({ message: "Link copied." });
-    vi.advanceTimersByTime(30000);
+    window.App.toast({ message: "The chat couldn’t be saved.", tone: "error" });
+    vi.advanceTimersByTime(5000);
     expect(line(document).textContent).toContain("couldn’t be saved");
     line(document).querySelector(".toast-close").click();
     vi.advanceTimersByTime(10);
-    expect(line(document).textContent).toContain("Link copied.");
+    expect(line(document)).toBeNull();
   });
 
   it("brings an error back after an Undo that cut in", () => {

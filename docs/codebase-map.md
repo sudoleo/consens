@@ -269,7 +269,18 @@ Kontingent las „You don’t have access to this.“). Ausgenommen ist nur die
 "message"}}`. Ein 429 einer Route ohne eigenen Code (Agent-Sendegrenze,
 Provider-Cooldown) bekommt `code: "rate_limited"` und `retry_after` aus seinem
 `Retry-After`-Header; eigene Codes (`chat_rate_limited`, `limit_reached`,
-`usage_run_capacity`) bleiben. Jede
+`usage_run_capacity`, `feedback_cooldown`/`feedback_daily_limit`) bleiben.
+Jede Grenze pro Konto (`api_uid_limiter`: Bookmark-Saves, Agent-Turns,
+Einstellungen, Uploads, Chat-Schreibzugriffe) sendet seit Nachprüfung 2 diesen
+Header: `ApiUidRateLimitExceeded.retry_after` sind die Sekunden, bis der
+älteste gezählte Aufruf das Fenster verlässt, `exc.headers` ist der Header für
+die `HTTPException`; `persistence_guard.PersistenceLimitError.retry_after`
+trägt die Wartezeit des Feedback-Cooldowns (30 s) bzw. bis Mitternacht UTC.
+Kann die Kontoprüfung hinter einem gültigen Token nicht gelesen werden
+(`security.AuthenticationUnavailable`), antwortet jeder Router mit
+`security.auth_unavailable_error()` = 503 + `Retry-After: 5`, nie 401 (der
+Browser hielte die Anmeldung sonst für weg); die private Watch-Seite zeigt
+dann „One moment, please“ statt „Log in“. Jede
 slowapi-Grenze (`RateLimitExceeded`, alle Routen inkl. `/api/v1`) antwortet mit
 429 `{"error": "Too many requests in a short time. …", "code": "rate_limited",
 "retry_after": <s>}` und `Retry-After` (`rate_limit.retry_after_seconds` aus dem
@@ -989,12 +1000,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     onExpire, duration, key})` → `{update, settle, cancel, dismiss,
     focusAction}`; eine Zeile über dem Composer (`--toast-lift`: Composer,
     Tastatur, Safe Area), immer nur eine, weitere warten (eine mit Aktion
-    verdrängt sofort, die vorige wird „expired“; ein Fehler tritt dagegen
-    nur zurück und kommt danach wieder; Ersetzen — Aktion oder gleicher
-    `key` — schaltet die Warteschlange nicht weiter), `role=status`, Dauer
-    nach Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`,
-    allgemein `duration: Infinity`) bleiben bis zum Schließen, auch wenn
-    eine weitere Zeile kommt (die wartet), Hover/Fokus pausieren, asynchrone
+    verdrängt sofort, die vorige wird „expired“; Ersetzen — Aktion oder
+    gleicher `key` — schaltet die Warteschlange nicht weiter), `role=status`,
+    Dauer nach Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`,
+    allgemein `duration: Infinity` ohne Aktion) bleiben bis zum Schließen,
+    blockieren aber nichts: jede neue Zeile (mit oder ohne Aktion) stellt
+    den Fehler zur Seite (`parked`), läuft ihre volle Zeit, dann kommt der
+    Fehler wieder; neue Zeilen reihen sich vor geparkten Fehlern ein, und
+    ein geparkter Fehler drängt die Zeile davor nicht; derselbe Fehler noch einmal ersetzt den geparkten (Nachprüfung 2 N2). Hover/Fokus pausieren, asynchrone
     Aktionen zeigen ihren Fortgang und melden über `update()`. Ist ein
     modaler Dialog offen, zieht die Zeile in ihn (sonst läge sie inert
     darunter); öffnet oder schließt einer, während sie steht, folgt sie ihm
@@ -2096,6 +2109,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Pille in einem offenen `<dialog>` (der Antwortleser ist modal), hängen Liste
   und Backdrop in diesem Dialog, das Popover dann `position: fixed`; auf
   `<body>` lagen sie inert unter dem Top-Layer (Nachprüfung 2026-10-21).
+  Die Liste geht mit diesem Dialog: ein haltbares `cancel` (Android-Zurück)
+  schließt zuerst nur sie (wie Escape), jedes `close` des Dialogs (Kreuz,
+  nicht haltbares Zurück, Layoutwechsel modal ↔ angedockt ↔ direkt) schließt
+  sie mit; den Fokus gibt dann der Leser an seinen Knopf zurück, nur ein
+  verlorener Fokus geht an die noch sichtbare Pille. Vorher hielt der
+  Backdrop im geschlossenen Dialog die Seite gesperrt (Nachprüfung 2 N1).
   Copy consensus/Copy citation lesen Pillen über
   `window.App.sourceRefs.plainText/urls` („ (uci.org, pcs.com)“). Share- und
   Topic-Seiten rendern serverseitig aus Markdown und sind nicht betroffen.
@@ -2818,7 +2837,20 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   it is reached“ zur ersten Regel). Der Login-Hinweis für Gäste sagt „Your
   question waits for you.“ nur, wenn eine Frage wartet. `receiveWatchList` (aus
   `loadWatchLimits` und dem Dashboard) hält neben den Limits die Watch-Liste
-  (`watchState.watches`) und meldet `consensio:watches-changed`;
+  (`watchState.watches`) und meldet `consensio:watches-changed`. Die Liste
+  kommt über `watchUi.requestWatchList({fresh})`: höchstens ein GET zugleich,
+  wer währenddessen fragt, teilt ihn (`fresh` nur nach einer eigenen
+  Änderung); das Dashboard lädt Liste, Brief und Telegram über ein geteiltes
+  `load()`, und der erste Blick auf `/app/watches` kommt einmal (`firstLook`:
+  Route oder Auth-Zustand, wer zuerst da ist; die Anmeldung nimmt für die
+  Seitenleiste über `App.watch.loadState` die geladene Liste) – je ein Request statt
+  3×/2×/2× (Nachprüfung 2). Der Schritt „alle Plätze belegt“
+  (`renderLimitStep(intent, {resume, reload})`) fragt beim Öffnen einmal neu
+  und folgt `consensio:watches-changed`: wird ein Platz frei (eine Löschung,
+  deren Undo abgelaufen ist), kommt das Formular zurück. Wird der Dialog
+  geschlossen, während eine Watch startet, gilt sie trotzdem: Details werden
+  nachgetragen, die Karte erscheint auf der Seite, eine Zeile sagt „Watch
+  started“ (bzw. „Watch not started …“ als Fehler);
   `App.watch.watchedFor(question)` vergleicht wie `question_hash`
   (Groß/Klein, Leerraum, Schluss-„?!.“). Der Hinweis ist ein
   eigener Viewport-Layer unter `<body>` und übermalt nie den Composer.
@@ -5432,10 +5464,12 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 - Frontend: Die autoritative Fortsetzungsbasis liegt getrennt von der Ansicht
   in `runRegistry.selectedConversationBasis`; ein neuer `RunContext` erhält
   davon einen Snapshot und eine eigene `ChatSession`. `runRegistry.retitle(
-  bookmarkId, title)` gibt einem umbenannten Chat den neuen Namen auch in den
-  Basen (gewählte, `basis`/`completedBasis` jedes Laufs), aus denen die
-  nächste Nachricht ihren Seitenleisten-Namen nimmt (`firebase.js`
-  `applyBookmarkTitle`). `window.App.followup`
+  bookmarkId, title, {source})` ist der eine Weg, einen umbenannten Chat
+  umzubenennen (`firebase.js` `applyBookmarkTitle` ruft nur ihn): jeder Lauf
+  des Chats, auch ein laufender, bekommt `bookmark.title` (+ `latestMeta`,
+  ein Ereignis, damit seine Seitenleisten-Zeile nachzieht), dazu die Basen
+  (gewählte, `basis`/`completedBasis` jedes Laufs), aus denen die nächste
+  Nachricht ihren Namen nimmt. `window.App.followup`
   (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
   sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
   `run-view.js` gleicht ihn bei jedem Sichtwechsel mit `historyTurns` und der
@@ -8924,7 +8958,10 @@ nur noch über `clip_html` (zählt sichtbare Zeichen in UTF-16 wie Telegram,
 schneidet nie in Tag oder Entity, schließt offene Tags, „…“) statt die
 Auszeichnung roh bei 4.096 abzuschneiden. Wird die Auszeichnung trotzdem
 abgelehnt (HTTP 400), geht dieselbe Nachricht als Klartext raus, Links als
-„Titel (URL)“. Knöpfe je Art: „Open watch“ (private
+„Titel (URL)“ (`_notification_text(..., plain=True)`): der Platz wird dann am
+Klartext gemessen (`telegram_notifier.plain_length`), die Antwort bekommt nur
+den Rest, die Meldungsblöcke werden notfalls gekürzt, die Frage unten nie
+(Nachprüfung 2 N3; vorher schnitt `clip_plain` sie ab). Knöpfe je Art: „Open watch“ (private
 Watches über `mailer.owner_page_path`, also `/app?next=/s/<id>`) plus
 „Mute 24h“/„Pause“; eine pausierte Watch bekommt „Resume watch“ (`wr:`), eine
 erreichte nur „Open watch“. **Bestätigung am Ort der Aktion (K7):** „Pause“

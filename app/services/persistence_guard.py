@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timedelta, timezone
 
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -33,10 +34,14 @@ ACCOUNT_DELETION_JOBS_COLLECTION = "account_deletion_jobs"
 
 
 class PersistenceLimitError(RuntimeError):
-    def __init__(self, code: str, message: str):
+    """A per-account write limit. ``retry_after`` (whole seconds) is set for
+    a limit that lifts by itself (the feedback cooldown and daily cap)."""
+
+    def __init__(self, code: str, message: str, *, retry_after: int | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.retry_after = None if retry_after is None else max(1, int(retry_after))
 
 
 class AccountDeletionInProgress(RuntimeError):
@@ -361,10 +366,18 @@ def create_feedback(*, uid: str, feedback: dict, db, now: datetime | None = None
         state = snapshot.to_dict() or {} if snapshot.exists else {}
         last = state.get("last_submitted_at")
         if isinstance(last, datetime) and (now - last).total_seconds() < FEEDBACK_COOLDOWN_SECONDS:
-            raise PersistenceLimitError("feedback_cooldown", "Please wait before sending feedback again.")
+            raise PersistenceLimitError(
+                "feedback_cooldown", "Please wait before sending feedback again.",
+                retry_after=math.ceil(FEEDBACK_COOLDOWN_SECONDS - (now - last).total_seconds()),
+            )
         count = int(state.get("day_count") or 0) if state.get("day") == day else 0
         if count >= MAX_FEEDBACK_PER_UTC_DAY:
-            raise PersistenceLimitError("feedback_daily_limit", "Daily feedback limit reached.")
+            midnight = datetime.combine(now.astimezone(timezone.utc).date() + timedelta(days=1),
+                                        datetime.min.time(), tzinfo=timezone.utc)
+            raise PersistenceLimitError(
+                "feedback_daily_limit", "Daily feedback limit reached.",
+                retry_after=math.ceil((midnight - now).total_seconds()),
+            )
         _set(tx, feedback_ref, feedback)
         _set(tx, state_ref, {
             "schema_version": 1,

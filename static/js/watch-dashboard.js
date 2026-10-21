@@ -2057,13 +2057,28 @@
     }).catch(() => {});
   }
 
-  async function load() {
-    const [watchData, briefData, telegramData] = await Promise.all([
-      ui().api("GET", "/api/my/watches"),
+  // What the page shows, loaded once however many ways ask for it at the
+  // same time: a direct /app/watches opening renders from the route and
+  // again from the auth state, and the account's list request on sign-in
+  // runs alongside (review 2: three list loads, two of brief and Telegram).
+  // A render that comes while a load for the same account is on its way
+  // takes that one; the list itself is the shared request of watch.js,
+  // which also takes it in (receiveWatchList).
+  let loading = null;
+  function load() {
+    const uid = window.auth?.currentUser?.uid || null;
+    const epoch = watchState.sessionEpoch;
+    if (loading && loading.uid === uid && loading.epoch === epoch) return loading.promise;
+    const promise = Promise.all([
+      ui().requestWatchList(),
       ui().api("GET", "/api/my/watch-brief").catch(() => ({ brief: page.brief || {} })),
       ui().api("GET", "/api/my/telegram").catch(() => ({ telegram: page.telegram || {} }))
-    ]);
-    return { watchData, briefData, telegramData };
+    ]).then(([watchData, briefData, telegramData]) => ({ watchData, briefData, telegramData }));
+    const entry = { promise, uid, epoch };
+    loading = entry;
+    const done = () => { if (loading === entry) loading = null; };
+    promise.then(done, done);
+    return promise;
   }
 
   function isCurrentRender(token, epoch, uid) {
@@ -2104,7 +2119,6 @@
     body.removeAttribute("aria-busy");
     body.querySelector(".wd-alert")?.remove();
     const watches = data.watchData.watches || [];
-    ui().receiveWatchList(data.watchData);
     page.brief = data.briefData.brief || {};
     page.telegram = data.telegramData.telegram || { configured: false, connected: false };
     watchState.setTelegram(page.telegram);

@@ -383,12 +383,17 @@ def _answer_block(result: dict, *, limit: int = 0) -> str:
 ANSWER_MARKUP_LIMIT = 1_500
 
 
-def _notification_text(kind: str, watch: dict, result: dict) -> str:
+def _notification_text(kind: str, watch: dict, result: dict, *, plain: bool = False) -> str:
     """Headline, what changed, why, what held, the goal, then the question.
 
     Same order and words as the e-mails: the first lines carry the news, the
     question sits at the bottom in a quote that Telegram folds when long. No
     agreement score: it is not a reason to message anyone.
+
+    ``plain`` is the resend without markup. A link there reads "title (url)",
+    longer than the link was, so the room is measured on that text: the
+    answer takes what is left, the news gives way if it must, and the
+    question at the bottom is never what Telegram cuts (review 2 N3).
     """
     question = str(watch.get("question") or "Your Watch")
     delta = result.get("delta") or {}
@@ -420,16 +425,30 @@ def _notification_text(kind: str, watch: dict, result: dict) -> str:
         if delta.get("goal"):
             blocks.append("<b>Waiting for</b>\n" + _escape(delta["goal"], limit=400))
     question_block = "<b>Question</b>\n" + _quote_block(question, limit=900)
-    text = "\n\n".join(block for block in blocks + [question_block] if block)
+    blocks = [block for block in blocks if block]
+    length = telegram_notifier.visible_length
+    if plain:
+        blocks = [_strip_markup(block) for block in blocks]
+        question_block = _strip_markup(question_block)
+        length = telegram_notifier.plain_length
+        room = telegram_notifier.TEXT_LIMIT - length(question_block) - 2
+        news = "\n\n".join(blocks)
+        if length(news) > room:
+            cut = telegram_notifier.clip_plain(news, room - 1)
+            if " " in cut[-80:]:
+                cut = cut.rsplit(" ", 1)[0]
+            blocks = [cut.rstrip() + "…"]
+    text = "\n\n".join(blocks + [question_block])
     if kind in {"every_run", "condition"}:
         # The answer takes the room the news and the question leave, so the
         # whole message stays within Telegram's limit and the question at
         # the bottom is never the part that gets cut. Too little room: the
-        # page has the answer ("Open watch").
-        room = telegram_notifier.TEXT_LIMIT - telegram_notifier.visible_length(text) - 40
+        # page has the answer ("Open watch"). Its markup budget bounds its
+        # plain text too: "title (url)" is shorter than the <a> it was.
+        room = telegram_notifier.TEXT_LIMIT - length(text) - 40
         answer = _answer_block(result, limit=min(ANSWER_MARKUP_LIMIT, room)) if room >= 200 else ""
         if answer:
-            text = "\n\n".join(block for block in blocks + [answer, question_block] if block)
+            text = "\n\n".join(blocks + [_strip_markup(answer) if plain else answer, question_block])
     return text
 
 
@@ -473,7 +492,7 @@ def send_watch_message(chat_id, watch_id: str, kind: str, watch: dict,
     if status.get("http_status") == 400 or status.get("error_code") == 400:
         logging.warning("Telegram Watch message rejected as HTML; retrying as plain text")
         status = telegram_notifier.send_bot_message(
-            chat_id, _strip_markup(text), reply_markup=keyboard,
+            chat_id, _notification_text(kind, watch, result, plain=True), reply_markup=keyboard,
         )
     return status
 

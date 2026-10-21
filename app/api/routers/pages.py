@@ -16,7 +16,10 @@ from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 from app.core.site import SITE_URL
 from app.core.version import REPO_URL, get_commit_short
-from app.core.security import verify_user_token, extract_id_token, db_firestore
+from app.core.security import (
+    verify_user_token, extract_id_token, db_firestore,
+    AuthenticationUnavailable, auth_unavailable_error,
+)
 from firebase_admin import firestore
 from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -657,6 +660,8 @@ def submit_feedback(request: Request, payload: FeedbackRequest):
 
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     
@@ -676,7 +681,11 @@ def submit_feedback(request: Request, payload: FeedbackRequest):
             uid=uid, feedback=feedback_data, db=db_firestore, now=now
         )
     except persistence_guard.PersistenceLimitError as exc:
-        raise HTTPException(status_code=429, detail=exc.message) from None
+        # Its own code and wait, like every throttle (review 2).
+        raise HTTPException(
+            status_code=429, detail={"error": exc.message, "code": exc.code},
+            headers={"Retry-After": str(exc.retry_after)} if exc.retry_after else None,
+        ) from None
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error when saving the feedback.")
     
@@ -704,6 +713,8 @@ def record_vote(request: Request, payload: VoteRequest):
 
     try:
         uid = verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -738,6 +749,8 @@ def check_keys(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=401, detail="Please log in to test and use your own API keys.")
     try:
         verify_user_token(id_token)
+    except AuthenticationUnavailable:
+        raise auth_unavailable_error() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
 

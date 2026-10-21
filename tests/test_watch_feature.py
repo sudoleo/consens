@@ -2327,7 +2327,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="watchUsageDisplay"', html_source)
         self.assertIn('action.textContent = "All slots in use"', source)
         # At the limit the dialog says so before any typing (J25).
-        self.assertIn("function renderLimitStep(modalIntent)", source)
+        self.assertIn("function renderLimitStep(modalIntent, { resume = null, reload = false } = {})", source)
 
     def test_watch_modal_has_one_scroll_area_and_locks_background(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")

@@ -210,6 +210,63 @@ describe("New watch dialog", () => {
     expect(document.activeElement.id).toBe("watchShowList");
   });
 
+  // Review 2: the step stood on "all in use" after the watch was deleted.
+  it("brings the form back once a deletion frees the slot", async () => {
+    const { window, document, server } = boot({ watches: [watch()], limits: { plan: "free", active_count: 1, active_limit: 1 } });
+    await window.App.watchDashboard.render();
+    const lists = () => server.calls.filter(call => call[1] === "/api/my/watches").length;
+    const before = lists();
+    window.openWatchDialog("create", { question: "Will the EU pass the AI liability rules?" });
+    expect(document.getElementById("watchShowList")).not.toBeNull();
+    // On opening it asks the server once more: still full.
+    await vi.waitFor(() => expect(lists()).toBeGreaterThan(before));
+    await settle();
+    expect(document.getElementById("watchShowList")).not.toBeNull();
+    // The one watch behind the dialog is deleted; while its Undo stands the
+    // slot is not free yet.
+    const card = document.querySelector('.wd-item[data-watch-id="w1"]');
+    card.querySelector(".wd-action-toggle").click();
+    card.querySelector('.wd-settings-footer [data-action="delete"]').click();
+    await settle();
+    expect(document.getElementById("watchShowList")).not.toBeNull();
+    server.watches.splice(0);
+    server.limits = { plan: "free", active_count: 0, active_limit: 1 };
+    window.App.watchDashboard.commitPending();
+    await vi.waitFor(() => expect(document.getElementById("watchConfirmBtn")).not.toBeNull());
+    expect(document.getElementById("watchShowList")).toBeNull();
+    expect(document.querySelector(".watch-question-preview strong").textContent).toBe("Will the EU pass the AI liability rules?");
+    expect(document.getElementById("watchConfirmBtn").disabled).toBe(false);
+  });
+
+  // Review 2: a dialog closed while its watch started lost the details and
+  // the new card; the watch was there all the same.
+  it("keeps the details and the new card when the dialog closes while the watch starts", async () => {
+    const { window, document, server } = boot({ watches: [watch({ id: "old" })], dialogs: true });
+    await window.App.watchDashboard.render();
+    const serve = window.fetch;
+    let release = null;
+    window.fetch = vi.fn((input, options = {}) => {
+      if ((options.method || "GET") === "POST" && String(input) === "/api/watch") {
+        return new Promise(resolve => { release = () => resolve(serve(input, options)); });
+      }
+      return serve(input, options);
+    });
+    window.openWatchDialog("create", { question: "Will the EU pass the AI liability rules?" });
+    await settle();
+    document.getElementById("watchDetails").value = "Only the final vote counts.";
+    document.getElementById("watchConfirmBtn").click();
+    await vi.waitFor(() => expect(typeof release).toBe("function"));
+    document.getElementById("closeShareModal").click();
+    expect(document.getElementById("shareModal").open).toBe(false);
+    release();
+    await vi.waitFor(() => expect(server.calls.some(([method, url, body]) => method === "PATCH"
+      && url === "/api/watch/created" && body?.requirements === "Only the final vote counts.")).toBe(true));
+    await vi.waitFor(() => expect(document.querySelector('.wd-item[data-watch-id="created"]')).not.toBeNull());
+    expect(document.querySelector('.wd-section[data-section="active"] .wd-item').dataset.watchId).toBe("created");
+    expect(document.querySelector("#appToasts .toast.is-shown").textContent).toContain("Watch started");
+    expect(document.getElementById("shareModal").open).toBe(false);
+  });
+
   it("sends a guest into the sign-in and back to the dialog with the question (J3)", async () => {
     const { window, document } = boot({ user: false, path: "/app" });
     window.openWatchDialog("create", { question: "Is the new iPhone out in Germany?" });

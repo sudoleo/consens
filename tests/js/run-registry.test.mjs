@@ -124,6 +124,37 @@ describe("App.runRegistry", () => {
     dom.window.close();
   });
 
+  // Review 2: retitle left a running follow-up its old name; its sidebar
+  // row showed it while it ran, and on success it handed the old name on
+  // to the next basis (agent-chat.js / consensus-run.js setCompletedBasis
+  // take context.bookmark.title).
+  it("gives a running follow-up the new name, which stays after it", () => {
+    const { registry, dom, window } = bootRegistry();
+    const basis = { chatId: "c1", bookmarkId: "b1", question: "First", title: "Old name",
+      bookmarkMeta: { id: "b1", title: "Old name" } };
+    registry.selectConversationBasis(basis);
+    const run = registry.create(spec("Second", { bookmarkId: "b1", bookmarkTitle: "Old name",
+      basis: registry.getSelectedConversationBasis() }));
+    registry.setStatus(run.runId, "running");
+    const other = registry.create(spec("Elsewhere", { bookmarkId: "b2", bookmarkTitle: "Other chat" }));
+    const events = [];
+    window.addEventListener("consensio:run-registry-change", event => events.push(event.detail));
+    registry.retitle("b1", "Renamed", { source: "user" });
+    const live = registry.get(run.runId);
+    expect(live.bookmark.title).toBe("Renamed");
+    expect(live.bookmark.latestMeta).toMatchObject({ title: "Renamed", title_source: "user" });
+    // The run's sidebar row hears of it (run-view.js ensureRunRow).
+    expect(events.some(detail => detail.runId === run.runId)).toBe(true);
+    expect(registry.get(other.runId).bookmark.title).toBe("Other chat");
+    // The follow-up ends: its completed basis takes the run's name.
+    registry.setStatus(run.runId, "succeeded");
+    registry.setCompletedBasis(run.runId, { chatId: "c1", bookmarkId: "b1", question: "Second",
+      title: registry.get(run.runId).bookmark.title });
+    registry.show(run.runId);
+    expect(registry.getSelectedConversationBasis().title).toBe("Renamed");
+    dom.window.close();
+  });
+
   it("keeps execution, visible view, and selected follow-up basis independent", () => {
     const { registry, dom } = bootRegistry();
     const runA = registry.create(spec("A"));
