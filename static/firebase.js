@@ -2243,15 +2243,18 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
       if (!res.ok) {
-        console.error("Error saving bookmark:", data.detail);
+        // The server's sentence (`error`, flat since Apple-Audit H6) names
+        // the limit; `detail` was never sent, so the specific line never came.
+        const errorDetail = window.App?.errorFields?.(data)?.error || data.detail || "";
+        console.error("Error saving bookmark:", errorDetail);
         if (boundRunId) {
           window.App.runRegistry?.notePersistence?.(boundRunId, {
             status: "error",
-            error: { type: "model", status: res.status, detail: data.detail || "Chat save failed" }
+            error: { type: "model", status: res.status, detail: errorDetail || "Chat save failed" }
           });
         }
         if (!boundRunId || window.App.runRegistry?.isVisible?.(boundRunId)) {
-          showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
+          showBookmarkSaveError(res.status, errorDetail, `${bookmarkId}:${question}`);
         }
         return;
       }
@@ -2359,7 +2362,7 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       }
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
       if (!res.ok) {
-        const errorDetail = data.detail || data.error || "Chat answer save failed";
+        const errorDetail = window.App?.errorFields?.(data)?.error || data.detail || "Chat answer save failed";
         data.detail = errorDetail;
         console.error("Error saving consensus bookmark:", errorDetail, data.details || "");
         if (boundRunId) {
