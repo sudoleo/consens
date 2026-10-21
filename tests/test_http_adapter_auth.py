@@ -147,6 +147,12 @@ def test_the_flat_shape_keeps_every_field_and_spares_the_public_api():
     # The documented public API shape does not move.
     scoped = {"code": "insufficient_scope", "message": "API key requires scope: run:create"}
     assert main.error_body("/api/v1/runs", scoped) == {"error": scoped}
+    # A throttle is "rate_limited" with its wait, unless it names itself.
+    assert main.error_body("/agent", "Too many agent requests. Please wait.", status=429,
+                           headers={"Retry-After": "30"}) == {
+        "error": "Too many agent requests. Please wait.", "code": "rate_limited", "retry_after": 30}
+    chats = {"error": "Too many chat requests. Please slow down.", "error_code": "chat_rate_limited"}
+    assert main.error_body("/api/chats", chats, status=429)["code"] == "chat_rate_limited"
 
 
 @pytest.mark.parametrize("method,path", [("GET", "/user_status"), ("POST", "/usage")])

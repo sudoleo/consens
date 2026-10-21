@@ -257,7 +257,10 @@ Pro-/Plus-Grenze, Memory-Konflikt mit `revision`, Chat-Turn-Zustand) wird seit
 als `{"error": {...}}`, und die Clients fanden weder Satz noch Code (leeres
 Kontingent las „You don’t have access to this.“). Ausgenommen ist nur die
 öffentliche `/api/v1/` mit ihrem dokumentierten `{"error": {"code",
-"message"}}`. Jede
+"message"}}`. Ein 429 einer Route ohne eigenen Code (Agent-Sendegrenze,
+Provider-Cooldown) bekommt `code: "rate_limited"` und `retry_after` aus seinem
+`Retry-After`-Header; eigene Codes (`chat_rate_limited`, `limit_reached`,
+`usage_run_capacity`) bleiben. Jede
 slowapi-Grenze (`RateLimitExceeded`, alle Routen inkl. `/api/v1`) antwortet mit
 429 `{"error": "Too many requests in a short time. …", "code": "rate_limited",
 "retry_after": <s>}` und `Retry-After` (`rate_limit.retry_after_seconds` aus dem

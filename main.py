@@ -307,7 +307,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 PUBLIC_API_PREFIX = "/api/v1/"
 
 
-def error_body(path: str, detail, fields=None) -> dict:
+def error_body(path: str, detail, fields=None, *, status: int = 0, headers=None) -> dict:
     """One shape for every refusal the app reads: ``{error: "<sentence>",
     code, ...}`` (Apple-Audit H6, Zweitprüfung 2).
 
@@ -317,6 +317,8 @@ def error_body(path: str, detail, fields=None) -> dict:
     Nested as ``{error: {...}}`` the clients found neither the sentence nor
     the code: an empty allowance read "You don't have access to this."
     ``error_code`` stays as an alias for readers written before ``code``.
+    A throttle (429) without a code of its own is ``rate_limited`` with the
+    ``retry_after`` of its Retry-After header, like every slowapi limit.
     """
     if not isinstance(detail, dict) or path.startswith(PUBLIC_API_PREFIX):
         content = {"error": detail}
@@ -332,6 +334,11 @@ def error_body(path: str, detail, fields=None) -> dict:
             content["code"] = code
             content["error_code"] = code
     content.update(fields or {})
+    if status == 429 and isinstance(content, dict) and not path.startswith(PUBLIC_API_PREFIX):
+        content.setdefault("code", RATE_LIMITED_CODE)
+        retry_after = str((headers or {}).get("Retry-After") or "")
+        if retry_after.isdigit() and int(retry_after) > 0:
+            content.setdefault("retry_after", int(retry_after))
     return content
 
 
@@ -341,7 +348,8 @@ async def handle_http_exception(request, exc: HTTPException):
     # Routen setzen bewusst Header (Retry-After bei 429/503, WWW-Authenticate
     # bei 401); das JSON-Fehlerformat darf sie nicht verschlucken.
     # ``error_fields`` (z. B. ``code``, ``watch_id``) stehen neben dem Satz.
-    content = error_body(request.url.path, exc.detail, getattr(exc, "error_fields", None))
+    content = error_body(request.url.path, exc.detail, getattr(exc, "error_fields", None),
+                         status=exc.status_code, headers=exc.headers)
     return JSONResponse(
         status_code=exc.status_code,
         content=content,
