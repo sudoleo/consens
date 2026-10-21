@@ -262,6 +262,9 @@ describe("agent live fallback", () => {
 
   it("checks a turn running elsewhere less and less often", async () => {
     const { window: w, dom } = boot();
+    // Gaps of 50, 100, 200 ms: a busy machine stretches one gap by tens of
+    // milliseconds, which at 10/20/40 ms turned the order around.
+    w.App.agentLive.RUNNING_ELSEWHERE_MS = 50;
     w.fetch = vi.fn(async () => reply({ known: false, done: false, last_seq: 0, events: [] }));
     const times = [];
     const { live } = watcher(w, { recover: vi.fn(async () => { times.push(Date.now()); return "running"; }) });
