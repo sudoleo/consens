@@ -1007,7 +1007,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     blockieren aber nichts: jede neue Zeile (mit oder ohne Aktion) stellt
     den Fehler zur Seite (`parked`), läuft ihre volle Zeit, dann kommt der
     Fehler wieder; neue Zeilen reihen sich vor geparkten Fehlern ein, und
-    ein geparkter Fehler drängt die Zeile davor nicht (Nachprüfung 2 N2). Hover/Fokus pausieren, asynchrone
+    ein geparkter Fehler drängt die Zeile davor nicht; derselbe Fehler noch einmal ersetzt den geparkten (Nachprüfung 2 N2). Hover/Fokus pausieren, asynchrone
     Aktionen zeigen ihren Fortgang und melden über `update()`. Ist ein
     modaler Dialog offen, zieht die Zeile in ihn (sonst läge sie inert
     darunter); öffnet oder schließt einer, während sie steht, folgt sie ihm
@@ -2795,7 +2795,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   wer währenddessen fragt, teilt ihn (`fresh` nur nach einer eigenen
   Änderung); das Dashboard lädt Liste, Brief und Telegram über ein geteiltes
   `load()`, und der erste Blick auf `/app/watches` kommt einmal (`firstLook`:
-  Route oder Auth-Zustand, wer zuerst da ist) – je ein Request statt
+  Route oder Auth-Zustand, wer zuerst da ist; die Anmeldung nimmt für die
+  Seitenleiste über `App.watch.loadState` die geladene Liste) – je ein Request statt
   3×/2×/2× (Nachprüfung 2). Der Schritt „alle Plätze belegt“
   (`renderLimitStep(intent, {resume, reload})`) fragt beim Öffnen einmal neu
   und folgt `consensio:watches-changed`: wird ein Platz frei (eine Löschung,
