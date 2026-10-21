@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +19,32 @@ const read = (relative) => readFileSync(path.join(ROOT, relative), "utf8").repla
 
 const STYLE = read("static/style.css");
 const APP_CSS = [...STYLE.matchAll(/url\('\.\/css\/([^']+)'\)/g)].map(m => `static/css/${m[1]}`);
+
+// Every stylesheet a visitor or user gets: /app (static/style.css) and each
+// sheet a template links, with everything they import, however deep
+// (components-consensus-visuals.css, for one, only arrives through another
+// sheet). The admin pages are a desktop tool and keep their own.
+function templateFiles(dir) {
+  return readdirSync(path.join(ROOT, dir), { withFileTypes: true }).flatMap(entry =>
+    entry.isDirectory() ? templateFiles(`${dir}/${entry.name}`) : entry.name.endsWith(".html") ? [`${dir}/${entry.name}`] : []);
+}
+const LINKED = templateFiles("templates").flatMap(file =>
+  [...read(file).matchAll(/\/(static\/(?:css\/)?[\w.-]+\.css)/g)].map(m => m[1]));
+function withImports(entries) {
+  const seen = new Set();
+  const stack = [...entries];
+  while (stack.length) {
+    const file = stack.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    for (const m of read(file).matchAll(/@import\s+url\(\s*['"]?([^'")]+)['"]?\s*\)/g)) {
+      stack.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])));
+    }
+  }
+  return [...seen].sort();
+}
+const ALL_CSS = withImports(["static/style.css", ...LINKED])
+  .filter(file => file !== "static/style.css" && !path.posix.basename(file).startsWith("admin"));
 
 function declarations(css) {
   const out = [];
@@ -42,9 +68,17 @@ function items(value) {
 }
 
 describe("motion tokens (C14)", () => {
-  const files = APP_CSS.filter(file => !file.endsWith("variables.css"));
+  const files = ALL_CSS;
 
-  it("names only --dur-* and --ease-* in every transition and animation of the app", () => {
+  it("reads the nested and the public stylesheets too", () => {
+    for (const sheet of ["components-consensus-visuals.css", "landing.css", "public-pages.css", "public-shell.css",
+      "public-nav.css", "public-tokens.css", "benchmark.css", "topics.css", "consensus-engine.css", "model-pulse.css"]) {
+      expect(files).toContain(`static/css/${sheet}`);
+    }
+    expect(files.some(file => file.includes("admin"))).toBe(false);
+  });
+
+  it("names only --dur-* and --ease-* in every transition and animation, in the app and on every public page", () => {
     const offenders = [];
     for (const file of files) {
       for (const { prop, value, line } of declarations(read(file))) {
@@ -58,6 +92,19 @@ describe("motion tokens (C14)", () => {
             if (!/var\(--ease-|steps\(/.test(item)) offenders.push(`${file}:${line}: ${prop}: ${item} (no curve)`);
           }
         }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps durations in the tokens, not in custom properties of their own", () => {
+    const offenders = [];
+    for (const file of files) {
+      const css = read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const match of css.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+);/g)) {
+        if (!/(?<![\w.-])\d*\.?\d*[1-9]\d*(?:ms|s)(?![\w-])/.test(match[2])) continue;
+        if (file === "static/css/foundation.css" && /^--dur-/.test(match[1])) continue;
+        offenders.push(`${file}: ${match[1]}: ${match[2].trim()}`);
       }
     }
     expect(offenders).toEqual([]);
@@ -104,9 +151,9 @@ describe("one spinner and one beat (C13)", () => {
     expect(read("static/css/motion.css")).toMatch(/animation: spinner-turn var\(--dur-spin\) var\(--ease-linear\) infinite;/);
   });
 
-  it("repeats everything else at the one beat", () => {
+  it("repeats everything else at the one beat, on the public pages too", () => {
     const offenders = [];
-    for (const file of APP_CSS) {
+    for (const file of ALL_CSS) {
       for (const { value, line } of declarations(read(file))) {
         if (!/infinite/.test(value)) continue;
         if (!/var\(--dur-(?:beat|spin)\)|calc\(var\(--dur-(?:beat|spin)\)/.test(value)) offenders.push(`${file}:${line}: ${value}`);

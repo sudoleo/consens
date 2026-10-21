@@ -134,17 +134,8 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.feedback-login-button {
-  min-height: 38px;
-  padding: 9px 16px;
-  border: 1px solid var(--button-bg);
-  border-radius: var(--radius-xs);
-  background: var(--button-bg);
-  color: var(--button-text);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-}
+/* "Log in" for a guest wears the one filled button (.btn material,
+   components-input.css): 36 px, --radius-sm, a tone step on hover. */
 
 #systemPromptModal {
   --settings-gutter: clamp(12px, 3vw, 32px);

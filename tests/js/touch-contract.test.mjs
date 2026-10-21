@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ROOT } from "./helpers/appWindow.mjs";
-import { ancestors, lineOf, parseCss, walkRules } from "./helpers/css-rules.mjs";
+import { ancestors, declaredProperties, lineOf, parseCss, splitSelectors, walkRules } from "./helpers/css-rules.mjs";
 
 /**
  * A finger is not a mouse (Apple audit F3, F4, F15):
@@ -100,7 +100,14 @@ describe("one scroll lock (F2)", () => {
       ".memory-edit-backdrop:not([hidden])", ".agent-google-overlay:not([hidden])"]) {
       expect(lock).toContain(layer);
     }
-    expect(lock).toMatch(/\) body \{\s*overflow: hidden;/);
+    expect(lock).toMatch(/\)\)\) \{\s*overflow: hidden;/);
+  });
+
+  it("holds only the root: a locked body would be a scroll box and move the sticky composer (review point 4)", () => {
+    const rules = [...walkRules(parseCss(foundation))]
+      .filter(rule => rule.selector.includes("html:has(") && declaredProperties(rule.body).includes("overflow"));
+    expect(rules.length).toBe(1);
+    for (const selector of splitSelectors(rules[0].selector)) expect(selector).toMatch(/^html:has\(.*\)$/s);
   });
 
   it("has no second lock beside it", () => {

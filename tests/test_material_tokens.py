@@ -265,7 +265,7 @@ def test_the_filled_button_is_one_component():
     primaries = (".share-primary-btn", ".btn-pro", ".auth-primary-action", ".memory-edit-submit",
                  ".watch-nudge-btn", ".post-demo-login-action", ".agent-google-btn.is-primary",
                  ".wd-button.is-primary", ".wd-action.is-strong", ".run-blocked-btn.is-primary",
-                 ".verify-banner-btn", "#feedbackForm .feedback-submit")
+                 ".verify-banner-btn", ".feedback-login-button", "#feedbackForm .feedback-submit")
     head, material = next((s, b) for s, b in rules(inputs) if s.startswith(".button, .btn, .share-primary-btn"))
     for primary in primaries:
         assert primary in head, primary
@@ -282,6 +282,18 @@ def test_the_filled_button_is_one_component():
             assert "translateY(-" not in body, (name, selector)
             assert not re.search(r"box-shadow:\s*(?!none)[^;]*var\(--button-bg\)", body), (name, selector)
 
+
+
+def test_the_filled_button_hover_lends_no_id_weight():
+    """Inside :is() the one ID selector (#feedbackForm .feedback-submit) gave
+    every filled button's hover the weight of an ID. In a narrow desktop window
+    it outranked the phone header's Sign up, whose surface is a 32 px ::before
+    in a 44 px target, and the hover filled the whole target."""
+    inputs = strip_comments(read("components-input.css"))
+    hover = next(s for s, _ in rules(inputs) if ":hover" in s and ".auth-top-signup" in s)
+    groups = re.findall(r":is\(([^)]*\([^)]*\)[^)]*|[^)]*)\)", hover)
+    assert groups and not any("#" in group for group in groups), hover
+    assert "#feedbackForm .feedback-submit:hover:not(:disabled)" in hover
 
 def test_the_chosen_option_reads_in_full_ink():
     shell = strip_comments(read("shell.css"))

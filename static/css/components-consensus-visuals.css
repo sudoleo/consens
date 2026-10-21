@@ -146,11 +146,11 @@
     top: 0;
     right: 0;
     color: var(--verdict-ring, var(--text-color));
-    animation: verdict-count 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation: verdict-count var(--dur-light) var(--ease-out) both;
   }
 
   .verdict-gauge.is-settling .verdict-meter-fill {
-    animation: verdict-fill 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation: verdict-fill var(--dur-light) var(--ease-out) both;
   }
 }
 

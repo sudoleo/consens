@@ -103,9 +103,6 @@
   --page-gutter: 20px;
   --page-width: min(var(--maxw), calc(100% - 2 * var(--page-gutter)));
   --section-pad: clamp(76px, 11vw, 150px);
-  --agent-pulse-duration: 1.15s;
-  --agent-sweep-duration: 2.8s;
-  --scene-transition-duration: 0.28s;
 }
 
 :root.dark-mode,
@@ -205,6 +202,27 @@ body { overflow-x: clip; }
 :where(.site-nav, .lp-nav) a[aria-current="page"]:not(.nav-cta):not(.lp-nav-cta) {
   color: var(--heading, var(--text-primary));
   font-weight: var(--font-weight-semibold);
+}
+
+/* Semibold is wider. Every link in the bar keeps the width of its semibold
+   self (an invisible second line from data-label, partials/public_nav.html),
+   so when the landing marks Watches instead of Product while you scroll,
+   nothing beside them moves (the bar twitched by up to 1.8 px). The link is
+   a flex item, so it is a block already; its text sits in the middle. */
+:where(.site-nav, .lp-nav) .nav-links > a[data-label] {
+  text-align: center;
+}
+
+:where(.site-nav, .lp-nav) .nav-links > a[data-label]::after {
+  content: attr(data-label);
+  content: attr(data-label) / "";
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--font-weight-semibold);
+  pointer-events: none;
+  user-select: none;
 }
 
 ::selection {

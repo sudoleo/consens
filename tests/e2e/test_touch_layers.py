@@ -173,3 +173,49 @@ def test_every_covering_layer_holds_the_page(browser, phase4_server):
         assert page.evaluate("Math.round(scrollY)") == before
     finally:
         context.close()
+
+
+def test_a_dialog_holds_the_desktop_page_without_moving_its_composer(browser, phase4_server):
+    """Review point 4: the lock is on the root only. With body locked too, body
+    became a scroll box and the sticky composer left the window's bottom edge
+    for the end of the thread behind the dialog (y 806 -> 1882) and came back
+    when it closed."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": 1400, "height": 900})
+        seed_long_answer(page)
+        page.evaluate("window.scrollTo(0, 600)")
+        # The column settles first (the composer's room under the thread can
+        # still land by a pixel); the dialog is measured against that.
+        read = """() => ({y: Math.round(scrollY),
+          top: Math.round(document.querySelector('.input-section').getBoundingClientRect().top)})"""
+        before = page.evaluate(read)
+        for _ in range(20):
+            page.wait_for_timeout(250)
+            now = page.evaluate(read)
+            if now == before:
+                break
+            before = now
+        assert before["top"] < 900
+        page.evaluate("""() => {
+          window.__tops = new Set();
+          const composer = document.querySelector('.input-section');
+          const tick = () => { window.__tops.add(Math.round(composer.getBoundingClientRect().top));
+            if (window.__sampling) requestAnimationFrame(tick); };
+          window.__sampling = true; requestAnimationFrame(tick);
+        }""")
+        page.evaluate("App.modalDialog.open(document.getElementById('helpModal'))")
+        page.wait_for_timeout(500)
+        assert page.evaluate("getComputedStyle(document.documentElement).overflowY") == "hidden"
+        # The wheel does not move the page behind the dialog.
+        page.mouse.move(40, 450)
+        page.mouse.wheel(0, 600)
+        page.wait_for_timeout(300)
+        assert page.evaluate("Math.round(scrollY)") == before["y"]
+        page.evaluate("App.modalDialog.close(document.getElementById('helpModal'))")
+        page.wait_for_timeout(500)
+        tops = page.evaluate("window.__sampling = false, [...window.__tops]")
+        assert tops == [before["top"]]
+        assert page.evaluate("Math.round(scrollY)") == before["y"]
+    finally:
+        context.close()

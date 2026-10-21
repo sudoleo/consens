@@ -87,7 +87,11 @@ dialog.modal[open] {
   transition-timing-function: var(--ease-out);
 }
 
-:is(dialog.modal, .memory-edit-backdrop, .agent-google-overlay) > :is(.modal-content, .memory-edit-dialog, .agent-google-sheet) {
+/* One material for every layer. The parent part is :where(), so the rule
+   weighs no more than a class: a layer that takes another shape on a phone
+   (the Gmail & Calendar sheet, agent-google.css) says so with its own,
+   slightly more specific rule instead of losing to this one. */
+:where(dialog.modal, .memory-edit-backdrop, .agent-google-overlay) > :is(.modal-content, .memory-edit-dialog, .agent-google-sheet) {
   box-sizing: border-box;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-lg);

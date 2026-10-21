@@ -206,8 +206,11 @@
   border: 1px solid var(--bench-model-edge);
   border-bottom: 0;
   background: var(--bench-model-fill);   /* flat matte fill, no gloss */
-  transition: height 0.95s var(--ease-out);
-  transition-delay: calc(var(--i, 0) * 65ms);
+  /* One movement from the motion tokens: each bar grows for --dur-light,
+     the next one starts half a press later; its value fades in as the bar
+     arrives, the whisker once it stands. */
+  transition: height var(--dur-light) var(--ease-out);
+  transition-delay: calc(var(--i, 0) * var(--dur-press) / 2);
 }
 
 .bench-chart.is-visible .bench-bar { height: calc(var(--val) * var(--scale)); }
@@ -241,7 +244,7 @@
   font-variant-numeric: tabular-nums;
   opacity: 0;
   transition: opacity var(--dur-layer) var(--ease-standard);
-  transition-delay: calc(var(--i, 0) * 65ms + 0.5s);
+  transition-delay: calc(var(--i, 0) * var(--dur-press) / 2 + var(--dur-layer));
 }
 .bench-chart.is-visible .bench-val { opacity: 1; }
 .bench-col.is-consensus .bench-val { color: var(--accent); font-weight: var(--font-weight-bold); }
@@ -257,7 +260,7 @@
   background: var(--bench-ci-color);
   opacity: 0;
   transition: opacity var(--dur-layer) var(--ease-standard);
-  transition-delay: calc(var(--i, 0) * 65ms + 0.7s);
+  transition-delay: calc(var(--i, 0) * var(--dur-press) / 2 + var(--dur-light));
 }
 .bench-chart.is-visible .bench-ci { opacity: 1; }
 .bench-ci::before,
@@ -466,7 +469,7 @@
   color: var(--text-secondary);
   opacity: 0;
   transition: opacity var(--dur-layer) var(--ease-standard);
-  transition-delay: calc(var(--i, 0) * 70ms + 0.45s);
+  transition-delay: calc(var(--i, 0) * var(--dur-press) / 2 + var(--dur-layer));
 }
 .bench-mini-col.is-consensus .bench-mini-val { color: var(--accent); }
 
@@ -478,8 +481,8 @@
   border: 1px solid #9b9ea1;
   border-bottom: 0;
   background: #bdbfc2;
-  transition: height 0.9s var(--ease-out);
-  transition-delay: calc(var(--i, 0) * 70ms);
+  transition: height var(--dur-light) var(--ease-out);
+  transition-delay: calc(var(--i, 0) * var(--dur-press) / 2);
 }
 .is-visible .bench-mini-bar,
 .bench-mini.is-visible .bench-mini-bar { height: calc(var(--v) * var(--mscale)); }

@@ -717,7 +717,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       keinen grauen Blitz, und nichts bleibt danach grau stehen (Reasoning
       sieht nach dem Antippen nicht eingeschaltet aus); bei offenem Menü,
       Aktivitäts-Sheet, Satzkarte oder Quellenkarte bewegt Wischen den Chat
-      dahinter nicht; das Menü folgt einem Wisch nach links und schließt ab
+      dahinter nicht, auch nicht über einem offenen Dialog (die Sperre hält
+      seit der Nachprüfung nur `html`, nicht mehr `body`); ein Tipp auf die
+      untere Hälfte einer Quellen-Pille öffnet diese Pille, nicht die in der
+      Zeile darunter; das Menü folgt einem Wisch nach links und schließt ab
       einem Drittel, sonst gleitet es zurück; mit eingeklappter Safari-Leiste
       liegt das Eingabefeld über dem Home-Balken, quer liegt nichts unter der
       Notch; beim Lesen läuft zwischen den Kopfknöpfen kein Text durch; Text

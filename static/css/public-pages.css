@@ -90,7 +90,8 @@ a {
   gap: 9px;
   color: var(--heading);
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-bold);
+  /* The same mark in the same bar as on the landing page (I14). */
+  font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-tight);
   line-height: var(--line-height-solid);
 }
@@ -430,10 +431,10 @@ canvas {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 0s !important;
   }
 }
 
@@ -467,36 +468,10 @@ canvas {
     background-attachment: fixed;
   }
 
-  .page-shell,
-  .footer-inner {
-    width: min(100% - 24px, var(--maxw));
-  }
-
-  .site-nav {
-    min-height: 50px;
-    padding-inline: 14px;
-  }
-
-  .brand {
-    font-size: var(--font-size-base);
-  }
-
-  .brand img {
-    width: 21px;
-  }
-
-  .nav-cta {
-    min-height: 33px;
-    padding-inline: 14px;
-    border-radius: var(--radius-pill);
-    font-size: var(--font-size-sm);
-    box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent);
-  }
-
-  .nav-links {
-    gap: 10px;
-    font-size: var(--font-size-sm);
-  }
+  /* The column, the footer and the bar keep the shared page grid on a phone
+     too (--page-gutter, 16 px from public-nav.css): the legal pages, /questions
+     and the Watch and Topic pages used to stand 12 px from the edge under a
+     smaller bar than the landing page's (Apple-Audit I14). */
 
   .nav-links a:not(.nav-cta) {
     display: none;
@@ -834,10 +809,8 @@ canvas {
   font-size: var(--font-size-sm);
 }
 
-.share-follow-form input[type="email"]:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 1px;
-}
+/* Focused, the field wears the one field look (public-shell.css, G12);
+   an outline here drew a second ring around it. */
 
 .share-follow-note {
   margin: 10px 0 0;
@@ -998,7 +971,7 @@ canvas {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
-  animation: shareDiffCuePing 2.2s ease-out 3;
+  animation: shareDiffCuePing var(--dur-beat) var(--ease-out) 3;
 }
 
 /* Sobald die Differences-Ansicht aktiv ist, keinen Hinweis mehr zeigen. */
@@ -1356,7 +1329,7 @@ canvas {
 
 .share-header .share-scoreboard {
   box-sizing: border-box;
-  width: min(var(--maxw), calc(100vw - 40px));
+  width: min(var(--maxw), calc(100vw - 2 * var(--page-gutter)));
 }
 
 /* Den Zustand tragen der Punkt und die Schiene links (public-shell.css), nicht
@@ -1800,7 +1773,7 @@ canvas {
   background: var(--raise);
   color: var(--heading);
   text-decoration: none;
-  transition: background-color .15s ease;
+  transition: background-color var(--dur-press) var(--ease-standard);
 }
 .wp-link:focus-visible { background: var(--raise-hover); box-shadow: inset 0 0 0 1px var(--line-soft); }
 @media (hover: hover) and (pointer: fine) {
@@ -1818,7 +1791,7 @@ canvas {
   -webkit-line-clamp: 2;
 }
 .wp-link-domain { overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
-.wp-link-arrow { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted); transition: transform .15s ease, color .15s ease; }
+.wp-link-arrow { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted); transition: transform var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .wp-link:focus-visible .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
 @media (hover: hover) and (pointer: fine) {
   .wp-link:hover .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
@@ -2057,7 +2030,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 /* L14 — A jump to a check (a point of the curve, the state line) marks it
    for a moment, so the eye finds where it landed. */
 .wp-event.is-flash,
-.wp-quiet-list li.is-flash { animation: wp-flash 1.8s var(--ease-standard); }
+.wp-quiet-list li.is-flash { animation: wp-flash var(--dur-beat) var(--ease-standard); }
 @keyframes wp-flash {
   0%, 30% { background: color-mix(in srgb, var(--partial) 14%, transparent); }
   100% { background: transparent; }

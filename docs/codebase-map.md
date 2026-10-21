@@ -949,11 +949,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Seite liegt (`static/css/overlays.css`, nach allen Komponenten geladen):
   - **Scrim:** ein Token `--scrim` (`foundation.css`, hell/dunkel) hinter
     jedem modalen Fenster, dem Antwortleser (`::backdrop`), dem Memory-Dialog,
-    dem Gmail-/Calendar-Sheet, dem Satzkarten-Sheet und der Handy-Schublade;
+    dem Gmail-/Calendar-Sheet, dem Satzkarten-Sheet (auch auf der Startseite,
+    `landing.css`), dem Agent-Aktivitäts-Sheet und der Handy-Schublade;
     nirgends mehr `backdrop-filter` (`tests/js/overlays.test.mjs` verbietet
     jeden Wert außer `none`, Admin ausgenommen).
   - **Dialogfläche:** `--raise`, `--lift`, `--radius-lg`, eine Haarlinie
-    `--line-soft` für `.modal-content` (und Memory-/Google-Sheet).
+    `--line-soft` für `.modal-content` (und Memory-/Google-Sheet). Der
+    Elternteil des Selektors steht in `:where()`, die Regel wiegt also nur
+    eine Klasse: Eine Ebene mit eigener Form schreibt sie mit einer etwas
+    spezifischeren Regel (am Handy das bündige Gmail-&-Calendar-Sheet,
+    `.agent-google-overlay > .agent-google-sheet`, unten eckig, ohne Linie).
     Bewegung: Dialog blendet in `--dur-layer`/`--ease-out` ein, die Fläche
     steigt 8px aus 98 % (`@starting-style`); Ausgang `--dur-state`/`--ease-in`.
   - **Popover (`popover.js`, `App.popover`):** (+)-Menü, Modellwahl,
@@ -1037,9 +1042,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Dunkelmodus aus der dunklen `--ink-2`, ≥ 7:1), kein `outline: none` hinter
   einem Hover-Ton mehr, in Menüs nach innen versetzt; Textlinks runden die
   Ecken. `tests/js/motion-tokens.test.mjs` verlangt in jeder Transition und
-  Animation von `/app` nur `var(--dur-*)`/`var(--ease-*)` (keine rohen
-  Zeiten/Kurven, kein `transition: all`) und prüft Spinner, Takt, Ring und
-  Druck.
+  Animation nur `var(--dur-*)`/`var(--ease-*)` (keine rohen
+  Zeiten/Kurven, kein `transition: all`, keine eigenen Dauer-Properties) und
+  prüft Spinner, Takt, Ring und Druck. Seit der Nachprüfung gilt das für
+  jedes Stylesheet, das ein Nutzer bekommt: `static/style.css` und jedes von
+  einem Template verlinkte Blatt samt aller (auch verschachtelten) Imports,
+  also auch Startseite, Benchmark, Topics, Consensus Engine und die übrigen
+  öffentlichen Seiten (Admin ausgenommen).
 - **Handy-Schublade (`app-init.js`, `syncDrawerFocus`):** die offene
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
@@ -9227,7 +9236,11 @@ zählen nicht):
   `padding: 4px; margin: -4px; background-clip: content-box`; die Adresse im
   Seitenmenü clippt ihren Text, ihre Fläche ist Padding mit Gegenmargin (die
   Tarifzeile darunter lässt Taps durch); Pillen/Picker mit eigenem
-  Ellipsis-Label setzen auf Touch `overflow: visible`; die Beispielfragen in
+  Ellipsis-Label setzen auf Touch `overflow: visible`; die Quellen-Pille im
+  Fließtext reicht 44 px in die Breite, aber nach oben und unten nur über
+  ihre eigene Zeile (`--src-ref-line`, per `@property` registriert, `1lh` des
+  umgebenden Textes, `source-pill.css`) – 44 px griffen in die Nachbarzeilen
+  über deren Wörter, Links und Pillen (Nachprüfung); die Beispielfragen in
   der seitwärts scrollenden Zeile holen sich 6 px Innenraum und geben ihn per
   Margin zurück (`--starters-room` misst deshalb die Margin-Box); Reasoning/
   Anhang stehen auf dem Handy 16 px auseinander. Wo zwei Flächen kollidieren,
@@ -9235,8 +9248,13 @@ zählen nicht):
   zwischen Passwortfeld und Knopf). Fließtext-Links (Rechtliches im
   Login-Text) und volle Listenzeilen (Chats 40 px) bleiben bewusst so.
   `tests/e2e/test_touch_targets.py` misst mit `elementFromPoint` bei 320/390 px.
-  **Eine Scroll-Sperre (F2):** `foundation.css` hält `html` und `body` auf
-  `overflow: hidden; overscroll-behavior: none`, solange eine deckende Ebene
+  **Eine Scroll-Sperre (F2):** `foundation.css` hält nur `html` auf
+  `overflow: hidden; overscroll-behavior: none` (dessen Overflow ist der des
+  Viewports; Rad und Finger, Safari ab 16, bewegen nichts). `body` bleibt
+  bewusst ohne eigenen Overflow: sonst würde er zur Scroll-Box, und der
+  sticky Composer am Desktop klebte hinter dem Dialog am Threadende statt am
+  Fensterrand (Nachprüfung Punkt 4, `test_touch_layers.py` misst ihn). Die
+  Sperre gilt, solange eine deckende Ebene
   offen ist – erkannt am Zustand der Ebene selbst, per
   `html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet,
   .claim-sheet-backdrop:not([hidden]), .memory-edit-backdrop:not([hidden]),

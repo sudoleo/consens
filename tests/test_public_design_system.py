@@ -304,3 +304,29 @@ def test_smooth_scrolling_starts_only_after_the_page_has_arrived():
     script = read("static/js/public-nav.js")
     assert 'classList.add("is-scroll-smooth")' in script
     assert 'addEventListener("load", enableSmoothScroll)' in script
+
+
+def test_every_bar_link_keeps_the_width_of_its_semibold_self():
+    """The current section is semibold, which is wider: the landing bar
+    twitched sideways while scrolling into Watches. Each bar link carries its
+    own text as data-label; an invisible semibold line reserves the width."""
+    nav = read("templates/partials/public_nav.html")
+    bar = nav.split('<div class="nav-links', 1)[1].split("<details", 1)[0]
+    links = re.findall(r"<a ([^>]*)>([^<]+)</a>", bar)
+    assert len(links) == 5
+    for attributes, text in links:
+        assert f'data-label="{text}"' in attributes, text
+    tokens = re.sub(r"/\*.*?\*/", "", read("static/css/public-tokens.css"), flags=re.S)
+    rule = tokens.split(".nav-links > a[data-label]::after {", 1)[1].split("}", 1)[0]
+    assert "content: attr(data-label)" in rule
+    assert "visibility: hidden" in rule and "height: 0" in rule
+    assert "font-weight: var(--font-weight-semibold)" in rule
+
+
+def test_public_pages_keep_the_page_grid_and_the_bar_on_a_phone():
+    """I14: one grid and one bar. The phone block of public-pages.css set its
+    own 12 px column, a 50 px bar with 14 px padding and a smaller mark."""
+    css = re.sub(r"/\*.*?\*/", "", read("static/css/public-pages.css"), flags=re.S)
+    assert "100% - 24px" not in css
+    assert "min-height: 50px" not in css and "width: 21px" not in css
+    assert "100vw - 40px" not in css

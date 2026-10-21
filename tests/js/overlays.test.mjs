@@ -71,6 +71,11 @@ describe("no browser windows and no glass (E1, G1)", () => {
     }
     expect(overlays).toContain(".answer-reader-dialog::backdrop {\n  background: var(--scrim");
     expect(read("static/css/shell.css")).toMatch(/body::after \{[^}]*background: var\(--scrim\)/);
+    // The landing page's sentence card dims with the same token (it has no
+    // overlays.css of its own); it used to carry a raw, darker rgba.
+    expect(read("static/css/landing.css")).toMatch(/\.claim-sheet-backdrop \{[^}]*background: var\(--scrim\);/);
+    // So does the Agent activity sheet; an --ink tint turned pale in dark mode.
+    expect(read("static/css/agent-chat.css")).toMatch(/\.agent-sidebar-scrim \{[^}]*background: var\(--scrim\);/);
     const foundation = read("static/css/foundation.css");
     expect(foundation).toMatch(/:root \{[\s\S]*--scrim: rgba/);
     expect(foundation).toMatch(/\.dark-mode \{\s*--scrim: rgba/);

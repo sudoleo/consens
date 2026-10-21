@@ -127,19 +127,20 @@
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--button-bg) 16%, transparent);
   opacity: 0.42;
   transform: scale(0.84);
-  animation: consensusLoaderDots 1.2s ease-in-out infinite;
+  /* Waiting breathes at the one beat (foundation.css). */
+  animation: consensusLoaderDots var(--dur-beat) var(--ease-standard) infinite;
 }
 
 .consensus-loader span:nth-child(2) {
-  animation-delay: 0.12s;
+  animation-delay: calc(var(--dur-beat) / 10);
 }
 
 .consensus-loader span:nth-child(3) {
-  animation-delay: 0.24s;
+  animation-delay: calc(var(--dur-beat) / 5);
 }
 
 .consensus-loader span:nth-child(4) {
-  animation-delay: 0.36s;
+  animation-delay: calc(var(--dur-beat) * 3 / 10);
 }
 
 .ce-flow-section {
