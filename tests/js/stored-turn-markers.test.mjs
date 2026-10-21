@@ -251,6 +251,11 @@ describe("difference cards in the detail panel", () => {
     expect(answer.querySelector(".diff-position-label").classList.contains("is-group")).toBe(true);
     expect(answer.querySelector(".diff-position-count").textContent).toBe("2 models");
     expect(other.querySelector(".diff-position-count")).toBe(null);
+    // The claim first, then one quiet line: who, the answer's side, the quote toggle.
+    expect([...answer.children].map(el => el.className))
+      .toEqual(["diff-position-stance", "diff-position-meta", "diff-position-quote"]);
+    expect([...answer.querySelector(".diff-position-meta").children].map(el => el.className))
+      .toEqual(["diff-position-label is-group", "diff-position-answer", "diff-quote-toggle"]);
     // The quote waits behind a toggle.
     const toggle = answer.querySelector(".diff-quote-toggle");
     const quote = answer.querySelector(".diff-position-quote");

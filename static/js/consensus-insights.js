@@ -2698,12 +2698,6 @@
                   }
                   const posEl = document.createElement("div");
                   posEl.className = "diff-position" + (pos.in_answer === true ? " is-answer" : "");
-                  if (pos.in_answer === true) {
-                    const answerTag = document.createElement("span");
-                    answerTag.className = "diff-position-answer";
-                    answerTag.textContent = "In the answer";
-                    posEl.appendChild(answerTag);
-                  }
                   const claimText = pos.stance || pos.quote;
                   if (claimText) {
                     const stance = document.createElement("div");
@@ -2711,6 +2705,11 @@
                     renderInlineMarkdown(stance, claimText);
                     posEl.appendChild(stance);
                   }
+                  // Unter der Behauptung eine leise Zeile (2026-10-21): wer das
+                  // sagt, ob die Antwort diese Seite vertritt, und das Zitat
+                  // auf Wunsch. Vorher stand jedes davon in eigener Zeile.
+                  const meta = document.createElement("div");
+                  meta.className = "diff-position-meta";
 
                   // Wer das sagt: Icon + Name; bei mehreren Modellen nur die
                   // Icons und die Anzahl (die Namen bleiben Linktext und
@@ -2766,7 +2765,14 @@
                     count.textContent = pos.models.length + " models";
                     label.appendChild(count);
                   }
-                  posEl.appendChild(label);
+                  meta.appendChild(label);
+                  if (pos.in_answer === true) {
+                    const answerTag = document.createElement("span");
+                    answerTag.className = "diff-position-answer";
+                    answerTag.textContent = "In the answer";
+                    meta.appendChild(answerTag);
+                  }
+                  posEl.appendChild(meta);
 
                   // Das Zitat belegt die Behauptung, es wiederholt sie: erst
                   // auf Wunsch (Klick-Delegation unten, auch fuer Kopien).
@@ -2780,7 +2786,8 @@
                     quote.className = "diff-position-quote";
                     quote.hidden = true;
                     renderInlineMarkdown(quote, pos.quote);
-                    posEl.append(toggle, quote);
+                    meta.appendChild(toggle);
+                    posEl.appendChild(quote);
                   }
                   sides.appendChild(posEl);
                 });
@@ -2960,8 +2967,8 @@
           // Antwort-Leser die Karten verschiebt und Kopien davon zeigt.
           document.addEventListener("click", function (event) {
             const toggle = event.target.closest?.(".diff-quote-toggle");
-            const quote = toggle?.nextElementSibling;
-            if (!quote?.matches(".diff-position-quote")) return;
+            const quote = toggle?.closest(".diff-position")?.querySelector(".diff-position-quote");
+            if (!quote) return;
             quote.hidden = !quote.hidden;
             toggle.setAttribute("aria-expanded", String(!quote.hidden));
             toggle.textContent = quote.hidden ? "Show quote" : "Hide quote";
