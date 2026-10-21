@@ -116,7 +116,8 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
         assert not area.get("covered"), area
         assert area["box"][1] < 24
         assert area["hit"][0] >= 43, area
-        assert line - 2 <= area["hit"][1] <= line + 1, (area, line)
+        # Whole-pixel steps from a fractional centre read a 28.9 px line as 29 or 30.
+        assert line - 2 <= area["hit"][1] <= line + 2, (area, line)
         page.evaluate("() => App.quote.set('The race starts in Monaco and climbs La Turbie.')")
         page.wait_for_function("""() => !document.body.classList.contains('composer-animating')
           && !document.body.classList.contains('composer-gliding')

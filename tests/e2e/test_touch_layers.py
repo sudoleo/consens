@@ -152,9 +152,17 @@ def test_a_dialog_holds_the_desktop_page_without_moving_its_composer(browser, ph
         page.set_viewport_size({"width": 1400, "height": 900})
         seed_long_answer(page)
         page.evaluate("window.scrollTo(0, 600)")
-        page.wait_for_timeout(200)
-        before = page.evaluate("""() => ({y: Math.round(scrollY),
-          top: Math.round(document.querySelector('.input-section').getBoundingClientRect().top)})""")
+        # The column settles first (the composer's room under the thread can
+        # still land by a pixel); the dialog is measured against that.
+        read = """() => ({y: Math.round(scrollY),
+          top: Math.round(document.querySelector('.input-section').getBoundingClientRect().top)})"""
+        before = page.evaluate(read)
+        for _ in range(20):
+            page.wait_for_timeout(250)
+            now = page.evaluate(read)
+            if now == before:
+                break
+            before = now
         assert before["top"] < 900
         page.evaluate("""() => {
           window.__tops = new Set();

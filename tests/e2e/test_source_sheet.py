@@ -74,6 +74,10 @@ def test_a_click_on_a_grouped_pill_lists_its_sources_at_the_pill(browser, phase4
         expect(sheet).not_to_have_class(re.compile(r"\bis-modal\b"))
         expect(sheet.locator("a.source-sheet-link")).to_have_count(3)
         # A menu at the pill: next to it, first source focused, arrows move.
+        # It rises 4px into place (overlays.css); measured where it stays,
+        # not in the frame the box happens to be read.
+        page.wait_for_function("""() => !document.getElementById('sourceSheet').getAnimations()
+          .some(a => a.playState === 'running')""")
         pill, card = group.bounding_box(), sheet.bounding_box()
         assert abs(card["y"] - (pill["y"] + pill["height"] + 8)) <= 2 or abs(card["y"] + card["height"] - (pill["y"] - 8)) <= 2
         expect(sheet.locator("a.source-sheet-link").first).to_be_focused()
