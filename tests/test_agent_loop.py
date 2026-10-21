@@ -2,10 +2,12 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import json
+import re
 
 from pydantic import BaseModel, ConfigDict, Field
 import pytest
 
+from app.core.openrouter_contract import provider_session_id
 from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy, tools_for_model
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, configured_model
@@ -88,6 +90,54 @@ def test_a_service_tier_of_the_model_config_reaches_the_request(store, monkeypat
     list(loop.run())
     assert requests[0]["service_tier"] == "priority"
     assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny"}
+
+
+def recording_transport(monkeypatch, responses):
+    """transport() that also keeps each request's headers."""
+    requests, _, _ = transport(monkeypatch, responses)
+    lines, headers = agent_client.cancellable_sse_lines, []
+    def recording(url, **kwargs):
+        headers.append(kwargs["headers"])
+        return lines(url, **kwargs)
+    monkeypatch.setattr(agent_client, "cancellable_sse_lines", recording)
+    return requests, headers
+
+
+def test_every_step_of_a_chat_stays_on_the_endpoint_holding_its_cached_prefix(store, monkeypatch):
+    # One opaque session per chat (openrouter_contract.provider_session_id):
+    # OpenRouter keeps the steps on one endpoint from the first request on.
+    requests, headers = recording_transport(monkeypatch, [
+        [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())],
+        [packet({"content": "Result: 4"}), packet(finish="stop", usage=usage())],
+    ])
+    chat_id, turn = pending(store)
+    model = configured_model(resolve_agent_model("claude-haiku-4-5"))
+    # The adapter owns the session: a registry value never reaches the request.
+    model = replace(model, request_config={**model.request_config, "session_id": "from-registry"})
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat_id, turn_id=turn["id"], model=model,
+                     messages=store.messages(UID, chat_id, turn, model=model), api_key="test",
+                     cancellation=ProviderCancellation(), registry=client_registry([]))
+    list(loop.run())
+    assert len(requests) == len(headers) == 2
+    session = headers[0]["x-session-id"]
+    assert headers[1]["x-session-id"] == session == provider_session_id(UID, chat_id)
+    assert re.fullmatch(r"[0-9a-f]{32}", session) and UID not in session and chat_id not in session
+    assert session not in {provider_session_id(UID, "other-chat"), provider_session_id("other-user", chat_id)}
+    assert all("session_id" not in request for request in requests)
+    assert headers[0]["Authorization"] == "Bearer test"
+    assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny"}
+
+
+def test_a_request_without_a_session_keeps_the_plain_routing(monkeypatch):
+    # Helper steps (comparison answers, judges, page reads) keep the plain
+    # fastest-endpoint routing.
+    requests, headers = recording_transport(monkeypatch, [
+        [packet({"content": "Hi"}, finish="stop", usage=usage())]])
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=1)):
+        list(AgentCompletion().stream(model=resolve_agent_model("claude-haiku-4-5"),
+                                      messages=[{"role": "user", "content": "Hi"}], api_key="test"))
+    assert "x-session-id" not in headers[0] and "session_id" not in requests[0]
 
 
 def test_native_search_stays_in_selected_model_request_with_real_citations(store, monkeypatch):

@@ -258,9 +258,10 @@ class PageFetch(AgentCompletion):
                      "error": str(item.get("error") or "")[:300]}
 
     def stream(self, *, model, messages, api_key, tools=None, native_searches=0, allow_tool_calls=False,
-               prompt_cache=True):
+               prompt_cache=True, session_id=None):
         # The same routing as AgentCompletion.stream: fastest endpoint without
         # prompt collection, the registry's (or a Google chat's) settings on top.
+        # A page read is a helper step: it never gets the chat's session_id.
         from app.core.openrouter_contract import provider_routing
         payload = {"model": model.model, "input": messages, "tools": list(tools or []), "stream": True,
                    "max_output_tokens": model.max_output_tokens,

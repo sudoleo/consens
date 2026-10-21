@@ -992,7 +992,8 @@ class DelegationLoop(AgentLoop):
                 self._check(cancellation)
                 provider_attempted = True
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
-                                      native_searches=searches, allow_tool_calls=allow_tools)
+                                      native_searches=searches, allow_tool_calls=allow_tools,
+                                      session_id=None if worker else self.provider_session)
                 try:
                     for event in source:
                         self._check(cancellation)

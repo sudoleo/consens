@@ -33,7 +33,7 @@ class Script:
         self.direct, self.depth = direct, depth
         self.compares, self.revise, self.missing = compares, revise, missing
         self.fail_coverage, self.fail_model = fail_coverage, fail_model
-        self.calls, self.prompts = [], []
+        self.calls, self.prompts, self.sessions = [], [], []
         self.loop = None
 
     def factory(self):
@@ -41,6 +41,7 @@ class Script:
         class Completion(AgentCompletion):
             def stream(self, *, model, messages, **kwargs):
                 script.calls.append((self.step_id, model.model))
+                script.sessions.append((self.step_id, kwargs.get("session_id")))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001,
                     "prompt_tokens_details": {"cached_tokens": 20}, "completion_tokens_details": {"reasoning_tokens": 10}}, model)
                 if self.step_id.startswith("completion:"):
@@ -132,6 +133,22 @@ def test_mock_runs_write_no_differences_stats(store, monkeypatch):
     monkeypatch.setattr(mock_llm, "mock_llm_enabled", lambda: True)
     list(make_loop(store, Script()).run())
     assert recorded == []
+
+
+def test_only_the_chat_models_steps_share_the_chats_provider_session(store):
+    """The chat model's steps re-send one growing prefix and stay on the
+    endpoint that caches it; comparison answers and judges share no prefix
+    and keep the fastest endpoint (openrouter_contract.provider_session_id)."""
+    script = Script(compares=2)
+    loop = make_loop(store, script)
+    list(loop.run())
+    own = {session for step, session in script.sessions if step.startswith("completion:")}
+    helpers = {session for step, session in script.sessions if step.startswith("agent:")}
+    assert own == {loop.provider_session} and loop.provider_session
+    assert helpers == {None}
+    # Comparisons and both judge kinds ran as helpers.
+    assert {model for step, model in script.calls if step.startswith("agent:")} >= {
+        "anthropic/claude-haiku-4.5", "openai/gpt-5.4-mini"}
 
 
 @pytest.mark.parametrize("compares", [1, 2])
