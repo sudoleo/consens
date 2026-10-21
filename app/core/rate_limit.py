@@ -55,9 +55,19 @@ class ApiUidRateLimitExceeded(Exception):
 class ApiUidRateLimiter:
     """Small in-process UID limiter applied after API-key authentication."""
 
+    # Above this many buckets a check sweeps out the empty ones, at most once
+    # per SWEEP_INTERVAL_SECONDS so a crowd of fresh buckets is no full scan
+    # on every call.
+    MAX_KEYS = 4096
+    SWEEP_INTERVAL_SECONDS = 5.0
+
     def __init__(self, *, enabled: bool = True):
         self._enabled = enabled
         self._events = defaultdict(deque)
+        # Each bucket's own window: a sweep must never shorten an hourly
+        # limit to the minute of whoever triggered it.
+        self._windows = {}
+        self._next_sweep = 0.0
         self._lock = threading.Lock()
 
     def reset(self):
@@ -66,6 +76,17 @@ class ApiUidRateLimiter:
         vorherigen mit und die Suite wird reihenfolgeabhaengig."""
         with self._lock:
             self._events.clear()
+            self._windows.clear()
+            self._next_sweep = 0.0
+
+    def _sweep(self, now: float) -> None:
+        for stored_key, stored_events in list(self._events.items()):
+            cutoff = now - self._windows.get(stored_key, 0)
+            while stored_events and stored_events[0] <= cutoff:
+                stored_events.popleft()
+            if not stored_events:
+                self._events.pop(stored_key, None)
+                self._windows.pop(stored_key, None)
 
     def check(self, uid: str, operation: str, limit: int, *, window_seconds: int = 60):
         if not self._enabled:
@@ -74,12 +95,10 @@ class ApiUidRateLimiter:
         key = (str(uid), str(operation))
         cutoff = now - window_seconds
         with self._lock:
-            if len(self._events) > 4096:
-                for stored_key, stored_events in list(self._events.items()):
-                    while stored_events and stored_events[0] <= cutoff:
-                        stored_events.popleft()
-                    if not stored_events:
-                        self._events.pop(stored_key, None)
+            if len(self._events) > self.MAX_KEYS and now >= self._next_sweep:
+                self._sweep(now)
+                self._next_sweep = now + self.SWEEP_INTERVAL_SECONDS
+            self._windows[key] = max(window_seconds, self._windows.get(key, 0))
             events = self._events[key]
             while events and events[0] <= cutoff:
                 events.popleft()
