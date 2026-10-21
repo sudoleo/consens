@@ -414,6 +414,8 @@
   // whole answer before, two to five times a run (Apple audit A6).
   function overText(body, raw, change) {
     const apply = () => {
+      // The marks are redrawn: a hover card of one of them goes with it.
+      App.claimPopover?.hidePreview?.(body);
       if (typeof raw === 'string' && !window.isPlainMarkdown?.(body, raw)) {
         if (window.morphMarkdown) window.morphMarkdown(body, raw); else window.injectMarkdown?.(body, raw, []);
       }

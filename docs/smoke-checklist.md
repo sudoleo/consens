@@ -1115,6 +1115,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Am Ende eines geprüften Laufs bleiben die Claim-Marken stehen (kein
   erneutes Einblenden); Reload eines Agent-Chats: Bookmarks und Eingabefeld
   springen nicht.
+- [ ] Desktop: Hover über einem roten Satz, dessen Quelle als Pille am
+  Satzende steht → die Hover-Karte steht am Satz, nicht oben links.
 - [ ] Handy, Antwortleser „Answers“: Modellauswahl schließt das Dropdown.
 - [ ] Folgefragen direkt im Composer; kein zusätzlicher „Follow up“-Button.
   Contradictions/Review, Answers und Sources haben dezente Icons, lesbare

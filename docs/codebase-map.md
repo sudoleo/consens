@@ -3038,7 +3038,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `BestModel:`-Zeile wird weiterhin separat als „Best answer“ dargestellt.
   Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
   die Quellenzahl selbst als Satzteil gewrappt und trug die Markierung
-  der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
+  der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Seit
+  2026-10-21 wickelt `wrapFlatRange` auch keinen Text in einem Link, dessen
+  Beschriftung seine eigene Adresse oder nur seine Domain ist
+  (`window.isBareSourceLink`, sources.js): `linkifyAgentSources` setzt nach dem
+  Markieren eine Quellen-Pille an seine Stelle und verwirft die Beschriftung,
+  ein Span darin fiel mit aus dem Dokument, und die Hover-Karte seines Satzes
+  stand oben links (bei Widersprüchen; ein Claim-Badge im Link hielt die
+  Beschriftung bisher zufällig davon ab, als Domain zu gelten). Der Linktext
+  zählt für die Ankersuche weiter mit; ein Satz, der nur aus einem solchen
+  Link besteht, gilt als nicht verankert. Ein Satz wird höchstens einmal dekoriert
   (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
   ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
   existiert nicht mehr.
@@ -3050,6 +3059,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (vertiefte Marke)
   ↔ `.claim-badge.is-linked-hover`. Wo ein Badge steht, ist es das
   fokussierbare Steuerelement und die Passage nur ein zusätzlicher Mausweg.
+  **Hover-Vorschau (`.insight-preview`, seit 2026-10-21 nachgeschärft):**
+  `placeHoverPreview` verankert nur an
+  Spans im Dokument mit Fläche (`getClientRects()`), ohne solche keine Karte.
+  Neu markieren
+  (`renderInlineMarkers`), `resetConsensusInsights` und `agent-review.js::overText`
+  nehmen eine Vorschau ihrer Marken mit (`App.claimPopover.hidePreview(root)`).
   Inline-Quoten haben auf Mausgeraeten nur ihre sichtbare Trefferflaeche;
   auf Touch erweitert `::after` nur die Hoehe auf 44 px. So ueberdeckt das
   Badge keine direkt folgende `.src-ref`-Quelle. Nur alleinstehende Badges
@@ -9001,7 +9016,7 @@ zählen nicht):
   verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
   (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
   stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open,
-  close}` (aus `consensus-insights.js`), `agentReview.contextFor`,
+  close, hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
   `syncThreadAskClamp`. Globale `.cx-claim`-Schleifen in `consensus-insights.js`
   schließen `.pc-claim` aus, sonst nähme die Highlights-Einstellung den Marken
   auf der Nachricht Rolle und Label.

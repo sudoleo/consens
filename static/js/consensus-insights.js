@@ -405,10 +405,21 @@
             sentenceBounds,
             locateAnchor
           } = window.App.consensusAnchor.create(stripMarkdown);
+          // A link that only shows its address or its site becomes a source
+          // pill after the marks are set (sources.js linkifyAgentSources), and
+          // its text goes. Its words still find the sentence, but they are not
+          // wrapped: a span inside left the page with them, and the hover card
+          // of its sentence opened in the top left corner.
+          function insideBareSourceLink(node) {
+            const link = node.parentElement?.closest("a[href]");
+            return Boolean(link) && Boolean(window.isBareSourceLink?.(link));
+          }
+
           function wrapFlatRange(slices, start, end, className) {
             const spans = [];
             slices.forEach(function (slice) {
               if (slice.end <= start || slice.start >= end) return;
+              if (insideBareSourceLink(slice.node)) return;
               let node = slice.node;
               const from = Math.max(start, slice.start) - slice.start;
               const to = Math.min(end, slice.end) - slice.start;
@@ -1259,6 +1270,9 @@
             const spans = wrapFlatRange(
               hit.slices, bounds.start, bounds.end, "cx-claim " + severityClass
             );
+            // Nothing left to wrap (the sentence is a bare source link): no
+            // mark, the claim goes to the list like any unanchored one.
+            if (!spans.length) return null;
             marked.push({
               start: bounds.start, end: bounds.end, spans: spans, severity: severityClass
             });
@@ -1379,6 +1393,22 @@
             }
           }
 
+          // Marks of `root` are redrawn or taken off: a preview of one of them
+          // (or of a mark already gone) goes too, any other stays.
+          function hidePreviewWithin(root) {
+            const hovered = hoverGroup?.spans[0];
+            if (hovered && (!root || !hovered.isConnected || root.contains(hovered))) hideHoverPreview();
+          }
+
+          // Was die Karte verankern kann: Spans, die im Dokument stehen und
+          // Flaeche haben. Ein abgehaengter Span misst ueberall 0 und setzte
+          // die Karte in die linke obere Ecke.
+          function placedSpans(group) {
+            return group.spans.filter(function (span) {
+              return span.isConnected && span.getClientRects().length > 0;
+            });
+          }
+
           function placeHoverPreview(card, spans) {
             const first = spans[0].getBoundingClientRect();
             const last = spans[spans.length - 1].getBoundingClientRect();
@@ -1399,6 +1429,8 @@
 
           function showHoverPreview(group) {
             if (!passageIsVisible(group)) return;
+            const spans = placedSpans(group);
+            if (!spans.length) return;
             const active = activeControl(group);
             const build = (active && active.preview) ? active
               : group.controls.find(function (c) { return c.preview && !c.suppressed; });
@@ -1407,14 +1439,14 @@
             card.innerHTML = "";
             card.appendChild(build.preview());
             card.hidden = false;
-            placeHoverPreview(card, group.spans);
+            placeHoverPreview(card, spans);
           }
 
           function scheduleHoverPreview(group) {
             window.clearTimeout(hoverTimer);
             hoverGroup = group;
             hoverTimer = window.setTimeout(function () {
-              if (group.hover && group.spans.some(span => span.isConnected)) showHoverPreview(group);
+              if (group.hover) showHoverPreview(group);
             }, HOVER_DELAY_MS);
           }
 
@@ -1614,6 +1646,9 @@
             // gehoert bereits dem naechsten Lauf.
             const focusDifference = options.focusDifference || focusDifferenceCard;
             if (!body || !fallbackBox) return;
+            // Neu markiert: eine offene Vorschau dieses Textes gehoert zu Spans,
+            // die es gleich nicht mehr gibt (oder schon nicht mehr gibt).
+            hidePreviewWithin(body);
 
             // Pro Blockelement eine eigene Liste bereits markierter Bereiche:
             // die flachen Offsets gelten nur innerhalb ihres Blocks.
@@ -2818,6 +2853,7 @@
           // --- Reset & Haupteinstieg -----------------------------------------
           function resetConsensusInsights() {
             closeClaimPopover();
+            hideHoverPreview();
             const verdict = $("consensusVerdict");
             if (verdict) {
               verdict.hidden = true;
@@ -2938,7 +2974,9 @@
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;
           // The same card for a checked sentence of the user's own message
-          // (passage-check.js), so both read and close alike.
+          // (passage-check.js), so both read and close alike. hidePreview:
+          // marks taken off outside this module (agent-review.js) take their
+          // preview along.
           window.App = window.App || {};
-          window.App.claimPopover = { open: openClaimPopover, close: closeClaimPopover };
+          window.App.claimPopover = { open: openClaimPopover, close: closeClaimPopover, hidePreview: hidePreviewWithin };
         })();
