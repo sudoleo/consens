@@ -9120,7 +9120,11 @@ zählen nicht):
   `padding: 4px; margin: -4px; background-clip: content-box`; die Adresse im
   Seitenmenü clippt ihren Text, ihre Fläche ist Padding mit Gegenmargin (die
   Tarifzeile darunter lässt Taps durch); Pillen/Picker mit eigenem
-  Ellipsis-Label setzen auf Touch `overflow: visible`; die Beispielfragen in
+  Ellipsis-Label setzen auf Touch `overflow: visible`; die Quellen-Pille im
+  Fließtext reicht 44 px in die Breite, aber nach oben und unten nur über
+  ihre eigene Zeile (`--src-ref-line`, per `@property` registriert, `1lh` des
+  umgebenden Textes, `source-pill.css`) – 44 px griffen in die Nachbarzeilen
+  über deren Wörter, Links und Pillen (Nachprüfung); die Beispielfragen in
   der seitwärts scrollenden Zeile holen sich 6 px Innenraum und geben ihn per
   Margin zurück (`--starters-room` misst deshalb die Margin-Box); Reasoning/
   Anhang stehen auf dem Handy 16 px auseinander. Wo zwei Flächen kollidieren,

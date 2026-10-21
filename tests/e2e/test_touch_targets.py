@@ -105,17 +105,34 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
             assert_tappable(page, selector)
         page.locator("#sidebarToggleInner").tap()
 
-        # An answer: the source pill is a 19px mark in the line; the quoted
-        # passage's cross is 22px.
+        # An answer: the source pill is a 19px mark in the line. It takes a
+        # finger 44 px across and its own line up and down, no further: a
+        # 44 px area reached over the words, links and pills of the lines
+        # above and below. The quoted passage's cross is 22px.
         _agent_answer_with_sources(page)
-        pill = assert_tappable(page, "#agentAnswerBody .src-ref")
-        assert pill["box"][1] < 24
+        pill = page.locator("#agentAnswerBody .src-ref").first
+        area = pill.evaluate(HIT_AREA)
+        line = pill.evaluate("el => parseFloat(getComputedStyle(el.parentElement).lineHeight)")
+        assert not area.get("covered"), area
+        assert area["box"][1] < 24
+        assert area["hit"][0] >= 43, area
+        assert line - 2 <= area["hit"][1] <= line + 1, (area, line)
         page.evaluate("() => App.quote.set('The race starts in Monaco and climbs La Turbie.')")
         page.wait_for_function("""() => !document.body.classList.contains('composer-animating')
           && !document.body.classList.contains('composer-gliding')
           && !document.querySelector('.input-section').getAnimations({subtree: true}).some(a => a.playState === 'running')""")
         assert_tappable(page, "#composerQuoteRemove", drawn=[22, 22])
         assert_tappable(page, "#sendButton")
+
+        # The activity sheet's close: a 34px square, 44px to the finger.
+        page.evaluate("""() => App.agentDelegation.demo({turnId: 'demo-1', running: false, agents: [
+          {id: 'demo-OpenAI', kind: 'comparison', title: 'OpenAI', status: 'completed', text: 'Send it.',
+           model: {label: 'OpenAI', model: ''}, usage: {input_tokens: 10, output_tokens: 5, complete: true}}]})""")
+        page.locator(".agent-sidebar-toggle").first.tap()
+        expect(page.locator("#agentSidebar")).to_be_visible()
+        page.wait_for_function("""() => !document.getElementById('agentSidebar')
+          .getAnimations({subtree: true}).some(a => a.playState === 'running')""")
+        assert_tappable(page, ".agent-sidebar-close", drawn=[34, 34])
     finally:
         context.close()
 

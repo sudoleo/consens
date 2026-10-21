@@ -199,12 +199,31 @@
   }
 }
 
-/* 44px to the finger (Apple-Audit F5): the pill stays a 19px mark in the
-   line and reaches over half a line above and below it. The label clips
-   its own text (ellipsis), so the pill itself may let the area out. */
+/* 44px to the finger (Apple-Audit F5) across, and up and down exactly the
+   pill's own line: the pill stays a 19px mark in the text. A 44 px area
+   reached some 9 px into the lines above and below, over their words,
+   links and pills - a tap on the lower half of a pill could open the one
+   under it. --src-ref-line is the line height of the text around the pill;
+   registered as a length, 1lh resolves on that text, not on the smaller
+   pill. Without it the area keeps to the pill. The label clips its own text
+   (ellipsis), so the pill itself may let the area out. */
+@property --src-ref-line {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+:has(> .src-ref) {
+  --src-ref-line: 1lh;
+}
+
 @media (pointer: coarse) {
   .src-ref { overflow: visible; }
-  .src-ref::after { content: ""; position: absolute; inset: var(--hit-slop); }
+  .src-ref::after {
+    content: "";
+    position: absolute;
+    inset: max(var(--hit-slop), min(0px, calc((100% - var(--src-ref-line)) / 2))) var(--hit-slop);
+  }
 }
 
 /* The domain is already in the sentence: favicon only (plus "+N"). */
