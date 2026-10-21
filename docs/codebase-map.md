@@ -945,11 +945,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     onExpire, duration, key})` → `{update, settle, cancel, dismiss,
     focusAction}`; eine Zeile über dem Composer (`--toast-lift`: Composer,
     Tastatur, Safe Area), immer nur eine, weitere warten (eine mit Aktion
-    verdrängt sofort, die vorige wird „expired“), `role=status`, Dauer nach
-    Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`) bleiben bis
-    zum Schließen, Hover/Fokus pausieren, asynchrone Aktionen zeigen ihren
-    Fortgang und melden über `update()`. Ist ein modaler Dialog offen, zieht
-    die Zeile in ihn (sonst läge sie inert darunter). `App.toast.current()`,
+    verdrängt sofort, die vorige wird „expired“; ein Fehler tritt dagegen
+    nur zurück und kommt danach wieder; Ersetzen — Aktion oder gleicher
+    `key` — schaltet die Warteschlange nicht weiter), `role=status`, Dauer
+    nach Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`,
+    allgemein `duration: Infinity`) bleiben bis zum Schließen, auch wenn
+    eine weitere Zeile kommt (die wartet), Hover/Fokus pausieren, asynchrone
+    Aktionen zeigen ihren Fortgang und melden über `update()`. Ist ein
+    modaler Dialog offen, zieht die Zeile in ihn (sonst läge sie inert
+    darunter); öffnet oder schließt einer, während sie steht, folgt sie ihm
+    (MutationObserver auf `open`). `App.toast.current()`,
     `App.toast.settleAll()`. Dünne Weiterleitungen: `App.showPopup(message,
     options)` (`app-core.js`, ~100 Aufrufer), `App.undoNotice.show({text,
     actionLabel, onAction, onExpire, duration})` (Chat löschen),
@@ -960,7 +965,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     duration})` / `.clear()` sagt Eingabefehler (zu lange Nachricht, zu viele
     Wörter, falsche/zu große/zu viele Dateien – eine Zeile pro Wurf) als
     `#composerInputNotice` unter `#agentComposerNotice`, faltet weich auf und
-    zu und verschwindet beim nächsten Tippen.
+    zu und verschwindet beim nächsten Tippen; ein neuer Hinweis während des
+    Zufaltens dreht die Faltung um, statt mit ihr zu verschwinden.
   - **Bestätigung (`confirm-dialog.js`):** `App.confirm({title, body,
     confirmLabel, cancelLabel, danger})` → `Promise<boolean>`; ein
     `#appConfirmDialog`, bei `danger` Fokus auf Cancel. Ersetzt jedes

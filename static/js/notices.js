@@ -187,8 +187,10 @@
       present(record);
     } else if (record.action) {
       // An Undo belongs to what the user just did: it shows now, and what
-      // was on screen gives way (an older Undo happens).
-      end(current, "replaced");
+      // was on screen gives way (an older Undo happens). An error steps
+      // back and comes again after it: it stays until it is closed (E3).
+      if (!Number.isFinite(current.duration) && !current.action && !current.busy) setAside(current);
+      else end(current, "replaced");
       present(record);
     } else {
       queue.push(record);
@@ -198,13 +200,32 @@
   }
 
   // The line on screen gives way to the queue once it has been seen,
-  // unless it holds an action the user might still take or is working.
+  // unless it holds an action the user might still take, is working, or
+  // stays until it is closed (an error: E3; it went after 1.6 s when another
+  // line came, review E3). What comes then waits behind it.
   function hurry(record) {
     if (!record || record.ended || record.action || record.busy || !queue.length) return;
+    if (!Number.isFinite(record.duration)) return;
     const seen = Date.now() - record.shownAt;
     const left = Math.max(0, MIN_VISIBLE_MS - seen);
     window.clearTimeout(record.timer);
     record.timer = window.setTimeout(() => end(record, "expired"), left);
+  }
+
+  // The line leaves the screen without ending: first in the queue again.
+  function setAside(record) {
+    window.clearTimeout(record.timer);
+    record.paused = false;
+    current = null;
+    const node = record.node;
+    record.node = null;
+    if (node) {
+      node.classList.remove("is-shown");
+      const remove = () => window.setTimeout(() => node.remove(), 0);
+      if (App.motion?.leave) App.motion.leave(node, remove);
+      else remove();
+    }
+    queue.unshift(record);
   }
 
   function present(record) {
@@ -295,6 +316,11 @@
       if (App.motion?.leave) App.motion.leave(node, remove);
       else remove();
     }
+    // A line replaced by another (an Undo, the same key) gives its place to
+    // that one, which the caller shows now; what waited keeps waiting. Moving
+    // the queue on here showed a waiting line under the new one, and nothing
+    // ever took it away again (review 7).
+    if (reason === "replaced") return;
     const next = queue.shift();
     if (next) present(next);
   }
@@ -341,24 +367,30 @@
   let noticeTimer = 0;
   let noticeFor = null;
   let noticeMotion = null;
+  let noticeClosing = false;
 
   // The line opens and closes its own height, softly: the composer and what
-  // sits under it are not pushed in one frame.
+  // sits under it are not pushed in one frame. A fold that turns around
+  // (a new notice while the old one folds away) goes on from where it is.
   function foldNotice(el, opening, done) {
+    const style = getComputedStyle(el);
+    const from = noticeMotion ? { height: style.height, opacity: Number(style.opacity), marginTop: style.marginTop, marginBottom: style.marginBottom } : null;
     noticeMotion?.cancel();
     noticeMotion = null;
-    if (!el.animate || App.motion?.reduced?.()) { done?.(); return; }
+    noticeClosing = !opening;
+    if (!el.animate || App.motion?.reduced?.()) { noticeClosing = false; done?.(); return; }
+    el.style.overflow = "hidden";
     const height = el.getBoundingClientRect().height;
     const closed = { height: "0px", opacity: 0, marginTop: "0px", marginBottom: "0px" };
-    const style = getComputedStyle(el);
-    const open = { height: `${height}px`, opacity: 1, marginTop: style.marginTop, marginBottom: style.marginBottom };
-    el.style.overflow = "hidden";
-    noticeMotion = el.animate(opening ? [closed, open] : [open, closed], {
+    const settled = getComputedStyle(el);
+    const open = { height: `${height}px`, opacity: 1, marginTop: settled.marginTop, marginBottom: settled.marginBottom };
+    noticeMotion = el.animate([from || (opening ? closed : open), opening ? open : closed], {
       duration: App.motion?.ms?.("state") ?? 200,
       easing: App.motion?.ease?.(opening ? "out" : "in") ?? "ease",
     });
     noticeMotion.onfinish = () => {
       noticeMotion = null;
+      noticeClosing = false;
       el.style.overflow = "";
       done?.();
     };
@@ -369,11 +401,14 @@
       const el = composerNoticeEl();
       if (!el) { toast({ message, tone }); return; }
       window.clearTimeout(noticeTimer);
-      const wasHidden = el.hidden;
+      // A notice still folding away is taken over by this one: its fold
+      // turns around instead of hiding the new words when it ends (review 6).
+      const wasHidden = el.hidden || noticeClosing;
       el.textContent = String(message || "");
       el.dataset.tone = tone;
       el.hidden = !message;
       if (wasHidden && message) foldNotice(el, true);
+      else if (!message && noticeClosing) { noticeMotion?.cancel(); noticeMotion = null; noticeClosing = false; }
       noticeFor = field || document.getElementById("questionInput");
       if (noticeFor) {
         const ids = new Set((noticeFor.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
@@ -422,10 +457,14 @@
     const target = topModalDialog() || document.body;
     if (region.parentElement !== target) target.append(region);
   }
-  document.addEventListener("close", event => {
-    if (host && event.target instanceof Element && event.target.contains(host)) {
-      window.setTimeout(() => { if (host && !host.closest("dialog[open]")) document.body.append(host); }, 0);
-    }
-  }, true);
+  // A dialog that opens or closes while a line is on screen takes it along:
+  // it never stays under the open dialog, and never inside a closed one
+  // while another is still open (review E3). The `open` attribute is the
+  // one signal every way of opening and closing a dialog sets.
+  if (typeof MutationObserver === "function") {
+    new MutationObserver(records => {
+      if (host?.isConnected && records.some(record => record.target.localName === "dialog")) adoptRegion();
+    }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["open"] });
+  }
   App.toast.__adoptRegion = adoptRegion;
 })();
