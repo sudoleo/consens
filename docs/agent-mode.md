@@ -286,6 +286,41 @@ statt 62 s mit V4.1 Flash, deshalb migriert V4 Flash seit 2026-10-15 auf V4.1
 Flash (`cfg.DEEPSEEK_MODEL_MIGRATIONS`). Die Zeiten des Messskripts (unten, Median
 231 s, Lücken um 300 s) lagen deutlich darüber; in Prod trat keine Lücke über
 60 s nach dem Vergleich auf.
+
+#### Wartezeit im Server (seit 2026-10-21)
+
+Befund 2026-10-21: Eine Packlisten-Frage brauchte 7:18 min. Laut OpenRouter
+(`/api/v1/generation`: `created_at`, `latency`, `generation_time`) waren alle
+Modelle in Sekunden fertig, auch die zwölf als abgebrochen gebuchten
+Luna-Prüfungen (6–10 s). Die Zeit verlor unser Server: Jede Statusmeldung jedes
+Aufrufs (wartet, arbeitet, die Live-Zeile alle 3 s, fertig, Ergebnis) war eine
+eigene Firestore-Transaktion mit sechs einzeln gelesenen Dokumenten, alle
+Transaktionen eines Kontos laufen hintereinander, und die schreibende Stelle
+hielt dabei die Condition des Laufs, die jeder Stream bei jedem Ereignis
+brauchte. Sechs Vergleichsmodelle, zwei Differences-Pässe, Coverage-Fenster und
+ihre Hedges erzeugten mehr Meldungen, als die Datenbank abarbeiten konnte: Die
+Entscheidung zum Vergleich fiel bei 0:16, die sechs Anfragen gingen zwischen 0:51
+und 1:33 raus, fertige Prüfer-Antworten lagen ungelesen bis zu ihrer
+90-s-Grenze. Jede Tempo-Maßnahme mit mehr parallelen Aufrufen (zweiter Pass,
+Fenster, Hedges) verlängerte die Schlange. Im normalen Lauf (seit 10-18
+Median ~88 s) kostete das 15–20 s, je Aufruf 2–5 s vor der Anfrage.
+
+Seitdem (Details codebase-map „Wartezeit im Server“): Statusmeldungen schreibt
+ein Journal je Lauf (`agent_journal.py`) im Hintergrund, Live-Zeilen gebündelt;
+nur eine neue Sitzung vor ihrem Claim wartet auf ihren Eintrag, und sie geht vor.
+Jede Transaktion liest ihre Dokumente in einem Rundgang (`get_all`). Streams
+und die SSE-Weitergabe brauchen die Lauf-Condition nicht mehr. Review-Speicherungen
+schreiben außerhalb des Vergleichs-Locks, ein überholter Stand entfällt. Hängt
+ein Prüfer trotzdem, fragt `_hedged_judge_call` nach 15 s dasselbe Modell noch
+einmal und nach 30 s die nächste Familie (Chat: Gemini); die erste Antwort
+gewinnt, statt 90 s bis zum Familienwechsel.
+
+`tests/test_agent_tempo.py` spielt einen Lauf mit sechs Modellen gegen eine
+Datenbank mit Latenz je Rundgang und einem Konto-Lock; er schlägt an, sobald ein
+Stream auf die Datenbank wartet, die letzte Anfrage spät rausgeht oder der
+Server zu viel Zeit addiert (gemessen 2026-10-21 auf Windows: vorher 9,2 s auf
+1,6 s Modellzeit, nachher 2,3 s). Zeiten immer gegen OpenRouters eigene Zeiten
+legen, bevor ein Modell oder Anbieter als langsam gilt.
 Mit `balanced` wartet sie seit 2026-10-06 bei `full` auf
 jedes Modell: Das sorgfältigste Modell recherchiert oft am längsten und darf
 nicht wegfallen; wer schneller will, wählt `fast`. Bei `quick` gilt das Quorum

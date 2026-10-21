@@ -73,6 +73,21 @@ def _serialized_size(value):
     import json
     return len(json.dumps(value, default=str, ensure_ascii=False).encode("utf-8"))
 class AgentSessionStore:
+    @staticmethod
+    def _read_all(tx, refs):
+        """``refs`` read in one round trip of transaction ``tx`` (Firestore's
+        get_all), in their order; a missing document is a snapshot that does
+        not exist. Until 2026-10-21 each read was its own round trip: a claim
+        read nine documents one after another while every other call of the
+        account waited for the account lock (agent_journal)."""
+        get_all = getattr(tx, "get_all", None)
+        if get_all is None:
+            return [ref.get(transaction=tx) for ref in refs]
+        # The root receipt of a first step is that step's receipt: asked once.
+        unique = list({ref.path: ref for ref in refs}.values())
+        found = {snapshot.reference.path: snapshot for snapshot in get_all(unique)}
+        return [found[ref.path] for ref in refs]
+
     def _agent_transaction(self, uid, operation):
         # Shared with the pipeline's usage transactions: both write the same
         # token-account document.
@@ -95,11 +110,16 @@ class AgentSessionStore:
         budget_config = agent_budget_config.get_config(self.db)
         token_limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
 
+        day = agent_quota.period_key(budget_config)
+        daily_ref = agent_quota.quota_ref(self.db, uid, day)
+        agent_refs = [self.agent_ref(uid, chat_id, turn_id, agent_id)] if agent_id != "orchestrator" else []
+
         def operation(tx):
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
-            receipt, root, chat, turn, user, active = (ref.get(transaction=tx) for ref in
-                (receipt_ref, root_ref, chat_ref, turn_ref, user_ref, active_ref))
-            agent = self.agent_ref(uid, chat_id, turn_id, agent_id).get(transaction=tx) if agent_id != "orchestrator" else None
+            tombstone, receipt, root, chat, turn, user, active, daily_snapshot, *agent = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), receipt_ref, root_ref, chat_ref, turn_ref, user_ref,
+                active_ref, daily_ref, *agent_refs))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            agent = agent[0] if agent else None
             if receipt.exists:
                 return False
             now = datetime.now(timezone.utc)
@@ -144,9 +164,7 @@ class AgentSessionStore:
             if agent is not None and (not agent.exists or (agent.to_dict() or {}).get("status") in {"stopped", "failed"}):
                 raise TurnStatusConflict("Worker session is not runnable")
             tokens, cost = reservation
-            day = agent_quota.period_key(budget_config)
-            daily_ref = agent_quota.quota_ref(self.db, uid, day)
-            daily = daily_ref.get(transaction=tx).to_dict() or {}
+            daily = daily_snapshot.to_dict() or {}
             # Review/synthesis can spend this run's protected budget; workers
             # and comparisons cannot consume it.
             protected = data.get("review_hold", 0)
@@ -205,14 +223,14 @@ class AgentSessionStore:
         ref = self.receipt_ref(uid, chat_id, turn_id)
         budget_config = agent_budget_config.get_config(self.db)
         token_limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
+        day = agent_quota.period_key(budget_config)
+        daily_ref = agent_quota.quota_ref(self.db, uid, day)
         def operation(tx):
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
-            root = ref.get(transaction=tx).to_dict() or {}
+            tombstone, root, daily = self._read_all(tx, (persistence_guard.deletion_ref(self.db, uid), ref, daily_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            root, daily = root.to_dict() or {}, daily.to_dict() or {}
             if root.get("run_token") != run_token or root.get("run_status") != "running":
                 raise TurnStatusConflict("Agent run is closed")
-            day = agent_quota.period_key(budget_config)
-            daily_ref = agent_quota.quota_ref(self.db, uid, day)
-            daily = daily_ref.get(transaction=tx).to_dict() or {}
             protected = root.get("review_hold", 0)
             previous_ref = None
             if root["quota_day"] != day:
@@ -237,8 +255,9 @@ class AgentSessionStore:
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
         def operation(tx):
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
-            root, turn, chat = (r.get(transaction=tx).to_dict() or {} for r in (root_ref, turn_ref, chat_ref))
+            tombstone, *snapshots = self._read_all(tx, (persistence_guard.deletion_ref(self.db, uid), root_ref, turn_ref, chat_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            root, turn, chat = (snapshot.to_dict() or {} for snapshot in snapshots)
             if (root.get("run_token") != run_token or root.get("run_status") != "running"
                     or chat.get("status") != "active" or turn.get("status") != "pending"):
                 raise TurnStatusConflict("Agent review is closed")
@@ -264,8 +283,9 @@ class AgentSessionStore:
         event_id = event_id or uuid4().hex
         event_ref = turn_ref.collection("agent_events").document(event_id)
         def operation(tx):
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
-            root, agent, event, chat, turn = (ref.get(transaction=tx) for ref in (root_ref, agent_ref, event_ref, chat_ref, turn_ref))
+            tombstone, root, agent, event, chat, turn = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), root_ref, agent_ref, event_ref, chat_ref, turn_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
             data = root.to_dict() or {}
             if not chat.exists or not turn.exists or (chat.to_dict() or {}).get("status") != "active":
                 raise ChatNotFound("Chat not found")

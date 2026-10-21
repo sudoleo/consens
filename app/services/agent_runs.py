@@ -268,19 +268,19 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
         user_ref = self.db.collection("users").document(uid)
         active_ref = self.active_ref(uid)
+        root_ref = self.receipt_ref(uid, chat_id, turn_id)
 
         def operation(tx):
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
-            receipt = receipt_ref.get(transaction=tx)
-            user = user_ref.get(transaction=tx)
-            chat, turn = chat_ref.get(transaction=tx), turn_ref.get(transaction=tx)
-            active = active_ref.get(transaction=tx)
+            # One round trip for all of them (_read_all); the quota day is on the receipt.
+            tombstone, receipt, user, chat, turn, active, root = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), receipt_ref, user_ref, chat_ref, turn_ref, active_ref,
+                root_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
             if not receipt.exists or not user.exists:
                 raise ChatNotFound("Agent receipt not found")
             if (receipt.to_dict() or {}).get("status") != "running":
                 return False
-            root_ref = self.receipt_ref(uid, chat_id, turn_id)
-            root_data = (receipt if step == "completion:0" else root_ref.get(transaction=tx)).to_dict() or {}
+            root_data = (receipt if step == "completion:0" else root).to_dict() or {}
             receipt_data = receipt.to_dict() or {}
             daily_ref = (agent_quota.quota_ref(self.db, uid, receipt_data["quota_day"])
                          if receipt_data.get("quota_day") else None)

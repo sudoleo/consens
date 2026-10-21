@@ -578,6 +578,9 @@ class ComparisonTools:
         self.judge_calls = 0
         # Reentrant: straggler answers checkpoint while holding it.
         self.lock = threading.RLock()
+        # Review saves (checkpoint): one at a time, newest snapshot wins.
+        self._save_lock = threading.Lock()
+        self._snapshots = self._saved = 0
         # Comparison answers run all at once; judges have their own slots.
         # The loop's slots stay with delegated workers.
         self.judge_slots = threading.BoundedSemaphore(JUDGE_PARALLEL)
@@ -768,10 +771,28 @@ class ComparisonTools:
                models_compared=result["models_compared"], sentences=result["sentences"], judges=result["judges"])
 
     def checkpoint(self, status=None):
+        """Saves the review as it is now, and returns once it (or a newer
+        one) is saved. The snapshot is taken under ``self.lock``, the database
+        write only holds it when the caller does: a write no longer stops the
+        other answers and the judges from using the comparison. A snapshot
+        that a newer one has overtaken is not written any more; the newer one
+        holds everything it held (six answers arriving together used to be six
+        writes in a row)."""
         with self.lock:
-            self._checkpoint(status)
+            data = self._checkpoint(status)
+            text = self.text
+            self._snapshots += 1
+            number = self._snapshots
+        with self._save_lock:
+            if number <= self._saved:
+                return
+            self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id, self.loop.run_token,
+                                        data, text)
+            self._saved = number
+            self.loop.outgoing.put_nowait({"type": "review", "review": data})
 
     def _checkpoint(self, status=None):
+        """The review to save, within its storage budget."""
         encoded = json.dumps(self.snapshot(status), ensure_ascii=False)
         data = json.loads(encoded)
         if len(encoded.encode("utf-8")) > 600_000:
@@ -799,8 +820,7 @@ class ComparisonTools:
                 encoded = json.dumps(data, ensure_ascii=False)
             if len(encoded.encode("utf-8")) > 600_000:
                 raise ValueError("Comparison review storage budget reached")
-        self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id, self.loop.run_token, data, self.text)
-        self.loop.outgoing.put_nowait({"type": "review", "review": data})
+        return data
 
     def answer_progress(self, text):
         """The answer as far as the user sees it while it streams: settled
@@ -912,9 +932,11 @@ class ComparisonTools:
                 raise ModelOutputLimit() if value.finish_reason in {"length", "max_tokens"} and not value.tool_calls \
                     else ValueError("Model response did not complete")
             value.truncated = truncated
+            # Both go to the journal as one write; the answer is used at once.
             loop._state(worker, "completed", sources=value.sources, finish_reason=value.finish_reason)
             loop._publish(worker, text=value.text[:loop.policy.result_chars], kind="result", sender=worker.id,
-                          recipient="orchestrator", patch={"result_truncated": len(value.text) > loop.policy.result_chars})
+                          recipient="orchestrator", patch={"result_truncated": len(value.text) > loop.policy.result_chars},
+                          wait=False)
             return value
         except BaseException as exc:
             from app.services.agent_provider_limits import agent_failure
@@ -926,7 +948,7 @@ class ComparisonTools:
                 try:
                     limit = loop.policy.result_chars
                     loop._publish(worker, text=text[:limit], kind="partial", sender=worker.id, recipient="orchestrator",
-                                  patch={"partial": True, "result_truncated": len(text) > limit})
+                                  patch={"partial": True, "result_truncated": len(text) > limit}, wait=False)
                 except Exception:
                     logging.warning("Agent comparison could not publish a partial answer")
             if getattr(cancellation, "cutoff", False):
@@ -1065,7 +1087,7 @@ class ComparisonTools:
                     self._raw[cid][provider] = {"text": text, "sources": sources,
                                                 **({"truncated": True} if getattr(value, "truncated", False) else {})}
                     self._rebuild(comparison)
-                    self.checkpoint()
+                self.checkpoint()
                 outcome = "success"
             except BaseException as exc:
                 from app.services.agent_provider_limits import agent_failure

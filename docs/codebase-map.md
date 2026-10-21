@@ -3608,6 +3608,38 @@ Kurze Agent-Transaktionen teilen innerhalb eines Prozesses einen kontogebundenen
 Lock-Pool, damit parallele Claims, Statusmeldungen und Abrechnungen nicht um
 dieselben Root-/Kontingentdokumente konkurrieren. Firestore bleibt die atomare
 Absicherung zwischen Prozessen; Modellaufrufe laufen weiterhin parallel.
+**Wartezeit im Server (seit 2026-10-21).** Weil alle Transaktionen eines Kontos
+hintereinander laufen, darf keine davon zwischen einem Modell-Stream und dem
+Server stehen, und jede liest ihre Dokumente in einem Rundgang:
+- `AgentSessionStore._read_all` liest per `Transaction.get_all` alle Dokumente
+  einer Transaktion auf einmal (Claim, Settlement, `publish_agent`,
+  `save_review`, `protect_review`; der Löschungs-Tombstone kommt über
+  `persistence_guard.deletion_ref` und `ensure_account_write_allowed(snapshot=)`
+  mit). Vorher war jeder Lesezugriff ein eigener Rundgang, ein Claim las neun
+  Dokumente nacheinander.
+- Sitzungs-Updates (`publish_agent`) schreibt das Journal des Laufs
+  (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf):
+  `DelegationLoop._publish(wait=False)` übergibt und arbeitet weiter, das
+  Journal schreibt je Sitzung in Reihenfolge. Wartende Aufrufer (neue Sitzung
+  vor ihrem Claim, Nachrichten eines delegierten Workers fürs Postfach) gehen
+  vor, mit allem, was ihre Sitzung vorher übergab. Noch ungeschriebene Updates
+  einer Sitzung werden ein Schreibvorgang (`completed` + Ergebnis). Live-Zeilen
+  (`progress=True`) ersetzen eine wartende Zeile und gehen lauf-weit höchstens
+  alle `THINKING_UPDATE_SECONDS / 2` hinaus; eine Zeile hinter einem Status
+  reist mit ihm. `_journal_write` versucht einen kurzen Datenbankausfall einmal
+  mit derselben Event-ID, `_journal_failed` beendet den Lauf nur, wenn er nicht
+  mehr schreiben darf (Stopp, Chat/Konto gelöscht). `run()` schließt das Journal
+  nach `comparison.close()` und vor dem Settlement-Nachlauf und `finish_run`.
+- `_stream_progress` und `_events` nutzen `DelegationLoop.live_lock` statt der
+  Lauf-Condition: Kein Stream wartet mehr, während ein anderer Aufruf schreibt.
+  Das Journal legt sein Event vor der neuen `session_seq` in `outgoing`.
+- `ComparisonTools.checkpoint` nimmt den Schnappschuss unter `self.lock`,
+  schreibt aber außerhalb davon (`_save_lock`, nummeriert); ein überholter
+  Schnappschuss wird nicht mehr geschrieben. Eintreffende Vergleichsantworten
+  speichern nach dem Lock.
+Belegt mit `tests/test_agent_tempo.py` (sechs Modelle, Datenbank mit Latenz je
+Rundgang, ein Konto-Lock) und `tests/test_agent_journal.py`. Prod-Befund und
+Zahlen: [agent-mode.md](agent-mode.md) „Wartezeit im Server“.
 DelegationLoop wiederholt bei temporären Datenbankfehlern ausschließlich die
 idempotente Abrechnung mit den ursprünglichen Messwerten, auch bei unklarem
 Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut
@@ -4751,6 +4783,15 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Duplikat startet nur, wenn das Budget danach noch einen Call für den
   Fallback-Judge übrig hat (`_spare_judge_call`). Ein Hänger kostet so rund
   15 s plus eine normale Judge-Dauer statt 90 s bis zum Familienwechsel.
+  Seit 2026-10-21 bekommt `_hedged_judge_call(call, fallback=, won=)` nach
+  `JUDGE_FALLBACK_SECONDS` (30 s) zusätzlich denselben Check auf der nächsten
+  Familie des Plans (`_next_family`: Coverage-Fenster und `run_pass`, Chat:
+  Gemini); die erste Antwort gewinnt, `won["fallback"]` lässt Repair und
+  `_judge_metadata` den Judge nennen, der wirklich geantwortet hat. Der zweite
+  Differences-Pass hat keine andere Familie im Plan, der Fallback läuft also nie
+  doppelt; Coverage-Repair hedgt nur dasselbe Modell. Jede weitere Anfrage läuft
+  in einer eigenen Kopie des Aufrufer-Kontexts (ein `Context` darf nur in einem
+  Thread zugleich laufen).
   Gegen eine durchweg langsame Spur hilft der Hedge nicht (Chat-Review
   2026-10-19: jeder Luna-Call 20–24 s auf OpenAIs Standard-Spur, 8 Duplikate,
   keins gewann). Deshalb fragen die Agent-Judges (`judge_transport`) per
@@ -6482,6 +6523,7 @@ app/services/
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
+  agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates (publish_agent) je Sitzung in Reihenfolge, wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache

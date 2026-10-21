@@ -92,7 +92,8 @@ TURN_REPEAT_LIMIT = ("The model repeated the same tool request without progress.
                      "The available results have been saved; send a follow-up message to continue.")
 TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress. "
                       "The available results have been saved.")
-# Pause before the one retry of a worker's end record (_terminal).
+# Pause before the one retry of a session update after a short database
+# outage (_journal_write; a worker's end record, audit A12).
 TERMINAL_RETRY_SECONDS = .5
 
 
@@ -226,6 +227,12 @@ class DelegationLoop(AgentLoop):
         self.slots = threading.BoundedSemaphore(self.policy.max_parallel)
         self.outgoing = queue.Queue(maxsize=1024)
         self.live_progress = {}
+        # The live stream counters and the journal's saved events, never the
+        # run's condition: no stream waits for a database write (agent_journal).
+        self.live_lock = threading.Lock()
+        from app.services.agent_journal import AgentJournal
+        self.journal = AgentJournal(self._journal_write, failed=self._journal_failed,
+                                    progress_gap=THINKING_UPDATE_SECONDS / 2)
         self.unsettled = {}
         self.mailbox = deque()
         self.tools_used = 0
@@ -457,21 +464,25 @@ class DelegationLoop(AgentLoop):
             return None
         return "refuse" if seen == limit + 1 else "stop"
 
-    def _publish(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None):
-        with self.condition:
-            return self._publish_locked(worker, patch=patch, text=text, kind=kind, sender=sender, recipient=recipient)
+    def _publish(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None,
+                 wait=True, progress=False):
+        """Save a session update through the run's journal (agent_journal).
 
-    def _publish_locked(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None):
+        ``wait=False``: hand it over and go on; the journal saves it in this
+        session's order and sends its event then. A caller that needs the
+        saved event (a new session before its receipt, a worker's message for
+        the orchestrator's mailbox) waits. ``progress``: a live reasoning
+        line, replaced by a newer one while it waits."""
         patch = dict(patch or {})
         if worker.state not in {"completed", "failed", "stopped"}:
             patch.setdefault("duration_ms", max(0, int((time.monotonic() - worker.started) * 1000)))
         message = {"text": text, "kind": kind, "sender": sender, "recipient": recipient or worker.id} if text is not None else None
         if message and patch:
             message.update({key: patch[key] for key in ("sources", "result_truncated", "finish_reason") if key in patch})
-        event = self.store.publish_agent(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
-            agent_id=worker.id, patch=patch, message=message)
-        worker.session_seq = event["agent"]["seq"]
-        self.outgoing.put_nowait(event)
+        if not wait:
+            self.journal.submit(worker, patch, message, wait=False, progress=progress)
+            return None
+        event = self.journal.submit(worker, patch, message, wait=True)
         if sender == worker.id and message and getattr(worker, "kind", "worker") == "worker":
             with self.condition:
                 if kind == "result":
@@ -480,6 +491,42 @@ class DelegationLoop(AgentLoop):
                 self.mailbox.append({**message, "agent_id": worker.id, "message_id": event["id"], "seq": event["seq"]})
                 self.condition.notify_all()
         return event
+
+    def _journal_write(self, job):
+        """Saves one journal job (on the journal's thread, under no run lock).
+        A short database outage gets one retry with the same event id, so an
+        ambiguous first commit is not saved twice."""
+        worker = job.worker
+        if job.progress and worker.state in {"completed", "failed", "stopped"}:
+            # The call has ended since: its end record carries what counts.
+            return None
+        for attempt in range(2):
+            try:
+                event = self.store.publish_agent(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
+                    agent_id=worker.id, patch=job.patch, message=job.message, event_id=job.key)
+                break
+            except Exception as exc:
+                if attempt or not _transient_store_error(exc):
+                    raise
+                time.sleep(TERMINAL_RETRY_SECONDS)
+        with self.live_lock:
+            # Queued before the session's sequence moves on: a live counter
+            # never names a session event the page has not received yet.
+            self.outgoing.put_nowait(event)
+            worker.session_seq = event["agent"]["seq"]
+        return event
+
+    def _journal_failed(self, job, exc):
+        """A session update nobody waited for could not be saved. Only that
+        record is missing, unless the run itself can no longer write (stopped
+        elsewhere, chat or account deleted): then the run ends, as when a
+        worker's end record could not be saved (_terminal)."""
+        from app.services.chat_store import ChatNotFound, TurnStatusConflict
+        from app.services.persistence_guard import AccountDeletionInProgress
+        logging.warning("Agent session update not saved category=%s status=%s",
+                        safe_exception(exc), job.patch.get("status") or ("line" if job.progress else "-"))
+        if isinstance(exc, (ProviderCancelled, ChatNotFound, TurnStatusConflict, AccountDeletionInProgress)):
+            self.cancellation.cancel()
 
     def _stream_progress(self, worker, progress, usage, *, streaming=True, force=False):
         # Cumulative provider snapshots replace the current step's measurement;
@@ -491,7 +538,7 @@ class DelegationLoop(AgentLoop):
         worker.stream_chars = progress.chars
         if snapshot is None:
             return
-        with self.condition:
+        with self.live_lock:
             worker.progress_seq += 1
             # Keep only the latest visual snapshot per session. A slow reader
             # must never fill the durable-event queue with disposable counters.
@@ -501,12 +548,14 @@ class DelegationLoop(AgentLoop):
                 "duration_ms": max(0, int((time.monotonic() - worker.started) * 1000)), **snapshot}
 
     def _state(self, worker, status, **patch):
+        """The worker's new state, at once in memory; the journal saves it in
+        order (the caller does not wait for the database)."""
         with self.condition:
             worker.state = status
             if status in {"completed", "failed", "stopped"}:
                 patch.setdefault("ended_at", datetime.now(timezone.utc).isoformat())
             self._publish(worker, patch={"status": status, "duration_ms": int((time.monotonic() - worker.started) * 1000),
-                                        "usage": aggregate_usage(worker.usages), **patch})
+                                        "usage": aggregate_usage(worker.usages), **patch}, wait=False)
             self.condition.notify_all()
 
     def _worker(self, agent_id):
@@ -1000,7 +1049,10 @@ class DelegationLoop(AgentLoop):
                         if worker and event.get("type") == "activity":
                             compact = worker_progress.update(event)
                             if compact:
-                                self._publish(worker, patch={"progress_text": compact["text"], "progress_kind": compact["summary_source"]})
+                                # Handed to the journal: the stream is read on
+                                # at once (agent_journal).
+                                self._publish(worker, patch={"progress_text": compact["text"], "progress_kind": compact["summary_source"]},
+                                              wait=False, progress=True)
                         if worker:
                             stream_progress.update(event)
                             self._stream_progress(worker, stream_progress, value.usage)
@@ -1195,32 +1247,29 @@ class DelegationLoop(AgentLoop):
     def _terminal(self, worker, state, text, failure=None):
         """Save how a worker (a comparison answer, a page read) ended.
 
-        A short database outage retries once and otherwise leaves only this
-        record unsaved: one model's failure used to stop the whole turn when
-        writing it hit a transient error (audit A12)."""
-        for attempt in range(2):
-            try:
-                with self.condition:
-                    self._state(worker, state, ended_at=datetime.now(timezone.utc).isoformat(), failure=failure)
-                    self._publish(worker, text=text[:self.policy.message_chars], kind="failure", sender=worker.id, recipient="orchestrator")
+        A short database outage retries once (_journal_write) and otherwise
+        leaves only this record unsaved: one model's failure used to stop the
+        whole turn when writing it hit a transient error (audit A12). Only a
+        delegated worker's end waits for the database: it is a message for
+        the orchestrator's mailbox."""
+        mailbox = getattr(worker, "kind", "worker") == "worker"
+        try:
+            with self.condition:
+                self._state(worker, state, ended_at=datetime.now(timezone.utc).isoformat(), failure=failure)
+                self._publish(worker, text=text[:self.policy.message_chars], kind="failure", sender=worker.id,
+                              recipient="orchestrator", wait=mailbox)
+        except Exception as exc:
+            with self.condition:
+                worker.state = state
+                self.condition.notify_all()
+            if _transient_store_error(exc):
+                logging.warning("Agent worker end not saved category=%s state=%s", safe_exception(exc), state)
                 return
-            except Exception as exc:
-                transient = _transient_store_error(exc)
-                if transient and not attempt:
-                    time.sleep(TERMINAL_RETRY_SECONDS)
-                    continue
-                with self.condition:
-                    worker.state = state
-                    self.condition.notify_all()
-                if transient:
-                    logging.warning("Agent worker end not saved category=%s state=%s", safe_exception(exc), state)
-                    return
-                # Deletion/tombstones prohibit recreating a session. Cancellation still completes.
-                self.cancellation.cancel()
-                return
+            # Deletion/tombstones prohibit recreating a session. Cancellation still completes.
+            self.cancellation.cancel()
 
     def _events(self):
-        with self.condition:
+        with self.live_lock:
             events = []
             while True:
                 try:
@@ -1843,6 +1892,9 @@ class DelegationLoop(AgentLoop):
             watcher.join()
             if self.comparison:
                 self.comparison.close()
+            # Every session update is saved before the run closes: a later
+            # one would find the run finished.
+            self.journal.close()
             # Provider threads are joined; retain and retry their original
             # measurements before finalizing. Never rerun a paid model step.
             for step, (value, step_status) in list(self.unsettled.items()):

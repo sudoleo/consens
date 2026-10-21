@@ -82,7 +82,11 @@ jeden Schreibvorgang. Die Chat-Lease dauert 120 Sekunden und wird etwa alle
 30 Sekunden atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre
 DB-Ausfälle verursachen keinen sofortigen Stopp. Nach Prozessverlust werden offene Belege beim Lesen nach Lease-Ablauf
 als abgebrochen/unbekannt abgeschlossen; bereits bezahlte Schritte werden nie
-neu gestartet. Reload lädt gespeicherte Sitzungen. Ein verlorener HTTP-Stream
+neu gestartet. Sitzungsstände (Status, Live-Zeile, Ergebnis) schreibt seit
+2026-10-21 das Journal des Laufs im Hintergrund (`agent_journal.py`, je Sitzung
+in Reihenfolge); nur eine neue Sitzung vor ihrem Claim und Nachrichten fürs
+Postfach des Orchestrators warten darauf. Beim Laufende ist alles geschrieben.
+Reload lädt gespeicherte Sitzungen. Ein verlorener HTTP-Stream
 wird aus Sicherheitsgründen abgebrochen, nicht als Hintergrundjob fortgesetzt.
 Chat- und Kontolöschung entfernen auch Sitzungen/Nachrichten; entstandene Account-
 Kosten bleiben bei Chatlöschung bestehen. Verspätete Resultate können gelöschte

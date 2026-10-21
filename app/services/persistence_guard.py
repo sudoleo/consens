@@ -132,23 +132,29 @@ def _run_transaction(db, operation):
     return run(transaction)
 
 
+def deletion_ref(db, uid: str):
+    """The account's deletion tombstone, for a transaction that reads it
+    together with its own documents (ensure_account_write_allowed)."""
+    return db.collection(ACCOUNT_DELETION_JOBS_COLLECTION).document(str(uid or "").strip())
+
+
 def ensure_account_write_allowed(
-    *, uid: str, db, transaction=None, now: datetime | None = None
+    *, uid: str, db, transaction=None, now: datetime | None = None, snapshot=None
 ) -> None:
     """Fence a user-owned write against the durable deletion tombstone.
 
     The tombstone read must share the Firestore transaction used for the
     mutation. If the write commits first, the later deletion sweep observes
     it; if deletion commits first, Firestore retries this transaction against
-    the tombstone and the mutation is rejected.
+    the tombstone and the mutation is rejected. ``snapshot``: the tombstone
+    (deletion_ref) as this transaction already read it, in one batch with
+    its other documents.
     """
     uid = str(uid or "").strip()
     if not uid:
         raise ValueError("uid must not be empty")
-    snapshot = _get(
-        db.collection(ACCOUNT_DELETION_JOBS_COLLECTION).document(uid),
-        transaction,
-    )
+    if snapshot is None:
+        snapshot = _get(deletion_ref(db, uid), transaction)
     if not snapshot.exists:
         return
     deletion = snapshot.to_dict() or {}
