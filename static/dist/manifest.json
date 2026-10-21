@@ -313,21 +313,17 @@
     }
   },
   "previous_assets": [
-    "app.41b09f8fb551.css",
-    "app.743651f01d25.css",
-    "app.63d66fc0933e.js",
-    "app.6a8db5ad5986.js",
-    "auth.e148c0e3b0c7.js",
+    "app.c3ab78d0a724.css",
+    "app.8a781a339d11.css",
+    "app.06a65bcaa6a4.js",
+    "app.4cc60c64c33e.js",
     "auth.5c8ab3c866cb.js",
-    "demo.1bcf3ec5aeb7.js",
+    "auth.5e487d1e2570.js",
     "demo.1a3421e3e4d2.js",
-    "firebase.5169f411ba0a.js",
-    "firebase.95597ab5aac3.js",
-    "head.058d2935d841.js",
-    "head.f126878e224c.js",
-    "landing.040dce50f343.css",
-    "landing.ac9d31c6eea6.css",
-    "public.6d35c0042f82.css",
-    "public.8b35048d50c7.css"
+    "demo.9cb7e261a771.js",
+    "firebase.02d5cd4749ea.js",
+    "firebase.7bbd8d7ca369.js",
+    "head.9076e14a6904.js",
+    "head.b8a4fe4a421c.js"
   ]
 }
