@@ -1800,6 +1800,8 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             else:
                 raise asyncio.CancelledError
 
+        # The next due time is the store's answer; a real read here waited out
+        # Firestore retries against the unreachable test host (280 s).
         with (
             patch.object(watch_scheduler, "run_watch_tick", side_effect=tick),
             patch.object(watch_scheduler, "run_brief_tick", new_callable=AsyncMock, return_value=0),
@@ -1807,10 +1809,16 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
                 watch_scheduler, "run_notification_outbox_tick",
                 new_callable=AsyncMock, return_value={},
             ),
+            patch.object(watch_service, "earliest_next_run_at", return_value=None),
+            patch.object(
+                watch_scheduler, "next_tick_seconds", wraps=watch_scheduler.next_tick_seconds,
+            ) as next_tick,
         ):
             with self.assertRaises(asyncio.CancelledError):
                 await watch_scheduler.watch_scheduler_loop()
         self.assertEqual(calls, 2)
+        # The wait knows when the tick looked for due watches (Zweitprüfung 10).
+        self.assertIsInstance(next_tick.call_args.kwargs["scanned_at"], datetime)
 
     def _tick_patches(self, claimed, result=None, *, execute=None, db=None):
         """Common patches for one scheduler tick against a FakeDb outbox."""

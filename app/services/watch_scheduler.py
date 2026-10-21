@@ -634,11 +634,14 @@ async def run_notification_outbox_tick() -> dict:
         return {}
 
 
-def next_tick_seconds(*, now: datetime | None = None) -> float:
+def next_tick_seconds(*, now: datetime | None = None, scanned_at: datetime | None = None) -> float:
     """Seconds until the next tick: the next due watch, at most TICK_SECONDS.
 
-    A watch still due after a tick (its lease is held elsewhere, the daily
-    budget is spent) waits for the normal rhythm instead of a busy loop."""
+    ``scanned_at`` is when the last tick looked for due watches. A watch that
+    fell due after that (during a long run) was never seen: it runs on the
+    next short tick, not half an hour late. A watch already due at the scan
+    and still due (its lease is held elsewhere, the daily budget is spent)
+    waits for the normal rhythm instead of a busy loop."""
     now = now or datetime.now(timezone.utc)
     try:
         due = watch_service.earliest_next_run_at()
@@ -649,6 +652,8 @@ def next_tick_seconds(*, now: datetime | None = None) -> float:
         return TICK_SECONDS
     wait = (due - now).total_seconds()
     if wait <= 0:
+        if isinstance(scanned_at, datetime) and due > scanned_at:
+            return float(MIN_TICK_SECONDS)
         return TICK_SECONDS
     # A few seconds past the due time, so the scan finds it due.
     return float(min(TICK_SECONDS, max(MIN_TICK_SECONDS, wait + 5)))
@@ -670,6 +675,8 @@ async def watch_scheduler_loop():
             # retained and causes another immediate scan afterwards.
             wake_event.clear()
             started = time.monotonic()
+            # Not later than the tick's own due scan (run_watch_tick).
+            scanned_at = watch_service.utcnow()
             with correlation_scope(prefix="watch-tick"):
                 try:
                     watches_ran = await run_watch_tick()
@@ -695,7 +702,8 @@ async def watch_scheduler_loop():
             )
             try:
                 await asyncio.wait_for(
-                    wake_event.wait(), timeout=await asyncio.to_thread(next_tick_seconds),
+                    wake_event.wait(),
+                    timeout=await asyncio.to_thread(next_tick_seconds, scanned_at=scanned_at),
                 )
             except asyncio.TimeoutError:
                 pass

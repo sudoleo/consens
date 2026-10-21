@@ -6,6 +6,7 @@ error, page visibility changeable in the settings, and a scheduler that
 wakes at the next due check. Firestore is the in-memory FakeDb.
 """
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -129,3 +130,40 @@ def test_scheduler_wakes_at_the_next_due_check():
             assert watch_scheduler.next_tick_seconds(now=now) == watch_scheduler.TICK_SECONDS
     with patch.object(watch_service, "earliest_next_run_at", side_effect=RuntimeError("down")):
         assert watch_scheduler.next_tick_seconds(now=now) == watch_scheduler.TICK_SECONDS
+
+
+def test_a_watch_that_fell_due_during_a_long_tick_runs_on_the_next_short_one():
+    # Zweitprüfung 10: the tick scanned at 08:00 and ran for 20 minutes; a
+    # check due at 08:10 was never seen and must not wait until 08:50.
+    scanned_at = datetime(2026, 10, 20, 8, 0, tzinfo=timezone.utc)
+    now = scanned_at + timedelta(minutes=20)
+    with patch.object(watch_service, "earliest_next_run_at", return_value=scanned_at + timedelta(minutes=10)):
+        assert watch_scheduler.next_tick_seconds(now=now, scanned_at=scanned_at) == watch_scheduler.MIN_TICK_SECONDS
+    # Already due at the scan and still due (lease elsewhere, budget spent):
+    # the normal rhythm, no busy loop.
+    with patch.object(watch_service, "earliest_next_run_at", return_value=scanned_at - timedelta(minutes=1)):
+        assert watch_scheduler.next_tick_seconds(now=now, scanned_at=scanned_at) == watch_scheduler.TICK_SECONDS
+    with patch.object(watch_service, "earliest_next_run_at", return_value=scanned_at):
+        assert watch_scheduler.next_tick_seconds(now=now, scanned_at=scanned_at) == watch_scheduler.TICK_SECONDS
+
+
+def test_the_next_due_read_does_not_wait_out_firestore_retries():
+    seen = {}
+
+    class Query:
+        def where(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, *args, **kwargs):
+            return self
+
+        def stream(self, **kwargs):
+            seen.update(kwargs)
+            return iter(())
+
+    db = SimpleNamespace(collection=lambda _name: Query())
+    assert watch_service.earliest_next_run_at(db=db) is None
+    assert seen == {"retry": None, "timeout": 3.0}

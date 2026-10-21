@@ -8278,9 +8278,12 @@ außerhalb des Event-Loops. Details §4 „SEO-Puls“.
 **Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten;
 seit 2026-10-20 (Apple-Audit J5) schläft er nur bis zur nächsten fälligen
 Watch (`watch_scheduler.next_tick_seconds`: ein Read über
-`watch_service.earliest_next_run_at`, mindestens `MIN_TICK_SECONDS` = 30 s,
-höchstens 30 min; eine nach dem Tick noch fällige Watch wartet den normalen
-Takt ab statt einer Dauerschleife), damit „Next check 09:00“ um 09:00 läuft.
+`watch_service.earliest_next_run_at` ohne Retries mit 3 s Frist, mindestens
+`MIN_TICK_SECONDS` = 30 s, höchstens 30 min; eine Watch, die erst während
+eines langen Ticks fällig wurde (`scanned_at` = Beginn des Ticks), läuft im
+nächsten kurzen Tick; eine schon beim Scan fällige und danach noch fällige
+Watch wartet den normalen Takt ab statt einer Dauerschleife), damit „Next
+check 09:00“ um 09:00 läuft.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen
 Watch-Lease und das globale Tagesbudget; innerhalb eines Workers laufen Watches
 strikt sequenziell. Der globale Lease trägt ein Owner-Token: der Tick erneuert
