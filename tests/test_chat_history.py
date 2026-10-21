@@ -477,6 +477,7 @@ def test_all_chat_endpoints_require_verified_authentication(chat_api):
         client.post("/chats/" + "a" * 32 + "/turns", json=TURN_PAYLOAD),
         client.get("/chats/" + "a" * 32 + "/turns"),
         client.get("/chats/" + "a" * 32 + "/turns/" + "b" * 32),
+        client.put("/chats/" + "a" * 32 + "/turns/" + "b" * 32 + "/task-checks", json={"checked": [0]}),
         client.get("/chats", headers={"Authorization": "Bearer invalid"}),
     )
     assert all(response.status_code == 401 for response in requests)
@@ -2225,3 +2226,85 @@ def test_turn_attachment_meta_survives_completion(chat_api):
     assert detail["attachments"] == [
         {"name": "chart.png", "mime": "image/png", "size": 2048}
     ]
+
+
+def test_task_checks_are_kept_on_a_completed_turn_and_read_back(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    url = f"/chats/{chat['id']}/turns/{turn['id']}/task-checks"
+
+    # Only an answer that exists can have its boxes ticked.
+    pending = client.put(url, json={"checked": [0]}, headers=AUTH_OWNER)
+    assert pending.status_code == 409
+
+    chat_store.ChatStore(database).complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload()
+    )
+    chat_before = dict(database.chats("owner-uid")[chat["id"]])
+    updated_before = database.turns("owner-uid", chat["id"])[turn["id"]]["updated_at"]
+
+    saved = client.put(url, json={"checked": [3, 0, 3]}, headers=AUTH_OWNER)
+    assert saved.status_code == 200
+    assert saved.json() == {"status": "success", "checked": [0, 3]}
+    stored = database.turns("owner-uid", chat["id"])[turn["id"]]
+    assert stored["task_checks"] == [0, 3]
+    # Ticking reorders nothing: neither the chat nor the turn moves.
+    assert stored["updated_at"] == updated_before
+    assert database.chats("owner-uid")[chat["id"]] == chat_before
+
+    detail = client.get(f"/chats/{chat['id']}/turns/{turn['id']}", headers=AUTH_OWNER).json()["turn"]
+    assert detail["task_checks"] == [0, 3]
+    page = chat_store.ChatStore(database).list_turn_details("owner-uid", chat["id"])
+    assert page["turns"][0]["task_checks"] == [0, 3]
+
+    cleared = client.put(url, json={"checked": []}, headers=AUTH_OWNER)
+    assert cleared.json()["checked"] == []
+    assert database.turns("owner-uid", chat["id"])[turn["id"]]["task_checks"] == []
+
+
+@pytest.mark.parametrize("body", [
+    {"checked": [-1]},
+    {"checked": [200]},
+    {"checked": ["1"]},
+    {"checked": [True]},
+    {"checked": [1.5]},
+    {"checked": list(range(201))},
+    {"checked": 1},
+    {"checked": [0], "extra": "nope"},
+    {},
+])
+def test_task_checks_reject_anything_but_item_positions(chat_api, body):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    chat_store.ChatStore(database).complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload()
+    )
+    response = client.put(
+        f"/chats/{chat['id']}/turns/{turn['id']}/task-checks", json=body, headers=AUTH_OWNER
+    )
+    assert response.status_code == 422
+    assert "task_checks" not in database.turns("owner-uid", chat["id"])[turn["id"]]
+
+
+def test_task_checks_of_a_foreign_or_unknown_turn_are_404(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    chat_store.ChatStore(database).complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload()
+    )
+    body = {"checked": [1]}
+    foreign = client.put(f"/chats/{chat['id']}/turns/{turn['id']}/task-checks", json=body, headers=AUTH_OTHER)
+    unknown = client.put(f"/chats/{chat['id']}/turns/{'f' * 32}/task-checks", json=body, headers=AUTH_OWNER)
+    other_chat = create_chat(client)
+    wrong_chat = client.put(f"/chats/{other_chat['id']}/turns/{turn['id']}/task-checks", json=body, headers=AUTH_OWNER)
+    assert foreign.status_code == unknown.status_code == wrong_chat.status_code == 404
+    assert "task_checks" not in database.turns("owner-uid", chat["id"])[turn["id"]]
+
+
+def test_turn_detail_drops_malformed_stored_task_checks():
+    detail = chat_store.turn_detail("a" * 32, {"status": "completed", "task_checks": ["x"]}, {})
+    assert "task_checks" not in detail
+    assert chat_store.turn_detail("a" * 32, {"task_checks": [2, 1]}, {})["task_checks"] == [1, 2]

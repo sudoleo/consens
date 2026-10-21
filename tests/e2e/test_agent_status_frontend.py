@@ -1,4 +1,6 @@
 """Localized progress through the real SSE parser and built app, without paid calls."""
+import re
+
 import pytest
 from playwright.sync_api import expect
 
@@ -53,6 +55,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
                 window.__tool('comparison', 'compare_models', 'running');
               };
               window.__answerChunk = text => emit('delta', {text});
+              window.__answerCheck = () => emit('answer_check', {type:'answer_check'});
               window.__finishProgress = (sparse = false) => {
                 const response = 'Die erste Option passt zu deinem Budget.';
                 window.__tool('judge', 'judge_answer', 'succeeded');
@@ -149,8 +152,22 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(page.locator("#agentAnswerBody")).to_contain_text("Die erste Option")
         page.evaluate("() => window.__answerChunk('passt zu deinem Budget.')")
         expect(page.locator("#agentAnswerBody")).to_have_text("Die erste Option passt zu deinem Budget.")
+        # The last word stands and the server announces the check: it shows at
+        # once, also in words where the evidence row will stand (the only sign
+        # with reduced motion or forced colors).
+        check = page.locator("#agentAnswer .agent-check-status")
+        expect(check).to_have_count(0)
+        page.evaluate("() => window.__answerCheck()")
+        expect(check).to_have_text("Checking the answer…")
+        expect(check).to_be_visible()
+        expect(page.locator("#agentAnswerBody")).to_have_class(re.compile(r"\bis-answer-checking\b"))
+        body_box, check_box = page.locator("#agentAnswerBody").bounding_box(), check.bounding_box()
+        assert check_box["y"] >= body_box["y"] + body_box["height"]
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
         page.evaluate("sparse => window.__finishProgress(sparse)", width == 320)
         expect(page.locator("#agentAnswerBody")).to_have_text("Die erste Option passt zu deinem Budget.")
+        expect(check).to_have_count(0)
+        expect(page.locator("#agentAnswerBody")).not_to_have_class(re.compile(r"\bis-answer-checking\b"))
         # A history the reader opened stays open on screen: closing it would pull
         # the answer up under the eye. The live paragraphs still give way.
         reader_opened = width != 320

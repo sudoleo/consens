@@ -547,11 +547,21 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         expect(cards.first).to_have_attribute('open', '')
         for index in (1, 2):
             expect(cards.nth(index)).not_to_have_attribute('open', '')
-        claim_weight = cards.first.locator('.diff-card-claim').evaluate('el => getComputedStyle(el).fontWeight')
-        assert claim_weight == '400'
-        tag_color = cards.first.locator('.diff-type-tag').evaluate('el => getComputedStyle(el).color')
-        status_color = status.evaluate('el => getComputedStyle(el).color')
-        assert tag_color == status_color  # the dot carries the colour, not the word
+        # The chat's type, three steps: a semibold title, the claims at the
+        # answer's 17px, one meta size and grey for everything else.
+        type_steps = cards.first.evaluate("""card => {
+          const style = el => { const s = getComputedStyle(el); return [s.fontSize, s.fontWeight, s.color]; };
+          return {title: style(card.querySelector('.diff-card-claim')), claim: style(card.querySelector('.diff-position-stance')),
+            tag: style(card.querySelector('.diff-type-tag')), meta: style(card.querySelector('.diff-position-meta')),
+            versus: style(card.querySelector('.diff-versus-mark')),
+            status: style(document.querySelector('#answerReaderInspector .agent-evidence-status')),
+            more: style(document.querySelector('#answerReaderInspector .diff-more-summary'))};
+        }""")
+        assert type_steps['title'][:2] == ['17px', '600']
+        assert type_steps['claim'][:2] == ['17px', '400']
+        # The dot carries the colour, not the word, and "vs" is no warning sign.
+        assert type_steps['tag'] == type_steps['meta'] == type_steps['versus'] == type_steps['status'] == type_steps['more']
+        assert type_steps['meta'][0] == '13px'
         _snapshot(page, f'differences-calm-overview-{width}-{theme}')
         status.locator('summary').click()
         detail = status.locator('.agent-evidence-status-detail')
@@ -648,11 +658,70 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
         context.close()
 
 
+def test_phone_closing_the_answer_reader_brings_no_hover_card(browser, phase4_server):
+    """On a phone a tap on a disputed sentence opens the large reader; closing
+    it gives the focus back to the sentence. That focus is no request for the
+    hover card (Apple audit follow-up 2026-10-21): it used to pop up on its
+    own 130 ms later. The card exists only for a real mouse."""
+    from app.services.chat_store import turn_detail
+
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True)
+    sentence = "The smaller plan includes five seats."
+    text = "For a team of five, start with the smaller plan.\n\n" + sentence + "\n\nConfirm the seat limit."
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
+                "text": "Choose the smaller plan.", "sources": []}
+               for p, label, model, name in [("openai", "OpenAI", "openai/gpt-5.4-mini", "GPT-5.4 Mini"),
+                                             ("gemini", "Gemini", "google/gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite")]]
+    review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
+        "versions": [{"id": 1, "text": text, "hash": digest, "status": "succeeded"}],
+        "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Compare plans", "status": "succeeded", "answers": answers}],
+        "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
+            "differences_data": {"models_compared": ["OpenAI", "Gemini"], "claims": [], "differences": [
+                {"claim": "Whether the smaller plan includes five seats", "consensus_anchor": sentence, "type": "contradiction",
+                 "severity": "major", "positions": [
+                     {"models": ["OpenAI"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
+                     {"models": ["Gemini"], "stance": "Only three seats are included.", "quote": "Choose the smaller plan."}]}]}}]}
+    turn = turn_detail("b" * 32, {"execution_mode": "agent", "status": "completed", "question": "Compare plans", "assistant_response": text,
+            "agent_review": review, "agent_settings": {"model_id": CATALOG["default_model_id"]}}, {})
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 390, "height": 844})
+        assert page.evaluate("matchMedia('(hover: none) and (pointer: coarse)').matches")
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
+        page.evaluate('() => window.exitHeroMode()')
+        mark = page.locator('#agentAnswerBody .cx-claim.is-major')
+        expect(mark).to_have_text(sentence)
+        expect(mark).to_have_attribute('tabindex', '0')
+        mark.tap()
+        reader = page.locator('#modelAnswerReader')
+        expect(reader).to_be_visible()
+        page.locator('#answerReaderClose').tap()
+        expect(reader).to_be_hidden()
+        # The focus is back on the sentence, and no card follows it.
+        page.wait_for_function("() => document.activeElement?.classList.contains('cx-claim')")
+        page.wait_for_timeout(400)
+        expect(page.locator('.insight-preview:not([hidden])')).to_have_count(0)
+        expect(mark).not_to_have_class(re.compile(r"\bis-hovered\b"))
+        # A scroll with the tap still on the sentence brings none either.
+        page.evaluate("() => dispatchEvent(new Event('scroll'))")
+        page.wait_for_timeout(300)
+        expect(page.locator('.insight-preview:not([hidden])')).to_have_count(0)
+        assert not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width", [1280, 390])
-def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(browser, phase4_server, width):
-    """The quiet compare_models phase quotes ONE comparison model's latest
-    reasoning sentence from streamed delegation events; it follows the model
-    that reported last, leaves with the comparison and is never saved."""
+def test_live_comparison_quotes_model_reasoning_in_turn_only_while_comparing(browser, phase4_server, width):
+    """The quiet compare_models phase quotes the comparison models' latest
+    reasoning sentences on ONE line from streamed delegation events: each
+    excerpt stands about 2.5 s, then the next model with something new takes
+    the line in turn; it leaves with the comparison and is never saved."""
     context, page = _real_firebase_page(browser, phase4_server)
     chat, turn, gemini, gpt = (c * 32 for c in "abcd")
     text = "Both plans fit; the smaller one is cheaper."
@@ -708,8 +777,10 @@ def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(brow
         expect(quotes).to_have_count(1)
         expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Checking the 2026 figures.")
         delegate(answer(gpt, 1, "working", "GPT-5.4 Mini", "openai/gpt-5.4-mini", "Weighing both sources."))
+        # Gemini's excerpt stands its time before GPT takes the line.
+        expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Checking the 2026 figures.")
         expect(quotes).to_have_text("GPT-5.4 Mini: Weighing both sources.")
-        # Gemini's newer reasoning takes the line back; still exactly one line.
+        # Gemini's newer reasoning takes the line back in turn; still exactly one line.
         delegate(answer(gemini, 2, "working", "Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite",
                         "Checking the 2026 figures.\nComparing the seat limits."))
         expect(quotes).to_have_text("Gemini 3.5 Flash-Lite: Comparing the seat limits.")
@@ -767,10 +838,12 @@ def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(brow
 
 def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(browser, phase4_server):
     """Coverage windows that are done mark the fixed answer quietly while the
-    Differences judge still runs (coverage_preview, since 2026-10-18). The
-    final review replaces them and strokes on only what is new or changed;
-    the saved turn shows the saved review alone. Green marks show only
-    under "All checks" (the default shows disagreements only)."""
+    Differences judge still runs (coverage_preview, since 2026-10-18). Since
+    2026-10-21 a provisional mark is neutral: it says that the sentence was
+    compared, not how. The final review replaces them in the same frame,
+    without a moment without marks, and brings the colours; the saved turn
+    shows the saved review alone. Green marks show only under "All checks"
+    (the default shows disagreements only)."""
     context, page = _real_firebase_page(browser, phase4_server,
         init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','all')")
     chat, turn = "a" * 32, "b" * 32
@@ -834,19 +907,25 @@ def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(bro
         expect(body).to_have_class(re.compile(r"\bis-answer-checking\b"))
         expect(marks).to_have_count(0)
 
-        # The first window is done: its sentence is marked quietly, no score yet.
+        # The first window is done: its sentence is marked quietly and
+        # neutrally, no colour, no count, no score yet.
         preview = {"answer_hash": digest, "comparison_id": "c1", "models_compared": ["Gemini", "OpenAI"], "sentences": 2}
         push("coverage_preview", {**preview, "claims": [supported(seats, 1)], "checked": 1})
         expect(marks).to_have_count(1)
         expect(marks.first).to_have_text(seats)
-        expect(marks.first).to_have_class(re.compile(r"\bis-unanimous\b.*\bis-mark-arriving\b|\bis-mark-arriving\b.*\bis-unanimous\b"))
+        expect(marks.first).to_have_class(re.compile(r"\bis-provisional\b.*\bis-mark-arriving\b|\bis-mark-arriving\b.*\bis-provisional\b"))
+        expect(marks.first).not_to_have_class(re.compile(r"\bis-(thin|unanimous|minor|split|major)\b"))
+        expect(body.locator(".claim-badge")).to_have_count(0)
+        expect(marks.first).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+        expect(marks.first).to_have_css("text-decoration-style", "dotted")
         expect(body).to_have_class(re.compile(r"\bhas-provisional-marks\b"))
         expect(body).to_have_class(re.compile(r"\bis-answer-checking\b"))
         expect(body).not_to_have_class(re.compile(r"\bis-marks-revealing\b"))
         expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
-        # The provisional mark already explains itself.
+        # The provisional mark says that it was compared, not how it came out.
         marks.first.hover()
-        expect(page.locator(".insight-preview")).to_contain_text("2/2")
+        hover_card = page.locator(".insight-preview")
+        expect(hover_card).to_have_text("Compared with 2 model answersThe result appears once the whole answer is checked")
         page.mouse.move(0, 0)
 
         # The next window: the seen mark stays as it is, the new one fades in.
@@ -855,16 +934,26 @@ def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(bro
         expect(marks.first).not_to_have_class(re.compile(r"\bis-mark-arriving\b"))
         expect(marks.nth(1)).to_have_class(re.compile(r"\bis-mark-arriving\b"))
 
-        # Differences is done: the final review takes over. The confirmed mark
-        # stays still; the contradiction strokes on in red; the score appears.
+        # Differences is done: the final review takes over in the same frame
+        # (never a moment without marks) and brings the colours: the
+        # contradiction in red, the score.
+        page.evaluate("""() => {
+          const body = document.getElementById('agentAnswerBody');
+          window.__markGap = false;
+          new MutationObserver(() => { if (!body.querySelector('.cx-claim')) window.__markGap = true; })
+            .observe(body, {subtree: true, childList: true});
+        }""")
         push("review", {"review": review})
         expect(body).not_to_have_class(re.compile(r"\bhas-provisional-marks\b"))
         expect(body).not_to_have_class(re.compile(r"\bis-answer-checking\b"))
         expect(body.locator(".cx-claim.is-major")).to_have_count(1)
         expect(body.locator(".cx-claim.is-major")).to_have_text(billing)
-        expect(body.locator(".cx-claim.is-major")).not_to_have_class(re.compile(r"\bis-mark-shown\b"))
-        expect(body.locator(".cx-claim.is-unanimous")).to_have_class(re.compile(r"\bis-mark-shown\b"))
+        expect(body.locator(".cx-claim.is-unanimous")).to_have_count(1)
+        expect(body.locator(".cx-claim.is-provisional")).to_have_count(0)
+        assert page.evaluate("window.__markGap") is False
         expect(page.locator("#agentAnswer .agent-agreement-num")).to_have_text("72")
+        # The hand-over leaves no trace once the colours have stroked on.
+        expect(body.locator(".was-provisional")).to_have_count(0)
 
         request = page.evaluate("window.__agentRequest")
         bookmark = {"id": request["bookmark_id"], "chat_id": chat, "turn_id": turn, "title": saved["question"],

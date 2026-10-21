@@ -51,7 +51,7 @@ class AgentLoop:
             event.pop(key, None)
         if kind == "reasoning":
             progress = self.progress.setdefault(step, ReasoningProgress())
-            compact = progress.update({"kind": kind, **event})
+            compact = progress.update({"kind": kind, "id": event_id, **event})
             if not compact:
                 return None
             event = compact

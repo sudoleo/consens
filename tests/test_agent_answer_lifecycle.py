@@ -118,6 +118,50 @@ def test_early_judge_or_intro_cannot_replace_complete_streamed_answer(store, ear
         assert not any(e.get("name") == "judge_answer" for e in events[:first_delta])
 
 
+def test_the_check_is_announced_the_moment_the_last_word_stands(store):
+    """The page shows the check from the last word on, not only once the
+    settled step, the allowance and the review checkpoints are through."""
+    script = Script()
+    loop = make_loop(store, script)
+    loop.factory = answer_factory(script)
+    settled, events = [], []
+    original = loop.store.settle
+    def settle(*args, **kwargs):
+        settled.append(kwargs.get("step"))
+        return original(*args, **kwargs)
+    loop.store.settle = settle
+    for event in loop.run():
+        if event["type"] == "answer_check":
+            # Before the answer step is even settled.
+            assert "completion:1" not in settled
+        events.append(event)
+    announced = [i for i, e in enumerate(events) if e["type"] == "answer_check"]
+    last_delta = max(i for i, e in enumerate(events) if e["type"] == "delta")
+    versioned = next(i for i, e in enumerate(events) if e["type"] == "review" and e["review"].get("versions"))
+    assert len(announced) == 1 and last_delta < announced[0] < versioned
+    assert events[announced[0]] == {"type": "answer_check"}
+    # The step's own usage and the review checkpoints come after it.
+    assert any(e.get("kind") == "usage" for e in events[announced[0]:versioned])
+    # Live only: never part of the saved turn.
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert "answer_check" not in json.dumps(saved, default=str)
+    assert review_is_bound(saved["agent_review"], ANSWER)
+
+
+def test_no_check_is_announced_when_none_follows(store):
+    from app.services.agent_comparison import AgentPreferences
+    # Answer check off: the answer is final without judges.
+    script = Script()
+    loop = make_loop(store, script, preferences=AgentPreferences(judges="off"))
+    loop.factory = answer_factory(script)
+    assert not any(e["type"] == "answer_check" for e in loop.run())
+    # A direct answer without comparisons is never checked.
+    from test_agent_comparison import Script as Direct
+    direct = Direct(direct=True)
+    loop = make_loop(store, direct)
+    assert not any(e["type"] == "answer_check" for e in loop.run())
+
+
 @pytest.mark.parametrize("ending", ["length", "max_tokens", "cancelled", "timeout"])
 def test_incomplete_answer_is_saved_without_starting_judges(store, ending):
     script = Script()
@@ -127,6 +171,8 @@ def test_incomplete_answer_is_saved_without_starting_judges(store, ending):
     with pytest.raises((AnalysisBudgetExceeded, ProviderCancelled, httpx.ReadTimeout)):
         for event in loop.run():
             events.append(event)
+    # Nothing announces a check that never comes.
+    assert not any(e["type"] == "answer_check" for e in events)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "failed"
     assert saved["consensus"] == ANSWER

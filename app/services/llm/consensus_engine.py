@@ -642,10 +642,14 @@ CHAT_MAX_CONSENSUS_SENTENCES = 320
 MIN_SENTENCE_WORDS = 3
 
 # Zeilenpraefix, das zur Markdown-Struktur gehoert und nicht zum Satz:
-# Einrueckung, Blockquote-Pfeile, Aufzaehlungs- und Nummerierungszeichen.
+# Einrueckung, Blockquote-Pfeile, Aufzaehlungs- und Nummerierungszeichen und
+# das Kaestchen eines Checklistenpunkts ("- [ ] "), das im gerenderten Text ein
+# Button ohne Text ist.
 # Spiegelt inlineMarkdownSource() in consensus-insights.js - was dort vom
 # Anker abgeschnitten wird, darf hier gar nicht erst hineingeraten.
-_LINE_PREFIX_RE = re.compile(r"^[ \t]*(?:>[ \t]*)*(?:[-*+][ \t]+|\d+[.)][ \t]+)?")
+_LINE_PREFIX_RE = re.compile(
+    r"^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)?"
+)
 # Quellentags stehen zwischen Satzzeichen und Leerzeichen ("…330 m.[S1] Der
 # naechste…") und wuerden die Trennung sonst verhindern - ausgerechnet an den
 # zentralen Faktensaetzen, an die der Consensus-Prompt sie haengt. Sie liegen
@@ -1226,6 +1230,8 @@ def _build_differences_prompt_from(context: _JudgeContext, *, output_language: s
         "reader can see it marked in place. Use 0 if the consensus answer does not state it at all.\n"
         "- Report every distinct disagreement you find, not just the most obvious one, and give each its own "
         "entry with one position per side.\n"
+        "- Models that make the same claim form one position that lists all of them; never repeat a claim "
+        "as a second position. Each model appears in at most one position of a difference.\n"
         + claim_rule +
         "- \"stance\" is the claim this side makes, stated directly the way its models would put it (for "
         "example \"Frontier token prices rose 67% year on year\"), so that the stances of the sides stand "
@@ -1395,6 +1401,12 @@ def _normalize_claims(raw_claims, anon_map: dict, sentences: list = None) -> lis
     return claims
 
 
+def _stance_key(stance: str) -> str:
+    """Two stances are the same claim when they differ only in case,
+    whitespace or the punctuation at their end."""
+    return " ".join(str(stance or "").split()).casefold().rstrip(" .!?;:,…。！？")
+
+
 def _normalize_differences(raw_differences, anon_map: dict, sentences: list = None) -> list:
     sentences = sentences or []
     differences = []
@@ -1406,24 +1418,47 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
             continue
 
         positions = []
+        # Live 2026-10-21: the judge put the answer's own claim twice, once
+        # for Luna and once for two other models, and the reader saw the same
+        # sentence on both sides of "vs". One claim is one side, and a model
+        # holds only the side it is named for first.
+        collapsed = False
         for item in entry.get("positions") if isinstance(entry.get("positions"), list) else []:
             if not isinstance(item, dict):
                 continue
             models = _real_model_names(item.get("models"), anon_map)
             if not models:
                 continue
-            position = {
-                "stance": _clip(_named_models(item.get("stance"), anon_map), MAX_DIFF_TEXT_CHARS),
-                "models": models,
-                "quote": _clip(item.get("quote"), MAX_DIFF_QUOTE_CHARS),
-            }
+            stance = _clip(_named_models(item.get("stance"), anon_map), MAX_DIFF_TEXT_CHARS)
+            quote = _clip(item.get("quote"), MAX_DIFF_QUOTE_CHARS)
+            in_answer = item.get("in_answer") is True and not any(p.get("in_answer") for p in positions)
+            taken = {model for p in positions for model in p["models"]}
+            key = _stance_key(stance)
+            same = next((p for p in positions if key and _stance_key(p["stance"]) == key), None)
+            if same is not None:
+                collapsed = True
+                same["models"].extend(m for m in models if m not in taken)
+                if not same["quote"] and quote:
+                    same["quote"] = quote
+                if in_answer:
+                    same["in_answer"] = True
+                continue
+            models = [m for m in models if m not in taken]
+            if not models:
+                collapsed = True
+                continue
+            position = {"stance": stance, "models": models, "quote": quote}
             # The side the answer itself takes; it takes at most one.
-            if item.get("in_answer") is True and not any(p.get("in_answer") for p in positions):
+            if in_answer:
                 position["in_answer"] = True
             positions.append(position)
             if len(positions) >= MAX_DIFF_POSITIONS:
                 break
         if not positions:
+            continue
+        # Sides that turned out to be one are no disagreement. A difference
+        # the judge gave a single side keeps it, as before.
+        if collapsed and len(positions) < 2:
             continue
 
         diff_type = str(entry.get("type") or "").strip().lower()

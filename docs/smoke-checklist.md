@@ -116,9 +116,12 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Etikett), Satzstreifen und Legende mit Farbpunkten, auf einer Schiene nur
       die widersprochenen/geteilten Sätze, jeder mit
       „N of M models disagree – Modell: „…““ darunter (gut lesbar, nicht grau),
-      keine grauen Zeilen dazwischen; „Show full text“ zeigt alle Sätze
+      keine grauen Zeilen dazwischen; die Karte startet zugeklappt, auch unter
+      „All checks“; „Show full text“ zeigt alle Sätze
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
-      nur grau, nie grün). Ein Zähler/Satz öffnet die Karte, „View answer“ die
+      nur grau, nie grün). Mit Maus zeigt ein gefärbter Satz die Hover-Vorschau
+      wie in der Antwort; Klick ersetzt sie durch die Karte, nach Escape kommt
+      keine Vorschau von selbst. Ein Zähler/Satz öffnet die Karte, „View answer“ die
       Modellantwort. Die Antwort nennt den Fehler und wird wie jede Antwort
       geprüft (Marken, Score); ein Satz wie „Dein Text sagt X, das stimmt
       nicht“ trägt keine rote Marke für X. Aktivität: Vergleichsfrage enthält
@@ -127,6 +130,17 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Gegenprobe „Fasse diesen Text zusammen: …“ → keine Karte.
       Automatisiert: `test_agent_passage_check.py`, `passage-check.test.mjs`,
       `test_passage_check_frontend.py`.
+- [ ] Checklisten (2026-10-21, echter Provider): Agent um eine Packliste mit
+      Kästchen bitten. Während die Antwort einströmt, stehen die Kästchen an
+      der Stelle der Spiegelstriche, kein `[` blitzt auf, nichts rutscht zur
+      Seite. Nach dem Ende ein Kästchen anhaken → Network zeigt nach ~0,6 s
+      `PUT /chats/…/turns/…/task-checks`; die Chatliste ordnet sich nicht um.
+      Neu laden und den Chat am Handy öffnen → dieselben Häkchen. Eine
+      Folgefrage stellen → die Häkchen der vorigen Antwort bleiben im
+      Verlauf anklickbar. Die Prüfmarken sitzen auch auf Sätzen in
+      Listenpunkten mit Kästchen. Einzelantworten im Leser zeigen Kästchen,
+      lassen sich aber nicht anhaken. Automatisiert: `task-lists.test.mjs`,
+      `test_chat_history.py` (`task_checks`), `test_public_markdown.py`.
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,
@@ -274,9 +288,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       und 390 px): kein Untertitel, Frage als eine abgeschnittene Zeile ohne
       Label; im Agent-Chat eine Statuszeile `N of M models answered · Checked`,
       fehlende Modelle erst nach Aufklappen. Karten: Punkt + `Critical`/
-      `Minor`/`Emphasis`, kritische zuerst, Titel in normalem Gewicht, keine
-      Positionszahl; nur eine Karte gleichzeitig offen. Pro Position eine Zeile
-      Icon + Modellname (Klick öffnet die Originalantwort), Zitat leiser.
+      `Minor`/`Emphasis`, kritische zuerst, keine Positionszahl; nur eine
+      Karte gleichzeitig offen. Drei Schriftstufen wie im Chat: Titel 17px
+      halbfett, Behauptungen 17px normal, alles Übrige 13px in einem Grau;
+      „vs“ leise ohne Farbe und Linien, Farbe nur auf dem Punkt. Pro Position
+      unter der Behauptung eine Metazeile Icon + Modellname (Klick öffnet die
+      Originalantwort) · „In the answer“ · „Show quote“. Chevrons von Karte
+      und „smaller differences“ auf einer Linie am rechten Rand.
       Inline-Marker öffnen weiterhin die richtige Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
@@ -1120,6 +1138,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Am Ende eines geprüften Laufs bleiben die Claim-Marken stehen (kein
   erneutes Einblenden); Reload eines Agent-Chats: Bookmarks und Eingabefeld
   springen nicht.
+- [ ] Desktop: Hover über einem roten Satz, dessen Quelle als Pille am
+  Satzende steht → die Hover-Karte steht am Satz, nicht oben links.
+- [ ] Handy: roten Satz antippen, großes Fenster schließen → keine Hover-Karte
+  poppt auf.
+- [ ] Während die Antwort geprüft wird, tragen fertig verglichene Sätze nur
+  eine leise graue gepunktete Linie (hell und dunkel), nie Gelb/Grün/Rot; ihr
+  Hover nennt kein Urteil. Mit dem Ergebnis kommen die Farben, ohne dass die
+  Marken kurz ganz verschwinden.
 - [ ] Handy, Antwortleser „Answers“: Modellauswahl schließt das Dropdown.
 - [ ] Folgefragen direkt im Composer; kein zusätzlicher „Follow up“-Button.
   Contradictions/Review, Answers und Sources haben dezente Icons, lesbare

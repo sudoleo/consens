@@ -198,6 +198,7 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None, site_li
     text = _preserve_math_delimiters(text)
     tokens = _MD.parse(text)
     _normalize_citation_links(tokens, sources)
+    _mark_task_items(tokens)
     if site_links is not None:
         _link_site_mentions(tokens, site_links)
     html = _MD.renderer.render(tokens, _MD.options, {})
@@ -210,7 +211,44 @@ _ALLOWED_ATTRIBUTES = {
     **nh3.ALLOWED_ATTRIBUTES,
     "a": set(nh3.ALLOWED_ATTRIBUTES.get("a", set())) | {"class", "target"},
     "img": set(nh3.ALLOWED_ATTRIBUTES.get("img", set())) | {"class", "loading"},
+    "li": set(nh3.ALLOWED_ATTRIBUTES.get("li", set())) | {"class"},
+    "ul": set(nh3.ALLOWED_ATTRIBUTES.get("ul", set())) | {"class"},
+    "span": set(nh3.ALLOWED_ATTRIBUTES.get("span", set())) | {"class", "role", "aria-label", "data-checked"},
 }
+
+_TASK_MARKER_RE = re.compile(r"\[([ xX])\][ \t]+")
+
+
+def _mark_task_items(tokens):
+    """Checklist items ("- [ ] item") show a box instead of their brackets,
+    as in the app (markdown-stream.js); a public page cannot tick it."""
+    lists = []
+    for index, token in enumerate(tokens):
+        if token.type in {"bullet_list_open", "ordered_list_open"}:
+            lists.append(token)
+        elif token.type in {"bullet_list_close", "ordered_list_close"} and lists:
+            lists.pop()
+        if token.type != "list_item_open" or index + 2 >= len(tokens):
+            continue
+        paragraph, inline = tokens[index + 1], tokens[index + 2]
+        if paragraph.type != "paragraph_open" or inline.type != "inline" or not inline.children:
+            continue
+        first = inline.children[0]
+        match = _TASK_MARKER_RE.match(first.content) if first.type == "text" else None
+        # An item needs words after its box to be one.
+        if not match or (match.end() == len(first.content) and len(inline.children) == 1):
+            continue
+        first.content = first.content[match.end():]
+        checked = match[1] in "xX"
+        box = Token("html_inline", "", 0)
+        box.content = (
+            f'<span class="md-task-box" role="img" aria-label="{"Done" if checked else "Open"}" '
+            f'data-checked="{"true" if checked else "false"}"></span>'
+        )
+        inline.children.insert(0, box)
+        token.attrSet("class", "md-task-item")
+        if lists and lists[-1].type == "bullet_list_open":
+            lists[-1].attrSet("class", "md-task-list")
 
 
 def _favicon_token(domain):

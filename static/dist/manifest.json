@@ -1,5 +1,5 @@
 {
-  "sources": "c118f1beac9f",
+  "sources": "0a4b8add0786",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -122,6 +122,7 @@
     "static/js/sidebar-resize.js",
     "static/js/sources.js",
     "static/js/tab-status.js",
+    "static/js/task-checks.js",
     "static/js/token-budget.js",
     "static/js/tooltip.js",
     "static/js/usage-limit.js",
@@ -217,7 +218,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.23a2d484e476.js",
+      "src": "/static/dist/firebase.62d5824d35dc.js",
       "module": true,
       "defer": false
     },
@@ -229,20 +230,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.f25e08a4feef.js",
+      "src": "/static/dist/app.b124cd653f45.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.26f2480b59ca.css",
-    "landing": "/static/dist/landing.a2f18c50b9d9.css",
-    "public": "/static/dist/public.1ae3994a4727.css"
+    "app": "/static/dist/app.30643fa6a76e.css",
+    "landing": "/static/dist/landing.80f18d337511.css",
+    "public": "/static/dist/public.9c984e4eab77.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "4f3db7366818",
+      "hash": "0da26e30dabe",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -284,7 +285,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "5a5b44229e3b",
+      "hash": "850a49b7160c",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -300,7 +301,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "a3600f910cc1",
+      "hash": "c22d5695da0d",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -313,17 +314,18 @@
     }
   },
   "previous_assets": [
-    "app.3aa2372caae0.css",
-    "app.c3ab78d0a724.css",
-    "app.cbcfa51342ea.js",
-    "app.06a65bcaa6a4.js",
+    "app.272965888faf.css",
+    "app.a37648292e87.css",
+    "app.537492073118.js",
+    "app.63bb6e5a5521.js",
     "auth.5c8ab3c866cb.js",
     "auth.5e487d1e2570.js",
     "demo.1a3421e3e4d2.js",
     "demo.9cb7e261a771.js",
+    "firebase.a905aada47ce.js",
     "firebase.dfe831007349.js",
-    "firebase.02d5cd4749ea.js",
     "head.9076e14a6904.js",
-    "head.b8a4fe4a421c.js"
+    "head.b8a4fe4a421c.js",
+    "landing.a2f18c50b9d9.css"
   ]
 }

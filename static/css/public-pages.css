@@ -1004,6 +1004,38 @@ canvas {
 .share-md h1, .share-md h2 { font-size: var(--font-size-lg); }
 .share-md h3, .share-md h4 { font-size: var(--font-size-base); }
 .share-md ul, .share-md ol { padding-left: 22px; }
+/* Checklists drawn as in the app (shell.css .md-task-box), without ticking:
+   in a bulleted list the box takes the bullet's place, a numbered list keeps
+   its numbers and the box leads the words. */
+.share-md ul.md-task-list > .md-task-item { list-style: none; position: relative; }
+.share-md .md-task-box {
+  --task-box: 0.95em;
+  box-sizing: border-box;
+  display: inline-block;
+  width: var(--task-box);
+  height: var(--task-box);
+  margin-right: 0.45em;
+  border: 1.5px solid var(--ink-3);
+  border-radius: 0.24em;
+  vertical-align: -0.12em;
+  position: relative;
+}
+.share-md ul.md-task-list > .md-task-item > .md-task-box {
+  position: absolute;
+  left: -1.25em;
+  top: 0.38em;
+  top: calc((1lh - var(--task-box)) / 2);
+  margin: 0;
+}
+.share-md .md-task-box[data-checked="true"] { background: var(--ink); border-color: var(--ink); }
+.share-md .md-task-box[data-checked="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--ground);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.4l3 3 6-6.8' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 78% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.4l3 3 6-6.8' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 78% no-repeat;
+}
 .share-md pre { overflow-x: auto; padding: 12px; border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.06); }
 .dark-mode .share-md pre { background: rgba(255, 255, 255, 0.08); }
 .share-md code { font-size: var(--font-size-sm); }

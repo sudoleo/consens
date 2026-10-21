@@ -7,53 +7,110 @@ from test_agent_runs import store
 from test_agent_comparison import Script, make_loop
 
 
-def event(text, format="text"):
-    return {"kind": "reasoning", "format": format, "text": text, "append": True}
+def event(text, format="text", id=None):
+    return {"kind": "reasoning", "format": format, "text": text, "append": True, **({"id": id} if id else {})}
 
 
 def test_short_highlights_update_at_boundaries_and_remain_bounded():
     progress = ReasoningProgress()
     assert progress.update(event("Checking the ")) is None
-    first = progress.update(event("available evidence."))
+    # The end of the streamed text is no sentence end yet ("e.g." or "3."
+    # look the same there): the whitespace after it must have arrived.
+    assert progress.update(event("available evidence.")) is None
+    first = progress.update(event(" Next"))
     assert first["text"] == "Checking the available evidence."
     assert first["summary_source"] == "excerpt" and first["append"] is False
-    assert progress.update(event(" Next")) is None
     for i in range(20):
         value = progress.update(event(f"\n\nChecking source {i} against the constraints. " + "detail " * 80))
         if value:
-            assert len(value["text"]) <= 542
+            assert len(value["text"]) <= 3 * 160 + 2
             assert len(value["text"].splitlines()) <= 3
+            assert "…" not in value["text"] and "detail" not in value["text"]
     assert progress.updates <= 8 and len(progress.text) <= 8000
 
 
 def test_short_announcements_of_the_next_step_are_no_highlight():
     progress = ReasoningProgress()
     assert progress.update(event("Okay, no search needed. I'll answer directly.")) is None
-    value = progress.update(event(" The question is whether every disease could become curable."))
+    value = progress.update(event(" The question is whether every disease could become curable.\n"))
     assert value["text"] == "The question is whether every disease could become curable."
     # A planning sentence that names its topic says something and stays.
-    value = ReasoningProgress().update(event("Let me weigh the biological limits of ageing against therapies."))
+    value = ReasoningProgress().update(event("Let me weigh the biological limits of ageing against therapies.\n"))
     assert value["text"] == "Let me weigh the biological limits of ageing against therapies."
 
 
 def test_provider_summary_replaces_excerpts_and_ignores_raw_reasoning():
     progress = ReasoningProgress()
-    progress.update(event("A preliminary assumption needs checking."))
-    value = progress.update(event("Checking the primary sources.", "summary"))
+    progress.update(event("A preliminary assumption needs checking. "))
+    value = progress.update(event("**Checking the primary sources**\n\n", "summary"))
     assert value["summary_source"] == "provider_summary"
-    assert "preliminary" not in value["text"]
+    assert value["text"] == "Checking the primary sources"
     assert progress.update(event("Private additional detail. " * 100)) is None
     assert progress.update({"kind": "reasoning", "format": "encrypted", "text": "ciphertext"}) is None
 
 
-def test_late_provider_summary_without_punctuation_replaces_excerpts_at_limit():
+def test_late_provider_summary_heading_replaces_excerpts_at_limit():
     progress = ReasoningProgress()
     for i in range(12):
         progress.update(event(f"\n\nChecking alternative {i}. " + "detail " * 80))
     assert progress.updates == 7
-    value = progress.update(event("Checking sources and conflicting claims", "summary"))
+    value = progress.update(event("**Checking sources and conflicting claims**\n\n", "summary"))
     assert value["text"] == "Checking sources and conflicting claims"
     assert value["summary_source"] == "provider_summary" and progress.updates == 8
+
+
+def test_sentence_ends_survive_abbreviations_initials_and_ordinals():
+    from app.services.agent_progress import _sentences
+    line = ("We compare e.g. the U.S. data with Dr. Weber's from am 3. Oktober and option 2. "
+            "Then it costs 100. J. Smith agrees! Prices rose in 2024. Wait... no")
+    assert _sentences(line, False) == [
+        "We compare e.g. the U.S. data with Dr. Weber's from am 3. Oktober and option 2.",
+        "Then it costs 100.", "J. Smith agrees!", "Prices rose in 2024."]
+    # A finished line also ends with its last sentence; a fragment is dropped.
+    assert _sentences("- **Option A** costs `100`.", True) == ["Option A costs 100."]
+    assert _sentences("Weighing the details and then", True) == []
+
+
+def test_raw_reasoning_quotes_the_last_sentence_of_the_newest_finished_paragraph():
+    progress = ReasoningProgress(unlimited=True)
+    value = progress.update(event("The user asks whether a heat pump pays off in Germany. "
+                                  "I need the subsidy rules, e.g. the BEG program, and current prices."))
+    # No paragraph has finished: the open one shows its newest complete sentence.
+    assert value["text"] == "The user asks whether a heat pump pays off in Germany."
+    value = progress.update(event("\n\nElectricity costs about 0.35 EUR per kWh. So running costs are "
+                                  "close to gas at a COP of 3. " + "Still weighing the " * 25))
+    assert value["text"].splitlines()[-1] == "I need the subsidy rules, e.g. the BEG program, and current prices."
+    # The open paragraph never speaks once one has finished.
+    assert "Still weighing" not in value["text"]
+    # Finished, its last sentence is too long to quote: the one before speaks.
+    value = progress.update(event("Still weighing the " * 20 + "installation.\n\nNow the comparison"))
+    assert value["text"].splitlines()[-1] == "So running costs are close to gas at a COP of 3."
+
+
+def test_a_sentence_too_long_gives_way_instead_of_being_cut():
+    progress = ReasoningProgress(unlimited=True)
+    long = "This sentence keeps going " + "and going " * 20 + "until it ends."
+    value = progress.update(event(f"A short point about prices. {long}\n\n"))
+    assert value["text"] == "A short point about prices."
+    # Only an overlong sentence: the previous highlight stays.
+    assert progress.update(event("x " * 200 + f"\n\n{long}\n\n")) is None
+    assert progress.summary == "A short point about prices."
+
+
+def test_each_summary_part_is_quoted_by_its_heading():
+    progress = ReasoningProgress(unlimited=True)
+    part = lambda index, text: event(text, "summary", f"reasoning.summary:{index}")
+    assert progress.update(part(0, "**Comparing the two")) is None
+    assert progress.update(part(0, " heat pump models**")) is None
+    value = progress.update(part(0, "\n\nI'm looking at the efficiency figures of both. " + "Detail. " * 60))
+    assert value["text"] == "Comparing the two heat pump models"
+    # The next part starts without a line break: its heading stands alone.
+    value = progress.update(part(1, "**Weighing installation costs**\n\nI'm checking quotes. " + "Detail. " * 60))
+    assert value["text"].splitlines() == ["Comparing the two heat pump models", "Weighing installation costs"]
+    # A summary without headings speaks with the topic sentence of a finished paragraph.
+    plain = ReasoningProgress()
+    value = plain.update(event("Checking the official tariff tables first. Then the rest.\n", "summary"))
+    assert value["text"] == "Checking the official tariff tables first."
 
 
 def test_live_and_saved_activity_never_contain_full_reasoning(store):
@@ -228,8 +285,9 @@ def test_answer_step_progress_keeps_updating_past_the_kept_window_at_its_pace():
             published.append((now[0], value["text"]))
     # Far beyond the 8000 characters kept and the 7 updates of a worker.
     assert len(published) > 7 and len(progress.text) <= 8000
-    # The newest excerpt is at most one pacing interval behind.
-    assert any(f"gap number {i}" in published[-1][1] for i in (57, 58, 59))
+    # The newest excerpt is at most one pacing interval behind the newest
+    # finished paragraph (59 is still being written).
+    assert any(f"gap number {i}" in published[-1][1].splitlines()[-1] for i in (56, 57, 58))
     assert all(b[0] - a[0] >= 3 for a, b in zip(published, published[1:]))
 
 

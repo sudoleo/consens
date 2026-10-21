@@ -429,11 +429,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    verb is as wide as the wider of "Working for" and "Thought for" (the
    other one stands invisibly in the same cell), the time as wide as its
    largest value in its unit. The chevron and the model icons stay put while
-   it ticks and when it ends (Apple audit A7). */
+   it ticks and when it ends; at the first minute they glide once to the
+   wider slot (Apple audit A7). nowrap keeps "1m 0s" on one line while the
+   slot widens. */
 .agent-activity-verb { display: inline-grid; justify-items: start; }
 .agent-activity-verb > .agent-activity-verb-text, .agent-activity-verb::after { grid-area: 1 / 1; }
 .agent-activity-verb::after { content: attr(data-ghost); visibility: hidden; speak: never; }
-.agent-activity-time { display: inline-block; text-align: left; }
+.agent-activity-time { display: inline-block; text-align: left; white-space: nowrap; }
 .agent-activity-time[data-unit="seconds"] { min-width: 3ch; }
 .agent-activity-time[data-unit="minutes"] { min-width: 6.4ch; }
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
@@ -550,6 +552,19 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    reader reads (Apple audit D1). Each pass grows in and shrinks out
    (scaleX), which leaves opacity to the fade at the end. */
 #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
+/* "Checking the answer…" where the evidence row will stand (agent-chat.js
+   setAnswerChecking): that row's margins and height, so the row takes its
+   place without a jump, its quiet ink and size, no motion of its own. The
+   text sits in the row's first line: the agreement score and the links on
+   one row, on phones the score above the grid of links. */
+.agent-check-status { min-height: 36px; margin: 18px 0 8px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 36px; }
+@media (pointer: coarse) {
+  .agent-check-status { min-height: 44px; line-height: 44px; }
+}
+@media (max-width: 540px) {
+  .agent-check-status { min-height: 92px; line-height: 36px; }
+  body.agreement-verdict-hidden .agent-check-status { min-height: 56px; line-height: 56px; }
+}
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
     content: ''; position: absolute; top: -2px; bottom: -2px; left: -6px; width: calc((100% + 12px) * .4);
@@ -561,34 +576,38 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
   /* The marks stroke on in reading order; badges settle in behind them. */
-  /* Only marks the reader's highlight setting shows take part, and none the
-     reader already saw as a provisional mark in the same colour. */
+  /* Only marks the reader's highlight setting shows take part. */
   /* A sentence whose disputed words are named strokes only those words
      (.cx-spot inherits the sentence's --cx-reveal-delay). */
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown, .has-spot),
+    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered, .is-mark-shown) .cx-spot {
+    .cx-claim.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered) .cx-spot {
     background-color: transparent;
     background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
     background-repeat: no-repeat;
     box-shadow: none;
     animation: agent-mark-stroke var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
-  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered, .is-mark-shown) {
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered) {
     animation: agent-mark-badge var(--dur-layer) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
   /* Provisional marks (Coverage windows that are done while Differences
-     still runs, agent-review.js preview) arrive quietly: each fades in once,
-     without the stroke. */
-  body:not(.consensus-markers-hidden) #agentAnswerBody
-    .cx-claim.is-mark-arriving:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
-  body:not(.consensus-markers-hidden) #agentAnswerBody
-    .cx-claim.is-mark-arriving.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered) .cx-spot {
-    animation: agent-mark-arrive var(--dur-layer) var(--ease-out) backwards;
+     still runs, agent-review.js preview): each neutral line fades in once. */
+  body:not(.consensus-markers-hidden) #agentAnswerBody .cx-claim.is-provisional.is-mark-arriving {
+    animation: agent-provisional-in var(--dur-layer) var(--ease-out) backwards;
   }
-  body:not(.consensus-markers-hidden) #agentAnswerBody .claim-badge.is-mark-arriving:not(.is-marker-filtered) {
-    animation: agent-mark-badge var(--dur-layer) var(--ease-out) backwards;
+  /* The hand-over to the final marks happens in one frame, without a gap: a
+     sentence keeps its provisional line until its own colour strokes on
+     (its --cx-reveal-delay), then the line fades as the colour comes; a
+     sentence the result leaves unmarked lets it fade at once. */
+  body:not(.consensus-markers-hidden) #agentAnswerBody .cx-claim.was-provisional {
+    animation: agent-provisional-out var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
+  }
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
+    .cx-claim.was-provisional:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot) {
+    animation: agent-mark-stroke var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards,
+      agent-provisional-out var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
@@ -609,7 +628,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
-@keyframes agent-mark-arrive { from { background-color: transparent; box-shadow: none; } }
+@keyframes agent-provisional-in { from { text-decoration-color: transparent; } }
+@keyframes agent-provisional-out {
+  from { text-decoration-color: var(--cx-provisional-line); }
+  to { text-decoration-color: transparent; }
+}
 
 /* ---- Progress at the models ------------------------------------------------
    While the agent works, each comparison model's icon in the summary row

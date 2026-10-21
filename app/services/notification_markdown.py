@@ -83,6 +83,14 @@ class _Tree(HTMLParser):
         self._stack[-1].children.append(data)
 
 
+def _task_box(node) -> str | None:
+    """A checklist item's box (public_markdown._mark_task_items) as a
+    character: a notification has no stylesheet to draw it with."""
+    if node.tag != "span" or "md-task-box" not in node.attrs.get("class", "").split():
+        return None
+    return "☑ " if node.attrs.get("data-checked") == "true" else "☐ "
+
+
 def _merge_adjacent_runs(md_text: str) -> str:
     def merge(segment: str) -> str:
         previous = None
@@ -203,6 +211,9 @@ def _mail_node(node, styles, citations, *, in_code=False, in_pre=False, first=Fa
         return ""
     if tag == "br":
         return "<br>"
+    box = _task_box(node)
+    if box:
+        return box
     if tag == "hr":
         style, classes = styles["hr"]
         return f'<hr class="{classes}" style="{style}">'
@@ -272,6 +283,9 @@ def _inline(node, mode: str, *, in_code=False) -> str:
         return ""  # images never travel; nested lists are blocks of their own
     if tag == "br":
         return "\n"
+    box = _task_box(node)
+    if box:
+        return box
     child_code = in_code or tag == "code"
     inner = "".join(_inline(child, mode, in_code=child_code) for child in node.children)
     if tag == "a":

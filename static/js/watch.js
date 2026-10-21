@@ -1263,8 +1263,11 @@
       confirm.textContent = "Preparing saved consensus…";
       window.resolveCurrentShareResultId?.().then(resultId => {
         if (!confirm.isConnected) return;
-        confirm.disabled = !resultId;
-        confirm.textContent = resultId ? "Start watching" : "Saved consensus unavailable";
+        confirm.disabled = false;
+        confirm.textContent = "Start watching";
+        // A saved chat that could not be prepared says why (the server's
+        // reason); the button stays to try again.
+        if (!resultId) showDialogError(window.currentBookmarkShareResultError || "");
       });
     } else if (!directQuestion && !window.lastShareResultId) {
       confirm.disabled = true;
@@ -1276,10 +1279,16 @@
       if (!body.contains(document.activeElement)) focusQuietly(goals.checked() || confirm);
     });
     confirm.addEventListener("click", async function () {
+      // A second try after a failed preparation asks the server again.
+      if (!directQuestion) this.disabled = true;
       const resultId = directQuestion ? "" : await (window.resolveCurrentShareResultId?.()
         || Promise.resolve(window.lastShareResultId));
       if (!watchModalIntentIsCurrent(modalIntent)) return;
-      if (!directQuestion && !resultId) return;
+      this.disabled = false;
+      if (!directQuestion && !resultId) {
+        showDialogError(window.currentBookmarkShareResultError || "");
+        return;
+      }
       const visibility = visibilitySelect.value;
       const emailMode = emailModeSelect.value;
       const goal = selectedGoal();

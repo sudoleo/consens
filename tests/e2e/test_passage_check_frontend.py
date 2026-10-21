@@ -88,8 +88,8 @@ GREY = r"""el => { const value = getComputedStyle(el).backgroundColor;
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
 def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, width, dark):
-    # The folded card is the "Disagreements & issues" view, the default again
-    # since 2026-10-19; "All checks" opens it on the full text.
+    # The card starts folded under every Highlights setting (since
+    # 2026-10-21); "Disagreements & issues" is the default since 2026-10-19.
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700,
         init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','concerns')")
     requests, errors = [], []
@@ -150,10 +150,27 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
         _snapshot(page, f"passage-check-{width}")
 
+        popover = page.locator("#claimPopover")
+        if width >= 700:
+            # With a mouse a quoted sentence previews like a sentence of the
+            # answer; the click swaps the preview for the card, and closing
+            # the card brings no preview back.
+            quotes.hover()
+            hover_card = page.locator(".insight-preview")
+            expect(hover_card).to_be_visible()
+            expect(hover_card).to_contain_text("1/3")
+            quotes.click()
+            expect(hover_card).to_be_hidden()
+            expect(popover).to_be_visible()
+            page.keyboard.press("Escape")
+            expect(popover).to_be_hidden()
+            page.wait_for_timeout(300)
+            expect(hover_card).to_be_hidden()
+            page.mouse.move(0, 0)
+
         # A count opens the same card as a checked answer sentence, with a
         # way to the model's own answer.
         card.locator('.passage-check-count[data-verdict="disputed"]').click()
-        popover = page.locator("#claimPopover")
         expect(popover).to_be_visible()
         expect(popover).to_contain_text("Deviate")
         expect(popover).to_contain_text("Larger radiators are often enough.")

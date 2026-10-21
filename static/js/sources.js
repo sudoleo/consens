@@ -5,7 +5,8 @@
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.linkifySourceTags, window.mergeEvidenceSources,
 // window.rewriteSourceTags, window.registerResponseSources,
-// window.prepareResponseSources, window.renderModelResponseWithSources.
+// window.prepareResponseSources, window.renderModelResponseWithSources,
+// window.linkifyAgentSources, window.isBareSourceLink.
 // Call-time-Abhaengigkeiten: window.injectMarkdown, window.renderEvidenceSources,
 // window.currentEvidenceSources (geteilter State).
 // =====================================================================
@@ -538,19 +539,36 @@ function linkifySourceTags(containerEl, sources) {
 }
 window.linkifySourceTags = linkifySourceTags;
 
+// The form under which an Agent source is one source: http(s) only, no
+// credentials, no fragment; '' for anything else.
+function canonicalAgentSourceUrl(value) {
+  try {
+    const url = new URL(value);
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return '';
+    url.hash = '';
+    return url.href;
+  } catch (_) { return ''; }
+}
+
+// A link whose label is its own address or just its site's name
+// ("[njaped.no](https://njaped.no/)"): linkifyAgentSources puts a pill in its
+// place, and the label goes with it. Sentence marks keep out of such a link
+// (consensus-insights.js wrapFlatRange); a mark inside it left the page with
+// the label, and its hover card opened in the corner of the screen.
+function isBareSourceLink(link) {
+  if (!link?.matches?.('a[href]') || link.matches('.src-ref, .source-link') || link.querySelector('img, svg')) return false;
+  const url = canonicalAgentSourceUrl(link.getAttribute('href'));
+  const label = link.textContent.trim();
+  return Boolean(url) && (canonicalAgentSourceUrl(label) === url || labelIsSourceHost(label, { url }));
+}
+window.isBareSourceLink = isBareSourceLink;
+
 // Agent prose cites URLs across independent model catalogs. Display numbers
 // belong to this answer's deduplicated list, never to the currently active run.
 // This is a DOM projection: the original Markdown and its review hash stay intact.
 function linkifyAgentSources(containerEl, sources) {
   if (!containerEl || !sources?.length) return;
-  const canonical = value => {
-    try {
-      const url = new URL(value);
-      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return '';
-      url.hash = '';
-      return url.href;
-    } catch (_) { return ''; }
-  };
+  const canonical = canonicalAgentSourceUrl;
   const refs = new Map(sources.map((src, index) => [canonical(src.url), {src, token: String(index + 1)}]));
   refs.delete('');
   const skip = 'a, code, pre, script, style, textarea, .katex, mjx-container';

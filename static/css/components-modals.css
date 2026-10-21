@@ -1414,9 +1414,10 @@ dialog#shareModal[open] { display: flex; }
 .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
 .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
 .share-modal-actions .share-link-btn { margin-left: auto; }
-/* Why this answer can't be shared (yet): the server's sentence, above the
-   buttons, in the Watch dialog's error voice. */
-.share-modal-error { flex: 1 0 100%; margin: 0; color: var(--dispute); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
+/* Why this answer can't be shared (yet), in the server's words
+   (share-dialog.js): a line of its own above the buttons, in the Watch
+   dialog's error colour. */
+.share-modal-content .share-modal-error { flex: 1 0 100%; margin: 0; color: var(--dispute); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
 .share-modal-error[hidden], .share-modal-actions [hidden] { display: none; }
 .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {
   display: inline-flex; align-items: center; justify-content: center; min-height: 36px;

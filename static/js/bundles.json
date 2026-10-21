@@ -131,6 +131,10 @@
           "note": "Shared LaTeX preparation; must load before markdown-stream.js."
         },
         "static/js/markdown-stream.js",
+        {
+          "file": "static/js/task-checks.js",
+          "note": "App.taskChecks: ticks in an answer's checklists, kept on the saved turn. markdown-stream.js calls it after each write."
+        },
         "static/js/sources.js",
         "static/js/attachments.js",
         "static/js/model-answer-reader.js",

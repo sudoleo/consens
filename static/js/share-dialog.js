@@ -262,8 +262,11 @@
       }
       const resultId = await window.resolveCurrentShareResultId?.();
       if (resultId) return (pendingId = resultId);
+      // The refusal itself (its status says whether a retry can help), else
+      // its sentence (firebase.js requestBookmarkShareResult).
       const error = window.currentBookmarkShareResultContext?.error;
-      throw error || new Error("This chat couldn’t be prepared for sharing. Try again.");
+      throw error || new Error(window.currentBookmarkShareResultError
+        || "This chat couldn’t be prepared for sharing. Try again.");
     }
     async function prepareLink() {
       confirmBtn.disabled = true;

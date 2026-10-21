@@ -351,7 +351,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. das Feld `memory` an `compare_models`/`check_text` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
-| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail, Turns und neuen Context-Versionen bereits unsichtbar bzw. gesperrt), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Consensus-Turns werden serverseitig über `/consensus`, Agent-Turns über `/agent` finalisiert. |
+| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail, Turns und neuen Context-Versionen bereits unsichtbar bzw. gesperrt), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Consensus-Turns werden serverseitig über `/consensus`, Agent-Turns über `/agent` finalisiert. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Mailbox-Setup-Pfad: Der Admin-SDK-Reset-Link (`continueUrl = {PUBLIC_SITE_URL}/app?setup=1`, damit Firebases „Passwort gespeichert“-Seite zurück in den vorausgefüllten Login führt) geht in einer EIGENEN SMTP-Mail raus (`registration.send_own_setup_email` → `mailer.build_account_setup_message` „Finish setting up …“ bzw. für Konten mit mindestens einem Login `build_existing_account_message` „You already have an account“ mit Login-Knopf + optionalem Reset; „Send the link again“ vor dem ersten Login bekommt wieder die Setup-Mail, `needs_password_setup`). Grund: Firebases Vorlage sagt „Reset your password“ und ist in diesem Projekt gesperrt. Ohne SMTP oder bei Fehlern geht wie früher Firebases `PASSWORD_RESET`-Mail raus (lehnt Firebase die Continue-URL mit 400 ab, ohne sie). Die HTTP-Antwort bleibt in allen Fällen identisch. Neben dem IP-Limit (3/min) gehen pro Adresse höchstens 5 Setup-Mails je Stunde raus (prozesslokal über `api_uid_limiter`, Schlüssel = SHA-256 der Adresse); darüber antwortet `/register` gleich und versendet nichts, damit niemand über viele IPs ein fremdes Postfach flutet. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig; es läuft bei jedem Login und Seitenaufruf und ist deshalb nur gegen Fluten begrenzt (30/min pro IP). |
 | `firebase_auth_proxy.py` | Same-Origin-Proxy für Firebases Sign-in-Helfer: `GET/HEAD/POST /__/auth/*` und `GET /__/firebase/init.json` werden transparent an `https://<FIREBASE_PROJECT_ID>.firebaseapp.com` (überschreibbar per `FIREBASE_AUTH_PROXY_UPSTREAM`) weitergereicht (Firebase „redirect best practices“, Proxy-Option). Weitergereicht werden nur Request-Zeile, Content-Negotiation-Header und der Handler-Body, nie Cookies/Authorization; zurück nur Inhalts-/Cache-Header, kein `Set-Cookie`. `CustomSecurityMiddleware` lässt auf diesen Pfaden die App-CSP weg und setzt `X-Frame-Options: SAMEORIGIN` (das `/__/auth/iframe` rahmt die App selbst). Wirksam erst, wenn `FIREBASE_AUTH_DOMAIN` den App-Host nennt (siehe §7). Ohne Projekt-ID 404, Upstream-Fehler neutral 502. |
@@ -1998,6 +1998,39 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und meldet den degradierten Zustand, statt eine Promise-Rejection auszulösen.
   `injectMarkdown(el, md, evidenceSources?)` akzeptiert optional turnbezogene
   Quellen; ohne dritten Parameter gilt weiter `window.currentEvidenceSources`.
+  **Checklisten (seit 2026-10-21):** `- [ ] Punkt` / `- [x] Punkt` werden zu
+  Kästchen. marked zeichnet das Kästchen als Formularfeld, das
+  `MODEL_HTML_CONFIG` zu Recht verbietet (vorher verschwand es, der Punkt las
+  sich als normaler Spiegelstrich); `ensureTaskMarkers` lässt marked (einmal
+  je Instanz, per `marked.use`) stattdessen `span.md-task[data-checked]`
+  schreiben, `enhanceTaskLists` macht daraus nach dem Sanitizer einen
+  `button.md-task-box[role=checkbox][aria-checked]` (aria-label = Wortlaut
+  des Punkts), `li.md-task-item`, Liste `.md-task-list`. Nur ein Marker am
+  Anfang seines Listenpunkts wird ein Kästchen, jeder andere fällt weg. Neue
+  Kästchen sind `disabled`; nach jedem Schreiben (`injectMarkdown`,
+  `morphMarkdown`, `renderMarkdownStream`, `createStreamRenderer`) ruft
+  `syncTaskBoxes(el)` `App.taskChecks.apply(el)`. Im Stream hält
+  `holdOpenTask` eine Zeile `- [` / `- [x` zurück (kann noch ein Link werden),
+  `- [ ]` steht sofort als Kästchen. Optik in `shell.css` (im Spiegelstrich-
+  Listen steht das Kästchen an der Stelle des Punkts, die Wörter behalten ihre
+  Spalte; nummerierte Listen behalten die Zahl), öffentlich `.share-md`.
+- **`task-checks.js`** — `App.taskChecks` (`scope`, `apply`, `flush`), lädt nach
+  `markdown-stream.js`. Abhaken geht nur in der Antwort eines **gespeicherten,
+  fertigen Turns**: die Render-Stelle nennt ihn vor dem Schreiben per
+  `scope(el, {chatId, turnId, checked})` (`data-task-turn`/`data-task-chat` am
+  Antwort-Element: `#agentAnswerBody` in `agent-chat.js` für gespeicherten und
+  fertigen Live-Turn, `#consensusAnswerBody` in `run-view.js` über
+  `completedBasis`, Verlaufs-Turns in `consensus-run.js::buildHistoryTurn`;
+  wandert der Live-Turn in den Verlauf, nimmt das Element die Attribute mit).
+  Ohne Turn (Einzelantworten im Leser, laufende Antwort) bleiben Kästchen
+  `disabled`. Gezählt wird die Reihenfolge der Kästchen dieser Antwort (nicht
+  in einer darin verschachtelten `.consensus-answer-body`). Ungetickt zeigt
+  ein Turn das Geschriebene (`[x]` angehakt); ab dem ersten Klick gilt die
+  Liste. Klicks auf dieser Seite gewinnen über später gerenderte, ältere
+  Turn-Daten. Speichern: 600 ms nach dem letzten Klick die ganze Liste per
+  `PUT /chats/{chat}/turns/{turn}/task-checks` (eine Anfrage je Turn
+  gleichzeitig, Wiederholung nach 2 s/8 s bei Netz/401/408/429/5xx, beim
+  Verstecken des Tabs `keepalive`).
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
   Zwei Darstellungen: **im Chat-Fliesstext** (Container ist bzw. liegt in
@@ -2863,8 +2896,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (Telegram-Verbindung und Morning Brief im `.switch`/`.slider`-Stil des
   Input-Felds, Brief-Uhrzeit beim Verlassen des Feldes gespeichert) und am
   Ende das einklappbare „Why a watch, not a scheduled prompt“
-  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, Offen-Zustand in
-  `consensio.watchExplainer.open.v1`, standardmäßig zu). Jede Karte zeigt
+  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, standardmäßig zu;
+  `consensio.watchExplainer.open.v2` merkt nur, was der Leser selbst
+  umschaltet — v1 speicherte auch das `toggle`-Event des eigenen
+  `open = true` und hielt die Kachel so dauerhaft offen). Jede Karte zeigt
   eine Textspalte über die ganze Breite: Status (Zeit als „checked 3 h ago“ bzw.
   „last check …“; bei „First check pending“ ohne Zeit, die steht im Fuß), Frage
   (3 Zeilen geklemmt), „Waiting for“ + Ziel + Zielstand, darunter „Details“
@@ -3052,7 +3087,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `BestModel:`-Zeile wird weiterhin separat als „Best answer“ dargestellt.
   Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
   die Quellenzahl selbst als Satzteil gewrappt und trug die Markierung
-  der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
+  der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Seit
+  2026-10-21 wickelt `wrapFlatRange` auch keinen Text in einem Link, dessen
+  Beschriftung seine eigene Adresse oder nur seine Domain ist
+  (`window.isBareSourceLink`, sources.js): `linkifyAgentSources` setzt nach dem
+  Markieren eine Quellen-Pille an seine Stelle und verwirft die Beschriftung,
+  ein Span darin fiel mit aus dem Dokument, und die Hover-Karte seines Satzes
+  stand oben links (bei Widersprüchen; ein Claim-Badge im Link hielt die
+  Beschriftung bisher zufällig davon ab, als Domain zu gelten). Der Linktext
+  zählt für die Ankersuche weiter mit; ein Satz, der nur aus einem solchen
+  Link besteht, gilt als nicht verankert. Ein Satz wird höchstens einmal dekoriert
   (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
   ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
   existiert nicht mehr.
@@ -3064,6 +3108,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (vertiefte Marke)
   ↔ `.claim-badge.is-linked-hover`. Wo ein Badge steht, ist es das
   fokussierbare Steuerelement und die Passage nur ein zusätzlicher Mausweg.
+  **Hover-Vorschau (`.insight-preview`, seit 2026-10-21 nachgeschärft):**
+  `canHoverPassages` fragt genau die CSS-Kapsel ab (vorher `any-hover`/`any-pointer`,
+  das manches Handy erfüllt); dieselbe Prüfung gilt in `refreshHoverPreview`
+  (Scroll/Resize). Fokus zeigt die Vorschau nur, wenn er per Tab kam
+  (`focusPassage`: Tab-Taste seit dem letzten `pointerdown`, `:focus-visible`,
+  echter Zeiger): ein Tippen fokussiert den Satz ebenfalls, und ein
+  geschlossener Leser (`model-answer-reader.js` `close()`) oder eine geschlossene
+  Claim-Karte geben den Fokus an ihn zurück – auf dem Handy stand die
+  Vorschau danach von selbst da. `placeHoverPreview` verankert nur an
+  Spans im Dokument mit Fläche (`getClientRects()`), ohne solche keine Karte;
+  solange die Claim-Karte offen ist, keine Vorschau daneben. Neu markieren
+  (`renderInlineMarkers`), `resetConsensusInsights` und `agent-review.js::overText`
+  nehmen eine Vorschau ihrer Marken mit (`App.claimPopover.hidePreview(root)`).
   Inline-Quoten haben auf Mausgeraeten nur ihre sichtbare Trefferflaeche;
   auf Touch erweitert `::after` nur die Hoehe auf 44 px. So ueberdeckt das
   Badge keine direkt folgende `.src-ref`-Quelle. Nur alleinstehende Badges
@@ -3088,9 +3145,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   **Gegenüberstellung (seit 2026-10-16):** Ein Widerspruch sind Behauptungen,
   die sich gegenüberstehen. Der Kartenkopf trägt nur noch das Thema
   (`claim`), der Körper ist `.diff-sides`: jede Position als Satz
-  (`.diff-position-stance`, beim Widerspruch 16px/500), darunter wer das sagt,
-  zwischen den Seiten ein `.diff-versus-mark` „vs“ in der Ampelfarbe der
-  Schwere (`--dispute`/`--partial`, keine Fläche). Die Seiten stehen **immer
+  (`.diff-position-stance`), darunter eine Metazeile `.diff-position-meta`
+  (wer das sagt, „In the answer“, „Show quote“, durch Mittelpunkte getrennt),
+  zwischen den Seiten ein leises `.diff-versus-mark` „vs“ in Metagröße und
+  -grau. Seit 2026-10-21 hat das „vs“ weder Ampelfarbe noch Haarlinien: die
+  Schwere trägt allein der `.sev-dot`. Im Leser (`model-answer-reader.css`)
+  setzt der Tab die Chat-Typografie fort, drei Stufen: Thema als Titel
+  (17px/600), Behauptungen in Antwortgröße (17px/400), alles Übrige eine
+  Metastufe (13px, `--ink-2`); Abstände im 4px-Raster, ein Chevron für Karte
+  und „smaller differences“ am rechten Inhaltsrand. Die Seiten stehen **immer
   untereinander** (seit dem Nachschliff am selben Tag: nebeneinander bei zwei,
   untereinander bei drei Seiten wirkte in derselben Frage willkürlich). Die
   Seite mit `in_answer` steht vorn und trägt „In the answer“. Eine andere
@@ -3103,11 +3166,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   zeigen nur Icons + Anzahl („4 models“, Namen bleiben Linktext/Tooltip),
   ein Modell Icon + Name; ist die Originalantwort erreichbar, ist genau das
   Icon/Name-Paar der `.diff-jump-link`. Das Zitat steht hinter
-  `.diff-quote-toggle` („Show quote“, per Dokument-Delegation, damit es auch
-  in den in den Leser verschobenen Karten greift); ohne `stance` ist das
-  Zitat selbst die Behauptung und erscheint nur einmal. Das „vs“ ist
-  halbfett in der Ampelfarbe auf einer gleichfarbigen, nach außen
-  auslaufenden Haarlinie.
+  `.diff-quote-toggle` („Show quote“ in der Metazeile, per
+  Dokument-Delegation über `closest(".diff-position")`, damit es auch in den
+  in den Leser verschobenen Karten greift); ohne `stance` ist das Zitat
+  selbst die Behauptung und erscheint nur einmal.
   **Alte Daten (vor 2026-10-16)** bereitet `readableDifference` für Karte und
   Hover-Vorschau auf, ohne die Daten zu ändern: die Zuschreibung am
   Satzanfang („Model F sagt, …“, „Die Synthese sagt, dass …“) fällt weg,
@@ -3240,13 +3302,20 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   die eigene Farbe über. Kein Rahmen um die Icons (Max). Den Status setzt
   `agent-delegation.js` schon immer auf die `.agent-inline-model`-Buttons.
   Seit 2026-10-08 füllt eine ruhige Zeile die sonst stille Vergleichsphase
-  („Comparing perspectives…“): `agentDelegation.liveHighlight(chatId, turnId)`
-  liefert die letzte Zeile des `progress_text` des Vergleichsmodells, das noch
-  läuft und zuletzt berichtet hat (Judges nie); `agent-chat.js::project` reicht
-  sie als `highlight` an `agentActivity.render`, das sie nur live und nur in
-  dieser Phase als `Modell: Satz` unter den Schritt setzt (ein `<p>` unter dem
-  internen Schlüssel `comparison-highlight`, `aria-hidden`, damit der
-  Screenreader-Log nicht überläuft; nie gespeichert). Damit die Zeile nicht
+  („Comparing perspectives…“): `agentDelegation.liveHighlights(chatId, turnId)`
+  liefert seit 2026-10-21 für jedes noch laufende Vergleichsmodell (Judges nie)
+  die letzte Zeile seines `progress_text` mit `order` (Reihenfolge, in der die
+  Modelle kamen); `agent-chat.js::project` reicht die Liste als `highlights` an
+  `agentActivity.render`, das sie nur live und nur in dieser Phase als
+  `Modell: Satz` unter den Schritt setzt (ein `<p>` unter dem internen Schlüssel
+  `comparison-highlight`, `aria-hidden`, damit der Screenreader-Log nicht
+  überläuft; nie gespeichert). `comparisonLine` lässt jeden Auszug mindestens
+  `LINE_DWELL_MS` (2,5 s) stehen und gibt die Zeile dann reihum an das nächste
+  Modell mit neuem Auszug (ohne Neues behält sie das sprechende Modell); ein
+  eigener Timer (`scheduleLine`) rückt sie auch ohne neues Ereignis weiter, und
+  `crossfade` blendet den Text weich über (bei reduced-motion sofort). Bis
+  2026-10-21 gewann immer das Modell, das zuletzt berichtet hatte: die Zeile
+  wechselte etwa alle 0,5–1 s. Damit die Zeile nicht
   nach wenigen Sätzen einfriert, nutzen Vergleichsantworten
   `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)`
   (andere Worker behalten das Limit), und `comparison_selection` fordert für
@@ -3566,6 +3635,20 @@ Verlaufsnachrichten bleiben wörtlich. Vorher stand die Uhrzeit oben im System
 und machte jeden Cache ab dort bei jeder Nachricht ungültig.
 `DelegationLoop` hängt danach (wie bisher) Orchestrator-/Vergleichsregeln an
 und zuletzt Memory, sodass eine Memory-Änderung nur ab dort neu cached.
+Was sich zwischen den Nachrichten eines Chats ändert, steht seit 2026-10-21
+ebenfalls im App-Kontextblock der neuesten Frage (`DelegationLoop._app_context`
+→ `agent_runs.add_app_context`): die Dateiliste („Files available in this
+chat: …“, ändert sich mit jedem Upload) und die Google-Auswahl dieser
+Nachricht („Google data access was explicitly enabled for this message: …“).
+Im System bleiben nur ihre festen Regeln (`UNTRUSTED`, Google-Regeln), die mit
+denselben Tools kommen und gehen; die Tool-Liste ändert sich mit Dateien oder
+Google ohnehin, das ist selten. Hinweise für **einen** Schritt („Web search is
+unavailable for this step …“ in `_admit_chat_step`, `GOOGLE_NO_SEARCH` in
+`_step`) hängt `with_step_note` als eigene Nutzer-Nachricht **ans Ende** der
+Anfrage statt an `messages[0]`: so bleibt der Präfix der vorigen Schritte
+lesbar. Ausnahme: der Hinweis im Rückfall begrenzter Läufe (`_step`, bei
+`AgentTokenBudgetExceeded` ohne Kontomodus) hängt noch am System; Chats laufen
+im Kontomodus und erreichen ihn nicht.
 `answer_conversation` (der echte Verlauf für Memory-Belege, Passagensuche,
 lesbare Links) entfernt den App-Kontextblock (`strip_app_context`). `prompt_cache_control` setzt für
 `anthropic/`- und `qwen/`-Modelle OpenRouters automatisches
@@ -3575,6 +3658,23 @@ schreibt. Bis 2026-10-14 lief der getrennte Antwortschritt mit eigener Uhr ohne
 Cache (`prompt_cache=False`) und las Gespräch und Vergleichsantworten ein zweites
 Mal. Gemessene `cached_input_tokens`/`cache_write_tokens` laufen wie bisher über
 `measured_usage` in Kosten und Kontingent.
+
+**Cache nur, wo ihn jemand liest (seit 2026-10-21).** Ein Cache-Write kostet bei
+Anthropic ein Viertel mehr als normaler Input, ein Read ein Zehntel. Pro
+Aufrufart: Schritte des Chatmodells lesen den Präfix im nächsten Schritt und in
+der nächsten Nachricht → Cache. Vergleichsantworten (`kind: comparison`) sind
+eine Anfrage, deren Suchrunden den eigenen Prompt wieder lesen (14 Tage bis
+2026-10-21: 21 von 49 Claude-Antworten lasen Cache, netto positiv) → Cache nur
+mit Suche. Judges sind einmalige Aufrufe (Retries, Hedges und Coverage-Fenster
+unterscheiden sich im Nutzerblock, an dem der automatische Breakpoint sitzt) →
+kein Cache. `DelegationLoop.worker_completion` setzt dafür
+`AgentCompletion.one_off` (Vergleich, Judge) und `AgentCompletion.stream`
+sendet `cache_control` nur, wenn `not one_off` oder die Anfrage Suchrunden hat.
+Seitenlesungen (`PageFetch`, Responses-API) senden ohnehin keinen Marker.
+Messen: `scripts/cache_hit_rate.py` (nur lesend; pro Tag, Familie und
+Aufrufart Anteil `cached_input_tokens/input_tokens`, Writes/Reads und für
+Anthropic die Netto-Ersparnis in vollen Input-Tokens; `--exclude-own` lässt
+Max' Konten weg).
 
 **Sticky Endpunkt (seit 2026-10-21).** Jeder Endpunkt cacht nur für sich
 (Claude läuft bei Anthropic, Vertex und Bedrock mit getrennten Caches). Ohne
@@ -3588,10 +3688,15 @@ kann den Request aber nie ungültig machen) aus
 `openrouter_contract.provider_session_id`: ein SHA-256-Präfix über uid und
 Chat-ID, gleich für alle Nachrichten eines Chats, ohne beide im Klartext. OpenRouter bleibt damit ab dem ersten erfolgreichen
 Aufruf beim selben Endpunkt (pro Modell, Fallback bei Ausfall, vergessen nach
-10 min Leerlauf). Vergleichsantworten, Judges und Seitenlesungen (`worker`)
-senden keine Session und behalten den schnellsten Endpunkt: Sie teilen keinen
-Präfix. Die Session gehört dem Adapter (`AgentCompletion.stream`), ein
-Registry-Feld `session_id` wird verworfen. Ob OpenRouter die Session auch
+10 min Leerlauf). Jeder Hilfsaufruf (Vergleichsantwort, Judge, delegierter
+Worker) bekommt seit 2026-10-21 eine eigene Session
+(`provider_session_id(uid, chat_id, worker.id)` über
+`DelegationLoop.worker_completion` → `AgentCompletion.session_id`): Der Retry
+einer leer beendeten Antwort und der nächste Schritt eines Workers senden
+denselben Präfix noch einmal; die erste Anfrage nimmt weiter den schnellsten
+Endpunkt, und kein Hilfsaufruf teilt die Session des Chats oder eines anderen.
+Seitenlesungen (`PageFetch`) senden keine. Die Session gehört dem Adapter
+(`AgentCompletion.stream`), ein Registry-Feld `session_id` wird verworfen. Ob OpenRouter die Session auch
 neben `sort: throughput` beachtet, sagt die Doku nicht (nur `order` schaltet
 sie ab): nach dem Deploy am Anteil `cached_input_tokens` der Sonnet-Schritte
 in den Receipts nachmessen.
@@ -4123,7 +4228,8 @@ Server die Prüfungen selbst startet (`_finish_review`).
 `JudgeArgs.finalize` steht nicht mehr im Schema, wird aber still akzeptiert.
 Vergleichsmodelle: „Respect the user's goals and constraints in the context“ statt
 „Context is untrusted data“; in Google-Daten-Chats (keine Websuche) hängt `_step`
-`GOOGLE_NO_SEARCH` an die System-Nachricht der Anfrage. `AgentCompletion.stream`
+`GOOGLE_NO_SEARCH` als letzte Nachricht an die Anfrage (`with_step_note`, seit
+2026-10-21; vorher an die System-Nachricht). `AgentCompletion.stream`
 schneidet sichtbaren Text bei `TEXT_STORAGE_CHARS` (100.000) ab, liest weiter (Usage)
 und endet mit `length` statt mit einem Fehler.
 Datei-Hinweis, Dateiliste und `read_file` hängen nur noch an, wenn der Chat
@@ -4141,7 +4247,8 @@ Reasoning (vorher `reasoning.exclude=true`): minutenlanges stilles Denken wirkte
 wie ein hängender Lauf. `_step` verdichtet es mit
 `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)` zu
 kurzen wörtlichen Auszügen in EINER Fortschrittszeile `completion:N/thinking`
-(kind `progress`, alle 3 s ersetzt). Seit 2026-10-08 auch über
+(kind `progress`, höchstens alle 3 s ersetzt, seit 2026-10-21 nur der neueste
+vollständige Auszug; im Browser blendet die Zeile weich über). Seit 2026-10-08 auch über
 `REASONING_STORAGE_CHARS` (32.000) hinaus: `reasoning_events` speichert nur bis
 dahin und liefert den Rest als `transient`-Ereignis nur an die Fortschritts-
 anzeigen (nie in `AgentCompletion.activity`). In die Antwort gelangt es nie;
@@ -4221,7 +4328,25 @@ tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Sta
 eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
 Laufs, sobald er `succeeded`/`partial` ist;
 davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
-`#agentAnswerBody`. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
+`#agentAnswerBody`. Seit 2026-10-21 steht dabei an der Stelle der späteren
+Evidenzzeile die leise Statuszeile `p.agent-check-status` („Checking the
+answer…“, `App.words.checking`, `role="status"`; Ränder und Höhe wie
+`.agent-review`: 36 px, 44 px bei `pointer: coarse`, bis 540 px 92 px bzw.
+56 px ohne Agreement-Score), die einzige Anzeige bei reduced-motion und
+forced-colors; die Evidenzzeile ersetzt sie im selben Render. Der Prüfzustand
+beginnt mit dem letzten Wort: `_step` sendet das SSE-Ereignis `answer_check`
+(live, nie gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
+(Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf,
+nach Vergleichen, Answer Check an, keine offenen Worker oder Mailbox), noch vor
+Settlement, Kontingent-Snapshot und den Review-Checkpoints von
+`freeze_for_synthesis`/`capture` (zusammen mehrere Firestore-Schreibvorgänge,
+bis dahin startete der Schimmer erst mit dem Review mit `versions`). Der
+Handler merkt sich den Text (`context.metadata.answerCheckText`); `project`
+zeigt die Prüfung, solange genau dieser Text steht und noch keine Version
+vorliegt, danach übernimmt `review.status` `required`/`running`. Ein
+zurückgenommener oder geänderter Text löscht die Ankündigung, das Laufende
+beendet den Zustand; ein Reload ohne Live-Frames sieht nur den gespeicherten
+Review. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
 neu gerenderter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
 beim ersten Auftreten je `answer_hash` (`evidence.reveal`). Veraltete
 Antwort-/Grundlagenbindungen werden nicht angezeigt.
@@ -4233,13 +4358,30 @@ null, previews, evidence)`: Sie markiert nur bei exakt gebundenem Text
 (`answer_hash`, Versionstext = `dataset.markdown`, Status `required`/`running`)
 die Claims des Vergleichs, den die Evidenzzeile zeigen wird
 (`_selectedBasis` oder der erste), mit `differences: []`, losgelöster
-Fallback-Box (keine „Key claims“) und ohne Score; neue Marken bekommen
-`.is-mark-arriving` (Einblenden), `body._shownMarks` merkt Farbe+Text je
-`answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand. Ohne
-passende Vorschau nimmt `preview` die Marken einmal wieder ab
-(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark` setzt
-den Zustand zurück; `revealMarks` setzt Marken aus `_shownMarks` auf
-`.is-mark-shown` (samt Badge) und lässt nur neue oder umgefärbte anstreichen.
+Fallback-Box (keine „Key claims“) und ohne Score. **Neutral seit 2026-10-21**
+(Max: erst wurde ein Satz gelb, das Gelb verschwand, dann wurde ein ganz
+anderer rot): `renderStoredConsensusClaims(…, { provisional: true })` setzt
+jeden verankerten Claim als `.cx-claim.is-provisional` ohne Stufenklasse,
+Badge, `.cx-spot` und „Key claims“; der Highlights-Filter lässt sie immer
+stehen (außer „No highlights“). Aussehen: nur eine leise gepunktete Linie in
+Tinte (`--cx-provisional-line`, hell/dunkel, `forced-colors`: `GrayText`),
+keine Fläche, kein Platzbedarf. Hover (nur echter Zeiger) zeigt kein Urteil
+(„Compared with N model answers“ / „The result appears once the whole answer
+is checked“), Klick öffnet nichts, kein Tabstopp. Neue Marken bekommen
+`.is-mark-arriving` (die Linie blendet ein), `body._shownMarks` merkt die
+Satztexte je `answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand.
+Ohne passende Vorschau nimmt `preview` die Marken einmal wieder ab
+(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark`
+ersetzt sie im selben Task durch die finalen (nie ein Moment ohne Marken) und
+setzt den Zustand zurück; finale Marken auf vorher vorläufigen Sätzen tragen
+kurz `.was-provisional` (`handOver`): die Linie bleibt, bis ihre Farbe per
+`revealMarks` anstreicht (`--cx-reveal-delay`), und blendet dann aus; ein Satz,
+den das Ergebnis nicht färbt, verliert sie sofort weich. Weil die vorläufigen
+Marken keine Farbe zeigten, streicht `revealMarks` jede farbige Marke an
+(kein `.is-mark-shown` mehr). Bei `prefers-reduced-motion` (und
+`forced-colors`) gibt es keine Animation: die Farben stehen sofort da.
+`settleHandOver` räumt die Klasse am Ende des Anstreichens bzw. nach
+`HAND_OVER_MS` ab.
 
 Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
 Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
@@ -4606,8 +4748,20 @@ Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
 `agent_progress.py`/`agent_loop.py` behalten für Legacy-Läufe und Worker drei Zeilen
-à 180 Zeichen und acht Updates je Modellschritt; Provider-Zusammenfassungen haben
-Vorrang. Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
+und acht Updates je Modellschritt; Provider-Zusammenfassungen haben Vorrang.
+Seit 2026-10-21 ist jede Zeile eine vollständige Aussage (`_excerpts`, Tests
+`test_agent_progress.py`): ein Satz endet nur, wenn nach dem Satzzeichen
+wirklich Whitespace angekommen ist, nie in „e.g.“, „U.S.“, „Dr.“, Initialen
+oder deutschen Ordinalzahlen („am 3. Oktober“, `_ends_sentence`); rohes Denken
+zeigt den letzten passenden Satz der neuesten fertigen Zeile (die offene Zeile
+nur, solange keine fertig ist), eine Überschrift („**Comparing options**“,
+OpenAI-/Gemini-Summaries; jeder Summary-Teil mit eigener `id` beginnt einen
+neuen Block) steht für ihren Abschnitt, Summaries ohne Überschrift sprechen mit
+ihrem ersten Satz. Gekürzt wird nichts mehr (vorher 177 Zeichen + „…“): ein Satz
+über 160 Zeichen weicht einem kürzeren, sonst bleibt der alte Auszug stehen.
+`compactReasoning` (agent-activity.js) wendet dieselben Satzgrenzen auf
+gespeicherte Zeilen an (≤ 180 Zeichen, abgeschnittene „…“-Zeilen fallen weg).
+Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
 agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
@@ -5039,21 +5193,28 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
   Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene; mehr
   als 8 widersprochene Sätze → „N more in the full text" (klappt auf). Der
-  Toggle trägt `aria-controls` auf die Schiene. Unter „All checks" öffnet die
-  Karte standardmäßig auf dem Volltext (zugeklappt stünden nur bestrittene
-  Sätze, bei einem haltbaren Text also gar nichts Eingefärbtes); ein Wechsel
-  der Einstellung klappt mit, bis der Nutzer selbst auf-/zuklappt
-  (`card._passageChosen`).
+  Toggle trägt `aria-controls` auf die Schiene. Seit 2026-10-21 startet die
+  Karte immer zugeklappt, unter jeder Highlights-Einstellung (Max: erst
+  zählen die Unterschiede); nur ein Klick des Nutzers klappt sie auf, ein
+  Wechsel der Einstellung malt nur neu (vorher öffnete „All checks“ auf dem
+  Volltext und klappte mit, `card._passageChosen` gibt es nicht mehr). Zeigt
+  dieselbe Karte den Text eines anderen Turns, klappt sie wieder zu.
   „Show full text" zeigt die ganze Passage
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
   als Fürstimmen), gemalt nach der Highlights-Einstellung
-  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19 „concerns";
-  unter „all" öffnet die Karte auf dem ganzen Text); bestrittene Worte
+  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19
+  „concerns"); bestrittene Worte
   (`dissent[].target`) tragen wie in der Antwort allein die Farbe (`.cx-spot`,
   `spotRanges`); der Rest ist
   `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
-  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Klick/Enter auf einen Satz
+  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Seit 2026-10-21 zeigt ein
+  gemalter Satz mit echter Maus (oder per Tab) dieselbe Hover-Vorschau wie ein
+  Satz der Antwort (`App.claimPopover.attachPreview(span, claim, models)` in
+  `mark()`, Hover-only-Gruppe ohne eigenen Klick); `is-quiet` zeigt keine.
+  Der Klick schließt die Vorschau (Dokument-Capture), solange die Karte offen
+  ist, erscheint keine, und die Fokus-Rückgabe beim Schließen bringt sie nicht
+  zurück. Klick/Enter auf einen Satz
   öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
   über `App.agentReview.contextFor`, während des Laufs über einen
   Minimal-Kontext aus `review.comparisons`. Darunter „Checked against N models
@@ -5077,6 +5238,7 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   `normalize_question`) statt der Wortgrenze; der doppelte Klick-Validator in
   `app-init.js` ist entfallen (jede Absage kam zweimal).
 - **Tests:** `tests/test_agent_passage_check.py`, `tests/js/passage-check.test.mjs`,
+  `tests/js/claim-hover-preview.test.mjs` (Hover-Vorschau aller Marken),
   `tests/e2e/test_passage_check_frontend.py`.
 
 ### Browser-Run-Lifecycle und Sichtwechsel
@@ -5120,7 +5282,11 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Verlassen speichert über `PATCH /bookmarks/{id}/title`, `title_source:
   "user"`, das wie `generated` spätere Saves und Namensgenerierung übersteht,
   `persistence_guard.KEPT_TITLE_SOURCES`), Share (öffnet den Chat, dann den
-  Share-Dialog) und Delete. **Löschen** blendet die Zeile sofort aus
+  Share-Dialog) und Delete. Share steht nur bei einem Chat mit gespeicherter
+  Antwort (`bookmarkShareable`: Listen-Meta `has_consensus` aus der Projektion
+  von `GET /bookmarks`, auch für Agent-Chats); ein Direktvergleich ohne
+  Consensus bekommt es nicht. Agent-Chats waren am 2026-10-21 kurz
+  ausgenommen, bis ihre Antworten teilbar wurden (siehe „Sharing“). **Löschen** blendet die Zeile sofort aus
   (`.is-undo-pending`), verlässt einen offenen Chat sofort und zeigt
   `App.undoNotice` „Chat deleted · Undo“ (5 s, Hover/Fokus pausieren); erst
   danach läuft das unveränderte `deleteBookmark` (Fence, Run-Abbruch, DELETE).
@@ -5770,6 +5936,18 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   (Schema-Pflichtfeld, boolean) markiert die Seite, die die Konsensantwort
   selbst vertritt; `_normalize_differences` speichert es nur als `true` und
   höchstens einmal je Differenz, der Share-Sanitizer reicht es durch.
+  **Eine Behauptung = eine Seite (seit 2026-10-21):** `_normalize_differences`
+  führt Positionen mit gleicher Behauptung zusammen (`_stance_key`: Groß-/
+  Kleinschreibung, Whitespace, Satzzeichen am Ende): Modelle werden vereinigt,
+  `in_answer` geht mit, das erste vorhandene Zitat bleibt. Ein Modell steht nur
+  in seiner ersten Position; eine Position ohne verbleibendes Modell entfällt.
+  Fallen so alle Seiten zu einer zusammen, ist es kein Unterschied mehr und die
+  Differenz entfällt (eine vom Judge einseitig gelieferte Differenz bleibt wie
+  bisher). Der Prompt verlangt dasselbe. `readableDifference`
+  (`consensus-insights.js`) wendet die Regel beim Anzeigen an, ohne die Daten
+  zu ändern, damit gespeicherte Chats dieselbe Behauptung nicht zweimal mit
+  „vs“ zeigen. Live-Befund: Lunas Satz „In the answer“, darunter derselbe Satz
+  für zwei weitere Modelle, dann Grok.
   `_named_models` ersetzt übrig gebliebene Judge-Labels in `claim`/`stance`/
   `verify` („Model F“, „Modell F“, „Models A and C“) durch die echten
   Modellnamen; unbekannte Labels bleiben stehen. Auslöser war ein Live-Befund
@@ -5781,7 +5959,9 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Werte; beide Judges berücksichtigen Spaltenüberschrift und Zeilenkontext).
   Tabellenköpfe und Trennzeilen bleiben Kontext; Zellenanker überschreiten
   keine Zellgrenzen. Überschriften, Code und **abgesetzte Formeln**
-  — `$$…$$`, `\[…\]` — bleiben außen vor. Listenzähler und `[S1]`-Tags gehören
+  — `$$…$$`, `\[…\]` — bleiben außen vor. Listenzähler, das Kästchen eines
+  Checklistenpunkts (`- [ ] `, im Render ein Button ohne Text; gespiegelt in
+  `consensus-insights.js::inlineMarkdownSource`) und `[S1]`-Tags gehören
   nicht zum Fließtext-Satz. Der Index stellt jedem Eintrag ein `[n] ` voran;
   der Judge liefert nur noch `claims[].s` bzw. `differences[].s` (`0` = der
   Konsens sagt dazu nichts), der Server setzt daraus den exakten Originalsatz
@@ -6908,7 +7088,13 @@ keinen Abgleich.
   Consensus des Bookmarks der des Turns ist. Ohne passenden completed Turn
   (Legacy-Bookmarks ohne Chat-Bindung, ~325 aus der Zeit vor August 2026,
   sobald ihr Pending-Verweis nach 24 h abgelaufen ist) antwortet der Endpunkt
-  409 und der Dialog zeigt den Grund des Servers. Share/Watch warten
+  409. Jede Absage legt `requestBookmarkShareResult` mit dem Satz des Servers
+  (`App.userError`) in `window.currentBookmarkShareResultError` ab, die Absage
+  selbst (mit Status) in `currentBookmarkShareResultContext.error`. Der
+  Watch-Dialog zeigt den Satz als Fehlerzeile, der Knopf bleibt für einen neuen
+  Versuch; der Share-Dialog zeigt ihn als `#shareDialogError` und bietet „Try
+  again“ nur, wenn ein neuer Versuch helfen kann (seit 2026-10-21, vorher ein
+  toter Knopf „Saved consensus unavailable“). Share/Watch warten
   auf diese Rehydration und können dadurch auch außerhalb der Ursprungssession
   verwendet werden. Ein Versions-Gate verhindert, dass eine verspätete Antwort
   auf ein inzwischen anderes angezeigtes Ergebnis zeigt.
@@ -6956,6 +7142,10 @@ keinen Abgleich.
 - **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot (keine LLM-Calls).
   `public_markdown.py` erhält LaTeX-Delimiter im serverseitigen HTML; die
   Share-Seite setzt sie anschließend mit derselben KaTeX-Brücke wie die App.
+  Checklistenpunkte (`- [ ] …`) zeichnet `_mark_task_items` als nicht
+  anklickbares `span.md-task-box[data-checked]` im `li.md-task-item`
+  (Spiegelstrich-Liste `.md-task-list`); Mails/Telegram/Klartext setzen dafür
+  ☐/☑ (`notification_markdown._task_box`).
   Public-Snapshots enthalten JSON-LD, Canonical-Dedup über `question_hash` und
   „verwandte Fragen"; **Indexierung (`index, follow`) nur wenn der Admin `indexed`
   setzt** — nie automatisch; sonst `noindex`. Private Watch-Snapshots werden am
@@ -8202,8 +8392,8 @@ Consensus-Stream und `memory_edit`; Registry-Felder des Modells (Kimi
 `only`) kommen obendrauf. Ein `service_tier` im `request_config` geht als
 Top-Level-Feld mit (Agent-Judges der OpenAI-Familie: `priority`, siehe
 `JUDGE_SERVICE_TIER_BY_PROVIDER`). Die Schritte des Chatmodells senden dazu eine
-Session pro Chat (`x-session-id`), damit sie beim Endpunkt mit ihrem Prompt-Cache bleiben
-(siehe „Sticky Endpunkt“ im Agent-Abschnitt). Zero Data Retention gilt nur noch in Chats mit
+Session pro Chat (`x-session-id`), damit sie beim Endpunkt mit ihrem Prompt-Cache bleiben,
+jeder Hilfsaufruf eine eigene (siehe „Sticky Endpunkt“ im Agent-Abschnitt). Zero Data Retention gilt nur noch in Chats mit
 Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
 `deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
 ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR
@@ -9044,7 +9234,7 @@ zählen nicht):
   verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
   (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
   stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open,
-  close}` (aus `consensus-insights.js`), `agentReview.contextFor`,
+  close, attachPreview, hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
   `syncThreadAskClamp`. Globale `.cx-claim`-Schleifen in `consensus-insights.js`
   schließen `.pc-claim` aus, sonst nähme die Highlights-Einstellung den Marken
   auf der Nachricht Rolle und Label.
@@ -9085,6 +9275,7 @@ zählen nicht):
   `window.consensusCitationMeta`, `window.lastShareResultId`,
   `window.currentBookmarkShareResultContext`,
   `window.currentBookmarkShareResultPromise`,
+  `window.currentBookmarkShareResultError`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`.
@@ -9299,7 +9490,10 @@ zählen nicht):
   `@media (hover: hover) and (pointer: fine) { … }`. `:focus-visible`,
   `[aria-expanded="true"]`, `.is-open` usw. stehen daneben außerhalb (eine
   gemischte Regel wird geteilt, Werte identisch), damit Tastatur- und
-  Offen-Zustände überall gleich aussehen. Gegenregeln „A tap leaves :hover
+  Offen-Zustände überall gleich aussehen. JS-Hover fragt dieselbe Kapsel ab
+  (`consensus-insights.js::canHoverPassages`, seit 2026-10-21; `any-pointer`
+  erfüllt auch manches Handy), und ein Fokus, der nicht per Tab kam, zeigt
+  keine Hover-Vorschau (§3, Hover-Vorschau). Gegenregeln „A tap leaves :hover
   stuck“ unter `(hover: none)` gibt es nicht mehr. Was auf Touch sichtbar sein
   muss (Chat-Menü „…“, Suche, Faltzeichen), zeigt ein eigener
   `@media (hover: none)`-Block, nie ein Hover. `foundation.css` setzt am
@@ -9569,8 +9763,9 @@ Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
 genau dem Text, den die Live-Prüfung schon vollständig samt Claim-Marken
 gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
 dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
-Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18) zeichnet
-`project` schon, während die feste Antwort geprüft wird.
+Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18, seit
+2026-10-21 neutral ohne Urteil) zeichnet `project` schon, während die feste
+Antwort geprüft wird.
 Seit 2026-10-20 (Apple-Audit D4) malt `follow()` gestreamten Text einmal pro
 Frame (`schedulePaint` → `renderAnswerBody(..., 'stream')`, nur in eine Antwort,
 die dieser sichtbare Lauf schon streamt), getrennt vom 100-ms-Takt der übrigen
@@ -9759,10 +9954,15 @@ während eines laufenden bzw. abschließenden Laufs und endet danach.
 Die Kopfzeile tickt in einem Feld fester Breite (A7): `.agent-activity-verb`
 reserviert die Breite des breiteren Verbs („Working for“/„Thought for“, das
 andere unsichtbar per `data-ghost`), `.agent-activity-time[data-unit]` die des
-größten Werts seiner Einheit; eine live tickende Uhr hält von der ersten Sekunde
-an den Minuten-Platz und behält ihn fürs Endlabel. Pfeil und Logos stehen still
-(gemessen: Chevron bei 9 s, 10 s, 1 min und „Thought for“ auf demselben Pixel),
-der Wortlaut bleibt.
+größten Werts seiner Einheit. Eine live tickende Uhr hält den Platz ihrer
+eigenen Einheit (bis 59 s nur `seconds`; bis 2026-10-21 von der ersten Sekunde
+an den Minuten-Platz, das ließ eine Minute lang eine breite Lücke vor dem
+Pfeil); bei 1 min weitet sich der Platz einmal weich (`setTitle` misst alte
+und neue Breite und animiert `width` mit `overflow: clip`, bei reduced-motion
+sofort). Das Endlabel behält mindestens den Platz, in dem die Uhr zuletzt
+tickte. Pfeil und Logos stehen beim Ticken innerhalb einer Einheit und am
+Laufende still (Chevron bei 9 s und 10 s bzw. bei 1 min und „Thought for“ auf
+demselben Pixel), der Wortlaut bleibt.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
 Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:
 `checkRow` fasst alle Versuche, Wiederholungen und Backup-Judges zu einer Zeile

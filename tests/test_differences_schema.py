@@ -103,11 +103,78 @@ class ParseDifferencesPayloadTests(unittest.TestCase):
         payload = valid_payload()
         positions = payload["differences"][0]["positions"]
         positions[0]["in_answer"] = True
+        positions[0]["models"] = ["Model A"]
         positions[1]["in_answer"] = True
-        positions.append({"stance": "Marseille", "models": ["Model C"], "quote": "", "in_answer": "true"})
+        positions.append({"stance": "Marseille", "models": ["Model B"], "quote": "", "in_answer": "true"})
         data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
         flags = [p.get("in_answer") for p in data["differences"][0]["positions"]]
         self.assertEqual(flags, [True, None, None])
+
+    def test_the_same_claim_twice_is_one_side(self):
+        # Live 2026-10-21: the answer's claim once for one model and once,
+        # differently cased and punctuated, for two others, then the rival.
+        payload = valid_payload()
+        payload["differences"][0]["positions"] = [
+            {"stance": "Paris is the capital.", "models": ["Model A"], "quote": "", "in_answer": True},
+            {"stance": "  paris is   the Capital ", "models": ["Model B", "Model A"], "quote": "Paris is the capital",
+             "in_answer": False},
+            {"stance": "Lyon is the capital.", "models": ["Model C"], "quote": "the capital is Lyon", "in_answer": False},
+        ]
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        positions = data["differences"][0]["positions"]
+        self.assertEqual([p["stance"] for p in positions], ["Paris is the capital.", "Lyon is the capital."])
+        self.assertEqual(positions[0]["models"], ["OpenAI", "Gemini"])
+        # The first quote there is wins; the answer's side stays the answer's.
+        self.assertEqual(positions[0]["quote"], "Paris is the capital")
+        self.assertIs(positions[0].get("in_answer"), True)
+        self.assertNotIn("in_answer", positions[1])
+
+    def test_merged_side_keeps_the_first_quote_and_takes_over_the_answer(self):
+        payload = valid_payload()
+        payload["differences"][0]["positions"] = [
+            {"stance": "Paris is the capital", "models": ["Model A"], "quote": "Paris", "in_answer": False},
+            {"stance": "Lyon is the capital", "models": ["Model C"], "quote": "Lyon", "in_answer": False},
+            {"stance": "Paris is the capital!", "models": ["Model B"], "quote": "the capital, Paris", "in_answer": True},
+        ]
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        positions = data["differences"][0]["positions"]
+        self.assertEqual(len(positions), 2)
+        self.assertEqual(positions[0]["models"], ["OpenAI", "Gemini"])
+        self.assertEqual(positions[0]["quote"], "Paris")
+        self.assertIs(positions[0].get("in_answer"), True)
+
+    def test_a_model_holds_only_its_first_side(self):
+        payload = valid_payload()
+        payload["differences"][0]["positions"] = [
+            {"stance": "Paris is the capital", "models": ["Model A", "Model B"], "quote": "", "in_answer": True},
+            {"stance": "Lyon is the capital", "models": ["Model C", "Model A"], "quote": "", "in_answer": False},
+            {"stance": "Marseille is the capital", "models": ["Model B"], "quote": "", "in_answer": False},
+        ]
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        positions = data["differences"][0]["positions"]
+        self.assertEqual([p["models"] for p in positions], [["OpenAI", "Gemini"], ["Grok"]])
+
+    def test_sides_that_collapse_into_one_are_no_difference(self):
+        payload = valid_payload()
+        payload["differences"][0]["positions"] = [
+            {"stance": "Paris is the capital.", "models": ["Model A"], "quote": "", "in_answer": True},
+            {"stance": "PARIS IS THE CAPITAL", "models": ["Model B", "Model C"], "quote": "", "in_answer": False},
+        ]
+        payload["differences"].append({
+            "claim": "Founding date", "type": "contradiction", "severity": "minor",
+            "positions": [
+                {"stance": "Founded in the third century BC", "models": ["Model A"], "quote": "", "in_answer": True},
+                {"stance": "Founded in 52 BC", "models": ["Model A"], "quote": "", "in_answer": False},
+            ],
+        })
+        # A single side from the judge stays what it was (e.g. an emphasis).
+        payload["differences"].append({
+            "claim": "Tourism", "type": "emphasis",
+            "positions": [{"stance": "Tourism matters most", "models": ["Model C"], "quote": "", "in_answer": False}],
+        })
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        self.assertEqual([d["claim"] for d in data["differences"]], ["Tourism"])
+        self.assertEqual(data["agreement"]["major_contradictions"], 0)
 
     def test_prompt_asks_for_two_facing_claims_and_the_answer_side(self):
         prompt = _build_differences_prompt({"OpenAI": "Paris.", "Gemini": "Lyon."}, "Paris is the capital.")[0]
@@ -115,6 +182,8 @@ class ParseDifferencesPayloadTests(unittest.TestCase):
         self.assertIn("short neutral heading", prompt)
         self.assertIn("stated directly", prompt)
         self.assertIn('Never write model labels such as "Model A" into claim, stance, or verify', prompt)
+        self.assertIn("Models that make the same claim form one position", prompt)
+        self.assertIn("Each model appears in at most one position of a difference.", prompt)
         position = DIFFERENCES_JSON_SCHEMA["properties"]["differences"]["items"]["properties"]["positions"]["items"]
         self.assertEqual(position["properties"]["in_answer"], {"type": "boolean"})
         self.assertIn("in_answer", position["required"])
@@ -894,6 +963,19 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
         for sentence in sentences:
             self.assertIn(sentence, text, "Anker muss ein Substring des Konsens sein")
         return numbered, sentences
+
+    def test_checklist_box_stays_out_of_the_anchor(self):
+        # The box of "- [ ] item" is a button without text in the rendered
+        # answer: an anchor starting with "[ ]" would never be found there.
+        numbered, sentences = self.sentences(
+            "- [ ] Renew the passport before you book.\n"
+            "1. [x] The visa takes four weeks.\n"
+        )
+        self.assertEqual(sentences, [
+            "Renew the passport before you book.",
+            "The visa takes four weeks.",
+        ])
+        self.assertIn("- [ ] [1] Renew", numbered)
 
     def test_plain_sentences_are_split(self):
         _numbered, sentences = self.sentences(

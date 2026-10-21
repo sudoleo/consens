@@ -890,10 +890,13 @@ class ComparisonTools:
                     # same outdated facts. Judges only read the answers.
                     # An answer that ended without a word (ModelEmptyAnswer)
                     # is chance, not a limit: it gets one more paid attempt.
+                    # No later request continues an answer or a judge; the
+                    # retry re-sends the same prompt on the worker's session.
                     for attempt in range(2 if kind == "comparison" else 1):
                         generator = loop._step(model, messages, f"agent:{worker.id}:{attempt}", ToolRegistry(),
                                                cancellation, worker=worker, searches_enabled=kind == "comparison",
-                                               search_rounds=search_rounds, retry_empty=attempt == 0 and kind == "comparison")
+                                               search_rounds=search_rounds, retry_empty=attempt == 0 and kind == "comparison",
+                                               completion=loop.worker_completion(worker, one_off=True))
                         try:
                             while True:
                                 next(generator)

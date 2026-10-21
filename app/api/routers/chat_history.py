@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
@@ -20,6 +20,7 @@ from app.core.security import (
 from app.services.chat_store import (
     CHAT_PAGE_SIZE,
     CHAT_PAGE_SIZE_MAX,
+    MAX_TASK_ITEMS,
     TURN_PAGE_SIZE,
     TURN_PAGE_SIZE_MAX,
     ChatCursorUnavailable,
@@ -35,6 +36,7 @@ from app.services.chat_store import (
     normalize_model_name,
     normalize_question,
     normalize_selected_models,
+    normalize_task_checks,
     normalize_title,
 )
 from app.services.chat_context import (
@@ -138,6 +140,18 @@ class TurnCreateRequest(BaseModel):
         return normalize_client_request_id(value)
 
 
+class TaskChecksRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Positions of the ticked checklist boxes in the turn's answer.
+    checked: list[StrictInt] = Field(max_length=MAX_TASK_ITEMS)
+
+    @field_validator("checked")
+    @classmethod
+    def validate_checked(cls, value):
+        return normalize_task_checks(value)
+
+
 class ContextBuildRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -171,6 +185,7 @@ CHAT_UID_RATE_LIMITS = {
     "create_turn": 40,
     "build_context": 30,
     "delete_chat": 30,
+    "task_checks": 60,
 }
 
 
@@ -382,6 +397,23 @@ def get_turn(request: Request, chat_id: str, turn_id: str):
         }
     except Exception as exc:
         _raise_store_error(exc, operation="get turn", uid=uid)
+
+
+@router.put("/chats/{chat_id}/turns/{turn_id}/task-checks")
+@limiter.limit("60/minute")
+def set_task_checks(
+    request: Request,
+    chat_id: str,
+    turn_id: str,
+    payload: TaskChecksRequest,
+):
+    """Which checklist boxes of the turn's answer are ticked (task-checks.js)."""
+    uid = _chat_uid(request, "task_checks")
+    try:
+        checked = _store().set_task_checks(uid, chat_id, turn_id, payload.checked)
+        return {"status": "success", "checked": checked}
+    except Exception as exc:
+        _raise_store_error(exc, operation="set task checks", uid=uid)
 
 
 @router.post("/chats/{chat_id}/turns/{turn_id}/context")

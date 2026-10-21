@@ -117,6 +117,11 @@
     const state = context.consensus;
     const sourceReferences = state.sourceReferenceMode !== 'none';
     body.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
+    // A saved answer's checklists can be ticked (task-checks.js). The turn
+    // is named after the text is fixed, so this runs before the shortcut.
+    const saved = context.completedBasis;
+    window.App.taskChecks?.scope(body, { chatId: saved?.chatId, turnId: saved?.turnId,
+      checked: saved?.currentTurn?.task_checks });
     const signature = JSON.stringify([context.runId, state.text || state.streamText || "",
       state.status === "streaming", state.differencesData, state.differences,
       state.error, context.evidenceSources, sourceReferences]);

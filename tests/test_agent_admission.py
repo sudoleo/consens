@@ -322,6 +322,25 @@ def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
     loop.google_data_consent = True
     exhaust(loop._step(loop.model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation, search_rounds=3))
     assert observed[0]["native_searches"] == 0
-    assert observed[0]["messages"][0]["content"].endswith(GOOGLE_NO_SEARCH)
+    # After the newest message: the system prompt, and with it the prefix the
+    # chat's steps have cached, stays as it was (with_step_note).
+    assert observed[0]["messages"][-1] == {"role": "user", "content": GOOGLE_NO_SEARCH}
+    assert observed[0]["messages"][:-1] == loop.messages
     # Only this request carries the note; the chat's own messages stay unchanged.
-    assert GOOGLE_NO_SEARCH not in loop.messages[0]["content"]
+    assert all(GOOGLE_NO_SEARCH not in str(message["content"]) for message in loop.messages)
+
+
+def test_a_search_that_does_not_fit_is_noted_after_the_newest_message(store):
+    observed = []
+    class Capture(Completion):
+        def stream(self, **kwargs):
+            observed.append(kwargs)
+            yield from super().stream(**kwargs)
+    loop = chat_loop(store, Capture)
+    inputs = input_estimate(loop.messages, loop.registry.schemas, loop.model.request_config)
+    quota(store, inputs + 900)
+    list(loop.run())
+    assert observed[0]["native_searches"] == 0
+    assert observed[0]["messages"][0] == loop.messages[0]
+    assert observed[0]["messages"][-1]["role"] == "user"
+    assert observed[0]["messages"][-1]["content"].startswith("Web search is unavailable for this step")
