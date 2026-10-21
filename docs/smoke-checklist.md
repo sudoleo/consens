@@ -116,7 +116,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Etikett), Satzstreifen und Legende mit Farbpunkten, auf einer Schiene nur
       die widersprochenen/geteilten Sätze, jeder mit
       „N of M models disagree – Modell: „…““ darunter (gut lesbar, nicht grau),
-      keine grauen Zeilen dazwischen; „Show full text“ zeigt alle Sätze
+      keine grauen Zeilen dazwischen; die Karte startet zugeklappt, auch unter
+      „All checks“; „Show full text“ zeigt alle Sätze
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
       nur grau, nie grün). Ein Zähler/Satz öffnet die Karte, „View answer“ die
       Modellantwort. Die Antwort nennt den Fehler und wird wie jede Antwort

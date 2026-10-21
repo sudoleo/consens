@@ -5025,17 +5025,18 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
   Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene; mehr
   als 8 widersprochene Sätze → „N more in the full text" (klappt auf). Der
-  Toggle trägt `aria-controls` auf die Schiene. Unter „All checks" öffnet die
-  Karte standardmäßig auf dem Volltext (zugeklappt stünden nur bestrittene
-  Sätze, bei einem haltbaren Text also gar nichts Eingefärbtes); ein Wechsel
-  der Einstellung klappt mit, bis der Nutzer selbst auf-/zuklappt
-  (`card._passageChosen`).
+  Toggle trägt `aria-controls` auf die Schiene. Seit 2026-10-21 startet die
+  Karte immer zugeklappt, unter jeder Highlights-Einstellung (Max: erst
+  zählen die Unterschiede); nur ein Klick des Nutzers klappt sie auf, ein
+  Wechsel der Einstellung malt nur neu (vorher öffnete „All checks“ auf dem
+  Volltext und klappte mit, `card._passageChosen` gibt es nicht mehr). Zeigt
+  dieselbe Karte den Text eines anderen Turns, klappt sie wieder zu.
   „Show full text" zeigt die ganze Passage
   mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
   `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
   als Fürstimmen), gemalt nach der Highlights-Einstellung
-  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19 „concerns";
-  unter „all" öffnet die Karte auf dem ganzen Text); bestrittene Worte
+  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19
+  „concerns"); bestrittene Worte
   (`dissent[].target`) tragen wie in der Antwort allein die Farbe (`.cx-spot`,
   `spotRanges`); der Rest ist
   `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
