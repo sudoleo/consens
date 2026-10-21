@@ -315,7 +315,7 @@
 
   let draftSeeded = false;
   const seeded = new Set();
-  const SEED_KEYS = ["body", "sidebar", "auth", "greeting", "input", "starters", "switch", "watches",
+  const SEED_KEYS = ["body", "sidebar", "auth", "input", "starters", "switch", "watches",
     "families", "agentChip", "consensusChip", "demo", "send", "reasoning", "icons", "bookmarks", "login", "watchHint"];
   function once(key, node) {
     if (seeded.has(key) || !node) return null;
@@ -352,14 +352,8 @@
     // buttons if it turns out to be a guest after all.
     const authTopActions = once("auth", document.getElementById("authTopActions"));
     if (authTopActions && guestExpected()) authTopActions.hidden = false;
-    // Agent starts with Agent's words (agent-chat.js keeps them until access
-    // is known): the consensus wording swapped in front of the reader once
-    // /user_status answered, and the greeting changed size with it.
-    const greeting = once("greeting", agentLook ? document.querySelector(".hero-greeting") : document.body);
-    if (greeting && agentLook) {
-      greeting.dataset.consensusGreeting = greeting.textContent;
-      greeting.textContent = "What can I help you with?";
-    }
+    // One greeting for every mode and for guests (Max, 2026-10-22): it
+    // stands in the template and never changes while the page loads.
     // The composer starts with the words it will keep: Agent's new-chat line
     // (same words as agent-chat.js syncComposer), which a guest gets too
     // (app-init.js: guests type, and sign in when they send). A restored

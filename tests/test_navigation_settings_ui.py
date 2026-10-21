@@ -334,7 +334,7 @@ def test_hero_greeting_requires_agent_mode_and_available_space():
     template = read("templates/index.html")
     input_css = read("static/css/components-input.css")
 
-    assert "What should the models cross-check?" in template
+    assert "What do you want to be sure about?" in template
     # Der sichtbare Direktvergleich ist ausgenommen: dort steht der Composer
     # oben, die Begruessung schwebte darueber hinaus in die Kopfzeile.
     assert (

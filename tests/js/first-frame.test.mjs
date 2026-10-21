@@ -22,7 +22,7 @@ const BODY = `
     <div id="bookmarksContainer"></div><div id="loginContainer" hidden></div>
   </div>
   <div class="input-section">
-    <p class="hero-greeting">What should the models cross-check?</p>
+    <p class="hero-greeting">What do you want to be sure about?</p>
     <div class="chat-input-container">
       <textarea id="questionInput" placeholder="Enter your question"></textarea>
       <div class="composer-models">
@@ -77,7 +77,7 @@ describe("the session a first frame expects (B4)", () => {
     // Reasoning; no Consensus chip, no account placeholders.
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
-    expect(document.querySelector(".hero-greeting").textContent).toBe("What can I help you with?");
+    expect(document.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
     expect(document.getElementById("agentModelControls").hidden).toBe(false);
     expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
     expect(chip(document).querySelector(".model-picker-display-count").textContent).toBe("+3");
@@ -92,7 +92,7 @@ describe("the session a first frame expects (B4)", () => {
     const chose = paint({ storage: { runMode: "consensus" } }).document;
     expect(chose.documentElement.classList.contains("agent-shell-expected")).toBe(false);
     expect(chose.body.classList.contains("single-agent-active")).toBe(false);
-    expect(chose.querySelector(".hero-greeting").textContent).toBe("What should the models cross-check?");
+    expect(chose.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
     const { window, document } = paint();
     document.documentElement.dataset.authUnavailable = "true";
     expect(window.App.isGuest()).toBe(false);
@@ -117,7 +117,7 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.getElementById("authTopActions").hidden).toBe(true);
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
-    expect(document.querySelector(".hero-greeting").textContent).toBe("What can I help you with?");
+    expect(document.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
     // The account's placeholders are there from the first frame (B11).
     expect(document.querySelectorAll("#bookmarksContainer .skeleton-bookmark")).toHaveLength(4);
     expect(document.getElementById("loginContainer").hidden).toBe(false);

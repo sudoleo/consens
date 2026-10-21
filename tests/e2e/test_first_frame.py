@@ -148,7 +148,7 @@ def test_a_session_firebase_keeps_paints_the_account_before_firebase_answers(bro
         _settled(page)
         frames = _frames(page)
         assert all(not frame["guestButtons"] and frame["demo"] == "-" for frame in frames), frames
-        assert all(frame["agent"].startswith("chip:") and frame["greeting"] == "What can I help you with?" for frame in frames), frames
+        assert all(frame["agent"].startswith("chip:") and frame["greeting"] == "What do you want to be sure about?" for frame in frames), frames
     finally:
         context.close()
 
@@ -175,7 +175,7 @@ def test_a_failed_status_check_keeps_agent_says_so_and_asks_again(browser, phase
         assert len(calls) == 2
         expect(page.locator("#agentComposerNotice")).to_be_hidden()
         frames = _frames(page)
-        assert all(frame["consensus"] == "hidden" and frame["demo"] == "-" and frame["greeting"] == "What can I help you with?"
+        assert all(frame["consensus"] == "hidden" and frame["demo"] == "-" and frame["greeting"] == "What do you want to be sure about?"
                    for frame in frames), frames
         assert page.evaluate("App.agentChat.isSelected()")
     finally:
@@ -254,7 +254,7 @@ def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades
         assert first["agent"].startswith(f"chip:{label}") and first["agent"].endswith("+6"), first
         assert first["consensus"] == "hidden", first
         assert first["reasoning"] == "Auto" and first["marks"] == 6, first
-        assert first["greeting"] == "What can I help you with?", first
+        assert first["greeting"] == "What do you want to be sure about?", first
         assert first["tab"] == "Chat" and first["switchInHeader"] is not mobile
         # Nothing a guest cannot have is asked for (the model list needs an account).
         assert agent_calls == [], agent_calls

@@ -6789,7 +6789,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   und zeigt die Begrüßung auch auf dem Handy. **Seit 2026-10-21 (Max,
   Apple-Audit H3)** sieht ein Gast mit Standardwahl ab dem ersten Bild Agents
   Composer eines neuen Chats wie ein Konto: Chip mit `data-agent-default-label`
-  und `+N`, „What can I help you with?“, Reasoning „Auto“; im (+)-Menü Agent
+  und `+N`, „What do you want to be sure about?“ (ein Satz für jeden Modus), Reasoning „Auto“; im (+)-Menü Agent
   gewählt, Consensus und Compare daneben. Geladen wird nichts, was ein Konto
   braucht (keine `/agent/models`), und es steht kein Hinweis unter dem Feld.
   Jede Wahl darin ist eine Tür zum Login mit Satz (`App.askToLogIn`): Chip,

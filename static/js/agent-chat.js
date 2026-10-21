@@ -460,17 +460,11 @@
     const modeChanged = document.body.classList.contains("single-agent-active") !== (look || demoView);
     document.body.classList.toggle("single-agent-active", look || demoView);
     document.body.classList.toggle("agent-demo-active", demoView);
-    const wording = look;
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
     // The switch says "Chat" and the sidebar "New chat" in every mode and for
     // guests (Max, Apple-Audit H3): the words no longer change once the mode
     // is known, so the pill keeps its width (B10).
-    const greeting = document.querySelector(".hero-greeting");
-    if (greeting) {
-      if (!greeting.dataset.consensusGreeting) greeting.dataset.consensusGreeting = greeting.textContent;
-      greeting.textContent = wording ? "What can I help you with?" : greeting.dataset.consensusGreeting;
-    }
     const panel = document.getElementById("agentAnswer");
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });

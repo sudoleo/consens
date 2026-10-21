@@ -294,7 +294,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         _choose_mode(page, "agent")
         assert not errors
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
-        expect(page.locator(".hero-greeting")).to_have_text("What can I help you with?")
+        expect(page.locator(".hero-greeting")).to_have_text("What do you want to be sure about?")
         expect(page.locator(".hero-greeting")).to_be_visible()
         expect(page.locator("#viewSwitchConsensus")).to_have_text("Chat")
         expect(page.locator(".demo-chip")).not_to_be_visible()
