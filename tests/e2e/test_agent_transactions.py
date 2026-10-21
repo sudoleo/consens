@@ -294,6 +294,57 @@ def test_delegation_budget_journal_and_receipts_are_atomic_in_firestore():
         db.close()
 
 
+def test_a_journal_batch_is_one_transaction_with_its_own_refusals_in_firestore(monkeypatch):
+    """The run's journal saves several sessions in one transaction
+    (publish_agents, since 2026-10-22): one refused update leaves the others
+    saved, a retried batch finds its first commit, and two batches racing
+    without the process lock still number every event exactly once."""
+    assert_safe_e2e_environment()
+    db = firestore.Client(project=E2E_PROJECT_ID)
+    uid = "journal-batch-" + uuid.uuid4().hex
+    store, model = AgentRunStore(db), AgentModel()
+    monkeypatch.setattr(AgentRunStore, "_agent_transaction", lambda self, uid, op: self._transaction(op))
+    try:
+        chat = store.create_chat(uid, execution_mode="agent")["id"]
+        turn = store.create_turn(uid, chat, question="Six answers", mode="Agent", deep_search=False,
+            selected_models=[model.model], consensus_model=model.model, client_request_id="batch", execution_mode="agent")["id"]
+        config = defaults()
+        config["enabled"] = True
+        args = (uid, chat, turn)
+        assert store.claim(*args, model, run_token=uid, policy=AgentPolicy.from_config(config).snapshot(), reservation=(1, 10))
+        ids = [uuid.uuid4().hex for _ in range(3)]
+        task = {"assignment": {"goal": "Answer"}, "status": "waiting"}
+        updates = [(ids[0], task, None, uuid.uuid4().hex),
+                   (ids[1], {"status": "waiting"}, None, uuid.uuid4().hex),  # no assignment: refused alone
+                   (ids[2], task, None, uuid.uuid4().hex),
+                   (ids[0], {"status": "completed"}, {"sender": ids[0], "recipient": "orchestrator", "kind": "result",
+                                                       "text": "Done."}, uuid.uuid4().hex)]
+        first = store.publish_agents(*args, run_token=uid, updates=updates)
+        assert isinstance(first[1], TurnStatusConflict)
+        assert [first[i]["seq"] for i in (0, 2, 3)] == [1, 2, 3]
+        # The second update of a session builds on its first in the same batch.
+        assert first[3]["agent"]["status"] == "completed" and first[3]["agent"]["message_seq"] == 3
+        saved = store.agent_ref(uid, chat, turn, ids[0]).get().to_dict()
+        assert saved["assignment"] == {"goal": "Answer"} and saved["status"] == "completed"
+        again = store.publish_agents(*args, run_token=uid, updates=updates)
+        assert [again[i] for i in (0, 2, 3)] == [first[i] for i in (0, 2, 3)]
+        root = store.receipt_ref(*args).get().to_dict()
+        assert (root["event_seq"], root["agent_count"], root["message_count"]) == (3, 2, 1)
+        view = store.delegation_view(*args)
+        assert sorted(a["id"] for a in view["agents"]) == sorted([ids[0], ids[2]])
+        assert store.delegation_view(*args, agent_id=ids[0])["messages"][0]["text"] == "Done."
+        racers = [[(uuid.uuid4().hex, task, None, uuid.uuid4().hex) for _ in range(3)] for _ in range(2)]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            raced = list(pool.map(lambda batch: AgentRunStore(db).publish_agents(*args, run_token=uid, updates=batch),
+                                  racers))
+        assert sorted(event["seq"] for batch in raced for event in batch) == [4, 5, 6, 7, 8, 9]
+        assert store.receipt_ref(*args).get().to_dict()["event_seq"] == 9
+    finally:
+        FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
+        db.collection("users").document(uid).delete()
+        db.close()
+
+
 def test_parallel_workers_share_admission_and_settle_each_receipt_once():
     assert_safe_e2e_environment()
     db = firestore.Client(project=E2E_PROJECT_ID)

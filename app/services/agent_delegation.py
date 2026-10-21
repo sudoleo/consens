@@ -492,29 +492,54 @@ class DelegationLoop(AgentLoop):
                 self.condition.notify_all()
         return event
 
-    def _journal_write(self, job):
-        """Saves one journal job (on the journal's thread, under no run lock).
-        A short database outage gets one retry with the same event id, so an
-        ambiguous first commit is not saved twice."""
-        worker = job.worker
-        if job.progress and worker.state in {"completed", "failed", "stopped"}:
-            # The call has ended since: its end record carries what counts.
-            return None
+    def _journal_write(self, jobs):
+        """Saves journal jobs of different sessions in one transaction (on
+        the journal's thread, under no run lock) and returns each one's event
+        or refusal. A short database outage gets one retry with the same
+        event ids, so an ambiguous first commit is not saved twice. One that
+        outlasts it tries each update on its own: an outage costs a session
+        its update, never every session in the batch (a new session's record,
+        which its model call waits for, among them)."""
+        # A line of a call that has ended since: its end record carries what counts.
+        live = [job for job in jobs if not (job.progress and job.worker.state in {"completed", "failed", "stopped"})]
+        if not live:
+            return [None] * len(jobs)
+        try:
+            saved = self._journal_publish(live)
+        except Exception as exc:
+            if len(live) == 1 or not _transient_store_error(exc):
+                raise
+            saved = []
+            for job in live:
+                try:
+                    saved.extend(self._journal_publish([job]))
+                except Exception as error:
+                    saved.append(error)
+        results = dict(zip(map(id, live), saved))
+        with self.live_lock:
+            for job, event in zip(live, saved):
+                if isinstance(event, Exception):
+                    continue
+                try:
+                    # Queued before the session's sequence moves on: a live
+                    # counter never names a session event the page has not
+                    # received yet.
+                    self.outgoing.put_nowait(event)
+                except queue.Full:
+                    # Saved: a page that stopped reading finds it on reload.
+                    logging.warning("Agent session event dropped: event queue full")
+                job.worker.session_seq = event["agent"]["seq"]
+        return [results.get(id(job)) for job in jobs]
+
+    def _journal_publish(self, jobs):
         for attempt in range(2):
             try:
-                event = self.store.publish_agent(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
-                    agent_id=worker.id, patch=job.patch, message=job.message, event_id=job.key)
-                break
+                return self.store.publish_agents(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
+                    updates=[(job.worker.id, job.patch, job.message, job.key) for job in jobs])
             except Exception as exc:
                 if attempt or not _transient_store_error(exc):
                     raise
                 time.sleep(TERMINAL_RETRY_SECONDS)
-        with self.live_lock:
-            # Queued before the session's sequence moves on: a live counter
-            # never names a session event the page has not received yet.
-            self.outgoing.put_nowait(event)
-            worker.session_seq = event["agent"]["seq"]
-        return event
 
     def _journal_failed(self, job, exc):
         """A session update nobody waited for could not be saved. Only that

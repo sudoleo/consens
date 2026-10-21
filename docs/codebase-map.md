@@ -3612,31 +3612,42 @@ Absicherung zwischen Prozessen; Modellaufrufe laufen weiterhin parallel.
 hintereinander laufen, darf keine davon zwischen einem Modell-Stream und dem
 Server stehen, und jede liest ihre Dokumente in einem Rundgang:
 - `AgentSessionStore._read_all` liest per `Transaction.get_all` alle Dokumente
-  einer Transaktion auf einmal (Claim, Settlement, `publish_agent`,
+  einer Transaktion auf einmal (Claim, Settlement, `publish_agents`,
   `save_review`, `protect_review`; der Löschungs-Tombstone kommt über
   `persistence_guard.deletion_ref` und `ensure_account_write_allowed(snapshot=)`
   mit). Vorher war jeder Lesezugriff ein eigener Rundgang, ein Claim las neun
   Dokumente nacheinander.
-- Sitzungs-Updates (`publish_agent`) schreibt das Journal des Laufs
+- Sitzungs-Updates schreibt das Journal des Laufs
   (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf):
   `DelegationLoop._publish(wait=False)` übergibt und arbeitet weiter, das
-  Journal schreibt je Sitzung in Reihenfolge. Wartende Aufrufer (neue Sitzung
-  vor ihrem Claim, Nachrichten eines delegierten Workers fürs Postfach) gehen
-  vor, mit allem, was ihre Sitzung vorher übergab. Noch ungeschriebene Updates
-  einer Sitzung werden ein Schreibvorgang (`completed` + Ergebnis). Live-Zeilen
-  (`progress=True`) ersetzen eine wartende Zeile und gehen lauf-weit höchstens
-  alle `THINKING_UPDATE_SECONDS / 2` hinaus; eine Zeile hinter einem Status
-  reist mit ihm. `_journal_write` versucht einen kurzen Datenbankausfall einmal
-  mit derselben Event-ID, `_journal_failed` beendet den Lauf nur, wenn er nicht
-  mehr schreiben darf (Stopp, Chat/Konto gelöscht). `run()` schließt das Journal
-  nach `comparison.close()` und vor dem Settlement-Nachlauf und `finish_run`.
+  Journal schreibt je Sitzung in Reihenfolge. Seit 2026-10-22 geht alles, was
+  fällig ist, sobald der Schreib-Thread frei ist, in **eine** Transaktion
+  (`AgentSessionStore.publish_agents`, je Sitzung das vorderste Update,
+  höchstens `BATCH_LIMIT` = 32): sechs gleichzeitig startende Antworten sind
+  ein Schreibvorgang statt sechs hintereinander. `publish_agents` liefert je
+  Update das Event oder die Ablehnung nur dieses Updates (Limit, fehlende
+  Assignment, gestoppter Lauf bei nicht beendendem Status), die übrigen werden
+  trotzdem gespeichert; Konto, Chat und `run_token` lehnen alle ab.
+  `publish_agent` ist der Einzelfall davon. Wartende Aufrufer (neue Sitzung
+  vor ihrem Claim, Nachrichten eines delegierten Workers fürs Postfach) kommen
+  bei vollem Stapel zuerst, mit allem, was ihre Sitzung vorher übergab. Noch
+  ungeschriebene Updates einer Sitzung werden ein Update (`completed` +
+  Ergebnis). Live-Zeilen (`progress=True`) ersetzen eine wartende Zeile; die
+  Zeilen aller Sitzungen gehen lauf-weit höchstens alle
+  `THINKING_UPDATE_SECONDS / 2` hinaus, dann alle zusammen; eine Zeile hinter
+  einem Status reist mit ihm. `_journal_write` versucht einen kurzen
+  Datenbankausfall einmal mit denselben Event-IDs, `_journal_failed` beendet
+  den Lauf nur, wenn er nicht mehr schreiben darf (Stopp, Chat/Konto
+  gelöscht). `run()` schließt das Journal nach `comparison.close()` und vor dem
+  Settlement-Nachlauf und `finish_run`.
 - `_stream_progress` und `_events` nutzen `DelegationLoop.live_lock` statt der
   Lauf-Condition: Kein Stream wartet mehr, während ein anderer Aufruf schreibt.
   Das Journal legt sein Event vor der neuen `session_seq` in `outgoing`.
 - `ComparisonTools.checkpoint` nimmt den Schnappschuss unter `self.lock`,
-  schreibt aber außerhalb davon (`_save_lock`, nummeriert); ein überholter
-  Schnappschuss wird nicht mehr geschrieben. Eintreffende Vergleichsantworten
-  speichern nach dem Lock.
+  schreibt aber außerhalb davon (`_save_lock`, nummeriert). Wer als Nächster
+  schreibt, schreibt den neuesten Schnappschuss (`_latest`, seit 2026-10-22);
+  wessen Schnappschuss darin steckt, kehrt ohne eigenen Schreibvorgang zurück.
+  Eintreffende Vergleichsantworten speichern nach dem Lock.
 Belegt mit `tests/test_agent_tempo.py` (sechs Modelle, Datenbank mit Latenz je
 Rundgang, ein Konto-Lock) und `tests/test_agent_journal.py`. Prod-Befund und
 Zahlen: [agent-mode.md](agent-mode.md) „Wartezeit im Server“.
@@ -6523,7 +6534,7 @@ app/services/
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
-  agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates (publish_agent) je Sitzung in Reihenfolge, wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
+  agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
