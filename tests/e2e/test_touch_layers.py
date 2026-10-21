@@ -41,10 +41,26 @@ def _reading_page(browser, server):
     context, page = _real_firebase_page(browser, server, has_touch=True)
     page.set_viewport_size({"width": 390, "height": 780})
     seed_long_answer(page)
+    # Reading mode hides the menu button on the way down and shows it after
+    # some travel up. On a busy machine the long answer still lays out while
+    # the test scrolls (scroll anchoring moves the page down again), so wait
+    # until the page stands, then go up in steps until the button is back.
+    frames = "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))"
+    page.wait_for_function("""() => new Promise(done => {
+      const h = document.documentElement.scrollHeight;
+      requestAnimationFrame(() => requestAnimationFrame(() => done(document.documentElement.scrollHeight === h)));
+    })""", timeout=5000)
     page.evaluate("window.scrollTo(0, 400)")
+    page.evaluate(frames)
     page.wait_for_timeout(200)
-    page.evaluate("window.scrollBy(0, -80)")
-    expect(page.locator("#toggleSidebarButton")).to_be_visible()
+    toggle = page.locator("#toggleSidebarButton")
+    for _ in range(4):
+        page.evaluate("window.scrollBy(0, -80)")
+        page.evaluate(frames)
+        page.wait_for_timeout(100)
+        if toggle.is_visible():
+            break
+    expect(toggle).to_be_visible()
     return context, page, context.new_cdp_session(page)
 
 

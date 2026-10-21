@@ -271,6 +271,10 @@ def test_every_agent_answer_has_a_watch_pill_with_its_own_question(browser, phas
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         expect(page.locator("#agentAnswer #agentAnswerWatchButton")).to_be_visible()
         page.locator("#questionInput").fill(questions[1])
+        # The mocked answer lands at once; a second start within 450 ms is
+        # dropped as a double click (run-registry.js claimStartAction).
+        page.wait_for_function("() => !document.body.classList.contains('composer-gliding')")
+        page.wait_for_timeout(500)
         page.locator("#sendButton").click()
         page.wait_for_function("q => App.runRegistry.visible()?.status === 'succeeded'"
                                " && App.runRegistry.visible().question === q", arg=questions[1])
