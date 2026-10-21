@@ -143,7 +143,10 @@ def test_og_http_route_renders_stored_question_score_and_private_revocation(
         image.size == (1200, 630)
         and len(image.crop((72, 150, 1128, 430)).getcolors(1_000_000)) > 20
     )
-    assert "Unique public question?" in texts and "71" in texts
+    # Each wrapped line is its own text() call. Where the question breaks
+    # depends on font metrics (FreeType build, OS), so check the drawn lines
+    # in order instead of assuming it fits on one line.
+    assert "Unique public question?" in " ".join(texts) and "71" in texts
     assert any("3 AI models" in text for text in texts)
     stored = h.share_db.stores[snapshots.SHARES_COLLECTION][created["share_id"]]
     for patch in (
