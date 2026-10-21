@@ -132,7 +132,7 @@
           body: JSON.stringify({ email: email })
         }).then(function (response) {
           return response.json().catch(function () { return {}; }).then(function (data) {
-            if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+            if (!response.ok) throw new Error(data.error || data.detail || ("HTTP " + response.status));
             form.hidden = true;
             done.textContent = data.message || "Check your inbox and confirm to start following.";
             done.hidden = false;
