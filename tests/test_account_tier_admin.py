@@ -326,7 +326,8 @@ def test_unknown_account_has_structured_error_in_real_main_app(http_adapter, mon
         "/api/admin/account-tier?identifier=missing", headers=login("admin")
     )
     assert response.status_code == 404
-    error = response.json()["error"]
-    assert error["error_code"] == "not_found"
-    assert isinstance(error["message"], str) and error["message"]
+    # One flat shape (Zweitprüfung 2): the sentence in "error", the code beside it.
+    body = response.json()
+    assert body["code"] == body["error_code"] == "not_found"
+    assert isinstance(body["error"], str) and body["error"]
     assert "private" not in response.text

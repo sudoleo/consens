@@ -157,7 +157,7 @@ def test_native_memory_undo_through_main_preserves_error_status_and_body(
     before = tree(native_db.collection("users").document(uid))
     response = client.post("/api/my/memory/undo", headers=headers, json=payload)
     assert response.status_code == 422
-    assert response.json()["error"]["error_code"] == "memory_limit"
+    assert response.json()["code"] == "memory_limit"
     assert tree(native_db.collection("users").document(uid)) == before
     actual_get = DocumentReference.get
 

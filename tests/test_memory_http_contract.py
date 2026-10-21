@@ -109,8 +109,8 @@ def test_main_undo_errors_preserve_all_state_and_never_call_provider(
     assert response.status_code == status, response.text
     assert "error" in response.json()
     if code:
-        assert response.json()["error"]["error_code"] == code
-        assert response.json()["error"]["message"]
+        assert response.json()["code"] == response.json()["error_code"] == code
+        assert isinstance(response.json()["error"], str) and response.json()["error"]
     assert "private database diagnostic" not in response.text
     assert h.db.documents == before and len(h.db.write_log) == writes
     h.provider.assert_not_called()

@@ -248,7 +248,16 @@ Ausgenommen bleiben die dokumentierte `/api/v1` (sonst wüchse das
 OpenAPI-Schema) und der Auth-Proxy `/__/*`.
 **Fehlerformat und Drosselung (seit 2026-10-20, Apple-Audit H6):** Der Handler
 für FastAPIs `HTTPException` liefert `{"error": <Satz>}` plus die Felder aus
-`exc.error_fields` (z. B. `code`, `watch_id` der Watch-Routen). Jede
+`exc.error_fields` (z. B. `code`, `watch_id` der Watch-Routen). Ein
+strukturiertes Detail (`{error|message, error_code|code, …}`, etwa Tageskontingent,
+Pro-/Plus-Grenze, Memory-Konflikt mit `revision`, Chat-Turn-Zustand) wird seit
+2026-10-21 flach ausgeliefert (`main.error_body`, Zweitprüfung 2):
+`{"error": <Satz>, "code": …, "error_code": …, …weitere Felder}`;
+`error_code` bleibt als Alias für ältere Leser. Vorher stand es verschachtelt
+als `{"error": {...}}`, und die Clients fanden weder Satz noch Code (leeres
+Kontingent las „You don’t have access to this.“). Ausgenommen ist nur die
+öffentliche `/api/v1/` mit ihrem dokumentierten `{"error": {"code",
+"message"}}`. Jede
 slowapi-Grenze (`RateLimitExceeded`, alle Routen inkl. `/api/v1`) antwortet mit
 429 `{"error": "Too many requests in a short time. …", "code": "rate_limited",
 "retry_after": <s>}` und `Retry-After` (`rate_limit.retry_after_seconds` aus dem
