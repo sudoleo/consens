@@ -7,7 +7,9 @@
 //     none), above the keyboard and the safe area. One at a time; what comes
 //     while another is showing waits its turn. It stays as long as it takes
 //     to read (by length), pauses under the pointer and the keyboard, and an
-//     error stays until it is closed. role=status, so it is read out.
+//     error stays until it is closed: a line that comes while it shows
+//     takes its place for its time, then the error is back. role=status,
+//     so it is read out.
 //       tone      "info" (default) | "success" | "error"
 //       action    { label, onAction }   onAction may return a promise; the
 //                 line then shows it is working and stays until it settles
@@ -167,7 +169,7 @@
 
   function toast(options) {
     const record = { ...normalize(options), node: null, ended: false, busy: false,
-      timer: 0, remaining: 0, startedAt: 0, shownAt: 0, paused: false };
+      timer: 0, remaining: 0, startedAt: 0, shownAt: 0, paused: false, parked: false };
     record.remaining = record.duration;
     const handle = handleFor(record);
     record.handle = handle;
@@ -185,26 +187,46 @@
 
     if (!current) {
       present(record);
+    } else if (stays(current)) {
+      // An error stays until it is closed (E3), but it does not hold up
+      // what comes after it: it steps aside, the new line shows now, and
+      // the error comes back once that one has gone (an action-less line
+      // waited behind an open error until it was closed, review 2 N2).
+      setAside(current);
+      present(record);
     } else if (record.action) {
       // An Undo belongs to what the user just did: it shows now, and what
-      // was on screen gives way (an older Undo happens). An error steps
-      // back and comes again after it: it stays until it is closed (E3).
-      if (!Number.isFinite(current.duration) && !current.action && !current.busy) setAside(current);
-      else end(current, "replaced");
+      // was on screen gives way (an older Undo happens).
+      end(current, "replaced");
       present(record);
     } else {
-      queue.push(record);
+      enqueue(record);
       hurry(current);
     }
     return handle;
   }
 
+  // A line without an action that stays until it is closed: an error.
+  function stays(record) {
+    return !Number.isFinite(record.duration) && !record.action && !record.busy;
+  }
+
+  // What comes waits its turn, ahead of the errors that stepped aside:
+  // they come back last and then stay.
+  function enqueue(record) {
+    const at = queue.findIndex(item => item.parked);
+    if (at < 0) queue.push(record);
+    else queue.splice(at, 0, record);
+  }
+
   // The line on screen gives way to the queue once it has been seen,
   // unless it holds an action the user might still take, is working, or
   // stays until it is closed (an error: E3; it went after 1.6 s when another
-  // line came, review E3). What comes then waits behind it.
+  // line came, review E3). An error that stepped aside does not hurry the
+  // line in front of it: it waits as long as it takes.
   function hurry(record) {
-    if (!record || record.ended || record.action || record.busy || !queue.length) return;
+    if (!record || record.ended || record.action || record.busy) return;
+    if (!queue.some(item => !item.parked)) return;
     if (!Number.isFinite(record.duration)) return;
     const seen = Date.now() - record.shownAt;
     const left = Math.max(0, MIN_VISIBLE_MS - seen);
@@ -216,6 +238,7 @@
   function setAside(record) {
     window.clearTimeout(record.timer);
     record.paused = false;
+    record.parked = true;
     current = null;
     const node = record.node;
     record.node = null;
@@ -230,6 +253,7 @@
 
   function present(record) {
     current = record;
+    record.parked = false;
     const region = ensureHost();
     App.toast.__adoptRegion?.();
     placeHost();

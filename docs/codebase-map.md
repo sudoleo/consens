@@ -989,12 +989,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     onExpire, duration, key})` → `{update, settle, cancel, dismiss,
     focusAction}`; eine Zeile über dem Composer (`--toast-lift`: Composer,
     Tastatur, Safe Area), immer nur eine, weitere warten (eine mit Aktion
-    verdrängt sofort, die vorige wird „expired“; ein Fehler tritt dagegen
-    nur zurück und kommt danach wieder; Ersetzen — Aktion oder gleicher
-    `key` — schaltet die Warteschlange nicht weiter), `role=status`, Dauer
-    nach Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`,
-    allgemein `duration: Infinity`) bleiben bis zum Schließen, auch wenn
-    eine weitere Zeile kommt (die wartet), Hover/Fokus pausieren, asynchrone
+    verdrängt sofort, die vorige wird „expired“; Ersetzen — Aktion oder
+    gleicher `key` — schaltet die Warteschlange nicht weiter), `role=status`,
+    Dauer nach Wortzahl (3–10 s, mit Aktion ≥ 5 s), Fehler (`tone: "error"`,
+    allgemein `duration: Infinity` ohne Aktion) bleiben bis zum Schließen,
+    blockieren aber nichts: jede neue Zeile (mit oder ohne Aktion) stellt
+    den Fehler zur Seite (`parked`), läuft ihre volle Zeit, dann kommt der
+    Fehler wieder; neue Zeilen reihen sich vor geparkten Fehlern ein, und
+    ein geparkter Fehler drängt die Zeile davor nicht (Nachprüfung 2 N2). Hover/Fokus pausieren, asynchrone
     Aktionen zeigen ihren Fortgang und melden über `update()`. Ist ein
     modaler Dialog offen, zieht die Zeile in ihn (sonst läge sie inert
     darunter); öffnet oder schließt einer, während sie steht, folgt sie ihm
