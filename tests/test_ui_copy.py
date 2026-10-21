@@ -137,3 +137,11 @@ def test_dates_and_numbers_have_one_locale():
             if relative != "static/js/app-text.js" and own_formatter.search(code):
                 found.append(f"{relative}:{number}: {line.strip()}")
     assert found == []
+
+
+def test_the_account_menu_says_log_out():
+    # One-word labels in markup built by a script are no prose for the
+    # scanner above; the account menu's entry is checked directly (review F).
+    firebase = (ROOT / "static/firebase.js").read_text(encoding="utf-8")
+    assert ">Log out</button>" in firebase
+    assert not re.search(r">\s*Log(in|out)\s*<", firebase)

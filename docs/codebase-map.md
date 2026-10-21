@@ -908,7 +908,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nutzt `showModal()` (Top-Layer, Hintergrund inert, Stapeln ohne z-index),
   schließt offene Popover (`App.popover.closeAll`), merkt den Auslöser
   (aktives Element, sonst `opener`, weil Safari geklickte Buttons nicht
-  fokussiert) und setzt den Fokus auf `focus` bzw. `[autofocus]`; Tab bleibt
+  fokussiert; liegt das aktive Element in einem Popover oder hat gerade ein
+  Popover geschlossen, ist es dessen Auslöser — ein Dialog aus einem Menü
+  gibt den Fokus an den Menüknopf zurück, nicht ins Leere) und setzt den Fokus auf `focus` bzw. `[autofocus]`; Tab bleibt
   im Dialog (letztes → erstes Element, Shift umgekehrt); jedes Schließen
   (Button, Escape, `close()`) gibt den Fokus an den Auslöser zurück. Der
   Hintergrund schließt nur einen Klick, der auch dort begann (Audit F5),
@@ -937,7 +939,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     `--popover-origin-y` vom Auslöser aus), `closed(el)`, `closeAll`,
     `anyOpen`, `menuKeys(el, {items, close, opener})` (Pfeile mit Umlauf,
     Home/End, Escape mit Rückgabe, Tab verlässt), `focusItem`, `leave(el,
-    done)` für Menüs, die beim Schließen entfernt werden (`.is-leaving`).
+    done)` für Menüs, die beim Schließen entfernt werden (`.is-leaving`),
+    `triggerOf(el)` (Auslöser des Popovers um `el`) und `recentTrigger()`
+    (Auslöser des in der letzten Sekunde geschlossenen Popovers;
+    `modal-dialog.js` nimmt beide für die Fokus-Rückgabe).
     Rein: 4px + 98 % in `--dur-state`/`--ease-out`; raus `--dur-press`/
     `--ease-in`. Die Bewegung kommt aus CSS (`display` allow-discrete), das
     Öffnen/Schließen der Module bleibt synchron.
@@ -5142,7 +5147,11 @@ weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
 Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Version.
 - Frontend: Die autoritative Fortsetzungsbasis liegt getrennt von der Ansicht
   in `runRegistry.selectedConversationBasis`; ein neuer `RunContext` erhält
-  davon einen Snapshot und eine eigene `ChatSession`. `window.App.followup`
+  davon einen Snapshot und eine eigene `ChatSession`. `runRegistry.retitle(
+  bookmarkId, title)` gibt einem umbenannten Chat den neuen Namen auch in den
+  Basen (gewählte, `basis`/`completedBasis` jedes Laufs), aus denen die
+  nächste Nachricht ihren Seitenleisten-Namen nimmt (`firebase.js`
+  `applyBookmarkTitle`). `window.App.followup`
   (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
   sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
   `run-view.js` gleicht ihn bei jedem Sichtwechsel mit `historyTurns` und der

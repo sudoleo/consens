@@ -1832,6 +1832,9 @@ describe("single-model agent chat", () => {
     expect(error).not.toMatch(/Load failed|Failed to fetch|expected pattern|doctype|gateway|Wi-Fi/i);
     expect(w.streamSSERequest).not.toHaveBeenCalled();
     expect(d.getElementById('questionInput').value).toBe('Sent from a tunnel');
+    // Nothing ran, so nothing "failed after 0s" above that sentence (review F).
+    expect(d.getElementById('agentAnswerActivity').textContent).not.toMatch(/Failed after/);
+    expect(d.getElementById('agentAnswerActivity').childElementCount).toBe(0);
     dom.window.close();
   });
 

@@ -19,6 +19,8 @@
 //   App.popover.focusItem(panel, items, 0 | -1);
 //   App.popover.closeAll({ except });
 //   App.popover.leave(panel, () => panel.remove());   // a menu that is removed
+//   App.popover.triggerOf(el)      the control the popover around `el` came from
+//   App.popover.recentTrigger()    that control for a popover closed in the last second
 //
 // Loaded in the "auth" group (the overlay modules), before firebase.js (the account menu).
 // =====================================================================
@@ -28,6 +30,11 @@
 
   const registry = new Map(); // element -> { close }
   const openSet = new Set();
+  // The control each popover came from, and the one that closed last: a
+  // dialog chosen in a menu gives focus back to the menu's control when it
+  // closes, as the menu item is gone by then (modal-dialog.js).
+  const triggers = new WeakMap();
+  let lastClosed = null;
 
   function register(element, { close } = {}) {
     if (!element) return null;
@@ -41,7 +48,7 @@
 
   function unregister(element) {
     registry.delete(element);
-    openSet.delete(element);
+    closed(element);
   }
 
   // A popover sits above its control when the control is in the lower half
@@ -65,7 +72,7 @@
     for (const element of Array.from(openSet)) {
       if (element === except) continue;
       if (!element.isConnected) { openSet.delete(element); continue; }
-      openSet.delete(element);
+      closed(element);
       try {
         registry.get(element)?.close?.({ reason, focus: false });
       } catch (error) {
@@ -80,11 +87,26 @@
     closeAll({ except: element });
     App.motion?.cancelLeave?.(element);
     aim(element, trigger);
+    if (trigger) triggers.set(element, trigger);
+    else triggers.delete(element);
     openSet.add(element);
   }
 
   function closed(element) {
-    openSet.delete(element);
+    if (openSet.delete(element)) lastClosed = { trigger: triggers.get(element) || null, at: Date.now() };
+  }
+
+  // The control `element` (a popover, or anything inside one) came from.
+  function triggerOf(element) {
+    const popover = element?.closest?.("[data-popover]");
+    return (popover && triggers.get(popover)) || null;
+  }
+
+  // The control of the popover that closed in the last moment (a menu item
+  // that closes its menu before it opens a dialog), or null.
+  function recentTrigger(within = 1000) {
+    if (!lastClosed || Date.now() - lastClosed.at > within) return null;
+    return lastClosed.trigger?.isConnected ? lastClosed.trigger : null;
   }
 
   function isOpen(element) {
@@ -157,5 +179,6 @@
     else done?.();
   }
 
-  App.popover = { register, unregister, opened, closed, isOpen, anyOpen, closeAll, menuKeys, focusItem, leave, aim };
+  App.popover = { register, unregister, opened, closed, isOpen, anyOpen, closeAll, menuKeys, focusItem, leave, aim,
+    triggerOf, recentTrigger };
 })();

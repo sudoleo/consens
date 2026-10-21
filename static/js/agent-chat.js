@@ -769,7 +769,11 @@
       { streaming: running && !state.text && !settled });
     // A finished turn is what the next message continues (setCompletedBasis).
     markLiveTurn(running ? null : state.completedTurn);
-    App.agentActivity?.render(activityHost(context.runId), {
+    // A message that never left (offline, refused before it started) is
+    // back in the box and says so: no "Failed after 0s" above that line.
+    const unsent = !running && context.status === "failed" && !context.metadata.requestSent;
+    if (unsent) activityHost(`${context.runId}:unsent`);
+    else App.agentActivity?.render(activityHost(context.runId), {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
         ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],

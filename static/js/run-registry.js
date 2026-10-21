@@ -382,6 +382,21 @@
     return selectedConversationBasis;
   }
 
+  // A chat renamed while it is open: the bases a next message starts from
+  // carry the new name (firebase.js applyBookmarkTitle).
+  function retitle(bookmarkId, title) {
+    const id = cleanId(bookmarkId);
+    const name = String(title || "");
+    if (!id || !name) return;
+    const apply = basis => {
+      if (basis?.bookmarkId !== id) return;
+      basis.title = name;
+      if (basis.bookmarkMeta) basis.bookmarkMeta.title = name;
+    };
+    apply(selectedConversationBasis);
+    runs.forEach(context => { apply(context.completedBasis); apply(context.basis); });
+  }
+
   function getSelectedConversationBasis({ includeHistory = true } = {}) {
     return cloneValue(selectedConversationBasis && !includeHistory
       ? { ...selectedConversationBasis, historyTurns: [] } : selectedConversationBasis);
@@ -614,6 +629,7 @@
     selectConversationBasis,
     getSelectedConversationBasis,
     getSelectedConversationIdentity,
+    retitle,
     setCompletedBasis,
     cancel,
     beginAction,
