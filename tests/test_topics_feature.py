@@ -693,7 +693,9 @@ def test_topic_followers_use_separate_collection_and_double_opt_in(monkeypatch):
     assert topics.claim_delivery(
         topic["id"], "run-before-unsubscribe", follower_doc_id, db=db
     )
-    token = topics.make_unsubscribe_token(topic["id"], confirmed["email"], now=NOW)
+    # Signed now: unsubscribe_follow checks the link against the real clock,
+    # and a link signed at NOW (July) ran out after 90 days.
+    token = topics.make_unsubscribe_token(topic["id"], confirmed["email"])
     topics.unsubscribe_follow(token, db=db)
     assert not any(path[0] == topics.FOLLOWERS_COLLECTION for path in db.documents)
     assert not any(path[0] == topics.DELIVERIES_COLLECTION for path in db.documents)

@@ -70,7 +70,10 @@ def test_bookmark_save_failures_are_visible_and_deduplicated():
     assert "Your chat storage is full" in notice
     assert "600_000" in notice
     assert "window.App?.showPopup?.(message)" in notice
-    assert 'showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`)' in model_save
+    # The server's sentence comes as `error` (flat, Apple-Audit H6).
+    assert 'window.App?.errorFields?.(data)?.error' in model_save
+    assert 'showBookmarkSaveError(res.status, errorDetail, `${bookmarkId}:${question}`)' in model_save
+    assert 'window.App?.errorFields?.(data)?.error' in consensus_save
     assert 'showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`)' in consensus_save
 
 
