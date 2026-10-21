@@ -441,9 +441,10 @@
     // On a phone the Watches hint is a still dot on the menu island until
     // Watches is opened once (watch.js): there from the first frame, not
     // added a second later (Apple-Audit B2). Above the overlay width it is a
-    // pulse that watch.js starts on purpose after a moment.
+    // pulse that watch.js starts on purpose after a moment. Only for an
+    // account: a guest could only be asked to log in behind it (H2, review 3).
     const watchHint = once("watchHint", document.getElementById("viewSwitchWatches"));
-    if (watchHint && !watchPage && window.matchMedia("(max-width: 1099px)").matches
+    if (watchHint && !watchPage && !guestExpected() && window.matchMedia("(max-width: 1099px)").matches
       && read("consensio.watchViewSwitchHint.seen.v1") !== "true") {
       watchHint.classList.add("has-watch-pulse");
     }
@@ -467,5 +468,10 @@
     seed();
     // A session that resolved before this point owns the UI already: the
     // restoring placeholders above never apply to it (restoringAccount).
+  });
+  // The account this browser remembered is not coming (its session ended):
+  // the Watches dot drawn for it goes, as nobody signed in has one (H2).
+  window.addEventListener("consensio:auth-state", event => {
+    if (!event.detail?.uid) document.getElementById("viewSwitchWatches")?.classList.remove("has-watch-pulse");
   });
 })();

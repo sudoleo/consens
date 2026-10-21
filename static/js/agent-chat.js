@@ -390,6 +390,7 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const picked = catalogStatus === 'ready' ? selection() : null;
     return JSON.stringify([selectedMode(), App.runMode?.preference?.(), canUse(), window.auth?.currentUser?.uid || '', App.authState?.generation,
+      Boolean(window.__consensioAuthState?.known),
       expectingAgent(), App.agentAccessCheck?.attempt,
       catalogStatus, catalogOwner, loadGeneration, catalog?.models?.length, picked?.model_id, picked?.reasoning_effort,
       context?.runId, context?.status, registry.isExecuting(context?.runId),
@@ -1772,6 +1773,10 @@
   // a no-op when nothing the shell shows has changed.
   window.addEventListener("consensio:run-registry-change", () => renderShell());
   window.addEventListener("consensio:run-mode-change", () => renderShell());
+  // The session is known (signed in, or ended): the look the page expected
+  // gives way to the real one, e.g. no Agent chip for a session that ended
+  // while the page still expected it (review 1).
+  window.addEventListener("consensio:auth-state", () => renderShell());
   // The account's model pick arrived (server, another tab, sign-out). A pick
   // this tab's model list does not know comes from a newer list (a tab or
   // device opened after a deploy): the list is fetched again before anything

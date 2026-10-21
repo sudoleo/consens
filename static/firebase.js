@@ -873,6 +873,15 @@ onIdTokenChanged(auth, async (user) => {
         window.App?.accountTier?.set?.("free");
         document.body.classList.remove("viewer-is-admin");
         publishAuthState(null);
+        // Only now is the session known to be gone. The field was drawn
+        // above while the page still expected the account this browser
+        // remembered (app-bootstrap.js expectedSession): an ended session
+        // (password changed elsewhere, account disabled, a Google sign-in
+        // that came back without a user) left it grey and locked under
+        // "Log in" until a reload (review 1, regression of B4).
+        if (typeof window.updateQuestionInputAccess === "function") {
+          window.updateQuestionInputAccess();
+        }
       }
     });
 

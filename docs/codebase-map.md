@@ -2324,7 +2324,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `App.expectedSession()` → `{known, account, verified, uid}` (vor Firebase aus
   `id_token`, Firebases eigenem `localStorage`-Nutzer
   `firebase:authUser:<apiKey>:[DEFAULT]` und `consensio.googleRedirectPending`;
-  danach die Antwort; `app-init.js` nutzt es für Gast-Composer und Sidebar);
+  danach die Antwort; `app-init.js` nutzt es für Gast-Composer und Sidebar.
+  Endet die erwartete Sitzung (Firebase meldet `null`), zeichnet `firebase.js`
+  das Feld nach `publishAuthState(null)` neu und `agent-chat.js` die Shell
+  bei `consensio:auth-state`; vorher blieb das Feld gesperrt mit Agent-Chip
+  unter „Log in“ stehen, Nachprüfung 1);
   `App.expectsAgent()`; `App.firstFrame` `{look(), remember(), agentModel(),
   agentEffort(), forget()}` — bei `pagehide`/verborgen merkt es pro Konto, was
   der Composer zeigte (`localStorage consensio.firstFrame.v1`: Agent-Modellname
