@@ -40,6 +40,19 @@ def test_the_app_names_the_default_chat_model_without_the_catalog(monkeypatch):
     assert pages is not None
 
 
+def test_a_guest_gets_the_google_entries_every_account_has(monkeypatch):
+    """Apple-Audit H3: a guest's composer is Agent's; the page says which
+    Google entries every account has (app-bootstrap.js GOOGLE_FOR_EVERYONE)."""
+    from fastapi.testclient import TestClient
+    import main
+    from app.services import google_connections
+    monkeypatch.setattr(google_connections, "entries_for_everyone", lambda: {"gmail": True, "drive": False})
+    html = TestClient(main.app).get("/app").text
+    assert 'data-google-for-everyone="{&#34;drive&#34;: false, &#34;gmail&#34;: true}"' in html
+    monkeypatch.setattr(google_connections, "entries_for_everyone", lambda: (_ for _ in ()).throw(RuntimeError("no config")))
+    assert 'data-google-for-everyone="{&#34;drive&#34;: false, &#34;gmail&#34;: false}"' in TestClient(main.app).get("/app").text
+
+
 def test_the_mail_strip_follows_the_composer():
     html = read("templates/index.html")
     # After the composer in the DOM: on the start screen it stands under the

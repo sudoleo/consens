@@ -1110,6 +1110,57 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Max, Apple-Audit H3: a guest sees Agent's composer of a new chat as an
+  // account does by default. Nothing in it loads or sends without an
+  // account, and each choice in it asks for the login with its reason.
+  it("shows a guest Agent's composer of a new chat, and every choice in it asks for the login", async () => {
+    const extra = '<div class="consensus-model"><div class="select-wrapper"><select id="consensusModelDropdown"><option value="m">Daily</option></select></div></div>';
+    const notice = '<div id="agentComposerNotice" hidden><span id="agentComposerMessage"></span><button id="agentComposerAction" hidden></button></div>';
+    const { window, document, dom } = boot({ body: `<div class="chat-input-container">${BODY}${extra}</div>${notice}`, setup(w) {
+      w.localStorage.removeItem("runMode");
+      w.auth = { currentUser: null };
+      w.App.agentAccess = null;
+      w.App.isGuest = () => !w.auth.currentUser && w.document.documentElement.dataset.authUnavailable !== "true";
+      w.App.askToLogIn = vi.fn();
+      w.App.firstFrame = { agentModel: () => "Claude Sonnet 5.5", agentEffort: () => "" };
+      w.App.getSelectedModelCount = () => 2;
+    } });
+    window.App.initCustomModelPicker(document.getElementById("consensusModelDropdown"));
+    const agent = window.App.agentChat;
+    agent.render();
+    expect(agent.modeState()).toMatchObject({ family: null, canUse: false, guest: true });
+    expect(agent.isSelected()).toBe(true);
+    expect(window.App.runMode.availability().agent).toMatchObject({ visible: true, enabled: true });
+    expect(document.body.classList.contains("single-agent-active")).toBe(true);
+    expect(document.getElementById("agentModelControls").hidden).toBe(false);
+    const chip = document.querySelector(".agent-model-picker .model-picker-display");
+    expect(chip.querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
+    expect(chip.disabled).toBe(false);
+    // No "Log in to use Agent." under the field, no model list to load.
+    agent.syncComposer();
+    expect(document.getElementById("agentComposerNotice").hidden).toBe(true);
+    expect(window.fetch).not.toHaveBeenCalled();
+    chip.click();
+    expect(window.App.askToLogIn).toHaveBeenLastCalledWith("Log in to choose your models.", expect.objectContaining({ source: "models", trigger: chip }));
+    expect(document.querySelector(".agent-model-picker .model-picker-menu").classList.contains("is-open")).toBe(false);
+    window.App.openModelPicker(document.getElementById("agentModelDropdown"), { secondary: true });
+    expect(window.App.askToLogIn).toHaveBeenLastCalledWith("Log in to choose the reasoning.", expect.objectContaining({ source: "reasoning" }));
+    window.App.openModelPicker(document.getElementById("consensusModelDropdown"));
+    expect(window.App.askToLogIn).toHaveBeenCalledTimes(3);
+    expect(document.querySelector(".model-picker-menu.is-open")).toBeNull();
+    // A send that reaches Agent anyway asks for the login (composer-invite.js comes first).
+    document.getElementById("questionInput").value = "Question";
+    await agent.send();
+    expect(window.App.askToLogIn).toHaveBeenLastCalledWith("Log in to use Agent.", expect.objectContaining({ source: "agent" }));
+    expect(window.streamSSERequest).not.toHaveBeenCalled();
+    // A page whose login cannot load has no guest, and no Agent.
+    document.documentElement.dataset.authUnavailable = "true";
+    window.dispatchEvent(new window.Event("consensio:auth-unavailable"));
+    expect(agent.isSelected()).toBe(false);
+    expect(document.body.classList.contains("single-agent-active")).toBe(false);
+    dom.window.close();
+  });
+
   it("ignores late completion after logout", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);

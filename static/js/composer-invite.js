@@ -2,7 +2,8 @@
 //
 // 1. Guests type. Their Send keeps the question (draft, app-init.js) and
 //    opens the sign-in; once the new session can run it, the question goes
-//    out by itself (afterAccessUpdate, called by updateQuestionInputAccess).
+//    out by itself (afterAccessUpdate, called by updateQuestionInputAccess),
+//    in Agent as the guest saw it, or in the mode the guest chose.
 //    Most visitors used to leave in front of a locked field.
 // 2. Example questions under an empty new chat (#composerStarters), curated
 //    or predicted from the newest chats (composer-starters.js). A click
@@ -48,8 +49,12 @@
     if (!text) { input?.focus(); return true; }
     App.saveQuestionDraft?.(text);
     // The text itself: only exactly this question goes out by itself later,
-    // never one typed (or cut short) after this Send.
-    writePending({ at: Date.now(), source, text });
+    // never one typed (or cut short) after this Send. A mode the guest chose
+    // in the (+) menu goes with it (Apple-Audit H3): the sign-in may bring an
+    // account's settings that say otherwise. Unchosen, the account's own
+    // mode applies (Agent by default, as the guest saw it).
+    const mode = App.userSettings?.get?.("run_mode");
+    writePending({ at: Date.now(), source, text, ...(mode ? { mode } : {}) });
     track("app_guest_send", { source });
     App.openAuthModal?.("register", document.getElementById("sendButton"), "composer", { lead: GUEST_SEND_LEAD });
     return true;
@@ -62,20 +67,31 @@
     return Boolean(text) && (typeof pending.text !== "string" || text === pending.text.trim());
   }
 
+  // The waiting question may still go out: fresh, into a new chat (a chat on
+  // screen keeps the question in the field), and the field holds it.
+  function sendable(pending) {
+    if (Date.now() - pending.at > PENDING_MAX_AGE_MS) return false;
+    const registry = App.runRegistry;
+    if (registry?.visible?.() || registry?.getSelectedConversationBasis?.()) return false;
+    return holdsSentText(pending);
+  }
+
   function afterAccessUpdate(canStartRun) {
-    if (!canStartRun || autoSendScheduled || App.reloadingAfterSignIn) return;
+    if (autoSendScheduled || App.reloadingAfterSignIn) return;
     // A tab in the background only shares the sign-in (an email link opens a
     // new tab that signs in and reloads): the tab in front sends it, once.
     if (document.visibilityState === "hidden") return;
     const pending = readPending();
     if (!pending) return;
+    // The mode the guest chose holds once an account can run the question,
+    // before the send waits for that mode to be ready (Agent's model list,
+    // two models). set() renders the composer, which asks here again.
+    if (pending.mode && window.userCanAskQuestions?.() && App.runMode?.preference?.() !== pending.mode
+        && sendable(pending) && App.runMode.set(pending.mode, { source: "guest" })) return;
+    if (!canStartRun) return;
     // One try, whatever happens next.
     writePending(null);
-    if (Date.now() - pending.at > PENDING_MAX_AGE_MS) return;
-    // Only into a new chat: a chat on screen keeps the question in the field.
-    const registry = App.runRegistry;
-    if (registry?.visible?.() || registry?.getSelectedConversationBasis?.()) return;
-    if (!holdsSentText(pending)) return;
+    if (!sendable(pending)) return;
     autoSendScheduled = true;
     // Not from inside updateQuestionInputAccess, which sending calls again.
     setTimeout(() => {

@@ -564,9 +564,17 @@ def read_root(request: Request):
         agent_default_label = agent_model_label()
     except Exception:
         agent_default_label = ""
+    # A guest's composer is Agent's (Apple-Audit H3); its (+) menu shows the
+    # Google entries only where every account has them.
+    try:
+        from app.services.google_connections import entries_for_everyone
+        google_for_everyone = entries_for_everyone()
+    except Exception:
+        google_for_everyone = {"gmail": False, "drive": False}
 
     response = templates.TemplateResponse(request=request, name="index.html", context={
         "agent_default_label": agent_default_label,
+        "google_for_everyone": google_for_everyone,
         "limits": cfg.get_limits_config(),
         "models": models,
         "model_families": model_families,

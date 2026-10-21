@@ -75,10 +75,13 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
     expect(document.getElementById('composerReasoningState').textContent).toBe('High');
     document.getElementById('composerReasoningToggle').click();
-    expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'), {secondary: true});
+    // The control that asked travels along (a guest's login dialog gives the focus back to it).
+    expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'),
+      {secondary: true, trigger: document.getElementById('composerReasoningToggle')});
     window.App.openModelPicker.mockClear();
     document.getElementById('agentReasoningMenuOption').click();
-    expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'), {secondary: true});
+    expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'),
+      {secondary: true, trigger: document.getElementById('attachTrigger')});
     expect(document.getElementById('agentReasoningMenuState').textContent).toBe('High');
     document.body.classList.add('is-hero');
     await vi.waitFor(() => expect(document.getElementById('composerModeBar').hidden).toBe(false));

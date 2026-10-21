@@ -235,3 +235,69 @@ def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser,
         expect(page.locator("#agentComposerNotice")).to_be_hidden()
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, phase4_server, width):
+    """Apple-Audit H3 (Max): a guest's composer is an account's by default.
+    The (+) menu shows Agent chosen with Consensus and Compare beside it;
+    whatever needs an account opens the login dialog with a line that says
+    what for, never a dead click; a chosen Consensus holds."""
+    context, page = _real_firebase_page(browser, phase4_server, initial_uid=None, has_touch=width < 700)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        label = page.evaluate("document.getElementById('appBootstrapConfig').dataset.agentDefaultLabel")
+        chip = page.locator("#agentModelControls .model-picker-display")
+        expect(chip).to_be_visible()
+        expect(chip.locator(".model-picker-display-text")).to_have_text(label)
+        expect(page.locator(".consensus-model")).to_be_hidden()
+        expect(page.locator("#agentComposerNotice")).to_be_hidden()
+        page.locator("#attachTrigger").click()
+        for value in ("agent", "consensus", "compare"):
+            row = page.locator(f'#runModeControl [data-value="{value}"]')
+            expect(row).to_be_visible()
+            expect(row).to_be_enabled()
+            expect(row).to_have_attribute("aria-pressed", str(value == "agent").lower())
+        expect(page.locator("#attachUploadOption")).to_be_visible()
+        _shot(page, f"guest-plus-menu-{width}")
+
+        def asks(lead, focus):
+            expect(page.locator("#loginModal")).to_be_visible()
+            expect(page.locator("#authLead")).to_have_text(lead)
+            page.locator("#closeLoginModal").click()
+            expect(page.locator("#loginModal")).to_be_hidden()
+            expect(page.locator(".model-picker-menu.is-open")).to_have_count(0)
+            expect(page.locator("#attachMenu")).to_be_hidden()
+            expect(page.locator(focus)).to_be_focused()
+
+        page.locator("#attachUploadOption").click()
+        asks("Log in to add files.", "#attachTrigger")
+        if width < 701:
+            # Phones keep Reasoning and the comparison models in the (+) menu.
+            page.locator("#attachTrigger").click()
+            page.locator("#agentReasoningMenuOption").click()
+            asks("Log in to choose the reasoning.", "#attachTrigger")
+            page.locator("#attachTrigger").click()
+            page.locator("#agentComparisonMenuOption").click()
+            asks("Log in to choose your models.", "#attachTrigger")
+        page.locator("#composerReasoningToggle").click()
+        asks("Log in to choose the reasoning.", "#composerReasoningToggle")
+        page.locator("#composerAttachButton").click()
+        asks("Log in to add files.", "#composerAttachButton")
+        chip.click()
+        asks("Log in to choose your models.", "#agentModelControls .model-picker-display")
+
+        # The guest's own choice holds, on this page and the next.
+        choose(page, "consensus")
+        expect(chip).to_be_hidden()
+        assert page.evaluate("App.runMode.effective()") == "consensus"
+        page.reload()
+        page.wait_for_function("() => window.__consensioAuthState?.known === true && !!window.App.agentChat")
+        expect(page.locator("#runModeSelect")).to_have_value("consensus")
+        expect(page.locator("#agentModelControls")).to_be_hidden()
+        assert not page.evaluate("document.body.classList.contains('single-agent-active')")
+        assert not errors, errors
+    finally:
+        context.close()

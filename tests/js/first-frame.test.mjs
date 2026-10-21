@@ -66,12 +66,43 @@ const token = uid => `x.${Buffer.from(JSON.stringify({ user_id: uid })).toString
 const chip = document => document.querySelector("#agentModelControls .model-picker-display");
 
 describe("the session a first frame expects (B4)", () => {
-  it("paints a guest without any stored session", () => {
+  it("paints a guest without any stored session, in Agent's composer of a new chat (H3)", () => {
     const { window, document } = paint();
     expect(window.App.expectedSession()).toMatchObject({ known: false, account: false });
+    expect(window.App.isGuest()).toBe(true);
     expect(document.body.classList.contains("is-guest")).toBe(true);
     expect(document.getElementById("authTopActions").hidden).toBe(false);
+    // What an account sees by default (Max, Apple-Audit H3): Agent's chip
+    // with the default model and the comparison count, its greeting and
+    // Reasoning; no Consensus chip, no account placeholders.
+    expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
+    expect(document.body.classList.contains("single-agent-active")).toBe(true);
+    expect(document.querySelector(".hero-greeting").textContent).toBe("What can I help you with?");
+    expect(document.getElementById("agentModelControls").hidden).toBe(false);
+    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
+    expect(chip(document).querySelector(".model-picker-display-count").textContent).toBe("+3");
+    expect(document.querySelector(".consensus-model").hidden).toBe(true);
+    expect(document.getElementById("composerReasoningState").textContent).toBe("Auto");
+    expect(document.getElementById("questionInput").placeholder).toBe("Ask anything, or paste an AI answer to check it");
+    expect(document.querySelector(".demo-chip").hidden).toBe(false);
+    expect(document.querySelectorAll("#bookmarksContainer .skeleton-bookmark")).toHaveLength(0);
+  });
+
+  it("keeps a guest's own choice of Consensus, and gives no Agent while the login cannot load", () => {
+    const chose = paint({ storage: { runMode: "consensus" } }).document;
+    expect(chose.documentElement.classList.contains("agent-shell-expected")).toBe(false);
+    expect(chose.body.classList.contains("single-agent-active")).toBe(false);
+    expect(chose.querySelector(".hero-greeting").textContent).toBe("What should the models cross-check?");
+    const { window, document } = paint();
+    document.documentElement.dataset.authUnavailable = "true";
+    expect(window.App.isGuest()).toBe(false);
+    expect(window.App.expectsAgent()).toBe(false);
+    window.dispatchEvent(new window.CustomEvent("consensio:auth-unavailable"));
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(false);
+    // An unconfirmed sign-in is an account, not a guest.
+    window.auth = { currentUser: { uid: "u1", emailVerified: false } };
+    delete document.documentElement.dataset.authUnavailable;
+    expect(window.App.isGuest()).toBe(false);
   });
 
   it.each([

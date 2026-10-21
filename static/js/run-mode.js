@@ -24,9 +24,10 @@
 
   const settings = window.App.userSettings;
   const MODES = Object.freeze(["compare", "consensus", "agent"]);
-  // For people who never chose. Agent is the default since 2026-10-02;
-  // accounts without Agent access (guests, a failed status check) still fall
-  // back to consensus in effective().
+  // For people who never chose. Agent is the default since 2026-10-02, for
+  // guests too (Max, Apple-Audit H3: a guest sees what an account sees and
+  // logs in on Send); an account without Agent access (a refused status
+  // check) still falls back to consensus in effective().
   const DEFAULT_MODE = "agent";
 
   const COPY = Object.freeze({
@@ -59,14 +60,21 @@
     return true;
   }
 
+  // Agent is offered to an account with access and to a guest, who sees it
+  // as that account will and logs in on Send (composer-invite.js; the server
+  // still refuses Agent without an account, agent.py require_agent_access).
+  function agentOffered(state) {
+    return Boolean(state?.canUse || state?.guest);
+  }
+
   // What the next message will actually do, given the open chat and the
-  // account. agent-chat.js reports the open chat's family and access.
+  // account. agent-chat.js reports the open chat's family, access and guest.
   function effective() {
     const state = window.App?.agentChat?.modeState?.();
     const pref = read();
     if (state?.family === "agent") return "agent";
     if (pref === "agent") {
-      if (state?.family === "consensus" || !state?.canUse) return "consensus";
+      if (state?.family === "consensus" || !agentOffered(state)) return "consensus";
       return "agent";
     }
     return pref;
@@ -79,12 +87,13 @@
     const state = window.App?.agentChat?.modeState?.() || {};
     const family = state.family || null;
     const newChatReason = "Available in a new chat";
+    const offered = agentOffered(state) || family === "agent";
     return {
       compare: { enabled: family !== "agent", reason: family === "agent" ? newChatReason : "" },
       consensus: { enabled: family !== "agent", reason: family === "agent" ? newChatReason : "" },
       agent: {
-        visible: Boolean(state.canUse) || family === "agent",
-        enabled: family !== "consensus" && (Boolean(state.canUse) || family === "agent"),
+        visible: offered,
+        enabled: family !== "consensus" && offered,
         reason: family === "consensus" ? newChatReason : "",
       },
     };

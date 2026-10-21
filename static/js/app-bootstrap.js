@@ -21,6 +21,9 @@
   // Fortschritt lesen ausschliesslich hieraus (Server = cfg.PROVIDERS).
   window.MODEL_FAMILIES = parse("modelFamilies", []);
   window.MAX_RUN_FAMILIES = Number(config?.dataset.maxRunFamilies || 6);
+  // Gmail & Calendar and Drive as every account has them (pages.py): only
+  // then does a guest's (+) menu show them (agent-google.js, agent-drive.js).
+  window.GOOGLE_FOR_EVERYONE = parse("googleForEveryone", {});
 
   window.trackUmamiEvent = function (eventName, eventData = {}) {
     if (!eventName || !window.umami || typeof window.umami.track !== "function") return;
@@ -92,6 +95,15 @@
     return { known: false, account: expected.account, verified: expected.verified, uid: expected.uid };
   };
   const guestExpected = () => !window.App.expectedSession().account;
+  // A guest: nobody signed in or expected, and a login that can load (a page
+  // whose login cannot load has nobody who could send, auth-bootstrap.js).
+  // An unconfirmed sign-in is an account. The one rule for the first frame
+  // and the app (app-init.js isGuestComposer, agent-chat.js, model-picker.js).
+  window.App.isGuest = function () {
+    if (window.auth?.currentUser) return false;
+    if (document.documentElement.dataset.authUnavailable === "true") return false;
+    return !window.App.expectedSession().account;
+  };
 
   // Agent is open to every signed-in account (agent.py require_agent_access)
   // and the default mode, so a verified session expects Agent unless its
@@ -99,11 +111,14 @@
   // ("agentShellExpected" is "0", written by agent-chat.js once access is
   // known). html.agent-shell-expected holds Agent's look until then
   // (agent-chat.js drops it); a failed status check keeps it while it asks
-  // again (firebase.js, Apple-Audit B8).
+  // again (firebase.js, Apple-Audit B8). A guest sees Agent's composer of a
+  // new chat as an account does by default (Max, Apple-Audit H3) and logs in
+  // on Send (composer-invite.js); a guest's own choice of mode holds.
   window.App.expectsAgent = function () {
     const session = window.App.expectedSession();
-    if (!session.verified) return false;
     if ((window.App.runMode?.preference?.() || "agent") !== "agent") return false;
+    if (window.App.isGuest()) return true;
+    if (!session.verified) return false;
     return read("agentShellExpected") !== "0";
   };
   if (window.App.expectsAgent()) document.documentElement.classList.add("agent-shell-expected");
@@ -317,8 +332,9 @@
       if (window.App?.runMode?.preference() !== "compare") {
         document.body.classList.add("agent-mode-enabled");
       }
-      // A guest's composer (greeting on phones, no model chip) from the first
-      // paint; app-init.js keeps the class in step with the session.
+      // A guest's composer (greeting on phones, no Consensus chip, the demo
+      // beside Agent's) from the first paint; app-init.js keeps the class in
+      // step with the session.
       if (guestExpected()) document.body.classList.add("is-guest");
       // Agent's composer and sidebar (agent-chat.js keeps the class).
       if (agentLook) document.body.classList.add("single-agent-active");

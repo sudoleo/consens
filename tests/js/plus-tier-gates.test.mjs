@@ -101,12 +101,19 @@ describe("attachment gate per tier", () => {
     expect(harness.document.getElementById("loginModal").open).toBe(false);
   });
 
+  // The login dialog with its reason, as at every door a guest meets
+  // (App.askToLogIn, Apple-Audit H2, H3); the focus goes back to (+).
   it("asks a guest to sign in instead of opening the picker", () => {
     const harness = boot();
+    const asked = [];
+    let picked = 0;
+    harness.window.App.openAuthModal = (...args) => asked.push(args);
+    harness.document.getElementById("attachFileInput").addEventListener("click", () => { picked += 1; });
     harness.window.auth = { currentUser: null };
     clickUpload(harness);
     expect(harness.gated).toEqual([]);
-    expect(harness.document.getElementById("loginModal").open).toBe(true);
+    expect(picked).toBe(0);
+    expect(asked).toEqual([["login", harness.document.getElementById("attachTrigger"), "attachments", { lead: "Log in to add files." }]]);
   });
 
   it("names the tier on the badge and drops the Free-only upgrade link", () => {

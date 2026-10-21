@@ -46,6 +46,15 @@ aus Google Drive als normale Anhänge; zurückgeschrieben wird standardmäßig n
   gecacht). Andere Konten bekommen von `GET /agent/google/connections`
   `configured:false, drive:null` und sehen nichts; connect/finish/calendars/
   confirm/renew, Drive-Uploads und `google_selection` in `/agent` antworten 403.
+  Gäste (Agent-Composer seit 2026-10-21, Apple-Audit H3) sehen „Gmail &
+  Calendar“ bzw. „Add from Google Drive“ genau dann, wenn jedes Konto sie hat:
+  `entries_for_everyone()` (`GOOGLE_TEST_USERS` = `*` und `available()` bzw.
+  `drive_picker()`) geht über `pages.py` als `data-google-for-everyone` ins
+  Template, `app-bootstrap.js` legt es als `window.GOOGLE_FOR_EVERYONE` ab,
+  `agent-google.js::guestEntry(kind)` entscheidet für beide Einträge; ein Klick
+  öffnet den Login („Log in to use Gmail and Calendar.“ / „Log in to add
+  files.“). Mit einer Testnutzer-Liste sieht ein Gast, was ein nicht gelistetes
+  Konto sieht: nichts.
 - Lokaler Test: `configuration()` akzeptiert eine `http://localhost`-Rückleitung,
   solange weder `RENDER_SERVICE_NAME` noch `ENVIRONMENT=production` gesetzt ist.
 
@@ -906,8 +915,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `trackAppEvent`, `exitHeroMode`, `scrollBehavior`, seit 2026-10-20
   `askToLogIn(lead, {trigger, source})`: ein Gast an einer Tür, die ein
   Konto braucht, bekommt den Login-Dialog mit einer Zeile, wofür — Modellwahl,
-  Teilen, Resolve, Drive, Senden mit Dateien, Settings; ohne Firebase sagt es
-  die Hinweiszeile, Apple-Audit H2) sowie den zentralen
+  Reasoning, Anhang, Gmail & Calendar, Drive, Teilen, Resolve, Senden mit
+  Dateien, Settings; ohne Firebase sagt es die Hinweiszeile, Apple-Audit H2,
+  H3) sowie den zentralen
   `window.App.renderUsageDisplay(data, owner)`-Eingang: reicht das
   `token_budget` einer API-Antwort (auch aus Fehler-Details) an
   `App.tokenBudget` weiter; Antworten ohne das Feld (eigene Keys) ändern nichts.
@@ -2388,7 +2398,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   das Feld nach `publishAuthState(null)` neu und `agent-chat.js` die Shell
   bei `consensio:auth-state`; vorher blieb das Feld gesperrt mit Agent-Chip
   unter „Log in“ stehen, Nachprüfung 1);
-  `App.expectsAgent()`; `App.firstFrame` `{look(), remember(), agentModel(),
+  `App.isGuest()` (seit 2026-10-21, die eine Gast-Regel: niemand angemeldet
+  oder erwartet und der Login erreichbar; eine unbestätigte Anmeldung ist ein
+  Konto; `app-init.js::isGuestComposer`, `agent-chat.js`, `model-picker.js`
+  lesen sie); `App.expectsAgent()` (auch für einen Gast, dessen Wahl Agent ist,
+  Apple-Audit H3); `App.firstFrame` `{look(), remember(), agentModel(),
   agentEffort(), forget()}` — bei `pagehide`/verborgen merkt es pro Konto, was
   der Composer zeigte (`localStorage consensio.firstFrame.v1`: Agent-Modellname
   und Reasoning-Stufe nur aus geladener Modellliste, `select.dataset.catalog ===
@@ -3249,9 +3263,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   gerufen) — lädt zur ersten Frage ein. `window.App.composerInvite`:
   `sendAsGuest()` (erste Prüfung in `window.sendQuestion`, `query-send.js`):
   für einen Gast Entwurf speichern (`App.saveQuestionDraft`), den Sendewunsch
-  `localStorage["consensio.sendAfterLogin.v1"] = {at, source, text}` merken und den
+  `localStorage["consensio.sendAfterLogin.v1"] = {at, source, text, mode?}` merken
+  (`mode` nur, wenn der Gast selbst einen Modus gewählt hat,
+  `userSettings.get("run_mode")`) und den
   Registrierungsdialog mit Begründungszeile öffnen; `afterAccessUpdate(canStartRun)`
-  (Ende von `updateQuestionInputAccess`): sobald die neue Sitzung laufen darf,
+  (Ende von `updateQuestionInputAccess`): sobald ein Konto fragen darf, setzt es
+  einen mitgebrachten `mode` (`App.runMode.set(mode, {source: "guest"})`, auch
+  gegen die Einstellung eines bestehenden Kontos, die dann so gespeichert wird;
+  ohne `mode` gilt der Modus des Kontos, im Standard Agent), und erst danach
+  wartet es, bis die Sitzung in diesem Modus laufen darf; sobald die neue Sitzung laufen darf,
   einmal `window.sendQuestion()` (höchstens 1 h alt, nur in einen neuen Chat,
   nur wenn das Feld genau `text` hält, nie während `App.reloadingAfterSignIn`
   aus `firebase.js::continueSignedIn`, der Wunsch wird beim ersten Versuch
@@ -5927,11 +5947,14 @@ mit, sonst entfernt der Reset ihre Werte.
   offener Consensus-Chat kann nur zwischen Compare und Consensus wechseln
   (serverseitig getrennte Chat-Familien, `agent-chat.js` meldet sie ueber
   `App.agentChat.modeState()`), und ohne Agent-Zugang laeuft eine Agent-Wahl
-  als Consensus. `pipeline()` (= nicht Compare) ersetzt das fruehere
+  als Consensus. Ein Gast (`modeState().guest`, `App.isGuest()`) bekommt Agent
+  wie ein Konto im Standard (Max, Apple-Audit H3; geschickt wird erst nach dem
+  Login, `composer-invite.js`). `pipeline()` (= nicht Compare) ersetzt das fruehere
   `isAgentModeEnabled()` und fuellt das persistierte Laufsfeld
   `config.agentMode`/`autoConsensus` (Feldname historisch).
 - `availability()` liefert je Modus `enabled`/`reason`; der Wähler zeigt
-  gesperrte Modi mit Grund statt sie zu verstecken, Agent nur mit Zugang. In
+  gesperrte Modi mit Grund statt sie zu verstecken, Agent nur mit Zugang oder
+  für einen Gast. In
   einem offenen Agent-Chat gibt es nichts zu wählen: dort tritt `#runModeControl`
   (die Modusgruppe im (+)-Menü) zurück, das (+) heißt dann „Chat options“.
 - Aenderungen laufen nur ueber `set(mode, {source})`, feuern
@@ -6187,7 +6210,8 @@ beziehungsweise resetten den Leser. Modellwechsel merken lokale Lesepositionen
 Die bisherigen Schubladen sind nur der Fallback ohne geladenes Reader-Modul.
 
 Die Moduswahl steht im Abschnitt „Modus: Compare, Consensus, Agent". Compare und
-Consensus sind fuer alle Stufen frei; Agent erscheint nur mit Agent-Zugang.
+Consensus sind fuer alle Stufen frei; Agent erscheint mit Agent-Zugang und
+fuer Gaeste (seit 2026-10-21, sie melden sich beim Senden an).
 
 **Default fuer neue Nutzer**: `run-mode.js` nimmt `DEFAULT_MODE` (seit
 2026-10-02 `agent`, ohne Agent-Zugang laeuft es als Consensus), solange keine
@@ -6458,19 +6482,37 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   (Senden) sind zwei getrennte Rechte, und der Entwurf liegt bis zum ersten
   echten Lauf unter `consensio.questionDraft.v1` — die Frage überlebt den
   Umweg über das Postfach.
-- **Gäste tippen (seit 2026-10-15).** `window.App.isGuestComposer()` (app-init.js:
-  keine Firebase-Sitzung, Login erreichbar, keine noch wiederhergestellte
-  Sitzung) zählt zu `userCanTypeQuestions()`; nur `data-auth-unavailable`
+- **Gäste tippen (seit 2026-10-15).** `window.App.isGuestComposer()` (app-init.js,
+  gleich `App.isGuest()` aus app-bootstrap.js: keine Firebase-Sitzung, Login
+  erreichbar, keine noch wiederhergestellte Sitzung) zählt zu
+  `userCanTypeQuestions()`; nur `data-auth-unavailable`
   sperrt das Feld noch („Sign in to start…“). Gäste bekommen den Platzhalter
   eines neuen Chats (`App.askPlaceholder()`, app-bootstrap.js, auch für Agent),
-  `body.is-guest` (ab dem ersten Paint) blendet den Modell-Chip aus und zeigt die
-  Begrüßung auch auf dem Handy. Senden ist aktiv, sobald Text im Feld steht, und
+  `body.is-guest` (ab dem ersten Paint) blendet den Consensus-Chip aus, lässt
+  „Try the demo“ neben Agents Chip stehen (agent-chat.css, components-misc.css)
+  und zeigt die Begrüßung auch auf dem Handy. **Seit 2026-10-21 (Max,
+  Apple-Audit H3)** sieht ein Gast mit Standardwahl ab dem ersten Bild Agents
+  Composer eines neuen Chats wie ein Konto: Chip mit `data-agent-default-label`
+  und `+N`, „What can I help you with?“, Reasoning „Auto“; im (+)-Menü Agent
+  gewählt, Consensus und Compare daneben. Geladen wird nichts, was ein Konto
+  braucht (keine `/agent/models`), und es steht kein Hinweis unter dem Feld.
+  Jede Wahl darin ist eine Tür zum Login mit Satz (`App.askToLogIn`): Chip,
+  Reasoning und Vergleichsmodelle über `model-picker.js::openModelPicker` (ein
+  Gast im Composer öffnet kein Menü: „Log in to choose your models.“ / „Log in
+  to choose the reasoning.“, `trigger` gibt den Fokus zurück), Anhang über
+  `attachments.js` („Log in to add files.“), Gmail & Calendar und Drive über
+  `agent-google.js`/`agent-drive.js` (nur wo jedes Konto sie hat, siehe
+  Google). Eine eigene Wahl des Gasts (Consensus, Compare) gilt wie für jedes
+  Konto. Ohne erreichbaren Login ist niemand Gast, dann kein Agent
+  (`consensio:auth-unavailable` rendert die Shell neu). Senden ist aktiv, sobald Text im Feld steht, und
   öffnet über `composer-invite.js` den Registrierungsdialog
   (`openAuthModal(mode, trigger, source, {lead})`: die Begründungszeile gilt
   für beide Tabs bis zum Schließen). Nach dem Login lädt die Seite neu, der
   Entwurf kommt zurück ins Feld (auch im Gast-Zweig von `onIdTokenChanged`)
-  und geht einmal von selbst raus. Ohne Konto läuft weiterhin nichts, was
-  Modellkosten erzeugt.
+  und geht einmal von selbst raus, im Agent wie gesehen oder im Modus, den der
+  Gast im (+)-Menü wählte (`mode` im Sendewunsch, siehe `composer-invite.js`).
+  Ohne Konto läuft weiterhin nichts, was Modellkosten erzeugt (Agent bleibt
+  `require_agent_access`).
 - Eigene API-Keys sind ein eingeloggtes Feature: `/check_keys`, `/ask_*` mit
   User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
 - **Unvertrauenswürdige Request-Größen sind vor teurer Arbeit begrenzt:** Das
@@ -9498,8 +9540,9 @@ Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
 Composer beim Reload hoch und wieder runter. Erstes Zeichnen: Endete die letzte
 angemeldete Sitzung in Agent: seit 2026-10-20 erwartet `app-bootstrap.js`
 Agent für jede bestätigte Sitzung (`App.expectsAgent()`: Agent ist für jedes
-Konto offen und Standardmodus), außer das Konto wählte einen anderen Modus oder
-dieser Browser sah es ohne Agent-Zugang (`localStorage.agentShellExpected` =
+Konto offen und Standardmodus) und seit 2026-10-21 auch für einen Gast
+(`App.isGuest()`, Apple-Audit H3), außer Konto oder Gast wählten einen anderen
+Modus oder dieser Browser sah das Konto ohne Agent-Zugang (`localStorage.agentShellExpected` =
 `"0"`, geschrieben in `renderShellNow` aus `App.agentAccess.allowed`). Dann
 setzt es `html.agent-shell-expected` und `body.single-agent-active`; bis der
 Zugang bekannt ist, hält `agent-chat.js` Agents Aussehen (`expectingAgent()`,

@@ -75,6 +75,30 @@ describe("run mode", () => {
     dom.window.close();
   });
 
+  // Max, Apple-Audit H3: a guest sees Agent as an account does by default;
+  // the login comes on Send (composer-invite.js), nothing runs without it.
+  it("gives a guest Agent and the other two beside it, and an account without access none of it", () => {
+    const {window, dom} = boot();
+    const state = {family: null, canUse: false, pending: false, guest: true};
+    window.App.agentChat = {modeState: () => state};
+    const mode = window.App.runMode;
+    expect(mode.effective()).toBe("agent");
+    expect(mode.pipeline()).toBe(true);
+    expect(mode.availability().agent).toEqual({visible: true, enabled: true, reason: ""});
+    expect(mode.availability().consensus.enabled).toBe(true);
+    expect(mode.availability().compare.enabled).toBe(true);
+    // The guest's own choice holds, back and forth.
+    mode.set("consensus");
+    expect(mode.effective()).toBe("consensus");
+    mode.set("agent");
+    expect(mode.effective()).toBe("agent");
+    // A signed-in account without Agent access is no guest.
+    state.guest = false;
+    expect(mode.effective()).toBe("consensus");
+    expect(mode.availability().agent.visible).toBe(false);
+    dom.window.close();
+  });
+
   it("follows a change made in another tab or arriving from the account", () => {
     const {window, dom} = boot({runMode: "consensus", "consensio.settingsReset": "2026-10-12"});
     const heard = vi.fn();

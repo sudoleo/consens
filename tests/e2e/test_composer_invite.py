@@ -10,7 +10,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.e2e.test_auth_dialog import _guest_page
-from tests.e2e.test_phase4_frontend import _json, _real_firebase_page, phase4_server  # noqa: F401 (fixture)
+from tests.e2e.test_phase4_frontend import _json, _real_firebase_page, _route_account_settings, phase4_server  # noqa: F401 (fixture)
 
 CAPTURE_EVENTS = (
     "window.__events = [];"
@@ -26,12 +26,16 @@ NOTE_BELOW_FIELD = (
 
 def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_server):
     context, page = _guest_page(browser, phase4_server)
+    agent_calls = []
+    page.on("request", lambda request: agent_calls.append(request.url) if "/agent" in request.url.split("/static/")[0] else None)
     try:
         field = page.locator("#questionInput")
         starters = page.locator("#composerStarters")
         expect(field).to_be_enabled()
         expect(field).to_have_attribute("placeholder", "Ask anything, or paste an AI answer to check it")
-        # A guest cannot choose models yet; the chip would only promise it.
+        # Agent's composer of a new chat, as an account has it (H3): its chip
+        # names the default model; choosing one asks for the login.
+        expect(page.locator("#agentModelControls .model-picker-display")).to_be_visible()
         expect(page.locator(".consensus-model")).to_be_hidden()
         expect(starters).to_be_visible()
         expect(page.locator("#sendButton")).to_be_disabled()
@@ -76,8 +80,12 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         })""")
         assert stored["draft"]["text"] == question
         assert stored["pending"]["source"] == "example"
-        # Only exactly this text goes out by itself after the sign-in.
+        # Only exactly this text goes out by itself after the sign-in, in the
+        # mode the account has: the guest chose none.
         assert stored["pending"]["text"] == question
+        assert "mode" not in stored["pending"]
+        # Nothing went to Agent, which needs an account.
+        assert agent_calls == [], agent_calls
     finally:
         context.close()
 
@@ -205,5 +213,63 @@ def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in(browser, phase4
         page.wait_for_function("() => window.__consensioAuthState?.known === true")
         page.wait_for_timeout(500)
         assert len(prepared) == 1
+    finally:
+        context.close()
+
+
+AGENT_CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
+    {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "reasoning_efforts": ["default"],
+     "reasoning_available": True}]}
+
+
+@pytest.mark.parametrize("chose", [None, "consensus"])
+def test_a_guest_question_runs_after_the_sign_in_in_the_mode_the_guest_saw(browser, phase4_server, chose):
+    """Apple-Audit H3 (Max): a guest sees Agent, so the question sent as a
+    guest goes out in Agent after the sign-in. A guest who chose Consensus
+    gets Consensus, also from an account that kept Agent, and the account
+    keeps that choice."""
+    context, page = _real_firebase_page(browser, phase4_server, init_script=CAPTURE_EVENTS)
+    agent, prepared = [], []
+    try:
+        page.route("**/user_status", lambda route: _json(route, {"tier": "free", "is_pro": False, "agent_access": True}))
+        page.route("**/agent/models", lambda route: _json(route, AGENT_CATALOG))
+        page.route("**/agent/budget", lambda route: _json(route, {"token_budget": {"limit": 660000, "used": 0, "remaining": 660000}}))
+        page.route("**/api/my/memory", lambda route: _json(route, {"memory": {"content": "", "revision": 0}}))
+        page.route("**/chats", lambda route: _json(route, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.route("**/agent/chats/*/files*", lambda route: _json(route, {"files": [], "documents": []}))
+        page.route("**/agent/chats/*/actions*", lambda route: _json(route, {"actions": []}))
+        # The Agent run itself is held open: only its request matters here.
+        page.route("**/agent", lambda route: agent.append(route.request.post_data_json))
+        page.route("**/prepare", lambda route: (
+            prepared.append(route.request.post_data_json), _json(route, {"system_prompt": "Prepared prompt"})))
+        page.route("**/ask_*", lambda route: _json(route, {"response": "An answer", "sources": []}))
+        page.route("**/consensus", lambda route: _json(route, {}))
+        account = _route_account_settings(page, {"run_mode": "agent"}, revision=3)
+        question = "Is creatine safe for teenagers?"
+        # What a guest's Send left behind, then the page the sign-in reloads.
+        page.evaluate("""pending => {
+          localStorage.setItem('consensio.questionDraft.v1', pending.text);
+          localStorage.setItem('consensio.sendAfterLogin.v1', JSON.stringify({ ...pending, at: Date.now() }));
+        }""", {"source": "typed", "text": question, **({"mode": chose} if chose else {})})
+        page.reload(wait_until="domcontentloaded")
+
+        page.wait_for_function(f"() => window.App.runRegistry.visible()?.question === {json.dumps(question)}")
+        page.wait_for_function("() => window.__events.some(([name]) => name === 'ask')")
+        assert page.evaluate("localStorage.getItem('consensio.sendAfterLogin.v1')") is None
+        if chose:
+            page.wait_for_function("() => window.App.runRegistry.visible()?.config?.executionMode !== 'agent'")
+            assert len(prepared) == 1 and not agent
+            assert page.evaluate("App.runMode.preference()") == "consensus"
+            page.wait_for_function("() => window.App.userSettings.status().loaded && !window.App.userSettings.status().pending.length")
+            assert account["settings"]["run_mode"] == "consensus"
+        else:
+            for _ in range(50):
+                if agent:
+                    break
+                page.wait_for_timeout(100)
+            assert len(agent) == 1 and agent[0]["question"] == question, agent
+            assert not prepared
+            assert page.evaluate("window.App.runRegistry.visible().config.executionMode") == "agent"
+            assert account["settings"]["run_mode"] == "agent"
     finally:
         context.close()

@@ -64,6 +64,19 @@ describe("a guest's Send", () => {
     expect(calls.events).toEqual([["app_guest_send", { source: "typed" }]]);
   });
 
+  it("takes the mode along only when the guest chose one (H3)", () => {
+    const unchosen = boot();
+    unchosen.App.userSettings = { get: () => undefined };
+    unchosen.input.value = "Question";
+    unchosen.App.composerInvite.sendAsGuest();
+    expect(JSON.parse(unchosen.window.localStorage.getItem(PENDING))).not.toHaveProperty("mode");
+    const chose = boot();
+    chose.App.userSettings = { get: name => (name === "run_mode" ? "consensus" : undefined) };
+    chose.input.value = "Question";
+    chose.App.composerInvite.sendAsGuest();
+    expect(JSON.parse(chose.window.localStorage.getItem(PENDING)).mode).toBe("consensus");
+  });
+
   it("only points to the field while it is empty", () => {
     const { App, input, document, calls } = boot();
     expect(App.composerInvite.sendAsGuest()).toBe(true);
@@ -90,6 +103,45 @@ describe("the send after sign-in", () => {
     expect(calls.sentText).toBe("Do I charge VAT?");
     expect(calls.ask).toEqual({ source: "example", after_login: true });
     expect(App.composerInvite.takeAskContext()).toEqual({ source: "typed" });
+  });
+
+  // A guest sees Agent; one who chose Consensus or Compare sends in that
+  // mode, also into an account that kept another one (H3). The choice is
+  // made before the send waits for the session to be able to run it.
+  it("runs the question in the mode the guest chose, and leaves an unchosen one to the account", async () => {
+    const pending = { at: Date.now(), source: "typed", text: "Do I charge VAT?", mode: "consensus" };
+    const { App, input, window, calls } = boot({ guest: false, pending });
+    let preference = "agent";
+    App.runMode = { preference: () => preference, set: vi.fn(mode => { preference = mode; return true; }) };
+    input.value = "Do I charge VAT?";
+    App.composerInvite.afterAccessUpdate(false);
+    expect(App.runMode.set).toHaveBeenCalledWith("consensus", { source: "guest" });
+    expect(window.localStorage.getItem(PENDING)).not.toBeNull();
+    await tick(window);
+    expect(calls.sends).toBe(0);
+    App.composerInvite.afterAccessUpdate(true);
+    await tick(window);
+    expect(calls.sends).toBe(1);
+    expect(App.runMode.set).toHaveBeenCalledTimes(1);
+
+    const unchosen = boot({ guest: false, pending: { at: Date.now(), source: "typed", text: "Question" } });
+    unchosen.App.runMode = { preference: () => "consensus", set: vi.fn() };
+    unchosen.input.value = "Question";
+    unchosen.App.composerInvite.afterAccessUpdate(true);
+    await tick(unchosen.window);
+    expect(unchosen.App.runMode.set).not.toHaveBeenCalled();
+    expect(unchosen.calls.sends).toBe(1);
+    // A question that will not go out (a chat on screen) changes no mode.
+    const elsewhere = boot({ guest: false, pending, basis: { chatId: "chat-1" } });
+    elsewhere.App.runMode = { preference: () => "agent", set: vi.fn(() => true) };
+    elsewhere.input.value = "Do I charge VAT?";
+    elsewhere.App.composerInvite.afterAccessUpdate(true);
+    expect(elsewhere.App.runMode.set).not.toHaveBeenCalled();
+    // Still a guest (the login dialog is open): nothing changes yet.
+    const waiting = boot({ pending });
+    waiting.App.runMode = { preference: () => "agent", set: vi.fn() };
+    waiting.App.composerInvite.afterAccessUpdate(false);
+    expect(waiting.App.runMode.set).not.toHaveBeenCalled();
   });
 
   it("does not pass the mark on when the send stopped before its ask", async () => {

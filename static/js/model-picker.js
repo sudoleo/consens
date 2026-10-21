@@ -1335,8 +1335,21 @@
 
   // `secondary` opens the reasoning level, `level: "models"` the chat model
   // list. A linked companion opens inside its parent's menu, on its own level.
-  function openModelPicker(select, { secondary = false, level = secondary ? "secondary" : null } = {}) {
+  // `trigger`: the control that asked (the login dialog gives the focus back).
+  function openModelPicker(select, { secondary = false, level = secondary ? "secondary" : null, trigger = null } = {}) {
     let state = getModelPickerState(select);
+    // A guest cannot choose models yet. Every way into the composer's
+    // pickers (the chip, Reasoning, Comparison models, a notice) is this
+    // door: it asks for the login with the reason instead of opening a menu
+    // whose choices need an account (Apple-Audit H2, H3).
+    if (state && window.App.isGuest?.() && state.host.closest(".chat-input-container")) {
+      const reasoning = level === "secondary";
+      window.App?.closeAttachMenu?.();
+      window.App.askToLogIn?.(reasoning ? "Log in to choose the reasoning." : "Log in to choose your models.",
+        { trigger: trigger || (state.parent ? getModelPickerState(state.parent) : state)?.displayButton || state.host,
+          source: reasoning ? "reasoning" : "models" });
+      return;
+    }
     if (state?.parent) {
       if (select.disabled) return;
       select = state.parent;

@@ -990,6 +990,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       als neuer Chat. Ein weiteres Neuladen sendet nichts mehr. Über die
       E-Mail-Registrierung kommt die Frage nach dem Passwort-Setzen ebenfalls
       zurück (innerhalb einer Stunde läuft sie von selbst).
+- [ ] Gast sieht den Agent (seit 2026-10-21, Apple-Audit H3): privates Fenster,
+      `/app` hart neu laden — ab dem ersten Bild Agent-Chip mit dem
+      Standardmodell und `+6`, „What can I help you with?“, Beispielfragen und
+      „Try the demo“; nichts springt, wenn der Login-Status kommt. (+) zeigt
+      Agent gewählt, Consensus und Compare daneben. Chip, Reasoning, Attach
+      (Leiste und Menü) öffnen je den Login mit eigenem Satz, kein Menü öffnet
+      sich. Senden → Login → die Frage läuft einmal im Agent; vorher Consensus
+      gewählt → sie läuft in Consensus, und das Konto behält Consensus.
 - [ ] Beispielfragen beim Tippen (seit 2026-10-16): Der erste Buchstabe blendet
       sie weich nacheinander aus, danach gleitet „Please avoid personal…“ direkt
       unter die Leiste mit Reasoning/Attach statt allein unter einer Lücke zu

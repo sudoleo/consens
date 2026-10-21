@@ -473,18 +473,15 @@
     function canAttach() {
       return Boolean(window.auth?.currentUser);
     }
+    // The login dialog with the reason, as at every door a guest meets
+    // (App.askToLogIn, Apple-Audit H2, H3). The focus goes back to the
+    // control the reader used: the bar's Attach, else (+), whose menu closes.
     function showAttachmentSignIn(source) {
       setMenuOpen(false);
       trackAppEvent("app_attachment_locked_click", { source: source });
-      const modal = document.getElementById("loginModal");
-      if (window.App?.openAuthModal) {
-        window.App.openAuthModal("login", null, "attachments");
-      } else if (modal && window.App?.modalDialog) {
-        window.App.modalDialog.open(modal, { focus: document.getElementById("loginEmail") });
-        trackAppEvent("auth_modal_open", { source: "attachments" });
-      } else {
-        window.App?.showPopup?.("Log in to attach files. You can type your question as text.");
-      }
+      const used = document.activeElement?.id === "composerAttachButton" ? document.activeElement : trigger;
+      if (window.App?.askToLogIn) window.App.askToLogIn("Log in to add files.", { trigger: used, source: "attachments" });
+      else window.App?.showPopup?.("Log in to add files.");
     }
 
     uploadOption.addEventListener("click", function () {
