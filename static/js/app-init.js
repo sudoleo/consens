@@ -691,8 +691,17 @@
             setTimeout(() => window.removeEventListener("click", swallow, true), 80);
           }
           document.addEventListener("pointerdown", function (event) {
+            // A second finger leaves the first one's swipe alone: dropping it
+            // here left the menu stuck half way, with no finger to end it
+            // (review 13). A new first finger ends a swipe whose end was lost.
+            if (!event.isPrimary) return;
+            if (drag?.moving) {
+              sidebar.classList.remove("is-dragging");
+              sidebar.style.removeProperty("transform");
+              settleDim(drag.dim, 1);
+            }
             drag = null;
-            if (event.pointerType !== "touch" || !event.isPrimary) return;
+            if (event.pointerType !== "touch") return;
             if (!usesOverlaySidebar() || !sidebar.classList.contains("active")) return;
             const onDim = event.target === document.body;
             if (!onDim && !sidebar.contains(event.target)) return;
