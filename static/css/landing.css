@@ -690,7 +690,7 @@ img { display: block; max-width: 100%; }
   border-radius: inherit;
   background: var(--ink-3);
   transform-origin: left;
-  transition: transform var(--dur-light) var(--ease-out) 120ms;
+  transition: transform var(--dur-light) var(--ease-out) var(--dur-press);
 }
 
 .lp-live-pulse-list li:first-child .lp-live-pulse-meter i {
@@ -886,7 +886,7 @@ img { display: block; max-width: 100%; }
   margin-left: 2px;
   vertical-align: -0.16em;
   background: var(--ink);
-  animation: lpCaret 0.8s step-end infinite;
+  animation: lpCaret var(--dur-spin) steps(1, end) infinite;
 }
 @keyframes lpCaret { 50% { opacity: 0; } }
 
@@ -1066,7 +1066,7 @@ img { display: block; max-width: 100%; }
   color: var(--ink-2);
   font-size: var(--font-size-sm);
   line-height: 1.7;
-  animation: lpAgentIn 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
 }
 
 .lp-agent-step {
@@ -1078,7 +1078,7 @@ img { display: block; max-width: 100%; }
   color: var(--ink-2);
   font-size: var(--font-size-ui);
   line-height: 1.6;
-  animation: lpAgentIn 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
 }
 
 /* The live row starts with the consens mark and carries one sheen, exactly
@@ -1105,7 +1105,7 @@ img { display: block; max-width: 100%; }
   pointer-events: none;
   background-image: linear-gradient(105deg, transparent 43%, color-mix(in srgb, var(--ground) 60%, transparent) 50%, transparent 57%);
   background-size: 250% 100%;
-  animation: lpAgentShine 2.4s linear infinite;
+  animation: lpAgentShine var(--dur-beat) var(--ease-linear) infinite;
 }
 
 /* The six comparison models: faint until their answer is in. */
@@ -1122,7 +1122,7 @@ img { display: block; max-width: 100%; }
   opacity: 0.35;
   filter: grayscale(1);
   transform: scale(0.88);
-  transition: opacity var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard), transform var(--dur-layer) cubic-bezier(0.2, 0.7, 0.2, 1.4);
+  transition: opacity var(--dur-state) var(--ease-standard), filter var(--dur-state) var(--ease-standard), transform var(--dur-layer) var(--ease-out);
 }
 .lp-agent-model.is-done { opacity: 1; filter: none; transform: none; }
 .lp-agent-model img { width: 13px; height: 13px; object-fit: contain; }
@@ -1138,7 +1138,7 @@ img { display: block; max-width: 100%; }
   mask-image: linear-gradient(105deg, #000 40%, rgba(0, 0, 0, 0.55) 50%, #000 60%);
   -webkit-mask-size: 250% 100%;
   mask-size: 250% 100%;
-  animation: lpAgentMask 1.6s linear infinite;
+  animation: lpAgentMask var(--dur-beat) var(--ease-linear) infinite;
 }
 .lp-agent-answer .claim-badge { opacity: 0; transition: opacity var(--dur-layer) var(--ease-standard) var(--dur-state); }
 .lp-agent-answer.is-marked .claim-badge { opacity: 1; }
@@ -1787,7 +1787,7 @@ img { display: block; max-width: 100%; }
 /* The entry a mark just opened: a short amber wash that fades by itself. */
 .diff-card.is-focused {
   border-radius: var(--radius-xs);
-  animation: diffCardFlash 1.9s ease forwards;
+  animation: diffCardFlash var(--dur-beat) var(--ease-standard) forwards;
 }
 
 @keyframes diffCardFlash {
@@ -1821,7 +1821,7 @@ img { display: block; max-width: 100%; }
   background-repeat: no-repeat;
   /* The app's bleed is a shadow that a stroke cannot grow with. */
   box-shadow: none;
-  animation: cxStroke 0.55s ease 0.45s backwards;
+  animation: cxStroke var(--dur-light) var(--ease-standard) var(--dur-light) backwards;
 }
 
 /* --------------------------------------------------------------------------
@@ -2701,7 +2701,7 @@ img { display: block; max-width: 100%; }
   line-height: 1.5;
   text-align: left;
   white-space: nowrap;
-  animation: lpComposerToolsIn 260ms cubic-bezier(.22, 1, .36, 1) both;
+  animation: lpComposerToolsIn var(--dur-state) var(--ease-out) both;
   transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
 }
 .lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }

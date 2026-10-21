@@ -431,10 +431,10 @@ canvas {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 0s !important;
   }
 }
 
@@ -971,7 +971,7 @@ canvas {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
-  animation: shareDiffCuePing 2.2s ease-out 3;
+  animation: shareDiffCuePing var(--dur-beat) var(--ease-out) 3;
 }
 
 /* Sobald die Differences-Ansicht aktiv ist, keinen Hinweis mehr zeigen. */
@@ -1773,7 +1773,7 @@ canvas {
   background: var(--raise);
   color: var(--heading);
   text-decoration: none;
-  transition: background-color .15s ease;
+  transition: background-color var(--dur-press) var(--ease-standard);
 }
 .wp-link:focus-visible { background: var(--raise-hover); box-shadow: inset 0 0 0 1px var(--line-soft); }
 @media (hover: hover) and (pointer: fine) {
@@ -1791,7 +1791,7 @@ canvas {
   -webkit-line-clamp: 2;
 }
 .wp-link-domain { overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
-.wp-link-arrow { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted); transition: transform .15s ease, color .15s ease; }
+.wp-link-arrow { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted); transition: transform var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .wp-link:focus-visible .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
 @media (hover: hover) and (pointer: fine) {
   .wp-link:hover .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
@@ -2030,7 +2030,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 /* L14 — A jump to a check (a point of the curve, the state line) marks it
    for a moment, so the eye finds where it landed. */
 .wp-event.is-flash,
-.wp-quiet-list li.is-flash { animation: wp-flash 1.8s var(--ease-standard); }
+.wp-quiet-list li.is-flash { animation: wp-flash var(--dur-beat) var(--ease-standard); }
 @keyframes wp-flash {
   0%, 30% { background: color-mix(in srgb, var(--partial) 14%, transparent); }
   100% { background: transparent; }

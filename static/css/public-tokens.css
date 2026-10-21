@@ -103,9 +103,6 @@
   --page-gutter: 20px;
   --page-width: min(var(--maxw), calc(100% - 2 * var(--page-gutter)));
   --section-pad: clamp(76px, 11vw, 150px);
-  --agent-pulse-duration: 1.15s;
-  --agent-sweep-duration: 2.8s;
-  --scene-transition-duration: 0.28s;
 }
 
 :root.dark-mode,

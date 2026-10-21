@@ -995,9 +995,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Dunkelmodus aus der dunklen `--ink-2`, ≥ 7:1), kein `outline: none` hinter
   einem Hover-Ton mehr, in Menüs nach innen versetzt; Textlinks runden die
   Ecken. `tests/js/motion-tokens.test.mjs` verlangt in jeder Transition und
-  Animation von `/app` nur `var(--dur-*)`/`var(--ease-*)` (keine rohen
-  Zeiten/Kurven, kein `transition: all`) und prüft Spinner, Takt, Ring und
-  Druck.
+  Animation nur `var(--dur-*)`/`var(--ease-*)` (keine rohen
+  Zeiten/Kurven, kein `transition: all`, keine eigenen Dauer-Properties) und
+  prüft Spinner, Takt, Ring und Druck. Seit der Nachprüfung gilt das für
+  jedes Stylesheet, das ein Nutzer bekommt: `static/style.css` und jedes von
+  einem Template verlinkte Blatt samt aller (auch verschachtelten) Imports,
+  also auch Startseite, Benchmark, Topics, Consensus Engine und die übrigen
+  öffentlichen Seiten (Admin ausgenommen).
 - **Handy-Schublade (`app-init.js`, `syncDrawerFocus`):** die offene
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
