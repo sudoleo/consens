@@ -1,5 +1,5 @@
 {
-  "sources": "6cab46297844",
+  "sources": "b222d31641e9",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -229,7 +229,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.cae0daa80807.js",
+      "src": "/static/dist/app.c695d01318e1.js",
       "module": false,
       "defer": true
     }

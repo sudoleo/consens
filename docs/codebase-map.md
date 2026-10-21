@@ -2779,7 +2779,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   it is reached“ zur ersten Regel). Der Login-Hinweis für Gäste sagt „Your
   question waits for you.“ nur, wenn eine Frage wartet. `receiveWatchList` (aus
   `loadWatchLimits` und dem Dashboard) hält neben den Limits die Watch-Liste
-  (`watchState.watches`) und meldet `consensio:watches-changed`;
+  (`watchState.watches`) und meldet `consensio:watches-changed`. Die Liste
+  kommt über `watchUi.requestWatchList({fresh})`: höchstens ein GET zugleich,
+  wer währenddessen fragt, teilt ihn (`fresh` nur nach einer eigenen
+  Änderung); das Dashboard lädt Liste, Brief und Telegram über ein geteiltes
+  `load()`, und der erste Blick auf `/app/watches` kommt einmal (`firstLook`:
+  Route oder Auth-Zustand, wer zuerst da ist) – je ein Request statt
+  3×/2×/2× (Nachprüfung 2). Der Schritt „alle Plätze belegt“
+  (`renderLimitStep(intent, {resume, reload})`) fragt beim Öffnen einmal neu
+  und folgt `consensio:watches-changed`: wird ein Platz frei (eine Löschung,
+  deren Undo abgelaufen ist), kommt das Formular zurück. Wird der Dialog
+  geschlossen, während eine Watch startet, gilt sie trotzdem: Details werden
+  nachgetragen, die Karte erscheint auf der Seite, eine Zeile sagt „Watch
+  started“ (bzw. „Watch not started …“ als Fehler);
   `App.watch.watchedFor(question)` vergleicht wie `question_hash`
   (Groß/Klein, Leerraum, Schluss-„?!.“). Der Hinweis ist ein
   eigener Viewport-Layer unter `<body>` und übermalt nie den Composer.

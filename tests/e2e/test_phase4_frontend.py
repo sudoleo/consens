@@ -184,7 +184,8 @@ def _route_account_settings(page, settings=None, revision=0):
 
 
 def _real_firebase_page(
-    browser, app_server, initial_uid="account-a", path="/app", init_script=None, *, has_touch=False
+    browser, app_server, initial_uid="account-a", path="/app", init_script=None, *, has_touch=False,
+    before_goto=None,
 ):
     context = browser.new_context(viewport={"width": 1280, "height": 820}, has_touch=has_touch)
     context.add_init_script(
@@ -226,6 +227,9 @@ def _real_firebase_page(
     )
     page.route("**/auth/session", lambda route: _json(route, {"status": "ok"}))
     _route_account_settings(page)
+    # Routes and listeners a test needs from the first request on.
+    if before_goto:
+        before_goto(page)
     page.goto(app_server + path, wait_until="domcontentloaded")
     page.wait_for_function(
         "() => window.__consensioAuthState?.known === true"

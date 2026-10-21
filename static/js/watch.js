@@ -438,16 +438,28 @@
     return watchState.limits;
   }
 
-  async function loadWatchLimits(force) {
-    if (watchState.limits && watchState.watches && !force) return watchState.limits;
-    if (watchState.limitRequest && !force) return watchState.limitRequest;
+  // One GET of the list at a time: a caller that comes while one is on its
+  // way shares it (the Watches page opened directly loaded the list three
+  // times, review 2), unless it needs a list newer than a change it just
+  // made (`fresh`). Resolves to the server's answer, already taken in.
+  function requestWatchList({ fresh = false } = {}) {
+    if (watchState.limitRequest && !fresh) return watchState.limitRequest;
     const request = api("GET", "/api/my/watches")
-      .then(receiveWatchList)
+      .then(data => {
+        receiveWatchList(data);
+        return data;
+      })
       .finally(() => {
         if (watchState.limitRequest === request) watchState.setLimitRequest(null);
       });
     watchState.setLimitRequest(request);
-    return watchState.limitRequest;
+    return request;
+  }
+
+  async function loadWatchLimits(force) {
+    if (watchState.limits && watchState.watches && !force) return watchState.limits;
+    await requestWatchList({ fresh: Boolean(force) });
+    return watchState.limits;
   }
 
   function showWatchCostInfo() {
@@ -876,26 +888,30 @@
       renderAlreadyWatching(existing, modalIntent);
       return;
     }
-    // Before any typing: no free slot, no form (J25).
+    const showForm = () => {
+      if (view !== "create") {
+        renderConfirm(undefined, modalIntent);
+        return;
+      }
+      // A question that is already known (an example, the chat's last
+      // question, an Agent proposal) goes straight to the goal; "Edit" leads
+      // back to the field. Options: question, goal (the preset choice), goals
+      // (suggestions the caller already has, so none are fetched), interval,
+      // editQuestion (a follow-up: start at the field, prefilled) and source
+      // (analytics).
+      if (knownQuestion.length >= WATCH_QUESTION_MIN_CHARS && !setup.editQuestion) {
+        renderConfirm({ ...setup, question: knownQuestion }, modalIntent);
+      } else {
+        renderQuestionStep(setup.question, modalIntent, setup);
+      }
+    };
+    // Before any typing: no free slot, no form (J25); the form comes as
+    // soon as a slot is free.
     if (watchState.limits?.atLimit) {
-      renderLimitStep(modalIntent);
+      renderLimitStep(modalIntent, { resume: showForm, reload: true });
       return;
     }
-    if (view !== "create") {
-      renderConfirm(undefined, modalIntent);
-      return;
-    }
-    // A question that is already known (an example, the chat's last
-    // question, an Agent proposal) goes straight to the goal; "Edit" leads
-    // back to the field. Options: question, goal (the preset choice), goals
-    // (suggestions the caller already has, so none are fetched), interval,
-    // editQuestion (a follow-up: start at the field, prefilled) and source
-    // (analytics).
-    if (knownQuestion.length >= WATCH_QUESTION_MIN_CHARS && !setup.editQuestion) {
-      renderConfirm({ ...setup, question: knownQuestion }, modalIntent);
-    } else {
-      renderQuestionStep(setup.question, modalIntent, setup);
-    }
+    showForm();
   }
 
   function normalizeWatchQuestion(value) {
@@ -1314,6 +1330,13 @@
       this.disabled = true;
       this.textContent = "Starting…";
       const question = directQuestion || watchedQuestion;
+      const epoch = watchState.sessionEpoch;
+      const onWatchPage = onWatchPagePath();
+      // A dialog closed while the watch starts: the request went out, so
+      // the watch is there all the same. It keeps its details, the page
+      // behind shows it, and a line says what became of it. Closing it
+      // dropped both before (review 2).
+      const sameSession = () => Boolean(window.auth?.currentUser) && epoch === watchState.sessionEpoch;
       try {
         const payload = { ...currentSettings(), condition: goal, timezone: browserTimezone() };
         if (directQuestion) payload.question = directQuestion;
@@ -1324,13 +1347,12 @@
           payload,
           () => watchModalIntentIsCurrent(modalIntent)
         );
-        if (!watchModalIntentIsCurrent(modalIntent)) return;
         let watch = data.watch;
         // "Details that matter" ride along in the same step; the create
         // endpoint takes them through the watch's own update.
         const details = normalizeWatchQuestion(detailsInput.value);
         let detailsFailed = false;
-        if (details) {
+        if (details && sameSession()) {
           try {
             const updated = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { requirements: details });
             watch = Object.assign({}, watch, updated.watch);
@@ -1338,7 +1360,7 @@
             detailsFailed = true;
           }
         }
-        if (!watchModalIntentIsCurrent(modalIntent)) return;
+        if (!sameSession()) return;
         // Sidebar count, Watch buttons and Agent cards follow the new watch.
         loadWatchLimits(true).catch(() => {});
         const checked = goals.checked();
@@ -1348,9 +1370,24 @@
           has_goal: Boolean(goal),
           goal_source: checked ? checked.value : "none"
         });
+        if (!watchModalIntentIsCurrent(modalIntent)) {
+          if (onWatchPage && onWatchPagePath()) window.App.watchDashboard?.addCreated?.(watch);
+          window.App?.toast?.({
+            message: detailsFailed ? "Watch started, but its details couldn’t be saved" : "Watch started",
+            action: onWatchPagePath() ? null : { label: "Open", onAction: () => openWatchDashboard({ focus: watch.id }) },
+          });
+          return;
+        }
         renderSuccess(watch, modalIntent, { detailsFailed });
       } catch (error) {
-        if (error?.stale || !watchModalIntentIsCurrent(modalIntent)) return;
+        if (error?.stale) return;
+        if (!watchModalIntentIsCurrent(modalIntent)) {
+          if (sameSession()) {
+            window.App?.toast?.(isAlreadyWatched(error) ? { message: "You already watch this question" }
+              : { tone: "error", message: "Watch not started. " + window.App.userError(error, { fallback: "Try again." }) });
+          }
+          return;
+        }
         this.disabled = false;
         this.textContent = "Start watching";
         if (isAlreadyWatched(error)) {
@@ -1363,7 +1400,10 @@
           watchState.setLimits(null);
           await loadWatchLimits(true).catch(() => {});
           if (!watchModalIntentIsCurrent(modalIntent)) return;
-          renderLimitStep(modalIntent);
+          // A slot that frees up brings this form back as it was.
+          const kept = { ...options, goal: selectedGoal() || presetGoal, interval: intervalSelect.value,
+            settings: { ...currentSettings(), details: detailsInput.value, open: advanced.open } };
+          renderLimitStep(modalIntent, { resume: () => renderConfirm(kept, modalIntent) });
           return;
         }
         showDialogError(error.code === "rate_limited"
@@ -1502,7 +1542,12 @@
   }
 
   // All slots in use (J25): said before any typing, with the way out.
-  function renderLimitStep(modalIntent) {
+  // `resume` renders the form this step stands in for: a slot that frees up
+  // while the step is open (a deletion whose Undo passed, a watch paused or
+  // deleted elsewhere) brings it back, instead of the step standing on "all
+  // in use" (review 2). `reload` asks the server once, as the cached list
+  // may be older than this account's other tabs.
+  function renderLimitStep(modalIntent, { resume = null, reload = false } = {}) {
     if (!watchModalIntentIsCurrent(modalIntent)) return;
     const { title, body } = els();
     if (!body) return;
@@ -1537,6 +1582,23 @@
     });
     close.addEventListener("click", closeDialog);
     requestAnimationFrame(() => focusQuietly(show));
+    if (typeof resume !== "function") return;
+    const follow = () => {
+      if (!card.isConnected || !watchModalIntentIsCurrent(modalIntent)) {
+        window.removeEventListener("consensio:watches-changed", follow);
+        return;
+      }
+      const now = watchState.limits;
+      if (!now) return;
+      if (now.atLimit) {
+        text.textContent = limitMessage(now);
+        return;
+      }
+      window.removeEventListener("consensio:watches-changed", follow);
+      resume();
+    };
+    window.addEventListener("consensio:watches-changed", follow);
+    if (reload) loadWatchLimits(true).catch(() => {});
   }
 
   function renderSuccess(watch, modalIntent, { detailsFailed = false } = {}) {
@@ -1817,6 +1879,16 @@
     showWatchPage(options);
   }
 
+  // The page's first look for an account comes once, from whichever way
+  // learns of the account first: the route's wait below or the auth state.
+  // Both rendered it, and each render loaded the page (review 2).
+  let firstLookFor = "";
+  function firstLook(uid) {
+    if (!uid || firstLookFor === uid) return false;
+    firstLookFor = uid;
+    return true;
+  }
+
   function initWatchPageRoute() {
     // Deep-Link /app/watches: app-bootstrap.js has already painted the page
     // with its card skeleton (J6); here it waits for the asynchronous
@@ -1845,7 +1917,7 @@
     // known would otherwise keep the skeleton).
     const waitForAuth = function () {
       if (window.auth?.currentUser) {
-        window.App.watchDashboard?.render();
+        if (firstLook(window.auth.currentUser.uid)) window.App.watchDashboard?.render();
         if (wantsCreate) openWatchDialog("create", { source: "watch_page" });
         return;
       }
@@ -2055,6 +2127,7 @@
     settingsSummary: settingsSummary,
     limitMessage: limitMessage,
     receiveWatchList: receiveWatchList,
+    requestWatchList: requestWatchList,
     loadTelegramState: loadTelegramState,
     popup: popup,
     escapeHtml: escapeHtml,
@@ -2089,8 +2162,12 @@
       resumePendingWatch();
     }
     if (!onWatchPagePath() || !changed) return;
-    if (uid && window.auth?.currentUser?.uid === uid) showWatchPage({ animate: false });
-    else renderWatchLoginHint();
+    if (uid && window.auth?.currentUser?.uid === uid) {
+      if (firstLook(uid)) showWatchPage({ animate: false });
+    } else {
+      firstLookFor = "";
+      renderWatchLoginHint();
+    }
   });
   window.addEventListener("consensio:auth-unavailable", () => {
     if (onWatchPagePath()) {
