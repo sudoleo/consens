@@ -362,8 +362,16 @@
     const uid = window.auth?.currentUser?.uid;
     return Boolean(uid && App.agentAccess?.uid !== uid);
   }
+  // A guest (app-bootstrap.js App.isGuest) gets Agent's composer of a new
+  // chat as an account does by default (Max, Apple-Audit H3): the default
+  // model's name on the chip, no model list (it needs an account), no notice.
+  // Every choice in it asks for the login (model-picker.js, attachments.js,
+  // agent-google.js), and Send does too (composer-invite.js).
+  function guest() {
+    return !window.auth?.currentUser && App.isGuest?.() === true;
+  }
   function modeState() {
-    return { family: chatFamily(), canUse: canUse(), pending: accessPending() };
+    return { family: chatFamily(), canUse: canUse(), pending: accessPending(), guest: guest() };
   }
   // Agent's look before its access is known (Apple-Audit B1, B4): a session
   // app-bootstrap.js expects in Agent (html.agent-shell-expected) keeps
@@ -389,7 +397,7 @@
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const picked = catalogStatus === 'ready' ? selection() : null;
-    return JSON.stringify([selectedMode(), App.runMode?.preference?.(), canUse(), window.auth?.currentUser?.uid || '', App.authState?.generation,
+    return JSON.stringify([selectedMode(), App.runMode?.preference?.(), canUse(), guest(), window.auth?.currentUser?.uid || '', App.authState?.generation,
       Boolean(window.__consensioAuthState?.known),
       expectingAgent(), App.agentAccessCheck?.attempt,
       catalogStatus, catalogOwner, loadGeneration, catalog?.models?.length, picked?.model_id, picked?.reasoning_effort,
@@ -1085,7 +1093,8 @@
   function syncComposer() {
     const agent = selectedMode() === 'agent';
     const running = registry.isExecuting(registry.visible()?.runId);
-    const blocker = running ? null : agent ? sendBlocker() : expectingAgent() ? accessBlocker() : null;
+    // Nothing stands in a guest's way: Send asks for the login (composer-invite.js).
+    const blocker = running || guest() ? null : agent ? sendBlocker() : expectingAgent() ? accessBlocker() : null;
     const notice = document.getElementById('agentComposerNotice');
     const message = document.getElementById('agentComposerMessage');
     const action = document.getElementById('agentComposerAction');
@@ -1789,6 +1798,9 @@
   // gives way to the real one, e.g. no Agent chip for a session that ended
   // while the page still expected it (review 1).
   window.addEventListener("consensio:auth-state", () => renderShell());
+  // No login can load (auth-bootstrap.js): nobody is a guest who could send,
+  // so the signed-out page it shows has no Agent.
+  window.addEventListener("consensio:auth-unavailable", () => renderShell());
   // The account's model pick arrived (server, another tab, sign-out). A pick
   // this tab's model list does not know comes from a newer list (a tab or
   // device opened after a deploy): the list is fetched again before anything

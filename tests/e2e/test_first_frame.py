@@ -188,10 +188,12 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
     Firebase answers that the session has ended (password changed elsewhere,
     account disabled, a Google sign-in that came back without a user). The
     page turns into the guest page: the field takes typing, the guest buttons
-    stand, and no Agent chip or Watches dot waits for an account that is not
-    coming."""
+    stand, and neither the account's model nor a Watches dot waits for an
+    account that is not coming. A guest has Agent's chip with the default
+    model (Apple-Audit H3)."""
+    look = json.dumps({"uid": "account-a", "agentModel": "GPT-5.6 Sol", "agentEffort": "High"})
     context = _context(browser, width, height, uid=None, mobile=mobile,
-                       init_script="localStorage.setItem('id_token', 'cached');")
+                       init_script=f"localStorage.setItem('id_token', 'cached'); localStorage.setItem('consensio.firstFrame.v1', {json.dumps(look)});")
     # Firebase answers once every module is ready, as on a real network:
     # nothing else draws the field after that answer (the later route wins).
     slow = FIREBASE_AUTH_STUB.replace("queueMicrotask(() => window.__switchE2EUser(window.__E2E_INITIAL_UID));",
@@ -211,8 +213,13 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
         expect(field).to_have_attribute("placeholder", re.compile("AI answer"))
         assert not page.evaluate("document.documentElement.classList.contains('agent-shell-expected')")
         assert page.evaluate("document.body.classList.contains('is-guest')")
-        last = _frames(page)[-1]
-        assert last["guestButtons"] and last["agent"] == "hidden", last
+        frames = _frames(page)
+        # The remembered account's words first, the guest's in the end.
+        assert frames[0]["agent"].startswith("chip:GPT-5.6 Sol"), frames
+        last = frames[-1]
+        label = page.evaluate("document.getElementById('appBootstrapConfig').dataset.agentDefaultLabel")
+        assert last["guestButtons"] and last["agent"].startswith(f"chip:{label}"), last
+        assert last["reasoning"] == "Auto" and last["consensus"] == "hidden", last
         assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         field.type("Still here")
         expect(field).to_have_value("Still here")
@@ -221,18 +228,37 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
 
 
 @pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
-def test_a_guest_sees_the_demo_offer_from_the_first_frame_and_it_fades_once(browser, phase4_server, width, height, mobile):
+def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades_once(browser, phase4_server, width, height, mobile):
+    """H3 (Max): a guest sees Agent's composer of a new chat as an account
+    does by default, from the first frame to the end: the chip with the
+    default model and the comparison count, Agent's greeting, Reasoning
+    "Auto"; the demo offer stays a guest's (B13). One face, also on reload."""
     context = _context(browser, width, height, uid=None, mobile=mobile)
     page = context.new_page()
+    agent_calls = []
+    page.on("request", lambda request: agent_calls.append(request.url) if "/agent/" in request.url else None)
     try:
         _routes(page)
         page.goto(phase4_server + "/app")
         page.wait_for_function("() => window.__consensioAuthState?.known === true && typeof window.openShareDialog === 'function'")
         page.wait_for_timeout(600)
+        page.reload()
+        page.wait_for_function("() => window.__consensioAuthState?.known === true && typeof window.openShareDialog === 'function'")
+        page.wait_for_timeout(600)
         frames = _frames(page)
+        label = page.evaluate("document.getElementById('appBootstrapConfig').dataset.agentDefaultLabel")
+        assert label
         assert len(frames) == 1, frames
-        assert frames[0]["demo"] == "demo" and frames[0]["send"] == "hidden" and frames[0]["guestButtons"], frames
-        assert frames[0]["tab"] == "Chat" and frames[0]["switchInHeader"] is not mobile
+        first = frames[0]
+        assert first["demo"] == "demo" and first["send"] == "hidden" and first["guestButtons"], first
+        assert first["agent"].startswith(f"chip:{label}") and first["agent"].endswith("+6"), first
+        assert first["consensus"] == "hidden", first
+        assert first["reasoning"] == "Auto" and first["marks"] == 6, first
+        assert first["greeting"] == "What can I help you with?", first
+        assert first["tab"] == "Chat" and first["switchInHeader"] is not mobile
+        # Nothing a guest cannot have is asked for (the model list needs an account).
+        assert agent_calls == [], agent_calls
+        expect(page.locator("#agentComposerNotice")).to_be_hidden()
         # No Watches dot for a guest, on the phone's menu button neither (H2, review 3).
         assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         # The first keystroke retires the offer for good: it fades where it

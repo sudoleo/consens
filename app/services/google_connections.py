@@ -72,6 +72,22 @@ def available():
 _USER_EMAILS = {}
 
 
+def open_to_everyone():
+    """GOOGLE_TEST_USERS is "*": every account sees Google (see user_allowed)."""
+    return os.getenv("GOOGLE_TEST_USERS", "").strip() == "*"
+
+
+def entries_for_everyone():
+    """The Google entries every account has, for a guest's composer.
+
+    A guest sees Gmail & Calendar or Drive only when no account would miss
+    them after the login (Apple-Audit H3); while Google is open to listed test
+    users only, a guest sees what every other account sees: neither.
+    """
+    everyone = open_to_everyone()
+    return {"gmail": everyone and available(), "drive": everyone and drive_picker() is not None}
+
+
 def user_allowed(uid):
     """Who sees Google at all while the OAuth app is unverified.
 
@@ -80,9 +96,9 @@ def user_allowed(uid):
     account once Google has verified the app. Unset means nobody: an account
     Google would refuse never sees an entry that ends in "unverified app".
     """
-    raw = os.getenv("GOOGLE_TEST_USERS", "").strip()
-    if raw == "*":
+    if open_to_everyone():
         return True
+    raw = os.getenv("GOOGLE_TEST_USERS", "").strip()
     allowed = {item.strip().casefold() for item in raw.split(",") if item.strip()}
     if not allowed or not uid:
         return False

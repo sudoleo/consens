@@ -213,7 +213,9 @@
         // kommt beim Absenden (composer-invite.js). Nur ein unerreichbarer
         // Login sperrt das Feld, dann koennte kein Konto sie abschicken. Eine
         // gespeicherte Sitzung, die noch wiederhergestellt wird, ist kein Gast.
+        // Dieselbe Regel wie das erste Bild (app-bootstrap.js App.isGuest).
         function isGuestComposer() {
+          if (window.App.isGuest) return window.App.isGuest();
           if (window.auth?.currentUser) return false;
           if (document.documentElement.dataset.authUnavailable === "true") return false;
           const authState = window.__consensioAuthState;

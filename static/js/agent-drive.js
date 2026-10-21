@@ -37,10 +37,13 @@
   }
 
   // ---- Visibility: Agent chats on installations with a picker -----------
+  // A guest sees it where every account has it (agent-google.js guestEntry);
+  // choose() then asks for the login.
   function sync() {
     const el = option();
     if (!el) return;
-    const show = Boolean(App.agentGoogle?.agentActive?.() && App.agentGoogle?.knownDrive?.());
+    const show = Boolean((App.agentGoogle?.agentActive?.() && App.agentGoogle?.knownDrive?.())
+      || App.agentGoogle?.guestEntry?.('drive'));
     if (el.hidden === show) el.hidden = !show;
   }
   async function refresh() {

@@ -93,6 +93,14 @@
   function agentActive() {
     return Boolean(uid() && App.agentChat?.isSelected?.() && App.agentChat?.canUse?.() !== false);
   }
+  // A guest in Agent's composer (Apple-Audit H3) sees an entry ('gmail' or
+  // 'drive') exactly when every account has it (pages.py
+  // google_for_everyone): Google is per account while the app is unverified
+  // (GOOGLE_TEST_USERS), and an entry that vanishes after the login would be
+  // a dead end. Its click asks for the login.
+  function guestEntry(kind) {
+    return Boolean(!uid() && App.isGuest?.() && App.agentChat?.looksAgent?.() && window.GOOGLE_FOR_EVERYONE?.[kind] === true);
+  }
   function currentChatId() {
     const registry = App.runRegistry;
     const basis = registry?.getSelectedConversationBasis?.({includeHistory: false});
@@ -306,7 +314,12 @@
       const sub = node('span', 'Read as sources', 'attach-menu-hint agent-google-menu-hint'); sub.id = 'agentGoogleMenuHint';
       text.append(node('span', 'Gmail & Calendar', 'attach-menu-label'), sub);
       option.append(svg('google', ''), text, state);
-      option.addEventListener('click', event => { event.stopPropagation(); App.closeAttachMenu?.(); open(document.getElementById('attachTrigger')); });
+      option.addEventListener('click', event => {
+        event.stopPropagation(); App.closeAttachMenu?.();
+        const trigger = document.getElementById('attachTrigger');
+        if (!uid()) { App.askToLogIn?.('Log in to use Gmail and Calendar.', {trigger, source: 'google'}); return; }
+        open(trigger);
+      });
       anchor.after(option);
     }
     // Google lives only in the (+) menu, next to the files; there is no
@@ -322,7 +335,7 @@
   // or opens onto "not available", is a dead end.
   function syncEntry() {
     const agent = agentActive(), known = connections.configured ?? hint()?.configured;
-    const show = agent && known === true;
+    const show = (agent && known === true) || guestEntry('gmail');
     const option = document.getElementById('agentGoogleMenuOption');
     if (option && option.hidden === show) option.hidden = !show;
     const text = stateText(), state = document.getElementById('agentGoogleMenuState');
@@ -396,7 +409,7 @@
       const removed = App.attachments?.removeDriveFiles?.() || 0;
       if (removed) App.showPopup?.(`Files from Google Drive work in Agent chats only. ${removed === 1 ? 'It was' : 'They were'} removed from this message.`);
     }
-    const key = `${agent}:${uid()}:${chatId}`;
+    const key = `${agent}:${uid()}:${chatId}:${guestEntry('gmail')}`;
     if (key !== controlsKey || force) {
       controlsKey = key;
       if (!agent && sheet && !sheet.hidden) closeSheet();
@@ -1193,5 +1206,5 @@
   else ensureDom();
 
   App.agentGoogle = {selection, consent, resetConsent, blocker, pendingCount, open: () => open(), close: closeSheet,
-    refreshControls, refreshActions, evidenceFor, noteGoogleData, config, knownDrive, agentActive};
+    refreshControls, refreshActions, evidenceFor, noteGoogleData, config, knownDrive, agentActive, guestEntry};
 })();

@@ -258,11 +258,11 @@
 }
 
 /* Every state that hides the chip is listed here, so Send only steps aside
-   while the chip is really on screen: Agent hides it (agent-chat.css) and so
-   does the collapsed phone composer in a thread (composer.css). A question
-   already in the field (a draft from before the sign-in) keeps Send from the
-   first frame. */
-body:not(.single-agent-active):is(:not(.composer-collapsed), .is-hero, .direct-comparison-preview)
+   while the chip is really on screen: Agent hides it for an account
+   (agent-chat.css, a guest keeps it) and so does the collapsed phone
+   composer in a thread (composer.css). A question already in the field (a
+   draft from before the sign-in) keeps Send from the first frame. */
+body:is(:not(.single-agent-active), .is-guest):is(:not(.composer-collapsed), .is-hero, .direct-comparison-preview)
   .chat-input-container:not(.has-question-input):has(> #questionInput:placeholder-shown) .input-actions-container:has(> .demo-chip:not([hidden], .is-leaving)) > #sendButton[data-icon="send"] {
   display: none;
 }

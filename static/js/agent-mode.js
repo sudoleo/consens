@@ -637,7 +637,7 @@
   document.getElementById("composerReasoningToggle")?.addEventListener("click", function (event) {
     if (isBeta()) {
       event.stopPropagation();
-      window.App.openModelPicker?.(document.getElementById("agentModelDropdown"), { secondary: true });
+      window.App.openModelPicker?.(document.getElementById("agentModelDropdown"), { secondary: true, trigger: this });
       return;
     }
     document.getElementById("reasoningToggle")?.click();
@@ -649,13 +649,16 @@
   document.getElementById("composerAttachButton")?.addEventListener("click", function () {
     document.getElementById("attachUploadOption")?.click();
   });
+  // From the (+) menu, which closes: a login dialog gives the focus back to (+).
   document.getElementById("agentReasoningMenuOption")?.addEventListener("click", function (event) {
     event.stopPropagation();
-    if (isBeta()) window.App.openModelPicker?.(document.getElementById("agentModelDropdown"), { secondary: true });
+    if (isBeta()) window.App.openModelPicker?.(document.getElementById("agentModelDropdown"),
+      { secondary: true, trigger: document.getElementById("attachTrigger") });
   });
   document.getElementById("agentComparisonMenuOption")?.addEventListener("click", function (event) {
     event.stopPropagation();
-    if (isBeta()) window.App.openModelPicker?.(document.getElementById("consensusModelDropdown"));
+    if (isBeta()) window.App.openModelPicker?.(document.getElementById("consensusModelDropdown"),
+      { trigger: document.getElementById("attachTrigger") });
   });
   let composerIsHero = document.body.classList.contains("is-hero");
   new MutationObserver(function () {

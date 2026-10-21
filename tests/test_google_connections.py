@@ -312,6 +312,22 @@ def test_read_only_installation_never_requests_prepares_or_executes_writes(googl
     assert "prepare_calendar_event" in [t.name for t in CalendarTools(loop,google,actions,selection).tools()]
 
 
+def test_a_guest_gets_the_google_entries_only_where_every_account_has_them(google, monkeypatch):
+    """Apple-Audit H3: a guest's (+) menu is an account's. Listed test users
+    are not every account, so a guest sees what an unlisted account sees."""
+    from app.services.google_connections import entries_for_everyone
+    monkeypatch.setenv("GOOGLE_PICKER_API_KEY", "AIzaSyExampleExampleExample0123")
+    monkeypatch.setenv("GOOGLE_PROJECT_NUMBER", "123456789012")
+    assert entries_for_everyone() == {"gmail": True, "drive": True}
+    monkeypatch.delenv("GOOGLE_PICKER_API_KEY")
+    assert entries_for_everyone() == {"gmail": True, "drive": False}
+    monkeypatch.setenv("GOOGLE_TEST_USERS", "tester@example.org")
+    assert entries_for_everyone() == {"gmail": False, "drive": False}
+    monkeypatch.setenv("GOOGLE_TEST_USERS", "*")
+    monkeypatch.setenv("GOOGLE_INTEGRATIONS_ENABLED", "0")
+    assert entries_for_everyone() == {"gmail": False, "drive": False}
+
+
 def test_only_listed_verified_accounts_see_google(google, monkeypatch):
     from types import SimpleNamespace
     from fastapi import FastAPI

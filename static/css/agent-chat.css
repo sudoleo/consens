@@ -313,7 +313,10 @@
 }
 body.single-agent-active :is(#consensusOutput, #consensusRun, .response-section,
   #runProvenance, .consensus-footer-actions, #composerRunNotice,
-  .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
+  .models-section, .models-section + .sidebar-separator) { display: none !important; }
+/* "Try the demo" is a guest's offer (demo.js plays an Agent turn): a guest in
+   Agent's composer keeps it (Apple-Audit H3), an account has no use for it. */
+body.single-agent-active:not(.is-guest) .demo-chip { display: none !important; }
 /* Seeded before the first paint (app-bootstrap.js) until Agent is known. */
 html.agent-shell-expected :is(.models-section, .models-section + .sidebar-separator) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer, body:not(.single-agent-active) #agentReviewNotice { display: none; }
