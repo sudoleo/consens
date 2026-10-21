@@ -648,6 +648,64 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
         context.close()
 
 
+def test_phone_closing_the_answer_reader_brings_no_hover_card(browser, phase4_server):
+    """On a phone a tap on a disputed sentence opens the large reader; closing
+    it gives the focus back to the sentence. That focus is no request for the
+    hover card (Apple audit follow-up 2026-10-21): it used to pop up on its
+    own 130 ms later. The card exists only for a real mouse."""
+    from app.services.chat_store import turn_detail
+
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True)
+    sentence = "The smaller plan includes five seats."
+    text = "For a team of five, start with the smaller plan.\n\n" + sentence + "\n\nConfirm the seat limit."
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
+                "text": "Choose the smaller plan.", "sources": []}
+               for p, label, model, name in [("openai", "OpenAI", "openai/gpt-5.4-mini", "GPT-5.4 Mini"),
+                                             ("gemini", "Gemini", "google/gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite")]]
+    review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
+        "versions": [{"id": 1, "text": text, "hash": digest, "status": "succeeded"}],
+        "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Compare plans", "status": "succeeded", "answers": answers}],
+        "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
+            "differences_data": {"models_compared": ["OpenAI", "Gemini"], "claims": [], "differences": [
+                {"claim": "Whether the smaller plan includes five seats", "consensus_anchor": sentence, "type": "contradiction",
+                 "severity": "major", "positions": [
+                     {"models": ["OpenAI"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
+                     {"models": ["Gemini"], "stance": "Only three seats are included.", "quote": "Choose the smaller plan."}]}]}}]}
+    turn = turn_detail("b" * 32, {"execution_mode": "agent", "status": "completed", "question": "Compare plans", "assistant_response": text,
+            "agent_review": review, "agent_settings": {"model_id": CATALOG["default_model_id"]}}, {})
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 390, "height": 844})
+        assert page.evaluate("matchMedia('(hover: none) and (pointer: coarse)').matches")
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
+        page.evaluate('() => window.exitHeroMode()')
+        mark = page.locator('#agentAnswerBody .cx-claim.is-major')
+        expect(mark).to_have_text(sentence)
+        expect(mark).to_have_attribute('tabindex', '0')
+        mark.tap()
+        reader = page.locator('#modelAnswerReader')
+        expect(reader).to_be_visible()
+        page.locator('#answerReaderClose').tap()
+        expect(reader).to_be_hidden()
+        # The focus is back on the sentence, and no card follows it.
+        page.wait_for_function("() => document.activeElement?.classList.contains('cx-claim')")
+        page.wait_for_timeout(400)
+        expect(page.locator('.insight-preview:not([hidden])')).to_have_count(0)
+        expect(mark).not_to_have_class(re.compile(r"\bis-hovered\b"))
+        # A scroll with the tap still on the sentence brings none either.
+        page.evaluate("() => dispatchEvent(new Event('scroll'))")
+        page.wait_for_timeout(300)
+        expect(page.locator('.insight-preview:not([hidden])')).to_have_count(0)
+        assert not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width", [1280, 390])
 def test_live_comparison_quotes_latest_model_reasoning_only_while_comparing(browser, phase4_server, width):
     """The quiet compare_models phase quotes ONE comparison model's latest

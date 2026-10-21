@@ -3060,7 +3060,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   ↔ `.claim-badge.is-linked-hover`. Wo ein Badge steht, ist es das
   fokussierbare Steuerelement und die Passage nur ein zusätzlicher Mausweg.
   **Hover-Vorschau (`.insight-preview`, seit 2026-10-21 nachgeschärft):**
-  `placeHoverPreview` verankert nur an
+  `canHoverPassages` fragt genau die CSS-Kapsel ab (vorher `any-hover`/`any-pointer`,
+  das manches Handy erfüllt); dieselbe Prüfung gilt in `refreshHoverPreview`
+  (Scroll/Resize). Fokus zeigt die Vorschau nur, wenn er per Tab kam
+  (`focusPassage`: Tab-Taste seit dem letzten `pointerdown`, `:focus-visible`,
+  echter Zeiger): ein Tippen fokussiert den Satz ebenfalls, und ein
+  geschlossener Leser (`model-answer-reader.js` `close()`) oder eine geschlossene
+  Claim-Karte geben den Fokus an ihn zurück – auf dem Handy stand die
+  Vorschau danach von selbst da. `placeHoverPreview` verankert nur an
   Spans im Dokument mit Fläche (`getClientRects()`), ohne solche keine Karte.
   Neu markieren
   (`renderInlineMarkers`), `resetConsensusInsights` und `agent-review.js::overText`
@@ -9271,7 +9278,10 @@ zählen nicht):
   `@media (hover: hover) and (pointer: fine) { … }`. `:focus-visible`,
   `[aria-expanded="true"]`, `.is-open` usw. stehen daneben außerhalb (eine
   gemischte Regel wird geteilt, Werte identisch), damit Tastatur- und
-  Offen-Zustände überall gleich aussehen. Gegenregeln „A tap leaves :hover
+  Offen-Zustände überall gleich aussehen. JS-Hover fragt dieselbe Kapsel ab
+  (`consensus-insights.js::canHoverPassages`, seit 2026-10-21; `any-pointer`
+  erfüllt auch manches Handy), und ein Fokus, der nicht per Tab kam, zeigt
+  keine Hover-Vorschau (§3, Hover-Vorschau). Gegenregeln „A tap leaves :hover
   stuck“ unter `(hover: none)` gibt es nicht mehr. Was auf Touch sichtbar sein
   muss (Chat-Menü „…“, Suche, Faltzeichen), zeigt ein eigener
   `@media (hover: none)`-Block, nie ein Hover. `foundation.css` setzt am

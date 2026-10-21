@@ -6,7 +6,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 // The hover card of a marked sentence (consensus-insights.js): where it opens,
 // on which devices, and on which marks (Apple audit follow-up, 2026-10-21).
-const MOUSE = "(any-hover: hover) and (any-pointer: fine)";
+const MOUSE = "(hover: hover) and (pointer: fine)";
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function boot({ mode = "all", mouse = true } = {}) {
@@ -93,5 +93,71 @@ describe("where the hover card opens", () => {
     window.renderStoredConsensusClaims(body, data, document.createElement("div"), []);
     expect(shown()).toBeNull();
     dom.window.close();
+  });
+});
+
+describe("which devices get the card", () => {
+  const contradiction = {
+    models_compared: ["OpenAI", "Gemini"], claims: [],
+    differences: [{ claim: "the launch date", consensus_anchor: "The launch is on Monday.", type: "contradiction",
+      severity: "major", positions: [{ models: ["OpenAI"], stance: "Monday", quote: "Monday" },
+        { models: ["Gemini"], stance: "Friday", quote: "Friday" }] }]
+  };
+  function marked(env) {
+    env.body.innerHTML = "<p>The launch is on Monday.</p>";
+    env.window.renderStoredConsensusClaims(env.body, contradiction, env.document.createElement("div"), [],
+      { focusDifference() {} });
+    return env.body.querySelector(".cx-claim");
+  }
+
+  it("shows it for keyboard focus, not for a tap or a focus given back by a closed sheet", async () => {
+    const env = boot();
+    const mark = marked(env);
+    expect(mark.getAttribute("tabindex")).toBe("0");
+    // The reader closes and hands the focus back (model-answer-reader.js).
+    env.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Escape" }));
+    mark.focus();
+    await wait(160);
+    expect(env.shown()).toBeNull();
+    mark.blur();
+    // A tap focuses the sentence too.
+    mark.dispatchEvent(new env.window.Event("pointerdown", { bubbles: true }));
+    mark.focus();
+    await wait(160);
+    expect(env.shown()).toBeNull();
+    mark.blur();
+    // Tab to it: the preview, as for the pointer.
+    env.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Tab" }));
+    mark.focus();
+    await wait(160);
+    expect(env.shown().textContent).toContain("Contradiction");
+    env.dom.window.close();
+  });
+
+  it("never shows it on a touch phone", async () => {
+    const env = boot({ mouse: false });
+    const mark = marked(env);
+    env.hover(mark);
+    env.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Tab" }));
+    mark.focus();
+    await wait(160);
+    expect(env.shown()).toBeNull();
+    env.dom.window.close();
+  });
+
+  it("does not bring it back on a scroll once there is no pointer any more", async () => {
+    const env = boot();
+    const mark = marked(env);
+    env.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Tab" }));
+    mark.focus();
+    await wait(160);
+    expect(env.shown()).not.toBeNull();
+    // The mouse is gone (a tablet without its keyboard case): a scroll hides
+    // the card and, without a pointer, does not resume it.
+    env.window.matchMedia = query => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} });
+    env.window.dispatchEvent(new env.window.Event("scroll"));
+    await wait(160);
+    expect(env.shown()).toBeNull();
+    env.dom.window.close();
   });
 });

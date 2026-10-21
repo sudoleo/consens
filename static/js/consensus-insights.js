@@ -229,7 +229,7 @@
                   event.preventDefault();
                   activeControl(group)?.activate(event);
                 });
-                mark.addEventListener("focus", function () { setPassageHover(group, true); });
+                mark.addEventListener("focus", function () { focusPassage(group, mark); });
                 mark.addEventListener("blur", function () { setPassageHover(group, false); });
               }
             });
@@ -1356,10 +1356,30 @@
             return group;
           }
 
-          // Hover nur auf Geraeten mit echtem Zeiger. Der Klick auf die Passage
-          // bleibt dagegen auch auf Touch aktiv.
+          // Hover nur auf Geraeten mit echtem Zeiger, dieselbe Abfrage wie die
+          // Hover-Kapsel im CSS (codebase-map §8): ein Handy, das irgendeinen
+          // feinen Zeiger meldet (any-pointer), zaehlt nicht. Der Klick auf die
+          // Passage bleibt dagegen auch auf Touch aktiv.
           function canHoverPassages() {
-            return !!window.matchMedia?.("(any-hover: hover) and (any-pointer: fine)").matches;
+            return !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+          }
+
+          // Fokus zeigt die Vorschau nur, wenn der Leser ihn mit der Tastatur
+          // dorthin gebracht hat (Tab, also :focus-visible). Ein Tippen
+          // fokussiert den Satz ebenfalls (tabindex), und ein geschlossenes
+          // Sheet oder eine geschlossene Karte gibt den Fokus an ihn zurueck
+          // (model-answer-reader.js, closeClaimPopover): beides ist keine Bitte
+          // um die Vorschau. Auf dem Handy stand sie sonst nach dem Schliessen
+          // des grossen Fensters von selbst da.
+          let tabbing = false;
+          document.addEventListener("keydown", function (event) { tabbing = event.key === "Tab"; }, true);
+          document.addEventListener("pointerdown", function () { tabbing = false; }, true);
+          function focusShowsPreview(el) {
+            if (!tabbing || !canHoverPassages()) return false;
+            try { return el.matches(":focus-visible"); } catch (_) { return true; }
+          }
+          function focusPassage(group, el) {
+            if (focusShowsPreview(el)) setPassageHover(group, true);
           }
 
           // --- Vorschau beim Hovern -------------------------------------------
@@ -1453,10 +1473,11 @@
           // Scrolling can arrive just AFTER mouseenter and cancel its timer.
           // Hide stale geometry immediately, then resume the preview if the
           // pointer/focus is still on this passage when the layout settles.
+          // Only with a real pointer: a tap leaves :hover stuck on touch.
           function refreshHoverPreview() {
             const group = hoverGroup;
             hideHoverPreview();
-            if (!group) return;
+            if (!group || !canHoverPassages()) return;
             requestAnimationFrame(function () {
               if (hoverGroup && hoverGroup !== group) return;
               const targets = [...group.spans, ...group.controls.map(control => control.el)];
@@ -1611,7 +1632,7 @@
                 const target = activeControl(group);
                 if (target) target.activate(event);
               });
-              host.addEventListener("focus", function () { setPassageHover(group, true); });
+              host.addEventListener("focus", function () { focusPassage(group, host); });
               host.addEventListener("blur", function () { setPassageHover(group, false); });
             }
             const entry = { el: host, activate: activate, preview: preview, isPassage: true };
