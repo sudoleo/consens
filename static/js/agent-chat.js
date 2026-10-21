@@ -504,6 +504,12 @@
       App.agentMemory?.nudge(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}` });
       App.agentWatch?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null });
+      // A reopened chat's answer has its Watch pill too, with the question of
+      // this turn, never one left from the chat shown before (J20).
+      App.watch?.answerButton?.(document.getElementById('agentAnswerBody'), {
+        question: basis.currentTurn?.question || basis.question,
+        eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch,
+        followUp: Boolean(document.querySelector('#threadHistory > .thread-history-turn')) });
       App.agentSettings?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_settings_proposal : null });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
@@ -517,6 +523,7 @@
       // A saved Consensus turn or a new chat: no check of a pasted text.
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
       App.agentWatch?.render(document.getElementById("agentAnswerBody"), {});
+      App.watch?.answerButton?.(document.getElementById("agentAnswerBody"), {});
       App.agentSettings?.render(document.getElementById("agentAnswerBody"), {});
     }
     window.updateQuestionInputAccess?.();

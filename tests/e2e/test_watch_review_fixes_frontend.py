@@ -4,11 +4,14 @@ Writer-free like the other Phase-4 browser tests: every API answer comes from
 the route handlers below. Measured per frame where the finding was a jump:
 a card that is deleted folds away without first growing by its padding, and
 a quick Undo brings it back for good. The new watch shows on the page however
-the success step is closed.
+the success step is closed, and every Agent answer has its Watch pill with the
+question of its own turn, also in the history and in a reopened chat (J20).
 """
+import json
 from datetime import datetime, timedelta, timezone
 
 from playwright.sync_api import expect
+from test_agent_chat_frontend import CATALOG, _choose_mode
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json  # noqa: F401 (fixture)
 
 FUTURE = (datetime.now(timezone.utc) + timedelta(hours=26)).isoformat()
@@ -146,6 +149,87 @@ def test_new_watch_shows_on_the_page_when_its_success_step_is_left_with_escape(b
         expect(page.locator("#shareModal")).to_be_hidden()
         first = page.locator('.wd-section[data-section="active"] .wd-item').first
         expect(first).to_have_attribute("data-watch-id", "created")
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_every_agent_answer_has_a_watch_pill_with_its_own_question(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    chat_id = "a" * 32
+    turns, bookmark = [], {}
+    questions = ["When will OpenAI release GPT-6 to the public?", "And what will it cost per month?"]
+    try:
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True,
+            "agent_access": True, "limit": 500, "deep_limit": 50}))
+        page.route("**/usage", lambda route: _json(route, {"tier": "pro", "is_pro": True,
+            "remaining": 10, "deep_remaining": 1, "total_limit": 500, "deep_total_limit": 50}))
+        page.route("**/chats", lambda route: _json(route, {"chat": {"id": chat_id, "execution_mode": "agent"}}))
+        page.route("**/agent/models", lambda route: _json(route, CATALOG))
+        page.route("**/api/my/watches", lambda route: _json(route, {"status": "success", "watches": [],
+            "limits": {"plan": "pro", "active_count": 0, "active_limit": 10}}))
+        page.route("**/api/watch/goal-suggestions", lambda route: _json(route, {"goals": []}))
+        page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {"configured": False}}))
+
+        def answer(route):
+            body = route.request.post_data_json
+            turn_id = f"{len(turns) + 1:032x}"
+            text = f"Here is what is known: {body['question']}"
+            turn = {"id": turn_id, "turn_id": turn_id, "question": body["question"], "status": "completed",
+                    "position": len(turns) + 1, "mode": "Agent", "execution_mode": "agent", "consensus": text,
+                    "differences": "", "differences_data": None, "model_answers": {}, "sources": [],
+                    "agent_settings": {"model_id": CATALOG["default_model_id"], "label": "DeepSeek V4.1 Flash"}}
+            turns.append(turn)
+            bookmark.update(id=body["bookmark_id"], query=body["question"], title=questions[0], mode="Agent",
+                            execution_mode="agent", chat_id=chat_id, turn_id=turn_id,
+                            responses={"consensus": text, "differences": ""}, sources=[])
+            meta = {"id": body["bookmark_id"], "title": questions[0], "query": body["question"],
+                    "mode": "Agent", "has_consensus": True}
+            stream = "event: delta\ndata: " + json.dumps({"text": text}) + "\n\n"
+            stream += "event: final\ndata: " + json.dumps({"chat_id": chat_id, "turn_id": turn_id, "response": text,
+                                                           "turn": turn, "bookmark_meta": meta}) + "\n\n"
+            route.fulfill(content_type="text/event-stream", body=stream)
+
+        page.route("**/agent", answer)
+        page.route("**/bookmarks/*/conversation*", lambda route: _json(route, {"chat_id": chat_id, "turns": turns,
+                                                                              "next_cursor": None, "has_more": False}))
+        page.route("**/bookmarks/*", lambda route: _json(route, {"bookmark": bookmark}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.wait_for_function("() => document.getElementById('runModeControl').hidden === false")
+        _choose_mode(page, "agent")
+
+        page.locator("#questionInput").fill(questions[0])
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(page.locator("#agentAnswer #agentAnswerWatchButton")).to_be_visible()
+        page.locator("#questionInput").fill(questions[1])
+        page.locator("#sendButton").click()
+        page.wait_for_function("q => App.runRegistry.visible()?.status === 'succeeded'"
+                               " && App.runRegistry.visible().question === q", arg=questions[1])
+
+        history_pill = page.locator("#threadHistory .agent-watch-pill")
+        expect(history_pill).to_have_count(1)
+        expect(page.locator("#agentAnswerWatchButton")).to_have_count(1)
+        history_pill.click()
+        expect(page.locator(".watch-question-preview strong")).to_have_text(questions[0])
+        page.locator("#watchCancelBtn").click()
+
+        # The chat reopened from the sidebar: its history and its answer
+        # each have the pill of their own turn.
+        page.evaluate("() => App.runRegistry.clearAll('test-reload')")
+        page.locator(f'.bookmark[data-id="{bookmark["id"]}"]').click()
+        expect(page.locator("#agentAnswerBody")).to_contain_text(questions[1])
+        expect(page.locator("#threadHistory .agent-watch-pill")).to_have_count(1)
+        live = page.locator("#agentAnswer #agentAnswerWatchButton")
+        expect(live).to_be_visible()
+        live.click()
+        # A follow-up opens at the question, so it can stand alone.
+        expect(page.locator("#watchQuestion")).to_have_value(questions[1])
+        page.locator("#watchCancelBtn").click()
+        page.locator("#threadHistory .agent-watch-pill").click()
+        expect(page.locator(".watch-question-preview strong")).to_have_text(questions[0])
         assert not errors, errors
     finally:
         context.close()

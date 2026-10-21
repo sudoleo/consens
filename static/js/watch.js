@@ -1877,8 +1877,9 @@
   const EYE_ICON = '<svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>';
   const answerButtons = new Set();
 
+  // Also off the page: a history turn is built before it is inserted.
   function syncWatchPill(button) {
-    if (!button?.isConnected) return;
+    if (!button) return;
     const watch = watchedFor(button._watchQuestion?.());
     const watching = Boolean(watch);
     const label = button.querySelector("span");
@@ -1934,12 +1935,23 @@
   // The Agent answer's pill, right after its evidence row (Sources ·
   // Answers · Differences) in the same line, on phones on the next one;
   // without an evidence row, on a line of its own under the answer.
-  // agent-chat.js calls this on every projection; a finished answer is
-  // `eligible`, a follow-up opens at the question so it can stand alone.
-  function syncAnswerWatchButton(answerBody, { question = "", eligible = false, followUp = false } = {}) {
+  // Every finished Agent answer has one (Max, Apple-Audit J20): the live
+  // answer (agent-chat.js, on every projection), a reopened chat's answer
+  // and each Agent turn of the history (consensus-run.js, built off the
+  // page, `history: true`). The pill carries the question of its own turn,
+  // set on every call; a follow-up opens at the question so it can stand
+  // alone. Only the live answer's pill is #agentAnswerWatchButton.
+  const LIVE_PILL_ID = "agentAnswerWatchButton";
+
+  function syncAnswerWatchButton(answerBody, { question = "", eligible = false, followUp = false, history = false } = {}) {
     if (!answerBody) return;
     let button = answerBody._watchPill;
     const text = normalizeWatchQuestion(question);
+    // A turn that moved up into the history keeps its pill, but not the
+    // live answer's ID.
+    if (!history) {
+      document.querySelectorAll("#" + LIVE_PILL_ID).forEach(node => { if (node !== button) node.removeAttribute("id"); });
+    }
     if (!eligible || text.length < WATCH_QUESTION_MIN_CHARS) {
       button?.closest(".agent-watch-pill-row")?.remove();
       button?.remove();
@@ -1948,15 +1960,18 @@
       return;
     }
     if (!button) {
-      button = watchPill("agentAnswerWatchButton", () => answerBody._watchPill?._question || text,
+      button = watchPill(history ? "" : LIVE_PILL_ID, () => answerBody._watchPill?._question || text,
         trigger => openWatchDialog("create", { question: button._question, editQuestion: button._followUp, source: "agent_answer", trigger }));
       button.classList.add("agent-watch-pill");
       answerBody._watchPill = button;
     }
     button._question = text;
     button._followUp = followUp;
-    const nav = answerBody._agentReview?.isConnected
-      ? answerBody._agentReview.querySelector(".agent-evidence-links") : null;
+    // The evidence row beside the answer, also while a history turn is still
+    // built off the page.
+    const review = answerBody._agentReview?.parentNode && answerBody._agentReview.parentNode === answerBody.parentNode
+      ? answerBody._agentReview : null;
+    const nav = review ? review.querySelector(".agent-evidence-links") : null;
     if (nav) {
       button.closest(".agent-watch-pill-row")?.remove();
       if (nav.nextElementSibling !== button) nav.after(button);
@@ -1967,13 +1982,17 @@
         row.className = "agent-watch-pill-row";
         row.appendChild(button);
       }
-      const after = answerBody._agentReview?.isConnected ? answerBody._agentReview : answerBody;
+      const after = review || answerBody;
       if (after.nextElementSibling !== row) after.after(row);
     }
     syncWatchPill(button);
   }
 
-  window.addEventListener("consensio:watches-changed", () => answerButtons.forEach(syncWatchPill));
+  window.addEventListener("consensio:watches-changed", () => answerButtons.forEach(button => {
+    // A history replaced by another chat's takes its pills with it.
+    if (button.isConnected) syncWatchPill(button);
+    else answerButtons.delete(button);
+  }));
 
   function initViewSwitch() {
     const consensusButton = document.getElementById("viewSwitchConsensus");

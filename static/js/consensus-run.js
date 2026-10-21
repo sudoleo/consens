@@ -282,7 +282,8 @@
       })) {
         return false;
       }
-      const built = this.buildHistoryTurn(turnData, liveVerdict);
+      const built = this.buildHistoryTurn(turnData, liveVerdict,
+        { followUp: Boolean(history.querySelector(".thread-history-turn")) });
       history.appendChild(built.node);
       history.hidden = false;
       built.attached();
@@ -291,7 +292,9 @@
 
     // One archived turn, built off the page. `attached()` runs what needs the
     // node in the document (its file row, the fold measurement).
-    buildHistoryTurn(turnData, liveVerdict = null) {
+    // `options.followUp`: a turn after the chat's first (its Watch opens at
+    // the question, so the watched question stands on its own).
+    buildHistoryTurn(turnData, liveVerdict = null, options = {}) {
       const turnId = String(turnData.turn_id || "").trim();
       const normalizedQuestion = window.App.normalizeQuestionText?.(turnData.question)
         ?? String(turnData.question).replace(/\s+/g, " ").trim();
@@ -395,6 +398,12 @@
         // A pasted text the Agent checked: its result card above the answer.
         window.App.passageCheck?.apply(answerBody, turnData.agent_review);
         window.App.agentMemory?.render(answerBody, { key: turnId, changes: turnData.agent_memory });
+        // Every finished Agent answer has its Watch pill, with the question
+        // of its own turn (Max, Apple-Audit J20). The history shows no
+        // prepared-Watch card, so a turn with one gets the pill as well.
+        window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true,
+          eligible: turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim()),
+          followUp: options.followUp === true });
         // Documents and mail attachments of this turn stay with its answer;
         // agent-workspace.js fills the row from the chat's file list.
         if (turnId) {
@@ -630,8 +639,8 @@
       let kept = 0;
       while (kept < shown.length && kept < wanted.length
           && shown[kept].dataset.turnKey === this.turnKey(wanted[kept])) kept += 1;
-      const plan = wanted.slice(kept).map(turnData => options.adopt?.owns?.(turnData)
-        ? { turnData, adopt: true } : { turnData, built: this.buildHistoryTurn(turnData) });
+      const plan = wanted.slice(kept).map((turnData, index) => options.adopt?.owns?.(turnData)
+        ? { turnData, adopt: true } : { turnData, built: this.buildHistoryTurn(turnData, null, { followUp: kept + index > 0 }) });
       const nodes = plan.map(item => item.adopt ? options.adopt.take(item.turnData) : item.built.node);
       const hooks = plan.filter(item => item.built).map(item => item.built.attached);
       if (kept || !shown.length) {

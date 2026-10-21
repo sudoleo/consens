@@ -2617,10 +2617,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   den Tab, nie mit „refresh this page“; nur die Stelle, von der aus verbunden
   wurde, hakt Telegram danach an. **Watch-Knöpfe** (J15, J17, J20): dieselbe
   Pille unter Consensus (`#consensusWatchButton`) und Agent
-  (`#agentAnswerWatchButton` in `nav.agent-evidence-links`, sonst eigene Zeile
+  (`.agent-watch-pill` in `nav.agent-evidence-links`, sonst eigene Zeile
   `.agent-watch-pill-row`; `App.watch.answerButton(body, {question, eligible,
-  followUp})` aus `agent-chat.js` für jede fertige Antwort ohne eigene
-  Agent-Watch-Karte, Folgefragen öffnen beim Fragefeld). Eine schon
+  followUp, history})`). Seit 2026-10-21 (Max' Entscheidung J20,
+  Nachprüfung 9) unter **jeder** fertigen Agent-Antwort: live aus
+  `agent-chat.js` `project()` (ohne eigene Agent-Watch-Karte), in einem wieder
+  geöffneten Chat aus dem Basis-Zweig von `renderShell` (Frage des
+  `currentTurn`, nie die des vorher gezeigten Chats; ohne Antwort weg) und an
+  jedem Agent-Turn des Verlaufs aus `consensus-run.js` `buildHistoryTurn`
+  (`history: true`, außerhalb der Seite gebaut, auch mit vorbereiteter Watch,
+  weil der Verlauf deren Karte nicht zeigt). Jede Pille trägt die Frage ihres
+  eigenen Turns; nur die der Live-Antwort heißt `#agentAnswerWatchButton`
+  (ein nach oben gewanderter Turn verliert die ID). Folgefragen (`followUp`:
+  ein Turn über ihr im Verlauf) öffnen beim Fragefeld. Eine schon
   beobachtete Frage (`watchedFor`) heißt dort „Watching“ und öffnet ihre
   Watch auf der Seite (`openWatchDashboard({focus: id})`). Der View-Switch `#viewSwitch`
   (Chat/Consensus | Watches) ist ein Segment mit gleitendem Thumb
