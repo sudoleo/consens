@@ -14,7 +14,9 @@
   const ui = () => window.App.watchUi;
   const F = () => window.App.watchFields;
   const watchState = window.App.watchState;
-  const EXPLAINER_STORAGE_KEY = "consensio.watchExplainer.open.v1";
+  // v2: v1 also stored the page's own default as the reader's choice
+  // (renderDifferences), so the explainer stayed open for good.
+  const EXPLAINER_STORAGE_KEY = "consensio.watchExplainer.open.v2";
   const RECENT_MS = 7 * 24 * 3600 * 1000;
   const UNDO_MS = 6000;
   const REFRESH_STEPS_MS = [60 * 1000, 2 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000];
@@ -1500,12 +1502,17 @@
     const box = el("details", "wd-explainer");
     let stored = null;
     try { stored = window.localStorage.getItem(EXPLAINER_STORAGE_KEY); } catch (_) {}
-    box.open = stored === null ? open : stored === "true";
+    let shown = stored === null ? open : stored === "true";
+    box.open = shown;
     const summary = el("summary");
     summary.appendChild(el("span", "wd-explainer-title", "Why a watch, not a scheduled prompt"));
     summary.appendChild(el("span", "wd-explainer-hint", "How it works"));
     box.appendChild(summary);
+    // Setting `open` above fires a toggle event too, a task later; only a
+    // change away from what the page set is the reader's own and is kept.
     box.addEventListener("toggle", () => {
+      if (box.open === shown) return;
+      shown = box.open;
       try { window.localStorage.setItem(EXPLAINER_STORAGE_KEY, String(box.open)); } catch (_) {}
     });
     box.appendChild(differencesGrid());

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from app.core.openrouter_contract import provider_session_id
 from app.services import agent_quota, agent_budget_config
 from app.services.agent_comparison import AgentPreferences, comparison_selection, review_is_bound, review_issues
 from app.services.agent_delegation import DelegationLoop
@@ -41,7 +42,8 @@ class Script:
         class Completion(AgentCompletion):
             def stream(self, *, model, messages, **kwargs):
                 script.calls.append((self.step_id, model.model))
-                script.sessions.append((self.step_id, kwargs.get("session_id")))
+                # The session this request goes out with (AgentCompletion.stream).
+                script.sessions.append((self.step_id, kwargs.get("session_id") or self.session_id, self.one_off))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001,
                     "prompt_tokens_details": {"cached_tokens": 20}, "completion_tokens_details": {"reasoning_tokens": 10}}, model)
                 if self.step_id.startswith("completion:"):
@@ -137,15 +139,23 @@ def test_mock_runs_write_no_differences_stats(store, monkeypatch):
 
 def test_only_the_chat_models_steps_share_the_chats_provider_session(store):
     """The chat model's steps re-send one growing prefix and stay on the
-    endpoint that caches it; comparison answers and judges share no prefix
-    and keep the fastest endpoint (openrouter_contract.provider_session_id)."""
+    endpoint that caches it (openrouter_contract.provider_session_id). Each
+    comparison answer and judge keeps a session of its own: a retry re-sends
+    its prompt, and no other call shares it. Their first request still takes
+    the fastest endpoint."""
     script = Script(compares=2)
     loop = make_loop(store, script)
     list(loop.run())
-    own = {session for step, session in script.sessions if step.startswith("completion:")}
-    helpers = {session for step, session in script.sessions if step.startswith("agent:")}
+    own = {session for step, session, _ in script.sessions if step.startswith("completion:")}
+    helpers = [(step.split(":")[1], session) for step, session, _ in script.sessions if step.startswith("agent:")]
     assert own == {loop.provider_session} and loop.provider_session
-    assert helpers == {None}
+    sessions = dict(helpers)
+    assert all(session == sessions[worker] for worker, session in helpers)
+    assert len(set(sessions.values())) == len(sessions) and loop.provider_session not in sessions.values()
+    assert all(session == provider_session_id(UID, loop.chat_id, worker) for worker, session in sessions.items())
+    # No later request continues an answer or a judge (AgentCompletion.one_off);
+    # the chat model's steps do.
+    assert all(one_off == step.startswith("agent:") for step, _, one_off in script.sessions)
     # Comparisons and both judge kinds ran as helpers.
     assert {model for step, model in script.calls if step.startswith("agent:")} >= {
         "anthropic/claude-haiku-4.5", "openai/gpt-5.4-mini"}

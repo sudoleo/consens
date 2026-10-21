@@ -360,6 +360,56 @@ describe("dashboard render", () => {
   });
 });
 
+describe("the explainer at the end of the page", () => {
+  const KEY = "consensio.watchExplainer.open.v2";
+
+  async function rendered(window) {
+    window.history.replaceState(null, "", "/app/watches");
+    window.auth.currentUser.getIdToken = async () => "token";
+    window.fetch = vi.fn(async (path) => ({
+      ok: true,
+      json: async () => String(path).includes("/api/my/watches")
+        ? { watches: [], limits: { plan: "free", active_count: 0, active_limit: 1 } }
+        : {}
+    }));
+    await window.App.watchDashboard.render();
+    return window.document.querySelector(".wd-explainer");
+  }
+  // A details element announces every change of `open` a task later.
+  const toggled = () => new Promise(resolve => setTimeout(resolve, 0));
+  const page = '<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>';
+
+  it("starts closed, also for readers whose old key stored the page's own default", async () => {
+    const { window } = boot(page);
+    window.localStorage.setItem("consensio.watchExplainer.open.v1", "true");
+
+    const box = await rendered(window);
+    await toggled();
+
+    expect(box.open).toBe(false);
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("keeps only what the reader chose, never what the page set", async () => {
+    const { window } = boot(page);
+    window.localStorage.setItem(KEY, "true");
+    const box = await rendered(window);
+    expect(box.open).toBe(true);
+    // The page's own `open = true` fires a toggle too: it is not a choice.
+    window.localStorage.removeItem(KEY);
+    await toggled();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+
+    box.querySelector("summary").click();
+    await toggled();
+    expect(box.open).toBe(false);
+    expect(window.localStorage.getItem(KEY)).toBe("false");
+    box.querySelector("summary").click();
+    await toggled();
+    expect(window.localStorage.getItem(KEY)).toBe("true");
+  });
+});
+
 describe("details and wrong matches", () => {
   function dashboard(watches) {
     const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');

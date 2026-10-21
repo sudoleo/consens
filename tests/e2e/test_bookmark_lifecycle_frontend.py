@@ -26,13 +26,20 @@ def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phas
     try:
         page.set_viewport_size({'width': width, 'height': 800})
         page.emulate_media(reduced_motion='reduce' if reduced else 'no-preference')
-        bookmarks = [{'id': 'first', 'title': 'Delete this bookmark', 'query': 'Question', 'mode': 'Agent'},
-                     {'id': 'second', 'title': 'Keep this bookmark', 'query': 'Another question', 'mode': 'Agent'}]
+        bookmarks = [{'id': 'first', 'title': 'Delete this bookmark', 'query': 'Question', 'mode': 'Standard',
+                      'has_consensus': True},
+                     {'id': 'second', 'title': 'Keep this bookmark', 'query': 'Another question', 'mode': 'Agent',
+                      'has_consensus': True}]
         page.route('**/bookmarks?*', lambda r: _json(r, {'bookmarks': bookmarks, 'next_cursor': None}))
         page.route('**/bookmark', lambda r: requests.append(r))
         page.evaluate('() => window.loadBookmarks()')
         if width < 1100:
             page.locator('#toggleSidebarButton').click()
+        # Agent answers cannot be shared yet: no Share that could only say so.
+        agent_menu = _open_row_menu(page, page.locator('.bookmark[data-id="second"]'))
+        expect(agent_menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Delete'])
+        page.keyboard.press('Escape')
+        expect(page.locator('.bookmark-menu')).to_have_count(0)
         row = page.locator('.bookmark[data-id="first"]')
         menu = _open_row_menu(page, row)
         expect(menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Share', 'Delete'])
@@ -83,7 +90,8 @@ def test_chat_rows_open_by_keyboard_and_rename_in_place(browser, phase4_server, 
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
         page.set_viewport_size({'width': width, 'height': 800})
-        bookmarks = [{'id': 'first', 'title': 'Keep me even with a long title that runs to the edge', 'query': 'Question', 'mode': 'Agent'},
+        bookmarks = [{'id': 'first', 'title': 'Keep me even with a long title that runs to the edge', 'query': 'Question',
+                      'mode': 'Standard', 'has_consensus': True},
                      {'id': 'second', 'title': 'Other chat', 'query': 'Another question', 'mode': 'Agent'}]
         page.route('**/bookmarks?*', lambda r: _json(r, {'bookmarks': bookmarks, 'next_cursor': None}))
 
@@ -91,7 +99,7 @@ def test_chat_rows_open_by_keyboard_and_rename_in_place(browser, phase4_server, 
             body = route.request.post_data_json
             renames.append(body)
             _json(route, {'status': 'success', 'bookmark': {'id': 'first', 'title': body['title'], 'title_source': 'user',
-                                                            'query': 'Question', 'mode': 'Agent'}})
+                                                            'query': 'Question', 'mode': 'Standard', 'has_consensus': True}})
         page.route('**/bookmarks/first/title', title)
         page.evaluate('() => window.loadBookmarks()')
         page.evaluate("() => { window.openBookmark = id => { window.__opened = (window.__opened || []).concat(id); return Promise.resolve(); }; }")

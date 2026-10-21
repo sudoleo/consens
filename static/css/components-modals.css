@@ -1412,6 +1412,10 @@ dialog#shareModal[open] { display: flex; }
 .share-modal-content p { margin: 0 0 12px; }
 .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: var(--font-size-sm); line-height: var(--line-height-ui); color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
 .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
+/* Why a saved chat could not be prepared (share-dialog.js), the watch
+   dialog's error line in the same words and colour. */
+.share-modal-content .share-modal-error { margin: 12px 0 0; color: var(--dispute); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
+.share-modal-error[hidden] { display: none; }
 .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
 .share-modal-actions .share-link-btn { margin-left: auto; }
 .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {

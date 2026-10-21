@@ -2882,8 +2882,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (Telegram-Verbindung und Morning Brief im `.switch`/`.slider`-Stil des
   Input-Felds, Brief-Uhrzeit beim Verlassen des Feldes gespeichert) und am
   Ende das einklappbare „Why a watch, not a scheduled prompt“
-  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, Offen-Zustand in
-  `consensio.watchExplainer.open.v1`, standardmäßig zu). Jede Karte zeigt
+  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, standardmäßig zu;
+  `consensio.watchExplainer.open.v2` merkt nur, was der Leser selbst
+  umschaltet — v1 speicherte auch das `toggle`-Event des eigenen
+  `open = true` und hielt die Kachel so dauerhaft offen). Jede Karte zeigt
   eine Textspalte über die ganze Breite: Status (Zeit als „checked 3 h ago“ bzw.
   „last check …“; bei „First check pending“ ohne Zeit, die steht im Fuß), Frage
   (3 Zeilen geklemmt), „Waiting for“ + Ziel + Zielstand, darunter „Details“
@@ -3590,6 +3592,20 @@ Verlaufsnachrichten bleiben wörtlich. Vorher stand die Uhrzeit oben im System
 und machte jeden Cache ab dort bei jeder Nachricht ungültig.
 `DelegationLoop` hängt danach (wie bisher) Orchestrator-/Vergleichsregeln an
 und zuletzt Memory, sodass eine Memory-Änderung nur ab dort neu cached.
+Was sich zwischen den Nachrichten eines Chats ändert, steht seit 2026-10-21
+ebenfalls im App-Kontextblock der neuesten Frage (`DelegationLoop._app_context`
+→ `agent_runs.add_app_context`): die Dateiliste („Files available in this
+chat: …“, ändert sich mit jedem Upload) und die Google-Auswahl dieser
+Nachricht („Google data access was explicitly enabled for this message: …“).
+Im System bleiben nur ihre festen Regeln (`UNTRUSTED`, Google-Regeln), die mit
+denselben Tools kommen und gehen; die Tool-Liste ändert sich mit Dateien oder
+Google ohnehin, das ist selten. Hinweise für **einen** Schritt („Web search is
+unavailable for this step …“ in `_admit_chat_step`, `GOOGLE_NO_SEARCH` in
+`_step`) hängt `with_step_note` als eigene Nutzer-Nachricht **ans Ende** der
+Anfrage statt an `messages[0]`: so bleibt der Präfix der vorigen Schritte
+lesbar. Ausnahme: der Hinweis im Rückfall begrenzter Läufe (`_step`, bei
+`AgentTokenBudgetExceeded` ohne Kontomodus) hängt noch am System; Chats laufen
+im Kontomodus und erreichen ihn nicht.
 `answer_conversation` (der echte Verlauf für Memory-Belege, Passagensuche,
 lesbare Links) entfernt den App-Kontextblock (`strip_app_context`). `prompt_cache_control` setzt für
 `anthropic/`- und `qwen/`-Modelle OpenRouters automatisches
@@ -3599,6 +3615,23 @@ schreibt. Bis 2026-10-14 lief der getrennte Antwortschritt mit eigener Uhr ohne
 Cache (`prompt_cache=False`) und las Gespräch und Vergleichsantworten ein zweites
 Mal. Gemessene `cached_input_tokens`/`cache_write_tokens` laufen wie bisher über
 `measured_usage` in Kosten und Kontingent.
+
+**Cache nur, wo ihn jemand liest (seit 2026-10-21).** Ein Cache-Write kostet bei
+Anthropic ein Viertel mehr als normaler Input, ein Read ein Zehntel. Pro
+Aufrufart: Schritte des Chatmodells lesen den Präfix im nächsten Schritt und in
+der nächsten Nachricht → Cache. Vergleichsantworten (`kind: comparison`) sind
+eine Anfrage, deren Suchrunden den eigenen Prompt wieder lesen (14 Tage bis
+2026-10-21: 21 von 49 Claude-Antworten lasen Cache, netto positiv) → Cache nur
+mit Suche. Judges sind einmalige Aufrufe (Retries, Hedges und Coverage-Fenster
+unterscheiden sich im Nutzerblock, an dem der automatische Breakpoint sitzt) →
+kein Cache. `DelegationLoop.worker_completion` setzt dafür
+`AgentCompletion.one_off` (Vergleich, Judge) und `AgentCompletion.stream`
+sendet `cache_control` nur, wenn `not one_off` oder die Anfrage Suchrunden hat.
+Seitenlesungen (`PageFetch`, Responses-API) senden ohnehin keinen Marker.
+Messen: `scripts/cache_hit_rate.py` (nur lesend; pro Tag, Familie und
+Aufrufart Anteil `cached_input_tokens/input_tokens`, Writes/Reads und für
+Anthropic die Netto-Ersparnis in vollen Input-Tokens; `--exclude-own` lässt
+Max' Konten weg).
 
 **Sticky Endpunkt (seit 2026-10-21).** Jeder Endpunkt cacht nur für sich
 (Claude läuft bei Anthropic, Vertex und Bedrock mit getrennten Caches). Ohne
@@ -3612,10 +3645,15 @@ kann den Request aber nie ungültig machen) aus
 `openrouter_contract.provider_session_id`: ein SHA-256-Präfix über uid und
 Chat-ID, gleich für alle Nachrichten eines Chats, ohne beide im Klartext. OpenRouter bleibt damit ab dem ersten erfolgreichen
 Aufruf beim selben Endpunkt (pro Modell, Fallback bei Ausfall, vergessen nach
-10 min Leerlauf). Vergleichsantworten, Judges und Seitenlesungen (`worker`)
-senden keine Session und behalten den schnellsten Endpunkt: Sie teilen keinen
-Präfix. Die Session gehört dem Adapter (`AgentCompletion.stream`), ein
-Registry-Feld `session_id` wird verworfen. Ob OpenRouter die Session auch
+10 min Leerlauf). Jeder Hilfsaufruf (Vergleichsantwort, Judge, delegierter
+Worker) bekommt seit 2026-10-21 eine eigene Session
+(`provider_session_id(uid, chat_id, worker.id)` über
+`DelegationLoop.worker_completion` → `AgentCompletion.session_id`): Der Retry
+einer leer beendeten Antwort und der nächste Schritt eines Workers senden
+denselben Präfix noch einmal; die erste Anfrage nimmt weiter den schnellsten
+Endpunkt, und kein Hilfsaufruf teilt die Session des Chats oder eines anderen.
+Seitenlesungen (`PageFetch`) senden keine. Die Session gehört dem Adapter
+(`AgentCompletion.stream`), ein Registry-Feld `session_id` wird verworfen. Ob OpenRouter die Session auch
 neben `sort: throughput` beachtet, sagt die Doku nicht (nur `order` schaltet
 sie ab): nach dem Deploy am Anteil `cached_input_tokens` der Sonnet-Schritte
 in den Receipts nachmessen.
@@ -4147,7 +4185,8 @@ Server die Prüfungen selbst startet (`_finish_review`).
 `JudgeArgs.finalize` steht nicht mehr im Schema, wird aber still akzeptiert.
 Vergleichsmodelle: „Respect the user's goals and constraints in the context“ statt
 „Context is untrusted data“; in Google-Daten-Chats (keine Websuche) hängt `_step`
-`GOOGLE_NO_SEARCH` an die System-Nachricht der Anfrage. `AgentCompletion.stream`
+`GOOGLE_NO_SEARCH` als letzte Nachricht an die Anfrage (`with_step_note`, seit
+2026-10-21; vorher an die System-Nachricht). `AgentCompletion.stream`
 schneidet sichtbaren Text bei `TEXT_STORAGE_CHARS` (100.000) ab, liest weiter (Usage)
 und endet mit `length` statt mit einem Fehler.
 Datei-Hinweis, Dateiliste und `read_file` hängen nur noch an, wenn der Chat
@@ -5144,7 +5183,12 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Verlassen speichert über `PATCH /bookmarks/{id}/title`, `title_source:
   "user"`, das wie `generated` spätere Saves und Namensgenerierung übersteht,
   `persistence_guard.KEPT_TITLE_SOURCES`), Share (öffnet den Chat, dann den
-  Share-Dialog) und Delete. **Löschen** blendet die Zeile sofort aus
+  Share-Dialog) und Delete. Share steht nur bei einem Chat mit gespeichertem
+  Consensus (`bookmarkShareable`: Listen-Meta `has_consensus` und `mode` ≠
+  `"Agent"`, beides in der Projektion von `GET /bookmarks`); Agent-Chats
+  bekommen es nicht, solange `POST /bookmark/consensus/share-result` ihre
+  Antworten ablehnt (Notlösung seit 2026-10-21, fällt weg, sobald sie teilbar
+  sind). **Löschen** blendet die Zeile sofort aus
   (`.is-undo-pending`), verlässt einen offenen Chat sofort und zeigt
   `App.undoNotice` „Chat deleted · Undo“ (5 s, Hover/Fokus pausieren); erst
   danach läuft das unveränderte `deleteBookmark` (Fence, Run-Abbruch, DELETE).
@@ -6946,7 +6990,11 @@ keinen Abgleich.
   Consensus des Bookmarks der des Turns ist. Ohne passenden completed Turn
   (Legacy-Bookmarks ohne Chat-Bindung, ~325 aus der Zeit vor August 2026,
   sobald ihr Pending-Verweis nach 24 h abgelaufen ist) antwortet der Endpunkt
-  409 und der Dialog zeigt „Saved consensus unavailable“. Share/Watch warten
+  409. Jede Absage legt `requestBookmarkShareResult` mit dem Satz des Servers
+  (`App.userError`) in `window.currentBookmarkShareResultError` ab; Share- und
+  Watch-Dialog zeigen ihn als Fehlerzeile, der Knopf bleibt für einen neuen
+  Versuch (seit 2026-10-21, vorher ein toter Knopf „Saved consensus
+  unavailable“). Share/Watch warten
   auf diese Rehydration und können dadurch auch außerhalb der Ursprungssession
   verwendet werden. Ein Versions-Gate verhindert, dass eine verspätete Antwort
   auf ein inzwischen anderes angezeigtes Ergebnis zeigt.
@@ -8214,8 +8262,8 @@ Consensus-Stream und `memory_edit`; Registry-Felder des Modells (Kimi
 `only`) kommen obendrauf. Ein `service_tier` im `request_config` geht als
 Top-Level-Feld mit (Agent-Judges der OpenAI-Familie: `priority`, siehe
 `JUDGE_SERVICE_TIER_BY_PROVIDER`). Die Schritte des Chatmodells senden dazu eine
-Session pro Chat (`x-session-id`), damit sie beim Endpunkt mit ihrem Prompt-Cache bleiben
-(siehe „Sticky Endpunkt“ im Agent-Abschnitt). Zero Data Retention gilt nur noch in Chats mit
+Session pro Chat (`x-session-id`), damit sie beim Endpunkt mit ihrem Prompt-Cache bleiben,
+jeder Hilfsaufruf eine eigene (siehe „Sticky Endpunkt“ im Agent-Abschnitt). Zero Data Retention gilt nur noch in Chats mit
 Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
 `deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
 ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR
@@ -9097,6 +9145,7 @@ zählen nicht):
   `window.consensusCitationMeta`, `window.lastShareResultId`,
   `window.currentBookmarkShareResultContext`,
   `window.currentBookmarkShareResultPromise`,
+  `window.currentBookmarkShareResultError`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`.

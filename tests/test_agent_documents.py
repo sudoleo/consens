@@ -157,6 +157,47 @@ def test_the_answer_is_written_from_the_actual_document_results(setup):
     assert any(e.get("type") == "resources" for e in events)
 
 
+def test_the_file_list_travels_with_the_message_not_the_system_prompt(setup):
+    """The chat's file list changes with every upload. In the system prompt it
+    rewrote the prompt cache of everything after it, the history included;
+    in the message's app context the system prompt stays the same."""
+    import base64
+    from test_agent_runs import UID, pending
+    from app.services.agent_comparison import comparison_selection
+    from app.services.agent_delegation import DelegationLoop
+    from app.services.agent_delegation_config import defaults
+    from app.services.agent_files import UNTRUSTED
+    from app.services.agent_policy import AgentPolicy
+    from app.services.agent_runs import APP_CONTEXT_CLOSE, AgentRunStore, strip_app_context, with_app_context
+    from app.services.llm.agent_client import AgentCompletion, resolve_agent_model
+    files, _ = setup
+    store = AgentRunStore(files.db)
+    chat, turn = pending(store)
+    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
+
+    def loop():
+        return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+            model=resolve_agent_model("claude-haiku-4-5"),
+            messages=[{"role": "system", "content": "Answer."},
+                      {"role": "user", "content": with_app_context("Compare the offers.", "Current date: today.")}],
+            api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
+            delegation_config=config, completion_factory=AgentCompletion, file_context=FileContext(files, UID, chat, []),
+            comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+
+    files.upload(UID, chat, {"name": "offer.txt", "data": base64.b64encode(b"Price: 42 EUR").decode()})
+    first = loop()
+    files.upload(UID, chat, {"name": "second.txt", "data": base64.b64encode(b"Price: 55 EUR").decode()})
+    second = loop()
+    assert first.messages[0] == second.messages[0]
+    assert UNTRUSTED in first.messages[0]["content"] and "Files available" not in first.messages[0]["content"]
+    question = second.messages[-1]["content"]
+    context = question.split(APP_CONTEXT_CLOSE)[0]
+    assert "Current date: today." in context and "Files available in this chat:" in context
+    assert "offer.txt" in context and "second.txt" in context
+    # The user's own words stay what they wrote (memory evidence, read_source links).
+    assert strip_app_context(question) == "Compare the offers." == second.answer_conversation[-1]["content"]
+
+
 def test_chat_deletion_removes_document_versions_and_manifest(setup):
     files, chat = setup
     docs = service(files, chat)

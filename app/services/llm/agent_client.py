@@ -525,6 +525,10 @@ def prompt_cache_control(model):
     full price each time, as long as they reach the same endpoint (the chat
     model's steps carry a session, openrouter_contract.provider_session_id).
     The default five-minute lifetime matches chat pacing.
+
+    Writing costs a quarter more than plain input: a request no later one
+    continues (AgentCompletion.one_off: a judge) skips the marker unless its
+    own search rounds re-read the prompt (AgentCompletion.stream).
     """
     name = str(getattr(model, "model", "") or "")
     if name.startswith(("anthropic/", "qwen/")):
@@ -582,6 +586,10 @@ class AgentCompletion:
         self._reasoning_text = ""
         # Set when the step ended as ModelOutputLimit (see _output_limited).
         self.output_limited = False
+        # A helper call's own OpenRouter session, and whether no later request
+        # re-sends its prompt (DelegationLoop.worker_completion, see stream).
+        self.session_id = None
+        self.one_off = False
 
     def _output_limited(self):
         """The step ended without a usable answer or tool call after reasoning.
@@ -845,8 +853,10 @@ class AgentCompletion:
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
                native_searches=0, allow_tool_calls=False, prompt_cache=True, session_id=None):
         """``session_id`` keeps the request on the endpoint of the chat's
-        earlier steps (openrouter_contract.provider_session_id). The adapter
-        owns it: a ``session_id`` in the registry config never reaches the body."""
+        earlier steps (openrouter_contract.provider_session_id); without one,
+        a helper call keeps its own (``self.session_id``). The adapter owns
+        it: a ``session_id`` in the registry config never reaches the body."""
+        session_id = session_id or self.session_id
         payload = {
             "model": model.model, "messages": messages,
             "max_tokens": model.max_output_tokens,
@@ -878,7 +888,13 @@ class AgentCompletion:
                 payload["parallel_tool_calls"] = False
         if native_searches:
             payload["max_tool_calls"] = native_searches
-        cache = prompt_cache_control(model) if prompt_cache else None
+        # Cached for the requests that read the prompt again: the chat model's
+        # next steps and message, a worker's next step or retry, and the search
+        # rounds inside this request (2026-10-21: 21 of 49 Claude comparison
+        # answers, one request each, read from the cache; scripts/
+        # cache_hit_rate.py). A one-off call without search, a judge, would
+        # only pay the write.
+        cache = prompt_cache_control(model) if prompt_cache and (native_searches or not self.one_off) else None
         if cache:
             payload["cache_control"] = cache
         from app.services.llm.provider_runtime import ProviderProgressWatchdog, _bounded_env_float

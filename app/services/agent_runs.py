@@ -66,8 +66,9 @@ def agent_sources(completion, review=None):
     return normalize_turn_sources(sources)
 
 
-# Volatile per-message context (clock to the second, selected model) travels
-# with the newest user message instead of the system prompt. The system prompt
+# Volatile per-message context (clock to the second, selected model; from
+# DelegationLoop the chat's file list and this message's Google selection)
+# travels with the newest user message instead of the system prompt. The system prompt
 # and the replayed history then stay byte-identical across a chat's messages,
 # so providers can serve them from their prompt cache. A clock at the top of
 # the system prompt invalidated every cached token after it on every message.
@@ -91,6 +92,16 @@ def get_agent_system_prompt(model=None, config=None):
 
 def with_app_context(question, context):
     return f"{APP_CONTEXT_OPEN}\n{context}\n{APP_CONTEXT_CLOSE}\n\n{question}"
+
+
+def add_app_context(content, context):
+    """``content`` with ``context`` as the last lines of its app context
+    (one built by ``with_app_context``); a message without one gets it."""
+    if isinstance(content, str) and content.startswith(APP_CONTEXT_OPEN):
+        head, separator, rest = content.partition(f"\n{APP_CONTEXT_CLOSE}\n\n")
+        if separator:
+            return f"{head}\n{context}{separator}{rest}"
+    return with_app_context(content, context)
 
 
 def strip_app_context(content):

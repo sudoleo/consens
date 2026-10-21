@@ -216,6 +216,7 @@
         <li>It is a snapshot: later runs will not change it.</li>
         <li>You can revoke the link at any time under "My shared links".</li>
       </ul>
+      <p id="shareConfirmError" class="share-modal-error" role="alert" hidden></p>
       <div class="share-modal-actions">
         <button type="button" id="shareConfirmBtn" class="share-primary-btn">Create public link</button>
         <button type="button" id="shareCancelBtn" class="share-secondary-btn">Cancel</button>
@@ -227,27 +228,39 @@
     document.getElementById("shareListLink").addEventListener("click", renderShareListView);
     document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDialog?.("list"));
     const confirmBtn = document.getElementById("shareConfirmBtn");
+    const failure = document.getElementById("shareConfirmError");
+    // A saved chat that could not be prepared says why (the server's reason,
+    // firebase.js requestBookmarkShareResult); the button stays to try again.
+    const showFailure = () => {
+      failure.textContent = window.currentBookmarkShareResultError || "";
+      failure.hidden = !failure.textContent;
+    };
     if (!window.lastShareResultId && window.currentBookmarkShareResultContext) {
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Preparing saved consensus…";
       window.resolveCurrentShareResultId?.().then(resultId => {
         if (!confirmBtn.isConnected || !shareViewIsCurrent(viewEpoch)) return;
-        confirmBtn.disabled = !resultId;
-        confirmBtn.textContent = resultId ? "Create public link" : "Saved consensus unavailable";
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Create public link";
+        if (!resultId) showFailure();
       });
     } else if (!window.lastShareResultId) {
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Run a consensus first";
     }
     confirmBtn.addEventListener("click", async function () {
+      // A second try after a failed preparation asks the server again.
+      this.disabled = true;
       const resultId = await (window.resolveCurrentShareResultId?.()
         || Promise.resolve(window.lastShareResultId));
       if (!shareViewIsCurrent(viewEpoch)) return;
       if (!resultId) {
-        window.App.showPopup("Please run a consensus first.");
+        this.disabled = false;
+        if (window.currentBookmarkShareResultContext) showFailure();
+        else window.App.showPopup("Please run a consensus first.");
         return;
       }
-      this.disabled = true;
+      failure.hidden = true;
       this.textContent = "Creating link…";
       try {
         const data = await shareApiRequest("POST", "/api/share", { result_id: resultId }, viewEpoch);

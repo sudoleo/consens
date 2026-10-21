@@ -26,9 +26,10 @@ def provider_routing(overrides: dict | None = None) -> dict:
     return {**DEFAULT_PROVIDER_ROUTING, **(overrides or {})}
 
 
-def provider_session_id(uid: str, chat_id: str) -> str:
+def provider_session_id(uid: str, chat_id: str, worker_id: str = "") -> str:
     """OpenRouter's session (header ``x-session-id``) for the chat model's
-    steps in one chat.
+    steps in one chat, or with ``worker_id`` for the requests of one helper
+    call of it (DelegationLoop.worker_completion).
 
     Every Agent step re-sends system prompt, memory and history, and so does
     the chat's next message. Each endpoint caches that prefix only for itself
@@ -42,8 +43,8 @@ def provider_session_id(uid: str, chat_id: str) -> str:
     minutes. Opaque on purpose: neither the uid nor the chat id leaves the
     server.
     """
-    digest = hashlib.sha256(f"consens.io agent chat\0{uid}\0{chat_id}".encode("utf-8"))
-    return digest.hexdigest()[:32]
+    scope = f"consens.io agent chat\0{uid}\0{chat_id}" + (f"\0worker\0{worker_id}" if worker_id else "")
+    return hashlib.sha256(scope.encode("utf-8")).hexdigest()[:32]
 
 
 def openrouter_headers(api_key: str) -> dict[str, str]:

@@ -2424,11 +2424,16 @@ window.acceptPersistedConsensusBookmark = function (bookmarkMeta, conversation =
 let bookmarkShareResultVersion = 0;
 window.currentBookmarkShareResultPromise = null;
 window.currentBookmarkShareResultContext = null;
+// Why the last preparation of the chat on screen failed, in the server's
+// words where it gave any: Share and Watch say it instead of a dead button.
+window.currentBookmarkShareResultError = "";
+const BOOKMARK_SHARE_RESULT_FAILED = "This chat couldn’t be prepared. Try again.";
 
 window.clearPreparedBookmarkShareResult = function () {
   bookmarkShareResultVersion += 1;
   window.currentBookmarkShareResultPromise = null;
   window.currentBookmarkShareResultContext = null;
+  window.currentBookmarkShareResultError = "";
   window.App.state.set("lastShareResultId", null, "share");
 };
 
@@ -2490,6 +2495,7 @@ async function requestBookmarkShareResult() {
   const bookmarkId = context.bookmarkId;
   const expectedVersion = await bookmarkShareVersion(context.versionParts);
   if (version !== bookmarkShareResultVersion) return null;
+  window.currentBookmarkShareResultError = "";
   const promise = enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
     try {
       if (version !== bookmarkShareResultVersion
@@ -2501,9 +2507,9 @@ async function requestBookmarkShareResult() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_token: idToken, bookmarkId, expectedVersion })
       });
-      const data = await response.json();
+      const data = await window.App.readJson(response);
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return null;
-      if (!response.ok) throw new Error(data.detail || "This chat couldn’t be prepared.");
+      if (!response.ok) throw window.App.httpError(response, data, "This chat couldn’t be prepared.");
       if (version === bookmarkShareResultVersion) {
         window.App.state.set("lastShareResultId", data.result_id || null, "share");
       }
@@ -2511,6 +2517,7 @@ async function requestBookmarkShareResult() {
     } catch (error) {
       if (version === bookmarkShareResultVersion) {
         console.error("Error preparing bookmarked consensus for share/watch:", error);
+        window.currentBookmarkShareResultError = window.App.userError(error, { fallback: BOOKMARK_SHARE_RESULT_FAILED });
       }
       return null;
     }
@@ -2519,6 +2526,7 @@ async function requestBookmarkShareResult() {
   const resultId = await promise;
   if (!resultId && version === bookmarkShareResultVersion) {
     window.currentBookmarkShareResultPromise = null;
+    window.currentBookmarkShareResultError ||= BOOKMARK_SHARE_RESULT_FAILED;
   }
   return resultId;
 }
@@ -3505,6 +3513,14 @@ const BOOKMARK_MENU_ITEMS = [
 ];
 const BOOKMARK_UNDO_MS = 5000;
 
+// Share only offers a chat with a saved consensus to share. Stopgap until
+// Agent answers can be shared (POST /bookmark/consensus/share-result refuses
+// them): an Agent chat's menu leaves Share out instead of opening a dialog
+// that can only say no. A row whose chat is not in the list leaves it out too.
+function bookmarkShareable(meta) {
+  return meta?.has_consensus === true && meta.mode !== "Agent";
+}
+
 function labelBookmarkMenu(control, title) {
   control.setAttribute("aria-label", title ? `Chat options: ${title}` : "Chat options");
   control.title = "More";
@@ -3584,7 +3600,9 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
   menu.className = "bookmark-menu";
   menu.setAttribute("role", "menu");
   menu.setAttribute("aria-label", button.getAttribute("aria-label") || "Chat options");
+  const meta = (window.bookmarksData || []).find(item => item.id === row.dataset.id);
   for (const [action, label, path] of BOOKMARK_MENU_ITEMS) {
+    if (action === "share" && !bookmarkShareable(meta)) continue;
     const item = document.createElement("button");
     item.type = "button";
     item.className = `bookmark-menu-item${action === "delete" ? " is-destructive" : ""}`;
