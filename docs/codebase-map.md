@@ -3320,7 +3320,11 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   (`KEPT_TITLE_SOURCES`) einmal pro
   Sitzung `POST /bookmarks/{id}/title` an (`requestBookmarkTitle`); ein vom
   Nutzer gesetzter Name kommt über `PATCH /bookmarks/{id}/title` (`{title}`,
-  `rename_bookmark`, schreibt auch den Chat-Titel) und bleibt. `requestBookmarkTitle` blendet
+  `rename_bookmark`, schreibt erst das Bookmark, dann den Chat-Titel) und bleibt.
+  Der generierte Name landet nur auf einem Bookmark ohne eigenen Namen
+  (Guard in derselben Transaktion) und danach nur dann auf dem Chat, wenn das
+  Bookmark ihn noch trägt (`_name_chat_as_generated`): ein Umbenennen während
+  der Titel-Erzeugung wird nie überschrieben. `requestBookmarkTitle` blendet
   den Namen in Sidebar-Zeile, Run-Zeile und `bookmarksData` weich ein
   (`applyBookmarkTitle`); ältere Unterhaltungen bekommen ihn beim nächsten
   Turn. Liste, Saves und Löschen stoßen außerdem

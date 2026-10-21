@@ -274,3 +274,51 @@ def test_renaming_a_missing_chat_creates_nothing():
 
     assert response.status_code == 404
     assert bookmark_ref.data is None
+
+
+def test_a_rename_while_the_title_is_generated_keeps_the_persons_name():
+    # Zweitprüfung (Umbenennen): the model takes seconds; a rename in that
+    # time was overwritten by the generated name, on the chat and the bookmark.
+    chat_id = "c" * 32
+    bookmark_ref = FakeBookmarkRef("racing_bookmark", {
+        "query": QUESTION, "title": QUESTION, "chat_id": chat_id, "responses": {},
+    })
+    store = FakeChatStore(chat_id)
+    headers = {"Authorization": "Bearer token"}
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+        patch.object(bookmarks_router, "_chat_store", return_value=store),
+    ):
+        client = _client()
+
+        def rename_meanwhile(question):
+            renamed = client.patch("/bookmarks/racing_bookmark/title", headers=headers,
+                                   json={"title": "Our radiators"})
+            assert renamed.status_code == 200
+            return "Heat pump for a 1978 house"
+
+        with patch.object(bookmarks_router, "generate_title", side_effect=rename_meanwhile):
+            named = client.post("/bookmarks/racing_bookmark/title", headers=headers)
+
+    assert named.status_code == 200 and named.json()["status"] == "skipped"
+    assert named.json()["bookmark"]["title"] == "Our radiators"
+    assert bookmark_ref.data["title"] == "Our radiators" and bookmark_ref.data["title_source"] == "user"
+    assert store.ref.updates == [{"title": "Our radiators"}]
+
+
+def test_the_chat_gets_the_generated_name_only_while_the_bookmark_still_carries_it():
+    chat_id = "c" * 32
+    bookmark_ref = FakeBookmarkRef("checked_bookmark", {
+        "query": QUESTION, "title": "Our radiators", "title_source": "user", "chat_id": chat_id,
+    })
+    store = FakeChatStore(chat_id)
+    with (
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+        patch.object(bookmarks_router, "_chat_store", return_value=store),
+    ):
+        assert bookmarks_router._name_chat_as_generated("uid-1", chat_id, bookmark_ref, "Heat pump") is False
+        bookmark_ref.data.update({"title": "Heat pump", "title_source": "generated"})
+        assert bookmarks_router._name_chat_as_generated("uid-1", chat_id, bookmark_ref, "Heat pump") is True
+    assert store.ref.updates == [{"title": "Heat pump"}]
