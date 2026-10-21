@@ -63,3 +63,14 @@ def test_lead_sentences_cut_at_a_sentence_end_and_skip_headings():
     long = "First sentence is here. " + "word " * 60
     assert lead_sentences(long, limit=60) == "First sentence is here."
     assert lead_sentences("word " * 60, limit=40).endswith("…")
+
+
+def test_plain_text_is_text_not_html():
+    # Templates escape it once more: "AT&amp;T" stood on the Topic hub cards
+    # and in every meta and og:description ("AT&amp;amp;T" in the markup).
+    from app.services.public_markdown import lead_sentences, markdown_to_plaintext
+
+    assert markdown_to_plaintext("**AT&T** and R&D: 5 < 7 > 3, \"quoted\" `<b>`") == (
+        'AT&T and R&D: 5 < 7 > 3, "quoted" <b>'
+    )
+    assert lead_sentences("AT&T cut prices. More follows here.", limit=20, min_sentence=5) == "AT&T cut prices."

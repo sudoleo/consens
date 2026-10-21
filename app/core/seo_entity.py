@@ -77,10 +77,11 @@ SITE_REF: dict[str, str] = {"@id": WEBSITE_ID}
 def dumps(payload: Any) -> str:
     """JSON fuer ein <script type="application/ld+json">-Element.
 
-    "</" wird escaped, damit eingebettete Inhalte das script-Element nie
-    schliessen koennen.
+    Jedes "<" wird escaped (in JSON steht es nur in Strings), damit
+    eingebettete Inhalte das script-Element nie schliessen koennen, auch nicht
+    ueber "<!--<script", nach dem der Parser "</script>" ueberliest.
     """
-    return json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+    return json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
 
 
 def page_graph(*nodes: dict[str, Any]) -> dict[str, Any]:
