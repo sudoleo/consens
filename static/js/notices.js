@@ -184,6 +184,11 @@
       restart(current);
       return current.handle;
     }
+    // An error that stepped aside and comes again is one line, not two to close.
+    if (!record.action) {
+      for (const waiting of queue.filter(item => item.parked && item.message === record.message
+        && item.tone === record.tone)) end(waiting, "replaced");
+    }
 
     if (!current) {
       present(record);

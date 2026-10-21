@@ -156,6 +156,19 @@ describe("App.toast", () => {
     expect(onExpire).toHaveBeenCalledTimes(1);
   });
 
+  it("closes an error that came again while it stood aside only once", () => {
+    vi.useFakeTimers();
+    const { window, document } = boot();
+    window.App.toast({ message: "The chat couldn’t be saved.", tone: "error" });
+    window.App.toast({ message: "Link copied." });
+    window.App.toast({ message: "The chat couldn’t be saved.", tone: "error" });
+    vi.advanceTimersByTime(5000);
+    expect(line(document).textContent).toContain("couldn’t be saved");
+    line(document).querySelector(".toast-close").click();
+    vi.advanceTimersByTime(10);
+    expect(line(document)).toBeNull();
+  });
+
   it("brings an error back after an Undo that cut in", () => {
     vi.useFakeTimers();
     const { window, document } = boot();
