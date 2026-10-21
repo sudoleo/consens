@@ -16,7 +16,8 @@ def test_app_renders_markdown_and_math_without_jsdelivr(browser, phase4_server):
         page.on("pageerror", lambda error: errors.append(str(error)))
         context.route("https://cdn.jsdelivr.net/**", lambda route: (cdn_requests.append(route.request.url), route.abort()))
         page.reload(wait_until="networkidle")
-        page.wait_for_function("() => typeof window.renderMathInElement === 'function'")
+        # KaTeX comes with the first formula, not with the page (Apple-Audit B12).
+        assert page.evaluate("typeof window.renderMathInElement") == "undefined"
         page.evaluate(r"""() => {
             const target = document.createElement('div');
             target.id = 'vendor-regression';
@@ -25,7 +26,7 @@ def test_app_renders_markdown_and_math_without_jsdelivr(browser, phase4_server):
             const math = document.createElement('div');
             math.textContent = '\\(x^2\\)';
             target.append(math);
-            renderMathInElement(math);
+            window.ConsensusMath.render(math);
         }""")
         expect(page.locator('#vendor-regression strong')).to_have_text('Works')
         expect(page.locator('#vendor-regression [onerror]')).to_have_count(0)
@@ -50,7 +51,7 @@ def test_rejected_vote_and_login_tokens_are_handled(browser, phase4_server):
             document.getElementById('loginPassword').value = 'test-password';
             document.getElementById('loginButton').click();
         }""")
-        expect(page.locator('#loginError')).to_contain_text('An error occurred')
+        expect(page.locator('#loginError')).to_contain_text('Logging in didn’t work')
         assert not errors
     finally:
         context.close()

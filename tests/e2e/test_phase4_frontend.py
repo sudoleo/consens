@@ -361,7 +361,7 @@ def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server)
         login.click()
         modal = page.get_by_role("dialog", name="Log in to consens.io")
         expect(modal).to_be_visible()
-        expect(page.locator("#loginError")).to_contain_text("temporarily unavailable")
+        expect(page.locator("#loginError")).to_contain_text("Logging in isn’t possible right now")
         expect(page.locator("#closeLoginModal")).to_be_focused()
 
         page.keyboard.press("Escape")
