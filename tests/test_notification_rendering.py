@@ -374,3 +374,58 @@ def test_mails_call_the_thing_a_watch():
             assert "Consensus Watch" not in text, name
     assert _parts(mails["change"])[1].startswith("Your Watch found a change backed by evidence.")
     assert _parts(mails["brief"])[1].startswith("Your morning brief – Tuesday")
+
+
+def _balanced(markup):
+    """Every Telegram tag closed in order (what its HTML parser demands)."""
+    stack = []
+    for closing, name in re.findall(r"<(/?)([a-z-]+)[^>]*>", markup):
+        if closing:
+            assert stack and stack.pop() == name, markup[-200:]
+        else:
+            stack.append(name)
+    return not stack
+
+
+def test_a_long_telegram_message_is_never_cut_inside_its_markup():
+    # Zweitprüfung (Telegram): the text was sliced at 4,096 characters of
+    # HTML -- mid-tag. Telegram refused it and the plain resend lost the links.
+    from app.services import telegram_notifier
+
+    markup = "<b>The answer moved</b>\n\n<blockquote expandable>" + " ".join(
+        f'<a href="https://example.com/{"long-path-" * 8}{index}">source {index}</a> said so'
+        for index in range(400)) + "</blockquote>\n\n<b>Question</b>\n<blockquote>Q?</blockquote>"
+    assert len(markup) > 4096
+    clipped = telegram_notifier.clip_html(markup)
+    assert telegram_notifier.visible_length(clipped) <= telegram_notifier.TEXT_LIMIT
+    assert _balanced(clipped) and re.search(r"…(</[a-z-]+>)*$", clipped)
+    assert '<a href="https://example.com/' in clipped
+    # Short enough already: untouched. Every tag counts nothing, every entity one.
+    assert telegram_notifier.clip_html("<b>a &amp; b</b>") == "<b>a &amp; b</b>"
+    assert telegram_notifier.visible_length("<b>a &amp; b</b>") == 5
+
+    sent = {}
+    with patch.object(telegram_notifier, "call_bot_api", lambda method, payload: sent.update(payload) or {}):
+        telegram_notifier.send_bot_message("1", markup, parse_mode="HTML")
+    assert sent["text"] == clipped
+
+
+def test_the_answer_takes_only_the_room_the_question_leaves():
+    watch = {"question": "Will " + "this very specific policy question " * 25 + "change?",
+             "condition": "A date is set " * 30}
+    result = {"consensus": ANSWER * 6, "consensus_sources": ANSWER_SOURCES, "moved": True,
+              "condition_reason": "The date is set. " * 70,
+              "condition_sources": [{"title": "Notice " * 20, "url": "https://example.com/" + "x" * 300}] * 3,
+              "delta": {"summary": "It moved. " * 120, "held": "Held. " * 80, "goal": "Goal. " * 80}}
+    from app.services import telegram_notifier
+
+    for kind in ("every_run", "condition"):
+        text = telegram_watch._notification_text(kind, watch, result)
+        assert telegram_notifier.visible_length(text) <= telegram_notifier.TEXT_LIMIT, kind
+        assert _balanced(text) and text.endswith("</blockquote>")
+        assert "<b>Question</b>" in text and "<b>The answer</b>" in text
+
+
+def test_the_plain_resend_keeps_its_links():
+    text = '<b>Why</b>\n• <a href="https://openai.com/gpt-6?a=1&amp;b=2">Launch post</a>'
+    assert telegram_watch._strip_markup(text) == "Why\n• Launch post (https://openai.com/gpt-6?a=1&b=2)"

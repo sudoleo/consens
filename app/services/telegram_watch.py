@@ -351,26 +351,35 @@ def _why_block(delta: dict, *, reason: str = "", sources=None) -> str:
     return "<b>Why</b>\n" + "\n".join(rows)
 
 
+_LINK = re.compile(r'<a\s+href="([^"]*)"[^>]*>(.*?)</a>', re.S)
+
+
 def _strip_markup(text: str) -> str:
-    return html.unescape(re.sub(r"<[^>]+>", "", str(text or "")))
+    """The plain-text resend: the same words, a link as "title (url)"."""
+    def link(match):
+        title = re.sub(r"<[^>]+>", "", match.group(2)).strip()
+        url = html.unescape(match.group(1))
+        return f"{title} ({url})" if title and title != url else url
+    return html.unescape(re.sub(r"<[^>]+>", "", _LINK.sub(link, str(text or ""))))
 
 
-def _answer_block(result: dict) -> str:
+def _answer_block(result: dict, *, limit: int = 0) -> str:
     """The answer as Telegram can show it (bold, italic, links, lists),
     folded behind "expand" in the chat."""
     consensus = str(result.get("consensus") or "").strip()
     if not consensus:
         return ""
     rendered = notification_markdown.answer_telegram(
-        consensus, sources=result.get("consensus_sources") or [], limit=ANSWER_MARKUP_LIMIT,
+        consensus, sources=result.get("consensus_sources") or [], limit=limit or ANSWER_MARKUP_LIMIT,
     )
     if not rendered:
         return ""
     return f"<b>The answer</b>\n<blockquote expandable>{rendered}</blockquote>"
 
 
-# Markup budget of the answer: with the other blocks the message stays
-# under Telegram's 4,096 characters, so it is never cut inside a tag.
+# Markup budget of the answer at most; _notification_text gives it only the
+# room the other blocks leave under Telegram's 4,096 visible characters, and
+# telegram_notifier.clip_html never cuts inside a tag.
 ANSWER_MARKUP_LIMIT = 1_500
 
 
@@ -410,12 +419,18 @@ def _notification_text(kind: str, watch: dict, result: dict) -> str:
             blocks.append("<b>What held</b>\n" + _escape(delta["held"], limit=400))
         if delta.get("goal"):
             blocks.append("<b>Waiting for</b>\n" + _escape(delta["goal"], limit=400))
+    question_block = "<b>Question</b>\n" + _quote_block(question, limit=900)
+    text = "\n\n".join(block for block in blocks + [question_block] if block)
     if kind in {"every_run", "condition"}:
-        answer = _answer_block(result)
+        # The answer takes the room the news and the question leave, so the
+        # whole message stays within Telegram's limit and the question at
+        # the bottom is never the part that gets cut. Too little room: the
+        # page has the answer ("Open watch").
+        room = telegram_notifier.TEXT_LIMIT - telegram_notifier.visible_length(text) - 40
+        answer = _answer_block(result, limit=min(ANSWER_MARKUP_LIMIT, room)) if room >= 200 else ""
         if answer:
-            blocks.append(answer)
-    blocks.append("<b>Question</b>\n" + _quote_block(question, limit=900))
-    return "\n\n".join(block for block in blocks if block)
+            text = "\n\n".join(block for block in blocks + [answer, question_block] if block)
+    return text
 
 
 def _action_row(watch_id: str, *, paused: bool) -> list[dict]:

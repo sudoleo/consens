@@ -8538,8 +8538,14 @@ Mail zu kleinen Links auf die Quelle der Version (`get_watch_version(...).source
 Bilder aus Antworten werden nie übernommen (eine Modell-URL lädt nie im Mailprogramm).
 Telegram sendet dieselbe Struktur und dieselben Wörter als HTML
 (`parse_mode=HTML`, keine Emojis); Frage und Antwort stehen in
-`<blockquote expandable>`; wird die Auszeichnung abgelehnt (HTTP 400), geht
-dieselbe Nachricht als Klartext raus. Knöpfe je Art: „Open watch“ (private
+`<blockquote expandable>`. Die Antwort bekommt nur den Platz, den die übrigen
+Blöcke unter Telegrams 4.096 sichtbaren Zeichen lassen (unter 200: keine
+Antwort, die Seite hat sie); `telegram_notifier.send_bot_message` kürzt HTML
+nur noch über `clip_html` (zählt sichtbare Zeichen in UTF-16 wie Telegram,
+schneidet nie in Tag oder Entity, schließt offene Tags, „…“) statt die
+Auszeichnung roh bei 4.096 abzuschneiden. Wird die Auszeichnung trotzdem
+abgelehnt (HTTP 400), geht dieselbe Nachricht als Klartext raus, Links als
+„Titel (URL)“. Knöpfe je Art: „Open watch“ (private
 Watches über `mailer.owner_page_path`, also `/app?next=/s/<id>`) plus
 „Mute 24h“/„Pause“; eine pausierte Watch bekommt „Resume watch“ (`wr:`), eine
 erreichte nur „Open watch“. **Bestätigung am Ort der Aktion (K7):** „Pause“

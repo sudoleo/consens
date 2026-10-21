@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import os
@@ -142,11 +143,92 @@ def call_bot_api(method: str, payload: dict, *, timeout: int = 30) -> dict:
     }
 
 
+# Telegram's limit: 4,096 characters of text after entity parsing (tags and
+# href values do not count, an entity counts as its character), measured in
+# UTF-16 units like its entity offsets.
+TEXT_LIMIT = 4096
+_HTML_TOKEN = re.compile(r"<[^>]*>|&(?:#\d+|#x[0-9a-fA-F]+|[A-Za-z]+);|[^<&]+|[<&]", re.S)
+_HTML_TAG_NAME = re.compile(r"^</?\s*([A-Za-z][\w-]*)")
+
+
+def _units(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2
+
+
+def visible_length(markup: str) -> int:
+    """What Telegram counts against TEXT_LIMIT for a parse_mode=HTML text."""
+    return _units(html.unescape(re.sub(r"<[^>]*>", "", str(markup or ""))))
+
+
+def clip_plain(text: str, limit: int = TEXT_LIMIT) -> str:
+    text = str(text or "")
+    if _units(text) <= limit:
+        return text
+    kept = text[:limit]
+    while _units(kept) > limit:
+        kept = kept[:-1]
+    return kept
+
+
+def clip_html(markup: str, limit: int = TEXT_LIMIT) -> str:
+    """At most ``limit`` visible characters of Telegram HTML, never cut inside
+    a tag or an entity, at a word where it can, with "…" and every open tag
+    closed. A raw slice of the markup broke a tag; Telegram then refused the
+    message and the plain-text resend lost every link."""
+    markup = str(markup or "")
+    if visible_length(markup) <= limit:
+        return markup
+    room = limit - 1  # the "…"
+    out: list[str] = []
+    stack: list[str] = []
+    used = 0
+    # The last word boundary: (pieces before it, open tags there, units used).
+    boundary = None
+    for token in _HTML_TOKEN.findall(markup):
+        if token.startswith("<") and len(token) > 1:
+            match = _HTML_TAG_NAME.match(token)
+            name = match.group(1).lower() if match else ""
+            if token.startswith("</"):
+                if name in stack:
+                    while stack and stack.pop() != name:
+                        pass
+            elif name and not token.endswith("/>"):
+                stack.append(name)
+            out.append(token)
+            continue
+        if token.startswith("&") and len(token) > 1:
+            size = _units(html.unescape(token))
+            if used + size > room:
+                break
+            out.append(token)
+            used += size
+            continue
+        full = True
+        for char in token:
+            size = _units(char)
+            if used + size > room:
+                full = False
+                break
+            out.append(html.escape(char, quote=False))
+            used += size
+            if char.isspace():
+                boundary = (len(out), list(stack), used)
+        if not full:
+            break
+    if boundary is not None and used - boundary[2] <= 400:
+        # Cut at the last space when it is near, not inside a word.
+        index, stack, _used = boundary
+        out = out[:index]
+    clipped = "".join(out).rstrip()
+    return clipped + "…" + "".join(f"</{name}>" for name in reversed(stack))
+
+
 def send_bot_message(chat_id, text: str, *, reply_markup: dict | None = None,
                      parse_mode: str = "") -> dict:
+    text = str(text or "")
     payload = {
         "chat_id": str(chat_id),
-        "text": str(text or "")[:4096],
+        "text": clip_html(text) if parse_mode == "HTML" else clip_plain(text),
         "disable_web_page_preview": True,
     }
     if parse_mode:
