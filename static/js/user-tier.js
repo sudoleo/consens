@@ -67,8 +67,8 @@
       if (tier !== TIER_FREE) badge.textContent = isPro ? "Pro" : "Plus";
       badge.classList.toggle("is-plus", tier === TIER_PLUS);
     }
-    // Der Link ist ein Flex-Container (Glyph + Text), nicht inline-block.
-    if (upgradeLink) upgradeLink.style.display = tier === TIER_FREE ? "inline-flex" : "none";
+    // Inline im Text der Tarifzeile: Die endet bei schmaler Sidebar mit "…".
+    if (upgradeLink) upgradeLink.style.display = tier === TIER_FREE ? "inline" : "none";
 
     if (isPro) {
       const proModal = document.getElementById("proFeatureModal");

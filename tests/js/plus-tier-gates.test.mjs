@@ -128,7 +128,7 @@ describe("attachment gate per tier", () => {
 
     window.updateUserTierUI("free", true);
     expect(document.getElementById("proBadge").style.display).toBe("none");
-    expect(document.getElementById("upgradeLink").style.display).toBe("inline-flex");
+    expect(document.getElementById("upgradeLink").style.display).toBe("inline");
   });
 
   it("keeps Plus when a run reports only is_pro_user: false", () => {

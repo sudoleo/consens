@@ -424,7 +424,7 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
         const upgradeLink = document.getElementById("upgradeLink");
         const isPro = data.is_pro === true;
         if (badge) badge.style.display = isPro ? "inline-block" : "none";
-        if (upgradeLink) upgradeLink.style.display = isPro ? "none" : "inline-flex";
+        if (upgradeLink) upgradeLink.style.display = isPro ? "none" : "inline";
         document.querySelectorAll('.premium-option').forEach(option => {
           option.disabled = !isPro;
           option.textContent = option.textContent
