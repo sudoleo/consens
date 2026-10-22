@@ -1459,7 +1459,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
   Plus und Pro zeigen nur das Badge (`planLabel.hidden`), nie „Pro Pro"; das
   Badge trägt den Namen der Stufe und ist bei Plus neutral statt golden
-  (`.pro-badge.is-plus`) — Gold gehört den teuren Modellen, die Plus nicht hat. Die **Wortmarke**
+  (`.pro-badge.is-plus`) — Gold gehört den teuren Modellen, die Plus nicht hat.
+  Seit 2026-10-22 ist `.pro-badge` überall ein getöntes Etikett („Pro“ in
+  tiefem Gold auf zarter Goldfläche, ohne Rand, Glanz und Schatten). Die **Wortmarke**
   ist aus demselben Grund aus dem Footer (unter dem Account-Icon) nach oben in
   `.sidebar-brand-row` gewandert; unten bleibt nur die Meta-Zeile.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
@@ -1580,9 +1582,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Die Usage-Gruppe zeigt zusätzlich das aktive Watch-Kontingent aus
   `/api/my/watches`. Gesperrte Features zeigen einen kurzen Hinweis ohne
   Unterbrechung; der Sidebar-Link „Early access“ (seit 2026-10-02 ein
-  Textlink in der Tarifzeile `#accountPlanLine` unter der Adresse
-  `#accountIdentity`, die dasselbe Konto-Menü öffnet wie das neutrale
-  Kürzel; firebase.js füllt die Adresse, user-tier.js `#accountPlanName`)
+  Textlink in der Tarifzeile `#accountPlanLine` unter dem Namen
+  `#accountIdentity`, der dasselbe Konto-Menü öffnet wie das Kürzel;
+  firebase.js füllt Kürzel und Namen, user-tier.js `#accountPlanName`).
+  Seit 2026-10-22 ist die Kontozeile `.sidebar-account` eine Fläche wie das
+  Konto oben in den macOS-Einstellungen: Monogramm mit Verlauf (zwei
+  Buchstaben aus `displayName`, sonst der erste der Adresse; die Stufe färbt
+  den Verlauf), darüber der Google-Name oder der Teil der Adresse vor dem @
+  (die volle Adresse steht im Tooltip und im Menü), darunter der Tarif grau.
+  Das `::before` von `#accountIdentity` spannt Trefferfläche und Fokusring
+  über die ganze Zeile; Kürzel und Early-access-Link liegen darüber
   öffnet die allgemeine Erklärung
   mit Kontaktmail und Hinweis auf spätere bezahlte Angebote. Verhalten und
   Modulvertrag stehen unter **Auth / Usage / Tier**.
@@ -3633,7 +3642,7 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   `aria-haspopup`/`aria-expanded`, Einträge `role="menuitem"`): Öffnen fokussiert
   den ersten Eintrag, Pfeile/Home/End wandern, Escape schließt und gibt den Fokus
   an den Öffner (`#emailIcon` oder `#accountIdentity`) zurück, Tab schließt.
-  Die Adresse wird per `textContent` gesetzt, nie ins Markup interpoliert.
+  Adresse und Name werden per `textContent` gesetzt, nie ins Markup interpoliert.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`, im Agent-Modus
   `runAgentDemoFlow` auf der echten Agent-Oberfläche) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-

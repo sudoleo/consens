@@ -715,7 +715,6 @@
   border-radius: var(--radius-2xs);
   font-size: var(--font-size-micro);
   line-height: 1.4;
-  letter-spacing: var(--tracking-wide);
   box-shadow: none;
 }
 

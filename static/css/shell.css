@@ -253,10 +253,11 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   stroke-linejoin: round;
 }
 
-/* The account row: initial, address over plan, then allowance and settings
-   as two quiet icons of the same size. */
+/* The account row: monogram, name over plan, then allowance and settings
+   as two quiet icons of the same size, close together like a toolbar pair
+   so the name keeps its room. */
 .sidebar-footer-row {
-  gap: 10px;
+  gap: 4px;
   min-height: 44px;
   padding: 4px 2px 2px;
 }
@@ -5094,13 +5095,11 @@ body .theme-toggle:focus-visible {
 
   /* Account: one row, no rule above it; the list simply ends. */
   .sidebar-settings { border-top: 0; padding-top: 6px; gap: 0; }
-  .sidebar-footer-row { min-height: 52px; gap: 10px; padding: 0 2px 0 8px; border-radius: var(--radius-sm); }
-  .sidebar-footer-row .email-icon { width: 32px; height: 32px; font-size: var(--font-size-sm); }
-  #accountIdentity.account-identity { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-  .account-plan-line { font-size: var(--font-size-xs); }
-  .account-plan-name.is-plus,
-  .account-plan-name.is-pro,
-  .dark-mode .account-plan-name.is-pro { color: var(--ink-3); }
+  .sidebar-footer-row { min-height: 52px; gap: 10px; padding: 0 2px 0 4px; }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar-account:has(#accountIdentity:not([hidden])):hover { background-color: var(--drawer-tint); }
+  }
+  .sidebar-account:has([aria-expanded="true"]) { background-color: var(--drawer-tint-strong); }
   .sidebar-settings #editSystemPromptBtn { color: var(--ink-2); }
   .sidebar-settings .settings-icon svg { width: 20px; height: 20px; }
   .sidebar-footer-row .quota-trigger { width: 44px; height: 44px; }
@@ -5126,10 +5125,7 @@ body .theme-toggle:focus-visible {
   /* The first chat starts 2px under the heading and takes its own taps;
      the heading reaches into the free room above it instead. */
   .sidebar-bookmarks-head .sidebar-toggle-btn::after { top: calc(2 * var(--hit-slop)); }
-  /* The address clips its own text (ellipsis), so its hit area is its
-     padding, handed back by the margin: the line stays where it was. The
-     plan under it lets those taps through (its link keeps its own). */
-  .sidebar #accountIdentity.account-identity { padding-block: 12px; margin-block: -12px; }
-  .sidebar .account-plan-line { pointer-events: none; }
-  .sidebar .account-plan-line a { pointer-events: auto; }
+  /* The name needs nothing here: its hit area is the whole account row
+     (layout.css, .sidebar-account), and a Free plan's "Early access" link
+     sits above it with its own taps. */
 }

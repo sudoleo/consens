@@ -166,7 +166,8 @@ describe("one spinner and one beat (C13)", () => {
 describe("focus ring and press (E4, E11)", () => {
   it("hides the ring behind no hover tint", () => {
     const offenders = [];
-    const keep = /auth-modal:focus|auth-success:focus|agent-action-title:focus|model-picker-wrapper select:focus|bookmark > p:focus-visible|bookmark-rename-input/;
+    // The account name draws its ring on its ::before, which spans the row.
+    const keep = /auth-modal:focus|auth-success:focus|agent-action-title:focus|model-picker-wrapper select:focus|bookmark > p:focus-visible|bookmark-rename-input|account-identity:focus-visible$/;
     for (const file of APP_CSS.filter(file => !file.endsWith("variables.css"))) {
       const css = read(file);
       for (const match of css.matchAll(/([^{}]*:focus(?:-visible)?[^{}]*)\{([^}]*)\}/g)) {

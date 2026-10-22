@@ -165,10 +165,7 @@
     const label = document.getElementById("accountTierLabel");
     if (label) {
       label.hidden = tier === TIER_FREE;
-      // is-subtle ist die Gold-Variante und gehoert deshalb nur Pro: bliebe sie
-      // an Plus, faerbte .dark-mode .pro-badge.is-subtle den Text gold und
-      // schlaege dabei .pro-badge.is-plus.
-      label.classList.toggle("is-subtle", tier === TIER_PRO);
+      // Gold traegt das Badge von sich aus; Plus schaltet es auf neutral.
       label.classList.toggle("is-plus", tier === TIER_PLUS);
       if (tier !== TIER_FREE) label.textContent = tier === TIER_PRO ? "Pro" : "Plus";
     }

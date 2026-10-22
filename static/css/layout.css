@@ -194,55 +194,47 @@ body:has(.sidebar.active) .brand-float {
 }
 
 /* Einheitliches Pro-Badge im App-Gold — die eine Quelle für alle
-   Pro-Kennzeichnungen (Top-Bar #proBadge, .diff-resolve-pro-chip,
-   .model-picker-pro-badge). Die Kontext-Klassen
-   steuern nur noch Layout (flex/margin), nicht mehr die Optik. */
+   Pro-Kennzeichnungen (#proBadge im Kontingent-Panel, #accountTierLabel im
+   Konto-Menue, .diff-resolve-pro-chip, .model-picker-pro-badge). Die
+   Kontext-Klassen steuern nur noch Layout (flex/margin), nicht die Optik.
+   Seit 2026-10-22 ein ruhiges Etikett wie Apples getoente Knoepfe: Gold als
+   zarte Flaeche, das Wort in tiefem Gold und normal geschrieben ("Pro"),
+   ohne Rand, Glanzkante und farbigen Schatten. Die frueher kraeftigere
+   Vollgold-Fassung und die dezente is-subtle-Variante sind damit eins. */
 .pro-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
-  border: 1px solid color-mix(in srgb, #d4af37 55%, transparent);
-  border-radius: var(--radius-pill);
-  background: linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent 60%), #c9a232;
-  color: #ffffff;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, #c9a232 17%, transparent);
+  color: #7a5e16;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.01em;
   line-height: var(--line-height-solid);
-  text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 6px rgba(201, 162, 50, 0.22);
-}
-
-/* Dezente Gold-Variante für Pro-Nutzer: Kennzeichnung statt Upsell-Teaser
-   (goldener Umriss ohne Vollfarbe). */
-.pro-badge.is-subtle {
-  border-color: color-mix(in srgb, #d4af37 46%, transparent);
-  background: color-mix(in srgb, #c9a232 14%, transparent);
-  color: color-mix(in srgb, #8a6b1a 88%, var(--text-color));
   box-shadow: none;
 }
 
-.dark-mode .pro-badge.is-subtle {
-  color: color-mix(in srgb, #e8c76a 86%, var(--text-color) 14%);
+.dark-mode .pro-badge {
+  background: color-mix(in srgb, #d4af37 19%, transparent);
+  color: #e6ca74;
 }
 
-/* Brand-Variante im Sidebar-Kopf: JS blendet sie für Pro- und Plus-Nutzer ein
-   und beschriftet sie mit dem Namen der Stufe. */
+/* JS blendet es für Pro- und Plus-Nutzer ein und beschriftet es mit dem
+   Namen der Stufe. */
 #proBadge {
   display: none;
-  padding: 2px 7px;
-  letter-spacing: var(--tracking-wide);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(201, 162, 50, 0.24);
 }
 
 /* Plus ist die Stufe zwischen Free und Pro und bleibt deshalb neutral: Gold
    ist die Farbe der teuren Modelle, und die hat Plus gerade nicht. */
 .pro-badge.is-plus,
-.pro-badge.is-neutral {
-  border-color: var(--line);
-  background: var(--well);
+.pro-badge.is-neutral,
+.dark-mode .pro-badge.is-plus,
+.dark-mode .pro-badge.is-neutral {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink-2);
-  box-shadow: none;
 }
 
 /* Early access: since 2026-10-02 a plain text link on the plan line under
@@ -250,6 +242,9 @@ body:has(.sidebar.active) .brand-float {
    user-tier.js still switches it with style.display. */
 #upgradeLink {
   display: none;
+  /* Above the name's hit area, which covers the whole account row. */
+  position: relative;
+  z-index: 1;
   align-items: baseline;
   gap: 0;
   min-width: 0;
@@ -705,7 +700,37 @@ body:has(.sidebar.active) .brand-float {
   padding: 0 2px;
 }
 
-/* Address over plan, one quiet column between the initial and the icons. */
+/* The account as one row, the way macOS draws it at the top of System
+   Settings: monogram, name over plan, and the whole row answers as one
+   control with one tint, no underline, no ring around the initial. The
+   name's button stretches its hit area over the row (::before below); the
+   monogram stays its own button on top and opens the same menu. */
+.sidebar-account {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px 0 -2px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--dur-press) var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-account:has(#accountIdentity:not([hidden])):hover {
+    background-color: var(--hover);
+  }
+}
+
+/* Open menu: the row stays lit, like the selected row of a sidebar. */
+.sidebar-account:has([aria-expanded="true"]) {
+  background-color: var(--hover);
+}
+
+/* Name over plan, one quiet column between the monogram and the icons. */
 .sidebar-account-meta {
   flex: 1;
   min-width: 0;
@@ -728,13 +753,32 @@ body:has(.sidebar.active) .brand-float {
   overflow: hidden;
   color: var(--text-color);
   font: inherit;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.35;
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.006em;
+  line-height: 1.3;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+
+/* Not clipped by the button's overflow: its containing block is the row. */
+#accountIdentity.account-identity::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+}
+
+/* The ring goes round what the button covers, the whole row, not round
+   the name alone. */
+#accountIdentity.account-identity:focus-visible {
+  outline: none;
+}
+
+#accountIdentity.account-identity:focus-visible::before {
+  outline: var(--focus-ring);
 }
 
 #accountIdentity.account-identity[hidden],
@@ -742,39 +786,16 @@ body:has(.sidebar.active) .brand-float {
   display: none;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  #accountIdentity.account-identity:hover {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-}
-
-#accountIdentity.account-identity:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
+/* The plan in the secondary grey of every account row. The colour of the
+   tier lives on the monogram alone (Plus green, Pro gold). */
 .account-plan-line {
   display: flex;
   align-items: baseline;
   max-width: 100%;
   min-width: 0;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  line-height: 1.35;
-}
-
-.account-plan-name.is-plus {
-  color: var(--agree);
-}
-
-.account-plan-name.is-pro {
-  color: color-mix(in srgb, #a8841f 82%, var(--text-color));
-}
-
-.dark-mode .account-plan-name.is-pro {
-  color: color-mix(in srgb, #e8c76a 82%, var(--text-color));
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.3;
 }
 
 .sidebar-footer-meta {
@@ -951,57 +972,38 @@ body:has(.sidebar.active) .brand-float {
   }
 }
 
-/* Account-Avatar in der Fußzeile: leicht getönter Initial-Kreis (Teal).
+/* Account-Monogramm in der Fußzeile, seit 2026-10-22 wie in den Apple-
+   Kontakten: ein Kreis mit senkrechtem Verlauf, das Kuerzel weiss darin,
+   kein Rand. Die Stufe faerbt den Verlauf (is-plus / is-pro unten); Hover
+   und Druck traegt die ganze Zeile (.sidebar-account), nicht der Kreis.
    firebase.js rendert .email-icon; Optik lebt hier statt in Inline-Styles. */
 .email-icon {
+  --monogram-top: #b3b7bf;
+  --monogram-bottom: #8b8f98;
   display: inline-block;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   /* Seit 2026-10-05 ein echter <button>: dessen UA-Polster und -Rand weg. */
   appearance: none;
   margin: 0;
   padding: 0;
+  border: 0;
   border-radius: 50%;
-  /* Neutral since 2026-10-02: the initial is the account, not a brand
-     surface. Plus and Pro still colour it (is-plus / is-pro below). */
-  background-color: var(--well, color-mix(in srgb, var(--text-color) 7%, var(--sidebar-bg)));
-  border: 1px solid var(--line, var(--sidebar-border));
-  color: var(--text-color);
+  background: linear-gradient(180deg, var(--monogram-top), var(--monogram-bottom));
+  color: #fff;
   text-align: center;
-  line-height: 28px;
-  font-weight: var(--font-weight-bold);
-  font-size: var(--font-size-sm);
+  line-height: 32px;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-ui);
+  letter-spacing: 0.01em;
   cursor: pointer;
   box-sizing: border-box;
   user-select: none;
-  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard),
-    transform var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
 }
 
-/* Der Kreis sah bisher wie ein Etikett aus. Ein kleiner Hub plus ein
-   deutlicherer Rand sagt beim Hovern, dass hier etwas aufgeht. */
-@media (hover: hover) and (pointer: fine) {
-  .email-icon:hover {
-    border-color: color-mix(in srgb, var(--text-color) 30%, var(--sidebar-border));
-  }
-}
-
-.email-icon:active {
-  transform: scale(var(--press-scale));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .email-icon,
-  .email-icon:active {
-    transform: none;
-    transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .email-icon:hover {
-      transform: none;
-      transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
-    }
-  }
+.dark-mode .email-icon {
+  --monogram-top: #8c9099;
+  --monogram-bottom: #62666e;
 }
 
 .email-icon:focus-visible {
@@ -1009,8 +1011,10 @@ body:has(.sidebar.active) .brand-float {
   outline-offset: 2px;
 }
 
+/* Above the name's hit area, which covers the whole account row. */
 .email-container {
   position: relative;
+  z-index: 1;
   display: inline-block;
 }
 
@@ -1094,11 +1098,6 @@ body:has(.sidebar.active) .brand-float {
   }
 }
 
-.dark-mode .email-icon {
-  background-color: color-mix(in srgb, #1d9e75 26%, var(--sidebar-bg));
-  color: color-mix(in srgb, #9fe1cb 76%, var(--text-color));
-}
-
 .dark-mode .email-popup {
   border-color: rgba(255, 255, 255, 0.12);
   background: #282828;
@@ -1124,50 +1123,29 @@ body:has(.sidebar.active) .brand-float {
    Account schon vertritt. Kein zusaetzlicher Punkt, kein zweiter Ring aussen
    herum: der Kreis WIRD gold, statt einen goldenen Rand um Gruen zu bekommen.
    Ausgeschrieben steht die Stufe eine Klick-Tiefe weiter im Popup.
-   Gesetzt von renderAccountTierMark() in static/js/user-tier.js. */
+   Gesetzt von renderAccountTierMark() in static/js/user-tier.js.
+   Seit 2026-10-22 faerbt die Stufe den Verlauf des Monogramms; das Kuerzel
+   bleibt weiss. */
 .email-icon.is-pro {
-  background-color: color-mix(in srgb, #c9a232 18%, var(--sidebar-bg));
-  border-color: color-mix(in srgb, #d4af37 52%, var(--sidebar-border));
-  color: color-mix(in srgb, #8a6b1a 80%, var(--text-color));
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .email-icon.is-pro:hover {
-    background-color: color-mix(in srgb, #c9a232 28%, var(--sidebar-bg));
-    border-color: color-mix(in srgb, #d4af37 76%, var(--sidebar-border));
-  }
+  --monogram-top: #d9b955;
+  --monogram-bottom: #a9862a;
 }
 
 /* Plus bleibt in der Farbe des Hauses -- Gold gehoert zu den teuren Modellen,
-   und die hat Plus gerade nicht. Es traegt denselben Kreis, nur mit einem
-   Rand, den man sieht. */
+   und die hat Plus gerade nicht. */
 .email-icon.is-plus {
-  background-color: color-mix(in srgb, #1d9e75 22%, var(--sidebar-bg));
-  border-color: color-mix(in srgb, #1d9e75 56%, var(--sidebar-border));
-  color: color-mix(in srgb, #0f6e56 72%, var(--text-color));
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .email-icon.is-plus:hover {
-    background-color: color-mix(in srgb, #1d9e75 46%, var(--sidebar-bg));
-    border-color: color-mix(in srgb, #1d9e75 84%, var(--sidebar-border));
-  }
-}
-
-.dark-mode .email-icon.is-plus {
-  background-color: color-mix(in srgb, #1d9e75 30%, var(--sidebar-bg));
-  color: color-mix(in srgb, #5fd3ad 80%, var(--text-color));
+  --monogram-top: #45b991;
+  --monogram-bottom: #1b8a67;
 }
 
 .dark-mode .email-icon.is-pro {
-  background-color: color-mix(in srgb, #c9a232 22%, var(--sidebar-bg));
-  color: color-mix(in srgb, #e8c76a 82%, var(--text-color));
+  --monogram-top: #c9a548;
+  --monogram-bottom: #8f7022;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .dark-mode .email-icon.is-pro:hover {
-    background-color: color-mix(in srgb, #c9a232 32%, var(--sidebar-bg));
-  }
+.dark-mode .email-icon.is-plus {
+  --monogram-top: #36a17d;
+  --monogram-bottom: #186f54;
 }
 
 

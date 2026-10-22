@@ -266,7 +266,7 @@
           <span id="quotaHeading">Today’s allowance</span>
           <span class="sidebar-quota-plan">
             <span id="quotaPlanLabel">Free</span>
-            <span id="proBadge" class="pro-badge u-display-none">PRO</span>
+            <span id="proBadge" class="pro-badge u-display-none">Pro</span>
           </span>
         </div>
         <div class="quota-primary" id="quotaPrimary" hidden>
@@ -282,19 +282,22 @@
         <p class="sidebar-quota-foot" id="quotaFoot" hidden></p>
       </div>
       <div class="sidebar-footer-row">
-        <div id="loginContainer" class="login-text" hidden></div>
-        <!-- Seit 2026-10-02 eine ruhige Identitaet wie in jedem Konto-Footer:
-             oben die Adresse (oeffnet dasselbe Konto-Menue wie das Kuerzel),
-             darunter der Tarif und fuer Free der Hinweis auf Early access als
-             schlichter Textlink statt einer Pille mit Fragezeichen.
-             firebase.js fuellt die Adresse, user-tier.js den Tarif. -->
-        <div class="sidebar-account-meta">
-          <button type="button" id="accountIdentity" class="account-identity" aria-haspopup="menu"
-            aria-controls="emailPopup" hidden></button>
-          <span id="accountPlanLine" class="account-plan-line" hidden>
-            <span id="accountPlanName" class="account-plan-name">Free</span>
-            <a id="upgradeLink" class="u-display-none" href="#" title="About early access">Early access</a>
-          </span>
+        <!-- Seit 2026-10-22 eine Zeile wie das Konto oben in den macOS-
+             Einstellungen: Monogramm, Name ueber Tarif, und die ganze Zeile
+             ist eine Flaeche (die Adresse spannt ihre Trefferflaeche darueber,
+             das Kuerzel bleibt ein eigener Knopf obenauf). Fuer Free steht
+             Early access als schlichter Textlink in der Tarifzeile.
+             firebase.js fuellt Kuerzel und Name, user-tier.js den Tarif. -->
+        <div class="sidebar-account">
+          <div id="loginContainer" class="login-text" hidden></div>
+          <div class="sidebar-account-meta">
+            <button type="button" id="accountIdentity" class="account-identity" aria-haspopup="menu"
+              aria-controls="emailPopup" hidden></button>
+            <span id="accountPlanLine" class="account-plan-line" hidden>
+              <span id="accountPlanName" class="account-plan-name">Free</span>
+              <a id="upgradeLink" class="u-display-none" href="#" title="About early access">Early access</a>
+            </span>
+          </div>
         </div>
         <!-- Kontingent: ein 20-px-Glyph ohne Zahl. Seit 2026-10-02 ein
              Kuchen (Rest des Tages) in einem feinen Ring statt eines

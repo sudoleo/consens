@@ -656,7 +656,15 @@ onIdTokenChanged(auth, async (user) => {
     // 5) E‑Mail & Logout als Popup (öffnet aus der Sidebar-Fußzeile nach oben).
     // Echte Buttons statt span/a ohne href: nur so sind Öffner und Einträge
     // per Tab erreichbar — Logout gibt es nur hier.
-    const emailInitial = user.email.charAt(0).toUpperCase();
+    // Wie ein Apple-Monogramm: Vor- und Nachname ergeben zwei Buchstaben,
+    // ohne Namen (E-Mail-Konto) bleibt es beim ersten Zeichen der Adresse.
+    // Array.from statt charAt: ein Emoji am Anfang bleibt ein ganzes Zeichen.
+    const displayName = (user.displayName || "").trim();
+    const nameParts = displayName.split(/\s+/).filter(Boolean);
+    const firstChar = text => Array.from(text)[0] || "";
+    const emailInitial = (nameParts.length > 1
+      ? firstChar(nameParts[0]) + firstChar(nameParts[nameParts.length - 1])
+      : firstChar(displayName || user.email)).toUpperCase();
     clearAccountMenuDocumentListener();
     loginContainer.innerHTML = `
       <div class="email-container">
@@ -735,7 +743,10 @@ onIdTokenChanged(auth, async (user) => {
     }
 
     if (accountIdentity) {
-      accountIdentity.textContent = user.email;
+      // Der Name, wo es einen gibt (Google), sonst der Teil der Adresse vor
+      // dem @: die ganze Adresse passte in die Zeile nie und endete in "...".
+      // Vollstaendig steht sie im Tooltip und oben im Menue.
+      accountIdentity.textContent = displayName || user.email.split("@")[0];
       accountIdentity.title = user.email;
       accountIdentity.setAttribute("aria-label", `Account menu for ${user.email}`);
       accountIdentity.setAttribute("aria-expanded", "false");
