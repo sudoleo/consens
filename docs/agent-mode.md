@@ -10,6 +10,17 @@ Mehrwert bietet oder der User das verlangt“):
   Entscheidung, Analyse, hohe Tragweite, Strittiges, alles mit Recherche, und
   immer, wenn der Nutzer Vergleich, Prüfung oder andere Modelle verlangt.
   **Im Zweifel vergleichen.** Eigene Recherche führt immer in einen Vergleich.
+- **Jede Nachricht neu entscheiden, auch Folgefragen** (seit 2026-10-22):
+  Konkrete Angaben, nach denen der Nutzer handelt (Namen, Zahlen, Versionen,
+  Preise, wo eine Einstellung in einem bestimmten Produkt sitzt), sind
+  Außenfakten, sobald das Modell sie falsch oder veraltet im Kopf haben kann:
+  vergleichen statt aus dem Gedächtnis. Anlass: In einer Schritt-für-Schritt-
+  Hilfe zum PC nannte der Agent nach mehreren direkten Antworten den Menüpfad
+  der AMD-Software aus dem Gedächtnis, falsch für die Version des Nutzers.
+  Bewusst ein Prinzip mit Beispielen statt einer Liste von Fällen (wie
+  ChatGPTs Web-Regel „Accuracy“: hohe Kosten eines kleinen Fehlers, und
+  Anthropics Rat zur „right altitude“ von System-Prompts). Live-Probe:
+  `scripts/probe_agent_routing.py` Fälle 12 (vergleichen) und 13 (direkt).
 - **Direkt antworten** (ohne Vergleich): Fragen zum Chat, zur App oder
   zu früheren Antworten, Umformulieren/Kürzen/Übersetzen/Erklären von Text aus
   dem Chat, Gruß, Dank, Rückfrage, Watch vorbereiten oder erklären, eine Seite

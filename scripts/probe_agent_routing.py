@@ -33,6 +33,15 @@ WATCHED = [
                                      "29. Oktober. Die Beobachtung ist vorbereitet: starte sie über die Karte unter "
                                      "dieser Antwort."},
 ]
+# A step-by-step help chat (2026-10-22): after direct answers the agent gave
+# the AMD software's menu path from memory, and it was wrong for that version.
+PC = [
+    {"role": "user", "content": "Ich habe einen Ryzen 5 5600X, 32 GB RAM und eine Radeon RX 6700 XT unter Windows 11. "
+                                "Kann man da noch was optimieren?"},
+    {"role": "assistant", "content": "Dein System ist ausgewogen. Drei Dinge kannst du prüfen: 1. Die Auslagerungsdatei "
+                                     "systemverwaltet lassen. 2. Den RAM-Takt im Task-Manager (XMP/DOCP). 3. Resizable BAR "
+                                     "(Smart Access Memory)."},
+]
 PASTED = ("Stimmt das? ChatGPT hat mir geschrieben: \"Wärmepumpen funktionieren in Altbauten nur mit "
           "Fußbodenheizung. Der Staat übernimmt bis zu 70 Prozent der Kosten. Unter 55 Grad Vorlauftemperatur "
           "arbeiten sie effizient.\"")
@@ -53,6 +62,8 @@ CASES = [
     ("direct", [], "Danke dir!"),
     ("direct", [], "Was kann consens.io eigentlich?"),
     ("check", [], PASTED),
+    ("compare", PC, "RAM-Takt passt. Wo prüfe ich jetzt Smart Access Memory in der AMD Software?"),
+    ("direct", PC, "Fass die drei Punkte bitte in einem Satz zusammen."),
 ]
 # Only with --memory: a memory request is answered with update_memory and text.
 MEMORY_CASES = [
