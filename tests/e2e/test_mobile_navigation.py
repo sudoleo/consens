@@ -240,6 +240,34 @@ def test_watch_navigation_uses_the_same_mobile_surface(browser, phase4_server, n
         context.close()
 
 
+@pytest.mark.parametrize('width', [390, 1440])
+def test_watches_take_the_place_of_an_open_chat(browser, phase4_server, width):
+    # In a chat shell.css shows the column as flex: Watches hung below the
+    # answer, and on the phone the menu's Watches seemed to do nothing.
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width': width, 'height': 820})
+        seed_long_answer(page)
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bis-hero\b'))
+        page.evaluate('window.scrollTo(0, 600)')
+        if width < 1100:
+            # Reading down hides the menu island; a little way back shows it.
+            page.evaluate('window.scrollBy(0, -80)')
+            expect(page.locator('.app-mobile-header')).to_be_visible()
+            page.locator('#toggleSidebarButton').click()
+            page.locator('#mobileSidebarViews #viewSwitchWatches').click()
+        else:
+            page.evaluate('window.openWatchDashboard()')
+        expect(page.locator('#watchDashboard')).to_be_visible()
+        expect(page.locator('.container')).to_be_hidden()
+        page.wait_for_function("() => document.getElementById('watchDashboard').getBoundingClientRect().top <= 0")
+        page.go_back()
+        expect(page.locator('#watchDashboard')).to_be_hidden()
+        expect(page.locator('.container')).to_be_visible()
+    finally:
+        context.close()
+
+
 def test_open_mobile_sidebar_survives_the_keyboard_resize(browser, phase4_server):
     # Chrome on Android resizes the layout viewport when the keyboard opens
     # (interactive-widget=resizes-content); typing in the chat search must not

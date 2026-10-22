@@ -134,7 +134,10 @@
   color: var(--ink);
 }
 .watch-page[hidden] { display: none; }
-body.is-watch-view .container { display: none; }
+/* !important: in a chat shell.css shows the column as flex with the same
+   specificity and later in the cascade, so the page hung below the open
+   chat (on the phone the menu's Watches seemed to do nothing). */
+body.is-watch-view .container { display: none !important; }
 .watch-page-inner {
   position: relative;
   box-sizing: border-box;
