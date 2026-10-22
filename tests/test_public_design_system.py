@@ -257,8 +257,9 @@ def test_landing_explains_consensus_watch_as_fourth_product_step():
 def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
     """The example once showed "72/100 model agreement" and "34/100 movement"
     long after watches dropped scores for goals and evidence. Every label it
-    shows has to exist in the dashboard, the alert options or the Telegram
-    message, so a rename there flags the landing too."""
+    shows has to exist in the dashboard, the watch page, the alert options,
+    the watch mail or the Telegram message, so a rename there flags the
+    landing too."""
     landing = read("templates/landing.html")
     section = landing.split('<section id="watch"', 1)[1].split("</section>", 1)[0]
 
@@ -266,12 +267,14 @@ def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
     assert "materially" not in section
     dashboard = read("static/js/watch-dashboard.js")
     alert_options = read("static/js/watch-fields.js")
+    mail = read("app/services/mailer.py")
+    watch_page = read("templates/partials/check_page.html")
     telegram = read("app/services/telegram_watch.py")
     for label, source in (
         ("Moved", dashboard),
         ("Waiting for", dashboard),
-        ("Not yet", dashboard),
-        ("Moved on evidence", dashboard),
+        ("Not yet", mail),
+        ("The answer changed", watch_page),
         ("When it moves or is reached", alert_options),
         ("The answer moved", telegram),
         ("What changed", telegram),

@@ -651,19 +651,23 @@ body.is-view-settle.is-watch-view .watch-page {
 .wd-section-note { color: var(--ink-3); font-size: var(--font-size-xs); }
 .wd-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 
-/* One text column across the card; the schedule sits in the footer next to
-   the actions instead of taking a column of its own. */
+/* A card is a teaser: status, question, one sentence on what happened, and
+   one quiet footer line (next check left, Settings right). The whole card
+   opens the watch's page, where the goal, sources and record are. */
 .wd-item {
   --wd-tone: var(--ink-3);
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "main main" "actions side" "note note" "settings settings";
+  grid-template-areas: "main main" "side actions" "note note" "settings settings";
   gap: 0 24px;
-  padding: 20px 22px 14px;
+  padding: 18px 22px 10px;
   border-radius: var(--radius-lg);
   background: var(--raise);
   transition: background-color var(--dur-light) var(--ease-standard);
+}
+@media (hover: hover) and (pointer: fine) {
+  .wd-item:not(.is-open):has(.wd-question a[href]:hover) { background: color-mix(in srgb, var(--ink) 4%, var(--raise)); }
 }
 .wd-item[hidden] { display: none; }
 .wd-item.is-moved { --wd-tone: var(--partial); }
@@ -677,14 +681,11 @@ body.is-view-settle.is-watch-view .watch-page {
   0%, 35% { background-color: color-mix(in srgb, var(--ink) 9%, var(--raise)); }
   100% { background-color: var(--raise); }
 }
-/* A hairline parts what the watch says from how it runs (actions, schedule);
-   flow-root keeps the floated picture inside, above the line. */
+/* flow-root keeps the floated picture inside the text block. */
 .wd-item-main {
   grid-area: main;
   display: flow-root;
   min-width: 0;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--line-soft);
 }
 
 .wd-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: var(--font-size-xs); }
@@ -705,6 +706,7 @@ body.is-view-settle.is-watch-view .watch-page {
 .is-resolved .wd-status-label { color: var(--agree); }
 .is-error .wd-status-label { color: var(--dispute); }
 .wd-status-time { color: var(--ink-3); }
+.wd-status-goal { color: var(--partial); font-weight: var(--font-weight-medium); }
 .wd-question { margin: 8px 0 0; font-size: var(--font-size-read); font-weight: var(--font-weight-semibold); line-height: 1.38; text-align: left; }
 .wd-question a {
   display: -webkit-box;
@@ -713,11 +715,23 @@ body.is-view-settle.is-watch-view .watch-page {
   text-decoration: none;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
-@media (hover: hover) and (pointer: fine) {
-  .wd-question a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+/* The question's link covers the card; footer, note and settings stay
+   above it (position + z-index below). */
+.wd-question a[href]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
 }
+.wd-question a[href]:focus-visible { outline: none; }
+.wd-question a[href]:focus-visible::after { outline: var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-lg); }
+.wd-item-side,
+.wd-actions,
+.wd-card-note,
+.wd-settings { position: relative; z-index: 1; }
 .is-paused .wd-question a,
 .is-error .wd-question a { color: var(--ink-2); }
 
@@ -778,33 +792,28 @@ body.is-view-settle.is-watch-view .watch-page {
 .is-paused .wd-symbol,
 .is-error .wd-symbol { opacity: .72; }
 
-/* Running text, not flex: label, goal and standing wrap like a sentence, so
-   a narrow card never leaves "· Not yet" alone on a line. */
-.wd-goal {
-  margin: 10px 0 0;
+/* The one sentence: what happened, two lines at most; the rest is on the
+   page the card opens. */
+.wd-headline {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 6px 0 0;
+  color: var(--ink-2);
   font-size: var(--font-size-sm);
-  line-height: 1.5;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
-/* One label voice per card: sentence case, small, muted -- no caps. The goal's
-   standing is a word after a dot, coloured only when it means something. */
-.wd-goal-label { color: var(--ink-3); font-size: var(--font-size-xs); }
-.wd-goal-text { min-width: 0; color: var(--ink); font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
-.wd-goal-status { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); white-space: nowrap; }
-.wd-goal-status.is-reached { color: var(--agree); }
-.wd-goal-status.is-reported { color: var(--partial); }
-/* What a match must fit sits right under the goal it belongs to. */
-.wd-goal.wd-details { margin-top: 2px; }
-.wd-details-text { color: var(--ink-2); overflow-wrap: anywhere; }
-
-.wd-headline { margin: 10px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.55; overflow-wrap: anywhere; }
 .is-moved .wd-headline,
 .is-resolved .wd-headline { color: var(--ink); }
-.wd-held { margin: 4px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.wd-headline-lead { color: var(--ink-3); }
 
-.wd-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
-.wd-sources li { min-width: 0; max-width: 100%; }
 /* Links straight to the pages (evidence of a move, else the watch's direct
-   links): favicon, site, page title -- one quiet row of chips. */
+   links): favicon and site, one short row of chips; the page's title is the
+   tooltip. They sit above the card's own link. */
+.wd-sources { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.wd-sources li { min-width: 0; max-width: 100%; }
 .wd-sources a {
   display: inline-flex;
   align-items: center;
@@ -812,12 +821,13 @@ body.is-view-settle.is-watch-view .watch-page {
   max-width: 100%;
   box-sizing: border-box;
   min-height: 28px;
-  padding: 5px 10px;
+  padding: 4px 10px;
   border-radius: var(--radius-xs);
   background: var(--well);
   box-shadow: inset 0 0 0 1px var(--line-soft);
   color: var(--ink-2);
   font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   text-decoration: none;
 }
 @media (hover: hover) and (pointer: fine) {
@@ -825,24 +835,9 @@ body.is-view-settle.is-watch-view .watch-page {
 }
 .wd-source-icon { margin-right: -2px; }
 .wd-source-icon.is-missing { visibility: hidden; }
-.wd-source-host { flex: 0 0 auto; color: var(--ink); font-weight: var(--font-weight-semibold); }
-.wd-source-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30ch; }
+.wd-source-host { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The record: one tick per check, newest right, with what it means in words
-   beside it (J26). */
-.wd-record-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 14px 0 0; }
-.wd-record { display: flex; align-items: center; gap: 3px; }
-.wd-record-caption { color: var(--ink-3); font-size: var(--font-size-xs); }
-.wd-tick { width: 6px; height: 16px; border-radius: 3px; background: var(--line); }
-.wd-tick.is-moved { background: var(--partial); }
-.wd-tick.is-preliminary { background: color-mix(in srgb, var(--partial) 45%, transparent); }
-.wd-tick.is-held { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
-.wd-tick.is-confirming { background: var(--ink-2); animation: wdPulse var(--dur-beat) var(--ease-standard) infinite; }
-.wd-tick.is-reverted { background: color-mix(in srgb, var(--ink-3) 35%, transparent); height: 8px; }
-.wd-tick.is-resolved { background: var(--agree); }
-
-/* The footer reads as one quiet line: "Next check tomorrow, 09:00 · Weekly
-   on … · Public page". Only the time itself is in ink. */
+/* The footer: when the watch looks next, muted, on the left edge. */
 .wd-item-side {
   grid-area: side;
   align-self: center;
@@ -851,21 +846,19 @@ body.is-view-settle.is-watch-view .watch-page {
   color: var(--ink-3);
   font-size: var(--font-size-xs);
   line-height: 1.6;
-  text-align: right;
 }
+.wd-item-side[hidden] { display: none; }
 .wd-side-part { white-space: nowrap; }
-/* A schedule with a far time zone may wrap inside itself (J33). */
-.wd-side-part:has(.wd-side-note) { white-space: normal; overflow-wrap: anywhere; }
-.wd-side-value { color: var(--ink); font-weight: var(--font-weight-medium); }
 .wd-sep { margin: 0 2px; color: var(--ink-3); }
 
 .wd-actions {
   grid-area: actions;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 4px;
-  margin: 10px -8px 0;
+  margin: 10px -10px 0 0;
 }
 .wd-action {
   display: inline-flex;
@@ -1106,16 +1099,25 @@ body.is-view-settle.is-watch-view .watch-page {
    Responsive + motion
    ========================================================================== */
 @media (max-width: 760px) {
-  .wd-item {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "main" "side" "actions" "note" "settings";
-    padding: 18px 16px 12px;
-  }
+  .wd-item { padding: 16px 16px 8px; }
   .wd-item { --wd-anchor: 44px; }
   .wd-image { margin-left: 12px; }
-  /* Beside the picture the question is narrower; a fourth line keeps its end. */
-  .wd-item.has-image .wd-question a { -webkit-line-clamp: 4; }
-  .wd-item-side { text-align: left; }
+  /* Beside the picture the question is narrower; a third line keeps more of it. */
+  .wd-item.has-image .wd-question a,
+  .wd-headline { -webkit-line-clamp: 3; }
+  /* The links stay one row: it swipes to the card's edge instead of wrapping. */
+  .wd-sources {
+    flex-wrap: nowrap;
+    margin-right: -16px;
+    padding-right: 16px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .wd-sources::-webkit-scrollbar { display: none; }
+  .wd-sources li { flex: 0 0 auto; max-width: none; }
+  .wd-item-side,
+  .wd-actions { margin-top: 6px; }
   .wd-explainer-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .wd-example-list { grid-template-columns: minmax(0, 1fr); }
   .wd-summary { gap: 8px 22px; }
@@ -1147,7 +1149,6 @@ body.is-view-settle.is-watch-view .watch-page {
   #viewSwitchWatches.has-watch-pulse::after { animation: none; }
   .view-switch-thumb { transition: none; }
   .is-rechecking .wd-dot,
-  .wd-tick.is-confirming,
   .watch-goal-option.is-loading,
   .wd-item.is-highlight,
   #watchDashBody.is-arriving > * { animation: none; }

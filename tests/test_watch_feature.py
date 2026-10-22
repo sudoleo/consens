@@ -2405,7 +2405,8 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("-webkit-line-clamp: 3", public_css)
         self.assertRegex(public_css, r"@media \(scripting: enabled\) \{\s*\.share-question\.is-clamped")
         self.assertIn(".wd-question a", watch_css)
-        self.assertIn("-webkit-line-clamp: 3", watch_css.split(".wd-question a {", 1)[1].split("}", 1)[0])
+        # Die Dashboard-Karte ist ein Teaser: zwei Zeilen, die Seite zeigt alles.
+        self.assertIn("-webkit-line-clamp: 2", watch_css.split(".wd-question a {", 1)[1].split("}", 1)[0])
 
     def test_watch_cards_open_their_settings_in_place_and_keep_their_styles(self):
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")

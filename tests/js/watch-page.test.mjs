@@ -333,7 +333,11 @@ describe("Cards change in place (D6, J8, J13, J14)", () => {
       const card = document.querySelector(".wd-item");
       card.querySelector(".wd-action-toggle").click();
       expect(card.classList.contains("is-open")).toBe(true);
-      expect(card.querySelector(".wd-item-side").textContent).toContain("Daily at 08:00");
+      const side = () => card.querySelector(".wd-item-side").textContent;
+      expect(side()).toMatch(/^Next check /);
+      expect(side()).not.toContain("Next check in");
+      // The server answers with the next check of the new schedule.
+      server.watches[0].next_run_at = new Date(Date.now() + 30 * 60 * 1000).toISOString();
       const interval = card.querySelector(".wd-settings select");
       interval.value = "weekly";
       interval.dispatchEvent(new window.Event("change", { bubbles: true }));
@@ -342,7 +346,7 @@ describe("Cards change in place (D6, J8, J13, J14)", () => {
       expect(patch[2]).toMatchObject({ interval: "weekly" });
       expect(document.querySelector(".wd-item")).toBe(card);
       expect(card.classList.contains("is-open")).toBe(true);
-      expect(card.querySelector(".wd-item-side").textContent).toContain("Weekly on");
+      expect(side()).toContain("Next check in");
     } finally {
       vi.useRealTimers();
     }

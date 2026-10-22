@@ -848,10 +848,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       offene Erklärung „Why a Watch, not a scheduled prompt“ samt Vergleichstabelle.
       Mit Watches: Kennzahlenzeile (watching / moved / resolved this week / next
       check), eingeklappte Erklärung, Abschnitte Watching / Resolved / Paused und
-      Delivery. Karten zeigen Status (Moved, Re-checking, Answer stands, Watching,
-      Resolved, Paused), Frage, „Waiting for“ + Zielstatus, den Satz des Zustands,
-      tragende Quellen, die Check-Leiste und rechts nächsten Check + Tages-Scan;
-      **kein** Agreement-Score. „Settings“ klappt Ziel, Intervall/Tag/Uhrzeit,
+      Delivery. Karten sind Teaser: Status mit Zeit (Moved, Re-checking, Answer
+      stands, Watching, Resolved, Paused; „Goal reported, confirming“ nur bei
+      gemeldetem Ziel), Frage (2 Zeilen, mobil 3), ein Satz zum Geschehen (2 bzw.
+      3 Zeilen, Judge-Text unübersetzt), eine Zeile Link-Chips (Favicon + Site,
+      eine je Site, Titel als Tooltip) und unten links nur der nächste Check (+
+      „Daily scan found news“); kein Ziel, keine Details, keine Check-Leiste,
+      **kein** Agreement-Score. Ein Klick irgendwo auf die Karte öffnet die
+      Watch-Seite; Chips, „Settings“ und Knöpfe reagieren selbst. Auf 375 px
+      wischen die Chips in einer Zeile. „Settings“ klappt Ziel, Intervall/Tag/Uhrzeit,
       Alerts, Kanäle, Google-Listing, Pause/Resume und Delete in der Karte auf.
       Eine abgeschlossene Watch bietet „Watch for something new“; dasselbe Ziel
       wird abgelehnt, ein neues oder leeres Ziel reaktiviert sie. ESC führt zurück.
@@ -888,10 +893,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Weiß; eine Themen-Watch (z. B. EU AI Act) das Vorschaubild eines passenden
       Quellartikels, kachelfüllend. Es lädt von `/api/watch/…/image/…` (nicht von
       der Quelle) und verlinkt auf die Quellseite. Dashboard: Bild oben rechts,
-      Text fließt herum, die Karte wird nicht höher; Zeitplan, Tages-Scan und
-      „Public page · Telegram“ stehen im Fuß rechts neben „Open page/Settings“,
-      die Zeitzone nur, wenn sie nicht die eigene ist. 375 px: Bild klein, die
-      Frage bleibt ganz lesbar (bis 4 Zeilen); auf der Watch-Seite steht das Bild
+      Text fließt herum, die Karte wird nicht höher; im Fuß links nur der nächste
+      Check, rechts „Settings“ (Zeitplan, Seite und Kanäle stehen dort). 375 px:
+      Bild klein, die Frage bis 3 Zeilen; auf der Watch-Seite steht das Bild
       neben der Kicker-Zeile, die Frage bleibt voll breit. Eine Frage ohne
       passende Quelle hat kein Bild. Das × im Dashboard (Hover, auf Touch immer
       sichtbar) entfernt das Bild dauerhaft, auch nach dem nächsten Check.

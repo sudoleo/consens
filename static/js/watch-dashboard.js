@@ -164,8 +164,12 @@
     return count;
   }
 
-  // One reading per card: tone (colour), label, the sentence under the
-  // question and the sources that carry it.
+  // One reading per card: tone (colour), label, the one sentence under the
+  // question and the sources that carry it. The card is a teaser: what
+  // happened, when, and where to look; the goal, the details and the record
+  // are one click away on the watch's page, the setup in Settings.
+  // `quoted`: the sentence is the Judge's, in the language of the answer,
+  // and is never translated; `lead` says when it was.
   function cardState(watch) {
     const point = latestPoint(watch);
     if (watch.status === "resolved") {
@@ -174,6 +178,7 @@
         key: "resolved", tone: "resolved", label: "Reached",
         when: resolution.at || watch.last_run_at,
         headline: resolution.reason || "What this watch was waiting for has happened.",
+        quoted: !!resolution.reason,
         sources: resolution.sources || []
       };
     }
@@ -181,39 +186,34 @@
       return {
         key: "paused", tone: "error", label: "Paused after errors",
         when: watch.last_run_at,
-        headline: "Three checks in a row could not complete. Resume to try again; the history is kept.",
-        sources: []
+        headline: "Three checks in a row could not complete. Resume to try again; the history is kept."
       };
     }
     if (watch.status !== "active") {
       return {
         key: "paused", tone: "paused", label: "Paused", when: watch.last_run_at,
-        headline: "No checks run while paused. Resume to continue the same record.",
-        sources: []
+        headline: "No checks run while paused. Resume to continue the same record."
       };
     }
     if (!point || watch.awaiting_first_run) {
       return {
         key: "waiting", tone: "waiting", label: "First check pending",
         when: watch.next_run_at,
-        headline: "The first check sets the baseline: what the models agree on today, with sources.",
-        sources: []
+        headline: "The first check sets the baseline: what the models agree on today, with sources."
       };
     }
     if (point.signal === "confirming") {
       return {
         key: "rechecking", tone: "rechecking", label: "Re-checking",
         when: point.ts,
-        headline: "A different reading came up. A second check runs within the hour before it counts.",
-        sources: []
+        headline: "A different reading came up. A second check runs within the hour before it counts."
       };
     }
     if (point.signal === "held") {
       return {
         key: "held", tone: "held", label: "Answer stands",
         when: point.ts,
-        headline: "The sources behind the answer did not come up in this check, and nothing contradicted them.",
-        sources: []
+        headline: "The sources behind the answer did not come up in this check, and nothing contradicted them."
       };
     }
     if (point.trigger === "changed") {
@@ -221,86 +221,46 @@
         key: "moved", tone: "moved", label: "Moved",
         when: point.ts,
         headline: point.change_summary || "The answer moved on new evidence.",
-        sources: point.evidence_sources || [],
-        held: point.held_summary || ""
+        quoted: !!point.change_summary,
+        sources: point.evidence_sources || []
       };
     }
     const move = lastMove(watch);
     const steady = steadyChecks(watch);
-    return {
-      key: "watching", tone: "watching", label: "Watching",
-      when: point.ts,
-      headline: move
-        ? `Last moved ${F().shortDay(move.ts)}: ${move.change_summary || "the answer changed on evidence."}`
-        : (steady > 1 ? `The answer has held through ${steady} checks.` : "The answer has held since the first check."),
-      sources: []
-    };
-  }
-
-  // The server says where the goal stands (watch_service.goal_state): a check
-  // that looked but found no answer is "unclear", not "not checked".
-  const GOAL_STATES = {
-    reached: { status: "Reached", tone: "reached" },
-    confirming: { status: "Reported, confirming", tone: "reported" },
-    not_met: { status: "Not yet", tone: "open" },
-    unclear: { status: "No clear answer yet", tone: "open" },
-    pending: { status: "Not checked yet", tone: "open" }
-  };
-
-  function goalLine(watch) {
-    const goal = String(watch.condition || "").trim();
-    if (!goal) return null;
-    let state = GOAL_STATES[watch.goal_state];
-    if (!state) {
-      state = watch.status === "resolved" ? GOAL_STATES.reached
-        : watch.last_condition_status === "met" ? GOAL_STATES.confirming
-          : watch.last_condition_status ? GOAL_STATES.not_met : GOAL_STATES.pending;
+    const state = { key: "watching", tone: "watching", label: "Watching", when: point.ts };
+    if (move) {
+      return Object.assign(state, {
+        lead: `Last moved ${F().shortDay(move.ts)}:`,
+        headline: move.change_summary || "the answer changed on evidence.",
+        quoted: !!move.change_summary
+      });
     }
-    return { goal: goal, status: state.status, tone: state.tone };
+    state.headline = steady > 1 ? `The answer has held through ${steady} checks.` : "The answer has held since the first check.";
+    return state;
   }
 
-  const SIGNAL_LABELS = {
-    moved: "Moved on evidence",
-    confirming: "Re-checking a different reading",
-    preliminary: "First seen; confirmed by the next check",
-    reverted: "Set aside: a re-check did not repeat it",
-    held: "Answer stood; sources did not come up",
-    restated: "Same answer, new wording",
-    stable: "No change"
-  };
-
-  // From three checks on the strip has a shape worth reading; one or two
-  // lone ticks only looked like a rendering glitch, and the sentence above
-  // already says how many checks held. What the strokes mean is written next
-  // to them, not only in a mouse tooltip (J26).
-  const RECORD_MIN_CHECKS = 3;
-
-  function buildRecord(watch) {
-    const history = (Array.isArray(watch.history) ? watch.history : []).slice(-16);
-    if (history.length < RECORD_MIN_CHECKS) return null;
-    const wrap = el("div", "wd-record-row");
-    const strip = el("div", "wd-record");
-    const moved = history.filter(point => point.signal === "moved").length;
-    const held = history.filter(point => point.signal === "held").length;
-    strip.setAttribute("aria-hidden", "true");
-    history.forEach((point, index) => {
-      const tick = el("span", "wd-tick is-" + (point.signal || (point.trigger === "changed" ? "moved" : "stable")));
-      if (index === history.length - 1 && watch.status === "resolved") tick.classList.add("is-resolved");
-      tick.title = `${F().shortDay(point.ts)} · ${SIGNAL_LABELS[point.signal] || "Checked"}`;
-      strip.appendChild(tick);
-    });
-    const parts = [`Last ${history.length} checks`];
-    if (moved) parts.push(`${moved} moved`);
-    if (held) parts.push(`${held} held without sources`);
-    wrap.append(strip, el("span", "wd-record-caption", parts.join(" · ")));
-    return wrap;
+  // A goal that was reported met and waits for its confirming check is news
+  // on a running watch; "not yet" or "no clear answer yet" is not (the
+  // server decides, watch_service.goal_state).
+  function goalReported(watch) {
+    if (watch.status !== "active" || !String(watch.condition || "").trim()) return false;
+    return watch.goal_state ? watch.goal_state === "confirming" : watch.last_condition_status === "met";
   }
 
   // Up to three links straight to the pages: the evidence of a move, else
   // the watch's direct links (services/source_links.py: the pages its answer
-  // names, deep pages with a real title). Favicons come through our own proxy.
+  // names). One short row: favicon and site, one chip per site (two equal
+  // chips read as a glitch); the page's title is the tooltip, the watch's
+  // page lists them all. Favicons come through our own proxy.
   function buildSources(sources) {
-    const items = (sources || []).filter(item => item && /^https?:\/\//.test(item.url || "")).slice(0, 3);
+    const seen = new Set();
+    const items = (sources || []).filter(item => {
+      if (!item || !/^https?:\/\//.test(item.url || "")) return false;
+      const host = item.domain || hostOf(item.url);
+      if (seen.has(host)) return false;
+      seen.add(host);
+      return true;
+    }).slice(0, 3);
     if (!items.length) return null;
     const list = el("ul", "wd-sources");
     items.forEach(item => {
@@ -322,8 +282,8 @@
       }
       link.appendChild(el("span", "wd-source-host", host));
       const title = item.title && item.title !== host ? item.title : "";
-      if (title) link.appendChild(el("span", "wd-source-title", title));
       link.title = (title ? title + " · " : "") + host;
+      if (title) link.setAttribute("aria-label", title + ", " + host);
       li.appendChild(link);
       list.appendChild(li);
     });
@@ -420,8 +380,9 @@
     return figure;
   }
 
-  // One quiet line of parts ("Next check tomorrow, 09:00 · Weekly on … ·
-  // Public page"), joined by real separators so a wrap breaks after a dot.
+  // One quiet line under a running watch: when it looks next, and news from
+  // the daily scan. How it is set up (schedule, page, channels) is in
+  // Settings; a paused or reached card says its state in the status line.
   function scheduleBlock(watch) {
     const side = el("div", "wd-item-side");
     const parts = [];
@@ -433,36 +394,23 @@
     };
     const fields = F();
     if (watch.status === "active" && watch.next_run_at) {
-      const next = el("strong", "wd-side-value");
+      const next = el("span", "wd-side-value");
       next.title = fields.dateTimeTitle(watch.next_run_at);
       liveText(next, now => fields.nextCheck(watch, now).text);
       part(next).classList.add("wd-side-next");
-      part(el("span", "wd-side-note", fields.scheduleLabel(watch)));
-    } else if (watch.status === "resolved") {
-      part(el("span", "wd-side-label", "Reached"), " ",
-        el("strong", "wd-side-value", fields.shortDay(watch.resolution?.at) || "on evidence"));
-    } else {
-      part(el("strong", "wd-side-value", "Paused"));
-      part(el("span", "wd-side-note", fields.scheduleLabel(watch)));
     }
     const probe = watch.last_probe;
-    if (watch.status === "active" && probe && probe.at) {
+    if (watch.status === "active" && probe && probe.at && probe.outcome === "new_evidence") {
       const scan = el("span", "wd-side-probe");
-      liveText(scan, now => probe.outcome === "new_evidence"
-        ? `Daily scan found news ${fields.relativePast(probe.at, now)}`
-        : probe.outcome === "failed"
-          ? "Daily scan unavailable"
-          : `Daily scan: nothing new (${fields.relativePast(probe.at, now)})`);
+      liveText(scan, now => `Daily scan found news ${fields.relativePast(probe.at, now)}`);
       part(scan);
     }
-    // How the watch is set up belongs with its schedule, not in the status line.
-    if (watch.visibility === "public") part(el("span", "wd-side-meta", "Public page"));
-    if (watch.telegram_enabled) part(el("span", "wd-side-meta", "Telegram"));
     // A no-break space ties each dot to the part before it.
     parts.forEach((node, index) => {
       if (index) side.append(" ", separator(), " ");
       side.appendChild(node);
     });
+    side.hidden = !parts.length;
     return side;
   }
 
@@ -484,16 +432,21 @@
     if (state.when && state.key !== "waiting") {
       // Say what the time is: the last check, unless the label already is
       // the event ("Moved", "Reached").
-      const prefix = state.key === "watching" || state.key === "held" ? "checked "
-        : state.key === "paused" ? "last check " : "";
       const time = el("time", "wd-status-time");
       time.dateTime = state.when;
       time.title = F().dateTimeTitle(state.when);
-      liveText(time, now => prefix + F().relativePast(state.when, now));
+      liveText(time, now => {
+        const when = F().relativePast(state.when, now);
+        return state.key === "watching" || state.key === "held" ? `checked ${when}`
+          : state.key === "paused" ? `last check ${when}` : when;
+      });
       status.appendChild(time);
     }
+    if (goalReported(watch)) status.appendChild(el("span", "wd-status-goal", "Goal reported, confirming"));
     main.appendChild(status);
 
+    // The question is the card's link: the whole card leads to the watch's
+    // page (its ::after covers the card; the controls sit above it).
     const question = el("h3", "wd-question");
     const link = el("a", "", watch.question || "(untitled)");
     link.title = watch.question || "";
@@ -503,31 +456,14 @@
     question.appendChild(link);
     main.appendChild(question);
 
-    const goal = goalLine(watch);
-    if (goal) {
-      const line = el("p", "wd-goal");
-      // Spaces between the parts let the line break like a sentence; a
-      // no-break space keeps the dot at the end of a line, never opening one.
-      line.append(
-        el("span", "wd-goal-label", "Waiting for"), " ",
-        el("span", "wd-goal-text", goal.goal), " ", separator(), " ",
-        el("span", "wd-goal-status is-" + goal.tone, goal.status)
-      );
-      main.appendChild(line);
-    }
-    const details = String(watch.requirements || "").trim();
-    if (details) {
-      const line = el("p", "wd-goal wd-details");
-      line.append(el("span", "wd-goal-label", "Details"), " ", el("span", "wd-details-text", details));
-      main.appendChild(line);
-    }
-
-    main.appendChild(el("p", "wd-headline", state.headline));
-    if (state.held) main.appendChild(el("p", "wd-held", "Held: " + state.held));
+    const headline = el("p", "wd-headline");
+    if (state.lead) headline.append(el("span", "wd-headline-lead", state.lead), " ");
+    const said = el("span", "", state.headline);
+    if (state.quoted) said.setAttribute("data-i18n-skip", "");
+    headline.appendChild(said);
+    main.appendChild(headline);
     const sources = buildSources(state.sources && state.sources.length ? state.sources : watch.key_links);
     if (sources) main.appendChild(sources);
-    const record = buildRecord(watch);
-    if (record) main.appendChild(record);
     return main;
   }
 
@@ -537,18 +473,12 @@
     return button;
   }
 
-  // The footer row: open the page, act on what the state names (Resume next
-  // to "Resume to continue", J22), the two ways on from a reached goal, and
-  // Settings.
+  // The footer row: act on what the state names (Resume next to "Resume to
+  // continue", J22), the two ways on from a reached goal, and Settings. The
+  // page itself opens from anywhere on the card.
   function buildActions(entry) {
     const watch = entry.watch;
     const actions = el("div", "wd-actions");
-    const open = el("a", "wd-action", "Open page");
-    open.href = watch.share_path || "#";
-    open.target = "_blank";
-    open.rel = "noopener";
-    open.dataset.action = "open";
-    actions.appendChild(open);
     if (watch.status !== "active" && watch.status !== "resolved") {
       actions.appendChild(actionButton("Resume", "resume", () => setStatus(entry, "active"), "is-strong"));
     }

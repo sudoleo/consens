@@ -44,6 +44,8 @@ describe("cardState", () => {
 
     expect(moved.key).toBe("moved");
     expect(moved.headline).toBe("GPT-6 was officially released.");
+    // The Judge's sentence is shown as written, never translated.
+    expect(moved.quoted).toBe(true);
     expect(moved.sources[0].url).toBe("https://openai.com/gpt-6");
   });
 
@@ -87,12 +89,13 @@ describe("cardState", () => {
     const state = cardState(watch);
 
     expect(state.key).toBe("watching");
-    expect(state.headline).toContain("Astra announced.");
+    expect(state.lead).toMatch(/^Last moved .+:$/);
+    expect(state.headline).toBe("Astra announced.");
   });
 });
 
 describe("dashboard render", () => {
-  it("groups watches and shows the goal with its status", async () => {
+  it("groups watches; the goal is news on the card only once it is reported", async () => {
     const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
     const { window } = harness;
     window.history.replaceState(null, "", "/app/watches");
@@ -107,7 +110,11 @@ describe("dashboard render", () => {
         condition: "Guidance is published",
         resolution: { at: "2026-09-20T08:00:00+00:00", reason: "Published.", sources: [] },
         history: [], share_path: "/s/b"
-      }
+      },
+      active({ signal: "stable", trigger: "stable" }, {
+        id: "w3", question: "Adios Pro 4 under 140 euros?", condition: "A shop offers it under 140 EUR",
+        goal_state: "confirming", share_path: "/s/c"
+      })
     ];
     window.fetch = vi.fn(async (path) => ({
       ok: true,
@@ -122,8 +129,12 @@ describe("dashboard render", () => {
     const sections = [...body.querySelectorAll(".wd-section:not([hidden]) .wd-section-head h2")].map(node => node.textContent);
     // A goal that happened is "Reached", one word for it everywhere (J18).
     expect(sections).toEqual(["Watching", "Reached", "Delivery"]);
-    expect(body.querySelector(".wd-item.is-moved .wd-goal-text").textContent).toBe("GPT-6 is released");
-    expect(body.querySelector(".wd-item.is-resolved .wd-goal-status").textContent).toBe("Reached");
+    // The goal and "not yet" are on the watch's page and in Settings; the
+    // card says what happened (Moved, Reached) and a reported goal.
+    expect(body.querySelector(".wd-goal")).toBeNull();
+    expect(body.querySelector(".wd-item.is-moved .wd-status-goal")).toBeNull();
+    expect(body.querySelector(".wd-item.is-resolved .wd-status-label").textContent).toBe("Reached");
+    expect(body.querySelector('[data-watch-id="w3"] .wd-status-goal').textContent).toBe("Goal reported, confirming");
     expect(body.textContent).toContain("Why a watch, not a scheduled prompt");
     expect(body.textContent).not.toMatch(/\/100/);
   });
@@ -173,9 +184,9 @@ describe("dashboard render", () => {
     expect(card.classList.contains("has-image")).toBe(true);
     expect(figure.classList.contains("is-item")).toBe(true);
     expect(card.querySelector(".wd-question a").textContent).toBe("Adios Pro 4 in 44.5 under 140 euros?");
-    // Setup details moved from the status line into the schedule footer.
+    // How the watch is set up is in Settings, not on the card.
     expect(card.querySelector(".wd-status").textContent).not.toContain("Public");
-    expect(card.querySelector(".wd-side-meta").textContent).toBe("Public page");
+    expect(card.querySelector(".wd-item-side").textContent).not.toContain("Public");
     const img = figure.querySelector("img");
     expect(img.getAttribute("src")).toBe(imageUrl);
     expect(img.alt).toBe("");
@@ -196,7 +207,7 @@ describe("dashboard render", () => {
     expect(card.classList.contains("has-image")).toBe(true);
   });
 
-  it("says where the goal stands, keeps one label voice and shows the record from three checks", async () => {
+  it("keeps a card to status, question, one sentence and the next check", async () => {
     const harness = boot('<div id="watchDashboard"><div id="watchDashLimit" hidden></div><div id="watchDashBody"></div></div>');
     const { window } = harness;
     window.history.replaceState(null, "", "/app/watches");
@@ -209,12 +220,14 @@ describe("dashboard render", () => {
       active({ signal: "stable", trigger: "stable" }, {
         id: "w1", question: "Promotionsstelle an der Hochschule Hannover?", share_path: "/s/a",
         condition: "Eine Stelle wird ausgeschrieben", goal_state: "unclear", history: two,
-        visibility: "public", telegram_enabled: true
+        visibility: "public", telegram_enabled: true,
+        last_probe: { at: "2026-10-11T09:00:00+00:00", outcome: "nothing_new" }
       }),
       active({ signal: "stable", trigger: "stable" }, {
         id: "w2", question: "Cursor or Claude Code?", share_path: "/s/b",
         condition: "Cursor drops its price", goal_state: "pending",
-        history: [...two, { ts: "2026-10-12T07:00:00+00:00", signal: "stable", trigger: "stable" }]
+        history: [...two, { ts: "2026-10-12T07:00:00+00:00", signal: "stable", trigger: "stable" }],
+        last_probe: { at: "2026-10-12T09:00:00+00:00", outcome: "new_evidence" }
       })
     ];
     window.fetch = vi.fn(async (path) => ({
@@ -229,19 +242,21 @@ describe("dashboard render", () => {
     const card = text => [...window.document.querySelectorAll(".wd-item")]
       .find(node => node.querySelector(".wd-question a").textContent.startsWith(text));
     const job = card("Promotionsstelle");
-    // Checked, but no answer: never "Not checked yet".
-    expect(job.querySelector(".wd-goal-status").textContent).toBe("No clear answer yet");
-    expect(card("Cursor").querySelector(".wd-goal-status").textContent).toBe("Not checked yet");
     expect(job.querySelector(".wd-status-time").textContent).toMatch(/^checked /);
     expect(job.querySelector(".wd-headline").textContent).toBe("The answer has held through 2 checks.");
-    // Two checks are no shape yet; three are.
-    expect(job.querySelector(".wd-record")).toBeNull();
-    expect(card("Cursor").querySelectorAll(".wd-record .wd-tick").length).toBe(3);
-    // The footer is one line of parts; each dot is tied to the part before it.
-    // A next check in the past is due, never "12 min ago" (J5).
+    // "Not yet", the record and "Open page" are on the watch's page; the
+    // question is the card's one link to it.
+    expect(job.querySelector(".wd-goal, .wd-record, [data-action='open']")).toBeNull();
+    expect(job.querySelector(".wd-question a").getAttribute("href")).toBe("/s/a");
+    expect(card("Cursor").querySelector(".wd-record")).toBeNull();
+    // The footer: when it looks next (a time in the past is due, never
+    // "12 min ago", J5) and news from the daily scan; no setup, no "nothing new".
     const side = job.querySelector(".wd-item-side");
-    expect(side.textContent.replace(/ /g, " ")).toMatch(/^Check due now · Weekly · Public page · Telegram$/);
-    expect([...side.querySelectorAll(".wd-sep")].every(dot => dot.previousSibling.textContent === " ")).toBe(true);
+    expect(side.textContent).toBe("Check due now");
+    const cursor = card("Cursor").querySelector(".wd-item-side");
+    expect(cursor.textContent).toMatch(/^Check due now · Daily scan found news /);
+    // A no-break space ties each dot to the part before it.
+    expect([...cursor.querySelectorAll(".wd-sep")].every(dot => dot.previousSibling.textContent === " ")).toBe(true);
   });
 
   it("leads straight to the pages: direct links, or the evidence of a move", async () => {
@@ -254,7 +269,9 @@ describe("dashboard render", () => {
         id: "w1", question: "Adios Pro 4 unter 140 €?", share_path: "/s/a",
         key_links: [
           { url: "https://www.idealo.de/preisvergleich/OffersOfProduct/1", title: "Adios Pro 4", domain: "idealo.de" },
-          { url: "javascript:alert(1)", title: "bad", domain: "x.de" }
+          { url: "https://www.idealo.de/preisvergleich/OffersOfProduct/2", title: "Adios Pro 4 (Herren)", domain: "idealo.de" },
+          { url: "javascript:alert(1)", title: "bad", domain: "x.de" },
+          { url: "https://geizhals.de/a", title: "adidas Adizero", domain: "geizhals.de" }
         ]
       }),
       active({
@@ -276,15 +293,18 @@ describe("dashboard render", () => {
 
     const card = text => [...window.document.querySelectorAll(".wd-item")]
       .find(node => node.querySelector(".wd-question a").textContent.startsWith(text));
+    // One chip per site, favicon and site; the page's title is the tooltip.
     const links = card("Adios").querySelectorAll(".wd-sources a");
-    expect(links.length).toBe(1);
+    expect([...links].map(link => link.textContent)).toEqual(["idealo.de", "geizhals.de"]);
     expect(links[0].href).toBe("https://www.idealo.de/preisvergleich/OffersOfProduct/1");
     expect(links[0].rel).toContain("noreferrer");
+    expect(links[0].title).toBe("Adios Pro 4 · idealo.de");
     expect(links[0].querySelector(".wd-source-icon").getAttribute("src")).toBe("/api/topics/favicon?d=idealo.de");
-    expect(links[0].querySelector(".wd-source-title").textContent).toBe("Adios Pro 4");
     // A move shows what moved it, not the standing direct links.
-    const moved = card("GPU").querySelectorAll(".wd-sources a");
-    expect([...moved].map(link => link.href)).toEqual(["https://geizhals.de/p"]);
+    const moved = card("GPU");
+    expect([...moved.querySelectorAll(".wd-sources a")].map(link => link.href)).toEqual(["https://geizhals.de/p"]);
+    // The Judge's sentence stays in the language it was written in.
+    expect(moved.querySelector(".wd-headline [data-i18n-skip]").textContent).toBe("Price dropped.");
   });
 
   it("shows logos without a frame and otherwise the watch's symbol", async () => {
@@ -356,7 +376,7 @@ describe("dashboard render", () => {
     expect(card.querySelector(".wd-image").classList.contains("is-article")).toBe(true);
     expect(card.querySelector(".wd-status time")).toBeNull();
     expect(card.querySelector(".wd-item-side .wd-side-value")).not.toBeNull();
-    expect(card.querySelector(".wd-side-meta").textContent).toBe("Telegram");
+    expect(card.querySelector(".wd-item-side").textContent).not.toContain("Telegram");
   });
 });
 
@@ -429,7 +449,7 @@ describe("details and wrong matches", () => {
     return { window, calls };
   }
 
-  it("shows the details under the goal and saves them from the settings", async () => {
+  it("keeps the details in the settings and saves them from there", async () => {
     const { window, calls } = dashboard([active({ signal: "stable", trigger: "stable" }, {
       id: "w1", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",
       condition: "A new pair is offered for under 140 EUR", goal_state: "pending",
@@ -439,7 +459,7 @@ describe("details and wrong matches", () => {
     await window.App.watchDashboard.render();
     const card = window.document.querySelector(".wd-item");
 
-    expect(card.querySelector(".wd-details").textContent).toBe("Details Only new, from a shop.");
+    expect(card.querySelector(".wd-item-main").textContent).not.toContain("Only new");
     const input = card.querySelector(".wd-goal-input.is-details");
     expect(input.value).toBe("Only new, from a shop.");
     expect(card.querySelector(".wd-settings").textContent).toContain("Ruled out: kleinanzeigen.de.");

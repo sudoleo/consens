@@ -2986,7 +2986,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   steht der Fehler am Feld) und „Remove picture“ mit Undo statt des × auf dem
   Bild (J23; das Bild führt wie die Frage zur eigenen Watch-Seite). Sektionen:
   Watching · Paused (Fehler zuerst) · Reached (J22); pausierte Karten haben
-  „Resume“ neben „Open page“, erreichte einen Fuß mit Delete (J21). Der
+  „Resume“ neben „Settings“, erreichte einen Fuß mit Delete (J21). Der
   Kopf bleibt in jedem Zustand gleich (eine Überschrift, „New watch“; am
   Limit als einfacher Knopf), der Leerzustand zeigt darunter auf derselben
   Kante nur „Start from an example“ (J24); die Kennzahlenzeile lässt Nullen
@@ -2998,10 +2998,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`close`-Event des Dialogs, nicht nach einem Logout). Es präsentiert nur das Server-Signal aus
   `drift_signal` (siehe `docs/watch-evidence-model.md`), leitet nichts selbst ab:
   `cardState` liefert pro Watch Ton/Label/Satz/Quellen — *Moved* (mit
-  `evidence_sources` und „Held: …“), *Re-checking* (`confirming`), *Answer
-  stands* (`held`), *Watching* (letzte Bewegung oder „No change on evidence in
-  N checks“), *Resolved* (Grund + Quellen aus `resolution`), *Paused*, *First
-  check pending*. Aufbau: ruhige Kennzahlenzeile (watching / moved / reached
+  `evidence_sources`), *Re-checking* (`confirming`), *Answer stands* (`held`),
+  *Watching* (`lead` „Last moved …:“ + Satz der letzten Bewegung oder „The
+  answer has held through N checks.“), *Resolved* (Grund + Quellen aus
+  `resolution`), *Paused*, *First check pending*; `quoted` markiert einen Satz
+  des Judges (`change_summary`, `resolution.reason`), der mit
+  `data-i18n-skip` in seiner Sprache bleibt. Aufbau: ruhige Kennzahlenzeile (watching / moved / reached
   this week / next check, Nullen weggelassen), Abschnitte *Watching* (neu
   angelegte zuerst, dann Moved → Re-checking → Held → Watching → Pending,
   dann nach nächstem Check) / *Paused* / *Reached*, *Delivery*
@@ -3011,28 +3013,26 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, standardmäßig zu;
   `consensio.watchExplainer.open.v2` merkt nur, was der Leser selbst
   umschaltet — v1 speicherte auch das `toggle`-Event des eigenen
-  `open = true` und hielt die Kachel so dauerhaft offen). Jede Karte zeigt
-  eine Textspalte über die ganze Breite: Status (Zeit als „checked 3 h ago“ bzw.
-  „last check …“; bei „First check pending“ ohne Zeit, die steht im Fuß), Frage
-  (3 Zeilen geklemmt), „Waiting for“ + Ziel + Zielstand, darunter „Details“
-  (`watch.requirements`, `.wd-details`), den Satz des Zustands
-  („The answer has held through N checks.“), bis zu drei Link-Chips (Favicon,
-  Site, Titel; bei einer Bewegung ihre Belege, sonst `watch.key_links`) und ab drei
-  Checks eine Check-Leiste (ein Strich je Check, Form nach Signal; ein, zwei
-  Striche sahen wie ein Darstellungsfehler aus) mit sichtbarer Beschriftung
-  daneben („Last 6 checks · 2 moved“, J26). Den Zielstand liefert der
-  Server (`watch_service.goal_state`: reached | confirming | not_met | unclear |
-  pending) — ein Check, der das aktuelle Ziel bewertet, aber keine Antwort
-  gefunden hat (`unknown`), heißt „No clear answer yet“, nie „Not checked yet“;
-  er ist Text hinter einem Punkt, gefärbt nur bei Reached (`--agree`) und
-  Reported (`--partial`). Pro Karte gibt es keine Versalien-Etiketten; Ziel- und
-  Fußzeile laufen als Fließtext mit echten Trennpunkten (`.wd-sep`, per
-  geschütztem Leerzeichen an den Teil davor gebunden, damit kein Umbruch eine
-  Zeile mit „·“ beginnt). Eine Haarlinie (`--line-soft`) trennt Inhalt
-  (`.wd-item-main`, `display: flow-root` hält das Bild darüber) und Fuß. Oben
+  `open = true` und hielt die Kachel so dauerhaft offen). Jede Karte ist ein
+  Teaser (Max 2026-10-23: „zu viel Input, schreckt ab“) — Status (Zeit als
+  „checked 3 h ago“ bzw. „last check …“; bei „First check pending“ ohne Zeit,
+  die steht im Fuß; „Goal reported, confirming“ nur bei `goal_state`
+  confirming, sonst kein Zielstand: „Not yet“ ist keine Nachricht), Frage
+  (2 Zeilen geklemmt, mobil 3), ein Satz zum Geschehen (`.wd-headline`, 2 bzw.
+  3 Zeilen) und eine Zeile Link-Chips (`.wd-sources`: Favicon + Site, eine je
+  Site, max. drei, Seitentitel als Tooltip; bei einer Bewegung ihre Belege,
+  sonst `watch.key_links`; mobil wischbar statt umbrechend). Ziel, Details
+  (`watch.requirements`), Zeitplan, Kanäle und Verlauf stehen auf der
+  Watch-Seite bzw. in „Settings“. Die Frage ist der Link der Karte: ihr
+  `::after` deckt die ganze Karte ab, Chips, Fuß, Notiz und Einstellungen
+  liegen per `z-index` darüber; Hover tönt die Karte, der Fokusring liegt auf
+  dem `::after`. Pro Karte gibt es keine Versalien-Etiketten; die Fußzeile
+  läuft als Fließtext mit echten Trennpunkten (`.wd-sep`, per geschütztem
+  Leerzeichen an den Teil davor gebunden, damit kein Umbruch eine Zeile mit
+  „·“ beginnt; `.wd-item-main`, `display: flow-root` hält das Bild darin). Oben
   rechts schwebt immer etwas zum Wiedererkennen (`.wd-image` float, Karte
   `.has-image`), alle Arten auf derselben Höhe `--wd-anchor` (60 px, mobil
-  44 px), der Text fließt herum; mobil darf die Frage daneben vier Zeilen haben.
+  44 px), der Text fließt herum.
   Hat die Watch ein Bild (`watch.image`), ist es eine 3:2-Kachel (`is-item` ganz
   auf Weiß, im Dunkelmodus mitsamt Foto gedämpft, J31; `is-article` füllend) oder bei `is-logo` die abgerundeten
   App-Icon-Kacheln ohne Rahmen (Haarlinien-Schatten per `drop-shadow`). Sonst — und sobald ein
@@ -3041,11 +3041,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `SYMBOL_ICONS`, unbekannte Namen → `eye`). Nur Pfade
   `/api/watch/{id}/image/{token}` werden gerendert, „Remove picture“ in den
   Einstellungen ruft nach dem Undo `DELETE /api/watch/{id}/image`. Im Fuß
-  stehen links „Open page“/(„Resume“)/„Settings“, rechts eine leise Zeile
-  „Next check tomorrow, 09:00 · Zeitplan (Zeitzone nur, wenn sie nicht die
-  eigene ist, als Stadt) · Tages-Scan (`last_probe`) · Public page · Telegram“,
-  nur die Zeit in `--ink` (mobil darüber, linksbündig); eine eigene rechte
-  Spalte gibt es nicht mehr. „Settings“
+  stehen links leise „Next check tomorrow, 09:00“ (nur laufende Watches, dazu
+  „Daily scan found news …“ aus `last_probe`; „nothing new“ und Ausfälle nicht),
+  rechts („Resume“)/(die zwei Wege einer erreichten Watch)/„Settings“. „Settings“
   klappt in der Karte die Zielliste, „Details that matter“ (PATCH
   `requirements`, mit „Ruled out: …“ aus `rejected_sources`),
   How often/Day/Time, Notify me, Send to, Watch page, Google-Listing,
