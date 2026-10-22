@@ -967,12 +967,12 @@ body.dark-mode {
   --composer-shadow: var(--field-lift);
   --composer-shadow-active: var(--field-lift-active);
   --composer-halo: var(--ground);
-  /* Focus in the question: the edge one step firmer, a soft light round
+  /* The empty start screen: the edge one step firmer, a soft light round
      the field in the ink's own tone (dark on light, light on dark). */
-  --composer-edge-focus: color-mix(in srgb, var(--ink) 30%, transparent);
-  --composer-focus-glow:
-    0 0 0 3px color-mix(in srgb, var(--ink) 7%, transparent),
-    0 0 30px 0 color-mix(in srgb, var(--ink) 14%, transparent);
+  --composer-start-edge: color-mix(in srgb, var(--ink) 24%, transparent);
+  --composer-start-glow:
+    0 0 0 3px color-mix(in srgb, var(--ink) 6%, transparent),
+    0 0 28px 0 color-mix(in srgb, var(--ink) 12%, transparent);
 }
 .claim-popover {
   background: var(--chat-surface);
@@ -995,12 +995,19 @@ body:not(.dark-mode) .chat-input-container {
   border-color: var(--line);
   box-shadow: var(--composer-shadow-active);
 }
-/* Where the question is typed, the field glows softly: no colour and no
-   hard ring, a tint of the ink round it. A deeper shadow alone showed
-   nothing on the dark page. A press on (+) or the models does not light it. */
-.chat-input-container:has(.input-field:focus) {
-  border-color: var(--composer-edge-focus);
-  box-shadow: var(--composer-shadow-active), var(--composer-focus-glow);
+/* On the empty start screen the field is the one thing to do, so it stands
+   out a little: no colour, no hard ring, a tint of the ink round it. It is
+   a state of the page, not of the pointer or the keys: it is there before
+   anyone clicks, stays while typing (focus only deepens the lift, as
+   everywhere) and fades with the box-shadow transition when the start
+   screen gives way to the chat. */
+body.is-hero .chat-input-container {
+  border-color: var(--composer-start-edge);
+  box-shadow: var(--composer-shadow), var(--composer-start-glow);
+}
+body.is-hero .chat-input-container:focus-within {
+  border-color: var(--composer-start-edge);
+  box-shadow: var(--composer-shadow-active), var(--composer-start-glow);
 }
 
 .input-field {
