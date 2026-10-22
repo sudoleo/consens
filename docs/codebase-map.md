@@ -4038,7 +4038,9 @@ Schreibregeln `AGENT_ANSWER_SECTION`). Seit 2026-10-11 entscheidet der Agent nac
 ANSWER DIRECTLY“, ob er vergleicht (Fakten, Aktuelles, Rat, Strittiges, Recherche,
 auf Wunsch; im Zweifel ja) oder direkt antwortet (Chat/App/frühere Antworten,
 Umformulieren/Übersetzen, Gruß/Rückfrage, Watch, eine gezeigte Seite lesen);
-beides in guided und free. Sonst mit begründeten Annahmen weiterarbeiten. Die Schreibregeln (Journalist, Treue zur Substanz, eigene
+beides in guided und free. Urteile (Meinung, Bewertung, Kritik, Empfehlung)
+werden seit 2026-10-22 immer verglichen, auch zu angehängten Dateien und bei
+„deine Meinung“; nur auf ausdrücklichen Wunsch ohne Vergleich. Sonst mit begründeten Annahmen weiterarbeiten. Die Schreibregeln (Journalist, Treue zur Substanz, eigene
 Beraterstimme, keine Superlative, Uneinigkeit nur wo sie die Entscheidung ändert,
 Quellenauszüge, `checked_text`, Antwort ohne Vergleich) stehen im Abschnitt
 „WRITING THE ANSWER“ (`AGENT_ANSWER_SECTION`), weil der Agent die Antwort selbst

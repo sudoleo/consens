@@ -21,10 +21,25 @@ Mehrwert bietet oder der User das verlangt“):
   ChatGPTs Web-Regel „Accuracy“: hohe Kosten eines kleinen Fehlers, und
   Anthropics Rat zur „right altitude“ von System-Prompts). Live-Probe:
   `scripts/probe_agent_routing.py` Fälle 12 (vergleichen) und 13 (direkt).
-- **Direkt antworten** (ohne Vergleich): Fragen zum Chat, zur App oder
-  zu früheren Antworten, Umformulieren/Kürzen/Übersetzen/Erklären von Text aus
-  dem Chat, Gruß, Dank, Rückfrage, Watch vorbereiten oder erklären, eine Seite
-  lesen, auf die der Nutzer zeigt, und daraus antworten.
+- **Direkt antworten** (ohne Vergleich) nur, wenn der Chat selbst die Antwort
+  festlegt, unabhängige Antworten sich also nicht in der Sache unterscheiden
+  könnten: Fragen zum Chat, zur App oder zu früheren Antworten,
+  Umformulieren/Kürzen/Übersetzen/Erklären von Text aus dem Chat, Gruß, Dank,
+  Rückfrage, Watch vorbereiten oder erklären, eine Seite lesen, auf die der
+  Nutzer zeigt, und daraus antworten.
+- **Urteile werden immer verglichen** (seit 2026-10-22): Meinung, Bewertung,
+  Kritik, Empfehlung, auch wenn ihr Gegenstand eine angehängte Datei, ein Bild
+  oder ein eingefügter Text ist (die Vergleichsmodelle bekommen die Dateien mit),
+  und auch bei „deine Meinung“ oder „dein Hottake“: Der Nutzer fragt consens.io,
+  nicht ein einzelnes Modell. Nur wenn er ausdrücklich keinen Vergleich will,
+  antwortet der Agent allein. Anlass: In 10 Tagen liefen 45 von 102 Agent-Antworten
+  ohne Vergleich. Wo Max den Vergleich danach selbst nachfordern musste, waren es
+  Urteile mit Sonnet 5.5 („was ist deine Meinung zu diesem Plan?“ mit PDF,
+  „wie bewertest du consens.io?“, „Hottake“, „würdest du“), dazu „was ist an
+  dieser UI verbesserungswürdig?“ mit Screenshot. Sonnet
+  erklärte selbst, es habe „deine Meinung“ wörtlich genommen und die Datei wie
+  Text aus dem Chat behandelt. Live-Probe: `scripts/probe_agent_routing.py`
+  Fälle 14–17 (vergleichen) und 18–19 (direkt), Dateien als App-Beleg-Block.
 
 Das gilt im geführten und im freien Modus gleich. Direkte Antworten sind nicht
 gekennzeichnet (Max); sie haben keinen Score und keine Prüfung, nur gegebenenfalls

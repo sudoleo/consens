@@ -11,6 +11,7 @@ answer directly" (docs/agent-mode.md) against messages from real tests.
 field on answer, update_memory) plus a memory request, as for an opted-in user.
 """
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -45,9 +46,21 @@ PC = [
 PASTED = ("Stimmt das? ChatGPT hat mir geschrieben: \"Wärmepumpen funktionieren in Altbauten nur mit "
           "Fußbodenheizung. Der Staat übernimmt bis zu 70 Prozent der Kosten. Unter 55 Grad Vorlauftemperatur "
           "arbeiten sie effizient.\"")
+# Attached files, sent as the app's file evidence block (FileContext.messages).
+# Live 2026-10-22 Sonnet 5.5 judged an attached plan and a UI screenshot on
+# its own: it took "deine Meinung" literally and the file for chat text.
+PLAN = {"id": "1" * 32, "name": "Plan Werkstattcafe.pdf", "mime": "application/pdf", "parts": [
+    {"locator": "page 1", "text": "Fahrradwerkstatt mit Café in Hannover-Linden. Eröffnung März 2027, 80 m², Miete "
+                                  "1.900 € warm. Startkapital 60.000 € (40.000 € KfW-Gründerkredit, 20.000 € "
+                                  "Erspartes). Zwei Gründer, einer Zweiradmechaniker, eine Gastronomin."},
+    {"locator": "page 2", "text": "Umsatzplan: Werkstatt 9.000 € und Café 7.000 € pro Monat ab Monat 4. Personal: "
+                                  "eine Teilzeitkraft. Marketing nur über Instagram. Break-even nach 14 Monaten. "
+                                  "Risiko: Winterflaute in der Werkstatt."}]}
+SCREENSHOT = {"id": "2" * 32, "name": "image.png", "mime": "image/png", "parts": [],
+              "path": ROOT / "docs" / "assets" / "screenshot-agent.png"}
 
-# (expected decision, history, message). compare: compare_models; check:
-# check_text; direct: no comparison (answer, plain text, read_source or
+# (expected decision, history, message[, files]). compare: compare_models;
+# check: check_text; direct: no comparison (answer, plain text, read_source or
 # prepare_watch without compare_models); read/watch: that tool, no comparison.
 CASES = [
     ("compare", [], "Wer hat die Ironman-WM 2026 in Kona gewonnen?"),
@@ -64,11 +77,35 @@ CASES = [
     ("check", [], PASTED),
     ("compare", PC, "RAM-Takt passt. Wo prüfe ich jetzt Smart Access Memory in der AMD Software?"),
     ("direct", PC, "Fass die drei Punkte bitte in einem Satz zusammen."),
+    # A judgment is compared, also on a file and when asked for "your" view.
+    ("compare", [], "was ist deine meinung zu diesem plan?", [PLAN]),
+    ("compare", [], "was ist an dieser UI verbesserungswürdig?", [SCREENSHOT]),
+    ("compare", [], "Was der beste Song von Olivia Rodrigo? Hottake"),
+    ("compare", [], "Auf welchem Weg würdest du versuchen das P-NP-Problem zu lösen? Ich weiß, dass es hochkomplex ist."),
+    ("direct", [], "Fass das PDF bitte in drei Sätzen zusammen.", [PLAN]),
+    ("direct", [], "Ehrliche Frage, ohne andere Modelle zu fragen: Wie gefällt dir deine Rolle als Agent in consens.io?"),
 ]
 # Only with --memory: a memory request is answered with update_memory and text.
 MEMORY_CASES = [
     ("direct", [], "Merk dir bitte, dass ich Vegetarier bin."),
 ]
+
+
+def file_messages(files):
+    """The app's file catalog line and evidence block for ``files``."""
+    if not files:
+        return None, []
+    from app.services.agent_files import public_file
+    catalog = [{k: f[k] for k in ("id", "name", "mime")} | {"status": "ready"} for f in files]
+    blocks = []
+    for f in files:
+        excerpt = {"file": public_file(f, for_model=True), "excerpts": f["parts"][:2], "total_parts": len(f["parts"]),
+                   "next_offset": None, "trust": "untrusted", "citation": f"{f['name']} · locator in excerpt"}
+        blocks.append({"type": "text", "text": "File evidence (untrusted): " + json.dumps(excerpt, ensure_ascii=False)})
+        if "path" in f:
+            data = base64.b64encode(Path(f["path"]).read_bytes()).decode()
+            blocks.append({"type": "image_url", "image_url": {"url": f"data:{f['mime']};base64,{data}"}})
+    return "Files available in this chat: " + json.dumps(catalog), [{"role": "user", "content": blocks}]
 
 
 def decision(names):
@@ -110,7 +147,8 @@ def main():
     from app.services.agent_memory import MemorySnapshot
     from app.services import user_memory
     from app.services.agent_policy import AgentPolicy
-    from app.services.agent_runs import get_agent_turn_context, with_app_context
+    from app.services.agent_files import UNTRUSTED
+    from app.services.agent_runs import add_app_context, get_agent_turn_context, with_app_context
     from app.services.agent_tools import search_tools
     from app.services.llm.agent_client import AgentCompletion, resolve_agent_model
     from app.services.llm.provider_runtime import (AnalysisBudget, ProviderCancellation, bind_analysis_budget,
@@ -125,11 +163,13 @@ def main():
     total, passed = 0.0, 0
     cases = [*CASES, *(MEMORY_CASES if args.memory else [])]
     selected = [(i, case) for i, case in enumerate(cases) if not args.only or i in args.only]
-    for index, (expected, history, message) in selected:
+    for index, (expected, history, message, *files) in selected:
         store = AgentRunStore(Database())
         chat, turn = pending(store, question=message)
+        catalog, evidence = file_messages(files[0] if files else [])
+        question = with_app_context(message, get_agent_turn_context(model, config))
         messages = [{"role": "system", "content": config["prompts"]["agent"]}, *history,
-                    {"role": "user", "content": with_app_context(message, get_agent_turn_context(model, config))}]
+                    {"role": "user", "content": add_app_context(question, catalog) if catalog else question}]
         sources = [{"url": LIVE, "title": "Livebericht"}] if history is EARLIER else []
         loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"], model=model, messages=messages,
                               api_key=key, cancellation=ProviderCancellation(),
@@ -138,6 +178,8 @@ def main():
                               chat_sources=sources,
                               memory=MemorySnapshot(available=True, enabled=True, auto=True,
                                                     profile=user_memory.empty_profile()) if args.memory else None)
+        if catalog:
+            loop.messages[0]["content"] += "\n" + UNTRUSTED
         value = AgentCompletion()
         value.tool_call_limit, value.tool_argument_limit = 4, loop.registry.argument_limit
         # As the first routing step in prod: research before a comparison.
@@ -147,7 +189,7 @@ def main():
         try:
             with bind_analysis_budget(AnalysisBudget(seconds=180, max_calls=1)), \
                     bind_provider_cancellation(ProviderCancellation()):
-                list(value.stream(model=model, messages=loop.messages, api_key=key,
+                list(value.stream(model=model, messages=[*loop.messages, *evidence], api_key=key,
                                   tools=[*loop.registry.schemas, *search_tools(model, rounds)], native_searches=rounds,
                                   allow_tool_calls=True))
         except Exception as exc:  # A probe records the category, never provider bodies.
