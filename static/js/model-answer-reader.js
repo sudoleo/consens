@@ -89,7 +89,7 @@
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.read}"/></svg>`;
   }
   function control(button, name, label, iconOnly = false) {
-    if (button.dataset.label === label) return;
+    if (button.dataset.label === window.App.t(label)) return;
     button.innerHTML = icon(name);
     if (!iconOnly) { const text = document.createElement("span"); text.textContent = label; button.append(text); }
     button.dataset.label = label;
@@ -674,8 +674,11 @@
     const count = selected.answers.filter(a => a.status === "complete").length;
     const failures = selected.answers.filter(a => ["error", "skipped", "canceled"].includes(a.status)).length;
     const partial = selected.answers.filter(a => a.status === "incomplete").length;
-    const statusText = `${count} of ${selected.answers.length} ready${partial ? ` · ${partial} incomplete` : ""}${failures ? ` · ${failures} unavailable` : ""}`;
-    if (get("Status").textContent !== statusText) get("Status").textContent = statusText;
+    // Each part through App.t, so optional tails stay translatable (docs/i18n.md).
+    const statusText = [window.App.t("{count} of {total} ready", { count, total: selected.answers.length }),
+      partial ? window.App.t("{partial} incomplete", { partial }) : "",
+      failures ? window.App.t("{failures} unavailable", { failures }) : ""].filter(Boolean).join(" · ");
+    if (get("Status").textContent !== window.App.t(statusText)) get("Status").textContent = statusText;
     get("Compare").disabled = selected.answers.length < 2;
     control(get("Compare"), pair ? "read" : "compare", pair ? "Read one" : "Compare two");
     get("Compare").setAttribute("aria-pressed", String(pair));
@@ -733,7 +736,7 @@
       const label = toggle.querySelector(".consensus-tab-label");
       if (label) {
         const text = active ? "Hide answers" : "Compare answers";
-        if (label.textContent !== text) label.textContent = text;
+        if (label.textContent !== window.App.t(text)) label.textContent = text;
         label.dataset.short = active ? "Hide" : "Answers";
       }
     }
@@ -956,7 +959,8 @@
       if (!direct || !selected || selected.preview) return null;
       const ready = selected.answers.filter(answer => answer.status === 'complete').length;
       const unavailable = selected.answers.filter(answer => ['error', 'skipped', 'canceled'].includes(answer.status)).length;
-      return `${ready} of ${selected.answers.length} ready${unavailable ? ` · ${unavailable} unavailable` : ''}`;
+      return [window.App.t("{count} of {total} ready", { count: ready, total: selected.answers.length }),
+        unavailable ? window.App.t("{failures} unavailable", { failures: unavailable }) : ""].filter(Boolean).join(" · ");
     },
     close,
     openPanel,
@@ -1021,13 +1025,13 @@
       button.setAttribute("aria-controls", root.id); button.setAttribute("aria-expanded", "false");
       button.innerHTML = '<svg class="consensus-evidence-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"/></svg>';
       const label = document.createElement("span"); label.className = "consensus-tab-label";
-      label.dataset.short = "Answers"; label.textContent = "Compare answers";
+      label.dataset.short = "Answers"; label.dataset.tab = "answers"; label.textContent = "Compare answers";
       const badge = document.createElement("span"); badge.className = "consensus-tab-count"; badge.textContent = String(count);
       const meta = document.createElement("span"); meta.className = "consensus-tab-meta";
       meta.appendChild(badge);
       button.append(label, meta);
       button.addEventListener("click", () => openSnapshot(fromStored(turn), null, button));
-      tabs.insertBefore(button, tabs.querySelector('[data-short="Sources"]')?.closest('.consensus-tab') || null);
+      tabs.insertBefore(button, tabs.querySelector('[data-tab="sources"]')?.closest('.consensus-tab') || null);
     },
     canOpenStored(node, model) { const turn = stored.get(node); return !!turn && !!findProvider(model, fromStored(turn)); },
     openStored(node, model, quote) {

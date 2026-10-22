@@ -85,7 +85,7 @@
     const shown = [...target.querySelectorAll('[data-starter="predicted"]')];
     const same = shown.length === items.length
       && shown.every((button, index) => button.dataset.question === items[index].question
-        && button.textContent === items[index].label);
+        && button.textContent === window.App.t(items[index].label));
     if (same) return;
     shown.forEach(button => button.remove());
     target.querySelectorAll(".composer-starter").forEach(button => {

@@ -192,7 +192,8 @@
     {% if entry.kind == "quiet" %}
     <li class="wp-event is-quiet">
       <details class="wp-disclosure"{% if selected.id in entry.run_ids %} open{% endif %}>
-        <summary>
+        {#- The toggle's words for public-pages.css, in the markup so they are translated. -#}
+        <summary data-show="Show" data-hide="Hide">
           <time datetime="{{ entry.points[-1].ts.isoformat() }}">{{ entry.points[-1].day }}{% if entry.points | length > 1 %} – {{ point.day }}{% endif %}</time>
           <span class="wp-event-title">{% if entry.points | length > 1 %}{{ entry.points | length }} checks, no change{% else %}Checked, no change{% endif %}</span>
           <span class="wp-disclosure-toggle" aria-hidden="true"><span class="wp-disclosure-show">Show</span><span class="wp-disclosure-hide">Hide</span>{{ chevron() }}</span>
@@ -248,7 +249,8 @@
    (check_page.named_differences). #}
 {% macro models_compared(model_count, contradiction_count, consulted_models, differences, differences_fallback_html) %}
 <details class="wp-more wp-disclosure">
-  <summary><span class="wp-disclosure-toggle">How the {% if model_count %}{{ model_count }} {% endif %}models compared{% if contradiction_count %} &middot; {{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }}{% endif %}{{ chevron() }}</span></summary>
+  {#- Whole texts per number, each in its own span (docs/i18n.md). -#}
+  <summary><span class="wp-disclosure-toggle"><span>{% if model_count %}How the {{ model_count }} models compared{% else %}How the models compared{% endif %}</span>{% if contradiction_count == 1 %} &middot; <span>1 contradiction</span>{% elif contradiction_count %} &middot; <span>{{ contradiction_count }} contradictions</span>{% endif %}{{ chevron() }}</span></summary>
   <div class="wp-disclosure-body">
   {% if consulted_models %}<p class="wp-models">{% for m in consulted_models %}{{ m.display or ((m.label ~ " " ~ m.model) if m.model else m.label) }}{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>{% endif %}
   {% if differences %}

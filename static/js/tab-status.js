@@ -30,7 +30,8 @@
     if (next === shown) return;
     if (shown === null) baseTitle = document.title;
     shown = next;
-    document.title = next ? `${next} · ${baseTitle}` : baseTitle;
+    // The label in the page's language; the question after it stays as asked.
+    document.title = next ? `${window.App.t(next)} · ${baseTitle}` : baseTitle;
   }
 
   function sync() {

@@ -871,8 +871,10 @@ img { display: block; max-width: 100%; }
 .lp-scroll-scene .lp-send { width: 38px; height: 38px; }
 .lp-scroll-scene .lp-send svg { width: 15px; height: 15px; }
 
+/* The words stand in the markup (data-placeholder), where a German page
+   translates them (docs/i18n.md). */
 .lp-composer-text:empty:not(.is-typing)::before {
-  content: "Enter your question";
+  content: attr(data-placeholder);
   color: var(--ink-3);
 }
 
@@ -1215,39 +1217,6 @@ img { display: block; max-width: 100%; }
 .lp-scroll-scene { position: relative; }
 .lp-scene-stage { position: relative; }
 .lp-scene-rail { display: none; }
-
-.lp-scene-notes {
-  display: grid;
-  gap: 9px;
-  margin: 20px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.lp-scene-notes li {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  color: var(--ink-3);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-  opacity: 0.42;
-  transition: opacity var(--dur-layer) var(--ease-standard), color var(--dur-layer) var(--ease-standard);
-}
-
-.lp-scene-notes li::before {
-  content: "";
-  flex: none;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  transform: translateY(-2px);
-}
-
-.lp-scene-notes li b { font-weight: var(--font-weight-semibold); color: inherit; }
-.lp-scene-notes li.is-done { opacity: 0.66; }
-.lp-scene-notes li.is-active { opacity: 1; color: var(--ink); }
 
 /* The scrubbed scenes pin on every screen that is tall enough to hold one,
    phones included. A phone used to get the fallback playhead: the scene was
@@ -2503,10 +2472,6 @@ img { display: block; max-width: 100%; }
     margin-left: 56px;
     text-align: left;
   }
-
-  /* The scene stops pinning below 900px (see the scene block above), so the
-     copy sits above the product again and the notes follow it. */
-  .lp-scene-notes { margin-top: 16px; }
 }
 
 @media (max-width: 600px) {
@@ -2611,19 +2576,6 @@ img { display: block; max-width: 100%; }
   /* --- Scenes ------------------------------------------------------------ */
   .lp-scene-visual,
   .lp-scene-03 .lp-scene-visual { margin-top: 34px; }
-  .lp-scene-notes { margin-top: 24px; gap: 12px; font-size: var(--font-size-sm); }
-
-  /* The <b> label and the sentence after it are two flex items. On a wide
-     screen they sit on one line and read as one note; in a 343px column they
-     become two ragged columns ("The run / switch." above "How many models /
-     answer"), which is what made this list look like a table. Block flow puts
-     the note back into one sentence and the dot back in front of it. */
-  .lp-scene-notes li { display: block; }
-  .lp-scene-notes li::before {
-    display: inline-block;
-    margin-right: 8px;
-    transform: translateY(-3px);
-  }
 
   /* The fine print under the composer is true, and unreadable at this size. */
   .lp-composer-foot { display: none; }
@@ -2703,7 +2655,9 @@ img { display: block; max-width: 100%; }
   line-height: 1.5;
   text-align: left;
   white-space: nowrap;
-  animation: lpComposerToolsIn var(--dur-state) var(--ease-out) both;
+  /* backwards, not both: a held end frame would pin opacity at 1, and the
+     fade after send (.is-sent) could only cut, not fade. */
+  animation: lpComposerToolsIn var(--dur-state) var(--ease-out) backwards;
   transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
 }
 .lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
@@ -2714,7 +2668,7 @@ img { display: block; max-width: 100%; }
 .lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
 .lp-composer-model img { width: 14px; height: 14px; object-fit: contain; }
 .dark-mode .lp-composer-mono { filter: invert(1); }
-.lp-composer-tools.is-sent { visibility: hidden; opacity: 0; animation: none; }
+.lp-composer-tools.is-sent { visibility: hidden; opacity: 0; }
 @keyframes lpComposerToolsIn {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }

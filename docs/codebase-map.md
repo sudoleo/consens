@@ -242,7 +242,9 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 **`main.py`** ist der App-Entry: lädt `.env` (nicht unter `UNIT_TEST_MODE=1`), fügt das vor dem
 Framework-Parsing greifende `RequestBodyLimitMiddleware`,
-`CustomSecurityMiddleware` (CSP etc.), `CorrelationMiddleware` + slowapi-Limiter
+`CustomSecurityMiddleware` (CSP etc.), `CorrelationMiddleware` + slowapi-Limiter,
+`I18nMiddleware` (Sprache, `/de/…`, deutsche HTML-Antworten; siehe §4
+„Deutsch für deutsche Leser“) und als äußerste `StaticDeliveryMiddleware`
 hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
 Seit 2026-10-15 fängt ein Handler für Starlettes `HTTPException` (Routing,
@@ -9407,6 +9409,41 @@ Stylesheets außer Admin), ein Chevron, ein Feld-Fokus, Umschalter ohne
 Fettsprung, eine Sidebar-Zeile, Gleiten mit der Leiste, bloßer Menüknopf am
 Handy.
 
+### Deutsch für deutsche Leser (i18n, seit 2026-10-22)
+
+Ausführlich in [`i18n.md`](i18n.md). Die Oberfläche bleibt im Code englisch;
+ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` nur
+für den Server) übersetzt, was ein Leser sieht:
+- **Sprache:** `app/core/i18n_middleware.py` (zwischen `CorrelationMiddleware`
+  und `StaticDeliveryMiddleware`): `/de/<Seite>` für `i18n.LOCALIZED_PATHS`
+  (Start, About, Privacy, Terms, Imprint, Consensus engine, Model guide,
+  Benchmark, Model pulse; Präfix wird vor dem Routing entfernt), sonst Cookie
+  `consens_lang`, sonst `Accept-Language`. Deutsche Browser auf englischen
+  Adressen lokalisierter Seiten → 302 auf `/de/…`; `?lang=en|de|auto` setzt
+  bzw. löscht das Cookie. `request.state.language` trägt die Sprache;
+  `/api/`, `/static/`, `/__/`, `/admin`, `/health` und der Google-Callback
+  laufen unberührt durch.
+- **Server:** jede deutsche HTML-Antwort durch `i18n.translate_html`
+  (Läufe aus Text und Inline-Elementen als Ganzes mit Markern `<0>…</0>`,
+  sonst stückweise; Platzhalter `{name}`; Attribute, Meta, JSON-LD, `lang`,
+  Links auf lokalisierte Seiten, Canonical/hreflang). Ergebnis-Cache per
+  Inhalts-Hash. `Content-Language: de`, `Vary: Accept-Language, Cookie`.
+- **Browser:** `/i18n/de.<hash>.js` = Wörterbuch + `static/js/i18n.js`, als
+  erstes Skript im `<head>` jeder deutschen Seite (nicht in `bundles.json`).
+  Ein `MutationObserver` übersetzt alles, was Skripte schreiben; `App.t`,
+  `App.lang`, `App.i18n`. `app-text.js` stellt `App.t` auf englischen
+  Seiten bereit und formatiert mit `App.format` in `de-DE`.
+- **Verträge:** Skripte vergleichen „schon gesetzt?“ gegen
+  `window.App.t(text)`, nie gegen rohes Englisch; Selektoren nie auf
+  übersetzte Attribute (Tabs: `data-tab`, nicht `data-short`); Modell- und
+  Nutzerinhalt trägt `data-i18n-skip` (Markdown-Container setzen es selbst),
+  Namen `translate="no"`; mehrdeutige Wörter per `data-i18n-context`
+  (`agent freedom|Free`). Einzahl/Mehrzahl als ganze Sätze, nie `"model" + "s"`.
+- **Prüfung:** `scripts/i18n.py missing|check` (Vorlagen, Skripte,
+  Server-Sätze), `tests/test_i18n.py`, `tests/js/i18n.test.mjs`.
+- **Noch englisch:** Mails, Telegram-Nachrichten, Admin, Topic-Inhalte,
+  OG-Bilder; vom Server formatierte Daten (`date_display`).
+
 ### Was die App sagt: Namen, Schreibstil, Admin-Zahlen (seit 2026-10-20, Apple-Audit H3–H5, H10)
 
 `tests/test_ui_copy.py` prüft jeden sichtbaren Text von `/app`
@@ -9827,6 +9864,9 @@ Commit/PR**, wenn sich Folgendes ändert:
   DOM-Dataset-als-State, neue Jinja↔JS-Brücke, CSP-Erweiterung (§8).
 - **Daten/Config**: neue Firestore-Collection/-Feld, neue Umgebungsvariable,
   geänderte Limit-/Modell-Quelle (§6).
+- **Sichtbarer Text**: neuer oder geänderter englischer Text braucht seinen
+  Eintrag in `app/i18n/de/*.json` (`scripts/i18n.py missing`, docs/i18n.md);
+  `tests/test_i18n.py` bricht sonst ab.
 - **Cache-Busting (immer, auch bei Kleinständerungen)**: Nach **jeder** Änderung
   an Dateien unter `static/`:
   - **`/app`**: `npm run build` laufen lassen und `static/dist/` mitcommitten.

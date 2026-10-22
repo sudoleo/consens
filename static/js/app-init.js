@@ -1819,7 +1819,7 @@
           const text = "Resets in: " + formattedHours + ":" + formattedMinutes;
 
           const countdown = document.getElementById('countdownDisplay');
-          if (countdown && countdown.textContent !== text) countdown.textContent = text;
+          if (countdown && countdown.textContent !== window.App.t(text)) countdown.textContent = text;
         }
 
         // Countdown sofort starten und jede Sekunde aktualisieren - nur bei

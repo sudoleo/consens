@@ -20,9 +20,34 @@ if (!Array.isArray(window.currentEvidenceSources)) {
    der Score liegt im mittleren Bereich. Quellenlisten gibt es bewusst
    nicht: erfundene Belege waeren die schlechtere Demo.
    ================================================================= */
-const DEMO_SCENARIO_PROMPT =
+// A German page shows the scenario in German: every text of it through the
+// dictionary (docs/i18n.md), markup through i18n.js's own rules. Anchors and
+// quotes are entries of their own, each a passage of the German answer, so
+// the marks still find their place. Names and numbers have no entry and stay.
+function demoInPageLanguage(value) {
+  const t = window.App?.t;
+  if (window.App?.lang !== "de" || !t) return value;
+  const markup = text => {
+    const holder = document.createElement("div");
+    holder.innerHTML = text;
+    window.App.i18n?.translate?.(holder);
+    return holder.innerHTML;
+  };
+  const walk = item => {
+    if (typeof item === "string") {
+      if (/<[a-z][^>]*>/i.test(item)) return markup(item);
+      return item.split("\n\n").map(part => t(part)).join("\n\n");
+    }
+    if (Array.isArray(item)) return item.map(walk);
+    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, walk(entry)]));
+    return item;
+  };
+  return walk(value);
+}
+
+const DEMO_SCENARIO_PROMPT = demoInPageLanguage(
   "Our house is from 1978 and still has the original radiators. Can a heat pump heat it properly, or do we need new radiators first?\n\n" +
-  "Detached, 140 m², walls insulated in 2015, original double glazing. The gas boiler currently runs at 70 °C.";
+  "Detached, 140 m², walls insulated in 2015, original double glazing. The gas boiler currently runs at 70 °C.");
 
 // Die Hausdaten werden nicht getippt, sondern eingefuegt, so wie man sie
 // aus einer Notiz oder dem Energieausweis uebernimmt.
@@ -30,7 +55,7 @@ const DEMO_TYPED_QUESTION = DEMO_SCENARIO_PROMPT.split("\n")[0];
 
 const DEMO_MODELS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"];
 
-const DEMO_DATA = {
+const DEMO_DATA = demoInPageLanguage({
   delays: { OpenAI: 1400, Mistral: 2500, Anthropic: 2900, Gemini: 3600, DeepSeek: 4300, Grok: 5000 },
   responses: {
     OpenAI:
@@ -387,7 +412,7 @@ const DEMO_DATA = {
 All six models agree that the house can work with a heat pump, that a room-by-room heat-loss calculation comes first, and that the heat pump must be sized from it. They contradict each other on the target flow temperature: three would keep most radiators and run at 55 °C, three would replace more of them for 45 °C, and they disagree on how much efficiency that difference is worth. They split again, more mildly, on keeping the gas boiler as a backup.
 
 BestModel: Anthropic`
-};
+});
 
 // Six authored viewpoints are instantiated for the configured Daily families.
 // Keep every claim/quote attached to the same viewpoint if an admin changes
@@ -691,23 +716,24 @@ const DEMO_AGENT_STEPS = {
   check: 2300           // the judges hold the fixed answer against all six
 };
 const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 42 };
-const DEMO_AGENT_NOTES = {
+const DEMO_AGENT_NOTES = demoInPageLanguage({
   plan: "Whether this works depends on the heat loss of each room, not on the year the house was built. I will get six independent reads before I answer.",
   compared: "All six say it can work. They split on the flow temperature and on what it costs, so the answer has to say so instead of picking a side."
-};
+});
 
 const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
 // The Agent writes its own answer: the Consensus fixture without its
-// "Consensus:" label, opened by the verdict in bold.
+// "Consensus:" label ("Konsens:" on a German page), opened by the verdict in bold.
+const DEMO_CONSENSUS_LABEL = /^(?:Consensus|Konsens):\s*/;
 function demoAgentAnswer() {
   return demoResponseMarkdown(activeDemoData.consensus || "")
-    .replace(/^Consensus:\s*(.+)$/m, (_, verdict) => `**${capitalize(verdict.replace(/[.\s]*$/, ""))}.**`);
+    .replace(/^(?:Consensus|Konsens):\s*(.+)$/m, (_, verdict) => `**${capitalize(verdict.replace(/[.\s]*$/, ""))}.**`);
 }
 function demoAgentDifferences() {
   const data = JSON.parse(JSON.stringify(activeDemoData.differencesData || {}));
   for (const claim of data.claims || []) {
-    if (typeof claim.anchor === "string" && /^Consensus:\s*/.test(claim.anchor)) {
-      claim.anchor = capitalize(claim.anchor.replace(/^Consensus:\s*/, ""));
+    if (typeof claim.anchor === "string" && DEMO_CONSENSUS_LABEL.test(claim.anchor)) {
+      claim.anchor = capitalize(claim.anchor.replace(DEMO_CONSENSUS_LABEL, ""));
     }
   }
   return data;

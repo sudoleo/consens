@@ -34,6 +34,9 @@ const app = initializeApp(window.FIREBASE_CONFIG);
 
 // Initialisiere Auth
 const auth = getAuth(app);
+// Google's sign-in window and Firebase's own mails (password reset) in the
+// page's language (i18n.js sets App.lang on a German page).
+if (window.App?.lang === "de") auth.languageCode = "de";
 window.auth = auth;
 
 function trackAppEvent(eventName, eventData = {}) {
@@ -1478,7 +1481,7 @@ async function handleEmailLogin() {
   } catch (error) {
     setButtonPending(loginBtn, false);
     loginErr.textContent = mapFirebaseLoginError(error);
-    if (loginErr.textContent === WRONG_CREDENTIALS_MESSAGE) passEl.setAttribute("aria-invalid", "true");
+    if (loginErr.textContent === window.App.t(WRONG_CREDENTIALS_MESSAGE)) passEl.setAttribute("aria-invalid", "true");
     trackAppEvent("auth_email_login_result", { status: "error" });
   }
 }

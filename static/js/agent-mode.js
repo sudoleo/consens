@@ -377,7 +377,7 @@
       if (effort?.dataset.options) delete state.dataset.seeded;
       const level = state.dataset.seeded ? state.textContent : effort?.selectedOptions[0]?.textContent;
       const word = beta ? level || "Auto" : reasoningOn ? "On" : "Off";
-      if (state.textContent !== word) state.textContent = word;
+      if (state.textContent !== window.App.t(word)) state.textContent = word;
       if (beta) {
         reasoningButton.removeAttribute("aria-checked");
         reasoningButton.setAttribute("aria-haspopup", "listbox");

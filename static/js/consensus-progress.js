@@ -293,8 +293,8 @@
             canceled: "Canceled before it answered."
           }[state];
         }
-        if (time.textContent !== text) time.textContent = text;
-        if (time.title !== title) time.title = title;
+        if (time.textContent !== window.App.t(text)) time.textContent = text;
+        if (time.title !== window.App.t(title)) time.title = title;
       }
 
       renderSkipOffer(row, box, done);
@@ -344,11 +344,11 @@
       if (item.dataset.step === "prepare") {
         const label = item.querySelector(".run-step-label");
         const text = status === "active" ? "Preparing" : status === "done" ? "Prepared" : "Prepare";
-        if (label && label.textContent !== text) label.textContent = text;
+        if (label && label.textContent !== window.App.t(text)) label.textContent = text;
       }
       if (item.dataset.step === "answers") {
         const title = status === "done" ? answersSummary : "";
-        if (item.title !== title) item.title = title;
+        if (item.title !== window.App.t(title)) item.title = title;
       }
     });
   }
@@ -370,16 +370,18 @@
     if (rest < 1) return "";
     const failed = out.filter(box => rowState(box, true, 0) === "error").map(box => modelName(box));
     const parts = [];
-    if (failed.length) parts.push(listNames(failed) + " didn’t answer.");
+    // Each sentence through App.t: joined, they are one text node that no
+    // dictionary entry matches (docs/i18n.md).
+    if (failed.length) parts.push(window.App.t("{names} didn’t answer.", { names: listNames(failed) }));
     parts.push(rest === 1
-      ? "The consensus uses the one remaining answer."
-      : "The consensus uses the other " + rest + " answers.");
+      ? window.App.t("The consensus uses the one remaining answer.")
+      : window.App.t("The consensus uses the other {rest} answers.", { rest }));
     return parts.join(" ");
   }
 
   function setText(id, text) {
     const el = $(id);
-    if (el && el.textContent !== text) el.textContent = text;
+    if (el && el.textContent !== window.App.t(text)) el.textContent = text;
     return el;
   }
 
@@ -419,7 +421,7 @@
 
     const status = $("runStatus");
     const announcement = accessibleStatus(stage, counts);
-    if (status && status.textContent !== announcement) status.textContent = announcement;
+    if (status && status.textContent !== window.App.t(announcement)) status.textContent = announcement;
 
     renderDetail();
   }
@@ -431,7 +433,7 @@
     const time = $("runTime");
     if (time && startedAt) {
       const text = clockText(Date.now() - startedAt);
-      if (time.textContent !== text) time.textContent = text;
+      if (time.textContent !== window.App.t(text)) time.textContent = text;
     }
     if (stage === "answers") renderDetail();
   }
@@ -663,12 +665,13 @@
     const costLabel = $("runReplayCost");
     if (costLabel) costLabel.textContent = cost?.share ? " · about " + cost.share + " of today" : "";
 
-    const detail = ["Runs every model again and writes a new consensus."];
-    if (cost?.share) detail.push("A run like this uses about " + cost.share + " of today’s allowance.");
+    const t = window.App.t;
+    const detail = [t("Runs every model again and writes a new consensus.")];
+    if (cost?.share) detail.push(t("A run like this uses about {share} of today’s allowance.", { share: cost.share }));
     if (cost?.view) {
       detail.push(cost.canStart === false
-        ? "Not enough of today’s allowance left for another run."
-        : cost.view.percent + " left today.");
+        ? t("Not enough of today’s allowance left for another run.")
+        : t("{percent} left today.", { percent: cost.view.percent }));
     }
     button.title = detail.join(" ");
   }

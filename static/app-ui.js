@@ -213,8 +213,22 @@ function bindSettingsModalControls() {
   });
 }
 
+// The language of the page is chosen on the server (cookie consens_lang,
+// docs/i18n.md): ?lang= stores the choice and comes back without it.
+function bindLanguageSelect() {
+  const select = document.getElementById("languageSelect");
+  if (!select || select.dataset.bound) return;
+  select.dataset.bound = "1";
+  select.addEventListener("change", () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("lang", select.value);
+    window.location.assign(url.toString());
+  });
+}
+
 function bindAppUiControls() {
   bindSettingsModalControls();
+  bindLanguageSelect();
 }
 
 if (document.readyState === "loading") {

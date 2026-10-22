@@ -53,7 +53,13 @@
       {% if entries %}
       <div class="hub-toolbar" role="search">
         <label class="visually-hidden" for="hubSearch">Filter questions</label>
-        <input id="hubSearch" type="search" placeholder="Filter {{ total_count }} question{{ 's' if total_count != 1 }}&hellip;" autocomplete="off">
+        {#- Singular and plural as whole texts, so a translation can say the
+            number its own way (docs/i18n.md). -#}
+        {% if total_count == 1 %}
+        <input id="hubSearch" type="search" placeholder="Filter 1 question&hellip;" autocomplete="off">
+        {% else %}
+        <input id="hubSearch" type="search" placeholder="Filter {{ total_count }} questions&hellip;" autocomplete="off">
+        {% endif %}
         <label class="visually-hidden" for="hubSort">Sort by</label>
         <select id="hubSort" aria-label="Sort questions">
           <option value="newest" selected>Newest first</option>
@@ -62,7 +68,7 @@
         </select>
       </div>
       <p id="hubCount" class="hub-count" aria-live="polite">
-        {{ total_count }} question{{ "s" if total_count != 1 }}{% if watch_count %} &middot; {{ watch_count }} tracked over time{% endif %}
+        <span>{% if total_count == 1 %}1 question{% else %}{{ total_count }} questions{% endif %}</span>{% if watch_count %} &middot; <span>{{ watch_count }} tracked over time</span>{% endif %}
       </p>
 
       <ol id="hubList" class="hub-list">
@@ -79,8 +85,12 @@
             {% if entry.watch %}
             <span class="hub-score is-watch{% if entry.watch.active %} is-active{% endif %}" aria-hidden="true"><i></i>Watch</span>
             {% else %}
-            <span class="hub-score{% if entry.score is none %} is-empty{% elif entry.score >= 75 %} is-high{% elif entry.score >= 50 %} is-mid{% else %} is-low{% endif %}"
-                  aria-label="{% if entry.score is not none %}Agreement {{ entry.score }} out of 100{% else %}No agreement score{% endif %}">
+            {% if entry.score is not none %}
+            <span class="hub-score{% if entry.score >= 75 %} is-high{% elif entry.score >= 50 %} is-mid{% else %} is-low{% endif %}"
+                  aria-label="Agreement {{ entry.score }} out of 100">
+            {% else %}
+            <span class="hub-score is-empty" aria-label="No agreement score">
+            {% endif %}
               {% if entry.score is not none %}{{ entry.score }}<small>/100</small>{% else %}&mdash;{% endif %}
             </span>
             {% endif %}
@@ -88,8 +98,8 @@
               <span class="hub-question">{{ entry.question }}</span>
               <span class="hub-meta">
                 {% if entry.watch %}<span class="hub-meta-watch is-{{ entry.watch.tone }}"><span class="visually-hidden">Watch: </span>{{ entry.watch.headline }}</span>{% endif %}
-                {% if entry.model_count %}<span>{{ entry.model_count }} model{{ "s" if entry.model_count != 1 }}</span>{% endif %}
-                {% if entry.contradiction_count %}<span class="hub-meta-contradiction">{{ entry.contradiction_count }} contradiction{{ "s" if entry.contradiction_count != 1 }}</span>{% endif %}
+                {% if entry.model_count %}<span>{% if entry.model_count == 1 %}1 model{% else %}{{ entry.model_count }} models{% endif %}</span>{% endif %}
+                {% if entry.contradiction_count %}<span class="hub-meta-contradiction">{% if entry.contradiction_count == 1 %}1 contradiction{% else %}{{ entry.contradiction_count }} contradictions{% endif %}</span>{% endif %}
                 {% if entry.date_display and not entry.watch %}<span>{{ entry.date_display }}</span>{% endif %}
               </span>
             </span>

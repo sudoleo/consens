@@ -339,13 +339,13 @@
     const option = document.getElementById('agentGoogleMenuOption');
     if (option && option.hidden === show) option.hidden = !show;
     const text = stateText(), state = document.getElementById('agentGoogleMenuState');
-    if (state && state.textContent !== text) state.textContent = text;
+    if (state && state.textContent !== window.App.t(text)) state.textContent = text;
     // Which Google account is connected, right where Google is picked.
     const linked = connections.accounts.filter(item => item.status === 'connected');
     const sub = document.getElementById('agentGoogleMenuHint');
     const subText = !linked.length ? (connections.accounts.length ? 'Reconnect to use' : 'Read as sources')
       : linked.length === 1 ? `Connected · ${linked[0].email}` : `${linked.length} accounts connected`;
-    if (sub && sub.textContent !== subText) sub.textContent = subText;
+    if (sub && sub.textContent !== window.App.t(subText)) sub.textContent = subText;
     option?.classList.toggle('is-connected', linked.length > 0);
     option?.setAttribute('aria-label', `Gmail & Calendar: ${text === 'Off' ? 'off' : text}. ${subText}`);
   }
@@ -660,7 +660,10 @@
     if (action.kind === 'gmail_send') {
       const all = [...(preview.to || []), ...(preview.cc || []), ...(preview.bcc || [])];
       const others = all.length - 1;
-      return `Send email to ${preview.to?.[0] || 'recipients'}${others > 0 ? ` and ${others} other${others === 1 ? '' : 's'}` : ''}`;
+      const to = preview.to?.[0] || 'recipients';
+      // Whole sentences, so a translation can say the number its own way.
+      return others > 1 ? `Send email to ${to} and ${others} others`
+        : others === 1 ? `Send email to ${to} and 1 other` : `Send email to ${to}`;
     }
     const before = preview.before || {}, after = preview.after || {};
     const name = after.summary || before.summary || 'event';
@@ -874,7 +877,8 @@
         const waiting = acks.filter(input => !input.checked).length;
         confirm.disabled = !card._ready();
         why.hidden = !(review.querySelector('input').checked && waiting);
-        why.textContent = waiting ? `Confirm ${waiting === 1 ? 'the flagged recipient' : `all ${waiting} flagged recipients`} above first.` : '';
+        why.textContent = !waiting ? '' : waiting === 1 ? 'Confirm the flagged recipient above first.'
+          : `Confirm all ${waiting} flagged recipients above first.`;
         if (why.hidden) confirm.removeAttribute('aria-describedby'); else confirm.setAttribute('aria-describedby', why.id);
         expiry.textContent = expiryText(action);
       };

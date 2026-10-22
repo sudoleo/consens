@@ -986,7 +986,7 @@
     toggle.setAttribute("aria-checked", String(included));
     toggle.setAttribute(
       "aria-label",
-      (included ? "Exclude " : "Include ") + pref.label
+      included ? "Exclude " + pref.label : "Include " + pref.label
     );
     const capped = !included && capBlocksInclusion(pref);
     toggle.title = included

@@ -115,7 +115,9 @@
       } else if (name === 'agent_preferences') {
         const now = App.agentPreferences?.get?.() || {};
         for (const [field, [label, labels]] of Object.entries(PREFERENCES)) {
-          if (value[field] !== undefined) add(label, labels[now[field]], labels[value[field]]);
+          // "Free" as Agent freedom, not the plan (docs/i18n.md, context).
+          const say = word => (field === 'autonomy' && word ? window.App.t(word, null, 'agent freedom') : word);
+          if (value[field] !== undefined) add(label, say(labels[now[field]]), say(labels[value[field]]));
         }
       } else {
         const [label, labels, current] = SETTINGS[name];

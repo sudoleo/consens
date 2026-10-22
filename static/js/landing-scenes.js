@@ -25,6 +25,9 @@
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  // A label as the page shows it: German on a German page (i18n.js
+  // translates what is written), so "already shown" compares with that.
+  const say = text => (window.App && window.App.t ? window.App.t(text) : text);
 
   // Progress of `value` through the window [from, to], clamped to 0..1.
   const span = (value, from, to) => clamp((value - from) / (to - from), 0, 1);
@@ -35,7 +38,9 @@
   // in die Demo springt, sieht dort weiter, was hier anfaengt. Nur die erste
   // Zeile — der Nachrichtenentwurf wird auch in der App eingefuegt, nicht
   // getippt.
-  const ASK_QUESTION = "Can a heat pump heat our 1978 house with the original radiators?";
+  // In the page's language: typed letter by letter, a half question is never
+  // looked up (the field is data-i18n-skip below).
+  const ASK_QUESTION = say("Can a heat pump heat our 1978 house with the original radiators?");
 
   function buildAskScene(scene) {
     const text = scene.querySelector("[data-ask-text]");
@@ -43,11 +48,10 @@
     const chip = scene.querySelector("[data-ask-chip]");
     const send = scene.querySelector("[data-ask-send]");
     const tools = scene.querySelector(".lp-composer-tools");
-    const notes = Array.from(scene.querySelectorAll("[data-ask-note]"));
     if (!text || !composer) return null;
+    text.setAttribute("data-i18n-skip", "");
 
     let lastChars = -1;
-    let lastStep = -1;
 
     // The question wraps to more lines as it is typed, and on a narrow screen
     // that grows the field — which grows the scene, which is what the scroll
@@ -92,16 +96,6 @@
         tools.classList.toggle("is-sent", p >= 0.9);
         tools.setAttribute("aria-hidden", String(p >= 0.9));
       }
-
-      // The three notes step through in time with the controls above them.
-      const step = p < 0.62 ? 0 : (p < 0.78 ? 1 : 2);
-      if (step !== lastStep) {
-        notes.forEach((note, i) => {
-          note.classList.toggle("is-active", i === step);
-          note.classList.toggle("is-done", i < step);
-        });
-        lastStep = step;
-      }
     }
 
     return renderAsk;
@@ -143,7 +137,12 @@
     const answer = scene.querySelector("[data-run-answer]");
     const evidence = scene.querySelector("[data-run-evidence]");
     // The answer streams in as one text across its blocks, in reading order.
-    const streams = Array.from(scene.querySelectorAll("[data-stream]")).map(el => ({ el, text: el.textContent }));
+    const streams = Array.from(scene.querySelectorAll("[data-stream]")).map(el => {
+      // The words arrive already in the page's language; a half-written
+      // word is never looked up in the dictionary.
+      el.setAttribute("data-i18n-skip", "");
+      return { el, text: el.textContent };
+    });
     const total = streams.reduce((sum, item) => sum + item.text.length, 0);
     const marks = Array.from(scene.querySelectorAll("[data-mark]"));
 
@@ -194,7 +193,7 @@
       const seconds = done ? RUN_SECONDS : Math.floor(span(p, 0, DONE_AT) * RUN_SECONDS);
       if (clock) {
         const text = done ? `Thought for ${RUN_SECONDS}s` : `Working for ${seconds}s`;
-        if (clock.textContent !== text) clock.textContent = text;
+        if (clock.textContent !== say(text)) clock.textContent = text;
       }
       run.classList.toggle("is-running", !done);
 
@@ -219,11 +218,11 @@
       if (items.compare) items.compare.classList.toggle("is-current", !compared);
       if (compareLabel) {
         const text = compared ? "Compared perspectives" : "Comparing perspectives…";
-        if (compareLabel.textContent !== text) compareLabel.textContent = text;
+        if (compareLabel.textContent !== say(text)) compareLabel.textContent = text;
       }
       if (count) {
         const text = compared ? `${models.length} answers` : `${answered} of ${models.length}`;
-        if (count.textContent !== text) count.textContent = text;
+        if (count.textContent !== say(text)) count.textContent = text;
       }
 
       // One live status row: writing, then checking the fixed text. It stays
@@ -231,7 +230,7 @@
       show(items.status, p >= WRITE_AT);
       if (status) {
         const text = p >= CHECK_AT ? "Checking the answer…" : "Writing answer…";
-        if (status.textContent !== text) status.textContent = text;
+        if (status.textContent !== say(text)) status.textContent = text;
       }
 
       // The answer streams in while it is written; the sheen runs while it

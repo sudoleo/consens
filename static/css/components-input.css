@@ -356,8 +356,9 @@ body:not(.dark-mode) .chat-input-container::before {
   box-shadow: var(--card-shadow-hover), 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+/* The words stand in the markup (data-drop-label, docs/i18n.md). */
 .chat-input-container.is-image-dragover::after {
-  content: "Drop file to attach";
+  content: attr(data-drop-label);
   position: absolute;
   inset: 6px;
   z-index: 3;

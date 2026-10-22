@@ -90,7 +90,7 @@
         return;
       }
       const text = compute(now);
-      if (node.textContent !== text) node.textContent = text;
+      if (node.textContent !== window.App.t(text)) node.textContent = text;
     });
     page.cards.forEach(entry => {
       const state = F().nextCheck(entry.watch, now).state;
@@ -1112,7 +1112,8 @@
       .filter(Boolean);
     if (!names.length) return "";
     const shown = names.slice(-3).join(", ");
-    return "Ruled out: " + shown + (names.length > 3 ? ` and ${names.length - 3} more` : "") + ".";
+    // Whole sentences: the names are the sources' own (docs/i18n.md).
+    return names.length > 3 ? `Ruled out: ${shown} and ${names.length - 3} more.` : `Ruled out: ${shown}.`;
   }
 
   // The panel opens with its content: the rows grow from 0 to their height

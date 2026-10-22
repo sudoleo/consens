@@ -135,7 +135,7 @@
     for (const { group, rows: members } of sections) {
       const heading = headings.get(group.key) || createHeading(group);
       headings.delete(group.key);
-      if (heading.textContent !== group.label) heading.textContent = group.label;
+      if (heading.textContent !== window.App.t(group.label)) heading.textContent = group.label;
       // A group whose chats a search or an Undo hides says nothing.
       const hidden = !members.some(isShown);
       if (heading.hidden !== hidden) heading.hidden = hidden;

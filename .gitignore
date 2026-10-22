@@ -38,6 +38,9 @@ node_modules/
 # Build-Ausgabe wird mitcommittet, damit der Render-Deploy kein Node braucht.
 # Ohne sie liefert app/core/assets.py automatisch die Einzeldateien aus.
 !static/dist/manifest.json
+# Das Woerterbuch der deutschen Oberflaeche (docs/i18n.md), ebenfalls gegen
+# die globale *json-Regel: ohne es bliebe die Seite in Prod englisch.
+!app/i18n/*/*.json
 
 # Local LinkedIn image posts and editorial notes
 /artifacts/linkedin/

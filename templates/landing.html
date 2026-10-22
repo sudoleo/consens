@@ -144,7 +144,7 @@
               <div class="lp-ask-stage">
                   <div class="lp-composer-preview">
                   <div class="lp-composer" data-ask-composer>
-                    <span class="lp-composer-text" data-ask-text></span>
+                    <span class="lp-composer-text" data-ask-text data-placeholder="Enter your question"></span>
                     <div class="lp-composer-row">
                       <span class="lp-icon-btn" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -159,11 +159,6 @@
                   </div>
                   <p class="lp-composer-foot">Please avoid personal or sensitive data. AI models can make mistakes.</p>
               </div>
-              <ul class="lp-scene-notes">
-                <li data-ask-note="0"><b>The field.</b> One question, nothing to configure first.</li>
-                <li data-ask-note="1"><b>The models.</b> The agent that writes, and the six it checks with.</li>
-                <li data-ask-note="2"><b>Send.</b> The only filled control on the page.</li>
-              </ul>
             </div>
           </div>
           <div class="lp-scene-rail" aria-hidden="true"><i></i></div>
@@ -682,6 +677,9 @@
       document.querySelectorAll(".lp-prompt-text[data-type-loop], .lp-prompt-text[data-type-text]").forEach(typeTarget => {
         const list = (typeTarget.dataset.typeLoop || typeTarget.dataset.typeText || "")
           .split("|").map(s => s.trim()).filter(Boolean);
+        // The questions arrive in the page's language (data-type-loop is
+        // translated); half-typed ones are never looked up (docs/i18n.md).
+        typeTarget.setAttribute("data-i18n-skip", "");
         if (reducedMotion || !("IntersectionObserver" in window) || !list.length) {
           typeTarget.textContent = list[0] || "";
         } else {

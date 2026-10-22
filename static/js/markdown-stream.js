@@ -203,7 +203,10 @@ function enhanceMarkdownTables(root) {
     wrapper.setAttribute("role", "region");
     wrapper.setAttribute(
       "aria-label",
-      headings.length ? `Table: ${headings.join(", ")}` : `Table ${index + 1}`
+      // The answer is never translated (data-i18n-skip), its label is.
+      headings.length
+        ? window.App.t("Table: {headings}", { headings: headings.join(", ") })
+        : window.App.t("Table {number}", { number: index + 1 })
     );
     wrapper.tabIndex = 0;
 
@@ -214,6 +217,8 @@ function enhanceMarkdownTables(root) {
 
 // Utils: Markdown → HTML (sanitised) + deine Addons
 function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources) {
+  // A model's words stay in the language it wrote them in (i18n.js).
+  el.setAttribute("data-i18n-skip", "");
   el.replaceChildren(renderMarkdownFragment(md));
 
   enhanceMarkdownTables(el);
@@ -316,6 +321,7 @@ function morphNodes(parent, current, wanted) {
 // `el` already shows. `decorate` gives the render its final inline form
 // before it is compared (source pills), as for streamed blocks.
 function morphMarkdown(el, md, { decorate } = {}) {
+  el.setAttribute("data-i18n-skip", "");
   const next = document.createElement("div");
   injectMarkdown(next, md, []);
   decorate?.(next);
@@ -534,6 +540,7 @@ function renderStreamTail(text, decorate) {
 // Renders `md` into `el`, reusing the blocks of the previous call when `md`
 // only grew. Returns the number of characters that were parsed.
 function renderMarkdownStream(el, md, { decorate } = {}) {
+  el.setAttribute("data-i18n-skip", "");
   md = String(md || "");
   let state = el._markdownStream;
   // Anyone else writing into the element (a full render, a review re-render)

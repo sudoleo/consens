@@ -236,7 +236,7 @@
       detail.className = "verdict-detail";
       const modelCount = Number(agreement.model_count) || 0;
       detail.textContent = modelCount
-        ? `${modelCount} model${modelCount === 1 ? "" : "s"} compared`
+        ? (modelCount === 1 ? "1 model compared" : `${modelCount} models compared`)
         : "Saved agreement score";
       main.append(headline, detail);
       verdict.append(gauge, main);
@@ -460,6 +460,9 @@
         const tabLabel = document.createElement("span");
         tabLabel.className = "consensus-tab-label";
         tabLabel.dataset.short = shortLabel;
+        // data-short is the label a reader sees (German on a German page);
+        // data-tab names the tab for code.
+        tabLabel.dataset.tab = shortLabel.toLowerCase();
         tabLabel.textContent = label;
         const tabCount = document.createElement("span");
         tabCount.className = "consensus-tab-count";
@@ -484,7 +487,7 @@
         });
 
         tabs.insertBefore(tab, shortLabel === "Answers"
-          ? tabs.querySelector('[data-short="Sources"]')?.closest('.consensus-tab') || null
+          ? tabs.querySelector('[data-tab="sources"]')?.closest('.consensus-tab') || null
           : null);
         panels.appendChild(panel);
       }

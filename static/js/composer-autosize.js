@@ -130,7 +130,7 @@
     // every key press) re-measured at once and cut the soft growth short.
     let placeholder = questionInput.placeholder;
     new MutationObserver(() => {
-      if (questionInput.placeholder === placeholder) return;
+      if (questionInput.placeholder === window.App.t(placeholder)) return;
       placeholder = questionInput.placeholder;
       resizeQuestionInput();
     }).observe(questionInput, { attributes: true, attributeFilter: ["placeholder"] });

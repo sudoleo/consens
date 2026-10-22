@@ -77,6 +77,12 @@ passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
 - Frontend-Module reden über `window.*` / `window.App` (keine ES-Imports). Die
   Script-Ladereihenfolge ist ein Vertrag — für `/app` steht sie in
   `static/js/bundles.json`, nicht mehr in `templates/index.html`.
+- **Deutsch:** Jeder sichtbare englische Text hat eine deutsche Fassung in
+  `app/i18n/de/*.json` ([`docs/i18n.md`](docs/i18n.md)). Wer Text ändert oder
+  hinzufügt, trägt sie im selben Commit ein; `venv/Scripts/python.exe
+  scripts/i18n.py missing` listet die Lücken, `tests/test_i18n.py` bricht sonst
+  ab. Skripte nie gegen sichtbaren Text vergleichen (`window.App.t(text)`),
+  Einzahl/Mehrzahl als ganze Sätze.
 - Nach Änderungen unter `static/` für `/app`: `npm run build` (Marke kommt aus
   dem Inhalt, es gibt dort nichts mehr von Hand zu bumpen) — Details in
   [`docs/frontend-build.md`](docs/frontend-build.md). Öffentliche Seiten und

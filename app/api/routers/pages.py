@@ -595,7 +595,7 @@ def read_root(request: Request):
         "model_labels": model_labels,
         "model_badges": model_badges,
         # Drei Beispielfragen pro Seitenaufruf (die Seite wird nie gecacht).
-        "starters": starter_questions.pick_curated(),
+        "starters": starter_questions.pick_curated(language=getattr(request.state, "language", "en")),
         # Statt einer handgepflegten Versionsnummer steht in der Fusszeile
         # der Commit, der gerade laeuft. Leer = unbekannt: dann zeigt das
         # Template gar nichts an.

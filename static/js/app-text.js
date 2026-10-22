@@ -2,10 +2,14 @@
 // app-text.js
 // How the app writes what it says, in one place (Apple-Audit H1, H8, H9):
 //
-//   App.format     dates, times, numbers and spans of time in ONE locale
-//                  (en-US, the language of the interface), never the
-//                  browser's: a German browser read "19. Okt. 2026" and
+//   App.format     dates, times, numbers and spans of time in ONE locale,
+//                  the language of the page (en-US, or de-DE when i18n.js
+//                  made the page German, App.lang), never the browser's: an
+//                  English page in a German browser read "19. Okt. 2026" and
 //                  "48.213 tokens" next to "Oct 19" and "8,000 characters".
+//   App.t          a sentence in the page's language (i18n.js on a German
+//                  page); here, on an English page, the sentence itself
+//                  with its {placeholders} filled.
 //   App.userError  every failure as a sentence with a next step: offline,
 //                  an unreachable server, a body that is not JSON (a
 //                  company proxy's HTML page), status codes and the
@@ -33,7 +37,26 @@
   // ------------------------------------------------------------------
   // App.format
   // ------------------------------------------------------------------
-  const LOCALE = "en-US";
+  const GERMAN = App.lang === "de";
+  const LOCALE = GERMAN ? "de-DE" : "en-US";
+  // The words App.format writes around its numbers. German is written here,
+  // not looked up: the numbers sit inside the words (scripts/i18n.py skips
+  // these lines).
+  const SAY = GERMAN
+    ? { today: "heute", tomorrow: "morgen", justNow: "gerade eben", minutesAgo: n => "vor " + n + " Min.", // i18n-ignore
+        hoursAgo: n => "vor " + n + " Std.", yesterday: "gestern", daysAgo: n => "vor " + n + " Tagen", // i18n-ignore
+        on: day => "am " + day, h: " Std.", m: " Min.", s: " Sek." } // i18n-ignore
+    : { today: "today", tomorrow: "tomorrow", justNow: "just now", minutesAgo: n => n + "m ago",
+        hoursAgo: n => n + "h ago", yesterday: "yesterday", daysAgo: n => n + " days ago",
+        on: day => "on " + day, h: "h", m: "m", s: "s" };
+
+  if (typeof App.t !== "function") {
+    App.lang = "en";
+    App.t = function (text, params) {
+      if (!params) return String(text);
+      return String(text).replace(/\{([A-Za-z_]\w*|\d+)\}/g, (match, name) => (Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match));
+    };
+  }
   const SECOND = 1000;
   const MINUTE = 60 * SECOND;
   const HOUR = 60 * MINUTE;
@@ -124,8 +147,8 @@
     if (!day) return "";
     const days = Math.round((startOfDay(day) - startOfDay(new Date(now))) / DAY);
     const clock = time(day);
-    if (days === 0) return "today, " + clock;
-    if (days === 1) return "tomorrow, " + clock;
+    if (days === 0) return SAY.today + ", " + clock;
+    if (days === 1) return SAY.tomorrow + ", " + clock;
     if (days > 1 && days < 7) {
       const intl = formatter("date", { weekday: "long" });
       if (intl) return intl.format(day) + ", " + clock;
@@ -143,13 +166,13 @@
       const total = Math.max(1, Math.ceil(Math.max(0, value) / MINUTE));
       const hours = Math.floor(total / 60);
       const rest = total % 60;
-      if (!hours) return rest + "m";
-      return rest ? hours + "h " + rest + "m" : hours + "h";
+      if (!hours) return rest + SAY.m;
+      return rest ? hours + SAY.h + " " + rest + SAY.m : hours + SAY.h;
     }
     const seconds = Math.floor(Math.max(0, value) / SECOND);
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor(seconds / 60) % 60;
-    return (hours ? hours + "h " : "") + (mins || hours ? mins + "m " : "") + (seconds % 60) + "s";
+    return (hours ? hours + SAY.h + " " : "") + (mins || hours ? mins + SAY.m + " " : "") + (seconds % 60) + SAY.s;
   }
 
   // A time behind, in the same units: "just now", "12m ago", "3h ago",
@@ -158,15 +181,15 @@
     const day = toDate(value);
     if (!day) return "";
     const minutes = Math.max(0, Math.round((now - day.getTime()) / MINUTE));
-    if (minutes < 1) return "just now";
-    if (minutes < 60) return minutes + "m ago";
+    if (minutes < 1) return SAY.justNow;
+    if (minutes < 60) return SAY.minutesAgo(minutes);
     const hours = Math.round(minutes / 60);
     const days = Math.round((startOfDay(new Date(now)) - startOfDay(day)) / DAY);
     // Earlier the same day stays in hours, even 23h40m ago (never "yesterday").
-    if (hours < 24 || days < 1) return Math.min(hours, 23) + "h ago";
-    if (days === 1) return "yesterday";
-    if (days < 7) return days + " days ago";
-    return "on " + date(day, { now });
+    if (hours < 24 || days < 1) return SAY.hoursAgo(Math.min(hours, 23));
+    if (days === 1) return SAY.yesterday;
+    if (days < 7) return SAY.daysAgo(days);
+    return SAY.on(date(day, { now }));
   }
 
   // "1 source", "3 sources".

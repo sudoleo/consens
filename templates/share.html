@@ -82,8 +82,8 @@
           {% if scoreboard.coverage_status == "insufficient" %}<li>Insufficient evidence to assess agreement</li>{% endif %}
           {% if scoreboard.coverage_percent is defined and scoreboard.coverage_percent is not none %}<li>Coverage: <b>{{ scoreboard.scored_claims }}/{{ scoreboard.total_claims }}</b> claims ({{ scoreboard.coverage_percent }}%){% if scoreboard.evidence_incomplete %} · evidence incomplete{% endif %}</li>{% endif %}
           {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
-          {% if has_differences_view and scoreboard.contradiction_count %}<li class="is-contradiction"><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
-          {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
+          {% if has_differences_view and scoreboard.contradiction_count %}<li class="is-contradiction">{% if scoreboard.contradiction_count == 1 %}<b>1</b> contradiction{% else %}<b>{{ scoreboard.contradiction_count }}</b> contradictions{% endif %}</li>{% endif %}
+          {% if scoreboard.source_count %}<li>{% if scoreboard.source_count == 1 %}<b>1</b> source{% else %}<b>{{ scoreboard.source_count }}</b> sources{% endif %}</li>{% endif %}
         </ul>
       </div>
       {% endif %}
@@ -92,7 +92,13 @@
         {% if consensus_model_view %}
         <div class="share-models-group">
           <span class="share-models-label">{% if is_agent %}Answer{% else %}Consensus{% endif %}</span>
-          <span class="share-model-chip is-consensus" title="{% if is_agent %}Answer{% else %}Consensus{% endif %} model: {{ consensus_model_view.label }}{% if consensus_model_view.model %} – {{ consensus_model_view.model }}{% endif %}">
+          {#- Whole texts per branch, so a translation finds them (docs/i18n.md). -#}
+          {% set chip_model = consensus_model_view.label ~ ((" – " ~ consensus_model_view.model) if consensus_model_view.model else "") %}
+          {% if is_agent %}
+          <span class="share-model-chip is-consensus" title="Answer model: {{ chip_model }}">
+          {% else %}
+          <span class="share-model-chip is-consensus" title="Consensus model: {{ chip_model }}">
+          {% endif %}
             {% if consensus_model_view.icon %}<img src="{{ consensus_model_view.icon }}" alt="{{ consensus_model_view.label }}" class="share-model-icon{% if consensus_model_view.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM', 'Meta', 'Qwen') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
             <span class="share-model-name">{{ consensus_model_view.model or consensus_model_view.label }}{% if consensus_model_view.pro %}<span class="share-model-pro">Pro</span>{% endif %}</span>
           </span>
@@ -177,7 +183,7 @@
         {% if has_differences_view and contradiction_count %}
         <button type="button" id="diffTeaser" class="share-diff-teaser" data-umami-event="share_diff_teaser_click">
           <span class="share-diff-teaser-icon" aria-hidden="true">&#9888;</span>
-          <span>The models don't fully agree here &mdash; {{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }} found. <b>See where they disagree &rarr;</b></span>
+          <span>{% if contradiction_count == 1 %}The models don't fully agree here &mdash; 1 contradiction found. <b>See where they disagree &rarr;</b>{% else %}The models don't fully agree here &mdash; {{ contradiction_count }} contradictions found. <b>See where they disagree &rarr;</b>{% endif %}</span>
         </button>
         {% endif %}
       </div>
@@ -187,10 +193,11 @@
         <section class="legal-panel">
           <h2>Differences</h2>
           {% if differences %}
+          {#- One piece per number, each a whole text (docs/i18n.md). -#}
           <p class="diff-verdict">
-            {{ differences | length }} notable difference{{ "s" if differences | length != 1 }}
-            {%- if contradiction_count %} ({{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }}){% endif %}
-            across {{ model_count }} models.
+            {% if differences | length == 1 %}<span>1 notable difference</span>{% else %}<span>{{ differences | length }} notable differences</span>{% endif %}
+            {%- if contradiction_count == 1 %} <span>(1 contradiction)</span>{% elif contradiction_count %} <span>({{ contradiction_count }} contradictions)</span>{% endif %}
+            <span>across {{ model_count }} models.</span>
           </p>
           <div class="diff-cards">
             {% for card in difference_cards.cards %}{{ difference_card(card) }}{% endfor %}
@@ -257,7 +264,7 @@
           <li>
             <a href="{{ item.path }}" class="share-related-item" data-umami-event="share_related_click">
               <span class="share-related-q">{{ item.question }}</span>
-              {% if item.models_count %}<span class="share-related-meta">{{ item.models_count }} model{{ "s" if item.models_count != 1 }} compared</span>{% endif %}
+              {% if item.models_count %}<span class="share-related-meta">{% if item.models_count == 1 %}1 model compared{% else %}{{ item.models_count }} models compared{% endif %}</span>{% endif %}
             </a>
           </li>
           {% endfor %}
@@ -273,22 +280,24 @@
         {% if is_agent %}
         {%- set answer_model = (consensus_model_view.model or consensus_model_view.label) if consensus_model_view else "" -%}
         <h2 id="shareAboutHeading">About this answer</h2>
+        {#- Each sentence whole, one span each, so a translation finds it
+            (docs/i18n.md); "an AI model" has an entry of its own. -#}
+        {%- set writer = answer_model or "an AI model" -%}
         <p>
           {% if scoreboard and scoreboard.model_count %}
-          {{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }} answered this question
-          independently{% if date_display %} on {{ date_display }}{% endif %}, and {{ answer_model or "an AI model" }}
-          wrote the answer from what they said.{% if has_judge_check %} A judge model then checked every sentence
-          against their answers and flagged where they differ.{% endif %}
+          {%- set models_count = scoreboard.model_count -%}
+          <span>{% if models_count == 1 and date_display %}1 AI model answered this question independently on {{ date_display }}, and {{ writer }} wrote the answer from what it said.{% elif models_count == 1 %}1 AI model answered this question independently, and {{ writer }} wrote the answer from what it said.{% elif date_display %}{{ models_count }} AI models answered this question independently on {{ date_display }}, and {{ writer }} wrote the answer from what they said.{% else %}{{ models_count }} AI models answered this question independently, and {{ writer }} wrote the answer from what they said.{% endif %}</span>
+          {% if has_judge_check %}<span>A judge model then checked every sentence against their answers and flagged where they differ.</span>{% endif %}
           {% else %}
-          {{ answer_model or "An AI model" }} answered this question{% if date_display %} on {{ date_display }}{% endif %}.
+          <span>{% if date_display %}{{ answer_model or "An AI model" }} answered this question on {{ date_display }}.{% else %}{{ answer_model or "An AI model" }} answered this question.{% endif %}</span>
           {% endif %}
         </p>
         {% else %}
         <h2 id="shareAboutHeading">About this consensus</h2>
+        {%- set models_count = scoreboard.model_count if scoreboard and scoreboard.model_count else 0 -%}
         <p>
-          {% if scoreboard and scoreboard.model_count %}{{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }}{% else %}Several AI models{% endif %}
-          answered this question independently{% if date_display %} on {{ date_display }}{% endif %}. A judge model
-          then cross-checked the answers, scored how far they agree and flagged where they differ.
+          <span>{% if models_count == 1 and date_display %}1 AI model answered this question independently on {{ date_display }}.{% elif models_count == 1 %}1 AI model answered this question independently.{% elif models_count and date_display %}{{ models_count }} AI models answered this question independently on {{ date_display }}.{% elif models_count %}{{ models_count }} AI models answered this question independently.{% elif date_display %}Several AI models answered this question independently on {{ date_display }}.{% else %}Several AI models answered this question independently.{% endif %}</span>
+          <span>A judge model then cross-checked the answers, scored how far they agree and flagged where they differ.</span>
         </p>
         {% endif %}
         <p class="share-about-caveat">

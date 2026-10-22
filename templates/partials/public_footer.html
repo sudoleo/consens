@@ -13,6 +13,12 @@
       <a href="/terms">Terms</a>
       <a href="/privacy">Privacy</a>
       <a href="/imprint">Imprint</a>
+      {#- The other language, named in itself (docs/i18n.md). -#}
+      {% if request.state.language is defined and request.state.language == 'de' %}
+      <a href="?lang=en" hreflang="en" lang="en" translate="no">English</a>
+      {% else %}
+      <a href="?lang=de" hreflang="de" lang="de" translate="no">Deutsch</a>
+      {% endif %}
     </div>
   </div>
 </footer>

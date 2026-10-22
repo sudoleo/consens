@@ -639,7 +639,7 @@
     const actionsEl = document.getElementById('agentAnswerErrorActions');
     const text = error?.text || '';
     if (errorEl) {
-      if (errorEl.textContent !== text) errorEl.textContent = text;
+      if (errorEl.textContent !== window.App.t(text)) errorEl.textContent = text;
       errorEl.hidden = !text;
     }
     if (!actionsEl) return;
@@ -1037,9 +1037,9 @@
     const notice = document.getElementById('agentReviewNotice');
     if (notice) {
       notice.hidden = !count;
-      const text = count ? `${count} ${count === 1 ? 'item needs' : 'items need'} your review` : '';
+      const text = !count ? '' : count === 1 ? '1 item needs your review' : `${count} items need your review`;
       const message = document.getElementById('agentReviewMessage');
-      if (message && message.textContent !== text) message.textContent = text;
+      if (message && message.textContent !== window.App.t(text)) message.textContent = text;
     }
     // Bookmark dot and tab title follow the conversation on screen.
     const context = registry.visible();
@@ -1048,7 +1048,7 @@
     document.querySelectorAll('.bookmark.needs-review').forEach(row => {
       if (count && row.dataset.id === bookmarkId) return;
       row.classList.remove('needs-review');
-      if (row.title === 'Needs review') row.removeAttribute('title');
+      if (row.title === window.App.t('Needs review')) row.removeAttribute('title');
     });
     if (count && bookmarkId) {
       document.querySelectorAll(`.bookmark[data-id="${cssId(bookmarkId)}"]`).forEach(row => {
@@ -1143,7 +1143,7 @@
       if (wait > 0) { quiet = true; loadingNoticeTimer = setTimeout(syncComposer, wait); }
     } else loadingNoticeSince = 0;
     if (notice) notice.hidden = !blocker || quiet;
-    if (message && message.textContent !== (blocker?.message || '')) message.textContent = blocker?.message || '';
+    if (message && message.textContent !== window.App.t(blocker?.message || '')) message.textContent = blocker?.message || '';
     if (action) {
       action.hidden = !blocker?.action;
       action.textContent = blocker?.label || '';

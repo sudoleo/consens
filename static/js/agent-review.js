@@ -59,7 +59,8 @@
     const level = agreementLevel(score);
     const el = node('span', 'agent-agreement');
     el.dataset.tone = score >= 65 ? 'calm' : score >= 40 ? 'warn' : 'alert';
-    el.title = `${level}: agreement score ${score}/100 across ${modelCount} model${modelCount === 1 ? '' : 's'}. `
+    el.title = (modelCount === 1 ? `${level}: agreement score ${score}/100 across 1 model. `
+      : `${level}: agreement score ${score}/100 across ${modelCount} models. `)
       + 'Model agreement compares perspectives; it is not independent fact checking.';
     const value = node('span', 'agent-agreement-score');
     value.append(node('span', 'agent-agreement-num', String(score)), node('span', 'agent-agreement-unit', '/100 agreement'));
@@ -99,12 +100,13 @@
   }
   function issueText(issue) {
     const n = issue.count;
-    return ({models_unavailable: `${n} comparison model${n === 1 ? '' : 's'} returned no usable answer; the check uses the remaining answers`,
+    return ({models_unavailable: n === 1 ? '1 comparison model returned no usable answer; the check uses the remaining answers'
+        : `${n} comparison models returned no usable answer; the check uses the remaining answers`,
       insufficient_answers: 'Fewer than two complete model answers arrived, so no comparison was possible',
       differences_unavailable: 'The answer check couldn’t look for disagreements, so none are marked',
       coverage_unavailable: 'The answer check couldn’t compare each sentence, so none is marked as supported',
-      sentences_unchecked: `${n} sentence${n === 1 ? '' : 's'} could not be checked`,
-      unindexed_sentences: `${n} sentence${n === 1 ? '' : 's'} fell outside the answer check`,
+      sentences_unchecked: n === 1 ? '1 sentence could not be checked' : `${n} sentences could not be checked`,
+      unindexed_sentences: n === 1 ? '1 sentence fell outside the answer check' : `${n} sentences fell outside the answer check`,
       truncated_answers: 'Some model answers were too long to check in full',
       incomplete: 'The saved check is incomplete'})[issue.code] || 'The check is incomplete';
   }
@@ -112,7 +114,7 @@
     if (!['succeeded', 'partial'].includes(state)) return states[state] || states.partial;
     if (issues.length && issues.every(i => i.code === 'models_unavailable')) {
       const n = issues.reduce((total, i) => total + i.count, 0);
-      return `${states.succeeded} · ${n} model${n === 1 ? '' : 's'} without an answer`;
+      return n === 1 ? `${states.succeeded} · 1 model without an answer` : `${states.succeeded} · ${n} models without an answer`;
     }
     return issues.length ? states.partial : states[state];
   }
@@ -142,7 +144,7 @@
     const unavailable = check ? comparison.failed_models || [] : [];
     const total = answers.length + unavailable.length;
     const count = !check ? '' : unavailable.length ? `${answers.length} of ${total} models answered`
-      : `${total} model${total === 1 ? '' : 's'} answered`;
+      : total === 1 ? '1 model answered' : `${total} models answered`;
     const line = [count, checkWord(check?.status || state, issues)].filter(Boolean).join(' · ');
     const details = [];
     for (const model of unavailable) details.push(model.partial_text

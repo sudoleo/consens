@@ -43,6 +43,7 @@ from app.core.background_tasks import (
 from app.core.concurrency import apply_worker_thread_budget
 from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.static_delivery import StaticDeliveryMiddleware
+from app.core.i18n_middleware import I18nMiddleware
 from app.core.e2e_profile import e2e_test_mode_enabled
 from app.core.not_found import not_found_page, wants_html_page
 from app.core.notice_page import notice_page
@@ -292,6 +293,9 @@ def operational_metrics():
 app.add_middleware(CustomSecurityMiddleware)
 app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(CorrelationMiddleware)
+# German pages for German readers (/de/<page>, cookie, Accept-Language); just
+# inside the delivery layer, so it rewrites HTML before gzip.
+app.add_middleware(I18nMiddleware)
 # Outermost: long-lived caching for content-hashed static/dist bundles and gzip
 # for static text and HTML. Server-Sent Events are never compressed or held.
 app.add_middleware(StaticDeliveryMiddleware)

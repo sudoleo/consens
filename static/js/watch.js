@@ -485,7 +485,7 @@
     const activeLabel = `${limits.activeCount} of ${limits.activeLimit} active`;
     const availabilityLabel = limits.atLimit
       ? "All slots in use"
-      : `${limits.remaining} slot${limits.remaining === 1 ? "" : "s"} free`;
+      : limits.remaining === 1 ? "1 slot free" : `${limits.remaining} slots free`;
     const meterWidth = limits.activeLimit > 0
       ? Math.min(100, Math.round((limits.activeCount / limits.activeLimit) * 100)) : 100;
     target.hidden = false;
@@ -1966,7 +1966,7 @@
     const watching = Boolean(watch);
     const label = button.querySelector("span");
     const text = watching ? "Watching" : "Watch";
-    if (label && label.textContent !== text) label.textContent = text;
+    if (label && label.textContent !== window.App.t(text)) label.textContent = text;
     button.classList.toggle("is-watching", watching);
     const description = watching ? "You watch this question. Open it on Watches." : "Watch this question for changes";
     button.title = description;

@@ -20,6 +20,7 @@ import unicodedata
 from datetime import datetime, timezone
 from typing import Callable
 
+from app.core import i18n
 from app.core.observability import safe_exception
 from app.services.chat_titles import title_model
 from app.services.llm.consensus_engine import query_engine_json
@@ -145,9 +146,15 @@ _EDGE_RE = re.compile(r"^[\s\"'`“”„‘’«»*#_\-–—:]+|[\s\"'`“”�
 _COMPARE_RE = re.compile(r"[\W_]+", re.UNICODE)
 
 
-def pick_curated(rng: random.Random | None = None) -> list[dict]:
-    """Three curated starters for one page load, in random order."""
-    return list((rng or random).sample(CURATED_STARTERS, CURATED_PER_PAGE))
+def pick_curated(rng: random.Random | None = None, *, language: str = "en") -> list[dict]:
+    """Three curated starters for one page load, in random order.
+
+    In the reader's language (docs/i18n.md): a German page gets German labels
+    and puts the German question into the field.
+    """
+    picked = (rng or random).sample(CURATED_STARTERS, CURATED_PER_PAGE)
+    return [{**item, "label": i18n.t(item["label"], language), "question": i18n.t(item["question"], language)}
+            for item in picked]
 
 
 def _plain(value) -> str:

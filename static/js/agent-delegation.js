@@ -75,8 +75,8 @@
   // for a running turn on a wide screen).
   const wideQuery = window.matchMedia?.('(min-width: 1200px)');
   const wide = () => !wideQuery || wideQuery.matches;
-  function setText(el, value) { if (el.textContent !== value) el.textContent = value; }
-  function setTitle(el, value) { if (el.title !== value) el.title = value; }
+  function setText(el, value) { if (el.textContent !== window.App.t(value)) el.textContent = value; }
+  function setTitle(el, value) { if (el.title !== window.App.t(value)) el.title = value; }
   const keyFor = (chat, turn) => `${uid()}:${chat}:${turn}`;
   function node(tag, className, text) {
     const el = document.createElement(tag);
@@ -452,7 +452,8 @@
       }
       const names = agent.missing;
       row.body.append(node('p', 'agent-judge-note', agent.status === 'working' ? 'Check in progress.'
-        : names.length ? `The ${joinNames(names)} ${names.length === 1 ? 'check' : 'checks'} could not run. The answer is shown without ${names.length === 1 ? 'it' : 'them'}.`
+        : names.length === 1 ? `The ${joinNames(names)} check could not run. The answer is shown without it.`
+        : names.length ? `The ${joinNames(names)} checks could not run. The answer is shown without them.`
           : agent.textOnly ? 'The check of your text is shown above the answer.'
             : agent.checkedText ? 'The check of your text is shown above the answer, the rest under Review.'
             : 'Results are marked in the answer and listed under Review.'));
@@ -529,7 +530,10 @@
     const done = rows.filter(agent => settled.has(agent.status)).length;
     const out = rows.filter(agent => ended.has(agent.status)).length;
     setText(sidebar.querySelector(".agent-sidebar-progress"), !rows.length && view.running ? "Starting…"
-      : `${done} of ${rows.length} done${out ? ` · ${out} without result` : ""}`);
+      // Each part through App.t: an optional tail glued to a sentence
+      // matches no dictionary entry (docs/i18n.md).
+      : [window.App.t("{done} of {total} done", { done, total: rows.length }),
+        out ? window.App.t("{out} without result", { out }) : ""].filter(Boolean).join(" · "));
     const segments = sidebar.querySelector(".agent-sidebar-segments");
     while (segments.children.length > rows.length) segments.lastElementChild.remove();
     while (segments.children.length < rows.length) segments.append(node("i"));

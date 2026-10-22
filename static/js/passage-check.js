@@ -279,7 +279,7 @@
   }
 
   function sentences(count) {
-    return `${count} sentence${count === 1 ? "" : "s"}`;
+    return count === 1 ? "1 sentence" : `${count} sentences`;
   }
 
   // What one dissenting model says instead, short: the card is a summary,
@@ -344,10 +344,10 @@
     const notes = [];
     for (const issue of check.issues) {
       if (issue.code === "models_unavailable" && issue.count) {
-        notes.push(`${issue.count} model${issue.count === 1 ? "" : "s"} did not answer`);
+        notes.push(issue.count === 1 ? "1 model did not answer" : `${issue.count} models did not answer`);
       }
       if ((issue.code === "sentences_unchecked" || issue.code === "unindexed_sentences") && issue.count) {
-        notes.push(`${sentences(issue.count)} could not be checked`);
+        notes.push(issue.count === 1 ? "1 sentence could not be checked" : `${issue.count} sentences could not be checked`);
       }
     }
     return notes.length ? notes.join(" · ") + "." : "";
@@ -385,21 +385,27 @@
     const line = node("p", "passage-check-headline");
     const figure = (value, state) => node("span", `passage-check-figure is-${state}`, String(value));
     const unchecked = check.issues.some(issue => ["sentences_unchecked", "unindexed_sentences"].includes(issue.code) && issue.count);
-    const statements = `${unchecked ? "checked " : ""}${total === 1 ? "statement" : "statements"}`;
+    // Whole phrases per number and wording, so a translation finds each
+    // piece (docs/i18n.md); the figure stays its own element between them.
+    const of = unchecked
+      ? (total === 1 ? " of 1 checked statement" : ` of ${total} checked statements`)
+      : (total === 1 ? " of 1 statement" : ` of ${total} statements`);
     if (contested) {
-      line.append("Models disagree with ", figure(contested, tally.disputed ? "disputed" : "split"),
-        ` of ${total} ${statements} in your text`);
+      line.append("Models disagree with ", figure(contested, tally.disputed ? "disputed" : "split"), `${of} in your text`);
     } else if (!tally.holds) {
       // Nothing contradicted, but nothing confirmed either: not "fine".
-      line.append(total === 1 ? `No model contradicts the ${statements} in your text, but none confirms it`
-        : `No model contradicts your text, but none of its ${total} ${statements} is confirmed`);
+      line.append(total === 1
+        ? (unchecked ? "No model contradicts the checked statement in your text, but none confirms it"
+          : "No model contradicts the statement in your text, but none confirms it")
+        : (unchecked ? `No model contradicts your text, but none of its ${total} checked statements is confirmed`
+          : `No model contradicts your text, but none of its ${total} statements is confirmed`));
     } else if (tally.unconfirmed) {
       line.append("No model contradicts your text; ", figure(tally.holds, "holds"),
-        ` of ${total} ${statements} ${tally.holds === 1 ? "is" : "are"} confirmed`);
+        `${of} ${tally.holds === 1 ? "is" : "are"} confirmed`);
     } else if (total === 1) {
-      line.append(`The ${statements} in your text holds up`);
+      line.append(unchecked ? "The checked statement in your text holds up" : "The statement in your text holds up");
     } else {
-      line.append("All ", figure(total, "holds"), ` ${statements} in your text hold up`);
+      line.append("All ", figure(total, "holds"), unchecked ? " checked statements in your text hold up" : " statements in your text hold up");
     }
     return line;
   }

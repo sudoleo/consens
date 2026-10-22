@@ -448,7 +448,7 @@
         <span id="agentReviewMessage" role="status" aria-live="polite"></span>
         <button id="agentReviewAction" type="button">Review</button>
       </div>
-      <div class="chat-input-container u-position-relative">
+      <div class="chat-input-container u-position-relative" data-drop-label="Drop file to attach">
         <!-- Fallback fuer die im Agent-Chat verborgene Toolbar. attachments.js
              verschiebt dieselbe Leiste im Hero/Direktvergleich unter das Feld.
              Noch nicht gesendete Anhaenge. Beim Senden wandern sie an die
@@ -709,7 +709,7 @@
                   <button type="button" id="consensusDifferencesTab" class="consensus-tab consensus-evidence-action"
                     aria-expanded="false" aria-controls="consensusDifferencesPanel" hidden>
                     <svg class="consensus-evidence-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5"/></svg>
-                    <span class="consensus-tab-label" data-short="Differences">Review differences</span>
+                    <span class="consensus-tab-label" data-tab="differences" data-short="Differences">Review differences</span>
                     <span class="consensus-tab-meta"><span class="consensus-tab-count" id="consensusDifferencesTabCount"></span></span>
                   </button>
                   <!-- Die Einzelantworten-Disclosure ist aus dem Agent-Mode-Panel
@@ -721,14 +721,14 @@
                       aria-expanded="false"
                       aria-controls="{{ model_families | map(attribute='responseId') | join(' ') }}">
                       <svg class="consensus-evidence-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"/></svg>
-                      <span class="consensus-tab-label" data-short="Answers">Compare answers</span>
+                      <span class="consensus-tab-label" data-tab="answers" data-short="Answers">Compare answers</span>
                       <span class="consensus-tab-meta"><span class="consensus-tab-count" id="consensusAnswersTabCount"></span></span>
                     </button>
                   </div>
                   <button type="button" id="consensusSourcesTab" class="consensus-tab consensus-evidence-action"
                     aria-expanded="false" aria-controls="consensusSourcesPanel" hidden>
                     <svg class="consensus-evidence-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6"/></svg>
-                    <span class="consensus-tab-label" data-short="Sources">Sources</span>
+                    <span class="consensus-tab-label" data-tab="sources" data-short="Sources">Sources</span>
                     <span class="consensus-tab-meta"><span class="consensus-tab-count" id="consensusSourcesTabCount"></span></span>
                   </button>
                 </div>
@@ -787,7 +787,8 @@
       {% set default_model = default_models[family.provider] %}
       <div class="response-box" id="{{ family.responseId }}" data-model="{{ family.label }}" data-short-label="{{ family.shortLabel }}">
         <h2 data-short-label="{{ family.shortLabel }}">
-          <span class="title">{{ family.title }}
+          {#- Names of models and their makers: never translated (docs/i18n.md). -#}
+          <span class="title" translate="no">{{ family.title }}
             <small>
               <img src="{{ family.icon }}" class="model-icon{% if family.iconClass %} {{ family.iconClass }}{% endif %}" alt="{{ family.title }} icon">
               <span id="{{ family.textId }}">{{ model_labels.get(default_model, default_model) }}</span>
@@ -1250,7 +1251,8 @@
                     <small>Guided asks all your comparison models every time. Free lets Agent decide which of them to ask and how many rounds the best answer needs. Every answer still rests on at least two models.</small>
                   </span>
                   <span class="settings-select">
-                    <select id="agentAutonomySelect">
+                    {#- "Free" here is not the plan Free (docs/i18n.md, context). -#}
+                    <select id="agentAutonomySelect" data-i18n-context="agent freedom">
                       <option value="guided" selected>Guided</option>
                       <option value="free">Free</option>
                     </select>
@@ -1300,6 +1302,25 @@
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {#- The language of this device (cookie consens_lang, docs/i18n.md).
+                  The names of the languages stay in their own language. -#}
+              {% set chosen_language = request.cookies.get('consens_lang', 'auto') %}
+              <div class="settings-section">
+                <label for="languageSelect" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Language</strong>
+                    <small id="languageHelp">On this device. Questions and answers stay in the language you write.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="languageSelect" aria-describedby="languageHelp">
+                      <option value="auto"{% if chosen_language not in ('en', 'de') %} selected{% endif %}>Browser language</option>
+                      <option value="en" lang="en" translate="no"{% if chosen_language == 'en' %} selected{% endif %}>English</option>
+                      <option value="de" lang="de" translate="no"{% if chosen_language == 'de' %} selected{% endif %}>Deutsch</option>
+                    </select>
+                  </span>
+                </label>
               </div>
 
               <div class="settings-section">

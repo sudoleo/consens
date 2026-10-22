@@ -1136,7 +1136,7 @@ def test_topic_page_leads_with_the_state_line_and_the_answer(monkeypatch):
     assert "wp-subheading" not in text
     assert text.index("wp-state") < text.index("wpAnswerHeading") < text.index("wp-history")
     assert "Topic started" in text
-    assert "How the 3 models compared &middot; 1 contradiction" in text
+    assert "<span>How the 3 models compared</span> &middot; <span>1 contradiction</span>" in text
     assert "<h1 id=\"shareQuestion\" class=\"wp-question share-question\">GPT-6</h1>" in text
     assert "What is the current evidence about GPT-6?" in text
 

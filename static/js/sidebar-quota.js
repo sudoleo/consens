@@ -27,7 +27,7 @@
   // style and layout, so every write below only happens on a change
   // (Apple audit D10).
   function setText(node, text) {
-    if (node && node.textContent !== text) node.textContent = text;
+    if (node && node.textContent !== window.App.t(text)) node.textContent = text;
   }
   function setHidden(node, hidden) {
     if (node && node.hidden !== hidden) node.hidden = hidden;

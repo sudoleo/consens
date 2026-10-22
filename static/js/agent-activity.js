@@ -118,7 +118,7 @@
   const SLOTS = ["seconds", "minutes", "long"];
   function setTitle(view, ms, running, status) {
     const label = durationLabel(ms, running, status);
-    if (view.title.dataset.label === label) return;
+    if (view.title.dataset.label === window.App.t(label)) return;
     view.title.dataset.label = label;
     const time = Number.isFinite(ms) ? durationText(ms) : "";
     const verb = time ? label.slice(0, label.length - time.length).trimEnd() : label;
@@ -136,14 +136,14 @@
     const resize = Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot && timeEl.isConnected;
     const from = resize ? timeEl.getBoundingClientRect().width : 0;
     if (resize) cancelMotion(view.slotMotion);
-    if (verbEl.textContent !== verb) verbEl.textContent = verb;
+    if (verbEl.textContent !== window.App.t(verb)) verbEl.textContent = verb;
     // The other verb stands invisibly in the same cell (agent-chat.css), so
     // the field is as wide as the wider one; it is no text of the title.
     const paired = verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : verb === SETTLED_VERBS.done ? SETTLED_VERBS.running : "";
     const holder = verbEl.parentElement;
     if (paired) holder.dataset.ghost = paired; else delete holder.dataset.ghost;
     view.title.querySelector(".agent-activity-gap").textContent = time ? " " : "";
-    if (timeEl.textContent !== time) timeEl.textContent = time;
+    if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
     if (!resize) return;
     // The first minute widens the slot once: the chevron glides to its new
@@ -597,7 +597,7 @@
       // A reasoning line that changes in place (a comparison model's quote,
       // the chat model's thinking) cross-fades; a step only brightens.
       if (item.kind === 'progress') crossfade(p, item.text);
-      else if (p.textContent !== item.text) {
+      else if (p.textContent !== window.App.t(item.text)) {
         const previous = p.textContent;
         p.textContent = item.text;
         if (previous) motion(p, [{opacity:.65}, {opacity:1}], () => {}, 160);
@@ -664,7 +664,7 @@
         }
       } else {
         const text = item.kind === 'progress' ? item.text : compactReasoning(item.text);
-        if (node.textContent !== text) node.textContent = text;
+        if (node.textContent !== window.App.t(text)) node.textContent = text;
         node.setAttribute("aria-label", item.kind === 'progress' ? 'Progress update' : item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary");
       }
     }
@@ -675,7 +675,12 @@
       ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
       : !reasoning.length ? (running ? "Waiting for the model’s response."
         : "No detailed progress updates were saved for this response.") : "";
-    if (finishReason === "length") view.note.textContent += " The response reached its output limit.";
+    if (finishReason === "length") {
+      // A sentence of its own, so it is translated on its own (docs/i18n.md).
+      const limit = document.createElement("span");
+      limit.textContent = "The response reached its output limit.";
+      view.note.append(view.note.textContent ? " " : "", limit);
+    }
     view.note.hidden = !view.note.textContent;
     const measured = usage && Number.isFinite(usage.input_tokens) && Number.isFinite(usage.output_tokens);
     const number = App.format.number;

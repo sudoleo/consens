@@ -2216,8 +2216,8 @@ canvas {
   list-style: none;
 }
 .wp-event.is-quiet summary::-webkit-details-marker { display: none; }
-.wp-event.is-quiet summary::after { content: "Show"; margin-left: auto; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
-.wp-event.is-quiet details[open] summary::after { content: "Hide"; }
+.wp-event.is-quiet summary::after { content: attr(data-show); margin-left: auto; color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.wp-event.is-quiet details[open] summary::after { content: attr(data-hide); }
 .wp-event.is-quiet .wp-event-title { margin: 0; color: var(--muted); font-weight: var(--font-weight-medium); }
 .wp-quiet-list { margin: 8px 0 0; padding: 0; list-style: none; }
 .wp-quiet-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 0; color: var(--muted); font-size: var(--font-size-xs); scroll-margin-top: 30px; }

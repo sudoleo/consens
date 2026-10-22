@@ -364,6 +364,8 @@
 
             if (source && window.marked?.parseInline && window.DOMPurify?.sanitize) {
               const content = document.createElement("span");
+              // A model's claim, in the language it was written in.
+              content.setAttribute("data-i18n-skip", "");
               const hasEscapedLiteralStar = /\\\*/.test(source);
               const prepared = window.ConsensusMath?.prepareMarkdown
                 ? window.ConsensusMath.prepareMarkdown(source)
@@ -995,8 +997,9 @@
               const gauge = document.createElement("span");
               gauge.className = "verdict-gauge";
               gauge.style.setProperty("--val", String(boundedScore));
-              gauge.title = "Agreement score " + agreement.score + "/100 across "
-                + modelCount + " model" + (modelCount === 1 ? "" : "s");
+              gauge.title = modelCount === 1
+                ? "Agreement score " + agreement.score + "/100 across 1 model"
+                : "Agreement score " + agreement.score + "/100 across " + modelCount + " models";
               const score = document.createElement("span");
               score.className = "verdict-score";
               const num = document.createElement("span");
@@ -1086,7 +1089,8 @@
               if (emphases > 0) {
                 detail.textContent = emphasisTopics
                   ? "different emphasis on " + emphasisTopics + ", no contradictions"
-                  : emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions";
+                  : emphases === 1 ? "1 difference in emphasis, no contradictions"
+                    : emphases + " differences in emphasis, no contradictions";
               } else {
                 detail.textContent = "no contradictions found";
               }
@@ -1098,14 +1102,12 @@
               const minor = contradictions - critical;
               if (minor > 0) {
                 detail.appendChild(document.createTextNode(
-                  " · " + minor + " minor detail" + (minor === 1 ? "" : "s")));
+                  minor === 1 ? " · 1 minor detail" : " · " + minor + " minor details"));
               }
             } else if (hasSeverity) {
-              detail.textContent = contradictions + " minor detail"
-                + (contradictions === 1 ? "" : "s");
+              detail.textContent = contradictions === 1 ? "1 minor detail" : contradictions + " minor details";
             } else {
-              detail.textContent = contradictions + " disputed point"
-                + (contradictions === 1 ? "" : "s");
+              detail.textContent = contradictions === 1 ? "1 disputed point" : contradictions + " disputed points";
             }
             if (contradictions > 0 && contradictionTopics) {
               detail.appendChild(document.createTextNode(
@@ -1583,7 +1585,7 @@
             const frag = document.createDocumentFragment();
             const count = Array.isArray(modelsCompared) ? modelsCompared.length : 0;
             frag.appendChild(previewHead(count
-              ? "Compared with " + count + " model answer" + (count === 1 ? "" : "s")
+              ? (count === 1 ? "Compared with 1 model answer" : "Compared with " + count + " model answers")
               : "Compared with the model answers"));
             const foot = document.createElement("div");
             foot.className = "insight-preview-foot";
