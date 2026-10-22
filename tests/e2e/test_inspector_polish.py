@@ -84,7 +84,19 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
             page.locator('#answerReaderSections [data-section="differences"]').click()
             button = inspector.locator('.diff-resolve-btn')
             expect(button).to_be_visible()
-            assert button.bounding_box()['width'] < inspector.bounding_box()['width'] * .9
+            # Compact and sized to its content, not the chat's card-wide bar.
+            # Measured against its own content, not a share of the inspector:
+            # at 320 px the content alone fills ~90 % since the Plus chip
+            # grew to the 12-px minimum (Apple-Audit G11).
+            fit = button.evaluate("""b => {
+              const width = b.getBoundingClientRect().width;
+              b.style.width = 'max-content';
+              const content = b.getBoundingClientRect().width;
+              b.style.width = '';
+              return {width, content};
+            }""")
+            assert fit['width'] <= fit['content'] + 1
+            assert fit['width'] <= inspector.bounding_box()['width']
             reader_screenshot(page, f'polished-differences-{width}-{theme}')
             # A finished resolve must still remove its button despite custom display.
             button.evaluate('(node) => node.hidden = true')
