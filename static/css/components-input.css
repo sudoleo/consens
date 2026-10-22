@@ -229,13 +229,21 @@ body.is-hero .hero-greeting {
   }
 }
 /* A guest on a phone gets the sentence too: it is the only line that says
-   what the field is for (Agent has the same rule in agent-chat.css). */
+   what the field is for (Agent has the same rule in agent-chat.css). On a
+   phone it is one line at reading size (17px), not a two-line 22px title
+   over the field (2026-10-22); from about 480px it grows to the desktop's. */
 @media (min-height: 620px) {
   body.is-guest.is-hero:not(.direct-comparison-active) .hero-greeting {
     opacity: 1;
     visibility: visible;
     transform: none;
-    font-size: clamp(1.375rem, 4.6vw, 1.75rem);
+    font-size: clamp(var(--font-size-read), 4.6vw, 1.75rem);
+  }
+}
+@media (max-width: 679px) {
+  .hero-greeting {
+    margin-bottom: 14px;
+    letter-spacing: -0.012em;
   }
 }
 

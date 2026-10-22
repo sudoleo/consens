@@ -532,7 +532,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @media (min-height: 620px) {
   body.single-agent-active.is-hero .hero-greeting,
   html.agent-shell-expected body.is-hero .hero-greeting {
-    opacity: 1; visibility: visible; transform: none; font-size: clamp(1.375rem, 4.6vw, 1.75rem);
+    opacity: 1; visibility: visible; transform: none; font-size: clamp(var(--font-size-read), 4.6vw, 1.75rem);
   }
 }
 @media (forced-colors: active) {

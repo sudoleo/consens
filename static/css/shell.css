@@ -4325,13 +4325,17 @@ body.dark-mode .feedback-modal h2 {
 
 /* Neutral filled controls. Primary and destructive actions retain their
    semantic colours; text-only actions retain their transparent treatment. */
-/* The feature explanation is one surface, not a white card inside a modal. */
-body:not(.dark-mode) #proFeatureModal .pro-header {
+/* The feature explanation is one surface, not a card inside a modal, in
+   both themes (until 2026-10-22 only in light: dark kept a tinted header
+   band and a framed panel whose edges sat on the dialog's own). "Got it"
+   is a neutral filled button; .btn-free sets its colours with !important
+   (components-modals.css), so this one has to as well. */
+#proFeatureModal .pro-header {
   background: transparent;
   border-bottom: 0;
 }
 
-body:not(.dark-mode) #proFeatureModal .pro-beta-panel {
+#proFeatureModal .pro-beta-panel {
   margin-top: 0;
   padding: 0 24px 24px;
   background: transparent;
@@ -4339,24 +4343,24 @@ body:not(.dark-mode) #proFeatureModal .pro-beta-panel {
   border-radius: 0;
 }
 
-body:not(.dark-mode) #proFeatureModal .btn-free {
-  background: var(--raise-hover);
-  border-color: transparent;
-  color: var(--ink);
+#proFeatureModal .btn-free {
+  background: var(--raise-hover) !important;
+  border-color: transparent !important;
+  color: var(--ink) !important;
   box-shadow: none;
 }
 
-body:not(.dark-mode) #proFeatureModal .btn-free:focus-visible {
-  background: var(--raise-selected);
+#proFeatureModal .btn-free:focus-visible {
+  background: var(--raise-selected) !important;
 }
 @media (hover: hover) and (pointer: fine) {
-  body:not(.dark-mode) #proFeatureModal .btn-free:hover {
-    background: var(--raise-selected);
+  #proFeatureModal .btn-free:hover {
+    background: var(--raise-selected) !important;
   }
 }
 
 @media (max-width: 620px) {
-  body:not(.dark-mode) #proFeatureModal .pro-beta-panel {
+  #proFeatureModal .pro-beta-panel {
     padding: 0 18px 18px;
   }
 }
