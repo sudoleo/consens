@@ -181,7 +181,9 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   align-items: center;
   justify-content: flex-start;
   text-align: left;
-  gap: 12px;
+  /* Narrows with the sidebar: longer words (German "Datenschutz") and a
+     narrow, resized sidebar must never push the two glyphs off the edge. */
+  gap: clamp(6px, 4%, 12px);
   min-height: 28px;
   padding: 0 0 0 6px;
   color: var(--ink-3);
@@ -190,12 +192,15 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .sidebar-footer-meta > .sidebar-footer-link {
+  min-width: 0;
   padding: 0;
   border: 0;
   background: none;
   color: inherit;
   font: inherit;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   transition: color var(--dur-press) var(--ease-standard);
 }
@@ -209,6 +214,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-footer-icons {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 2px;
   margin-left: auto;

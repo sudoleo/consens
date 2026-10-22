@@ -280,7 +280,7 @@
   "answers this run — click to leave it out": "antwortet in diesem Lauf – klicken, um es wegzulassen",
   "A run compares up to {0} models — leave one out to add {label}": "Ein Lauf vergleicht bis zu {0} Modelle – lass eines weg, um {label} hinzuzufügen",
   "is left out — click to include it": "ist weggelassen – klicken, um es einzubeziehen",
-  "Presets": "Voreinstellungen",
+  "Presets": "Presets",
   "Answering models": "Antwortende Modelle",
   "Select at least 2 models to {0} · {selectedCount} selected": "Mindestens 2 Modelle auswählen · {selectedCount} ausgewählt",
   "Consensus engine": "Konsens-Engine",
