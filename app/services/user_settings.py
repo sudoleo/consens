@@ -98,6 +98,9 @@ class UserSettings(_Strict):
         Literal["none", "all", "contradictions", "concerns", "critical"]
     ] = None
     claim_counts: Optional[bool] = None
+    # The letters of a streamed answer and behind the empty start screen
+    # (stream-reveal.js, letter-clouds.js); None is on.
+    letter_animations: Optional[bool] = None
 
     @field_validator("system_prompt")
     @classmethod

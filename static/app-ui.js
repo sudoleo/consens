@@ -131,6 +131,8 @@ function openSettingsModal(event) {
   // Immer auf dem ersten Reiter oeffnen. Der zuletzt benutzte waere clever,
   // aber unvorhersehbar — man findet Einstellungen ueber einen festen Ort.
   // Reset before showing: focus lands on the tab that is then selected.
+  // A search left from the last time is gone as well (settings-search.js).
+  window.App.settingsSearch?.clear();
   settingsTabs.reset();
   window.App.modalDialog.open(modal, {
     opener: event?.currentTarget || document.getElementById("editSystemPromptBtn"),
@@ -226,9 +228,24 @@ function bindLanguageSelect() {
   });
 }
 
+// Letter animations (account setting "letter_animations", on unless false):
+// stream-reveal.js and letter-clouds.js read it themselves.
+function bindLetterAnimationsSwitch() {
+  const toggle = document.getElementById("letterAnimationsSwitch");
+  const settings = window.App.userSettings;
+  if (!toggle || !settings || toggle.dataset.bound) return;
+  toggle.dataset.bound = "1";
+  const show = () => { toggle.checked = settings.get("letter_animations") !== false; };
+  show();
+  toggle.addEventListener("change", () => settings.set("letter_animations", toggle.checked));
+  settings.onChange("letter_animations", show);
+  window.addEventListener("pageshow", show);
+}
+
 function bindAppUiControls() {
   bindSettingsModalControls();
   bindLanguageSelect();
+  bindLetterAnimationsSwitch();
 }
 
 if (document.readyState === "loading") {

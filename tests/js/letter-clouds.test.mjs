@@ -14,17 +14,20 @@ function fakeContext() {
   return ctx;
 }
 
-function boot({ hero = true, reduce = false, hidden = false, canvas = true, watchHidden = true, media = true, dpr = 1 } = {}) {
+function boot({ hero = true, reduce = false, hidden = false, canvas = true, watchHidden = true, media = true, dpr = 1, letters } = {}) {
   const queue = [];
   const timers = new Map();
   let lastTimer = 0;
-  const { window, document } = loadScripts(["static/js/letter-clouds.js"], {
+  // `letters` sets Settings > Display > Letter animations (user-settings.js).
+  const files = letters === undefined ? [] : ["static/js/user-settings.js"];
+  const { window, document } = loadScripts([...files, "static/js/letter-clouds.js"], {
     body: `<div class="container"><div class="input-section"><p class="hero-greeting">Hi</p>
       <textarea id="questionInput"></textarea><button id="send">Send</button></div>
       <div id="empty"></div></div>
       <section class="watch-page"${watchHidden ? " hidden" : ""}></section>`,
     before(window) {
       if (hero) window.document.body.classList.add("is-hero");
+      if (letters !== undefined) window.localStorage.setItem("consensio.letterAnimations.v1", String(letters));
       Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: dpr });
       window.requestAnimationFrame = fn => { queue.push(fn); return queue.length; };
       window.cancelAnimationFrame = () => { queue.length = 0; };
@@ -147,6 +150,18 @@ describe("letter clouds", () => {
     expect(app.fog().puts).toBeGreaterThan(1);
     expect(app.window.App.letterClouds.splash(100, 100)).toBe(false);
     expect(app.state().running).toBe(false);
+  });
+
+  it("shows no clouds while Letter animations are off and follows the switch at once", () => {
+    const app = boot({ letters: false });
+    expect(app.state()).toMatchObject({ supported: true, active: false, running: false });
+    expect(app.document.querySelector(".letter-clouds").classList.contains("is-off")).toBe(true);
+
+    app.window.App.userSettings.set("letter_animations", true);
+    expect(app.state()).toMatchObject({ active: true, running: true });
+    app.window.App.userSettings.set("letter_animations", false);
+    expect(app.state()).toMatchObject({ active: false, running: false });
+    expect(app.document.querySelector(".letter-clouds").classList.contains("is-off")).toBe(true);
   });
 
   it("does not render while the tab is hidden", () => {

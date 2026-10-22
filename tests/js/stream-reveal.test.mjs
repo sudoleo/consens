@@ -4,10 +4,12 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 // A browser with the CSS Custom Highlight API, a clock the test moves and
 // animation frames it runs, so the pace is deterministic.
-function boot({ highlights = true, reduced = false } = {}) {
+function boot({ highlights = true, reduced = false, letters } = {}) {
   const frames = [];
   let clock = 1000;
   const loaded = loadScripts([
+    // Settings > Display > Letter animations, when the test sets it.
+    ...(letters === undefined ? [] : ["static/js/user-settings.js"]),
     "static/vendor/marked/12.0.2/marked.min.js",
     "static/vendor/dompurify/3.4.17/dist/purify.min.js",
     "static/js/markdown-stream.js",
@@ -22,6 +24,7 @@ function boot({ highlights = true, reduced = false } = {}) {
         Object.defineProperty(window.document, "adoptedStyleSheets", { value: [], writable: true, configurable: true });
       }
       window.matchMedia = query => ({ matches: reduced && query.includes("reduce"), addEventListener() {} });
+      if (letters !== undefined) window.localStorage.setItem("consensio.letterAnimations.v1", String(letters));
       window.performance.now = () => clock;
       window.requestAnimationFrame = fn => frames.push(fn);
     },
@@ -50,6 +53,14 @@ describe("stream-reveal: the pace of a streamed answer", () => {
     expect(boot().reveal.active()).toBe(true);
     expect(boot({ highlights: false }).reveal.active()).toBe(false);
     expect(boot({ reduced: true }).reveal.active()).toBe(false);
+  });
+
+  it("is off while Letter animations are switched off in Settings", () => {
+    expect(boot({ letters: true }).reveal.active()).toBe(true);
+    const app = boot({ letters: false });
+    expect(app.reveal.active()).toBe(false);
+    app.window.App.userSettings.set("letter_animations", true);
+    expect(app.reveal.active()).toBe(true);
   });
 
   it("paints a bundle that arrived at once word by word, never half a word", () => {

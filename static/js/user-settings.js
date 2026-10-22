@@ -2,7 +2,7 @@
 // user-settings.js
 // Account settings: the choices that follow an account to every device --
 // run mode, Agent model and preferences, the Compare and Consensus
-// models, the system prompt and three display options.
+// models, the system prompt and the display options.
 //
 // The server keeps them per account (GET/PATCH /api/my/settings,
 // app/services/user_settings.py). This browser keeps a copy under the
@@ -381,6 +381,8 @@
     agreement_display: agreementDisplay,
     consensus_highlights: consensusHighlights,
     claim_counts: booleanSetting("consensio.showClaimCounts.v1"),
+    // On unless false: stream-reveal.js and letter-clouds.js read it.
+    letter_animations: booleanSetting("consensio.letterAnimations.v1"),
   });
   const NAMES = Object.freeze(Object.keys(DEFINITIONS));
 

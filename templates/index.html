@@ -1029,6 +1029,17 @@
         </div>
 
         <div class="settings-layout">
+          {#- Search over every section (static/js/settings-search.js): word
+              parts, typos and English or German words find a setting. -#}
+          <div class="settings-side">
+          <div class="settings-search" role="search">
+            <svg class="settings-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+            </svg>
+            <input type="search" id="settingsSearch" placeholder="Search" aria-label="Search settings"
+              aria-controls="settingsBody" autocomplete="off" spellcheck="false" enterkeyhint="search">
+          </div>
           <div class="settings-nav" role="tablist" aria-label="Settings sections">
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabMemory"
               data-settings-tab="memorySettingsSection" aria-controls="memorySettingsSection">Memory</button>
@@ -1047,16 +1058,19 @@
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabAccount"
               data-settings-tab="accountSettingsSection" aria-controls="accountSettingsSection" hidden>Account</button>
           </div>
+          </div>
 
-          <div class="settings-body">
-          <section id="memorySettingsSection" class="settings-category" role="tabpanel"
+          <div class="settings-body" id="settingsBody">
+          <p id="settingsSearchEmpty" class="settings-search-empty" hidden>No setting matches your search.</p>
+          <p id="settingsSearchStatus" class="visually-hidden" role="status" aria-live="polite"></p>
+          <section id="memorySettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="gedächtnis erinnerung erinnern merken remember personalisierung personalization"
             aria-labelledby="settingsMemoryTitle">
             <div class="settings-category-heading">
               <h3 id="settingsMemoryTitle">Memory</h3>
               <p>What consens.io remembers about you across chats. You decide what goes in, and you can change or delete it any time.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="pause pausieren an aus on off automatisch automatic speichern save lernen learn">
                 <label for="memoryEnabledSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Use my memory</strong>
@@ -1073,7 +1087,7 @@
                 </label>
               </div>
 
-              <div class="settings-section settings-memory-items" id="memoryItemsSection">
+              <div class="settings-section settings-memory-items" id="memoryItemsSection" data-settings-keywords="erinnerungen memories gespeichert saved fakten facts vorlieben preferences hinzufügen add löschen delete entfernen remove">
                 <div class="settings-memory-subheading">
                   <h4>Saved memories</h4>
                   <p>Short facts and preferences, saved by Agent or by you. They go with your questions while Memory is on.</p>
@@ -1093,7 +1107,7 @@
                 </div>
               </div>
 
-              <div class="settings-section settings-memory-fields">
+              <div class="settings-section settings-memory-fields" data-settings-keywords="profil profile über mich about me rolle role beruf job arbeit work stil style antworten answers regeln rules notiz note chatgpt import einfügen paste">
                 <div class="settings-memory-subheading">
                   <h4>About you</h4>
                   <p>Short, reusable preferences for every question.</p>
@@ -1166,7 +1180,7 @@
             </details>
           </section>
 
-          <section id="behaviorSettingsSection" class="settings-category" role="tabpanel"
+          <section id="behaviorSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="verhalten behavior modell model anweisungen instructions"
             aria-labelledby="settingsBehaviorTitle">
             <div class="settings-category-heading">
               <h3 id="settingsBehaviorTitle">Model behavior</h3>
@@ -1174,7 +1188,7 @@
                 applies to you.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="systemprompt prompt anweisungen instructions custom instructions vorgabe ton tone stil style">
                 <label class="settings-field-label" for="systemPromptInput">System prompt</label>
                 <p>Customize how the models respond. Leave empty to use the default.</p>
                 <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7" maxlength="12000" placeholder="Use the app default, or enter your own instructions for Consensus answers."></textarea>
@@ -1183,14 +1197,14 @@
             </div>
           </section>
 
-          <section id="runsSettingsSection" class="settings-category" role="tabpanel"
+          <section id="runsSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="läufe runs lauf run"
             aria-labelledby="settingsRunsTitle">
             <div class="settings-category-heading">
               <h3 id="settingsRunsTitle">Runs</h3>
               <p>How consens answers your next message.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="modus mode vergleich vergleichen compare konsens consensus nebeneinander side by side agent standard default">
                 <label for="runModeSetting" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Mode</strong>
@@ -1207,14 +1221,14 @@
             </div>
           </section>
 
-          <section id="agentSettingsSection" class="settings-category" role="tabpanel"
+          <section id="agentSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="agent beta"
             aria-labelledby="settingsAgentTitle" hidden>
             <div class="settings-category-heading">
               <h3 id="settingsAgentTitle">Agent · Beta</h3>
               <p>How Agent compares and checks your questions. Saved to your account; applies from your next message.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="tiefe depth ausführlich gründlich thorough kurz brief knapp quick automatisch automatic länge length">
                 <label for="agentDepthSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer depth</strong>
@@ -1229,7 +1243,7 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="tempo speed schnell fast schneller faster warten wait quorum hälfte half start beginn">
                 <label for="agentQuorumSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer start</strong>
@@ -1244,7 +1258,7 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="autonomie autonomy freiheit frei free geführt guided runden rounds modelle models auswahl choice">
                 <label for="agentAutonomySelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Agent freedom</strong>
@@ -1259,7 +1273,7 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="prüfung check prüfen judges judge richter score highlights markierungen schneller faster">
                 <label for="agentJudgesSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer check</strong>
@@ -1276,14 +1290,14 @@
             </div>
           </section>
 
-          <section id="displaySettingsSection" class="settings-category" role="tabpanel"
+          <section id="displaySettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="darstellung display anzeige aussehen look"
             aria-labelledby="settingsDisplayTitle">
             <div class="settings-category-heading">
               <h3 id="settingsDisplayTitle">Display</h3>
               <p>How the app and its results look.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section settings-theme-section">
+              <div class="settings-section settings-theme-section" data-settings-keywords="theme thema design dunkel dark hell light nachtmodus night mode farbe color farben colors schwarz weiß black white erscheinungsbild">
                 <div class="settings-theme-row">
                   <div>
                     <h4>Appearance</h4>
@@ -1304,10 +1318,24 @@
                 </div>
               </div>
 
+              {#- On unless switched off (account setting letter_animations):
+                  stream-reveal.js and letter-clouds.js read it; app-ui.js
+                  binds the switch. -#}
+              <div class="settings-section"
+                data-settings-keywords="animation animationen bewegung motion effekt effects einblenden fade streaming licht light schrift text typing tippen wolken clouds hintergrund background startbildschirm reduce reduzieren ruhig still">
+                <label for="letterAnimationsSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Letter animations</strong>
+                    <small>Letters fade in while an answer is written and drift behind the empty start screen. Off: text appears at once.</small>
+                  </span>
+                  <input type="checkbox" id="letterAnimationsSwitch" checked>
+                </label>
+              </div>
+
               {#- The language of this device (cookie consens_lang, docs/i18n.md).
                   The names of the languages stay in their own language. -#}
               {% set chosen_language = request.cookies.get('consens_lang', 'auto') %}
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="sprache language deutsch german englisch english übersetzung translation locale">
                 <label for="languageSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Language</strong>
@@ -1323,7 +1351,7 @@
                 </label>
               </div>
 
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="markierungen hervorhebung hervorhebungen highlights widersprüche contradictions uneinigkeit disagreements farben colors rot red grün green">
                 <label for="consensusHighlightsSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer highlights</strong>
@@ -1340,7 +1368,7 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="zahlen numbers anzahl count counts zählung behauptungen claims aussagen modelle models unterstützung support">
                 <label for="claimCountsSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Inline claim counts</strong>
@@ -1349,7 +1377,7 @@
                   <input type="checkbox" id="claimCountsSwitch">
                 </label>
               </div>
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="übereinstimmung agreement score punktzahl wert prozent percent urteil verdict zusammenfassung summary ausblenden hide">
                 <label for="agreementDisplaySelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Agreement score</strong>
@@ -1367,14 +1395,14 @@
             </div>
           </section>
 
-          <section id="connectionsSettingsSection" class="settings-category" role="tabpanel"
+          <section id="connectionsSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="verbindungen connections integration"
             aria-labelledby="settingsConnectionsTitle">
             <div class="settings-category-heading">
               <h3 id="settingsConnectionsTitle">Connections</h3>
               <p>Use the included allowance or connect your own OpenRouter API key.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="api eigene own schlüssel key keys byok openrouter abrechnung billing bezahlen pay kosten cost kontingent allowance">
                 <label for="useOwnKeysSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Use your own API keys</strong>
@@ -1384,7 +1412,7 @@
                 </label>
               </div>
 
-              <div class="settings-section">
+              <div class="settings-section" data-settings-keywords="api key schlüssel openrouter token testen test speichern save">
                 <div id="apiSettingsToggle" class="collapse-header" role="button" tabindex="0" aria-controls="apiSettingsArea">
                   <div>
                     <h4>OpenRouter API key</h4>
@@ -1410,14 +1438,14 @@
             </div>
           </section>
 
-          <section id="accountSettingsSection" class="settings-category" role="tabpanel"
+          <section id="accountSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="konto account"
             aria-labelledby="settingsAccountTitle">
             <div class="settings-category-heading">
               <h3 id="settingsAccountTitle">Account</h3>
               <p>Manage permanent account actions.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section settings-danger-section">
+              <div class="settings-section settings-danger-section" data-settings-keywords="löschen delete entfernen remove kündigen cancel daten data dsgvo gdpr">
                 <div>
                   <h4>Delete account</h4>
                   <p>Permanently delete your account, your chats and all stored data. This can’t be undone.</p>

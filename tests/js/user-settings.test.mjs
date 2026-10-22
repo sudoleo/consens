@@ -152,6 +152,7 @@ describe("the local copy", () => {
   it.each([
     ["run_mode", "fast"],
     ["claim_counts", "true"],
+    ["letter_animations", "off"],
     ["agent_model", { model_id: "openai gpt", reasoning_effort: "low" }],
     ["agent_preferences", { depth: "deep" }],
     ["compare_models", { "Open<AI>": { enabled: true } }],

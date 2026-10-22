@@ -416,6 +416,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       sehen den Login-Hinweis statt des Formulars; eingeloggt sendet ein
       Doppelklick auf Submit einmal, Erfolg und Fehler stehen englisch im
       Dialog. FAQ-Fragen klappen per Enter/Leertaste auf. Light/Dark, 390 px.
+- [ ] Settings-Suche (2026-10-23): „dunkel“, „dark mode“, „animaton“ (Tippfehler),
+      „schlüssel“, „prompt“ finden die passende Zeile über alle Reiter; Treffer
+      getönt, Escape leert, Reiterklick kehrt zurück, Enter springt in den
+      ersten Treffer. Englisch und Deutsch, 390 px (Feld über der Reiterleiste)
+      und Desktop, Light/Dark.
+- [ ] Settings → Display → Letter animations aus: Antwort erscheint beim
+      Streamen ohne grünes Einblenden, leerer Startbildschirm ohne
+      Buchstabenwolken; wieder an → beides zurück, auch nach Reload und auf
+      einem zweiten Gerät desselben Kontos.
 - [ ] Settings → Display → Answer highlights: All / Contradictions /
       Disagreements & issues / Critical contradictions / None bei 320/390 px und Desktop prüfen. Graue Detail-
       widersprüche bleiben unter Contradictions sichtbar, graue Emphasis nicht.

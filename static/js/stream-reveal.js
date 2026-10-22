@@ -14,8 +14,9 @@
 // The look is drawn with the CSS Custom Highlight API over the text the
 // Markdown renderer made: no node is added and nothing moves, so a link or a
 // selection in the growing paragraph stays what it is (Apple audit D4).
-// Without that API or with reduced motion, active() is false and the caller
-// paints the answer as it arrives.
+// Without that API, with reduced motion or with Letter animations switched
+// off in Settings, active() is false and the caller paints the answer as it
+// arrives.
 // Exports: App.streamReveal { active, stream, settle }.
 // =====================================================================
 (() => {
@@ -77,8 +78,10 @@
   let sheet = null;
   let frame = 0;
 
+  // Settings > Display > Letter animations off (account setting) paints the
+  // answer as it arrives, like reduced motion.
   function active() {
-    return canDraw && !reducedMotion?.matches;
+    return canDraw && !reducedMotion?.matches && App.userSettings?.get("letter_animations") !== false;
   }
 
   function sharedLength(a, b) {

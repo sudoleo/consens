@@ -1104,6 +1104,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   bis zur Antwort gesperrt (ein Doppelklick ist eine Nachricht). FastAPI-
   Validierungslisten werden zu einem Satz. Ein getippter Text hält den Dialog
   bei Hintergrund-Klick offen.
+- **`settings-search.js`** (`window.App.settingsSearch`, seit 2026-10-23) —
+  die Suche in Settings (`#settingsSearch`): Wortteile, Tippfehler, englische
+  und deutsche Schlüsselwörter; Ablauf unter „Settings … Suche“ im
+  Layout-Abschnitt. `matches(query, texts)` ist der Abgleich ohne DOM.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle,
   Persistenz als Kontoeinstellungen `compare_models`, `consensus_model` und
   `consensus_preset` über `App.userSettings` (lokale Kopie unter den bisherigen
@@ -1544,6 +1548,27 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   umbrechen bei Platzmangel; mobile Eingaben vermeiden Fokus-Zoom mit 16 px.
   Der Controller synchronisiert `aria-orientation` mit dem 700-px-Breakpoint
   und hält aktivierte Reiter im sichtbaren Navigationsausschnitt.
+  **Suche (seit 2026-10-23, `static/js/settings-search.js`, `App.settingsSearch`):**
+  Über den Reitern sitzt in `.settings-side` das Feld `#settingsSearch` (mobil
+  über der Reiterleiste). Getippt zeigt `.settings-layout.is-searching` die
+  Treffer aller verfügbaren Kategorien unter ihren Titeln (Beschreibung,
+  `.settings-note` und Nicht-Treffer `.is-search-miss` ausgeblendet; Panels
+  versteckter Reiter werden nie durchsucht). Gesucht wird in den sichtbaren
+  Wörtern einer Zeile `.settings-group > .settings-section` (also in der
+  Seitensprache; gespeicherte Memories, Status-Zeilen und Textfelder nicht), in
+  ihrem `data-settings-keywords` und in Titel + `data-settings-keywords` ihrer
+  Kategorie; die Schlüsselwörter stehen englisch UND deutsch im Template und
+  werden nicht übersetzt. **Neue Einstellungszeile = Schlüsselwörter
+  mitpflegen.** Jedes Query-Wort muss passen: Wortanfang, ab vier Buchstaben
+  jeder Wortteil (auch über Bindestrich/Leerzeichen hinweg,
+  „buchstabenanimation“), sonst ein Tippfehler (ab fünf Buchstaben einer, ab
+  neun zwei; Tausch zählt einfach). Umlaute passen ausgeschrieben und schlicht,
+  Füllwörter („the“, „aus“) müssen nicht passen. Tippfehler-Treffer zeigen sich
+  nur, wenn nichts exakt passt. Treffer im Text tönt
+  `::highlight(settings-search)`. Ein Reiterklick, Pfeiltasten in der Leiste
+  oder Escape im Feld beenden die Suche (`exit` → `settingsTabs.activate`);
+  Enter springt zum ersten Treffer, Buchstaben auf den Reitern landen im Feld;
+  `openSettingsModal` leert sie. Tests: `tests/js/settings-search.test.mjs`.
   Display → `#consensusHighlightsSelect` steuert Antwort- und Quellenmarkierungen
   über die Kontoeinstellung `consensus_highlights` (`none` oder ein Filter;
   lokal `consensio.showConsensusMarkers.v1` + `consensio.consensusHighlightMode.v1`): `all`,
@@ -2074,9 +2099,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Verstecken des Tabs `keepalive`).
 - **`stream-reveal.js`** — `App.streamReveal` (`active`, `stream`, `settle`,
   seit 2026-10-22): Takt und „Licht“ einer gestreamten Agent-Antwort, Ablauf
-  unter „Agent-Laufoberfläche“. `active()` ist nur mit CSS Custom Highlight API
-  und ohne `prefers-reduced-motion` wahr; sonst malt `agent-chat.js` wie
-  vorher jeden Frame, was angekommen ist. Tests: `tests/js/stream-reveal.test.mjs`.
+  unter „Agent-Laufoberfläche“. `active()` ist nur mit CSS Custom Highlight API,
+  ohne `prefers-reduced-motion` und ohne ausgeschaltete Kontoeinstellung
+  `letter_animations` (Settings → Display → Letter animations, seit 2026-10-23)
+  wahr; sonst malt `agent-chat.js` wie vorher jeden Frame, was angekommen ist.
+  Ausschalten mitten im Stream: der direkte Maler schreibt, das Modul gibt die
+  Antwort über `_markdownWrites` ab. Tests: `tests/js/stream-reveal.test.mjs`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
   Zwei Darstellungen: **im Chat-Fliesstext** (Container ist bzw. liegt in
@@ -2580,7 +2608,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Hinweis unter dem Composer. Theme-Wechsel (`body.dark-mode`, System) malt neu,
   verdeckter Tab rechnet nicht. Ohne `matchMedia` (reduzierte Bewegung nicht
   prüfbar) oder Canvas bleibt das Modul aus; `prefers-reduced-motion` zeigt
-  ruhende Wolken ohne Welle. Tests: `tests/js/letter-clouds.test.mjs`,
+  ruhende Wolken ohne Welle. Die Kontoeinstellung `letter_animations: false`
+  (Settings → Display → Letter animations, seit 2026-10-23) zeigt gar keine:
+  `wanted()` ist dann falsch, ein Umschalten (`userSettings.onChange`) blendet
+  die Ebene sofort aus oder ein. Tests: `tests/js/letter-clouds.test.mjs`,
   Browser `tests/e2e/test_letter_clouds.py`.
 - **Thread-Layout: Composer unten (2026-07-27)** — ab dem ersten Lauf liest
   sich `/app` als Thread: Frage oben, Lauf, Antwort, Modellantworten, Composer
@@ -3678,7 +3709,8 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
 - **`static/app-ui.js`** — alleiniger Binder für Settings (`#systemPromptModal`)
   und Help (`#helpModal`), keine zweite Bindung mehr in `app-init.js`. Beide
   sind seit 2026-10-15 native `<dialog>` mit `aria-labelledby` und echtem
-  Schließen-Button, geöffnet über `App.modalDialog`: Settings setzt die Reiter
+  Schließen-Button, geöffnet über `App.modalDialog`: Settings leert die Suche
+  (`App.settingsSearch.clear`), setzt die Reiter
   vor dem Öffnen zurück und fokussiert den aktiven Reiter; Help ist ein
   Geschwister (nicht mehr Kind) von Settings und stapelt sich per `showModal()`
   darüber, Escape schließt zuerst Help, der Fokus geht an `#helpButton`. Der eigene
@@ -7055,7 +7087,10 @@ Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
 `consensus_model`, `consensus_preset`, `system_prompt` (höchstens 12.000 Zeichen
 / 32.000 Bytes; ein Lauf akzeptiert 64 mehr für die Datumszeile, die
 `query-send.js` voranstellt, `chat.py`), `agreement_display`,
-`consensus_highlights`, `claim_counts`. **Bewusst im Browser** bleiben Theme,
+`consensus_highlights`, `claim_counts`, `letter_animations` (Display → Letter
+animations; fehlt = an, `false` = aus; `app-ui.js` bindet
+`#letterAnimationsSwitch`, `stream-reveal.js` und `letter-clouds.js` lesen sie).
+**Bewusst im Browser** bleiben Theme,
 Sidebar-Breite/-Zustand, `agentShellExpected` (vor dem ersten Paint nötig,
 gerätebezogen), der Fragen-Entwurf (würde bei jedem Tastendruck schreiben), der
 eigene OpenRouter-Key (fremdes Geheimnis), das Analytics-Opt-out, gesehene

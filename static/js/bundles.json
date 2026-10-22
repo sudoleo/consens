@@ -123,6 +123,10 @@
           "file": "static/js/feedback-dialog.js",
           "note": "App.feedback: the Send feedback dialog (guest hint, inline status, POST /feedback). Uses App.modalDialog, window.auth and App.openAuthModal at call time."
         },
+        {
+          "file": "static/js/settings-search.js",
+          "note": "App.settingsSearch: the search field of Settings (word parts, typos, English and German keywords). After app-ui.js: ends a search through App.settingsTabs; app-ui.js clears it when Settings opens."
+        },
         "static/js/chat-scroll.js",
         {
           "file": "static/js/disclosure.js",

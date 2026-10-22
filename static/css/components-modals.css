@@ -222,19 +222,140 @@
   min-height: 0;
 }
 
-.settings-nav {
+/* Die linke Spalte: oben die Suche (settings-search.js), darunter die Reiter. */
+.settings-side {
   box-sizing: border-box;
   flex: 0 0 184px;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Dieselbe Linie wie Kopfzeile und Gruppen des Modals -- zwei Linienstaerken
+     in einem Fenster fallen sofort auf. */
+  border-right: 1px solid var(--sidebar-border);
+}
+
+.settings-nav {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
-  padding: 20px 12px;
+  padding: 8px 12px 20px;
   overscroll-behavior: contain;
-  /* Dieselbe Linie wie Kopfzeile und Gruppen des Modals -- zwei Linienstaerken
-     in einem Fenster fallen sofort auf. */
-  border-right: 1px solid var(--sidebar-border);
+}
+
+/* Getoent wie die Reiter, nicht gerahmt: aus der Textfarbe gemischt (--hover),
+   damit das Feld auch im Dark Mode auf dem Modalhintergrund sichtbar bleibt. */
+.settings-search {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  margin: 20px 12px 4px;
+}
+
+.settings-search-icon {
+  position: absolute;
+  left: 11px;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.settings-search input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 10px 8px 32px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--hover);
+  color: var(--text-color);
+  font-size: var(--font-size-sm);
+  outline: none;
+  transition: background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
+}
+
+.settings-search input::placeholder {
+  color: var(--sidebar-text-muted);
+}
+
+/* Das Loeschkreuz in Tinte statt im Akzentblau des Browsers. */
+.settings-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  background: var(--ink-3);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 4l8 8M12 4l-8 8' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-search input:hover {
+    background: var(--selected);
+  }
+}
+
+.settings-search input:focus {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--field-focus-border), var(--field-focus-ring);
+}
+
+/* Waehrend einer Suche zeigt der Koerper die Treffer aller Kategorien unter
+   ihren Titeln; kein Reiter ist dann ausgewaehlt. */
+.settings-layout.is-searching .settings-nav-item.is-active {
+  background: transparent;
+  color: var(--sidebar-text-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-layout.is-searching .settings-nav-item.is-active:hover {
+    background: var(--hover);
+    color: var(--text-color);
+  }
+}
+
+.settings-layout.is-searching .settings-category-heading {
+  margin-bottom: 10px;
+}
+
+.settings-layout.is-searching .settings-category-heading p,
+.settings-layout.is-searching .settings-note,
+.settings-layout.is-searching .is-search-miss {
+  display: none;
+}
+
+/* Die Trennlinie steht vor jedem sichtbaren Treffer ausser dem ersten. */
+.settings-layout.is-searching .settings-group > .settings-section {
+  border-top: 0;
+}
+
+.settings-layout.is-searching .settings-group > .settings-section:not(.is-search-miss) ~ .settings-section:not(.is-search-miss) {
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.settings-search-empty {
+  margin: 0;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+
+.settings-search-empty[hidden] {
+  display: none;
+}
+
+/* Gefundene Woerter: getoent, ohne Knoten (CSS Custom Highlight API). */
+::highlight(settings-search) {
+  background-color: var(--selected);
+  color: var(--text-color);
 }
 
 /* Dieselbe Sprache wie die Bookmark-Liste in der Sidebar: flache Zeile,
@@ -576,15 +697,23 @@
     flex-direction: column;
   }
 
+  .settings-side {
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--sidebar-border);
+  }
+
+  .settings-search {
+    margin: 8px 10px 0;
+  }
+
   .settings-nav {
     flex: 0 0 auto;
     flex-direction: row;
     gap: 2px;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 8px 10px;
-    border-right: 0;
-    border-bottom: 1px solid var(--sidebar-border);
+    padding: 6px 10px 8px;
     scrollbar-width: thin;
   }
 }

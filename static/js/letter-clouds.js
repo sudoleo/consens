@@ -12,7 +12,8 @@
  * der Browser weich hochskaliert. Pro Bild ändert sich nur der Nebel. Ruhig
  * 10 Bilder/s, zwischen denen der Tab schläft; nur während einer Welle im
  * vollen Bildtakt; ein verdeckter Tab rechnet gar nicht. Reduzierte Bewegung
- * zeigt ruhende Wolken ohne Welle.
+ * zeigt ruhende Wolken ohne Welle; die Einstellung „Letter animations“ aus
+ * zeigt gar keine.
  *
  * Öffentlich: window.App.letterClouds { state(), splash(x, y) }.
  */
@@ -352,8 +353,11 @@
     if (!raf && active && supported && !document.hidden) raf = window.requestAnimationFrame(loop);
   }
 
+  // Einstellungen > Darstellung > Buchstaben-Animationen aus (Kontoeinstellung):
+  // keine Wolken, auch keine ruhenden.
   function wanted() {
     if (!body.classList.contains("is-hero")) return false;
+    if (window.App.userSettings?.get("letter_animations") === false) return false;
     return !document.querySelector(".watch-page:not([hidden])");
   }
   function themeCheck() {
@@ -402,6 +406,7 @@
     });
     const watchPage = document.querySelector(".watch-page");
     if (watchPage) new MutationObserver(sync).observe(watchPage, { attributes: true, attributeFilter: ["hidden"] });
+    window.App.userSettings?.onChange?.("letter_animations", sync);
     darkQuery?.addEventListener?.("change", themeCheck);
     reduceQuery?.addEventListener?.("change", () => { lastCloud = -1e9; wake(); });
     document.addEventListener("visibilitychange", wake);
