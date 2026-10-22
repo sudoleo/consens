@@ -46,7 +46,7 @@
     folded = plain
       ? folded.replace(/ß/g, "ss")
       : folded.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
-    return folded.normalize("NFKD").replace(/[̀-ͯ]/g, "");
+    return folded.normalize("NFKD").replace(/\p{M}/gu, "");
   }
 
   function wordsOf(text) {
