@@ -4826,22 +4826,18 @@ body .theme-toggle:focus-visible {
   /* Share is in the ... menu here (consensus-actions.js adds the row); the
      island keeps New chat, Watch and the menu. */
   .app-mobile-header #consensusShareButton { display: none; }
-  .app-mobile-header :is(.mobile-new-run, .mobile-agent-action, .consensus-share-pill, .consensus-actions-toggle) {
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) {
     display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px;
     width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0;
     border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer;
   }
   @media (hover: hover) and (pointer: fine) {
-    .app-mobile-header :is(.mobile-new-run, .mobile-agent-action, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--hover); }
+    .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--hover); }
   }
   .app-mobile-header .consensus-actions-wrapper.open .consensus-actions-toggle { background: var(--selected); }
-  .app-mobile-header :is(.mobile-new-run, .mobile-agent-action, .consensus-share-pill, .consensus-actions-toggle):focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
-  .app-mobile-header :is(.mobile-new-run, .mobile-agent-action, .consensus-share-pill, .consensus-actions-toggle) svg { width: 22px; height: 22px; flex: 0 0 22px; }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 22px; height: 22px; flex: 0 0 22px; }
   .app-mobile-header :is(.consensus-share-pill, .consensus-actions-toggle) > span { display: none; }
-  /* Agent's Watch and Share of the answer on screen (mobile-header.js); a
-     watched question fills the eye's pupil, as "Watching" does in words. */
-  .app-mobile-header .mobile-agent-action[hidden] { display: none; }
-  .app-mobile-header .mobile-agent-action.is-watching .mobile-agent-watch-pupil { fill: currentColor; }
   /* In the island the toggle opens more than citations: three dots. */
   .app-mobile-header .consensus-actions-toggle .quote-toggle-icon { display: none; }
   .app-mobile-header .consensus-actions-toggle .more-toggle-icon { display: block; }

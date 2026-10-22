@@ -371,15 +371,20 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-review > .agent-agreement::after { content: none; }
 }
 @media (max-width: 540px) {
-  .agent-review > .agent-evidence-grid { flex: 1 0 100%; }
-  /* One equal column per link: three, or two without a review (answer
-     check off) or without sources instead of an empty third column. A
-     single link keeps the width of one of three, not the whole row. */
-  .agent-evidence-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch; gap: 4px; margin-left: 0; }
-  .agent-evidence-grid:has(> :only-child) { grid-auto-columns: calc((100% - 8px) / 3); }
+  /* One toolbar row from edge to edge (2026-10-22): the evidence links and
+     the answer's Watch and Share (components-watch.css) are its cells, each
+     a glyph (with its count) over a word, the first on the left edge, the
+     last on the right, the rest spread evenly. The links' nav steps aside
+     (display: contents) so all five share the row; the score keeps its own
+     line above. Without Watch and Share, the links alone spread the same. */
+  .agent-review { justify-content: space-between; column-gap: 0; }
+  .agent-review > .agent-agreement { flex: 1 0 100%; }
+  .agent-review > .agent-evidence-grid { display: contents; }
+  /* width: Consensus' phone footer gives every .consensus-tab the row (shell.css). */
+  .agent-evidence-grid > .agent-evidence-link { order: 2; flex: 0 0 auto; width: auto; }
   /* All links keep one top and height. */
   .agent-evidence-grid .agent-evidence-link { align-content: start; }
-  .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 0; min-height: 56px; padding: 6px 0; }
+  .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 44px; min-height: 56px; padding: 6px 0; }
   .agent-evidence-grid .agent-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }
   .agent-evidence-grid .consensus-tab-count { grid-row: 1; grid-column: 2; justify-self: start; line-height: 16px; }
   .agent-evidence-grid .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; }

@@ -1983,8 +1983,7 @@
       dismissWatchFeatureNudge("opened");
       const watch = watchedFor(question());
       if (watch) openWatchDashboard({ focus: watch.id });
-      // Pressed from the phone's bar (mobile-header.js): focus returns there.
-      else onStart(button._actionTrigger || button);
+      else onStart(button);
     });
     answerButtons.add(button);
     return button;
