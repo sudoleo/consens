@@ -19,6 +19,7 @@ _ALLOWED_TYPES = {
     "consensus_failed",
     "unhandled_error",
     "unhandled_rejection",
+    "dependency_unavailable",
 }
 _ALLOWED_PHASES = {
     "answers",
@@ -39,6 +40,8 @@ _GENERIC_MESSAGES = {
     "consensus_failed": "A browser consensus run failed.",
     "unhandled_error": "An unhandled browser error occurred.",
     "unhandled_rejection": "An unhandled browser promise rejection occurred.",
+    # marked/DOMPurify missing (markdown-stream.js, firebase.js): plain text.
+    "dependency_unavailable": "A required browser library is unavailable.",
 }
 _ALLOWED_RESOURCE_CLASSES = {
     "app_bundle",

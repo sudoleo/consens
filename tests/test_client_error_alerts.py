@@ -139,6 +139,26 @@ def test_client_error_report_replaces_unknown_phase_and_route(monkeypatch):
     }]
 
 
+def test_missing_markdown_renderer_is_reported(monkeypatch):
+    # markdown-stream.js and firebase.js send this when marked or DOMPurify
+    # did not load and answers show as plain text.
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "dependency_unavailable", "phase": "markdown_render",
+        "message": "Markdown renderer unavailable; displaying unformatted text.",
+        "details": "marked", "path": "/app",
+    })
+
+    assert response.status_code == 202
+    assert captured == [{
+        "source": "browser",
+        "type": "dependency_unavailable",
+        "phase": "markdown_render",
+        "message": "A required browser library is unavailable.",
+        "path": "/app",
+    }]
+
+
 def test_client_error_report_rejects_cross_origin(monkeypatch):
     captured = []
     client = _client(monkeypatch, captured)
