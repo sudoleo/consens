@@ -1891,7 +1891,6 @@
       const cancel = ui().makeButton("Cancel", "wd-link", () => ui().cancelTelegramPairing());
       actions.append(connect, cancel);
       const sync = (status, detail) => {
-        if (!row.isConnected) { unsubscribe(); return; }
         const waiting = status === "waiting";
         connect.disabled = waiting;
         connect.textContent = waiting ? "Waiting for Telegram…" : "Connect Telegram";
@@ -1907,7 +1906,11 @@
           error.hidden = false;
         }
       };
-      const unsubscribe = ui().onTelegramStatus(sync);
+      // The row is still detached here: only a later status may find it gone.
+      const unsubscribe = ui().onTelegramStatus((status, detail) => {
+        if (!row.isConnected) { unsubscribe(); return; }
+        sync(status, detail);
+      });
       sync(ui().telegramStatus());
     }
     container.appendChild(row);

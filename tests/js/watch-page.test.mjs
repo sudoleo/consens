@@ -61,8 +61,8 @@ function nativeDialogs(window) {
   };
 }
 
-function boot({ watches = [], limits = null, user = true, path = "/app/watches", patch = null, captureIntervals = false, dialogs = false } = {}) {
-  const server = { watches, limits, calls: [] };
+function boot({ watches = [], limits = null, user = true, path = "/app/watches", patch = null, captureIntervals = false, dialogs = false, telegram = null } = {}) {
+  const server = { watches, limits, telegram: telegram || { configured: false, connected: false }, calls: [] };
   const harness = loadScripts(
     ["static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js", "static/js/notices.js",
       "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
@@ -102,7 +102,9 @@ function boot({ watches = [], limits = null, user = true, path = "/app/watches",
               data = { watch: rest };
             }
           } else if (url === "/api/my/telegram") {
-            data = { telegram: { configured: false, connected: false } };
+            data = { telegram: server.telegram };
+          } else if (method === "POST" && url === "/api/my/telegram/link") {
+            data = { url: "https://t.me/consens_bot?start=pair" };
           } else if (method === "POST" && url === "/api/watch") {
             const created = watch({ id: "created", question: body.question, condition: body.condition,
               interval: body.interval, run_weekday: body.run_weekday, run_time: body.run_time,
@@ -642,5 +644,30 @@ describe("Undo, logout and failed saves (Apple-Audit second review 8)", () => {
     expect(window.App.openAuthModal.mock.calls.at(-1)[3].lead).toBe("Log in to start watching.");
     window.openWatchDialog("create", { question: "Is the new iPhone out in Germany?" });
     expect(window.App.openAuthModal.mock.calls.at(-1)[3].lead).toBe("Log in to start watching. Your question waits for you.");
+  });
+});
+
+/**
+ * Bug hunt 2026-10-22: the Delivery row follows the one Telegram pairing like
+ * every other surface that offers it.
+ */
+describe("Watches page (bug hunt 2026-10-22)", () => {
+  it("follows the pairing in the Delivery row from idle through waiting to connected", async () => {
+    const { window, document, server } = boot({ watches: [watch()], telegram: { configured: true, connected: false } });
+    const opened = { opener: null, location: "", close() {} };
+    window.open = () => opened;
+    await window.App.watchDashboard.render();
+    const row = () => document.getElementById("watchTelegramRow");
+    const button = label => [...row().querySelectorAll("button")].find(item => item.textContent === label);
+    expect(button("Cancel").hidden).toBe(true);
+    button("Connect Telegram").click();
+    await vi.waitFor(() => expect(button("Waiting for Telegram…")?.disabled).toBe(true));
+    expect(button("Cancel").hidden).toBe(false);
+    // Back from Telegram: the focus checks at once and the row says so.
+    await vi.waitFor(() => expect(opened.location).toContain("t.me"));
+    server.telegram = { configured: true, connected: true, telegram_username: "reader" };
+    window.dispatchEvent(new window.Event("focus"));
+    await vi.waitFor(() => expect(row().querySelector(".wd-field-hint").textContent)
+      .toBe("Connected to @reader. Turn it on per watch under Settings."));
   });
 });
