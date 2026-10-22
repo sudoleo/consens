@@ -7,11 +7,13 @@ import hmac
 import json
 import logging
 import unicodedata
+from datetime import datetime, timezone
 from typing import Any, Literal
 from firebase_admin import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 from fastapi import APIRouter, Request, Body, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
@@ -400,9 +402,13 @@ def _bookmark_uid(request: Request):
 
 # What the sidebar list projects; see persistence_guard.BOOKMARK_LIST_SUMMARY_FIELD.
 _BOOKMARK_LIST_FIELDS = [
-    "query", "title", "title_source", "mode", "timestamp",
+    "query", "title", "title_source", "mode", "timestamp", "pinned", "pinned_at",
     persistence_guard.BOOKMARK_LIST_SUMMARY_FIELD,
 ]
+
+# Pinned chats lead the sidebar list whatever their age, so the first page
+# brings them along instead of leaving an old one on a later page.
+MAX_PINNED_BOOKMARKS = 50
 
 
 def _bookmark_meta(bookmark_id, data, summary=None):
@@ -420,6 +426,9 @@ def _bookmark_meta(bookmark_id, data, summary=None):
         "title_source": data.get("title_source") if data.get("title_source") in persistence_guard.KEPT_TITLE_SOURCES else "",
         "mode": str(data.get("mode") or ""),
         "timestamp": data.get("timestamp"),
+        # Pinned in the row menu (pin_bookmark): the chat leads the list.
+        "pinned": data.get("pinned") is True,
+        "pinned_at": data.get("pinned_at") if data.get("pinned") is True else None,
         **summary,
     }
 
@@ -444,6 +453,26 @@ def _bookmark_list_rows(bookmarks_ref, page):
         _bookmark_meta(bookmark_id, data, summaries.get(bookmark_id) or persistence_guard.bookmark_list_summary({}))
         for bookmark_id, data in rows
     ]
+
+
+def _pinned_bookmark_rows(bookmarks_ref):
+    """The pinned chats, the latest pin first. An equality filter on one
+    field: Firestore's automatic single-field index serves it."""
+    try:
+        docs = list(
+            bookmarks_ref.select(_BOOKMARK_LIST_FIELDS)
+            .where(filter=FieldFilter("pinned", "==", True))
+            .limit(MAX_PINNED_BOOKMARKS)
+            .stream()
+        )
+        rows = _bookmark_list_rows(bookmarks_ref, docs)
+    except Exception as exc:
+        # The list without its pinned chats on top beats no list at all;
+        # they still come with their own page.
+        logging.warning("Pinned bookmarks unavailable category=%s", safe_exception(exc))
+        return []
+    earliest = datetime.min.replace(tzinfo=timezone.utc)
+    return sorted(rows, key=lambda row: row.get("pinned_at") or earliest, reverse=True)
 
 
 def _encode_bookmark_cursor(boundary):
@@ -515,6 +544,9 @@ def load_bookmarks(
             "bookmarks": bookmarks,
             "next_cursor": next_cursor,
             "has_more": has_more,
+            # Only with the first page; a pinned chat may come again with
+            # its own page, the browser keeps one row per chat.
+            "pinned": [] if cursor else _pinned_bookmark_rows(bookmarks_ref),
         }
     except HTTPException:
         raise
@@ -695,6 +727,46 @@ def rename_bookmark(request: Request, bookmark_id: str, payload: BookmarkRenameR
             _chat_store()._chat_ref(uid, chat_id).update({"title": title})
         except Exception as exc:
             logging.warning("Chat rename skipped category=%s", safe_exception(exc))
+    return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
+
+
+class BookmarkPinRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    pinned: StrictBool
+
+
+@router.patch("/bookmarks/{bookmark_id}/pin")
+@limiter.limit("30/minute")
+# Sync like the other bookmark routes: the Firestore writes block.
+def pin_bookmark(request: Request, bookmark_id: str, payload: BookmarkPinRequest):
+    """Pin a chat to the top of the sidebar list, or let it go back to its date.
+
+    A merge like every save, so later saves of the chat keep the pin.
+    """
+    uid = _bookmark_uid(request)
+    if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    doc_ref = (
+        db_firestore.collection("users").document(uid)
+        .collection("bookmarks").document(bookmark_id)
+    )
+    patch = (
+        {"pinned": True, "pinned_at": persistence_guard.utcnow()}
+        if payload.pinned else {"pinned": False, "pinned_at": None}
+    )
+    try:
+        bookmark = persistence_guard.write_bookmark(
+            uid=uid, db=db_firestore, doc_ref=doc_ref,
+            # Never recreate a bookmark deleted while it was pinned.
+            current_guard=lambda current: bool(current),
+            patch=patch,
+        )
+    except persistence_guard.PersistenceConflictError as exc:
+        raise HTTPException(status_code=404, detail="Bookmark not found") from exc
+    except Exception as exc:
+        logging.error("Bookmark pin failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="The chat could not be pinned.") from exc
     return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
 
 

@@ -5,12 +5,18 @@
    way in and out come from overlays.css; here the preview's own size.
    .modal in the selector: overlays.css loads later and sets
    dialog.modal[open] to display: block, which dropped the preview into the
-   top left corner. */
-dialog.modal.attachment-viewer-dialog[open] {
-  display: flex;
+   top left corner. The centring is no [open] state: on the way out the
+   dialog keeps its display until it has faded (overlays.css), and with
+   the centring gone with [open] the picture jumped into the top left
+   corner for that fade instead of sinking away where it stood. */
+dialog.modal.attachment-viewer-dialog {
   align-items: center;
   justify-content: center;
   padding: 18px;
+}
+
+dialog.modal.attachment-viewer-dialog[open] {
+  display: flex;
 }
 
 /* .modal-content (components-modals.css, later in the cascade) sizes the

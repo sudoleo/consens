@@ -59,9 +59,16 @@ def test_each_image_of_a_message_gets_its_own_preview_also_after_reopening(brows
                 _json(route, {'files': stored})
         page.route(f'**/agent/chats/{CHAT}/files', files)
 
+        # While `hold` is set, the stored pictures wait: the moment an old
+        # chat opens and its files are still on the way.
+        hold, held = [False], []
+
         def file_bytes(route):
             file_id = route.request.url.rsplit('/', 1)[-1]
             file_gets.append(file_id)
+            if hold[0]:
+                held.append((route, file_id))
+                return
             route.fulfill(body=IMAGES[IDS.index(file_id)], content_type='image/png')
         for file_id in IDS:
             page.route(f'**/agent/chats/{CHAT}/files/{file_id}', file_bytes)
@@ -100,10 +107,21 @@ def test_each_image_of_a_message_gets_its_own_preview_also_after_reopening(brows
         assert len(set(sources)) == 2, 'every tile shows its own picture'
 
         # Reopen the saved chat: the tiles come from the stored files now.
+        hold[0] = True
         page.reload(wait_until='domcontentloaded')
         page.wait_for_function('() => typeof window.openBookmark === "function" && window.__consensioAuthState?.uid')
         page.evaluate('id => window.openBookmark(id)', bookmarks[0]['id'])
         expect(page.locator('#agentAnswerBody')).to_contain_text('Two pictures.')
+        # 2026-10-22: while the files load, a tile is a quiet placeholder. An
+        # <img> with the file name as alt and no source drew the browser's
+        # broken-image glyph and "image.png" for that second.
+        page.wait_for_function("() => document.querySelectorAll('#threadAskAttachments .attachment-chip.is-thumb-loading').length === 2")
+        assert page.evaluate("() => [...document.querySelectorAll('#threadAskAttachments img.attachment-chip-thumb')]"
+                             ".every(img => img.alt === '' && !img.getAttribute('src'))")
+        hold[0] = False
+        page.wait_for_timeout(100)
+        for route, file_id in held:
+            route.fulfill(body=IMAGES[IDS.index(file_id)], content_type='image/png')
         page.wait_for_function("() => [...document.querySelectorAll('#threadAskAttachments .attachment-chip')].length === 2"
                                " && [...document.querySelectorAll('#threadAskAttachments .attachment-chip')].every(c => !c.classList.contains('is-thumb-loading'))",
                                timeout=15000)
@@ -112,6 +130,7 @@ def test_each_image_of_a_message_gets_its_own_preview_also_after_reopening(brows
         reopened = page.evaluate("() => [...document.querySelectorAll('#threadAskAttachments img.attachment-chip-thumb')].map(i => i.src)")
         # data: URLs (the CSP allows no blob: images), one picture per tile.
         assert len(set(reopened)) == 2 and all(src.startswith('data:image/png;base64,') for src in reopened)
+        assert page.evaluate("() => [...document.querySelectorAll('#threadAskAttachments img.attachment-chip-thumb')].map(i => i.alt)") == ['image.png', 'image.png']
         assert not errors
     finally:
         context.close()

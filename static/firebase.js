@@ -2012,6 +2012,10 @@ function bookmarkMeta(bookmark) {
     title_source: ["generated", "user"].includes(bookmark?.title_source) ? bookmark.title_source : "",
     mode: bookmark?.mode || "",
     timestamp: bookmark?.timestamp || null,
+    // Pin in the row menu (chat-list.js puts the chat on top). A save that
+    // does not say leaves the pin as it was (upsertBookmarkMeta).
+    pinned: typeof bookmark?.pinned === "boolean" ? bookmark.pinned : undefined,
+    pinned_at: bookmark?.pinned === true ? bookmark.pinned_at || null : null,
     has_consensus: bookmark?.responses && typeof bookmark.responses === "object"
       ? Boolean(String(responses.consensus || "").trim())
       : bookmark?.has_consensus === true,
@@ -2048,6 +2052,8 @@ function upsertBookmarkMeta(bookmark, {
   // A saved write changed the chat: its remembered view is out of date.
   if (nameIt) bookmarkViewCache.delete(meta.id);
   if (existingIndex >= 0) {
+    const existing = window.bookmarksData[existingIndex];
+    if (meta.pinned === undefined) Object.assign(meta, { pinned: existing.pinned, pinned_at: existing.pinned_at });
     window.bookmarksData[existingIndex] = meta;
     updateBookmarkDOM(meta);
   } else {
@@ -3121,7 +3127,13 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       if (!response.ok) throw new Error(data.detail || `Your chats couldn’t be loaded (${response.status}).`);
       const skeleton = container?.querySelector(".bookmarks-skeleton");
       const shown = new Set(container?.children || []);
-      (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false, nameIt: false }));
+      // The pinned chats come with the first page whatever their age; one
+      // that comes again with its own page keeps its one row.
+      [...(data.pinned || []), ...(data.bookmarks || [])]
+        .forEach(item => upsertBookmarkMeta(item, { prepend: false, nameIt: false }));
+      // Date headings and pinned rows in place before the page fades in,
+      // so the headings arrive with their rows (chat-list.js).
+      window.App.chatList?.sync?.();
       if (!append && container) revealLoadedBookmarks(container, skeleton, shown);
       else skeleton?.remove();
       bookmarksNextCursor = data.next_cursor || null;
@@ -3533,11 +3545,12 @@ function updateBookmarkDOM(bookmark) {
 // ---- A chat row --------------------------------------------------------
 // The title is the row's control (role="button", Enter or Space opens it,
 // Apple audit E5); a pointer may press anywhere on the row. "…" opens a
-// small menu with Rename, Share and Delete (E2); a deleted chat can be taken
-// back for a few seconds. One delegated listener serves every row, so a run
-// row that turns into a saved one in place keeps working.
+// small menu with Pin, Rename, Share and Delete (E2); a deleted chat can be
+// taken back for a few seconds. One delegated listener serves every row, so
+// a run row that turns into a saved one in place keeps working.
 const BOOKMARK_MENU_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>';
 const BOOKMARK_MENU_ITEMS = [
+  ["pin", "Pin", "M12 16v5M8.5 3h7M10 3v5.5L6.5 13v3h11v-3L14 8.5V3"],
   ["rename", "Rename", "M4 20h4L19 9l-4-4L4 16v4ZM14 6l4 4"],
   ["share", "Share", "M12 15V4m-4 4 4-4 4 4M5 13v6h14v-6"],
   ["delete", "Delete", "M5 7h14M10 7V5h4v2m-6 0 1 12h6l1-12"],
@@ -3560,6 +3573,8 @@ function labelBookmarkMenu(control, title) {
 function setBookmarkTitleControl(label) {
   label.setAttribute("role", "button");
   label.tabIndex = 0;
+  // A title the row cuts off is shown whole on a rest (tooltip.js).
+  label.setAttribute("data-tooltip-overflow", "");
 }
 
 function createReadyBookmarkRow(bookmark, runId = null) {
@@ -3642,7 +3657,7 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
     item.dataset.action = action;
     item.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
     const text = document.createElement("span");
-    text.textContent = label;
+    text.textContent = action === "pin" && meta?.pinned === true ? "Unpin" : label;
     item.append(text);
     menu.append(item);
   }
@@ -3678,6 +3693,7 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
     const bookmarkId = row.dataset.id;
     closeBookmarkMenu({ focus: item.dataset.action !== "rename" && item.dataset.action !== "delete" });
     if (item.dataset.action === "rename") startBookmarkRename(row);
+    else if (item.dataset.action === "pin") pinBookmark(bookmarkId, meta?.pinned !== true);
     else if (item.dataset.action === "share") shareBookmark(bookmarkId);
     else if (item.dataset.action === "delete") deleteBookmarkWithUndo(bookmarkId);
   });
@@ -3778,6 +3794,37 @@ async function renameBookmark(bookmarkId, title) {
   if (!isCurrentAuthenticatedUser(requestUid, generation)) return null;
   bookmarkViewCache.delete(bookmarkId);
   return data.bookmark || null;
+}
+
+// Pin moves the chat to the top of the list at once (chat-list.js); the
+// server keeps it there for the next visit. A refusal puts it back.
+async function pinBookmark(bookmarkId, pinned) {
+  const user = auth.currentUser;
+  const entry = (window.bookmarksData || []).find(item => item.id === bookmarkId);
+  if (!user || !entry) return;
+  const before = { pinned: entry.pinned === true, pinned_at: entry.pinned_at || null };
+  Object.assign(entry, { pinned, pinned_at: pinned ? new Date().toISOString() : null });
+  window.App.chatList?.sync?.();
+  const requestUid = user.uid, generation = authState.generation;
+  try {
+    const idToken = await user.getIdToken(false);
+    if (!isCurrentAuthenticatedUser(requestUid, generation)) return;
+    const response = await fetch("/bookmarks/" + encodeURIComponent(bookmarkId) + "/pin", {
+      method: "PATCH",
+      headers: { "Authorization": "Bearer " + idToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `Pin failed (${response.status})`);
+    if (!isCurrentAuthenticatedUser(requestUid, generation)) return;
+    if (data.bookmark) Object.assign(entry, { pinned: data.bookmark.pinned === true, pinned_at: data.bookmark.pinned_at || null });
+  } catch (error) {
+    console.warn("Bookmark pin failed:", error);
+    if (!isCurrentAuthenticatedUser(requestUid, generation)) return;
+    Object.assign(entry, before);
+    window.App?.showPopup?.(pinned ? "This chat couldn’t be pinned. Try again." : "This chat couldn’t be unpinned. Try again.");
+  }
+  window.App.chatList?.sync?.();
 }
 
 // Share works on the chat on screen: it opens first (at once when it was

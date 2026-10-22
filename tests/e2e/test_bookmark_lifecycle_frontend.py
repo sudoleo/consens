@@ -1,5 +1,6 @@
 """Bookmark interaction against built assets and isolated, delayed HTTP fixtures."""
 import re
+from datetime import datetime, timezone
 
 import pytest
 from playwright.sync_api import expect
@@ -39,17 +40,17 @@ def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phas
             page.locator('#toggleSidebarButton').click()
         # Agent answers are shared like Consensus ones (since 2026-10-21).
         agent_menu = _open_row_menu(page, page.locator('.bookmark[data-id="second"]'))
-        expect(agent_menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Share', 'Delete'])
+        expect(agent_menu.locator('.bookmark-menu-item')).to_have_text(['Pin', 'Rename', 'Share', 'Delete'])
         page.keyboard.press('Escape')
         expect(page.locator('.bookmark-menu')).to_have_count(0)
         # A chat without a saved answer has nothing to share: no Share that could only say so.
         direct_menu = _open_row_menu(page, page.locator('.bookmark[data-id="third"]'))
-        expect(direct_menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Delete'])
+        expect(direct_menu.locator('.bookmark-menu-item')).to_have_text(['Pin', 'Rename', 'Delete'])
         page.keyboard.press('Escape')
         expect(page.locator('.bookmark-menu')).to_have_count(0)
         row = page.locator('.bookmark[data-id="first"]')
         menu = _open_row_menu(page, row)
-        expect(menu.locator('.bookmark-menu-item')).to_have_text(['Rename', 'Share', 'Delete'])
+        expect(menu.locator('.bookmark-menu-item')).to_have_text(['Pin', 'Rename', 'Share', 'Delete'])
         reader_screenshot(page, f'bookmark-menu-{width}')
         menu.get_by_role('menuitem', name='Delete').click()
         expect(row).to_be_hidden()
@@ -122,9 +123,9 @@ def test_chat_rows_open_by_keyboard_and_rename_in_place(browser, phase4_server, 
         page.keyboard.press('Enter')
         menu = page.locator('.bookmark-menu')
         expect(menu).to_be_visible()
-        assert page.evaluate("document.activeElement.textContent") == 'Rename'
+        assert page.evaluate("document.activeElement.textContent") == 'Pin'
         page.keyboard.press('ArrowDown')
-        assert page.evaluate("document.activeElement.textContent") == 'Share'
+        assert page.evaluate("document.activeElement.textContent") == 'Rename'
         page.keyboard.press('Escape')
         expect(menu).to_have_count(0)
         assert page.evaluate("document.activeElement.classList.contains('bookmark-menu-button')")
@@ -171,6 +172,72 @@ def test_chat_search_without_a_match_says_so(browser, phase4_server):
         page.evaluate("() => window.filterBookmarks('heat')")
         expect(page.locator('#bookmarksSearchEmpty')).to_be_hidden()
         expect(page.locator('.bookmark[data-id="first"]')).to_be_visible()
+    finally:
+        context.close()
+
+
+def test_chats_stand_in_date_groups_and_pin_to_the_top(browser, phase4_server):
+    """2026-10-22: the list had no groups, no pin and a search nobody found.
+    Pinned chats lead (the first page brings them whatever their age), the
+    rest stand under Today / Yesterday / Previous 7 days / …, Pin and Unpin
+    move a chat at once, and Ctrl+K searches the names and the questions."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    pins, errors = [], []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({'width': 1280, 'height': 800})
+        ago = page.evaluate('() => [0, 1, 3, 400].map(days => new Date(Date.now() - days * 864e5).toISOString())')
+        rows = {
+            'today': {'title': 'Heat pump plan', 'query': 'Which heat pump for an old house?', 'timestamp': ago[0]},
+            'yesterday': {'title': 'Ice cream', 'query': 'Best flavour?', 'timestamp': ago[1]},
+            'week': {'title': 'Running shoes', 'query': 'Adidas or Asics?', 'timestamp': ago[2]},
+            'old': {'title': 'Tax return', 'query': 'Which form?', 'timestamp': ago[3],
+                    'pinned': True, 'pinned_at': ago[0]},
+        }
+        meta = {key: {'id': key, 'mode': 'Agent', 'has_consensus': True, **value} for key, value in rows.items()}
+        page.route('**/bookmarks?*', lambda r: _json(r, {
+            'bookmarks': [meta['today'], meta['yesterday'], meta['week']], 'pinned': [meta['old']],
+            'next_cursor': None}))
+
+        def pin(route):
+            body = route.request.post_data_json
+            bookmark_id = route.request.url.split('/bookmarks/')[1].split('/')[0]
+            pins.append((bookmark_id, body['pinned']))
+            _json(route, {'status': 'success', 'bookmark': {
+                **meta[bookmark_id], 'pinned': body['pinned'],
+                'pinned_at': datetime.now(timezone.utc).isoformat() if body['pinned'] else None}})
+        page.route('**/bookmarks/*/pin', pin)
+        page.evaluate('() => window.loadBookmarks()')
+        expect(page.locator('.bookmark[data-id="today"]')).to_be_visible()
+
+        order = """() => [...document.querySelectorAll('#bookmarksContainer > :is(.bookmark, .chat-list-heading)')]
+          .filter(node => node.getClientRects().length).map(node => node.dataset.id || node.textContent)"""
+        assert page.evaluate(order) == ['Pinned', 'old', 'Today', 'today', 'Yesterday', 'yesterday',
+                                        'Previous 7 days', 'week']
+        reader_screenshot(page, 'chat-list-groups-1280')
+
+        # Pin: the latest pin leads, at once and after the server said yes.
+        menu = _open_row_menu(page, page.locator('.bookmark[data-id="week"]'))
+        menu.get_by_role('menuitem', name='Pin').click()
+        expect(page.locator('#bookmarksContainer > .bookmark').first).to_have_attribute('data-id', 'week')
+        page.wait_for_function("() => bookmarksData.find(item => item.id === 'week').pinned_at")
+        assert pins == [('week', True)]
+        # Unpin: the chat goes back to its own date, under its own year.
+        menu = _open_row_menu(page, page.locator('.bookmark[data-id="old"]'))
+        menu.get_by_role('menuitem', name='Unpin').click()
+        year = page.evaluate(f"() => String(new Date('{ago[3]}').getFullYear())")
+        expect(page.locator('#bookmarksContainer > .bookmark').last).to_have_attribute('data-id', 'old')
+        assert page.evaluate(order) == ['Pinned', 'week', 'Today', 'today', 'Yesterday', 'yesterday', year, 'old']
+        assert pins == [('week', True), ('old', False)]
+
+        # Ctrl+K searches; the question counts too, empty groups say nothing.
+        page.evaluate('() => document.activeElement.blur()')
+        page.keyboard.press('Control+k')
+        expect(page.locator('#chatSearch')).to_be_focused()
+        page.keyboard.type('old house')
+        expect(page.locator('.bookmark[data-id="yesterday"]')).to_be_hidden()
+        assert page.evaluate(order) == ['Today', 'today']
+        assert not errors
     finally:
         context.close()
 

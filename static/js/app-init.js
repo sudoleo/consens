@@ -1351,8 +1351,11 @@
           const q = shown.toLowerCase();
           const container = document.getElementById("bookmarksContainer");
           let matches = 0;
+          // The name and the question it was asked as: a generated name
+          // rarely has the words a person remembers.
+          const questions = new Map((window.bookmarksData || []).map(meta => [meta?.id, meta?.query || ""]));
           document.querySelectorAll("#bookmarksContainer .bookmark").forEach(el => {
-            const text = el.querySelector("p")?.textContent?.toLowerCase() || "";
+            const text = `${el.querySelector("p")?.textContent || ""}\n${questions.get(el.dataset.id) || ""}`.toLowerCase();
             const match = !q || text.includes(q);
             el.style.display = match ? "" : "none";
             if (match && !el.classList.contains("is-undo-pending")) matches += 1;
@@ -1390,6 +1393,26 @@
 
         bookmarkSearchTrigger?.addEventListener("click", function (event) {
           event.stopPropagation();
+          setBookmarkSearchOpen(true, { focus: true });
+        });
+
+        // Ctrl+K (⌘K on a Mac) finds a chat from anywhere, as in other chat
+        // apps: a closed sidebar opens, a folded list unfolds, and the
+        // search field takes the keys.
+        const searchShortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "") ? "⌘K" : "Ctrl+K";
+        bookmarkSearchTrigger?.setAttribute("data-tooltip", `Search chats (${searchShortcut})`);
+        bookmarkSearchTrigger?.setAttribute("aria-keyshortcuts", "Control+K Meta+K");
+        document.addEventListener("keydown", function (event) {
+          if (String(event.key).toLowerCase() !== "k" || !(event.ctrlKey || event.metaKey)) return;
+          if (event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented) return;
+          if (!bookmarkSearchInput || bookmarkSearchInput.disabled || document.querySelector("dialog[open]")) return;
+          event.preventDefault();
+          const sidebar = document.querySelector(".sidebar");
+          const sidebarOpen = usesOverlaySidebar()
+            ? sidebar?.classList.contains("active")
+            : !sidebar?.classList.contains("collapsed");
+          if (sidebar && !sidebarOpen) handleSidebarToggle();
+          if (document.querySelector(".bookmarks-section")?.classList.contains("is-collapsed")) window.toggleBookmarks?.();
           setBookmarkSearchOpen(true, { focus: true });
         });
 

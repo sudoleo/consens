@@ -353,8 +353,9 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   justify-self: center;
 }
 
-/* Bookmarks stays visible as the navigation label. Hover reveals a dedicated
-   search affordance; only clicking it replaces the row with the input. */
+/* Bookmarks stays visible as the navigation label, with the search glyph
+   beside it; only clicking it (or Ctrl/⌘ K, app-init.js) replaces the row
+   with the input. */
 .sidebar-bookmarks-head {
   position: relative;
   min-height: 36px;
@@ -460,15 +461,10 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   height: 14px;
 }
 
-.bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger:focus-visible {
+/* Always there while the list is open: hidden until hover, nobody found it. */
+.bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger {
   opacity: 1;
   pointer-events: auto;
-}
-@media (hover: hover) and (pointer: fine) {
-  .bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-bookmarks-head:hover .sidebar-search-trigger {
-    opacity: 1;
-    pointer-events: auto;
-  }
 }
 
 .sidebar-search-trigger:focus-visible {
@@ -482,7 +478,7 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   }
 }
 
-.sidebar-bookmarks-head.is-searching .sidebar-search-trigger {
+.bookmarks-section .sidebar-bookmarks-head.is-searching .sidebar-search-trigger {
   opacity: 0;
   pointer-events: none;
 }
@@ -543,14 +539,6 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
-}
-
-/* Touch has no hover, so expose the explicit search trigger immediately. */
-@media (hover: none) {
-  .bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger {
-    opacity: 1;
-    pointer-events: auto;
-  }
 }
 
 /* Section headings shrink to quiet eyebrows — the list is the content. */
@@ -662,12 +650,49 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   background: transparent;
   box-shadow: none;
   color: var(--ink);
-  /* Right side stays free for the "…" menu (layout.css); on touch it is
-     always shown with a row-high tap target. */
-  padding: 6px 34px 6px 8px;
+  /* The title runs the whole row; the "…" menu (layout.css) shows over its
+     end only on the row pointed at, the open one and the focused one. On
+     touch it is always shown with a row-high tap target, so the room stays
+     free there. */
+  padding: 6px 8px;
 }
 @media (hover: none) {
   .sidebar .bookmark { padding-right: 44px; }
+}
+/* Where "…" shows, the title fades out under it instead of every row
+   keeping that room empty. The drawer below 1100px keeps its room. */
+@media (min-width: 1100px) {
+  .sidebar .bookmark:not(.run-entry, .is-pending):is(.is-active, .has-menu, :focus-within) > p {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent calc(100% - 24px));
+    mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent calc(100% - 24px));
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar .bookmark:not(.run-entry, .is-pending):hover > p {
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent calc(100% - 24px));
+      mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent calc(100% - 24px));
+    }
+  }
+}
+
+/* The list in groups (chat-list.js): Pinned, Today, Yesterday, … A quiet
+   word over each group; no rule, no capitals. */
+.chat-list-heading {
+  margin: 14px 0 2px;
+  padding: 4px 8px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: normal;
+  line-height: var(--line-height-ui);
+  text-transform: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#bookmarksContainer > .chat-list-heading:first-of-type {
+  margin-top: 0;
+}
+.chat-list-heading[hidden] {
+  display: none;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -942,6 +967,12 @@ body.dark-mode {
   --composer-shadow: var(--field-lift);
   --composer-shadow-active: var(--field-lift-active);
   --composer-halo: var(--ground);
+  /* Focus in the question: the edge one step firmer, a soft light round
+     the field in the ink's own tone (dark on light, light on dark). */
+  --composer-edge-focus: color-mix(in srgb, var(--ink) 30%, transparent);
+  --composer-focus-glow:
+    0 0 0 3px color-mix(in srgb, var(--ink) 7%, transparent),
+    0 0 30px 0 color-mix(in srgb, var(--ink) 14%, transparent);
 }
 .claim-popover {
   background: var(--chat-surface);
@@ -963,6 +994,13 @@ body:not(.dark-mode) .chat-input-container {
 .chat-input-container:focus-within {
   border-color: var(--line);
   box-shadow: var(--composer-shadow-active);
+}
+/* Where the question is typed, the field glows softly: no colour and no
+   hard ring, a tint of the ink round it. A deeper shadow alone showed
+   nothing on the dark page. A press on (+) or the models does not light it. */
+.chat-input-container:has(.input-field:focus) {
+  border-color: var(--composer-edge-focus);
+  box-shadow: var(--composer-shadow-active), var(--composer-focus-glow);
 }
 
 .input-field {
@@ -3027,8 +3065,33 @@ body:not(.is-hero) .consensus-section::before {
   transition: filter var(--dur-state) var(--ease-standard);
 }
 
+/* Until the stored picture is here (an old chat opening): the tile's place
+   in the skeleton's tone with its light passing, then the picture fades in
+   (attachments.js imageTile). Never the browser's broken-image glyph. */
+.message-attachments .is-image-tile.is-thumb-loading .attachment-chip-preview {
+  position: relative;
+  overflow: hidden;
+}
+
 .message-attachments .is-image-tile.is-thumb-loading .attachment-chip-thumb {
   width: 96px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.message-attachments .is-image-tile.is-thumb-loading .attachment-chip-preview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 15%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 85%);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer var(--dur-beat) var(--ease-standard) infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-attachments .is-image-tile.is-thumb-loading .attachment-chip-preview::after { display: none; }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -5092,6 +5155,8 @@ body .theme-toggle:focus-visible {
     .sidebar .bookmark .bookmark-menu-button:hover { background: transparent; color: var(--ink); }
   }
   .sidebar .bookmark.has-menu { background: var(--drawer-tint); }
+  /* Group words start where the titles start. */
+  .chat-list-heading { padding: 6px 10px 2px; }
 
   /* Account: one row, no rule above it; the list simply ends. */
   .sidebar-settings { border-top: 0; padding-top: 6px; gap: 0; }

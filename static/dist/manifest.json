@@ -1,5 +1,5 @@
 {
-  "sources": "88d30345801c",
+  "sources": "682f8b0f7431",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -80,6 +80,7 @@
     "static/js/auth-bootstrap.js",
     "static/js/auth-session-state.js",
     "static/js/bundles.json",
+    "static/js/chat-list.js",
     "static/js/chat-scroll.js",
     "static/js/chat-session.js",
     "static/js/composer-autosize.js",
@@ -213,13 +214,13 @@
     },
     {
       "name": "auth",
-      "src": "/static/dist/auth.1e4fda715b6f.js",
+      "src": "/static/dist/auth.7970b67a7af4.js",
       "module": false,
       "defer": true
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.246aac0cf7d3.js",
+      "src": "/static/dist/firebase.610c20c69455.js",
       "module": true,
       "defer": false
     },
@@ -231,20 +232,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.1a064d275dfa.js",
+      "src": "/static/dist/app.a8ca1ce03ffa.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.3a416d42e8c1.css",
+    "app": "/static/dist/app.ef058846e697.css",
     "landing": "/static/dist/landing.a81c4266e2f9.css",
     "public": "/static/dist/public.a152705acb9b.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "46e927db60bc",
+      "hash": "fd8e527c2b79",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -315,16 +316,16 @@
     }
   },
   "previous_assets": [
+    "app.3a416d42e8c1.css",
     "app.82597192d615.css",
-    "app.69c7a7983a9f.css",
+    "app.1a064d275dfa.js",
     "app.4e33edc72a2f.js",
-    "app.87485170027c.js",
+    "auth.1e4fda715b6f.js",
     "auth.5c8ab3c866cb.js",
-    "auth.5e487d1e2570.js",
     "demo.1a3421e3e4d2.js",
     "demo.9cb7e261a771.js",
+    "firebase.246aac0cf7d3.js",
     "firebase.c696d2dd6bda.js",
-    "firebase.db621406a69f.js",
     "head.8ce62eb43048.js",
     "head.9076e14a6904.js",
     "landing.8085b9f464de.css",

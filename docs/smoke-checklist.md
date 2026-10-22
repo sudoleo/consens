@@ -45,6 +45,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 - [ ] Bookmark-Titel: Nach der ersten Antwort eines neuen Chats wechselt der
       Sidebar-Name kurz darauf weich von der Frage auf einen 2–6-Wörter-Titel
       und bleibt bei Follow-ups und nach Reload stehen.
+- [ ] Chatliste (2026-10-22, echtes Firestore): die Liste steht unter Today /
+      Yesterday / Previous 7 days / …; einen alten Chat über ··· → Pin anheften
+      → er steht sofort unter „Pinned“ und nach Reload weiterhin oben (die
+      erste Seite holt ihn per `pinned == true`); Unpin → zurück an sein Datum.
+      Ctrl+K öffnet die Suche, ein Wort aus der Frage (nicht dem Titel) findet
+      den Chat. Ein Bild im Chat öffnen und schließen → es blendet mittig aus,
+      ohne in die linke obere Ecke zu springen.
 - [ ] Agent-Memory (2026-10-04, echter Provider): Settings → Memory → „Let
       Agent update memory“ an. Im Agent „Ich bin Vegetarierin, merk dir das“ →
       kurze Bestätigung ohne Modellvergleich, darunter „Memory updated · Saved: …“.

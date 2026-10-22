@@ -15,7 +15,9 @@
 // `title` stays the element's attribute (scripts and assistive technology
 // keep reading it); only while a pointer rests on the element is it parked
 // in data-tooltip-title, so the browser does not draw a second, grey one.
-// A tooltip that repeats the element's own visible text is not shown.
+// A tooltip that repeats the element's own visible text is not shown;
+// `data-tooltip-overflow` is the exception: the element's own text, shown
+// only while the element cuts it off (a chat title in the sidebar).
 // =====================================================================
 (function () {
   "use strict";
@@ -46,6 +48,10 @@
   }
 
   function textOf(element) {
+    if (element.hasAttribute("data-tooltip-overflow")) {
+      const cutOff = element.scrollWidth > element.clientWidth + 1;
+      return cutOff ? (element.textContent || "").replace(/\s+/g, " ").trim() : "";
+    }
     const text = element.getAttribute("data-tooltip") || element.getAttribute("data-tooltip-title")
       || element.getAttribute("title") || "";
     const clean = text.replace(/\s+/g, " ").trim();
@@ -55,7 +61,7 @@
   }
 
   function findTarget(node) {
-    return node?.closest?.("[data-tooltip], [title], [data-tooltip-title]") || null;
+    return node?.closest?.("[data-tooltip], [title], [data-tooltip-title], [data-tooltip-overflow]") || null;
   }
 
   function park(element) {

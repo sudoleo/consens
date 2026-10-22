@@ -90,6 +90,10 @@
         {
           "file": "static/js/auth-bootstrap.js",
           "note": "Same-origin watchdog: stays active even when the Firebase CDN modules cannot be imported. Must run before firebase.js."
+        },
+        {
+          "file": "static/js/chat-list.js",
+          "note": "App.chatList: pinned chats first, the rest under date headings. Watches #bookmarksContainer itself; before firebase.js, which fills the list and calls sync() before the first page fades in."
         }
       ]
     },

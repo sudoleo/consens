@@ -543,9 +543,22 @@
       if (known) {
         img.src = known;
       } else {
+        // Until the stored file is here the tile is a quiet placeholder: an
+        // <img> with a name and no source drew the browser's broken-image
+        // glyph and the file name for the second an old chat took to load.
+        img.alt = "";
         chip.classList.add("is-thumb-loading");
         storedImage(att.fileId).then(function (url) {
-          img.addEventListener("load", function () { chip.classList.remove("is-thumb-loading"); }, { once: true });
+          img.addEventListener("load", function () {
+            img.alt = att.name;
+            chip.classList.remove("is-thumb-loading");
+            if (img.animate && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+              img.animate([{ opacity: 0 }, { opacity: 1 }], {
+                duration: window.App?.motion?.ms?.("state") ?? 200,
+                easing: window.App?.motion?.ease?.("out") ?? "ease-out"
+              });
+            }
+          }, { once: true });
           img.src = url;
         }, fallback);
       }

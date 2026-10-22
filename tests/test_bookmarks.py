@@ -1438,6 +1438,7 @@ def test_bookmark_list_is_compact_and_cursor_paginated():
     assert third.pop("timestamp").startswith("2026-10-11T11:58:00")
     assert third == {
         "id": "third_id", "query": "Third", "title": "Third", "title_source": "", "mode": "",
+        "pinned": False, "pinned_at": None,
         "has_consensus": False, "model_count": 1,
         "source_count": 0, "attachment_count": 0,
     }
@@ -1567,6 +1568,66 @@ def test_bookmark_pages_split_equal_timestamps_without_losing_a_row():
     second = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + first.json()["next_cursor"])
 
     assert _ids(first) + _ids(second) == ["b4", "b3", "b2", "b1"]
+
+
+def _pin(database, bookmark_id, pinned, *, uid="uid-1"):
+    limiter._storage.reset()
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    with patch.object(bookmarks_router, "verify_user_token", return_value=uid),             patch.object(bookmarks_router, "db_firestore", database):
+        return TestClient(app).patch(f"/bookmarks/{bookmark_id}/pin", headers={"Authorization": "Bearer token"},
+                                     json={"pinned": pinned})
+
+
+def test_a_pinned_chat_comes_with_the_first_page_whatever_its_age():
+    """The row menu pins a chat to the top of the sidebar. The first page
+    brings every pinned chat along, the latest pin first, so one pinned long
+    ago is not waiting on page five; later pages bring no pinned block."""
+    database = FakeChatDatabase()
+    _seed_bookmarks(database, {f"b{index}": {"query": f"Q{index}"} for index in range(1, 7)})
+
+    old = _pin(database, "b6", True)
+    _pin(database, "b5", True)
+    first = _list_bookmarks(database, "/bookmarks?limit=2")
+    second = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + first.json()["next_cursor"])
+
+    assert old.status_code == 200, old.text
+    assert old.json()["bookmark"]["pinned"] is True
+    assert old.json()["bookmark"]["pinned_at"]
+    assert [row["id"] for row in first.json()["pinned"]] == ["b5", "b6"]
+    assert all(row["pinned"] is True for row in first.json()["pinned"])
+    assert _ids(first) == ["b1", "b2"]
+    assert all(row["pinned"] is False for row in first.json()["bookmarks"])
+    assert second.json()["pinned"] == []
+
+
+def test_a_pin_outlives_later_saves_and_unpinning_returns_the_chat_to_its_date():
+    database = FakeChatDatabase()
+    _seed_bookmarks(database, {"b1": {"query": "Q1"}, "b2": {"query": "Q2"}})
+
+    _pin(database, "b2", True)
+    _write_bookmark(database, "b2", {"responses": {"consensus": "A later answer"}})
+    pinned = _list_bookmarks(database, "/bookmarks").json()
+    unpinned = _pin(database, "b2", False)
+    after = _list_bookmarks(database, "/bookmarks").json()
+
+    assert [row["id"] for row in pinned["pinned"]] == ["b2"]
+    assert unpinned.json()["bookmark"]["pinned"] is False
+    assert unpinned.json()["bookmark"]["pinned_at"] is None
+    assert after["pinned"] == []
+    assert [row["id"] for row in after["bookmarks"]] == ["b1", "b2"]
+
+
+def test_pinning_a_missing_chat_creates_nothing():
+    database = FakeChatDatabase()
+
+    response = _pin(database, "gone_bookmark", True)
+    invalid = _pin(database, "gone_bookmark", "yes")
+
+    assert response.status_code == 404
+    assert invalid.status_code == 422
+    assert ("users", "uid-1", "bookmarks", "gone_bookmark") not in database.documents
 
 
 def _cursor(payload):
