@@ -3,14 +3,18 @@ import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // `served` answers the HEAD probe for a failed same-origin asset: false is a
-// real outage (reported), true a resource the browser refused by itself.
+// real outage (reported), true a resource the browser refused by itself,
+// "unanswered" a probe that never reached the server (a reload cut it off).
 function boot({ served = false } = {}) {
   const reports = [];
   const probes = [];
   const loaded = loadScripts(["static/js/error-reporter.js"], {
     before(window) {
       window.fetch = (url, options) => {
-        if (options?.method === "HEAD") { probes.push(String(url)); return Promise.resolve({ ok: served }); }
+        if (options?.method === "HEAD") {
+          probes.push(String(url));
+          return served === "unanswered" ? Promise.reject(new window.TypeError("Failed to fetch")) : Promise.resolve({ ok: served });
+        }
         reports.push(JSON.parse(options.body));
         return Promise.resolve({ ok: true });
       };
@@ -229,6 +233,16 @@ describe("critical resource reporting", () => {
       await fail(window, link);
     }
     expect(probes).toHaveLength(2);
+    expect(reports).toEqual([]);
+  });
+
+  it("does not alert when the probe gets no answer, as when a reload cuts off the page", async () => {
+    const { window, document, reports, probes } = boot({ served: "unanswered" });
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/static/dist/app.3a416d42e8c1.css";
+    await fail(window, link);
+    expect(probes).toHaveLength(1);
     expect(reports).toEqual([]);
   });
 

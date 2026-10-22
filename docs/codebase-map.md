@@ -838,7 +838,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   keine URL/Query. Eigene Assets (same-origin) melden seit 2026-10-09 nur, wenn
   ein ungecachter `HEAD`-Request sie ebenfalls nicht bekommt: Headless-Scraper
   blockieren Stylesheets selbst und lösten pro Seite zwei Fehlalarme aus; CDN-
-  Ressourcen melden sofort. Client und Server deduplizieren je Asset; unterschiedliche
+  Ressourcen melden sofort. Gemeldet wird nur eine Server-Antwort ohne `ok`;
+  ein `HEAD` ohne Antwort (Netz weg, Reload bricht Download und Probe ab, Alarm
+  2026-10-22) meldet seit 2026-10-23 nichts mehr. Client und Server deduplizieren je Asset; unterschiedliche
   Dateien derselben Klasse bleiben damit diagnostizierbar. Erwartete
   `AbortError`-Abbrüche werden ignoriert; Session-Deduplizierung verhindert
   Wiederholungen desselben Fehlers. Runtime-Alarme ergänzen einen allowgelisteten
