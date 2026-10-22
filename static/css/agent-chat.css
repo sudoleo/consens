@@ -166,8 +166,8 @@
   width: 25px; height: 25px; min-height: 25px; padding: 3px; margin-left: -6px;
   background: var(--ground); border: 2px solid var(--ground); border-radius: 50%;
 }
-/* Provider marks rest monochrome, as in the composer and the model picker,
-   and take their own colours while you point at them. The grey sits on the
+/* Provider marks rest monochrome, as in the model picker (the composer row
+   shows them in colour), and take their own colours while you point at them. The grey sits on the
    button, not the image: dark mode inverts the black logos on the image
    itself (components-model-picker.css). */
 .agent-model-stack .agent-inline-model {
@@ -647,7 +647,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    between the summary and the live text, and no ring around the icons.
    When the answer has been checked, the agreement number catches the light
    once (below). The grey sits on the button, not the image (as in the
-   composer): dark mode inverts the black logos on the image itself
+   model picker): dark mode inverts the black logos on the image itself
    (components-model-picker.css), and a filter there would replace that and
    leave them black on the dark ground. */
 .agent-answer-activity .agent-model-stack .agent-inline-model {

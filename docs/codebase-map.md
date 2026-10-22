@@ -2555,7 +2555,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `pointerdown` auf einer freien Stelle (nicht Steuerelemente,
   `.input-section`, Sidebar, Navigation, Dialoge) startet die Welle: Radius
   und Breite schwanken je Richtung, sie bremst ab, zerfällt in Flecken und
-  hat 1–2 Nachläufer. Theme-Wechsel (`body.dark-mode`, System) malt neu,
+  hat 1–2 Nachläufer. Solange ein solcher Klick gedrückt ist, bricht
+  `selectstart` ab: Doppel-, Dreifachklick oder Ziehen markierten sonst den
+  Hinweis unter dem Composer. Theme-Wechsel (`body.dark-mode`, System) malt neu,
   verdeckter Tab rechnet nicht. Ohne `matchMedia` (reduzierte Bewegung nicht
   prüfbar) oder Canvas bleibt das Modul aus; `prefers-reduced-motion` zeigt
   ruhende Wolken ohne Welle. Tests: `tests/js/letter-clouds.test.mjs`,
@@ -6359,8 +6361,10 @@ trägt dort den Modus und Dateien; auf dem Handy (Leiste nur mit Icons) bleibt
 das Menü vollständig. Reasoning trägt überall
 denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Leiste stehen
 Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
-ruhen einfarbig (Filter auf dem Badge, damit invertierte Mono-Logos im Dark
-Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Unter einem leeren
+stehen seit 2026-10-22 in ihren eigenen Farben (auch im Landing-Mockup
+`.lp-composer-model`): bei 14 px erkennt man eine Marke an der Farbe, und auf
+dem Handy gibt es keinen Hover. Unter den Antworten und im Modell-Picker ruhen
+sie weiter einfarbig mit Farbe bei Hover. Unter einem leeren
 neuen Chat (Hero) stehen seit 2026-10-15 vier Beispielfragen
 (`#composerStarters`, Pillen ohne Rahmen; auf dem Handy eine seitlich
 scrollende Zeile): ein Klick füllt nur das Feld (`composer-invite.js`). Seit

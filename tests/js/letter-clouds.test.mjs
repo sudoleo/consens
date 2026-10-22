@@ -95,6 +95,25 @@ describe("letter clouds", () => {
     expect(app.state().ripples).toBeGreaterThan(0);
   });
 
+  it("keeps a wave click from selecting text, and only that click", async () => {
+    const app = boot();
+    const empty = app.document.getElementById("empty");
+    const greeting = app.document.querySelector(".hero-greeting");
+    const select = target => target.dispatchEvent(new app.window.Event("selectstart", { bubbles: true, cancelable: true }));
+    app.press(empty);
+    expect(select(empty)).toBe(false);
+    empty.dispatchEvent(new app.window.MouseEvent("pointerup", { bubbles: true }));
+    expect(select(empty)).toBe(true);
+
+    app.press(greeting);
+    expect(select(greeting)).toBe(true);
+
+    app.document.body.classList.remove("is-hero");
+    await app.settle();
+    app.press(empty);
+    expect(select(empty)).toBe(true);
+  });
+
   it("sleeps between calm frames and draws every display frame only during a wave", async () => {
     const app = boot();
     app.frame();

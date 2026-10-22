@@ -2713,7 +2713,6 @@ img { display: block; max-width: 100%; }
 .lp-composer-models { display: flex; align-items: center; padding-left: 8px; }
 .lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
 .lp-composer-model img { width: 14px; height: 14px; object-fit: contain; }
-.lp-composer-model { filter: grayscale(1); opacity: .8; }
 .dark-mode .lp-composer-mono { filter: invert(1); }
 .lp-composer-tools.is-sent { visibility: hidden; opacity: 0; animation: none; }
 @keyframes lpComposerToolsIn {

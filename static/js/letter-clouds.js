@@ -416,12 +416,24 @@
         if (active) { resize(); wake(); } else stale = true;
       }, 150);
     }, { passive: true });
+    // Ein Klick, der eine Welle auslöst, wählt keinen Text: Doppel- und
+    // Dreifachklick oder Ziehen markierten sonst die nächste Zeile am
+    // Eingabefeld (meist den Hinweis darunter) in Browser-Blau.
+    let waving = false;
     document.addEventListener("pointerdown", event => {
+      waving = false;
       if (!active || event.button !== 0) return;
       const target = event.target;
       if (target && target.closest && target.closest(SKIP)) return;
+      waving = true;
       splash(event.clientX, event.clientY);
     }, { passive: true });
+    const waveDone = () => { waving = false; };
+    document.addEventListener("pointerup", waveDone, { passive: true });
+    document.addEventListener("pointercancel", waveDone, { passive: true });
+    document.addEventListener("selectstart", event => {
+      if (waving) event.preventDefault();
+    });
     sync();
   } else {
     layer.remove();

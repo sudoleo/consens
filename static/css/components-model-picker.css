@@ -304,7 +304,7 @@
 }
 
 /* Who answers: overlapping provider marks, monochrome at rest like the
-   composer stack, in their own colours while the row is pointed at. The grey
+   marks under the answers, in their own colours while the row is pointed at. The grey
    sits on the mark, not the image, so dark mode keeps inverting the black
    logos underneath. The ring takes the row's tone to keep the marks apart. */
 .model-picker-preset-marks {

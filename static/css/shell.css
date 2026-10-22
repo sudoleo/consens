@@ -4507,17 +4507,11 @@ body .theme-toggle:focus-visible {
   box-sizing: border-box;
   font-size: var(--font-size-xs);
 }
-/* Provider marks rest monochrome, so the only colour in the composer is the
-   state it reports; they take their own colours while you point at them.
-   The filter sits on the badge, not the image, so a mark that is inverted
-   for dark mode (mono logos) stays inverted underneath it. */
+/* Provider marks show their own colours here: the row says who will answer,
+   and at 14 px a mark is known by its colour (a phone has no hover to reveal
+   it). Greyed, the coloured marks faded while the black ones stayed black.
+   Under the answers they rest monochrome (agent-chat.css). */
 .composer-model-icon img { width: 14px; height: 14px; object-fit: contain; }
-.composer-model-icon { filter: grayscale(1); opacity: .8;
-  transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard); }
-.composer-mode-models:focus-visible .composer-model-icon { filter: none; opacity: 1; }
-@media (hover: hover) and (pointer: fine) {
-  .composer-mode-models:hover .composer-model-icon { filter: none; opacity: 1; }
-}
 /* Keep the explanation accessible without adding another visual row. */
 .composer-mode-description {
   position: absolute;
