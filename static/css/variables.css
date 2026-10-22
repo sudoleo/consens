@@ -56,6 +56,9 @@
   --partial-bg: #fbebcf;
   --dispute: #ad4b57;
   --dispute-bg: #f5e0e1;
+  /* The light a streamed answer's newest letters arrive in, the house green
+     of the Send button's light (stream-reveal.js). */
+  --stream-light: var(--agree);
 
   /* Interaction tone steps. foundation.css turns them into --hover and
      --selected (an ink wash, so the step reads on any surface). */
@@ -182,6 +185,8 @@
   --partial-bg: rgba(220, 177, 99, 0.17);
   --dispute: #f07f76;
   --dispute-bg: rgba(240, 127, 118, 0.17);
+  /* On the dark ground the light is brighter than the ink it cools to. */
+  --stream-light: color-mix(in oklab, var(--agree) 70%, white);
 
   --hover-mix: 4.5%;
   --selected-mix: 8%;

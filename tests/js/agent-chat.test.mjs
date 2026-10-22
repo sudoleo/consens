@@ -1722,6 +1722,40 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('hands streamed text to stream-reveal where it can draw, and lets the full render follow its last word', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    const reveal = { active: () => true, stream: vi.fn(), settle: vi.fn((_el, _text, render) => render()) };
+    w.App.streamReveal = reveal;
+    w.App.agentActivity.reveal = vi.fn();
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    handlers.delta.append('First part. More.');
+    w.App.agentChat.project(run);
+    // The module paces the text; agent-chat.js only hands it the painter.
+    expect(reveal.stream).toHaveBeenLastCalledWith(body, 'First part. More.', expect.any(Function));
+    expect(w.renderMarkdownStream).not.toHaveBeenCalled();
+    reveal.stream.mock.lastCall[2]('First part.');
+    expect(w.renderMarkdownStream).toHaveBeenLastCalledWith(body, 'First part.', { decorate: expect.any(Function) });
+    // Its letters come into view one by one: the body itself does not fade in.
+    expect(w.App.agentActivity.reveal).not.toHaveBeenCalledWith(body, expect.anything());
+    resolve({ ok: true, data: { response: 'First part. More.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'First part. More.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    w.App.agentChat.project(run);
+    expect(reveal.settle).toHaveBeenCalledWith(body, 'First part. More.', expect.any(Function));
+    expect(w.morphMarkdown).toHaveBeenLastCalledWith(body, 'First part. More.', { decorate: expect.any(Function) });
+    dom.window.close();
+  });
+
   it('keeps the marked answer DOM when the run ends with the text the review already rendered', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);

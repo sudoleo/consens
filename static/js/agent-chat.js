@@ -566,7 +566,9 @@
   // (markdown-stream.js). Once the text is fixed it is rendered in full, like
   // a saved answer, so review markers and cross-block Markdown are exact.
   // Both morph into the nodes on screen: a link in the answer stays the same
-  // link and a selection stays (Apple audit D4, A6).
+  // link and a selection stays (Apple audit D4, A6). Where it can draw,
+  // stream-reveal.js paces the streamed text and brings its letters into
+  // view; the full render then follows its last word.
   function renderAnswerBody(body, text, mode) {
     if (!body) return;
     // The run ends with the same text the review already rendered in full
@@ -583,19 +585,26 @@
     if (body.dataset.markdown !== text) body._shownMarks = null;
     body.dataset.markdown = text;
     body.dataset.renderMode = mode;
-    if (mode === 'stream') window.renderMarkdownStream(body, text, { decorate: streamSourcePills });
-    else if (window.morphMarkdown) {
+    const reveal = App.streamReveal?.active() ? App.streamReveal : null;
+    if (mode === 'stream') {
+      const paint = shown => window.renderMarkdownStream(body, shown, { decorate: streamSourcePills });
+      if (reveal) reveal.stream(body, text, paint);
+      else paint(text);
+    } else if (window.morphMarkdown) {
       const morph = () => window.morphMarkdown(body, text, { decorate: streamSourcePills });
-      window.keepTextSelection ? window.keepTextSelection(body, morph) : morph();
+      const full = () => (window.keepTextSelection ? window.keepTextSelection(body, morph) : morph());
+      if (reveal) reveal.settle(body, text, full);
+      else full();
     } else {
       window.resetMarkdownStream?.(body);
       window.injectMarkdown?.(body, text, []);
     }
     // A new render has no claim marks; the review renderer re-applies them.
     body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
-    // Animate the start of an answer once, never each streamed text chunk.
+    // Animate the start of an answer once, never each streamed text chunk;
+    // paced text comes into view letter by letter instead.
     if (!text.trim()) body._agentReveal?.cancel();
-    else if (entering) body._agentReveal = App.agentActivity?.reveal(body, { lift: false });
+    else if (entering && !(reveal && mode === 'stream')) body._agentReveal = App.agentActivity?.reveal(body, { lift: false });
   }
   function renderAnswer(text, error, { streaming = false } = {}) {
     renderAnswerBody(document.getElementById("agentAnswerBody"), text,

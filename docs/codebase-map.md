@@ -2058,6 +2058,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `PUT /chats/{chat}/turns/{turn}/task-checks` (eine Anfrage je Turn
   gleichzeitig, Wiederholung nach 2 s/8 s bei Netz/401/408/429/5xx, beim
   Verstecken des Tabs `keepalive`).
+- **`stream-reveal.js`** — `App.streamReveal` (`active`, `stream`, `settle`,
+  seit 2026-10-22): Takt und „Licht“ einer gestreamten Agent-Antwort, Ablauf
+  unter „Agent-Laufoberfläche“. `active()` ist nur mit CSS Custom Highlight API
+  und ohne `prefers-reduced-motion` wahr; sonst malt `agent-chat.js` wie
+  vorher jeden Frame, was angekommen ist. Tests: `tests/js/stream-reveal.test.mjs`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
   Zwei Darstellungen: **im Chat-Fliesstext** (Container ist bzw. liegt in
@@ -9971,6 +9976,36 @@ Sobald die Review den gestreamten Text als Version hält („settled“), render
 `project` ihn vollständig (`morphMarkdown` mit `streamSourcePills`, in die
 gezeigten Knoten und mit `keepTextSelection`) – auch eine Antwort, die mit
 einer Tabelle endet, zeigt sie so schon während der Prüfung.
+**Takt und Licht (seit 2026-10-22, `stream-reveal.js`).** Wo
+`App.streamReveal.active()` gilt, malt `renderAnswerBody` im Modus `stream` nicht
+selbst, sondern reicht den angekommenen Text mit `renderMarkdownStream` als
+Maler an `App.streamReveal.stream`. Das Modul malt in eigenen Frames ein
+wachsendes Präfix aus ganzen Wörtern, etwa 0,15 s hinter dem angekommenen Text
+(bis 0,8 s, wenn ein Proxy in Sekundenbrocken puffert: der Abstand folgt der
+gemessenen Pause zwischen zwei Brocken); ein großer Brocken wird schneller
+nachgeholt, nie in einem Sprung. Ein vom Stream zerschnittenes Wort wartet
+250 ms auf seinen Rest; „-“, „###“, „1.“, „>“ am Zeilenanfang stehen nur mit
+ihrem ersten Wort (vorher stand für etwa 25 Frames je Antwort ein leerer
+Punkt oder eine leere Überschrift da). Über 1200 Zeichen Rückstand (Reload
+eines laufenden Turns) wird sofort gezeigt. Ein Frame mit mehr als 8 ms
+Malzeit rückt den nächsten um das Doppelte hinaus (vorher in `follow()`).
+Ein gemaltes Wort steht sofort ganz im Layout (bricht nie halb um), seine
+Buchstaben kommen aber im Tempo des Texts nacheinander ins Bild, höchstens
+100 ms nach dem Malen: Jeder blendet weich ein und erscheint in
+`--stream-light` (hell `--agree`, dunkel heller gemischt, `variables.css`), das
+in etwa sechs Wörtern zu Tinte abkühlt. Gezeichnet wird mit der CSS Custom
+Highlight API (`stream-light-<Farbe>-<Stufe>`, Regeln in einem
+`adoptedStyleSheets`-Blatt, je Textfarbe eigene, Stufe 0 = noch nicht im Bild);
+kein Knoten kommt hinzu, Auswahl und Links im wachsenden Absatz bleiben. Was
+kein Text ist (Aufzählungspunkt, Quellen-Pill, Kästchen, Linie, Tabelle), blendet
+`agent-chat.css` über `#agentAnswerBody.is-stream-revealing` mit ein. Wird der
+Text fest (Modus `full`), rendert `renderAnswerBody` über
+`App.streamReveal.settle(body, text, render)`: Ein Rückstand läuft im Takt
+weiter, die volle Darstellung folgt dem letzten Wort. Ein Text, der nicht an
+den getakteten anschließt (anderer Chat), rendert sofort und beendet das Licht.
+Schreibt jemand anderes in die Antwort (`_markdownWrites`, etwa die Marken der
+Review), gibt das Modul sie ab. Der WAAPI-Fade des Antwortbeginns
+(`agentActivity.reveal`) entfällt für getakteten Text.
 Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
 (`LOADING_NOTICE_DELAY_MS`); vorher schob ihr kurzes Aufblitzen den zentrierten
 Composer beim Reload hoch und wieder runter. Erstes Zeichnen: Endete die letzte

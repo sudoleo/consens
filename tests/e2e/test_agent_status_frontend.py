@@ -150,6 +150,9 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             expect(preview).to_be_visible()
         page.evaluate("() => window.__answerChunk('Die erste Option ')")
         expect(page.locator("#agentAnswerBody")).to_contain_text("Die erste Option")
+        # The streamed letters come into view by stream-reveal.js (highlights),
+        # not with reduced motion.
+        assert page.evaluate("() => App.streamReveal.active()") == (quiet != "reduce")
         page.evaluate("() => window.__answerChunk('passt zu deinem Budget.')")
         expect(page.locator("#agentAnswerBody")).to_have_text("Die erste Option passt zu deinem Budget.")
         # The last word stands and the server announces the check: it shows at
@@ -183,7 +186,9 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         if reader_opened:
             expect(details).to_have_attribute("open", "")
         assert page.evaluate("document.querySelector('#agentAnswerActivity')._agentActivity.clockTimer === null")
-        assert page.evaluate("__agentMotion.filter(m => m.target.id === 'agentAnswerBody').length") == (1 if quiet == "none" else 0)
+        # The answer's letters came into view one by one (stream-reveal.js):
+        # the body itself does not fade in as a whole.
+        assert page.evaluate("__agentMotion.filter(m => m.target.id === 'agentAnswerBody').length") == 0
         if quiet == "none":
             assert page.evaluate("__agentMotion.every(m => m.options.duration <= 220)")
             if width == 320:

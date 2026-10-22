@@ -136,6 +136,10 @@
           "note": "App.taskChecks: ticks in an answer's checklists, kept on the saved turn. markdown-stream.js calls it after each write."
         },
         "static/js/sources.js",
+        {
+          "file": "static/js/stream-reveal.js",
+          "note": "App.streamReveal: pace and letter-by-letter light of a streamed Agent answer (CSS Custom Highlight API). agent-chat.js calls it at runtime with renderMarkdownStream / morphMarkdown as its painters."
+        },
         "static/js/attachments.js",
         "static/js/model-answer-reader.js",
         "static/js/agent-mode.js",
