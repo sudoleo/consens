@@ -102,3 +102,34 @@ def test_plain_text_is_text_not_html():
         'AT&T and R&D: 5 < 7 > 3, "quoted" <b>'
     )
     assert lead_sentences("AT&T cut prices. More follows here.", limit=20, min_sentence=5) == "AT&T cut prices."
+
+
+def test_a_shared_agent_answer_cites_its_sources_as_pills_like_the_app():
+    # sources.js linkifyAgentSources, on the server: the words stay, the source
+    # follows as a pill; a link that only names its domain becomes the pill.
+    from app.services.public_markdown import render_public_markdown
+    sources = [{"id": "S1", "url": "https://www.uni-hannover.de/news/hoi", "title": "Founding"},
+               {"id": "S2", "url": "https://njaped.no/", "title": "njaped"},
+               {"id": "S3", "url": "https://example.org/a", "title": "A"},
+               {"id": "S4", "url": "https://example.com/b", "title": "B"}]
+    md = ("Founded 2018 ([founding note](https://www.uni-hannover.de/news/hoi)). "
+          "Read [njaped.no](https://njaped.no/). "
+          "See [example.org](https://example.org/a), [example.com](https://example.com/b). "
+          "Elsewhere: [here](https://other.example/x). Last [report](https://example.org/a).")
+    html = render_public_markdown(md, sources, source_pills=True)
+
+    pill = '<a class="src-ref" href="https://www.uni-hannover.de/news/hoi" target="_blank"'
+    assert "(founding note" + pill in html
+    assert '<span class="src-ref-label">uni-hannover.de</span></a>).' in html
+    assert "Read " + '<a class="src-ref" href="https://njaped.no/"' in html
+    assert '>njaped.no</span></a>.' in html and ">njaped.no</a>" not in html
+    # Side by side: one pill, "+1".
+    assert '<span class="src-ref-label">example.org</span><span class="src-ref-more">+1</span></a>.' in html
+    assert 'href="https://example.com/b"' not in html
+    # The point before the pill that ends a sentence; other links stay links.
+    assert "Last report.<a class=\"src-ref\"" in html
+    assert '<a href="https://other.example/x" rel="nofollow noopener noreferrer">here</a>' in html
+    assert 'src="/api/topics/favicon?d=example.org"' in html
+
+    # Without the flag (Consensus and Watch pages) nothing changes.
+    assert "src-ref" not in render_public_markdown(md, sources)

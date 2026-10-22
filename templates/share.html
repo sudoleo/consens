@@ -99,17 +99,28 @@
         </div>
         {% endif %}
         {% if consulted_models %}
-        <div class="share-models-group">
-          <span class="share-models-label">{% if is_agent %}Models compared{% else %}Models consulted{% endif %}</span>
-          <ul class="share-models-list">
-            {% for m in consulted_models %}
-            <li class="share-model-chip" title="{{ m.label }}{% if m.model %} – {{ m.model }}{% endif %}">
-              {% if m.icon %}<img src="{{ m.icon }}" alt="{{ m.label }}" class="share-model-icon{% if m.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM', 'Meta', 'Qwen') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
-              <span class="share-model-name">{{ m.model or m.label }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-        </div>
+        {#- Folded since 2026-10-22: one line, the models as the Agent shows
+            them beside "Thought for …" (overlapping marks at rest in grey);
+            the names open below. -#}
+        <details class="wp-disclosure share-models-group share-models-compared">
+          <summary>
+            <span class="share-models-label">{% if is_agent %}Models compared{% else %}Models consulted{% endif %}</span>
+            <span class="share-models-stack" aria-hidden="true">
+              {%- for m in consulted_models %}{% if m.icon %}<span class="share-models-stack-mark"><img src="{{ m.icon }}" alt="" class="share-model-icon{% if m.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM', 'Meta', 'Qwen') %} is-mono{% endif %}" width="15" height="15" loading="lazy"></span>{% endif %}{% endfor -%}
+            </span>
+            <span class="wp-chevron chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="wp-disclosure-body">
+            <ul class="share-models-list">
+              {% for m in consulted_models %}
+              <li class="share-model-chip" title="{{ m.label }}{% if m.model %} – {{ m.model }}{% endif %}">
+                {% if m.icon %}<img src="{{ m.icon }}" alt="{{ m.label }}" class="share-model-icon{% if m.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM', 'Meta', 'Qwen') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
+                <span class="share-model-name">{{ m.model or m.label }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </details>
         {% endif %}
       </div>
       {% endif %}
@@ -121,19 +132,40 @@
       {% endif %}
     </header>
 
-    {% macro difference_card(diff) %}
-    <article class="diff-card" data-difference='{{ diff | tojson | forceescape }}'>
-      <span class="diff-type{% if diff.type == 'contradiction' %} diff-type-contradiction{% endif %}">{{ diff.type or "difference" }}{% if diff.severity == 'major' %} &middot; critical{% elif diff.severity == 'minor' %} &middot; minor detail{% endif %}</span>
-      <h3>{{ diff.claim }}</h3>
-      {% for position in diff.positions %}
-      <div class="diff-position">
-        <p class="diff-stance">{{ position.stance }}</p>
-        {% if position.models %}<p class="diff-models">{{ position.models | join(", ") }}</p>{% endif %}
-        {% if position.quote %}<blockquote>&ldquo;{{ position.quote }}&rdquo;</blockquote>{% endif %}
+    {#- A difference as the app draws it (consensus-insights.js
+        buildDifferenceCards, check_page.difference_cards): a dot and one word
+        for its weight, the point in dispute, then each side as one claim --
+        the answer's first, "vs" between -- with who says it, "In the answer"
+        and the quote on request. -#}
+    {% macro difference_card(card) %}
+    <details class="diff-card {{ card.classes }}" data-difference-index="{{ card.index }}" open>
+      <summary class="diff-card-summary">
+        <span class="diff-card-tags"><span class="sev-dot {{ card.dot }}" aria-hidden="true"></span><span class="diff-type-tag" title="{{ card.meaning }}">{{ card.tag }}</span></span>
+        <span class="diff-card-claim">{{ card.claim }}</span>
+      </summary>
+      <div class="diff-card-body">
+        <div class="diff-sides{% if card.versus %} is-versus{% endif %}">
+          {%- for side in card.sides %}
+          {% if card.versus and not loop.first %}<span class="diff-versus-mark">vs</span>{% endif %}
+          <div class="diff-position{% if side.in_answer %} is-answer{% endif %}">
+            {% if side.stance_html %}<div class="diff-position-stance">{{ side.stance_html | safe }}</div>{% endif %}
+            {% if side.models or side.in_answer or side.quote_html %}
+            <div class="diff-position-meta">
+              {%- if side.models %}<span class="diff-position-label{% if side.models | length > 1 %} is-group{% endif %}">
+                {%- for m in side.models %}<span class="diff-position-model" title="{{ m.name }}"><span class="diff-position-icon" aria-hidden="true">{% if m.icon %}<img src="{{ m.icon }}" alt=""{% if m.mono %} class="is-mono"{% endif %} width="16" height="16" loading="lazy">{% else %}{{ m.name[:1] }}{% endif %}</span><span class="diff-position-name">{{ m.name }}</span></span>{% endfor -%}
+                {%- if side.models | length > 1 %}<span class="diff-position-count" aria-hidden="true">{{ side.models | length }} models</span>{% endif -%}
+              </span>{% endif -%}
+              {%- if side.in_answer %}<span class="diff-position-answer">In the answer</span>{% endif -%}
+              {%- if side.quote_html %}<button type="button" class="diff-quote-toggle" aria-expanded="false">Show quote</button>{% endif -%}
+            </div>
+            {% endif %}
+            {% if side.quote_html %}<blockquote class="diff-position-quote" hidden>{{ side.quote_html | safe }}</blockquote>{% endif %}
+          </div>
+          {%- endfor %}
+        </div>
+        {% if card.verify %}<p class="diff-verify">Worth verifying: {{ card.verify }}</p>{% endif %}
       </div>
-      {% endfor %}
-      {% if diff.verify %}<p class="diff-verify">How to verify: {{ diff.verify }}</p>{% endif %}
-    </article>
+    </details>
     {% endmacro %}
 
     <div class="page-content">
@@ -160,7 +192,15 @@
             {%- if contradiction_count %} ({{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }}){% endif %}
             across {{ model_count }} models.
           </p>
-          {% for diff in differences %}{{ difference_card(diff) }}{% endfor %}
+          <div class="diff-cards">
+            {% for card in difference_cards.cards %}{{ difference_card(card) }}{% endfor %}
+            {% if difference_cards.smaller %}
+            <details class="diff-more">
+              <summary class="diff-more-summary">{{ difference_cards.smaller | length }} smaller differences</summary>
+              <div class="diff-more-body">{% for card in difference_cards.smaller %}{{ difference_card(card) }}{% endfor %}</div>
+            </details>
+            {% endif %}
+          </div>
           {% elif differences_fallback_html %}
           <div class="share-md share-differences-md">{{ differences_fallback_html | safe }}</div>
           {% else %}

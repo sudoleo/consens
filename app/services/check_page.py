@@ -272,3 +272,88 @@ def named_differences(differences):
         named.append({**diff, "claim": name(diff.get("claim")),
                       "verify": name(diff.get("verify")), "positions": positions})
     return named
+
+
+# Differences on the share page as the app draws them (consensus-insights.js
+# buildDifferenceCards, Max 2026-10-16): critical contradictions first, then
+# minor ones, then other emphases; two or more smaller ones fold behind the
+# critical ones. Each side is one claim, the side the answer takes first, the
+# sides under one another with "vs" between them; the same claim said by
+# several models is one side.
+_DIFFERENCE_TAGS = {
+    "major": ("Critical", "Critical contradiction", "is-crit"),
+    "minor": ("Minor", "Minor contradiction about a detail", "is-warn"),
+    "": ("Contradiction", "Contradiction", "is-warn"),
+}
+_MODEL_ALIASES = {"Claude": "Anthropic", "ChatGPT": "OpenAI", "Google": "Gemini", "xAI": "Grok"}
+_MONO_PROVIDERS = {"OpenAI", "Grok", "Kimi", "GLM", "Meta", "Qwen"}
+
+
+def _difference_rank(diff) -> int:
+    if diff.get("type") != "contradiction":
+        return 2
+    return 1 if diff.get("severity") == "minor" else 0
+
+
+def _claim_key(text) -> str:
+    return re.sub(r"[\W_]+", " ", str(text or "").lower()).strip()
+
+
+def _merged_sides(positions):
+    merged, taken = [], set()
+    for position in positions:
+        models = [model for model in position.get("models") or [] if model not in taken]
+        key = _claim_key(position.get("stance") or position.get("quote"))
+        same = next((side for side in merged if key and _claim_key(side.get("stance") or side.get("quote")) == key), None)
+        taken.update(models)
+        if same:
+            same["models"] = same["models"] + models
+            same["quote"] = same.get("quote") or position.get("quote")
+            same["in_answer"] = same.get("in_answer") is True or position.get("in_answer") is True
+            continue
+        # A side without a model of its own (the page names them in the claim) stays.
+        if models or not position.get("models"):
+            merged.append({**position, "models": models})
+    return merged
+
+
+def difference_cards(differences, providers, render_inline):
+    """``differences`` as named_differences returns them; ``providers`` maps a
+    family label to its provider (icon); ``render_inline`` turns a model's
+    Markdown into safe inline HTML (bold stays bold, no raw asterisks)."""
+    def model_view(name):
+        label = _MODEL_ALIASES.get(str(name), str(name))
+        provider = providers.get(label)
+        return {"name": str(name), "icon": provider.icon_url if provider else "",
+                "mono": label in _MONO_PROVIDERS}
+
+    ordered = sorted(enumerate(differences or []), key=lambda entry: (_difference_rank(entry[1]), entry[0]))
+    cards = []
+    for index, diff in ordered:
+        contradiction = diff.get("type") == "contradiction"
+        if contradiction:
+            tag, meaning, dot = _DIFFERENCE_TAGS.get(diff.get("severity") or "", _DIFFERENCE_TAGS[""])
+        else:
+            tag, meaning, dot = "Emphasis", "Different emphasis, not a contradiction", "is-info"
+        sides = _merged_sides([position for position in diff.get("positions") or [] if isinstance(position, dict)])
+        sides.sort(key=lambda side: side.get("in_answer") is not True)
+        cards.append({
+            "index": index,
+            "rank": _difference_rank(diff),
+            "classes": ("is-contradiction" if contradiction else "is-emphasis")
+                       + (" is-major" if contradiction and diff.get("severity") == "major" else ""),
+            "dot": dot, "tag": tag, "meaning": meaning,
+            "claim": str(diff.get("claim") or ""),
+            "versus": contradiction and len(sides) > 1,
+            "verify": str(diff.get("verify") or "").strip(),
+            "sides": [{
+                "stance_html": render_inline(side.get("stance") or side.get("quote") or ""),
+                "quote_html": render_inline(side.get("quote") or "") if side.get("stance") else "",
+                "in_answer": side.get("in_answer") is True,
+                "models": [model_view(model) for model in side.get("models") or []],
+            } for side in sides],
+        })
+    smaller = [card for card in cards if card["rank"] > 0]
+    if len(smaller) >= 2 and len(smaller) < len(cards):
+        return {"cards": [card for card in cards if card["rank"] == 0], "smaller": smaller}
+    return {"cards": cards, "smaller": []}

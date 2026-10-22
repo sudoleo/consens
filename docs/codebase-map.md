@@ -7287,6 +7287,16 @@ keinen Abgleich.
   Scoreboard, kein Differences-Umschalter, keine Judge-Zeile); die OG-Karte
   nennt dann keine Modelle statt „Several AI models“. Für alle Shares gilt
   seitdem: „0 contradictions“ wird nicht mehr gezählt.
+  Seit 2026-10-22 zitiert eine geteilte Agent-Antwort wie der Agent in der
+  App: `render_public_markdown(…, source_pills=True)` (nur Agent, nicht
+  Watch-Seiten) lässt bei Links auf Quellen der Antwort die Worte stehen und
+  setzt die Quellenpille `a.src-ref` (Favicon + Domain, `source-pill.css`)
+  dahinter, wie `sources.js` `linkifyAgentSources`. „Models compared“ ist
+  ein zugeklapptes `details.wp-disclosure` mit der grauen Logoreihe. Die
+  Differences-Ansicht jeder Share-Seite zeigt die Karten der App
+  (`check_page.difference_cards`: kritisch zuerst, kleinere gebündelt,
+  Seiten untereinander mit „vs“, Antwortseite vorn, „Show quote“ per
+  `check-page.js`; CSS unter `#differencesView` in `public-pages.css`).
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
   macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit
   Slug. Pending-Backlink, Tagesquote und Share-Anlage bilden eine einzige

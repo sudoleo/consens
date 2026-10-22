@@ -176,7 +176,7 @@
   }
 
   function favicons() {
-    document.querySelectorAll(".share-source-favicon, .wp-link-icon, .share-md .wp-ref-icon").forEach(function (img) {
+    document.querySelectorAll(".share-source-favicon, .wp-link-icon, .share-md .wp-ref-icon, .share-md .src-ref-favicon").forEach(function (img) {
       watchIcon(img);
     });
     // Inline citations get the icon of their source (same URL, no request).
@@ -257,6 +257,23 @@
     reveal();
   }
 
+  // ---- Quotes of a difference ---------------------------------------------
+
+  // A side's quote backs its claim and so repeats it: it opens on request, as
+  // in the app ("Show quote" in the side's line, the quote under it).
+  function quoteToggles() {
+    document.addEventListener("click", function (event) {
+      var toggle = event.target.closest && event.target.closest(".diff-quote-toggle");
+      if (!toggle) return;
+      var side = toggle.closest(".diff-position");
+      var quote = side && side.querySelector(".diff-position-quote");
+      if (!quote) return;
+      quote.hidden = !quote.hidden;
+      toggle.setAttribute("aria-expanded", String(!quote.hidden));
+      toggle.textContent = quote.hidden ? "Show quote" : "Hide quote";
+    });
+  }
+
   function start() {
     clampQuestion();
     dropMissingImage();
@@ -264,6 +281,7 @@
     favicons();
     animateDisclosures();
     revealCheck();
+    quoteToggles();
   }
 
   if (document.readyState === "loading") {

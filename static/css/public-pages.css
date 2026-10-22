@@ -867,6 +867,60 @@ canvas {
   list-style: none;
 }
 
+/* "Models compared" folded (2026-10-22): one line with the models as the
+   Agent shows them beside "Thought for …" -- overlapping marks on the page's
+   ground, at rest in grey, in colour while pointed at -- and the chevron;
+   the chips open below. Its own row under the answer model. */
+.share-models-compared {
+  display: block;
+  flex: 1 0 100%;
+}
+
+.share-models-compared > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.share-models-stack {
+  display: inline-flex;
+  align-items: center;
+  filter: grayscale(1);
+  transition: filter var(--dur-state) var(--ease-standard);
+}
+
+.share-models-stack-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 25px;
+  height: 25px;
+  margin-left: -6px;
+  padding: 3px;
+  border: 2px solid var(--page-bg);
+  border-radius: 50%;
+  background: var(--page-bg);
+}
+
+.share-models-stack-mark:first-child { margin-left: 0; }
+.share-models-stack .share-model-icon { width: 15px; height: 15px; border-radius: 0; }
+
+.share-models-compared[open]:not(.is-closing) .share-models-stack { display: none; }
+.share-models-compared .share-models-list { padding-top: 8px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .share-models-compared > summary:hover .share-models-stack { filter: none; }
+  .share-models-compared > summary:hover .share-models-label { color: var(--text); }
+}
+
+.share-models-compared > summary:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
 .share-model-chip {
   display: inline-flex;
   align-items: center;
@@ -1056,7 +1110,10 @@ canvas {
 .share-differences-md > :last-child { margin-bottom: 0; }
 
 /* Inline-Citations: dasselbe Bauteil wie .src-ref in der App
-   (source-pill.css, Apple-Audit G9). */
+   (source-pill.css, Apple-Audit G9). Shared Agent answers carry the app's
+   own .src-ref (public_markdown source_pills); the panel's underline for
+   links in prose (.legal-panel p a) is not theirs. */
+.share-md a.src-ref { text-decoration: none; }
 
 /* Quellenliste: kompakte einzeilige Eintraege (Nummer + Titel + Domain),
    ab Tablet zweispaltig, lange Listen starten eingeklappt. */
@@ -1260,6 +1317,224 @@ canvas {
   font-size: var(--font-size-sm);
   font-style: italic;
   color: var(--muted);
+}
+
+/* Differences on the share page since 2026-10-22: the app's cards
+   (components-consensus-insights.css, drawn by check_page.difference_cards),
+   not the older boxed cards above and in public-shell.css, which the Watch
+   pages' "How the models compared" keeps. Under #differencesView so they win
+   over those at any order. No box, no rail, no capitals: rows parted by a
+   hairline, a dot that carries the weight, the claims in reading size. */
+#differencesView .diff-verdict {
+  margin: 0 0 6px;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+}
+
+#differencesView .diff-card {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#differencesView .diff-cards > .diff-card:first-child { border-top: 0; }
+
+#differencesView .diff-card-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 0 5px;
+  cursor: pointer;
+  list-style: none;
+}
+
+#differencesView .diff-card-summary::-webkit-details-marker { display: none; }
+
+#differencesView .sev-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+#differencesView .sev-dot.is-crit { background: #cf5a4a; }
+#differencesView .sev-dot.is-warn { background: #d99b46; }
+#differencesView .sev-dot.is-info { background: color-mix(in srgb, var(--sidebar-text-muted) 55%, transparent); }
+.dark-mode #differencesView .sev-dot.is-crit { background: #e58a79; }
+.dark-mode #differencesView .sev-dot.is-warn { background: #e8b968; }
+
+#differencesView .diff-card-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+
+#differencesView .diff-type-tag {
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#differencesView .diff-card-claim {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+  overflow-wrap: anywhere;
+}
+
+#differencesView .diff-card-body { padding: 0 0 13px; }
+
+#differencesView .diff-sides { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+
+#differencesView .diff-versus-mark {
+  display: block;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+#differencesView .diff-card.is-major .diff-versus-mark { color: #cf5a4a; }
+.dark-mode #differencesView .diff-card.is-major .diff-versus-mark { color: #e58a79; }
+
+#differencesView .diff-position {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+#differencesView .diff-position-stance {
+  color: var(--ink);
+  font-size: var(--font-size-read);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+#differencesView .diff-position-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+#differencesView .diff-position-meta > :not(:first-child)::before {
+  content: "\00b7";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--ink-2);
+}
+
+#differencesView .diff-position-label { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 14px; }
+#differencesView .diff-position-label.is-group { gap: 2px 6px; }
+#differencesView .diff-position-label.is-group .diff-position-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+#differencesView .diff-position-model { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+#differencesView .diff-position-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  font-weight: var(--font-weight-semibold);
+}
+#differencesView .diff-position-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.dark-mode #differencesView .diff-position-icon img.is-mono { filter: invert(1); }
+#differencesView .diff-position-count { margin-left: 2px; }
+
+#differencesView .diff-quote-toggle {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+#differencesView .diff-quote-toggle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  #differencesView .diff-quote-toggle:hover {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 3px;
+  }
+}
+
+#differencesView .diff-position-quote {
+  margin: 0;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  font-style: normal;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+#differencesView .diff-position-quote[hidden] { display: none; }
+
+#differencesView .diff-verify {
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-style: normal;
+  line-height: var(--line-height-ui);
+}
+
+#differencesView .diff-more { border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent); }
+
+#differencesView .diff-more-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 0;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+#differencesView .diff-more-summary::-webkit-details-marker { display: none; }
+
+#differencesView .diff-more-summary::after {
+  content: "";
+  width: 1em;
+  height: 1em;
+  margin-left: 2px;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transition: transform var(--dur-layer) var(--ease-standard);
+}
+
+#differencesView .diff-more[open] > .diff-more-summary::after { transform: rotate(180deg); }
+#differencesView .diff-more-summary:focus-visible { color: var(--ink); outline: var(--focus-ring); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  #differencesView .diff-more-summary:hover { color: var(--ink); }
 }
 
 /* "Best answer"-Hervorhebung unter den Differences – gilt für strukturierte

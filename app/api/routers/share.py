@@ -24,6 +24,7 @@ from app.services.history_view import PAGE_CHART_WIDTH, build_history_view, day_
 from app.services import watch_service
 from app.services.share_snapshots import ShareError
 from app.services.public_markdown import (
+    render_inline_markdown,
     render_public_markdown,
     markdown_to_plaintext,
     source_host,
@@ -712,6 +713,9 @@ def share_page(request: Request, slug_id: str):
         payload["consensus_md"], source_links.without_own_pages(payload["sources"]),
         # Abgelaufene Weiterleitungen sind entfernt; ihre [S3]-Verweise fallen weg.
         excluded_sources=payload["expired_sources"] + own_sources, site_links=site_links,
+        # A shared Agent answer cites like the Agent in the app: words, then
+        # the source's pill (Watch pages keep their own links, site_links).
+        source_pills=payload["answer_mode"] == snapshots.AGENT_ANSWER_MODE and not watch_page,
     )
 
     # Differences: strukturierte Karten, sonst Freitext-Fallback (markdown-
@@ -896,6 +900,10 @@ def share_page(request: Request, slug_id: str):
         "consensus_html": consensus_html,
         # Old judge texts say "Model C"; the page names the families (L15).
         "differences": check_page.named_differences(differences),
+        # The same cards as in the app: "A vs B", the answer's side first.
+        "difference_cards": check_page.difference_cards(
+            check_page.named_differences(differences), snapshots.PROVIDERS_BY_LABEL, render_inline_markdown,
+        ),
         "differences_data": differences_data,
         "differences_fallback_html": differences_fallback_html,
         "best_model_display": best_model_display,

@@ -16,12 +16,14 @@ Gespeicherte Antworten und Quellenziele werden dabei nicht verändert.
 """
 
 import re
-from html import unescape
+from html import escape, unescape
 from urllib.parse import quote, urlsplit
 
 import nh3
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
+
+from app.services.source_catalog import canonical_source_url
 
 _MD = (
     MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False})
@@ -182,7 +184,7 @@ def _preserve_math_delimiters(md_text):
     )
 
 
-def render_public_markdown(md_text, sources=None, excluded_sources=None, site_links=None):
+def render_public_markdown(md_text, sources=None, excluded_sources=None, site_links=None, source_pills=False):
     """Markdown → sanitisiertes HTML (sicher für `| safe` im Template).
 
     ``excluded_sources`` are sources removed by source rules: citations to
@@ -190,6 +192,8 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None, site_li
     (``source_links.site_mentions``, Watch-Seiten) turns the first mention of a
     source's name into a link to it -- navigation, not a citation -- and gives
     every outbound link in the answer the same look: favicon, new tab.
+    ``source_pills`` (shared Agent answers) shows links to the answer's
+    sources as the app does: words, then the source's pill.
     """
     text = str(md_text or "")
     labels = _source_labels(sources)
@@ -198,12 +202,25 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None, site_li
         text = _link_source_tags(text, labels, dropped)
     text = _preserve_math_delimiters(text)
     tokens = _MD.parse(text)
+    if source_pills:
+        _pill_source_links(tokens, sources)
     _normalize_citation_links(tokens, sources)
     _mark_task_items(tokens)
     if site_links is not None:
         _link_site_mentions(tokens, site_links)
     html = _MD.renderer.render(tokens, _MD.options, {})
     return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL, attributes=_ALLOWED_ATTRIBUTES)
+
+
+_INLINE_TAGS = {"strong", "em", "code", "del", "s", "sub", "sup"}
+
+
+def render_inline_markdown(md_text):
+    """One line of a model's Markdown (a stance, a quote) as safe inline HTML,
+    like renderInlineMarkdown in the app: "**Board**" is bold, not starred.
+    Links, images and blocks are dropped to their text."""
+    html = _MD.renderInline(str(md_text or ""))
+    return nh3.clean(html, tags=_INLINE_TAGS, attributes={}).strip()
 
 
 # Die Site-Links tragen Klasse, Favicon und öffnen in neuem Tab. Modell-
@@ -320,6 +337,111 @@ def _link_site_mentions(tokens, site_links):
                 rest.content = content
                 children.append(rest)
         token.children = children
+
+
+_PILL_POINT_RE = re.compile(r"([.!?]+)(?=\s|$)")
+_PILL_GAP_RE = re.compile(r"[\s,;]*")
+
+
+def _bare_host(label):
+    value = str(label or "").strip().lower()
+    return re.sub(r"/$", "", re.sub(r"^www\.", "", re.sub(r"^https?://", "", value)))
+
+
+def _text_token(content):
+    token = Token("text", "", 0)
+    token.content = content
+    return token
+
+
+def _pill_html(href, host, more=0):
+    count = f'<span class="src-ref-more">+{more}</span>' if more else ""
+    return (
+        f'<a class="src-ref" href="{escape(href, quote=True)}" target="_blank">'
+        f'<img class="src-ref-favicon site-icon" src="/api/topics/favicon?d={quote(host, safe=".-")}" '
+        'alt="" width="14" height="14" loading="lazy">'
+        f'<span class="src-ref-label">{escape(host)}</span>{count}</a>'
+    )
+
+
+def _pill_token(href, host):
+    token = Token("html_inline", "", 0)
+    token.meta = {"pill": (href, host), "more": 0}
+    token.content = _pill_html(href, host)
+    return token
+
+
+def _pill_source_links(tokens, sources):
+    """A shared Agent answer cites as the app does (sources.js
+    linkifyAgentSources): a link to one of the answer's sources keeps its
+    words as plain text and the source follows as a pill -- site icon and
+    domain, after the point when the link ends a sentence. A link whose words
+    are just its address or its domain becomes the pill, and the brackets
+    around it go with it. Pills that stand side by side (only spaces, commas
+    or semicolons between) are one pill with "+N". Links to anything else
+    stay links."""
+    known = {}
+    for source in sources or []:
+        url = canonical_source_url(source.get("url"))
+        if url and url not in known:
+            known[url] = source
+    if not known:
+        return
+    for token in tokens:
+        if token.type != "inline" or not token.children:
+            continue
+        children, out, index = token.children, [], 0
+        while index < len(children):
+            child = children[index]
+            close = index + 1
+            while child.type == "link_open" and close < len(children) and children[close].type != "link_close":
+                close += 1
+            href = str(child.attrGet("href") or "") if child.type == "link_open" else ""
+            source = known.get(canonical_source_url(href)) if href else None
+            inner = children[index + 1:close]
+            host = source_host(source.get("url"), source.get("title")) if source else ""
+            if not host or close >= len(children) or any(part.type == "image" for part in inner):
+                out.append(child)
+                index += 1
+                continue
+            label = "".join(part.content for part in inner if part.type in {"text", "code_inline"}).strip()
+            raw_url = canonical_source_url(label) == canonical_source_url(href)
+            host_label = not raw_url and _bare_host(label) == host
+            before = out[-1] if out and out[-1].type == "text" else None
+            after = children[close + 1] if close + 1 < len(children) and children[close + 1].type == "text" else None
+            bracketed = bool(before and after and before.content.endswith("(") and after.content.startswith(")"))
+            if (raw_url or host_label) and bracketed:
+                before.content = re.sub(r"[ \t]*\($", "", before.content)
+                after.content = after.content[1:]
+            elif raw_url and before:
+                before.content = before.content.rstrip(" \t")
+            if not raw_url and not host_label:
+                out.extend(inner)
+            # A domain that stands in the sentence itself keeps its place.
+            point = _PILL_POINT_RE.match(after.content) if after and not (host_label and not bracketed) else None
+            if point:
+                out.append(_text_token(point[1]))
+                after.content = after.content[len(point[1]):]
+            out.append(_pill_token(href, host))
+            index = close + 1
+        token.children = _merge_adjacent_pills(out)
+
+
+def _merge_adjacent_pills(children):
+    merged = []
+    for child in children:
+        if (child.meta or {}).get("pill"):
+            gap = []
+            while merged and merged[-1].type == "text" and _PILL_GAP_RE.fullmatch(merged[-1].content):
+                gap.append(merged.pop())
+            previous = merged[-1] if merged else None
+            if previous is not None and (previous.meta or {}).get("pill"):
+                previous.meta["more"] += 1
+                previous.content = _pill_html(*previous.meta["pill"], more=previous.meta["more"])
+                continue
+            merged.extend(reversed(gap))
+        merged.append(child)
+    return merged
 
 
 def _normalize_citation_links(tokens, sources, *, strip=False):

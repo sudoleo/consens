@@ -438,3 +438,37 @@ def test_every_public_page_sits_on_one_grid_of_one_material():
     notice = shell.split(".notice {", 1)[1].split("}", 1)[0]
     assert "border-left: 0;" in notice and "background: transparent;" in notice
     assert "body { overflow-x: clip; }" in tokens
+
+
+def test_share_page_differences_are_the_apps_cards():
+    # check_page.difference_cards mirrors buildDifferenceCards (2026-10-16):
+    # critical first, two or more smaller ones folded behind them, the
+    # answer's side first, one side per claim, Markdown rendered.
+    from app.services.public_markdown import render_inline_markdown
+
+    def side(stance, models, **extra):
+        return {"stance": stance, "models": models, **extra}
+
+    differences = [
+        {"claim": "Board size", "type": "contradiction", "severity": "minor",
+         "positions": [side("Four members.", ["OpenAI"]), side("Five members.", ["Kimi"])]},
+        {"claim": "Who leads", "type": "contradiction", "severity": "major", "verify": "Check the imprint.",
+         "positions": [side("Weber leads.", ["DeepSeek"], quote="**Prof. Weber** leads"),
+                       side("Schneider leads.", ["Gemini", "Qwen"], in_answer=True),
+                       side("schneider leads", ["GLM"])]},
+        {"claim": "Focus", "type": "emphasis", "positions": [side("Risk first.", ["Grok"])]},
+    ]
+    view = check_page.difference_cards(differences, snapshots.PROVIDERS_BY_LABEL, render_inline_markdown)
+
+    [critical] = view["cards"]
+    assert critical["tag"] == "Critical" and critical["dot"] == "is-crit" and critical["versus"]
+    assert [s["stance_html"] for s in critical["sides"]] == ["Schneider leads.", "Weber leads."]
+    assert critical["sides"][0]["in_answer"] and [m["name"] for m in critical["sides"][0]["models"]] == ["Gemini", "Qwen", "GLM"]
+    assert critical["sides"][1]["quote_html"] == "<strong>Prof. Weber</strong> leads"
+    assert critical["sides"][1]["models"][0]["icon"].startswith("/static/icons/chat_icons/deepseek")
+    assert [card["tag"] for card in view["smaller"]] == ["Minor", "Emphasis"]
+    assert not view["smaller"][1]["versus"]
+
+    # One smaller difference does not fold.
+    single = check_page.difference_cards(differences[:2], snapshots.PROVIDERS_BY_LABEL, render_inline_markdown)
+    assert [card["tag"] for card in single["cards"]] == ["Critical", "Minor"] and single["smaller"] == []

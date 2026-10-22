@@ -1611,7 +1611,9 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("1 notable difference", body)
         self.assertIn("1 contradiction", body)
         self.assertIn("across 3 models", body)
-        self.assertIn("How to verify: Offizielle Quelle prüfen.", body)
+        self.assertIn("Worth verifying: Offizielle Quelle prüfen.", body)
+        # The app's card: the sides under one another, "vs" between them.
+        self.assertIn('<span class="diff-versus-mark">vs</span>', body)
         self.assertIn("Report this page", body)
 
     def test_differences_fallback_text_rendered(self):

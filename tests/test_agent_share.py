@@ -222,6 +222,9 @@ def test_a_compared_agent_answer_shows_its_models_and_differences(share_app):
 
     assert "Models compared" in body
     assert "GPT-6 Luna" in body and "Gemini 3.5 Flash" in body and "Grok 4.3" not in body
+    # Folded: one line with the models' marks, the names open below.
+    assert '<details class="wp-disclosure share-models-group share-models-compared">' in body
+    assert body.count('class="share-models-stack-mark"') == 2
     assert 'id="toggleDifferencesView"' in body and "How long it will last" in body
     assert "<b>1</b> contradiction" in body
     assert "2 AI models answered this question" in body
@@ -320,3 +323,18 @@ def test_the_consensus_page_no_longer_counts_zero_contradictions():
     root = __import__("pathlib").Path(__file__).resolve().parents[1]
     template = (root / "templates" / "share.html").read_text(encoding="utf-8")
     assert "{% if has_differences_view and scoreboard.contradiction_count %}" in template
+
+
+def test_a_shared_agent_answer_cites_its_sources_as_the_app_does(share_app):
+    # Its words, then the source's pill (public_markdown source_pills), not an
+    # underlined link.
+    client, database, store = share_app
+    answer = "It sends data every day ([mission status](https://science.nasa.gov/webb))."
+    chat_id, turn_id = _saved_turn(database, store, assistant_response=answer)
+
+    _, shared = _share(client, chat_id, turn_id)
+    body = client.get(shared["path"]).text
+
+    assert '(mission status<a class="src-ref" href="https://science.nasa.gov/webb" target="_blank"' in body
+    assert '<span class="src-ref-label">science.nasa.gov</span></a>).' in body
+    assert ">mission status</a>" not in body
