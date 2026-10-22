@@ -18,12 +18,12 @@ const ENTRIES = {
   "Table: {headings}": "Tabelle: {headings}",
 };
 
-function germanPage(body = "") {
+function germanPage(body = "", extra = {}) {
   return loadScripts(["static/js/i18n.js", "static/js/app-text.js"], {
     body,
     base: false,
     before(window) {
-      window.__consensI18n = { lang: "de", entries: ENTRIES };
+      window.__consensI18n = { lang: "de", entries: { ...ENTRIES, ...extra } };
     },
   });
 }
@@ -125,6 +125,28 @@ describe("i18n.js on a German page", () => {
     document.getElementById("p").textContent = "Switch to Compare";
     await settle(window);
     expect(document.getElementById("p").textContent).toBe("Zu Vergleich wechseln");
+  });
+
+  it("never lets a placeholder take half an element: the line falls back to its pieces", async () => {
+    const { window, document } = germanPage("<main></main>", {
+      "{answered} of {length}": "{answered} von {length}",
+      "{activeCount} of {activeLimit} active": "{activeCount} von {activeLimit} aktiv",
+      "{remaining} slots free": "{remaining} Plätze frei",
+      "Standard access": "Standard-Zugang",
+    });
+    // The plan line of /app/watches (watch.js renderWatchLimit): the whole
+    // line once matched "{answered} of {length}" and stayed English.
+    const line = document.createElement("div");
+    line.innerHTML = '<span>Standard access</span> <strong>2 of 20 active</strong> '
+      + '<span aria-hidden="true">·</span> <span>18 slots free</span> '
+      + '<span aria-hidden="true"><i style="width:10%"></i></span>';
+    // A whole element is still a value.
+    const mode = document.createElement("p");
+    mode.innerHTML = "Switch to <b>Luna</b>";
+    document.querySelector("main").append(line, mode);
+    await settle(window);
+    expect(line.textContent.replace(/\s+/g, " ").trim()).toBe("Standard-Zugang 2 von 20 aktiv · 18 Plätze frei");
+    expect(mode.innerHTML).toBe("Zu <b>Luna</b> wechseln");
   });
 
   it("gives App.t and German formats to the app", () => {

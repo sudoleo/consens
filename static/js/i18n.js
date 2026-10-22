@@ -108,11 +108,24 @@
     "not", "of", "on", "or", "than", "that", "the", "there", "this", "to", "was", "were", "with", "your",
   ]);
 
+  // Every marker the text opens it also closes, in order: no half element
+  // (app/core/i18n.py, whole_elements).
+  function wholeElements(text) {
+    const opened = [];
+    for (const match of text.matchAll(MARKER)) {
+      if (match[1] !== undefined) opened.push(match[1]);
+      else if (match[2] !== undefined && (!opened.length || opened.pop() !== match[2])) return false;
+    }
+    return !opened.length;
+  }
+
   // A value a pattern caught, translated when it has an entry of its own:
   // one level deep, the space around it kept (app/core/i18n.py, _captured).
   // English prose without an entry is no value (null): the pattern does not
-  // apply, rather than leaving half a sentence English.
+  // apply, rather than leaving half a sentence English. Nor is half an
+  // element: "{answered} of {length}" must not take a line of spans.
   function capturedValue(value, nested) {
+    if (!wholeElements(value)) return null;
     const key = normalize(value);
     if (!key || !LETTER.test(key)) return value;
     let found = exact.get(key);

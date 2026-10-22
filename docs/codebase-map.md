@@ -9462,7 +9462,7 @@ für den Server) übersetzt, was ein Leser sieht:
   laufen unberührt durch.
 - **Server:** jede deutsche HTML-Antwort durch `i18n.translate_html`
   (Läufe aus Text und Inline-Elementen als Ganzes mit Markern `<0>…</0>`,
-  sonst stückweise; Platzhalter `{name}`; Attribute, Meta, JSON-LD, `lang`,
+  sonst stückweise; Platzhalter `{name}` fangen nur ganze Elemente; Attribute, Meta, JSON-LD, `lang`,
   Links auf lokalisierte Seiten, Canonical/hreflang). Ergebnis-Cache per
   Inhalts-Hash. `Content-Language: de`, `Vary: Accept-Language, Cookie`.
 - **Browser:** `/i18n/de.<hash>.js` = Wörterbuch + `static/js/i18n.js`, als

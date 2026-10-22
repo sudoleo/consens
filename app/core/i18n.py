@@ -30,7 +30,9 @@ pieces: every text node and inline element on its own.
 
 **Patterns.** A key with ``{name}`` placeholders matches any text with the
 same words around them (``{n} chats`` → ``{n} Chats``); a captured value that
-has an entry of its own is translated too.
+has an entry of its own is translated too. A placeholder takes whole elements
+only: a value that opens a marker without closing it (or the other way round)
+is no match, and the run falls back to its pieces.
 
 **Entries.** ``"English": "German"``; an identical value marks a name that
 stays (``"consens.io": "consens.io"``) and counts as covered. Keys starting
@@ -107,6 +109,17 @@ def english_prose(text: str) -> bool:
 
 def markers(text: str) -> list[str]:
     return sorted(match.group(0) for match in _MARKER.finditer(text))
+
+
+def whole_elements(text: str) -> bool:
+    """Every marker the text opens it also closes, in order: no half element."""
+    opened: list[str] = []
+    for match in _MARKER.finditer(text):
+        if match.group(1) is not None:
+            opened.append(match.group(1))
+        elif match.group(2) is not None and (not opened or opened.pop() != match.group(2)):
+            return False
+    return not opened
 
 
 def placeholders(text: str) -> list[str]:
@@ -195,7 +208,12 @@ class Catalog:
         sentence that fills {0}; the space around the value stays. English
         prose without an entry is no value (None): "{n} questions" must not
         turn "Quick synthesis for everyday questions" into half German.
+        Nor is half an element: "{answered} of {length}" must not take a
+        line of spans, each side ending inside one, and leave the entries of
+        its pieces unused.
         """
+        if not whole_elements(value):
+            return None
         key = normalize(value)
         if not key or not has_letter(key):
             return value

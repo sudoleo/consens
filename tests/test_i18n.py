@@ -94,6 +94,33 @@ def test_entries_that_change_markers_or_placeholders_are_refused(small_catalog):
     assert i18n.Catalog({"{n} left": "{count} übrig"}).rejected
 
 
+def test_a_placeholder_takes_whole_elements_only(monkeypatch):
+    current = i18n.Catalog({
+        "{answered} of {length}": "{answered} von {length}",
+        "{activeCount} of {activeLimit} active": "{activeCount} von {activeLimit} aktiv",
+        "{remaining} slots free": "{remaining} Plätze frei",
+        "Standard access": "Standard-Zugang",
+        "Switch to {mode}": "Zu {mode} wechseln",
+    })
+    monkeypatch.setitem(i18n._catalogs, "de", ((), current))
+    monkeypatch.setitem(i18n._checked, "de", float("inf"))
+    i18n._translated_cache.clear()
+    # The plan line of /app/watches (watch.js renderWatchLimit): the whole
+    # line once matched "{answered} of {length}" and stayed English.
+    line = ('<div><span>Standard access</span> <strong>2 of 20 active</strong> '
+            '<span aria-hidden="true">·</span> <span>18 slots free</span></div>')
+    try:
+        # A whole element is still a value.
+        out = i18n.translate_html(line + "<p>Switch to <b>Luna</b></p>", "de")
+    finally:
+        i18n._translated_cache.clear()
+    assert current.lookup("<0>Standard access</0> <1>2 of 20 active</1> <2>·</2> <3>18 slots free</3>") is None
+    assert out == ('<div><span>Standard-Zugang</span> <strong>2 von 20 aktiv</strong> '
+                   '<span aria-hidden="true">·</span> <span>18 Plätze frei</span></div>'
+                   "<p>Zu <b>Luna</b> wechseln</p>")
+    assert i18n.whole_elements("<0>a</0> <1/>") and not i18n.whole_elements("<0>a") and not i18n.whole_elements("a</0>")
+
+
 def test_english_is_left_alone():
     assert i18n.translate_html(PAGE, "en") == PAGE
     assert i18n.t("New chat", "en") == "New chat"
