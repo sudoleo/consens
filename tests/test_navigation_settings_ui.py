@@ -147,7 +147,7 @@ def test_model_pulse_inverts_all_monochrome_provider_logos_in_dark_mode():
     pulse_css = read("static/css/model-pulse.css")
     pulse_page = read("templates/model-pulse.html")
 
-    for asset in ("chatgpt", "grok", "kimi", "meta.svg", "zai"):
+    for asset in ("chatgpt", "grok", "kimi", "meta.svg", "zai", "qwen"):
         assert (
             f'.dark-mode .pulse-board .lp-model-pulse-icon img[src*="{asset}"]'
             in pulse_css
@@ -166,9 +166,19 @@ def test_meta_muse_is_present_across_public_provider_surfaces():
     for page in (landing, about, comparison):
         assert "meta.svg" in page
         assert "Muse" in page
-    assert "GLM, and Meta Muse" in engine
+    assert "GLM, Meta Muse, and Qwen" in engine
     assert "Meta Muse" in app
     assert "'GLM', 'Meta'" in share
+
+
+def test_qwen_is_present_across_public_provider_surfaces():
+    for page in ("landing", "about", "ai-model-comparison"):
+        text = read(f"templates/{page}.html")
+        assert "qwen.svg" in text and "Qwen" in text, page
+    assert "Alibaba Qwen" in read("templates/index.html")
+    assert "Alibaba/Qwen" in read("templates/privacy.html")
+    assert "Alibaba/Qwen" in read("templates/terms.html")
+    assert "'Meta', 'Qwen'" in read("templates/share.html")
 
 
 def test_kimi_and_glm_are_present_across_public_provider_surfaces():

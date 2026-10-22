@@ -211,8 +211,8 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
   `.python-version` (Render, CI, Dependabot und `dev.ps1` lesen sie). Direkte
   Abhängigkeiten in `requirements.in`, daraus erzeugt die voll gepinnte
   `requirements.txt` (pip-compile, mit `# via`); Ablauf in `docs/testing.md`.
-- **LLM-Modelle**: neun Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
-  DeepSeek, Grok, Kimi, GLM, Meta/Muse), alle über einen OpenRouter-Chat-
+- **LLM-Modelle**: zehn Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
+  DeepSeek, Grok, Kimi, GLM, Meta/Muse, Qwen), alle über einen OpenRouter-Chat-
   Completions-Transport mit einem Routing (schnellster Endpunkt ohne
   Datensammlung, ZDR nur in Google-Chats). Ein Lauf wählt davon höchstens sechs.
   Provider-Label-Konvention: Claude = `Anthropic`, Muse = `Meta`.
@@ -8435,6 +8435,19 @@ zu kleines `max_tokens` liefert nur Reasoning-Tokens und ein leeres Final
 dort Prompts und Antworten für seine Produkte verwenden, was dem Routing
 `data_collection=deny` und der Zusage in Terms/Privacy widerspricht.
 
+**Qwen (seit 2026-10-22, zehnte Familie):** Basis `qwen/qwen3.8-27b` (offene
+Gewichte, 0,04/1,35 $ je Mio., Text/Bild/Video, rund 20 Anbieter inkl.
+ZDR-Endpunkten, am schnellsten bei Cerebras), Pro `qwen/qwen3.8-max-prime`
+(4/12 $, nur bei Alibaba, kein ZDR-Endpunkt: in Google-Chats fällt es aus wie
+jedes andere nicht routbare Modell). Beide laufen mit `reasoning.effort` `low`
+(`MODEL_REQUEST_CONFIG`). Live-Probe mit dem echten Vergleichs-Payload: ohne
+Reasoning rief 27B die Websuche in 5 von 8 Antworten nicht auf und hielt 2025
+für das laufende Jahr; mit dem Standardaufwand (`xhigh`) liefen 3 von 8 ins
+Output-Limit; `low` suchte 8 von 8 Mal, Median 12 s (gpt-oss-120b 4 s). Die
+Max-Modelle brauchten 24–138 s, das offene 2.4T-A95B brach zwei von drei
+Antworten am Limit ab. Bilder nativ (`PROVIDER_IMAGE_SUPPORT`), PDFs über den
+Text-Fallback.
+
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
 `FREE_DEFAULT_MODEL_BY_PROVIDER`, `MODEL_LABEL_OVERRIDES`). In Produktion sind
@@ -8448,12 +8461,18 @@ Familienmodelle plus `consensus`; das alte Top-Level-Provider-Schema wird beim
 Laden migriert. Daily/Open Models bleiben Free-faehig und
 High Quality bleibt unabhaengig von der Konfiguration Pro-only. Open Models
 (seit 2026-10-15, vorher das mit Daily deckungsgleiche „Balanced“) ist eine
-zweite Meinung aus sechs Modellen mit offenen Gewichten (gpt-oss-120b,
+zweite Meinung aus sechs Modellen mit offenen Gewichten (Qwen3.8 27B,
 Gemma 4 31B, DeepSeek V4.1 Flash, Kimi K2.6, GLM 5.3 Flash, Muse Glimmer 30B;
 Beleg je Modell: `hugging_face_id` im OpenRouter-Katalog) mit demselben
 Schreiber wie Daily. Free-Presets haben je Familie praktisch nur ein aktuelles
 Modell, ein zweites Free-Preset unterscheidet sich deshalb nur in der
-Aufstellung. gpt-oss-120b liest nur Text: `ProviderConfig.text_only_models`
+Aufstellung. Bis 2026-10-22 stand dort gpt-oss-120b (OpenAI, also das Labor
+des Schreibers; las nur Text und nannte in der Live-Probe trotz Suche
+Zinssatz und Förderung von 2024). Ein gespeichertes Open Models mit gpt-oss
+migriert ohne Firestore-Write: `DEPRECATED_CONSENSUS_PRESET_MODELS` nennt es,
+und weil die Basis keine OpenAI-Belegung mehr hat, fällt die Familie aus dem
+Preset und die Basis füllt den Platz mit Qwen (`_normalize_preset_answers`).
+gpt-oss-120b bleibt wählbar und liest nur Text: `ProviderConfig.text_only_models`
 nimmt einzelne Modelle einer sonst anhangfähigen Familie von Anhängen aus.
 `scripts/model_release_check.py` (lokaler geplanter Task
 `consens-model-release-check`, alle 3 Tage) prüft das Dokument nur lesend

@@ -49,7 +49,7 @@ def test_leaderboard_api_serves_cached_totals(monkeypatch, period, total):
     client = TestClient(app)
     api = client.get("/api/model-leaderboard", params={"period": period})
     assert api.json()["total_selections"] == total
-    assert len(api.json()["rows"]) == 9
+    assert len(api.json()["rows"]) == 10
     client.get("/api/model-leaderboard", params={"period": period})
     assert db.catalog_reads == 1
 
@@ -179,17 +179,21 @@ def test_public_model_leaderboard_aggregates_aliases_and_sets_cache(monkeypatch)
         ("Moonshot AI / Kimi", 0),
         ("Z.ai / GLM", 0),
         ("Meta / Muse", 0),
+        ("Alibaba / Qwen", 0),
     ]
     kimi = next(row for row in data["rows"] if row["family"] == "Moonshot AI / Kimi")
     glm = next(row for row in data["rows"] if row["family"] == "Z.ai / GLM")
     meta = next(row for row in data["rows"] if row["family"] == "Meta / Muse")
+    qwen = next(row for row in data["rows"] if row["family"] == "Alibaba / Qwen")
     assert kimi["icon"].split("?")[0].endswith("/kimi.svg")
     assert glm["icon"].split("?")[0].endswith("/zai.svg")
     assert meta["icon"].split("?")[0].endswith("/meta.svg")
+    assert qwen["icon"].split("?")[0].endswith("/qwen.svg")
     assert kimi["available_since"] == glm["available_since"] == "2026-08-31"
     # Jede spaeter ergaenzte Familie traegt ihr eigenes Startdatum, sonst
     # liest sich ein niedriger Stand wie ein Ergebnis.
     assert meta["available_since"] == "2026-09-02"
+    assert qwen["available_since"] == "2026-10-22"
     assert response.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=300"
 
 
@@ -249,7 +253,7 @@ def test_period_counts_preserve_historical_aliases_other_dates_and_deleted_votes
     }
     assert db.vote_streams == 0
     assert db.transactions == 1
-    assert len(db.count_queries) == 10
+    assert len(db.count_queries) == 11
     # Deletion changes live period totals after expiry; lifetime counters keep
     # their existing semantics. No stale decrement/backfill state is involved.
     db.vote_docs = [vote for vote in db.vote_docs if vote.to_dict()["model"] != "Claude"]

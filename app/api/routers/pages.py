@@ -324,6 +324,7 @@ _LEADERBOARD_FAMILY_BY_PROVIDER = {
     "kimi": "Moonshot AI / Kimi",
     "glm": "Z.ai / GLM",
     "meta": "Meta / Muse",
+    "qwen": "Alibaba / Qwen",
 }
 # Familien, die spaeter dazugekommen sind, tragen ihr Startdatum. Der
 # gemeinsame Vergleichszeitraum (_MODEL_PULSE_PERIOD) bleibt der aelteste
@@ -333,6 +334,7 @@ _LEADERBOARD_AVAILABLE_SINCE = {
     "kimi": "2026-08-31",
     "glm": "2026-08-31",
     "meta": "2026-09-02",
+    "qwen": "2026-10-22",
 }
 _LEADERBOARD_FAMILY_VIEW = {
     family: {
@@ -364,6 +366,8 @@ def _leaderboard_family(model: str) -> str:
         return "Z.ai / GLM"
     if "meta" in key or "muse" in key:
         return "Meta / Muse"
+    if "qwen" in key or "alibaba" in key:
+        return "Alibaba / Qwen"
     return "Other"
 
 

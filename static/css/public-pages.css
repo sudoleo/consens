@@ -253,6 +253,7 @@ a {
 .dark-mode .model-card img[src*="grok"],
 .dark-mode .model-card img[src*="kimi"],
 .dark-mode .model-card img[src*="meta.svg"],
+.dark-mode .model-card img[src*="qwen"],
 .dark-mode .model-card img[src*="zai"] {
   filter: invert(1);
 }

@@ -132,6 +132,22 @@ class RegistryCoverageTests(unittest.TestCase):
         )
         self.assertTrue(cfg.MODEL_CONFIGS[cfg.MUSE_BASE_MODEL].accepts_attachments)
 
+    def test_qwen_is_the_tenth_family_and_thinks_low(self):
+        qwen = cfg.PROVIDERS["qwen"]
+        self.assertEqual(list(cfg.PROVIDERS)[-1], "qwen")
+        self.assertEqual(qwen.openrouter_prefix, "qwen/")
+        self.assertEqual((qwen.base_model, qwen.pro_model), (cfg.QWEN_BASE_MODEL, cfg.QWEN_PRO_MODEL))
+        self.assertEqual((qwen.ask_endpoint, qwen.response_id, qwen.checkbox_id),
+                         ("/ask_qwen", "qwenResponse", "selectQwen"))
+        self.assertEqual(cfg.get_model_label(cfg.QWEN_BASE_MODEL), "Qwen3.8 27B")
+        self.assertEqual(cfg.get_model_label(cfg.QWEN_PRO_MODEL), "Qwen3.8 Max Prime")
+        # Without reasoning Qwen often skipped the search; "low" searched every time.
+        for model in (cfg.QWEN_BASE_MODEL, cfg.QWEN_PRO_MODEL):
+            self.assertEqual(cfg.MODEL_CONFIGS[model].request_config, {"reasoning": {"effort": "low"}})
+            self.assertTrue(cfg.MODEL_CONFIGS[model].accepts_attachments)
+        self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Qwen"], ("qwen", cfg.QWEN_BASE_MODEL))
+        self.assertIn(cfg.QWEN_BASE_MODEL, cfg.CONSENSUS_PRESET_MODELS["balanced"]["answers"].values())
+
     def test_open_models_have_labels_and_gpt_oss_reads_text_only(self):
         # gpt-oss-120b is the one text-only model of an attachment-capable
         # family; every other OpenAI model keeps taking files.

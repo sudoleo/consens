@@ -121,7 +121,7 @@ def test_saved_selections_of_dead_ids_fall_back_to_the_family_default(loaded_pro
     # Presets fallen auf ihre eigene Produktbelegung fuer die Familie zurueck.
     balanced = cfg.CONSENSUS_PRESET_MODELS["balanced"]["answers"]
     base = cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"]["answers"]
-    assert balanced["openai"] == base["openai"]
+    assert balanced["openai"] == base.get("openai", defaults["openai"])
     assert balanced["gemini"] == base.get("gemini", defaults["gemini"])
     thorough = cfg.CONSENSUS_PRESET_MODELS["thorough"]
     assert not set(thorough["answers"].values()) & cfg.ZDR_UNAVAILABLE_MODEL_IDS

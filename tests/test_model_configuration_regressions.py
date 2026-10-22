@@ -75,6 +75,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             "kimi": "moonshotai/",
             "glm": "z-ai/",
             "meta": "meta/",
+            "qwen": "qwen/",
         }
         for provider, model_ids in cfg._provider_allowed_sets().items():
             for model_id in model_ids:
@@ -206,7 +207,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         # Open Models (ID balanced): only open-weight models, same writer as Daily.
         self.assertEqual(presets["balanced"]["label"], "Open Models")
         self.assertEqual(presets["balanced"]["models"], {
-            "openai": cfg.OPENAI_OSS_MODEL, "gemini": cfg.GEMMA_MODEL,
+            "qwen": cfg.QWEN_BASE_MODEL, "gemini": cfg.GEMMA_MODEL,
             "deepseek": cfg.DEEPSEEK_FLASH_MODEL, "kimi": cfg.KIMI_BASE_MODEL,
             "glm": cfg.GLM_BASE_MODEL, "meta": cfg.MUSE_BASE_MODEL,
         })
@@ -221,6 +222,30 @@ class ExistingModelFlowTests(unittest.TestCase):
             cfg.GROK_FAST_MODEL,
         )
         self.assertTrue(presets["thorough"]["pro_only"])
+
+    def test_saved_open_models_trade_gpt_oss_for_qwen(self):
+        """Prod still stores Open Models with gpt-oss-120b (until 2026-10-22).
+        The family leaves the preset and Qwen takes its place, without a
+        write to Firestore; an OpenAI model chosen on purpose stays."""
+        stored = {
+            "openai": cfg.OPENAI_OSS_MODEL, "gemini": cfg.GEMMA_MODEL,
+            "deepseek": cfg.DEEPSEEK_FLASH_MODEL, "kimi": cfg.KIMI_BASE_MODEL,
+            "glm": cfg.GLM_BASE_MODEL, "meta": cfg.MUSE_BASE_MODEL,
+        }
+        normalized = normalize_models_document({
+            "preset_models": {"balanced": {"answers": stored, "consensus": cfg.OPENAI_LUNA_MODEL}},
+        })
+        answers = normalized["preset_models"]["balanced"]["answers"]
+        self.assertEqual(answers, {**{k: v for k, v in stored.items() if k != "openai"},
+                                   "qwen": cfg.QWEN_BASE_MODEL})
+        self.assertIn(cfg.OPENAI_OSS_MODEL, cfg.PROVIDERS["openai"].models)
+
+        chosen = normalize_models_document({
+            "preset_models": {"balanced": {"answers": {**stored, "openai": cfg.OPENAI_LUNA_MODEL},
+                                           "consensus": cfg.OPENAI_LUNA_MODEL}},
+        })["preset_models"]["balanced"]["answers"]
+        self.assertEqual(chosen["openai"], cfg.OPENAI_LUNA_MODEL)
+        self.assertNotIn("qwen", chosen)
 
     def test_admin_normalizes_preset_models_and_keeps_free_presets_free(self):
         normalized = normalize_models_document({
@@ -237,7 +262,7 @@ class ExistingModelFlowTests(unittest.TestCase):
                     **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"],
                     "answers": {
                         **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"]["answers"],
-                        "openai": "gpt-5.5",
+                        "qwen": cfg.QWEN_PRO_MODEL,
                     },
                     "consensus": "OpenAI-Pro",
                 },
@@ -251,8 +276,8 @@ class ExistingModelFlowTests(unittest.TestCase):
             },
         })
         self.assertEqual(
-            normalized["preset_models"]["balanced"]["answers"]["openai"],
-            cfg.OPENAI_LUNA_MODEL,
+            normalized["preset_models"]["balanced"]["answers"]["qwen"],
+            cfg.QWEN_BASE_MODEL,
         )
         self.assertEqual(
             normalized["preset_models"]["balanced"]["consensus"],

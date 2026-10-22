@@ -133,7 +133,8 @@ DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 OPENAI_SOL_MODEL = "gpt-5.6-sol"
 # Offene Modelle (Gewichte auf Hugging Face) fuer das Preset "Open Models".
 # gpt-oss-120b liest nur Text und denkt zwingend (Stufe "low", siehe
-# MODEL_REQUEST_CONFIG); Gemma 4 31B nimmt Text und Bilder.
+# MODEL_REQUEST_CONFIG); seit 2026-10-22 steht dort Qwen3.8 27B statt seiner,
+# waehlbar bleibt es. Gemma 4 31B nimmt Text und Bilder.
 OPENAI_OSS_MODEL = "gpt-oss-120b"
 GEMMA_MODEL = "gemma-4-31b-it"
 DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
@@ -191,6 +192,14 @@ GLM_PRO_MODEL = "glm-5.3"
 # Anbieter Prompts sammelt (Routing data_collection=deny).
 MUSE_BASE_MODEL = "muse-glimmer-30b"
 MUSE_PRO_MODEL = "muse-spark-1.3"
+# Alibabas Qwen (zehnte Familie seit 2026-10-22). Basis ist das offene, dichte
+# Qwen3.8 27B (0,04/1,35 $ je Mio. Token, Text und Bilder, 20 Anbieter, am
+# schnellsten bei Cerebras). Pro ist Qwen3.8 Max Prime (4/12 $), die schnellere
+# Variante des Flaggschiffs; alle Max-Modelle laufen nur bei Alibaba und
+# brauchten in der Live-Probe 24-77 s (Max 0902: bis 138 s, das offene
+# 2.4T-A95B brach zwei von drei Antworten am Output-Limit ab).
+QWEN_BASE_MODEL = "qwen3.8-27b"
+QWEN_PRO_MODEL = "qwen3.8-max-prime"
 
 # Modelle, die OpenRouter unter der frueheren Pflicht-Regel provider.zdr=true
 # (bis 2026-10-17) nicht bedienen konnte: kein Endpunkt in GET
@@ -376,6 +385,11 @@ PROVIDERS: dict[str, ProviderConfig] = {
             dom_key="muse", title="Muse", short_label="Muse",
             icon="meta.svg", icon_class="mono-logo", citation_label="Meta Muse",
         ),
+        _provider(
+            "qwen", "Qwen", "qwen/", QWEN_BASE_MODEL, QWEN_PRO_MODEL,
+            {QWEN_BASE_MODEL, QWEN_PRO_MODEL},
+            icon="qwen.svg", icon_class="mono-logo", citation_label="Alibaba Qwen",
+        ),
     )
 }
 
@@ -456,7 +470,7 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 # Eintrag haengen in Registry-Reihenfolge hinten an.
 _CONSENSUS_ALIAS_ORDER = [
     "grok", "openai", "anthropic", "mistral", "gemini", "deepseek", "kimi", "glm",
-    "meta",
+    "meta", "qwen",
 ]
 
 
@@ -527,9 +541,12 @@ _BASE_CONSENSUS_PRESET_MODELS = {
         },
         "consensus": "Gemini",
     },
+    # Qwen statt gpt-oss-120b seit 2026-10-22: gpt-oss kam vom selben Labor wie
+    # der Schreiber (Luna), las nur Text und nannte in der Live-Probe trotz
+    # Suche den EZB-Einlagezins von 2024 und die Foerderung von 2024.
     "balanced": {
         "answers": {
-            "openai": OPENAI_OSS_MODEL,
+            "qwen": QWEN_BASE_MODEL,
             "gemini": GEMMA_MODEL,
             "deepseek": DEEPSEEK_FLASH_MODEL,
             "kimi": KIMI_BASE_MODEL,
@@ -552,9 +569,12 @@ _BASE_CONSENSUS_PRESET_MODELS = {
 }
 # Alte gespeicherte Preset-Werte, die bei einem Deploy automatisch auf die
 # aktuelle Basis migriert werden. Das Modell bleibt ausserhalb des Presets
-# weiterhin erlaubt, solange andere Flows/Aliase es noch verwenden.
+# weiterhin erlaubt, solange andere Flows/Aliase es noch verwenden. Fuehrt die
+# Basis die Familie gar nicht mehr (Open Models ohne OpenAI), faellt sie aus
+# dem Preset, und die Basis fuellt den freien Platz.
 DEPRECATED_CONSENSUS_PRESET_MODELS = {
     "thorough": {"openai": {"gpt-5.5"}},
+    "balanced": {"openai": {OPENAI_OSS_MODEL}},
 }
 CONSENSUS_PRESET_MODELS = {
     preset_id: {
@@ -803,6 +823,8 @@ MODEL_LABEL_OVERRIDES = {
     GLM_PRO_MODEL: "GLM 5.3",
     MUSE_BASE_MODEL: "Muse Glimmer 30B",
     MUSE_PRO_MODEL: "Muse Spark 1.3",
+    QWEN_BASE_MODEL: "Qwen3.8 27B",
+    QWEN_PRO_MODEL: "Qwen3.8 Max Prime",
     OPENAI_OSS_MODEL: "gpt-oss-120b",
     GEMMA_MODEL: "Gemma 4 31B",
 }
@@ -832,6 +854,13 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     MUSE_PRO_MODEL: {"reasoning": {"effort": "low"}},
     # Ebenso zwingend denkend (OpenRouter: mandatory, Standard "medium").
     OPENAI_OSS_MODEL: {"reasoning": {"effort": "low"}},
+    # Qwen kann das Denken abschalten, sucht dann aber oft nicht mehr: in der
+    # Live-Probe 2026-10-22 rief Qwen3.8 27B ohne Reasoning die Websuche in 5
+    # von 8 Antworten nicht auf und hielt 2025 fuer das laufende Jahr. Mit
+    # Standard-Aufwand liefen 3 von 8 Antworten ins Output-Limit. "low" suchte
+    # 8 von 8 Mal (Median 12 s, gpt-oss-120b 4 s).
+    QWEN_BASE_MODEL: {"reasoning": {"effort": "low"}},
+    QWEN_PRO_MODEL: {"reasoning": {"effort": "low"}},
 }
 
 # Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.
@@ -1237,6 +1266,8 @@ def _normalize_preset_answers(
             .get(provider, set())
         )
         if chosen in deprecated:
+            if provider not in base_answers:
+                continue
             chosen = ""
         allowed = set(allowed_sets.get(provider, set()))
         if chosen not in allowed or (not pro_only and chosen in premium_models):

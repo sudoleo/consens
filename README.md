@@ -19,10 +19,10 @@
   <sub>One agent answer, the disputed claim highlighted, and which models stand on each side. Illustrative demo data, not live model output.</sub>
 </p>
 
-**consens.io** sends one question to models from nine independent providers,
+**consens.io** sends one question to models from ten independent providers,
 keeps their answers separate, and shows what they agree on, where they
 contradict each other, and how well each claim is backed by sources. The result
-is one answer with inline confidence, not a wall of nine answers.
+is one answer with inline confidence, not a wall of ten answers.
 
 Agreement between models is a signal, not proof. consens.io treats it as one
 input next to source verification, never as a substitute for it.

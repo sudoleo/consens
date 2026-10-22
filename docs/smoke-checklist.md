@@ -494,7 +494,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       wieder aus.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell per Checkbox ein-/ausschließen blendet die Antwortbox korrekt ein/aus.
-- [ ] Der Custom-Picker listet alle neun Familien (inkl. Kimi, GLM und Muse); sind
+- [ ] Der Custom-Picker listet alle zehn Familien (inkl. Kimi, GLM, Muse und Qwen); sind
       sechs gewaehlt, ist die siebte sichtbar gesperrt. Eine Familie abwaehlen
       gibt die gesperrten wieder frei, und jede Handauswahl schaltet die
       Kopfzeile von Daily/Open Models/High Quality auf die Custom-Anzeige um.
@@ -509,6 +509,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       18+-Bestaetigung des OpenRouter-Kontos
       (https://openrouter.ai/settings/preferences); fehlt sie, meldet der Lauf
       fuer Muse einen Fehler, waehrend die uebrigen Familien normal antworten.
+- [ ] Qwen liefert eine echte Antwort mit Quellen: Qwen3.8 27B (Free, in Open
+      Models statt gpt-oss-120b) und Qwen3.8 Max Prime (Pro, langsam: nur bei
+      Alibaba). Ein Bild im Anhang erreicht beide.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 - [ ] „Ask about this“ auf einem markierten Abschnitt einer Antwort: das Zitat
       steht über dem Eingabefeld, der Fokus liegt im Feld, das × entfernt es

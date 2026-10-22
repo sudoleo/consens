@@ -610,6 +610,7 @@ class ModelConfigurationTests(unittest.TestCase):
                 cfg.DEFAULT_GEMINI_MODEL,
                 cfg.KIMI_PRO_MODEL,
                 cfg.GLM_PRO_MODEL,
+                cfg.QWEN_PRO_MODEL,
             }),
         )
 
@@ -794,15 +795,15 @@ class ModelConfigurationTests(unittest.TestCase):
                     **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"],
                     "answers": {
                         **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"]["answers"],
-                        "openai": "gpt-5.5",
+                        "qwen": cfg.QWEN_PRO_MODEL,
                     },
                     "consensus": "OpenAI-Pro",
                 },
             },
         })
         self.assertEqual(
-            normalized["preset_models"]["balanced"]["answers"]["openai"],
-            cfg.OPENAI_LUNA_MODEL,
+            normalized["preset_models"]["balanced"]["answers"]["qwen"],
+            cfg.QWEN_BASE_MODEL,
         )
         self.assertEqual(
             normalized["preset_models"]["balanced"]["consensus"], cfg.OPENAI_LUNA_MODEL

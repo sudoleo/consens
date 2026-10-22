@@ -328,6 +328,8 @@ _CONSENSUS_ENGINE_MODELS = {
     "GLM-Pro": cfg.GLM_PRO_MODEL,
     "Meta": cfg.MUSE_BASE_MODEL,
     "Meta-Pro": cfg.MUSE_PRO_MODEL,
+    "Qwen": cfg.QWEN_BASE_MODEL,
+    "Qwen-Pro": cfg.QWEN_PRO_MODEL,
 }
 
 
