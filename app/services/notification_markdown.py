@@ -259,7 +259,10 @@ def _mail_node(node, styles, citations, *, in_code=False, in_pre=False, first=Fa
         return inner  # anything else keeps its text, never its tag
     if tag in _BLOCKS and not _visible(inner).strip():
         return ""  # a paragraph that only held an image
-    return f"{_open(tag, styles, first=first)}{inner}</{tag}>"
+    extra = ""
+    if tag == "ol" and node.attrs.get("start", "").isdecimal():
+        extra = f' start="{int(node.attrs["start"])}"'  # a list text broke up counts on
+    return f"{_open(tag, styles, extra, first=first)}{inner}</{tag}>"
 
 
 def answer_mail_html(md_text, *, palette: dict, sources=None, excluded_sources=None) -> str:
@@ -319,7 +322,8 @@ def _blocks(node, mode: str, *, depth=0, ordered=False, counter=None,
     if tag == "img":
         return []
     if tag in {"ul", "ol"}:
-        count = [0]
+        start = node.attrs.get("start", "")
+        count = [int(start) - 1 if tag == "ol" and start.isdecimal() else 0]
         group = group or f"list{id(node)}"
         for child in node.children:
             if isinstance(child, _Node) and child.tag == "li":

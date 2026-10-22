@@ -146,6 +146,16 @@ def test_telegram_answer_uses_only_the_html_telegram_accepts():
     assert '<a href="https://openai.com/blog/gpt-6">OpenAI blog</a>' in full
     assert "Region · Status" in full and "pixel.example" not in full
 
+def test_a_list_the_answer_breaks_up_counts_on_like_the_page():
+    # "1. A / text / 2. B": the page writes <ol start="2">, every channel counts on.
+    answer = "1. **Alpha** first\n\nWhy it matters.\n\n2. **Beta** second\n\nMore.\n\n3. Gamma\n"
+    markup = notification_markdown.answer_mail_html(answer, palette=mailer.MAIL_PALETTE)
+    assert '<ol start="2"' in markup and '<ol start="3"' in markup
+    plain = notification_markdown.answer_plain(answer)
+    assert "2. Beta second" in plain and "3. Gamma" in plain
+    telegram = notification_markdown.answer_telegram(answer)
+    assert "2. <b>Beta</b> second" in telegram and "3. Gamma" in telegram
+
 def test_telegram_every_check_and_goal_reached_carry_the_rendered_answer():
     view = {"question": "Q?", "condition": "A date is set"}
     result = {"delta": {"summary": "It moved."}, "moved": True,
