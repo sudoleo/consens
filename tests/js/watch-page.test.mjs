@@ -649,7 +649,8 @@ describe("Undo, logout and failed saves (Apple-Audit second review 8)", () => {
 
 /**
  * Bug hunt 2026-10-22: the Delivery row follows the one Telegram pairing like
- * every other surface that offers it.
+ * every other surface that offers it, and a logout in the chat does not keep
+ * the same account's next login on Watches at the guest example.
  */
 describe("Watches page (bug hunt 2026-10-22)", () => {
   it("follows the pairing in the Delivery row from idle through waiting to connected", async () => {
@@ -669,5 +670,21 @@ describe("Watches page (bug hunt 2026-10-22)", () => {
     window.dispatchEvent(new window.Event("focus"));
     await vi.waitFor(() => expect(row().querySelector(".wd-field-hint").textContent)
       .toBe("Connected to @reader. Turn it on per watch under Settings."));
+  });
+
+  it("shows the account's watches when it logs in again on Watches after a logout in the chat", async () => {
+    const { window, document } = boot({ watches: [watch()] });
+    await vi.waitFor(() => expect(document.querySelector('.wd-item[data-watch-id="w1"]')).not.toBeNull());
+    document.getElementById("viewSwitchConsensus").click();
+    expect(window.location.pathname).toBe("/app");
+    const account = window.auth.currentUser;
+    window.auth.currentUser = null;
+    window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: { uid: null } }));
+    window.App.watch.resetAfterLogout();
+    document.getElementById("viewSwitchWatches").click();
+    await vi.waitFor(() => expect(document.querySelector(".wd-item.is-example")).not.toBeNull());
+    window.auth.currentUser = account;
+    window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: { uid: "watch-user" } }));
+    await vi.waitFor(() => expect(document.querySelector('.wd-item[data-watch-id="w1"]')).not.toBeNull());
   });
 });

@@ -2168,6 +2168,8 @@
   window.addEventListener("consensio:auth-state", event => {
     const uid = event.detail?.uid || null;
     const changed = watchState.updateAuthUid(uid);
+    // A logout anywhere (also in the chat) lets the next login look again.
+    if (!uid) firstLookFor = "";
     if (uid && window.auth?.currentUser?.uid === uid) {
       // Watch buttons know their state from the first answer on.
       loadWatchLimits(false).catch(() => {});
