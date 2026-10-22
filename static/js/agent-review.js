@@ -325,6 +325,9 @@
   }
   function evidenceButton(section, label, count) {
     const button = node('button', 'consensus-tab agent-evidence-link');
+    // "Review" names the place of the answer check here, not an action:
+    // German reads it as „Widersprüche“ (docs/i18n.md, context).
+    button.dataset.i18nContext = 'answer tabs';
     button.type = 'button';
     button.dataset.section = section;
     button.setAttribute('aria-controls', 'modelAnswerReader');

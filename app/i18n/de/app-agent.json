@@ -580,5 +580,6 @@
   "no complete answer arrived": "es kam keine vollständige Antwort",
   "{0} reasoning": "Nachdenken: {0}",
   "{0} chars": "{0} Zeichen",
-  "{length} calendars": "{length} Kalender"
+  "{length} calendars": "{length} Kalender",
+  "answer tabs|Review": "Widersprüche"
 }
