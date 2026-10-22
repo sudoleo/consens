@@ -1673,7 +1673,9 @@
     }
     const input = document.getElementById("questionInput");
     const draft = retry ? retry.question : input?.value || "";
-    const question = retry ? String(retry.question || "").trim() : String(App.quote?.compose?.(draft) ?? draft).trim();
+    // Files without words go out under their names (attachments.js messageText).
+    const question = retry ? String(retry.question || "").trim()
+      : String(App.quote?.compose?.(draft) ?? draft).trim() || App.attachments?.messageText?.() || "";
     if (!question) return;
     const settings = recovery?.config.agentSettings || {
       ...selection(), reasoning_effort: document.getElementById("agentReasoningEffort")?.value || "default",

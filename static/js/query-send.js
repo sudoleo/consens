@@ -795,8 +795,10 @@
 
     const draftQuestion = document.getElementById("questionInput")?.value || "";
     const quotedContext = window.App.quote?.text?.() || "";
-    const question = window.App.quote?.compose?.(draftQuestion) ?? draftQuestion;
-    if (!String(question).trim()) return;
+    // Files without words go out under their names, as in Agent (attachments.js messageText).
+    const question = String(window.App.quote?.compose?.(draftQuestion) ?? draftQuestion).trim()
+      || window.App.attachments?.messageText?.() || "";
+    if (!question) return;
 
     if (isDemoQuery(question) && !registry.getSelectedConversationBasis()) {
       window.App.state.set("lastQuestion", question, "run");

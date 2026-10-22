@@ -264,7 +264,9 @@
           const hasMinimumModels = agent
             ? !agentBlocker
             : selectedModelCount >= 2;
-          const hasMessage = !agent || Boolean(String(window.App.quote?.compose?.(questionInput?.value || '') ?? questionInput?.value ?? '').trim());
+          // Files alone are a message too: they go out under their names.
+          const hasMessage = !agent || Boolean(String(window.App.quote?.compose?.(questionInput?.value || '') ?? questionInput?.value ?? '').trim())
+            || Boolean(window.App.attachments?.messageText?.());
           // A stored Agent choice waits for the account's Agent access instead
           // of sending as Consensus in the moment before it arrives.
           const mode = window.App.agentChat?.modeState?.();

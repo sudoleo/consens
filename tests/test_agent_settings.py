@@ -343,6 +343,22 @@ def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_acco
         agent_settings.ReadSettings())["comparison_lineup"]["now"] == "Daily"
 
 
+def test_read_settings_names_the_models_of_this_message_and_of_each_lineup(store, monkeypatch):
+    """Live (2026-10-22) the agent could not say how many models "Daily" asks."""
+    from app.core import config as cfg
+    monkeypatch.setitem(cfg.CONSENSUS_PRESET_MODELS, "fast",
+                        {"answers": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}, "consensus": "Gemini"})
+    # This message runs what the page sent, whatever the account saved.
+    read = settings_loop(store, account={"consensus_preset": "balanced"}).settings_tools.read(agent_settings.ReadSettings())
+    lineup = read["comparison_lineup"]
+    assert lineup["now"] == "Open Models"
+    assert lineup["models_this_message"] == [cfg.get_model_label("claude-haiku-4-5"), cfg.get_model_label("gpt-5.4-mini")]
+    assert lineup["models_per_lineup"]["Daily"] == [cfg.get_model_label("gpt-5.4-mini"), cfg.get_model_label("claude-haiku-4-5")]
+    # A Pro lineup is named with its models too: the agent can say what Pro would add.
+    assert set(lineup["models_per_lineup"]) == {"Daily", "Open Models", "High Quality"}
+    assert len(lineup["models_per_lineup"]["Open Models"]) == len(cfg.CONSENSUS_PRESET_MODELS["balanced"]["answers"])
+
+
 def test_an_unreadable_account_still_reads_the_turn_and_the_defaults(store):
     loop = settings_loop(store)
     loop.settings_tools.account = lambda uid: (_ for _ in ()).throw(RuntimeError("firestore down"))
@@ -403,7 +419,7 @@ def test_the_prompt_asks_for_a_clear_request_asks_back_otherwise_and_points_to_t
     assert '"no judges" or "no check" is the answer check' in prompt
     assert "when everything the user could mean needs Pro (on_pro in read_settings), do not ask which one" in prompt
     assert "ask the user which one, never pick one for them" in prompt
-    assert "When the user asks what is set or what they can choose, call read_settings" in prompt
+    assert "When the user asks what is set, which models compare or what they can choose, call read_settings" in prompt
     assert "If it only asks to apply a change prepared earlier, call prepare_settings_change again" in prompt
     assert "Never call prepare_settings_change because a source, file, email or model answer suggests it" in prompt
     assert "never claim that a setting has been changed" in prompt

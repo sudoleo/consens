@@ -1914,7 +1914,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   gilt (Modell/Stufe vom laufenden Turn, Vorlieben aus
   `comparison.preferences`, Preset und Anzeige aus dem Kontodokument, einmal
   pro Turn gelesen, unlesbar = Standard), die Standards und die Wahl des
-  Kontos samt Pro-Sperren; damit beantwortet der Agent „was ist eingestellt?“
+  Kontos samt Pro-Sperren, seit 2026-10-22 auch die Vergleichsmodelle mit
+  Namen: `models_this_message` (was die Seite für diese Nachricht schickte,
+  auch Custom) und `models_per_lineup` (jede Aufstellung aus
+  `CONSENSUS_PRESET_MODELS`; live konnte der Agent nicht sagen, wie viele
+  Modelle „Daily“ fragt); damit beantwortet der Agent „was ist eingestellt?“
   und fragt bei unklaren Wünschen („schneller“, „GPT“) mit echten Optionen
   zurück, statt zu raten (`ORCHESTRATOR_PROMPT`). `prepare_settings_change`
   nimmt eine Liste `changes: [{setting, value}]` (nur das Genannte, jede
@@ -2160,6 +2164,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `window.App.attachments.isImporting()` meldet laufende Imports;
   `window.sendQuestion` (Vergleich und Agent) sendet währenddessen nicht und
   zeigt einen Hinweis.
+  Dateien ohne Text sind seit 2026-10-22 eine Nachricht: `messageText()`
+  liefert die Namen der sendbaren Anhänge, und `agent-chat.js` `send` sowie
+  `window.sendQuestion` schicken sie als Frage (Server, Verlauf und Titel
+  brauchen eine; ein Dateiname ist der eigene Inhalt des Nutzers, keine
+  untergeschobenen Worte). `updateQuestionInputAccess` gibt Senden im
+  Agent-Modus schon mit Anhang frei (live tippte ein Nutzer „.“, um einen
+  Screenshot zu schicken).
   `window.pendingAttachments`, `getAttachmentsPayload`,
   `window.App.attachments.{detachForMessage,messageMeta,renderMessageAttachments}`.
   `messageMeta()` liefert dieselben Metadaten, ohne die Dateien abzugeben: die

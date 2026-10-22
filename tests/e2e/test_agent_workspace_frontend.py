@@ -74,6 +74,46 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
     finally: context.close()
 
 
+def test_a_file_without_words_is_sent_under_its_name(browser, phase4_server):
+    """Live (2026-10-22) a user typed "." to send a screenshot: Send waited for words."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    files, calls, errors = [], [], []
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    file_id = 'e' * 32
+    try:
+        _routes(page, files)
+        def resource(route):
+            if route.request.method == 'POST':
+                files.append({'id': file_id, 'name': 'offer.txt', 'mime': 'text/plain', 'status': 'ready', 'warnings': [], 'size': 12,
+                              'created_at': '2026-10-22T10:00:00Z', 'expires_at': '2099-10-29T10:00:00Z'})
+                _json(route, {'file': files[0]})
+            else: _json(route, {'files': files})
+        page.route(f'**/agent/chats/{CHAT}/files', resource)
+        def answer(route):
+            payload = route.request.post_data_json; calls.append(payload)
+            turn = {'id': 'b' * 32, 'question': payload['question'], 'consensus': 'The offer costs 42 EUR.', 'execution_mode': 'agent',
+                    'status': 'completed', 'attachments': files, 'agent_settings': {'file_ids': [file_id]}}
+            result = {'chat_id': CHAT, 'turn_id': turn['id'], 'turn': turn, 'response': turn['consensus'],
+                      'bookmark_meta': {'id': payload['bookmark_id'], 'chat_id': CHAT, 'execution_mode': 'agent', 'query': payload['question'], 'has_consensus': True}}
+            route.fulfill(content_type='text/event-stream', body='event: final\ndata: ' + json.dumps(result) + '\n\n')
+        page.route('**/agent', answer)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        expect(page.locator('#agentModelDropdown')).to_be_enabled()
+        expect(page.locator('#questionInput')).to_have_value('')
+        expect(page.locator('#sendButton')).to_be_disabled()
+        page.locator('#attachFileInput').set_input_files({'name': 'offer.txt', 'mimeType': 'text/plain', 'buffer': b'Price 42 EUR'})
+        expect(page.locator('#attachmentBar')).to_contain_text('offer.txt')
+        expect(page.locator('#sendButton')).to_be_enabled()
+        page.locator('#questionInput').press('Enter')
+        expect(page.locator('#agentAnswerBody')).to_contain_text('42 EUR')
+        assert calls[0]['question'] == 'offer.txt' and calls[0]['file_ids'] == [file_id]
+        # The field stays empty for the next message.
+        expect(page.locator('#questionInput')).to_have_value('')
+        assert not errors
+    finally: context.close()
+
+
 def _version(char, number, turn, ext):
     return {'id': char * 32, 'name': f'Decision brief-v{number}.{ext}', 'title': 'Decision brief', 'kind': 'document', 'document_id': DOC,
             'version': number, 'parent_version': number - 1, 'turn_id': turn, 'status': 'ready', 'size': 41000 + number,

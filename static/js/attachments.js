@@ -698,6 +698,17 @@
         });
     }
 
+    // What a message of files alone says: their names. A run needs a
+    // question, and a name is the user's own, not words put in their mouth
+    // (2026-10-22 a user typed "." to send a screenshot).
+    function messageText() {
+      return (window.pendingAttachments || [])
+        .filter(function (att) { return !att.previewOnly && att.data; })
+        .map(function (att) { return String(att.name || "").trim(); })
+        .filter(Boolean)
+        .join(", ");
+    }
+
     function detachForMessage() {
       invalidateImports();
       const meta = messageMeta();
@@ -787,6 +798,7 @@
         return pendingFileReads > 0 || (window.pendingAttachments || []).some(function (att) { return att.loading; });
       },
       messageMeta: messageMeta,
+      messageText: messageText,
       renderMessageAttachments: renderMessageAttachments,
       markError: markError,
       refreshCompatibility: syncAttachmentCompatibility,
