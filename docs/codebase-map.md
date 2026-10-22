@@ -3693,8 +3693,8 @@ Mal. Gemessene `cached_input_tokens`/`cache_write_tokens` laufen wie bisher übe
 
 **Cache nur, wo ihn jemand liest (seit 2026-10-21).** Ein Cache-Write kostet bei
 Anthropic ein Viertel mehr als normaler Input, ein Read ein Zehntel. Pro
-Aufrufart: Schritte des Chatmodells lesen den Präfix im nächsten Schritt und in
-der nächsten Nachricht → Cache. Vergleichsantworten (`kind: comparison`) sind
+Aufrufart: Schritte des Chatmodells lesen den Präfix im nächsten Schritt und
+(über die festen Cache-Punkte, siehe unten) in der nächsten Nachricht → Cache. Vergleichsantworten (`kind: comparison`) sind
 eine Anfrage, deren Suchrunden den eigenen Prompt wieder lesen (14 Tage bis
 2026-10-21: 21 von 49 Claude-Antworten lasen Cache, netto positiv) → Cache nur
 mit Suche. Judges sind einmalige Aufrufe (Retries, Hedges und Coverage-Fenster
@@ -3744,10 +3744,42 @@ einer leer beendeten Antwort und der nächste Schritt eines Workers senden
 denselben Präfix noch einmal; die erste Anfrage nimmt weiter den schnellsten
 Endpunkt, und kein Hilfsaufruf teilt die Session des Chats oder eines anderen.
 Seitenlesungen (`PageFetch`) senden keine. Die Session gehört dem Adapter
-(`AgentCompletion.stream`), ein Registry-Feld `session_id` wird verworfen. Ob OpenRouter die Session auch
-neben `sort: throughput` beachtet, sagt die Doku nicht (nur `order` schaltet
-sie ab): nach dem Deploy am Anteil `cached_input_tokens` der Sonnet-Schritte
-in den Receipts nachmessen.
+(`AgentCompletion.stream`), ein Registry-Feld `session_id` wird verworfen.
+Nachgemessen nach dem Deploy (Receipts 2026-10-21 23:55 bis 2026-10-22 12:30,
+`cache_hit_rate.py`): Innerhalb einer Nachricht wirkt die Session, der
+zweite Sonnet-Schritt las jedes Mal den ganzen Write des ersten. Über Nachrichten
+hinweg las kein einziger erster Schritt (0 von 20, Folgefragen eine Minute
+später eingeschlossen); das lag am Breakpoint, nicht am Endpunkt (siehe
+nächster Absatz).
+
+**Feste Cache-Punkte (seit 2026-10-22).** Der automatische Breakpoint sitzt
+auf dem letzten Block. Den Präfix eines Schritts setzt der nächste Schritt
+fort, die nächste Nachricht nicht: Wo der Schritt seine Tool-Aufrufe hatte,
+steht dort die fertige Antwort, und der App-Kontext der Frage ändert sich
+jedes Mal. Eine Leseposition gibt es aber nur, wo eine frühere Anfrage einen
+Breakpoint hatte. So schrieb jede neue Nachricht ihren ganzen Prompt neu
+(Sonnet: 9–20k Tokens zum Write-Preis, rund 3 Cent pro Nachricht; GPT-6 Luna
+setzt eigene Breakpoints und las 98 %). `agent_client.with_cache_points`
+setzt deshalb für Anfragen mit Marker zwei eigene Breakpoints: das Ende des
+System-Prompts (über alle Nachrichten eines Chats gleich, Memory schließt ihn
+ab) und die letzte frühere Nachricht des Chats (`AgentLoop.history_end` =
+Index vor der neuen Frage, nur Schritte des Chatmodells über
+`AgentCompletion.history_end`; Worker markieren nur ihr System). Die nächste
+Nachricht liest damit System und Verlauf bis zur vorletzten Antwort. Ein
+Token wird nur einmal geschrieben, egal welcher Breakpoint ihn abdeckt: Bei
+einem Miss kosten die Punkte nichts. Mit dem automatischen sind es drei der
+vier erlaubten Breakpoints; die Punkte gehen nur in den Request
+(`content` als ein Textblock mit `cache_control`), `self.messages` bleibt
+unverändert. OpenRouter dokumentiert beide Formen, die Kombination nicht
+(Anthropic selbst schon). Deshalb gibt es ein Netz: Lehnt der Anbieter die
+Anfrage mit HTTP 400 vor der ersten Zeile ab, geht dieselbe Anfrage einmal
+ohne die Punkte raus (`_sse_lines`; ein 400 kostet nichts). Klappt das, setzt
+der Prozess `_CACHE_POINTS_REFUSED` und sendet keine Punkte mehr (Log-Warnung
+„Provider refused explicit cache points“, Metrik `cache_points_refused`).
+Scheitert auch die zweite Anfrage, lag es nicht an den Punkten, und der
+Fehler bleibt. Live nicht geprobt; nach dem Deploy mit `cache_hit_rate.py`
+den Anteil gelesener Tokens der ersten Sonnet-Schritte (`step completion:0`)
+von Folgefragen nachmessen.
 
 **Zugang seit 2026-10-02: jedes angemeldete Konto.** `require_agent_access`
 verlangt nur noch eine UID (`/user_status` meldet `agent_access: true`); das

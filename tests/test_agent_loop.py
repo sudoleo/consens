@@ -140,6 +140,146 @@ def test_a_request_without_a_session_keeps_the_plain_routing(monkeypatch):
     assert "x-session-id" not in headers[0] and "session_id" not in requests[0]
 
 
+# --- Cache points (agent_client.with_cache_points) ----------------------------
+
+EPHEMERAL = {"type": "ephemeral"}
+
+
+def follow_up_loop(store, model="claude-haiku-4-5", **kwargs):
+    """An AgentLoop for a chat's second message: system prompt, one earlier
+    question and answer, then the new question."""
+    chat_id, first = pending(store)
+    assert store.claim(UID, chat_id, first["id"], resolve_agent_model(model))
+    store.settle(UID, chat_id, first["id"], completion=receipt(), status="succeeded")
+    _, second = pending(store, chat_id=chat_id, request_id="two", question="What next?")
+    model = configured_model(resolve_agent_model(model))
+    messages = store.messages(UID, chat_id, second, model=model)
+    return AgentLoop(store=store, uid=UID, chat_id=chat_id, turn_id=second["id"], model=model, messages=messages,
+                     api_key="test", cancellation=ProviderCancellation(), **kwargs), messages
+
+
+def marked(content):
+    return [{"type": "text", "text": content, "cache_control": EPHEMERAL}]
+
+
+def test_the_next_message_finds_the_system_prompt_and_history_cached(store, monkeypatch):
+    # 2026-10-22: with only the top-level marker on the last block, no first
+    # step of a message read the cache (Sonnet, 20 of 20), because the next
+    # message never reaches a point an earlier one had written.
+    requests, _, _ = transport(monkeypatch, [
+        [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())],
+        [packet({"content": "Result: 4"}), packet(finish="stop", usage=usage())],
+    ])
+    loop, messages = follow_up_loop(store, registry=client_registry([]))
+    assert [message["role"] for message in messages] == ["system", "user", "assistant", "user"]
+    list(loop.run())
+    assert len(requests) == 2
+    for request in requests:
+        sent = request["messages"]
+        # The system prompt and the chat's last earlier message carry points of
+        # their own, with the same bytes; the top-level marker keeps the tail.
+        assert sent[0] == {"role": "system", "content": marked(messages[0]["content"])}
+        assert sent[2] == {"role": "assistant", "content": marked("A helpful answer")}
+        assert sent[1] == messages[1] and sent[3] == messages[3]
+        assert request["cache_control"] == EPHEMERAL
+        # At most four breakpoints per request: two here plus the top-level one.
+        assert json.dumps(sent).count('"cache_control"') == 2
+    # The second step continues the first: same marked prefix, then its tool turn.
+    assert requests[1]["messages"][:4] == requests[0]["messages"]
+    # Nothing leaks into the loop's own conversation.
+    assert loop.messages[0]["content"] == messages[0]["content"]
+
+
+def test_a_chats_first_message_marks_only_its_system_prompt(store, monkeypatch):
+    requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}), packet(finish="stop", usage=usage())]])
+    loop = loop_for(store)
+    list(loop.run())
+    sent = requests[0]["messages"]
+    assert [message["role"] for message in sent] == ["system", "user"]
+    assert sent[0]["content"][0]["cache_control"] == EPHEMERAL
+    assert isinstance(sent[1]["content"], str)
+
+
+def test_providers_that_cache_on_their_own_get_the_plain_conversation(store, monkeypatch):
+    requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}), packet(finish="stop", usage=usage())]])
+    loop, messages = follow_up_loop(store, model="gpt-5.6-luna")
+    list(loop.run())
+    assert requests[0]["messages"] == messages and "cache_control" not in requests[0]
+
+
+@pytest.mark.parametrize("history_end", [None, 0, 3, 4, -1, "2"])
+def test_cache_points_never_mark_the_last_block_or_a_foreign_index(history_end):
+    from app.services.llm.agent_client import with_cache_points
+    messages = [{"role": "system", "content": "System"}, {"role": "user", "content": "One"},
+                {"role": "assistant", "content": "Answer"}, {"role": "user", "content": "Two"}]
+    sent = with_cache_points(messages, EPHEMERAL, history_end)
+    # Only the system prompt: the last message has the top-level marker,
+    # anything else is not the end of the chat's history.
+    assert sent[0]["content"] == marked("System") and sent[1:] == messages[1:]
+    assert messages[0]["content"] == "System"
+
+
+def test_cache_points_skip_what_cannot_carry_one():
+    from app.services.llm.agent_client import with_cache_points
+    blocks = [{"type": "text", "text": "Answer"}]
+    assert with_cache_points([{"role": "user", "content": "Only"}], EPHEMERAL) is None
+    assert with_cache_points([{"role": "system", "content": ""}, {"role": "user", "content": "Q"}], EPHEMERAL) is None
+    messages = [{"role": "user", "content": "One"}, {"role": "assistant", "content": blocks},
+                {"role": "user", "content": "Two"}]
+    assert with_cache_points(messages, EPHEMERAL, history_end=1) is None
+    assert with_cache_points(messages[:1] + [{"role": "assistant", "content": "Answer"}] + messages[2:],
+                             EPHEMERAL, history_end=1)[1]["content"] == marked("Answer")
+
+
+def test_a_refused_cache_point_never_costs_the_answer(store, monkeypatch):
+    """The points are not probed live: should a provider refuse them (HTTP 400
+    before any line, never billed), the same request goes once more without
+    them, and the process stops sending them."""
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    monkeypatch.setattr(agent_client, "_CACHE_POINTS_REFUSED", False)
+    requests, _, closed = transport(monkeypatch, [
+        [_ProviderHTTPStatusError(400)],
+        [packet({"content": "Answer"}), packet(finish="stop", usage=usage())],
+        [packet({"content": "Later"}), packet(finish="stop", usage=usage())],
+    ])
+    loop, messages = follow_up_loop(store)
+    list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+    assert isinstance(requests[0]["messages"][0]["content"], list)
+    assert requests[1]["messages"] == messages and requests[1]["cache_control"] == EPHEMERAL
+    assert closed == [0, 1] and agent_client._CACHE_POINTS_REFUSED
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=1)):
+        list(AgentCompletion().stream(model=resolve_agent_model("claude-haiku-4-5"), messages=messages, api_key="test"))
+    assert requests[2]["messages"] == messages
+
+
+@pytest.mark.parametrize("second", [400, 429])
+def test_a_request_that_fails_without_the_points_too_keeps_them(monkeypatch, second):
+    # Another cause (a 400 for the request itself, a 429 on the second try):
+    # the error stands and the points stay on for the next request.
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    monkeypatch.setattr(agent_client, "_CACHE_POINTS_REFUSED", False)
+    requests, _, _ = transport(monkeypatch, [[_ProviderHTTPStatusError(400)], [_ProviderHTTPStatusError(second)]])
+    messages = [{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)), pytest.raises(_ProviderHTTPStatusError) as raised:
+        list(AgentCompletion().stream(model=resolve_agent_model("claude-haiku-4-5"), messages=messages, api_key="test"))
+    assert raised.value.status_code == second and len(requests) == 2
+    assert not agent_client._CACHE_POINTS_REFUSED
+
+
+def test_other_provider_errors_never_resend_the_request(monkeypatch):
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    monkeypatch.setattr(agent_client, "_CACHE_POINTS_REFUSED", False)
+    requests, _, _ = transport(monkeypatch, [[_ProviderHTTPStatusError(429)]])
+    messages = [{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)), pytest.raises(_ProviderHTTPStatusError):
+        list(AgentCompletion().stream(model=resolve_agent_model("claude-haiku-4-5"), messages=messages, api_key="test"))
+    assert len(requests) == 1
+
+
 def test_native_search_stays_in_selected_model_request_with_real_citations(store, monkeypatch):
     sources = [{"type": "url_citation", "url_citation": {"url": "https://example.com/report", "title": "Report"}},
                {"type": "url_citation", "url_citation": {"url": "javascript:alert(1)", "title": "Bad"}}]

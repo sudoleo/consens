@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal
 import json
+import logging
 import os
 import re
 from urllib.parse import urlsplit
@@ -520,11 +521,12 @@ def prompt_cache_control(model):
     own. Anthropic (and Qwen) only cache behind a ``cache_control`` marker;
     OpenRouter's top-level form places the breakpoint on the last cacheable
     block and moves it along as a turn's steps grow. Every Agent step re-sends
-    the system prompt, memory and history, so later steps and the next message
-    read them from cache (about a tenth of the input price) instead of paying
-    full price each time, as long as they reach the same endpoint (the chat
-    model's steps carry a session, openrouter_contract.provider_session_id).
-    The default five-minute lifetime matches chat pacing.
+    the system prompt, memory and history, so later steps read them from
+    cache (about a tenth of the input price) instead of paying full price
+    each time, as long as they reach the same endpoint (the chat model's
+    steps carry a session, openrouter_contract.provider_session_id). The
+    chat's next message reads them through breakpoints of their own
+    (with_cache_points). The default five-minute lifetime matches chat pacing.
 
     Writing costs a quarter more than plain input: a request no later one
     continues (AgentCompletion.one_off: a judge) skips the marker unless its
@@ -534,6 +536,72 @@ def prompt_cache_control(model):
     if name.startswith(("anthropic/", "qwen/")):
         return {"type": "ephemeral"}
     return None
+
+
+def with_cache_points(messages, cache, history_end=None):
+    """``messages`` with ``cache`` on the system prompt and on the chat's last
+    earlier message (``history_end``, AgentLoop.history_end) as breakpoints
+    of their own, or None when neither can carry one.
+
+    The top-level marker sits on the last block. A turn's next step
+    continues that prefix, the chat's next message does not: where the step
+    had its tool calls, the message has the answer, and its question's app
+    context changes every time. So it found no point an earlier message had
+    written and paid the write for its whole prompt again (2026-10-22,
+    Sonnet as chat model: none of 20 first steps read the cache, follow-ups
+    a minute apart included; GPT-6 Luna, which sets its own breakpoints,
+    read 98 % on the next message). The system prompt stays the same across
+    a chat's messages (memory closes it, DelegationLoop) and the history
+    only grows, so the next message within the cache lifetime reads both.
+    A token is written once, whichever breakpoint covers it: the extra
+    points cost nothing on a miss. With the top-level one, three of the
+    four breakpoints a request may have.
+    """
+    points = [0] if messages and messages[0].get("role") == "system" else []
+    if type(history_end) is int and 0 < history_end < len(messages) - 1:
+        points.append(history_end)
+    marked = list(messages)
+    for index in points:
+        content = marked[index].get("content")
+        if not isinstance(content, str) or not content:
+            continue
+        marked[index] = {**marked[index], "content": [{"type": "text", "text": content, "cache_control": cache}]}
+    return marked if any(marked[index] is not messages[index] for index in points) else None
+
+
+# Set once a provider refused a request for its explicit cache points and
+# took it without them (_sse_lines): this process sends none after that.
+_CACHE_POINTS_REFUSED = False
+
+
+def _sse_lines(open_lines, payload, fallback=None):
+    """The provider's stream for ``payload``. Refused outright (HTTP 400
+    before any line), the same request goes once more as ``fallback``:
+    ``payload`` without its explicit cache points (with_cache_points). When
+    that one goes through, the points were the cause and this process stops
+    sending them. A refused request is not billed: the step loses one round
+    trip, never its answer."""
+    global _CACHE_POINTS_REFUSED
+    lines = open_lines(payload)
+    try:
+        try:
+            first = next(lines, None)
+        except _ProviderHTTPStatusError as exc:
+            if fallback is None or exc.status_code != 400:
+                raise
+            diagnostic = exc.safe_diagnostic
+            lines = open_lines(fallback)
+            first = next(lines, None)
+            _CACHE_POINTS_REFUSED = True
+            logging.warning("Provider refused explicit cache points, sending without them model=%s diagnostic=%s",
+                            fallback.get("model"), diagnostic)
+            record_metric("cache_points_refused", str(fallback.get("model")), outcome="failure")
+        if first is None:
+            return
+        yield first
+        yield from lines
+    finally:
+        lines.close()
 
 
 def _continues(last, detail):
@@ -590,6 +658,9 @@ class AgentCompletion:
         # re-sends its prompt (DelegationLoop.worker_completion, see stream).
         self.session_id = None
         self.one_off = False
+        # The chat model's steps: index of the chat's last earlier message,
+        # a cache point of its own (with_cache_points, AgentLoop.history_end).
+        self.history_end = None
 
     def _output_limited(self):
         """The step ended without a usable answer or tool call after reasoning.
@@ -895,15 +966,19 @@ class AgentCompletion:
         # cache_hit_rate.py). A one-off call without search, a judge, would
         # only pay the write.
         cache = prompt_cache_control(model) if prompt_cache and (native_searches or not self.one_off) else None
+        fallback = None
         if cache:
             payload["cache_control"] = cache
+            marked = None if _CACHE_POINTS_REFUSED else with_cache_points(messages, cache, self.history_end)
+            if marked is not None:
+                fallback, payload = payload, {**payload, "messages": marked}
         from app.services.llm.provider_runtime import ProviderProgressWatchdog, _bounded_env_float
         progress = ProviderProgressWatchdog(_bounded_env_float("AGENT_PROVIDER_STALL_SECONDS", 180, 30, 600))
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
-            lines = cancellable_sse_lines(
-                OPENROUTER_CHAT_COMPLETIONS_URL, json=payload,
-                headers=headers,
-                progress=progress,
+            lines = _sse_lines(
+                lambda body: cancellable_sse_lines(OPENROUTER_CHAT_COMPLETIONS_URL, json=body,
+                                                   headers=headers, progress=progress),
+                payload, fallback,
             )
             text_capped = False
             try:

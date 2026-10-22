@@ -676,8 +676,11 @@ def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
     names = [tool.get("function", {}).get("name") for tool in requests[0]["tools"] if tool.get("type") == "function"]
     assert "compare_models" in names and "answer" not in names
     assert requests[0]["tool_choice"] == "auto"
-    assert requests[0]["messages"][0]["content"].startswith(
-        prompt_defaults.AGENT_SYSTEM_PROMPT.split("COMPARE OR ANSWER DIRECTLY")[0])
+    # Claude's system prompt goes out as one block with a cache point of its
+    # own (agent_client.with_cache_points).
+    [system] = requests[0]["messages"][0]["content"]
+    assert system["cache_control"] == {"type": "ephemeral"}
+    assert system["text"].startswith(prompt_defaults.AGENT_SYSTEM_PROMPT.split("COMPARE OR ANSWER DIRECTLY")[0])
     replay = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
     assert replay.status_code == 200 and replay.json()["response"] == ANSWER
     assert replay.json()["turn"]["agent_settings"]["answer_mode"] == "merged"

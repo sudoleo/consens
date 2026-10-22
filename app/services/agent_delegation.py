@@ -1025,6 +1025,8 @@ class DelegationLoop(AgentLoop):
         provider_attempted = False
         value = completion if completion is not None else self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
+        if not worker:
+            value.history_end = self.history_end
         value.published = ""
         value.tool_call_limit = 4
         # A comparison answer's line is quoted live in the chat while the main

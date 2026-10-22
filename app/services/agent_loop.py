@@ -30,6 +30,10 @@ class AgentLoop:
         # cached. Comparison answers and judges keep the fastest endpoint:
         # they share no prefix with each other.
         self.provider_session = provider_session_id(uid, chat_id)
+        # The chat's last earlier message (system prompt, history, then this
+        # message's question): the chat model's steps mark it as a cache point,
+        # so the next message reads the history (agent_client.with_cache_points).
+        self.history_end = len(self.messages) - 2
         self.claimed = False
         self.costs = RunCosts(self.policy)
         self.remaining_tools = self.policy.max_tools
@@ -85,7 +89,7 @@ class AgentLoop:
                     tools = [*schemas, *search_tools(self.model, searches)]
                     reservation = self.costs.reserve(self.model, self.messages, tools, native_searches=searches)
                     value = self.factory()
-                    value.step_id = step
+                    value.step_id, value.history_end = step, self.history_end
                     provider_cooldowns.check(self.model, self.api_key)
                     if not self.store.claim(self.uid, self.chat_id, self.turn_id, self.model, step=step,
                                             run_token=self.run_token, policy=self.policy.snapshot()):
