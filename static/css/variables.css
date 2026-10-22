@@ -71,6 +71,10 @@
   --field-line: rgba(34, 36, 40, 0.11);
   --field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
   --field-lift-active: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
+  /* The same field on the empty start screen, a step higher (shell.css). */
+  --field-start: var(--well);
+  --field-lift-start: 0 2px 6px rgba(28, 30, 33, 0.05), 0 26px 56px -22px rgba(28, 30, 33, 0.3);
+  --field-lift-start-active: 0 2px 6px rgba(28, 30, 33, 0.06), 0 30px 60px -22px rgba(28, 30, 33, 0.36);
 
   /* Colors - Light Mode */
   --bg-color: var(--ground);
@@ -195,6 +199,10 @@
   --field-line: rgba(255, 255, 255, 0.11);
   --field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
   --field-lift-active: 0 2px 5px rgba(0, 0, 0, 0.36), 0 22px 44px -20px rgba(0, 0, 0, 0.6);
+  /* Raised surfaces are lighter in the dark: the start field one shade up. */
+  --field-start: color-mix(in srgb, var(--well) 95%, white);
+  --field-lift-start: 0 2px 6px rgba(0, 0, 0, 0.34), 0 26px 56px -22px rgba(0, 0, 0, 0.62);
+  --field-lift-start-active: 0 2px 6px rgba(0, 0, 0, 0.38), 0 30px 60px -22px rgba(0, 0, 0, 0.68);
 
   --bg-color: var(--ground);
   --container-bg: var(--raise);
