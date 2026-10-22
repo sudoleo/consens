@@ -128,6 +128,9 @@ def wait(sha):
 
 
 def main():
+    # A Windows console (cp1252) cannot print every character of a test's
+    # failure text; it crashed the report of a red run (2026-10-23).
+    sys.stdout.reconfigure(errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--hours", type=int, default=26)
     parser.add_argument("--wait", action="store_true", help="wait for the push run of --sha (default HEAD)")
