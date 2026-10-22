@@ -183,7 +183,7 @@ def test_the_judge_sees_ruled_out_sources_only_when_there_are_any():
     assert [item["ruled_out"] for item in marked] == [True, False]
 
 
-def _judge_prompt(**kwargs):
+def _judge_prompt(new="New", **kwargs):
     prompts = []
 
     def call(provider, api_model, model_ref, keys, **options):
@@ -199,7 +199,7 @@ def _judge_prompt(**kwargs):
             patch.object(consensus_engine, "_judge_effort", return_value=None), \
             patch.object(consensus_engine, "_call_engine_text", side_effect=call):
         consensus_engine.query_consensus_change(
-            "Old", "New", {}, "OpenAI", GOAL, old_sources=[], new_sources=[USED, SHOP], **kwargs,
+            "Old", new, {}, "OpenAI", GOAL, old_sources=[], new_sources=[USED, SHOP], **kwargs,
         )
     return prompts[0]
 
@@ -216,6 +216,19 @@ def test_the_judge_checks_the_goal_against_the_details_and_rejections():
     plain = _judge_prompt()
     assert "USER_DETAILS" not in plain
     assert "ruled_out" not in plain
+
+
+def test_the_judge_says_what_changed_in_the_language_of_the_answer():
+    # The dashboard card shows change_summary as its one line, next to a
+    # question in the owner's language: no English line under a German watch,
+    # and the news about the subject, not about the two answers.
+    german = ("Der Schuh ist nicht mehr für unter 140 Euro zu haben, und auch die Angebote "
+              "auf den Seiten der Händler sind nicht mehr da. Das ist ein Rückschritt.")
+    prompt = _judge_prompt(new=german)
+    assert "Write change_summary, held_summary and condition_reason in German." in prompt
+    assert "say it about the subject itself" in prompt
+
+    assert "in the language of the NEW answer" in _judge_prompt()
 
 
 # --- The search ---------------------------------------------------------------

@@ -47,6 +47,11 @@ Abgrenzung zu einem geplanten Chat-Prompt (so erklärt es die App):
 3. Er liefert `changed`, `severity`, `change_summary`, `held_summary`, die
    **Ursache** (`cause`) und die tragenden Quellen (`evidence`), bei einem Ziel
    außerdem `condition_status`, `condition_reason`, `condition_evidence`.
+   Die Sätze schreibt er in der namentlich genannten Sprache der neuen Antwort
+   (`_answer_language`, sonst „language of the NEW answer“), und
+   `change_summary` sagt die Nachricht über den Gegenstand selbst („The shop
+   lowered the price …“), nicht über die Antworten („The new answer adds …“):
+   Er ist die eine Zeile der Dashboard-Karte.
 4. Der Server prüft die Belege deterministisch (`evidence_change.verify`):
    * zitierte IDs müssen Quellen dieses Laufs sein, sonst fallen sie weg;
    * `new_evidence` braucht mindestens eine zitierte Quelle, deren URL in der
