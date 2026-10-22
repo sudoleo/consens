@@ -62,6 +62,22 @@ def test_missing_topic_shows_the_html_404_to_a_browser_and_json_to_scripts():
     assert script.json() == {"error": "Topic not found"}
 
 
+def test_unknown_topic_version_shows_the_html_404_to_a_browser_and_json_to_scripts():
+    topic = {"id": "t1", "slug": "gpt-6", "status": "active", "latest_run_id": "r1"}
+    with patch.object(topics_router.topics, "resolve_topic_by_slug", return_value=(topic, False)), \
+            patch.object(topics_router.topics, "list_runs", return_value=[]), \
+            patch.object(topics_router.topics, "get_run", return_value=None):
+        client = _client()
+        page = client.get("/topics/gpt-6?version=gone", headers=BROWSER)
+        script = client.get("/topics/gpt-6?version=gone")
+
+    assert page.status_code == 404
+    assert page.headers["content-type"].startswith("text/html")
+    assert "Page not found" in page.text
+    assert script.status_code == 404
+    assert script.json() == {"error": "Topic version not found"}
+
+
 def test_german_legal_addresses_redirect_to_the_english_pages():
     client = _client()
 

@@ -351,12 +351,12 @@ async def sitemap_topics():
     return Response(content=xml, media_type="application/xml")
 
 
-def _topic_not_found(request: Request):
+def _topic_not_found(request: Request, detail: str = "Topic not found"):
     # A visitor following an old link sees the site's 404 page, a script
     # still gets the JSON error it always got.
     if not_found.wants_html_page(request):
         return not_found.not_found_page(request)
-    raise HTTPException(status_code=404, detail="Topic not found")
+    raise HTTPException(status_code=404, detail=detail)
 
 
 @router.get("/topics/{slug}", response_class=HTMLResponse)
@@ -410,7 +410,7 @@ async def topic_page(
         # that was already resolved above, so a link never dies of old age.
         selected_raw = await asyncio.to_thread(topics.get_run, topic["id"], wanted)
     if not selected_raw:
-        raise HTTPException(status_code=404, detail="Topic version not found")
+        return _topic_not_found(request, "Topic version not found")
     current = selected_raw["id"] == standing_id
     selected = topics.run_public_view(selected_raw)
 
