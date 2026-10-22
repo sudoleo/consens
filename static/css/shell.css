@@ -354,7 +354,7 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
 }
 
 /* Bookmarks stays visible as the navigation label, with the search glyph
-   beside it; only clicking it (or Ctrl/⌘ K, app-init.js) replaces the row
+   beside it; only clicking it (or Ctrl/Cmd+K, app-init.js) replaces the row
    with the input. */
 .sidebar-bookmarks-head {
   position: relative;

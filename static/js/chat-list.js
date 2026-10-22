@@ -28,18 +28,6 @@
   const WEEK = Object.freeze({ key: "week", label: "Previous 7 days", rank: 3 });
   const MONTH = Object.freeze({ key: "month", label: "Previous 30 days", rank: 4 });
 
-  let monthNames = null;
-  function monthName(day) {
-    if (!monthNames) {
-      try {
-        monthNames = new Intl.DateTimeFormat(App.format?.LOCALE || "en-US", { month: "long" });
-      } catch (_) {
-        monthNames = { format: date => String(date.getMonth() + 1) };
-      }
-    }
-    return monthNames.format(day);
-  }
-
   // A saved time as the list gets it: an ISO string from the server, a
   // number, a Date, or a Firestore timestamp that came through as its parts.
   function toTime(value) {
@@ -72,7 +60,7 @@
     const day = new Date(time);
     const today = new Date(now);
     if (day.getFullYear() === today.getFullYear()) {
-      return { key: `month-${day.getMonth()}`, label: monthName(day), rank: 10 + today.getMonth() - day.getMonth() };
+      return { key: `month-${day.getMonth()}`, label: App.format.month(day), rank: 10 + today.getMonth() - day.getMonth() };
     }
     const year = day.getFullYear();
     return { key: `year-${year}`, label: String(year), rank: 100 + today.getFullYear() - year };

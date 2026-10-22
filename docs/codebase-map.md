@@ -867,7 +867,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `token-budget.js` jederzeit da) — wie die App schreibt, an einer Stelle:
   - **`App.format`**: eine Locale (`en-US`, die der Oberfläche), nie die des
     Browsers. `date(v, {year: "auto"|true|false, weekday, timeZone})` →
-    „Oct 19“ (anderes Jahr: „Oct 19, 2025“), `time(v, {timeZone})` → „14:03“
+    „Oct 19“ (anderes Jahr: „Oct 19, 2025“), `month(v)` → „October“ (Überschrift
+    der Monatsgruppen der Chatliste), `time(v, {timeZone})` → „14:03“
     (24 h wie die Watch-Zeiten), `dateTime` → „Oct 19, 14:03“, `upcoming(v)` →
     „today, 14:30“/„tomorrow, 09:00“/„Friday, 09:00“, `relative(v)` →
     „just now“/„12m ago“/„3h ago“/„yesterday“/„4 days ago“/„on Oct 3“,

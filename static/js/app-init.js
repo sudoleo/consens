@@ -1396,10 +1396,10 @@
           setBookmarkSearchOpen(true, { focus: true });
         });
 
-        // Ctrl+K (⌘K on a Mac) finds a chat from anywhere, as in other chat
+        // Ctrl+K (Cmd+K on a Mac) finds a chat from anywhere, as in other chat
         // apps: a closed sidebar opens, a folded list unfolds, and the
         // search field takes the keys.
-        const searchShortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "") ? "⌘K" : "Ctrl+K";
+        const searchShortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "") ? "Cmd+K" : "Ctrl+K";
         bookmarkSearchTrigger?.setAttribute("data-tooltip", `Search chats (${searchShortcut})`);
         bookmarkSearchTrigger?.setAttribute("aria-keyshortcuts", "Control+K Meta+K");
         document.addEventListener("keydown", function (event) {

@@ -84,6 +84,14 @@
     return pad(date.getHours()) + ":" + pad(date.getMinutes());
   }
 
+  // "October": the month alone, as a heading over a month's chats.
+  function month(value) {
+    const day = toDate(value);
+    if (!day) return "";
+    const intl = formatter("date", { month: "long" });
+    return intl ? intl.format(day) : String(day.getMonth() + 1);
+  }
+
   // "Oct 19"; another year adds it ("Oct 19, 2025"); `year: true` always.
   // `weekday: true` leads with the day ("Tue, Oct 21").
   function date(value, { year = "auto", weekday = false, timeZone, now = Date.now() } = {}) {
@@ -167,7 +175,7 @@
     return number(numeric) + " " + (numeric === 1 ? singular : plural);
   }
 
-  App.format = Object.freeze({ LOCALE, number, time, date, dateTime, upcoming, duration, relative, count, toDate });
+  App.format = Object.freeze({ LOCALE, number, time, date, month, dateTime, upcoming, duration, relative, count, toDate });
 
   // ------------------------------------------------------------------
   // App.words -- the glossary (Apple-Audit H9). One word per state.
