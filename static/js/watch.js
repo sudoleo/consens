@@ -1835,9 +1835,10 @@
       if (!watchViewIsOpen() || !event.target?.closest?.("#newRunButton")) return;
       closeWatchDashboard({ animate: false });
     }, true);
-    // A chat opened from the sidebar leaves Watches for that chat.
+    // A chat opened from the sidebar leaves Watches for that chat; its "…"
+    // menu and rename field act on the row and keep the page.
     document.getElementById("bookmarksContainer")?.addEventListener("click", event => {
-      if (!watchViewIsOpen() || event.target.closest(".delete-bookmark")) return;
+      if (!watchViewIsOpen() || event.target.closest(".bookmark-menu-button, .bookmark-rename-input")) return;
       if (!event.target.closest(".bookmark")) return;
       closeWatchDashboard({ animate: false, restoreScroll: false });
     }, true);

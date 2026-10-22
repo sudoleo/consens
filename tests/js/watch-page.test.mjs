@@ -300,6 +300,19 @@ describe("New watch dialog", () => {
     expect(document.body.classList.contains("is-watch-view")).toBe(false);
   });
 
+  it("stays on Watches for a chat row's menu and rename field, leaves for the row itself", () => {
+    const { document } = boot({ watches: [] });
+    document.getElementById("bookmarksContainer").innerHTML =
+      '<div class="bookmark" data-id="b1"><p role="button">A chat</p><input class="bookmark-rename-input">'
+      + '<button type="button" class="bookmark-menu-button"><svg><path></path></svg></button></div>';
+    const page = document.getElementById("watchDashboard");
+    document.querySelector(".bookmark-menu-button path").dispatchEvent(new document.defaultView.MouseEvent("click", { bubbles: true }));
+    document.querySelector(".bookmark-rename-input").click();
+    expect(page.hidden).toBe(false);
+    document.querySelector(".bookmark > p").click();
+    expect(page.hidden).toBe(true);
+  });
+
   it("shows a guest the page with an example instead of a toast", async () => {
     const { window, document } = boot({ user: false, path: "/app" });
     document.getElementById("viewSwitchWatches").click();
