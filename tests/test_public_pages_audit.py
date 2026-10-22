@@ -472,3 +472,13 @@ def test_share_page_differences_are_the_apps_cards():
     # One smaller difference does not fold.
     single = check_page.difference_cards(differences[:2], snapshots.PROVIDERS_BY_LABEL, render_inline_markdown)
     assert [card["tag"] for card in single["cards"]] == ["Critical", "Minor"] and single["smaller"] == []
+
+
+def test_a_quote_cut_from_a_bold_run_shows_no_stray_stars():
+    # Live 2026-10-22: "Dr. Sebastian Reddemann**, CEO" -- the judge cut the
+    # quote inside "**…**", and the closing mark stood in the card.
+    from app.services.public_markdown import render_inline_markdown
+
+    assert render_inline_markdown("Dr. Sebastian Reddemann**, CEO") == "Dr. Sebastian Reddemann, CEO"
+    assert render_inline_markdown("**Board** of four") == "<strong>Board</strong> of four"
+    assert render_inline_markdown("`a**b`") == "<code>a**b</code>"

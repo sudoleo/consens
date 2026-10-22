@@ -1507,6 +1507,27 @@ canvas {
 
 #differencesView .diff-more { border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent); }
 
+/* "Best answer" in the same quiet voice: a word in the secondary grey before
+   the model, not a capitalised green pill. */
+#differencesView .share-best-model {
+  gap: 8px;
+  border-top-color: color-mix(in srgb, var(--sidebar-border) 45%, transparent);
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+}
+
+#differencesView .share-best-model-label {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 #differencesView .diff-more-summary {
   display: flex;
   align-items: center;

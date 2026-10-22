@@ -219,8 +219,11 @@ def render_inline_markdown(md_text):
     """One line of a model's Markdown (a stance, a quote) as safe inline HTML,
     like renderInlineMarkdown in the app: "**Board**" is bold, not starred.
     Links, images and blocks are dropped to their text."""
-    html = _MD.renderInline(str(md_text or ""))
-    return nh3.clean(html, tags=_INLINE_TAGS, attributes={}).strip()
+    html = nh3.clean(_MD.renderInline(str(md_text or "")), tags=_INLINE_TAGS, attributes={}).strip()
+    # A quote cut out of the middle of a bold run keeps one "**" without its
+    # partner ("Dr. Reddemann**, CEO"): a mark, not text -- outside code.
+    parts = re.split(r"(<code>.*?</code>)", html)
+    return "".join(part if part.startswith("<code>") else part.replace("**", "") for part in parts)
 
 
 # Die Site-Links tragen Klasse, Favicon und öffnen in neuem Tab. Modell-
