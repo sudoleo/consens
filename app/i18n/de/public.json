@@ -123,7 +123,7 @@
   "Hide quote": "Zitat ausblenden",
   "All {length} models agree": "Alle {length} Modelle stimmen überein",
   "All {total} models agree": "Alle {total} Modelle stimmen überein",
-  "Thought for {RUN_SECONDS}s": "Nachgedacht für {RUN_SECONDS} s",
+  "Thought for {RUN_SECONDS}s": "Fertig nach {RUN_SECONDS} s",
   "Working for {seconds}s": "Arbeitet seit {seconds} s",
   "Only runs that included": "Nur Läufe mit",
   ". The score beside each family counts the runs in which it beat {rivalShort} to the pick, and the runs {rivalShort2} won.": ". Der Stand neben jeder Familie zählt die Läufe, in denen sie {rivalShort} bei der Wahl geschlagen hat, und die Läufe, die {rivalShort2} gewonnen hat.",
