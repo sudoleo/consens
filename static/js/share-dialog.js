@@ -485,8 +485,9 @@
       button.innerHTML = SHARE_PILL_ICON + "<span>Share</span>";
       button.title = "Share this answer as a public page";
       button.setAttribute("aria-label", "Share this answer publicly");
+      // Pressed from the phone's bar (mobile-header.js): focus returns there.
       button.addEventListener("click", () => shareAgentAnswer({
-        chatId: button._chatId || visibleChatId(), turnId: button._turnId, trigger: button
+        chatId: button._chatId || visibleChatId(), turnId: button._turnId, trigger: button._actionTrigger || button
       }));
       answerBody._sharePill = button;
     }

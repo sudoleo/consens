@@ -1335,6 +1335,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 - **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px seit
   2026-10-13 keine Leiste mehr, sondern zwei Gruppen: links das Menü als
   44-px-Knopf, rechts New chat und, für die fertige Antwort, Watch und „…“.
+  Im Agent-Modus stehen dort seit 2026-10-22 Watch und Share der Antwort
+  auf dem Schirm als Glyphen (`#mobileAgentWatch`, `#mobileAgentShare`);
+  `mobile-header.js` zeigt sie, solange die Pillen in `#agentAnswer`
+  existieren, und drückt beim Tippen diese Pillen (mit `_actionTrigger` =
+  Glyphe, damit Dialoge den Fokus dorthin zurückgeben). Eine beobachtete
+  Frage füllt die Pupille. Unter der Antwort sind die Pillen bis 1099 px
+  ausgeblendet (`components-watch.css`); frühere Turns behalten ihre, auf
+  dem Telefon als zwei Glyphen ohne Wort.
   Seit 2026-10-20 (Apple-Audit G17, Max' Entscheidung „rahmenlos wie am
   Desktop“) stehen beide als bloße Glyphen ohne erhabenen Kreis, Ring oder
   Schatten (vorher Inseln im Composer-Material); Hover `--hover`, das offene

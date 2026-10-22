@@ -1007,11 +1007,28 @@ body.is-view-settle.is-watch-view .watch-page {
 .agent-watch-pill-row :is(.agent-watch-pill, .agent-share-pill) { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 :is(.agent-watch-pill, .agent-share-pill) .share-pill-icon { width: 15px; height: 15px; flex: none; }
 .watch-consensus-pill.is-watching { color: var(--ink); }
-/* Phones: the evidence links fill their row; the pills start the next,
-   on the answer's left edge, with a full touch target. */
+/* Up to the width of the mobile bar, the answer on screen has its Watch and
+   Share up in the bar as glyphs (mobile-header.js presses these pills), so
+   under it only the evidence row remains (2026-10-22). */
+@media (max-width: 1099px) {
+  #agentAnswer :is(.agent-watch-pill, .agent-share-pill),
+  #agentAnswer .agent-watch-pill-row { display: none; }
+}
+/* Phones: the evidence links fill their row; an earlier turn's pills start
+   the next, on the answer's left edge, as two glyphs with a full touch
+   target, the way chat apps mark a message's actions (their names stay in
+   aria-label and title). */
 @media (max-width: 540px) {
-  .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { min-height: 44px; }
-  .agent-review > .agent-watch-pill, .agent-review > .agent-evidence-links + .agent-share-pill { margin-left: -8px; }
+  .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill),
+  .agent-watch-pill-row :is(.agent-watch-pill, .agent-share-pill) { justify-content: center; width: 44px; min-height: 44px; padding: 0; color: var(--ink-2); }
+  .agent-review > .agent-watch-pill, .agent-review > .agent-evidence-links + .agent-share-pill { margin-left: -12px; }
+  .agent-review > .agent-watch-pill + .agent-share-pill { margin-left: -12px; }
+  :is(.agent-review, .agent-watch-pill-row) > :is(.agent-watch-pill, .agent-share-pill) > span { display: none; }
+  :is(.agent-review, .agent-watch-pill-row) > :is(.agent-watch-pill, .agent-share-pill) .share-pill-icon { width: 19px; height: 19px; }
+  .agent-watch-pill-row { gap: 0; margin-left: -12px; }
+  /* Without the word "Watching", a watched question fills the pupil. */
+  :is(.agent-review, .agent-watch-pill-row) > .agent-watch-pill.is-watching { color: var(--ink); }
+  :is(.agent-review, .agent-watch-pill-row) > .agent-watch-pill.is-watching .share-pill-icon circle { fill: currentColor; }
 }
 
 /* ==========================================================================
