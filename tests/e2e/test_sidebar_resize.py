@@ -56,7 +56,9 @@ def test_dragging_the_edge_resizes_the_sidebar_and_everything_beside_it(app_page
     _open_sidebar(page)
     before = _geometry(page)
     assert before["sidebar"] == 260 and before["handleShown"]
-    assert before["handleLeft"] < 260 < before["handleLeft"] + before["handleWidth"]
+    # The handle ends at the edge, over the sidebar only: a half over the
+    # page kept the old theme's colour after a light/dark switch.
+    assert before["handleLeft"] < 260 == before["handleLeft"] + before["handleWidth"]
     expect(page.locator("#sidebarResizer")).to_have_attribute("role", "separator")
 
     # The column's offset from the canvas centre before the drag (a reserved

@@ -2,8 +2,11 @@
    Attachment Viewer (Vorschau-Modal)
    -------------------------------------------------------------------------- */
 /* A native <dialog class="modal"> (App.modalDialog): scrim, surface and the
-   way in and out come from overlays.css; here the preview's own size. */
-dialog.attachment-viewer-dialog[open] {
+   way in and out come from overlays.css; here the preview's own size.
+   .modal in the selector: overlays.css loads later and sets
+   dialog.modal[open] to display: block, which dropped the preview into the
+   top left corner. */
+dialog.modal.attachment-viewer-dialog[open] {
   display: flex;
   align-items: center;
   justify-content: center;

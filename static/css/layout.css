@@ -465,7 +465,10 @@ body:has(.sidebar.active) .brand-float {
 }
 
 /* Drag handle on the sidebar's right edge (sidebar-resize.js). A wide,
-   invisible hit area; the hairline only shows on hover, focus and drag. */
+   invisible hit area; the hairline only shows on hover, focus and drag.
+   It ends at the edge and lies only over the sidebar: Chrome left the half
+   that reached over the page in the old theme's colour after a light/dark
+   switch, a dark strip until the handle was hovered (2026-10-22). */
 .sidebar-resizer {
   display: none;
 }
@@ -476,7 +479,7 @@ body:has(.sidebar.active) .brand-float {
     position: fixed;
     top: 0;
     bottom: 0;
-    left: calc(var(--sidebar-width) - 5px);
+    left: calc(var(--sidebar-width) - 10px);
     width: 10px;
     cursor: col-resize;
     touch-action: none;
@@ -489,7 +492,7 @@ body:has(.sidebar.active) .brand-float {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 4px;
+    right: 0;
     width: 2px;
     background: var(--ink-3, currentColor);
     opacity: 0;

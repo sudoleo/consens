@@ -65,6 +65,11 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
         chip.click()
         viewer = page.locator('#attachmentViewerModal')
         expect(viewer.locator('iframe')).to_have_count(1)
+        # In the middle of the window, not in its top left corner (2026-10-22).
+        # Measured against the dialog: the scroll lock keeps the page's
+        # scrollbar gutter, so the dialog is that much narrower than the page.
+        box, layer = viewer.locator('.modal-content').bounding_box(), viewer.bounding_box()
+        assert abs((box['x'] + box['width'] / 2) - (layer['x'] + layer['width'] / 2)) <= 2
         with page.expect_download() as pending:
             viewer.get_by_role('button',name='Download',exact=True).click()
         assert pending.value.suggested_filename == 'offer.txt'
