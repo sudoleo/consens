@@ -121,6 +121,28 @@ describe("Settings: Let Agent update memory", () => {
     expect(ctx.document.getElementById("memoryAutoSwitch").disabled).toBe(true);
     ctx.dom.window.close();
   });
+
+  it("can still be switched off after memory was paused first", async () => {
+    const ctx = bootSettings();
+    ctx.server.profile = { ...ctx.server.profile, auto_memory: true };
+    await open(ctx);
+    const enabled = ctx.document.getElementById("memoryEnabledSwitch");
+    const auto = ctx.document.getElementById("memoryAutoSwitch");
+    enabled.checked = false;
+    enabled.dispatchEvent(new ctx.window.Event("change"));
+    await settle();
+    expect(auto.checked).toBe(true);
+    expect(auto.disabled).toBe(false);
+    auto.checked = false;
+    auto.dispatchEvent(new ctx.window.Event("change"));
+    await settle();
+    const put = ctx.server.calls.filter(call => call.method === "PUT").at(-1);
+    expect(put.body).toMatchObject({ enabled: false, auto_memory: false });
+    expect(auto.checked).toBe(false);
+    // Off and paused: switching it back on waits for memory itself.
+    expect(auto.disabled).toBe(true);
+    ctx.dom.window.close();
+  });
 });
 
 describe("Hint under an Agent answer", () => {

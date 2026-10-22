@@ -225,9 +225,10 @@
     const disabled = !signedIn || state.loading || state.saving;
     if (enabled) enabled.disabled = disabled;
     const { auto } = els();
-    // Ohne gelesenes Memory kann der Agent nichts abgleichen: der Schalter
-    // gilt nur, solange "Use my memory" an ist.
-    if (auto) auto.disabled = disabled || state.saved?.enabled === false;
+    // Ohne gelesenes Memory kann der Agent nichts abgleichen: einschalten geht
+    // nur, solange "Use my memory" an ist. Ausschalten geht immer, sonst hinge
+    // ein noch eingeschalteter Schalter nach der Pause fest.
+    if (auto) auto.disabled = disabled || (state.saved?.enabled === false && state.saved?.auto_memory !== true);
     syncItemControls();
     FIELDS.forEach(field => {
       if (inputs[field]) inputs[field].disabled = disabled;

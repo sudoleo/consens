@@ -1856,8 +1856,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Einträge **und** Undo-Log), `POST /api/my/memory/changes/{id}/undo` (stellt
   nur wieder her, solange jeder betroffene Eintrag exakt im Nachher-Zustand ist,
   sonst 409 `undo_conflict`; idempotent; markiert `turn.agent_memory` als
-  `undone`). UI: `user-memory.js` zeigt Schalter `#memoryAutoSwitch` (gesperrt
-  bei pausiertem Memory, speichert sofort nur sich selbst), die Liste
+  `undone`). UI: `user-memory.js` zeigt Schalter `#memoryAutoSwitch` (bei pausiertem
+  Memory nur noch ausschaltbar, nicht einschaltbar; speichert sofort nur sich
+  selbst), die Liste
   `#memoryItemsSection` mit Bearbeiten/Löschen/Hinzufügen und zweistufigem
   „Delete all“ (Löschen zeigt „Memory deleted · Undo“ über `App.toast` und
   nimmt es über `/changes/{change_id}/undo` zurück; ein geleertes Feld löscht
