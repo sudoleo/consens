@@ -24,6 +24,13 @@ if (!Array.isArray(window.currentEvidenceSources)) {
 // dictionary (docs/i18n.md), markup through i18n.js's own rules. Anchors and
 // quotes are entries of their own, each a passage of the German answer, so
 // the marks still find their place. Names and numbers have no entry and stay.
+// Values the app reads are no text and stay English: the dictionary has
+// "contradiction" (a UI word), and a difference typed "Widerspruch" is none,
+// so the red mark, its "vs" and "Critical" were gone.
+const DEMO_VALUE_FIELDS = new Set([
+  "type", "severity", "coverage", "level",
+  "model", "models", "agree", "models_compared", "best_model", "provider"
+]);
 function demoInPageLanguage(value) {
   const t = window.App?.t;
   if (window.App?.lang !== "de" || !t) return value;
@@ -39,7 +46,8 @@ function demoInPageLanguage(value) {
       return item.split("\n\n").map(part => t(part)).join("\n\n");
     }
     if (Array.isArray(item)) return item.map(walk);
-    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, walk(entry)]));
+    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, entry]) =>
+      [key, DEMO_VALUE_FIELDS.has(key) ? entry : walk(entry)]));
     return item;
   };
   return walk(value);

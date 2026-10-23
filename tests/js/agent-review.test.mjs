@@ -247,6 +247,19 @@ it('explains a missing model without reporting a failed check, including older s
   }
   dom.window.close();
 });
+it('writes the status line in the page language, one part at a time', () => {
+  const {window: w, document: d, dom} = setup();
+  // The joined line has no dictionary entry; its parts do (docs/i18n.md).
+  const german = {'1 of 2 models answered': '1 von 2 Modellen haben geantwortet', 'Checked': 'Geprüft'};
+  w.App.t = text => german[text] ?? text;
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  w.App.agentReview.render(body, partialReview());
+  d.querySelector('[data-section="differences"]').click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(panel.querySelector('.agent-evidence-status summary').textContent)
+    .toBe('1 von 2 Modellen haben geantwortet · Geprüft');
+  dom.window.close();
+});
 it.each([
   ['coverage', 'The answer check couldn’t compare each sentence', 'Partly checked'],
   ['sentences', '2 sentences could not be checked', '']

@@ -145,7 +145,9 @@
     const total = answers.length + unavailable.length;
     const count = !check ? '' : unavailable.length ? `${answers.length} of ${total} models answered`
       : total === 1 ? '1 model answered' : `${total} models answered`;
-    const line = [count, checkWord(check?.status || state, issues)].filter(Boolean).join(' · ');
+    // Part by part through App.t: the joined line has no entry of its own.
+    const line = [count, checkWord(check?.status || state, issues)].filter(Boolean)
+      .map(part => window.App.t(part)).join(' · ');
     const details = [];
     for (const model of unavailable) details.push(model.partial_text
       ? `${model.label}: stopped before it finished, ${failureReason(model.failure)}. Its partial answer is under Answers, not in the check.`
