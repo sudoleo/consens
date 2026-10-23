@@ -1653,8 +1653,14 @@
               side.appendChild(claim);
             }
             const meta = cardNode("div", "cx-card-meta");
-            if (models.length) meta.append(cardLogos(models, ctx, options.quote || ""), cardWho(models));
-            if (options.label) meta.appendChild(cardNode("span", "cx-card-tag", options.label));
+            if (models.length) meta.appendChild(cardLogos(models, ctx, options.quote || ""));
+            // Anzahl und "In the answer" brechen nur gemeinsam um: auf dem
+            // Handy stand nach fuenf Logos sonst ein einsamer Punkt am
+            // Zeilenanfang.
+            const words = cardNode("span", "cx-card-words");
+            if (models.length) words.appendChild(cardWho(models));
+            if (options.label) words.appendChild(cardNode("span", "cx-card-tag", options.label));
+            if (words.firstChild) meta.appendChild(words);
             if (meta.firstChild) side.appendChild(meta);
             return side;
           }

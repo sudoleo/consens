@@ -239,6 +239,13 @@ button.cx-card-title:focus-visible {
   margin-top: 0;
 }
 
+.cx-card-words {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  white-space: nowrap;
+}
+
 .cx-card-tag:not(:first-child)::before {
   content: "·";
   content: "·" / "";
