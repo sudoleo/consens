@@ -128,8 +128,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       (standardmäßig nur rot/gelb gefärbt, die übrigen klickbar und beim Hover
       nur grau, nie grün). Mit Maus zeigt ein gefärbter Satz die Hover-Vorschau
       wie in der Antwort; Klick ersetzt sie durch die Karte, nach Escape kommt
-      keine Vorschau von selbst. Ein Zähler/Satz öffnet die Karte, „View answer“ die
-      Modellantwort. Die Antwort nennt den Fehler und wird wie jede Antwort
+      keine Vorschau von selbst. Ein Zähler/Satz öffnet die Karte (Seite des
+      Texts „In your text“), ein Logo darin die Modellantwort. Die Antwort nennt den Fehler und wird wie jede Antwort
       geprüft (Marken, Score); ein Satz wie „Dein Text sagt X, das stimmt
       nicht“ trägt keine rote Marke für X. Aktivität: Vergleichsfrage enthält
       den Text nicht; im Agent-Panel eine Zeile „Answer check“ (vor dem
@@ -303,7 +303,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       unter der Behauptung eine Metazeile Icon + Modellname (Klick öffnet die
       Originalantwort) · „In the answer“ · „Show quote“. Chevrons von Karte
       und „smaller differences“ auf einer Linie am rechten Rand.
-      Inline-Marker öffnen weiterhin die richtige Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
+      Inline-Marker halten ihre Karte fest, deren Thema öffnet die richtige
+      Karte im Leser. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
       Notizen, Modell-Icons 0→6, Writing/Checking, Marken, 45/100) ohne
@@ -1136,7 +1137,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 ### Gemeinsame Detail-Seitenleiste
 - [ ] Differences und Sources aus aktuellem und archiviertem Turn oeffnen rechts denselben Leser; auf Handy/Tablet bildschirmfuellend.
 - [ ] Abschnitts- und Fragenwechsel behalten die korrekte Zuordnung; Schliessen stellt Karten/Quellenlisten an ihren Ursprungsort zurueck.
-- [ ] Differences zeigen zuerst Typ und Kernaussage. Aufklappen zeigt Positionen, Zitate, Pruefhinweis und vorhandene Resolve-Aktionen; Marker oeffnen die passende Karte.
+- [ ] Differences zeigen zuerst Typ und Kernaussage. Aufklappen zeigt Positionen, Zitate, Pruefhinweis und vorhandene Resolve-Aktionen; das Thema der Karte einer Marke oeffnet die passende Karte.
+- [ ] Karte einer Marke (2026-10-23), hell, dunkel, Handy: Mit Maus zeigt eine
+      gefärbte Stelle nach kurzer Pause eine Karte mit Pfeil auf die strittigen
+      Worte. Widerspruch = Thema (mit ›) + zwei Behauptungen mit „vs“, darunter
+      Logos + Name oder Anzahl; geteilte Aussage = Satz der Antwort („In the
+      answer“) vs Zitat des Abweichlers; keine Versalien, kein „Click for …“.
+      Die Karte verdeckt weder ihren eigenen Satz noch das Eingabefeld, ihr Text
+      beginnt bündig unter dem ersten markierten Wort. Ein Klick lässt sie exakt
+      stehen; dann öffnet ein Logo die Antwort des Modells, das Thema die Karte
+      im Leser; Escape/Klick daneben schließt, beim Scrollen bleibt sie an ihren
+      Worten. Handy: Blatt von unten mit Griff und grauem ×, der Satz rückt
+      knapp darüber; Schließen gibt den Fokus ohne Vorschau zurück.
 - [ ] Quellen zeigen Titel/Domain; laengere Auszuege sind separat aufklappbar.
 - [ ] Kurze Fragen haben keinen nutzlosen Chevron; lange Fragen lassen sich ohne doppelten Text auf- und zuklappen.
 - [ ] Desktop 1440/1920/2560px: Chat in der Restflaeche zentriert, Leser waechst mit; linke Navigation ein- und ausklappen.

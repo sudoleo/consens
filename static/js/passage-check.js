@@ -176,9 +176,12 @@
     };
   }
 
+  // The checked text is the user's own: its side of a dispute is "your text".
+  const TEXT_SIDE = "In your text";
+
   function openDetails(card, anchor, claim) {
     if (!claim) return;
-    window.App.claimPopover?.open(claim, anchor, card._passageCheck.models, navigation(card));
+    window.App.claimPopover?.open(claim, anchor, card._passageCheck.models, navigation(card), { sideLabel: TEXT_SIDE });
   }
 
   function claimLabel(claim) {
@@ -266,7 +269,7 @@
     // With a mouse, resting on a painted sentence shows the same short
     // preview as a sentence of the answer; the click (bind) opens the card
     // and the preview goes (consensus-insights.js).
-    window.App.claimPopover?.attachPreview?.(span, claim, models);
+    window.App.claimPopover?.attachPreview?.(span, claim, models, { sideLabel: TEXT_SIDE });
     return span;
   }
 

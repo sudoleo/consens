@@ -39,7 +39,6 @@ body:not(.dark-mode) {
 .modal-content,
 .popup,
 .attach-menu,
-.claim-popover,
 #emailPopup,
 .attachment-viewer,
 .sidebar-quota {
@@ -50,7 +49,6 @@ body:not(.dark-mode) {
    unreadable, and there is no blur left to rescue it. */
 .modal-content,
 .attach-menu,
-.claim-popover,
 #emailPopup {
   background: var(--raise);
   backdrop-filter: none;
@@ -973,9 +971,6 @@ body.dark-mode {
   --composer-shadow: var(--field-lift);
   --composer-shadow-active: var(--field-lift-active);
   --composer-halo: var(--ground);
-}
-.claim-popover {
-  background: var(--chat-surface);
 }
 .chat-input-container,
 body:not(.dark-mode) .chat-input-container {
@@ -4268,34 +4263,6 @@ body:has(#postDemoLoginPrompt:not([hidden])) .chat-input-container {
   display: none;
 }
 
-/* ---- Hover preview on a marked passage -----------------------------------
-   The underline says "something is here" but not what. Resting on it shows
-   the short version; the click still opens the full card. Purely a reading
-   aid, so it never takes the pointer. */
-.insight-preview {
-  position: absolute;
-  z-index: var(--z-popover, 1400);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 11px 13px;
-  border-radius: var(--radius-md);
-  background: var(--chat-surface);
-  color: var(--ink);
-  box-shadow: 0 1px 2px rgba(28, 30, 33, 0.06), 0 14px 34px rgba(28, 30, 33, 0.12);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  pointer-events: none;
-}
-
-.dark-mode .insight-preview {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.34);
-}
-
-.insight-preview[hidden] {
-  display: none;
-}
-
 body:not(.claim-counts-visible) .consensus-answer-body .claim-badge {
   display: none;
 }
@@ -4305,46 +4272,6 @@ body:not(.claim-counts-visible) .consensus-answer-body .claim-badge {
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.insight-preview-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-weight: var(--font-weight-semibold);
-}
-
-.insight-preview-claim {
-  color: var(--ink-2);
-}
-
-.insight-preview-row {
-  display: grid;
-  grid-template-columns: minmax(0, 84px) minmax(0, 1fr);
-  gap: 9px;
-  color: var(--ink-2);
-  font-size: var(--font-size-micro);
-}
-
-.insight-preview-key {
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.insight-preview-quote {
-  margin: 2px 0 0;
-  padding-left: 9px;
-  border-left: 1px solid var(--line-soft);
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-style: italic;
-}
-
-.insight-preview-foot {
-  margin-top: 2px;
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4437,16 +4364,15 @@ body.dark-mode .feedback-modal h2 {
 }
 
 body :is(.attach-trigger, .model-picker-display, .auth-top-login,
-  .claim-jump-link, .diff-resolve-btn, .share-secondary-btn,
-  .memory-edit-cancel) {
+  .diff-resolve-btn, .share-secondary-btn, .memory-edit-cancel) {
   background: var(--app-surface);
 }
 
-body :is(.attach-trigger, .model-picker-display, .auth-top-login, .claim-jump-link, .diff-resolve-btn, .share-secondary-btn, .memory-edit-cancel):focus-visible:not(:disabled):not([aria-disabled="true"]) {
+body :is(.attach-trigger, .model-picker-display, .auth-top-login, .diff-resolve-btn, .share-secondary-btn, .memory-edit-cancel):focus-visible:not(:disabled):not([aria-disabled="true"]) {
   background: var(--raise-hover);
 }
 @media (hover: hover) and (pointer: fine) {
-  body :is(.attach-trigger, .model-picker-display, .auth-top-login, .claim-jump-link, .diff-resolve-btn, .share-secondary-btn, .memory-edit-cancel):hover:not(:disabled):not([aria-disabled="true"]) {
+  body :is(.attach-trigger, .model-picker-display, .auth-top-login, .diff-resolve-btn, .share-secondary-btn, .memory-edit-cancel):hover:not(:disabled):not([aria-disabled="true"]) {
     background: var(--raise-hover);
   }
 }

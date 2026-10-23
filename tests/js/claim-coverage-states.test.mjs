@@ -204,7 +204,7 @@ describe("claim coverage states", () => {
     ctx.body.querySelector(".claim-badge")
       .dispatchEvent(new ctx.window.MouseEvent("click", { bubbles: true }));
 
-    const note = ctx.document.querySelector("#claimPopover .claim-popover-note");
+    const note = ctx.document.querySelector("#claimPopover .cx-card-note");
     expect(note).not.toBe(null);
     expect(note.textContent).toContain("not proof");
   });

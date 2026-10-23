@@ -377,6 +377,13 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         marker = page.locator('#agentAnswerBody .cx-claim[role="button"]').first
         marker.focus()
         page.keyboard.press("Enter")
+        # Enter pins the mark's card (a sheet on a phone): the two sides with
+        # "vs"; its topic leads to the difference in the reader.
+        card = page.locator('#claimPopover')
+        expect(card).to_be_visible()
+        expect(card.locator('.cx-card-vs')).to_have_count(1)
+        card.locator('button.cx-card-title').click()
+        expect(card).to_be_hidden()
         expect(page.locator('#modelAnswerReader')).to_be_visible()
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_count(1)
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_attribute('open', '')
@@ -671,11 +678,12 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
         context.close()
 
 
-def test_phone_closing_the_answer_reader_brings_no_hover_card(browser, phase4_server):
-    """On a phone a tap on a disputed sentence opens the large reader; closing
-    it gives the focus back to the sentence. That focus is no request for the
-    hover card (Apple audit follow-up 2026-10-21): it used to pop up on its
-    own 130 ms later. The card exists only for a real mouse."""
+def test_phone_closing_the_sentence_sheet_brings_no_hover_card(browser, phase4_server):
+    """On a phone a tap on a disputed sentence opens its card as a sheet from
+    the bottom edge; closing it gives the focus back to the sentence. That
+    focus is no request for the hover card (Apple audit follow-up
+    2026-10-21): it used to pop up on its own 130 ms later. The hover card
+    exists only for a real mouse."""
     from app.services.chat_store import turn_detail
 
     context, page = _real_firebase_page(browser, phase4_server, has_touch=True)
@@ -711,10 +719,12 @@ def test_phone_closing_the_answer_reader_brings_no_hover_card(browser, phase4_se
         expect(mark).to_have_text(sentence)
         expect(mark).to_have_attribute('tabindex', '0')
         mark.tap()
-        reader = page.locator('#modelAnswerReader')
-        expect(reader).to_be_visible()
-        page.locator('#answerReaderClose').tap()
-        expect(reader).to_be_hidden()
+        sheet = page.locator('#claimPopover')
+        expect(sheet).to_be_visible()
+        expect(sheet).to_have_attribute('aria-modal', 'true')
+        expect(sheet.locator('.cx-card-claim')).to_have_text(['Five seats are included.', 'Only three seats are included.'])
+        sheet.locator('.claim-popover-close').tap()
+        expect(sheet).to_be_hidden()
         # The focus is back on the sentence, and no card follows it.
         page.wait_for_function("() => document.activeElement?.classList.contains('cx-claim')")
         page.wait_for_timeout(400)

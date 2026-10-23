@@ -53,6 +53,7 @@ function boot() {
         <div class="thread-history-panels"></div>
       </article>
       <div id="differencesCards"></div>
+      <div id="claimPopover" hidden></div><div id="claimSheetBackdrop" hidden></div>
     `
   });
   // jsdom kennt kein Scrollen; die Marke ruft es beim Oeffnen der Karte auf.
@@ -103,13 +104,21 @@ describe("renderStoredConsensusClaims", () => {
       .toContain("contradict");
   });
 
-  it("opens the difference card of its own turn, not the live footer", () => {
+  it("opens the difference card of its own turn from the mark's card, not the live footer", () => {
     const { tab, panel, cards } = appendStoredCards(ctx.window, ctx.document, DIFFERENCES_DATA);
     const liveCards = ctx.document.getElementById("differencesCards");
 
     ctx.body.querySelector(".cx-claim.is-major")
       .dispatchEvent(new ctx.window.MouseEvent("click", { bubbles: true }));
+    // The click pins the mark's card: the two sides, and its topic leads on.
+    const popover = ctx.document.getElementById("claimPopover");
+    expect(popover.hidden).toBe(false);
+    expect([...popover.querySelectorAll(".cx-card-claim")].map(el => el.textContent))
+      .toEqual(["29 euros", "more than 29 euros"]);
+    expect(panel.hidden).toBe(true);
+    popover.querySelector("button.cx-card-title").click();
 
+    expect(popover.hidden).toBe(true);
     expect(panel.hidden).toBe(false);
     expect(tab.getAttribute("aria-expanded")).toBe("true");
     expect(cards.querySelector(".diff-card").classList.contains("is-focused")).toBe(true);
@@ -120,7 +129,8 @@ describe("renderStoredConsensusClaims", () => {
 describe('real archived drawer row', () => {
   it('keeps all drawers in one row, toggles only its own panel and allocates unique IDs', () => {
     const { window, document } = loadScripts(['static/js/user-settings.js', 'static/js/consensus-anchor.js', 'static/js/consensus-insights.js', 'static/js/consensus-run.js'], {
-      body: '<div id="threadHistory" hidden></div><div id="differencesCards"></div>',
+      body: '<div id="threadHistory" hidden></div><div id="differencesCards"></div>'
+        + '<div id="claimPopover" hidden></div><div id="claimSheetBackdrop" hidden></div>',
       before(window) { window.App = {}; window.Element.prototype.scrollIntoView = () => {}; },
     });
     const data = { question: 'What does the tower cost?', consensus: ANSWER, differences_data: DIFFERENCES_DATA,
@@ -147,6 +157,7 @@ describe('real archived drawer row', () => {
       }
     }
     turns[1].querySelector('.cx-claim.is-major').click();
+    document.querySelector('#claimPopover button.cx-card-title').click();
     expect(turns[1].querySelector('.diff-card.is-focused')).not.toBeNull();
     expect(turns[0].querySelector('.diff-card.is-focused')).toBeNull();
     expect(document.getElementById('differencesCards').children).toHaveLength(0);
@@ -403,6 +414,7 @@ describe("difference cards in the detail panel", () => {
     // The critical finding is the third entry of the data but the first card.
     ctx.body.querySelector(".cx-claim.is-major")
       .dispatchEvent(new ctx.window.MouseEvent("click", { bubbles: true }));
+    ctx.document.querySelector("#claimPopover button.cx-card-title").click();
     const focused = cards.querySelector(".diff-card.is-focused");
     expect(focused.dataset.differenceIndex).toBe("2");
     expect(focused).toBe(cards.querySelector(".diff-card"));

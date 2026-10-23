@@ -281,7 +281,7 @@
           };
 
           function isMobileViewport() {
-            return window.matchMedia("(max-width: 768px)").matches;
+            return !!window.matchMedia?.("(max-width: 768px)").matches;
           }
 
           // --- Die vier Anzeigezustaende einer belegten Aussage --------------
@@ -580,10 +580,13 @@
             return el;
           }
 
+          let pinnedCard = null;
+
           function closeClaimPopover(options) {
             const restoreFocus = options?.restoreFocus !== false;
             const pop = $("claimPopover");
             const backdrop = $("claimSheetBackdrop");
+            pinnedCard = null;
             if (pop) {
               if (!pop.hidden) window.App?.popover?.closed(pop);
               pop.hidden = true;
@@ -598,42 +601,9 @@
             document.removeEventListener("click", onDocClick, true);
             document.removeEventListener("keydown", onKeyDown, true);
             if (restoreFocus && claimPopoverTrigger?.isConnected) {
-              claimPopoverTrigger.focus();
+              claimPopoverTrigger.focus({ preventScroll: true });
             }
             claimPopoverTrigger = null;
-          }
-
-          function buildModelRow(model, quote, status, answerNavigation) {
-            const row = document.createElement("div");
-            row.className = "claim-model-row is-" + status;
-
-            const head = document.createElement("div");
-            head.className = "claim-model-head";
-            const name = document.createElement("span");
-            name.className = "claim-model-name";
-            name.textContent = modelDisplayName(model);
-            head.appendChild(name);
-            const navigation = answerNavigation || LIVE_ANSWER_NAVIGATION;
-            if (navigation.canOpen?.(model)) {
-              const jump = document.createElement("button");
-              jump.type = "button";
-              jump.className = "claim-jump-link";
-              jump.textContent = "View answer";
-              jump.addEventListener("click", function () {
-                closeClaimPopover({ restoreFocus: false });
-                navigation.open?.(model, quote);
-              });
-              head.appendChild(jump);
-            }
-            row.appendChild(head);
-
-            if (quote) {
-              const q = document.createElement("blockquote");
-              q.className = "claim-model-quote";
-              renderInlineMarkdown(q, quote);
-              row.appendChild(q);
-            }
-            return row;
           }
 
           function modelsNotAddressingClaim(claim, modelsCompared) {
@@ -644,90 +614,42 @@
             return modelsCompared.filter(function (model) { return !addressed.has(model); });
           }
 
-          function openClaimPopover(claim, anchorEl, modelsCompared, answerNavigation) {
+          // Die festgehaltene Karte einer Marke (Klick, Enter). Am Rechner ist
+          // es dieselbe Karte wie die Vorschau an derselben Stelle: stand die
+          // Vorschau schon da, bleibt sie einfach stehen (is-instant), nur
+          // werden ihre Logos und ihr Thema jetzt bedienbar. Auf dem Handy
+          // ein Blatt vom unteren Rand, und der Satz rueckt knapp darueber.
+          function openCard(anchorEl, spans, buildCard, kind) {
             const pop = ensureOverlayOnBody($("claimPopover"));
             const backdrop = ensureOverlayOnBody($("claimSheetBackdrop"));
             if (!pop) return;
+            const previewed = !!(spans && hoverCard && !hoverCard.hidden
+              && hoverGroup && hoverGroup.spans[0] === spans[0]);
             closeClaimPopover({ restoreFocus: false });
-            pop.innerHTML = "";
-            pop.style.left = pop.style.top = pop.style.width = "";
+            hideHoverPreview({ instant: true });
+            pop.replaceChildren();
+            pop.style.left = pop.style.top = "";
             // One of the app's popovers (App.popover): any other menu closes.
             window.App?.popover?.register(pop, { close: () => closeClaimPopover({ restoreFocus: false }) });
             claimPopoverTrigger = anchorEl || document.activeElement;
-            const coverage = claimCoverage(claim);
 
-            const header = document.createElement("div");
-            header.className = "claim-popover-header";
-            const title = document.createElement("span");
-            title.className = "claim-popover-title";
-            title.id = "claimPopoverTitle";
-            appendClaimSupport(title, claim);
             const close = document.createElement("button");
             close.type = "button";
             close.className = "claim-popover-close close-button";
             close.setAttribute("aria-label", "Close");
             close.innerHTML = window.App?.closeIcon?.() || "";
             close.addEventListener("click", closeClaimPopover);
-            header.append(title, close);
-            pop.appendChild(header);
-
-            const claimText = document.createElement("div");
-            claimText.className = "claim-popover-claim";
-            renderInlineMarkdown(claimText, claim.anchor, "“", "”");
-            pop.appendChild(claimText);
-
-            if (claim.agree.length) {
-              const section = document.createElement("div");
-              section.className = "claim-popover-section";
-              const label = document.createElement("div");
-              label.className = "claim-section-label is-agree";
-              label.textContent = "Agree";
-              section.appendChild(label);
-              claim.agree.forEach(model => section.appendChild(
-                buildModelRow(model, "", "agree", answerNavigation)
-              ));
-              pop.appendChild(section);
+            const card = buildCard({ interactive: true });
+            pop.append(close, card);
+            const title = card.querySelector(".cx-card-title, .cx-card-heading");
+            if (title) {
+              title.id = "claimPopoverTitle";
+              pop.setAttribute("aria-labelledby", title.id);
             }
-            if (claim.dissent.length) {
-              const section = document.createElement("div");
-              section.className = "claim-popover-section";
-              const label = document.createElement("div");
-              label.className = "claim-section-label is-dissent";
-              label.textContent = "Deviate";
-              section.appendChild(label);
-              claim.dissent.forEach(item => section.appendChild(
-                buildModelRow(item.model, item.quote, "dissent", answerNavigation)
-              ));
-              pop.appendChild(section);
-            }
-            const notAddressed = modelsNotAddressingClaim(claim, modelsCompared);
-            if (notAddressed.length) {
-              const section = document.createElement("div");
-              section.className = "claim-popover-section";
-              const label = document.createElement("div");
-              label.className = "claim-section-label";
-              label.textContent = "Not addressed";
-              section.appendChild(label);
-              notAddressed.forEach(model => section.appendChild(
-                buildModelRow(model, "", "neutral", answerNavigation)
-              ));
-              pop.appendChild(section);
-            }
-
-            // Der Satz, ohne den die ganze Quote missverstanden wird. Er steht
-            // seit 2026-08-31 in JEDER Karte, weil inzwischen fast jede Aussage
-            // eine traegt: "6/6" ist eine Uebereinstimmung zwischen Modellen,
-            // kein Wahrheitsbeweis.
-            const disclaimer = document.createElement("p");
-            disclaimer.className = "claim-popover-note";
-            disclaimer.textContent = coverage === "thin"
-              ? "Too little was said about this to compare. That is not evidence against it — it just was not checked."
-              : "Models agreeing is not proof. They can share the same source or the same blind spot.";
-            pop.appendChild(disclaimer);
 
             const asModal = isMobileViewport();
             pop.classList.toggle("is-modal", asModal);
-            pop.setAttribute("aria-labelledby", title.id);
+            pop.classList.toggle("is-instant", previewed && !asModal);
             window.App?.popover?.opened(pop, { trigger: asModal ? null : anchorEl });
             pop.hidden = false;
             if (asModal) {
@@ -738,28 +660,68 @@
                 backdrop.hidden = false;
                 backdrop.addEventListener("click", closeClaimPopover, { once: true });
               }
-              requestAnimationFrame(function () { close.focus(); });
+              settleAboveSheet(pop, spans || (anchorEl ? [anchorEl] : []));
+              requestAnimationFrame(function () { close.focus({ preventScroll: true }); });
             } else if (anchorEl) {
-              // Direkt unter dem Badge, horizontal am Badge zentriert
-              const rect = anchorEl.getBoundingClientRect();
-              const width = Math.min(340, window.innerWidth - 24);
-              pop.style.width = width + "px";
-              const minLeft = window.scrollX + 12;
-              const maxLeft = window.scrollX + window.innerWidth - width - 12;
-              const centered = rect.left + rect.width / 2 - width / 2 + window.scrollX;
-              pop.style.left = Math.max(minLeft, Math.min(centered, maxLeft)) + "px";
-              pop.style.top = (rect.bottom + window.scrollY + 8) + "px";
-              // Near the bottom of the screen (a long checked message, the
-              // composer below) the card opens above its sentence instead.
-              const height = pop.offsetHeight;
-              if (rect.bottom + 8 + height > window.innerHeight && rect.top - 8 - height >= 0) {
-                pop.style.top = (rect.top + window.scrollY - 8 - height) + "px";
-              }
+              // Wie die Vorschau: der Pfeil zeigt auf die strittigen Worte,
+              // auch wenn die sichtbare Quote der Ausloeser war.
+              pinnedCard = { anchor: spans ? cardAnchor(spans) : anchorEl, around: spans || [anchorEl] };
+              placeCard(pop, pinnedCard.anchor, pinnedCard.around);
             }
+            if (previewed) {
+              requestAnimationFrame(function () {
+                requestAnimationFrame(function () { pop.classList.remove("is-instant"); });
+              });
+            }
+            window.trackUmamiEvent?.("app_consensus_marker_opened", { kind: kind, previewed: previewed });
             setTimeout(function () {
               document.addEventListener("click", onDocClick, true);
               document.addEventListener("keydown", onKeyDown, true);
             }, 0);
+          }
+
+          // Auf dem Handy rueckt der Satz knapp ueber das Blatt, statt unter
+          // ihm zu verschwinden; sein Anfang bleibt unter der Kopfzeile sichtbar.
+          function settleAboveSheet(pop, around) {
+            const lines = visibleRects(around);
+            if (!lines.length) return;
+            const sheetTop = window.innerHeight - pop.offsetHeight;
+            const top = Math.min.apply(null, lines.map(function (r) { return r.top; }));
+            const bottom = Math.max.apply(null, lines.map(function (r) { return r.bottom; }));
+            const delta = Math.min(bottom - (sheetTop - 16), top - 72);
+            if (!(delta > 0)) return;
+            let scroller = around[0].parentElement;
+            while (scroller && scroller !== document.body) {
+              const overflow = getComputedStyle(scroller).overflowY;
+              if (/auto|scroll|overlay/.test(overflow) && scroller.scrollHeight > scroller.clientHeight) break;
+              scroller = scroller.parentElement;
+            }
+            if (!scroller || scroller === document.body) scroller = document.scrollingElement || document.documentElement;
+            scroller.scrollBy({ top: delta, behavior: window.App.scrollBehavior?.() || "auto" });
+          }
+
+          // The same card for a checked sentence of the user's own message
+          // (passage-check.js); options.spans names the marked sentence when
+          // the anchor is a visible count, options.sideLabel the side the
+          // text takes ("In your text").
+          function openClaimPopover(claim, anchorEl, modelsCompared, answerNavigation, options = {}) {
+            const spans = options.spans || anchorEl?.cxSpans || anchorEl?.cxGroup?.spans || null;
+            openCard(anchorEl, spans, function (ctx) {
+              return claimCard(claim, modelsCompared, Object.assign(ctx, {
+                spans: spans,
+                navigation: answerNavigation || LIVE_ANSWER_NAVIGATION,
+                sideLabel: options.sideLabel
+              }));
+            }, "claim");
+          }
+
+          function openDifferencePopover(diff, spans, answerNavigation, openInDrawer) {
+            openCard(spans[0], spans, function (ctx) {
+              return differenceCard(diff, Object.assign(ctx, {
+                navigation: answerNavigation || LIVE_ANSWER_NAVIGATION,
+                openInDrawer: openInDrawer
+              }));
+            }, "difference");
           }
 
           // --- Sprung zur Originalantwort mit Zitat-Highlight ---------------
@@ -914,10 +876,6 @@
               card.scrollIntoView({ behavior: window.App.scrollBehavior?.() || "auto", block: "center" });
               card.classList.add("is-focused");
               setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
-              window.trackUmamiEvent?.("app_consensus_marker_opened", {
-                kind: "difference",
-                stored_turn: true
-              });
             };
           }
 
@@ -1216,15 +1174,20 @@
             return marked.find(function (r) { return start < r.end && end > r.start; }) || null;
           }
 
-          function diffMarkerLabel(diff) {
+          function differenceKind(diff) {
             const isMajor = diff.type === "contradiction" && diff.severity === "major";
-            return (diff.type === "contradiction"
+            return diff.type === "contradiction"
               ? (isMajor ? "The models contradict each other here" : "The models differ on a detail here")
-              : "The models set a different focus here") + " — open details";
+              : "The models set a different focus here";
+          }
+
+          function diffMarkerLabel(diff) {
+            return differenceKind(diff) + " — open details";
           }
 
           // Öffnet die zugehörige Karte im Differences-Überblick und hebt sie
-          // kurz hervor. Das <details> darüber (Phase 4) wird mit aufgeklappt.
+          // kurz hervor (vom Thema der festgehaltenen Karte aus). Das
+          // <details> darüber (Phase 4) wird mit aufgeklappt.
           function focusDifferenceCard(index) {
             if (window.App?.answerReader?.openPanel('differences', null, null, index)) return;
             const card = differenceCardAt($("differencesCards"), index);
@@ -1235,7 +1198,6 @@
             card.scrollIntoView({ behavior: window.App.scrollBehavior?.() || "auto", block: "center" });
             card.classList.add("is-focused");
             setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
-            window.trackUmamiEvent?.("app_consensus_marker_opened", { kind: "difference" });
           }
 
           // Stufen der Satzmarkierung, schwach nach stark. Treffen zwei Marken
@@ -1396,15 +1358,18 @@
           }
 
           // --- Vorschau beim Hovern -------------------------------------------
-          // Die Unterstreichung sagt "hier ist etwas", aber nicht was. Wer mit
-          // der Maus darauf verweilt, bekommt deshalb sofort die Kurzfassung —
-          // wer klickt, weiterhin die ganze Karte. Reine Lesehilfe: die Karte
-          // faengt keine Maus (pointer-events: none), damit sie den Klick auf
-          // die Passage nicht abfaengt.
+          // Die Marke sagt "hier ist etwas", aber nicht was. Wer mit der Maus
+          // darauf verweilt, bekommt die Karte der Marke; wer klickt, haelt
+          // dieselbe Karte fest (openCard). Die Vorschau faengt keine Maus
+          // (pointer-events: none), damit sie den Klick auf die Passage nicht
+          // abfaengt. Wer von einer Marke zur naechsten zieht, wartet nicht
+          // ein zweites Mal (HOVER_WARM_MS), wie bei den Tooltips (tooltip.js).
           const HOVER_DELAY_MS = 130;
+          const HOVER_WARM_MS = 400;
           let hoverCard = null;
           let hoverTimer = null;
           let hoverGroup = null;
+          let hoverHiddenAt = 0;
 
           function ensureHoverCard() {
             if (hoverCard && hoverCard.isConnected) return hoverCard;
@@ -1416,14 +1381,18 @@
             return hoverCard;
           }
 
-          function hideHoverPreview() {
+          // Der Inhalt bleibt, bis die naechste Vorschau kommt: die Karte
+          // blendet aus, wie sie war. Haelt ein Klick sie fest, geht sie ohne
+          // Ausblenden (instant), denn an ihrer Stelle steht im selben Moment
+          // die festgehaltene Karte.
+          function hideHoverPreview(options) {
             window.clearTimeout(hoverTimer);
             hoverTimer = null;
             hoverGroup = null;
-            if (hoverCard) {
-              hoverCard.hidden = true;
-              hoverCard.innerHTML = "";
-            }
+            if (!hoverCard || hoverCard.hidden) return;
+            hoverCard.classList.toggle("is-instant", options?.instant === true);
+            hoverCard.hidden = true;
+            hoverHiddenAt = Date.now();
           }
 
           // Marks of `root` are redrawn or taken off: a preview of one of them
@@ -1442,22 +1411,87 @@
             });
           }
 
-          function placeHoverPreview(card, spans) {
-            const first = spans[0].getBoundingClientRect();
-            const last = spans[spans.length - 1].getBoundingClientRect();
-            const width = Math.min(360, window.innerWidth - 24);
-            card.style.width = width + "px";
+          function visibleRects(elements) {
+            const rects = [];
+            elements.forEach(function (el) {
+              Array.from(el?.getClientRects?.() || []).forEach(function (rect) {
+                if (rect.width > 0 || rect.height > 0) rects.push(rect);
+              });
+            });
+            return rects;
+          }
 
-            const centered = first.left + (last.right - first.left) / 2 - width / 2;
-            const left = Math.max(12, Math.min(centered, window.innerWidth - width - 12));
-            card.style.left = (left + window.scrollX) + "px";
+          // Worauf der Pfeil zeigt: die strittigen Worte (.cx-spot), sonst der
+          // Satz.
+          function cardAnchor(spans) {
+            for (const span of spans) {
+              const spot = span.querySelector?.(".cx-spot");
+              if (spot && spot.getClientRects().length) return spot;
+            }
+            return spans.find(function (span) { return span.getClientRects().length; }) || spans[0];
+          }
 
-            // Unter die Passage, solange darunter Platz ist — sonst darueber.
+          // Unten endet der Platz am Eingabefeld (oder am Hinweis, der es in
+          // der Demo ersetzt), nicht am Fensterrand: dort lag die Karte sonst
+          // halb darunter.
+          const CARD_GAP = 12;
+          const CARD_EDGE = 12;
+
+          function cardFloor(below) {
+            let floor = window.innerHeight - CARD_EDGE;
+            document.querySelectorAll(".chat-input-container, #postDemoLoginPrompt").forEach(function (el) {
+              if (!el.getClientRects().length) return;
+              const top = el.getBoundingClientRect().top;
+              if (top >= below && top < window.innerHeight) floor = Math.min(floor, top - CARD_EDGE);
+            });
+            return floor;
+          }
+
+          // Die Karte verdeckt nie den Satz, um den es geht: sie steht ueber
+          // seiner ersten oder unter seiner letzten Zeile, auf der Seite der
+          // strittigen Worte, und ihr Pfeil zeigt auf diese Worte. Ihr Text
+          // beginnt buendig unter dem ersten markierten Wort, nie links vom
+          // Textblock. Dieselbe Rechnung fuer Vorschau und festgehaltene Karte,
+          // damit ein Klick sie an Ort und Stelle laesst.
+          function placeCard(card, anchor, around) {
+            const marks = visibleRects([anchor]);
+            const lines = visibleRects(around && around.length ? around : [anchor]);
+            if (!marks.length || !lines.length) return;
+            card.style.left = "0px";
+            card.style.top = "0px";
+            const width = card.offsetWidth;
             const height = card.offsetHeight;
-            const below = last.bottom + 8;
-            const fitsBelow = below + height <= window.innerHeight - 12;
-            const top = fitsBelow ? below : Math.max(12, first.top - height - 8);
-            card.style.top = (top + window.scrollY) + "px";
+            const top = Math.min.apply(null, lines.map(function (r) { return r.top; }));
+            const bottom = Math.max.apply(null, lines.map(function (r) { return r.bottom; }));
+            const floor = cardFloor(bottom);
+            const fitsBelow = bottom + CARD_GAP + height <= floor;
+            const fitsAbove = top - CARD_GAP - height >= CARD_EDGE;
+            const first = marks[0];
+            const last = marks[marks.length - 1];
+            // Steht die Stelle in der ersten Zeile eines laengeren Satzes,
+            // liegt der kuerzere Weg ueber ihm.
+            const nearTop = first.top - top < 4 && bottom - last.bottom > 4;
+            let below = nearTop ? !fitsAbove && fitsBelow : fitsBelow || !fitsAbove;
+            if (!fitsAbove && !fitsBelow) below = floor - bottom >= top;
+            let y = below ? bottom + CARD_GAP : top - CARD_GAP - height;
+            if (!fitsAbove && !fitsBelow) y = Math.max(CARD_EDGE, Math.min(y, floor - height));
+
+            const inset = parseFloat(getComputedStyle(card).paddingLeft) || 0;
+            const block = anchor.closest("p, li, td, th, dd, dt, blockquote, h1, h2, h3, h4, h5, h6");
+            const blockLeft = block ? block.getBoundingClientRect().left : first.left;
+            const maxLeft = Math.max(CARD_EDGE, window.innerWidth - width - CARD_EDGE);
+            const minLeft = Math.min(Math.max(CARD_EDGE, blockLeft - inset), maxLeft);
+            const left = Math.max(minLeft, Math.min(first.left - inset, maxLeft));
+            const target = below ? last : first;
+            const arrow = Math.max(20, Math.min(target.left + Math.min(target.width / 2, 28) - left, width - 20));
+
+            card.dataset.placement = below ? "below" : "above";
+            card.style.setProperty("--cx-arrow-x", arrow + "px");
+            card.style.setProperty("--popover-origin-x", arrow + "px");
+            card.style.setProperty("--popover-origin-y", below ? "0%" : "100%");
+            card.style.setProperty("--popover-shift", below ? "-4px" : "4px");
+            card.style.left = (left + window.scrollX) + "px";
+            card.style.top = (y + window.scrollY) + "px";
           }
 
           function showHoverPreview(group) {
@@ -1472,54 +1506,202 @@
               : group.controls.find(function (c) { return c.preview && !c.suppressed; });
             if (!build || !build.preview) return;
             const card = ensureHoverCard();
-            card.innerHTML = "";
-            card.appendChild(build.preview());
+            card.classList.remove("is-instant");
+            card.replaceChildren(build.preview());
             card.hidden = false;
-            placeHoverPreview(card, spans);
+            placeCard(card, cardAnchor(spans), spans);
           }
 
           function scheduleHoverPreview(group) {
             window.clearTimeout(hoverTimer);
             hoverGroup = group;
+            const warm = !!hoverCard && (!hoverCard.hidden || Date.now() - hoverHiddenAt < HOVER_WARM_MS);
             hoverTimer = window.setTimeout(function () {
               if (group.hover) showHoverPreview(group);
-            }, HOVER_DELAY_MS);
+            }, warm ? 0 : HOVER_DELAY_MS);
+          }
+
+          // Am Rechner bleibt die festgehaltene Karte an ihren Worten, wenn
+          // der Verlauf scrollt.
+          function refreshPinnedCard() {
+            const pop = $("claimPopover");
+            if (!pinnedCard || !pop || pop.hidden || pop.classList.contains("is-modal")) return;
+            if (!pinnedCard.anchor.isConnected) {
+              closeClaimPopover({ restoreFocus: false });
+              return;
+            }
+            placeCard(pop, pinnedCard.anchor, pinnedCard.around);
           }
 
           // Scrolling can arrive just AFTER mouseenter and cancel its timer.
-          // Hide stale geometry immediately, then resume the preview if the
-          // pointer/focus is still on this passage when the layout settles.
+          // Once the layout settles, a card whose passage is still under the
+          // pointer (or the keyboard focus) moves along with its words; one
+          // whose passage left goes, and a pending one is resumed. Hiding and
+          // showing it again on every scroll event made it flicker.
           // Only with a real pointer: a tap leaves :hover stuck on touch.
           function refreshHoverPreview() {
+            refreshPinnedCard();
             const group = hoverGroup;
-            hideHoverPreview();
-            if (!group || !canHoverPassages()) return;
+            if (!group || !canHoverPassages()) {
+              hideHoverPreview();
+              return;
+            }
             requestAnimationFrame(function () {
-              if (hoverGroup && hoverGroup !== group) return;
+              if (hoverGroup !== group) return;
               const targets = [...group.spans, ...group.controls.map(control => control.el)];
-              if (targets.some(el => el.isConnected && el.matches(':hover, :focus-visible')) && passageIsVisible(group)) {
-                group.hover = true;
-                scheduleHoverPreview(group);
+              const held = targets.some(el => el.isConnected && el.matches(':hover, :focus-visible'));
+              if (!held || !passageIsVisible(group)) {
+                hideHoverPreview();
+                return;
               }
+              group.hover = true;
+              const spans = placedSpans(group);
+              if (hoverCard && !hoverCard.hidden && spans.length) placeCard(hoverCard, cardAnchor(spans), spans);
+              else scheduleHoverPreview(group);
             });
           }
           window.addEventListener("scroll", refreshHoverPreview, true);
           window.addEventListener("resize", refreshHoverPreview);
-          document.addEventListener("click", hideHoverPreview, true);
+          // Ein Klick nimmt die Vorschau weg, ausser er gilt ihrer Marke
+          // selbst: dann haelt openCard sie an Ort und Stelle fest. Ein Link
+          // oder Quellenchip im Satz nimmt sie mit.
+          document.addEventListener("click", function (event) {
+            const group = hoverGroup;
+            const target = event.target;
+            const own = group && [...group.spans, ...group.controls.map(control => control.el)]
+              .some(el => el.contains(target));
+            if (!own || target.closest?.("a, button:not(.claim-badge)")) hideHoverPreview();
+          }, true);
 
-          function previewHead(text, sevClass) {
-            const head = document.createElement("div");
-            head.className = "insight-preview-head";
-            if (sevClass) {
-              const dot = document.createElement("span");
-              dot.className = "sev-dot " + sevClass;
-              dot.setAttribute("aria-hidden", "true");
-              head.appendChild(dot);
+          // --- Die Karte einer Marke ------------------------------------------
+          // Seit 2026-10-23 (Max: "das muss perfekt sein") spricht jede Marke
+          // dieselbe Sprache wie die Differences-Schublade: Behauptungen, die
+          // sich gegenueberstehen, "vs" dazwischen, und unter jeder, wer sie
+          // vertritt (Logos, ein oder zwei Namen, sonst die Anzahl). Keine
+          // Quote "5/6 stuetzen das" an einem Streit, keine Namenslisten,
+          // keine Etiketten, kein "Klicken fuer ...". Vorschau, festgehaltene
+          // Karte und das Blatt auf dem Handy bauen denselben Inhalt; erst
+          // festgehalten (ctx.interactive) werden die Logos zu Wegen in die
+          // Antwort ihres Modells und das Thema eines Unterschieds zum Weg in
+          // die Schublade (Resolve, Zitate, alle Unterschiede).
+
+          function cardNode(tag, className, text) {
+            const node = document.createElement(tag);
+            node.className = className;
+            if (text != null) node.textContent = text;
+            return node;
+          }
+
+          // Ein Modell, wie Claims es nennen: als Name, in alten Daten als {model}.
+          function cardModel(model) {
+            return typeof model === "string" ? model : String(model?.model || model?.provider || "");
+          }
+
+          function cardNames(models) {
+            return models.map(function (model) { return modelDisplayName(cardModel(model)); }).join(", ");
+          }
+
+          // Wer eine Seite vertritt: ein oder zwei Namen, ab drei die Anzahl
+          // (die Namen tragen dann die Logos).
+          function cardWho(models) {
+            if (models.length > 2) return cardNode("span", "cx-card-who", models.length + " models");
+            const names = cardNode("span", "cx-card-who", cardNames(models));
+            names.setAttribute("data-i18n-skip", "");
+            return names;
+          }
+
+          function cardLogos(models, ctx, quote) {
+            const stack = cardNode("span", "cx-card-logos");
+            models.map(cardModel).forEach(function (model) {
+              const name = modelDisplayName(model);
+              const opens = !!(ctx.interactive && ctx.navigation?.canOpen?.(model));
+              const logo = cardNode(opens ? "button" : "span", "cx-card-logo");
+              logo.appendChild(window.App.createModelMark?.(model)
+                || cardNode("span", "model-mark-fallback", String(name).slice(0, 1).toUpperCase()));
+              if (opens) {
+                logo.type = "button";
+                logo.title = "Open the full answer from " + name;
+                logo.setAttribute("aria-label", "Open the full answer from " + name);
+                logo.addEventListener("click", function () {
+                  // The focus goes back to the mark first: the reader that
+                  // opens hands it back there, not to a button of a closed card.
+                  closeClaimPopover();
+                  ctx.navigation.open(model, quote);
+                });
+              } else {
+                logo.setAttribute("role", "img");
+                logo.setAttribute("aria-label", name);
+              }
+              stack.appendChild(logo);
+            });
+            return stack;
+          }
+
+          // Eine Seite: die Behauptung als Satz, darunter wer sie vertritt.
+          // `content.plain`: sichtbarer Text der Antwort (die strittigen
+          // Worte), sonst Markdown aus Anker oder Zitat.
+          function cardSide(content, models, ctx, options) {
+            const side = cardNode("div", "cx-card-side");
+            if (content && content.text) {
+              const claim = cardNode("div", "cx-card-claim");
+              if (content.plain) {
+                claim.textContent = content.text;
+                claim.setAttribute("data-i18n-skip", "");
+              } else {
+                renderInlineMarkdown(claim, content.text);
+              }
+              side.appendChild(claim);
             }
-            const label = document.createElement("span");
-            label.textContent = text;
-            head.appendChild(label);
-            return head;
+            const meta = cardNode("div", "cx-card-meta");
+            if (models.length) meta.append(cardLogos(models, ctx, options.quote || ""), cardWho(models));
+            if (options.label) meta.appendChild(cardNode("span", "cx-card-tag", options.label));
+            if (meta.firstChild) side.appendChild(meta);
+            return side;
+          }
+
+          function cardVersus() {
+            return cardNode("div", "cx-card-vs", "vs");
+          }
+
+          function cardTitle(text, ctx) {
+            const opens = !!(ctx.interactive && ctx.openInDrawer);
+            const title = cardNode(opens ? "button" : "div", "cx-card-title" + (ctx.openInDrawer ? " has-more" : ""));
+            const label = cardNode("span", "cx-card-title-text", text);
+            label.setAttribute("data-i18n-skip", "");
+            title.appendChild(label);
+            if (ctx.openInDrawer) {
+              const chevron = cardNode("span", "cx-card-chevron");
+              // The disclosure chevron of the resolve round, turned to point on (CSS).
+              chevron.innerHTML = RESOLVE_CHEVRON;
+              title.appendChild(chevron);
+            }
+            if (opens) {
+              title.type = "button";
+              title.title = "See all differences";
+              title.addEventListener("click", function () {
+                closeClaimPopover();
+                ctx.openInDrawer();
+              });
+            }
+            return title;
+          }
+
+          // Ohne sichtbaren Titel: der Name der Karte fuer Screenreader.
+          function cardHeading(text) {
+            return cardNode("span", "visually-hidden cx-card-heading", text);
+          }
+
+          function cardNote(text) {
+            return cardNode("p", "cx-card-note", text);
+          }
+
+          // Schweigen bleibt sichtbar, aber leise: weder Zustimmung noch Widerspruch.
+          function cardAside(models) {
+            const aside = cardNode("div", "cx-card-aside");
+            const names = cardNode("span", "cx-card-aside-names", cardNames(models));
+            names.setAttribute("data-i18n-skip", "");
+            aside.append(cardNode("span", "cx-card-aside-label", "Not addressed"), names);
+            return aside;
           }
 
           function appendClaimSupport(target, claim) {
@@ -1533,99 +1715,106 @@
             target.append(ratio, document.createTextNode(" models that addressed this support it"));
           }
 
-          function previewRow(label, text) {
-            const row = document.createElement("div");
-            row.className = "insight-preview-row";
-            const key = document.createElement("span");
-            key.className = "insight-preview-key";
-            key.textContent = label;
-            const value = document.createElement("span");
-            value.className = "insight-preview-value";
-            value.textContent = text;
-            row.append(key, value);
-            return row;
+          // Die Seite der Antwort: die strittigen Worte, wenn der Satz genau
+          // eine Stelle traegt, sonst die ganze Aussage.
+          function claimAnswerSide(claim, spans) {
+            const spots = [];
+            (spans || []).forEach(function (span) {
+              span.querySelectorAll?.(".cx-spot").forEach(function (spot) {
+                const text = spot.textContent.trim();
+                if (text && !spots.includes(text)) spots.push(text);
+              });
+            });
+            return spots.length === 1 ? { text: spots[0], plain: true } : { text: claim.anchor };
           }
 
-          function buildClaimPreview(claim, modelsCompared) {
-            const frag = document.createDocumentFragment();
-            const head = previewHead("", claim.dissent.length ? "is-warn" : null);
-            appendClaimSupport(head.lastElementChild, claim);
-            frag.appendChild(head);
-            if (claim.agree.length) {
-              frag.appendChild(previewRow(
-                "Agree", claim.agree.map(modelDisplayName).join(", ")));
-            }
+          // Die Gegenseiten: gleiche Zitate sind eine Seite, jedes Modell
+          // steht nur einmal.
+          function dissentSides(claim) {
+            const sides = [];
+            claim.dissent.forEach(function (item) {
+              const quote = item && typeof item.quote === "string" ? item.quote.trim() : "";
+              const key = claimKey(quote);
+              const same = sides.find(function (side) { return side.key === key; });
+              if (same) {
+                if (!same.models.includes(item.model)) same.models.push(item.model);
+              } else {
+                sides.push({ key: key, quote: quote, models: [item.model] });
+              }
+            });
+            return sides;
+          }
+
+          // Eine gepruefte Aussage. Bestritten: die Seite der Antwort gegen die
+          // Zitate der Abweichler. Unbestritten oder duenn belegt: wie viele
+          // sie stuetzen, mit dem Satz, ohne den die Quote missverstanden wird.
+          function claimCard(claim, modelsCompared, ctx) {
+            const card = cardNode("div", "cx-card");
+            const total = claim.agree.length + claim.dissent.length;
             if (claim.dissent.length) {
-              frag.appendChild(previewRow(
-                "Deviate", claim.dissent.map(function (d) { return modelDisplayName(d.model); }).join(", ")));
-              const quote = claim.dissent.find(function (d) { return d.quote; });
-              if (quote) {
-                const q = document.createElement("blockquote");
-                q.className = "insight-preview-quote";
-                renderInlineMarkdown(q, quote.quote);
-                frag.appendChild(q);
+              card.appendChild(cardHeading(claim.agree.length + " of " + total + " models support this"));
+              card.appendChild(cardSide(claimAnswerSide(claim, ctx.spans), claim.agree, ctx,
+                { label: ctx.sideLabel || "In the answer" }));
+              dissentSides(claim).forEach(function (side) {
+                card.append(cardVersus(), cardSide(side.quote ? { text: side.quote } : null, side.models, ctx,
+                  { quote: side.quote }));
+              });
+            } else {
+              const title = cardNode("div", "cx-card-title");
+              appendClaimSupport(title, claim);
+              card.appendChild(title);
+              if (claim.agree.length) {
+                const meta = cardNode("div", "cx-card-meta");
+                meta.append(cardLogos(claim.agree, ctx, ""), cardWho(claim.agree));
+                card.appendChild(meta);
               }
             }
             const notAddressed = modelsNotAddressingClaim(claim, modelsCompared);
-            if (notAddressed.length) {
-              frag.appendChild(previewRow(
-                "Not addressed", notAddressed.map(modelDisplayName).join(", ")));
+            if (notAddressed.length) card.appendChild(cardAside(notAddressed));
+            if (!claim.dissent.length) {
+              // "6/6" ist eine Uebereinstimmung zwischen Modellen, kein
+              // Wahrheitsbeweis; duenn belegt heisst nur: nicht geprueft.
+              card.appendChild(cardNote(claimCoverage(claim) === "thin"
+                ? "Too little was said about this to compare. That is not evidence against it — it just was not checked."
+                : "Models agreeing is not proof. They can share the same source or the same blind spot."));
             }
-            const foot = document.createElement("div");
-            foot.className = "insight-preview-foot";
-            foot.textContent = "Click for the full breakdown";
-            frag.appendChild(foot);
-            return frag;
+            return card;
+          }
+
+          // Ein Unterschied aus der Differences-Analyse, wie seine Karte in der
+          // Schublade: das Thema als Titel, die Seiten der Antwort vorn, "vs"
+          // nur bei einem Widerspruch.
+          function differenceCard(diff, ctx) {
+            const card = cardNode("div", "cx-card");
+            const readable = readableDifference(diff, modelDisplayName);
+            const isVersus = diff.type === "contradiction" && readable.positions.length > 1;
+            if (readable.narrative && isVersus) card.appendChild(cardHeading(differenceKind(diff)));
+            else card.appendChild(cardTitle(readable.claim, ctx));
+            readable.positions.slice().sort(function (a, b) {
+              return (b.in_answer === true) - (a.in_answer === true);
+            }).forEach(function (pos, index) {
+              if (isVersus && index) card.appendChild(cardVersus());
+              const text = pos.stance || pos.quote;
+              card.appendChild(cardSide(text ? { text: text } : null, pos.models, ctx, {
+                quote: pos.quote || "",
+                label: pos.in_answer === true ? "In the answer" : ""
+              }));
+            });
+            return card;
           }
 
           // A provisional mark (agent-review.js preview) says only that its
           // sentence was compared, never how it came out: the verdict and its
           // colour arrive together with the finished check.
-          function buildProvisionalPreview(modelsCompared) {
-            const frag = document.createDocumentFragment();
+          function provisionalCard(modelsCompared) {
+            const card = cardNode("div", "cx-card");
             const count = Array.isArray(modelsCompared) ? modelsCompared.length : 0;
-            frag.appendChild(previewHead(count
-              ? (count === 1 ? "Compared with 1 model answer" : "Compared with " + count + " model answers")
-              : "Compared with the model answers"));
-            const foot = document.createElement("div");
-            foot.className = "insight-preview-foot";
-            foot.textContent = "The result appears once the whole answer is checked";
-            frag.appendChild(foot);
-            return frag;
-          }
-
-          function buildDiffPreview(diff) {
-            const frag = document.createDocumentFragment();
-            const isMajor = diff.type === "contradiction" && diff.severity === "major";
-            let label = "Different emphasis";
-            if (diff.type === "contradiction") {
-              label = isMajor ? "Contradiction · critical" : "Contradiction · minor detail";
-            }
-            frag.appendChild(previewHead(label, isMajor ? "is-crit" : "is-warn"));
-
-            const readable = readableDifference(diff, modelDisplayName);
-            const claimEl = document.createElement("div");
-            claimEl.className = "insight-preview-claim";
-            claimEl.textContent = readable.claim;
-            frag.appendChild(claimEl);
-
-            readable.positions.slice().sort(function (a, b) {
-              return (b.in_answer === true) - (a.in_answer === true);
-            }).slice(0, 2).forEach(function (pos) {
-              const row = previewRow(
-                pos.models.map(modelDisplayName).join(", "),
-                "");
-              renderInlineMarkdown(
-                row.querySelector(".insight-preview-value"),
-                pos.stance || pos.quote || "");
-              frag.appendChild(row);
-            });
-
-            const foot = document.createElement("div");
-            foot.className = "insight-preview-foot";
-            foot.textContent = "Click to open the difference";
-            frag.appendChild(foot);
-            return frag;
+            card.append(
+              cardNode("div", "cx-card-title", count
+                ? (count === 1 ? "Compared with 1 model answer" : "Compared with " + count + " model answers")
+                : "Compared with the model answers"),
+              cardNote("The result appears once the whole answer is checked"));
+            return card;
           }
 
           // Haengt das Steuerelement hinter die Passage und verbindet beide.
@@ -1636,6 +1825,8 @@
             const group = passageGroup(spans);
             const entry = { el: control, activate: activate, preview: preview };
             group.controls.push(entry);
+            // Die Karte eines Badges zeigt auf die strittigen Worte seines Satzes.
+            control.cxSpans = spans;
             control.addEventListener("mouseenter", function () { if (canHoverPassages()) setPassageHover(group, true); });
             control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
             return entry;
@@ -1708,9 +1899,11 @@
           // Die Hover-Karte eines geprueften Satzes der Nachricht des Nutzers:
           // dieselbe Vorschau wie ein Satz der Antwort; ein Klick oeffnet
           // weiter die Karte (App.claimPopover.open), die die Vorschau ersetzt.
-          function attachClaimPreview(span, claim, modelsCompared) {
+          function attachClaimPreview(span, claim, modelsCompared, options) {
             if (!span || !claim) return;
-            attachPreviewOnly([span], function () { return buildClaimPreview(claim, modelsCompared); }, true);
+            attachPreviewOnly([span], function () {
+              return claimCard(claim, modelsCompared, { interactive: false, spans: [span], sideLabel: options?.sideLabel });
+            }, true);
           }
 
           function renderInlineMarkers(claims, differences, modelsCompared, options) {
@@ -1755,7 +1948,7 @@
                 const result = mark(claim.anchor, "is-provisional", claim.anchor_occurrence);
                 if (!result) return;
                 anchored += 1;
-                attachPreviewOnly(result.spans, function () { return buildProvisionalPreview(modelsCompared); });
+                attachPreviewOnly(result.spans, function () { return provisionalCard(modelsCompared); });
               });
               applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body, fallbackBox);
               return { claims_anchored: anchored, claims_unanchored: claims.length - anchored };
@@ -1801,8 +1994,10 @@
               const control = attachPassageControl(
                 result,
                 diffMarkerLabel(diff) + ": " + diff.claim,
-                function () { focusDifference(index); },
-                function () { return buildDiffPreview(diff); }
+                function () {
+                  openDifferencePopover(diff, result.spans, answerNavigation, function () { focusDifference(index); });
+                },
+                function () { return differenceCard(diff, { interactive: false, openInDrawer: true }); }
               );
               if (diff.type === "contradiction" && result.spans[0]?.cxGroup) {
                 result.spans[0].cxGroup.hasContradiction = true;
@@ -1893,8 +2088,8 @@
               if (overlappingDifference) suppressControl(overlappingDifference.control);
               attachControl(result, badge, function () {
                 const anchor = document.body.classList.contains("claim-counts-visible") ? badge : result.spans[0];
-                openClaimPopover(claim, anchor, modelsCompared, answerNavigation);
-              }, function () { return buildClaimPreview(claim, modelsCompared); });
+                openClaimPopover(claim, anchor, modelsCompared, answerNavigation, { spans: result.spans });
+              }, function () { return claimCard(claim, modelsCompared, { interactive: false, spans: result.spans }); });
             });
 
             // 3. Die Stelle des Streits: in einem bestrittenen Satz traegt nur

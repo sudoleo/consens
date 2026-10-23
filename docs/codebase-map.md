@@ -1190,9 +1190,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `--dispute #f07f76`, ein Rot statt des Korall, das neben Bernstein braun
   wirkte), die `-bg`-Töne sitzen auf demselben Farbton. Die Mail-Palette
   (`app/services/mailer.py`) zieht die Graustufen mit.
-  Seit 2026-09-06 hebt `shell.css` Chat-Fragen (auch historische), Claim-Popovers
-  und Claim-/Contradiction-Hoverkarten mit dem lokalen Token `--chat-surface`
-  ab (seit 2026-10-20 = `--raise`). Der Composer ist seit 2026-10-20 das
+  Seit 2026-09-06 hebt `shell.css` Chat-Fragen (auch historische) mit dem
+  lokalen Token `--chat-surface` ab (seit 2026-10-20 = `--raise`); die Karte
+  einer Marke (Vorschau und festgehaltene Karte) trägt seit 2026-10-23 ihre
+  eigene Fläche `--cx-card-bg`, eine Stufe heller als die Seite
+  (`components-consensus-insights.css`). Der Composer ist seit 2026-10-20 das
   gehobene Feld `--field` (= `--well`) mit `--field-line` und `--field-lift`
   (aktiv `--field-lift-active`) aus `variables.css`/`public-tokens.css`:
   dasselbe Material wie das Startseiten-Feld (`--lp-field*` in `landing.css`
@@ -3070,8 +3072,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Jump-to-answer, Resolve-Runde (Button an Widerspruchs-Karten → `POST
   /resolve`). Seit 2026-07-24 ist die Uneinigkeit *im* Antworttext markiert
   statt in einer zweiten Spalte daneben (Rechtschreibprüfungs-Metapher):
-  Claim-Popover und Difference-Karten laufen für den Sprung zur Fundstelle über
-  denselben `jumpToModelAnswer`-Pfad. Dieser deckt verborgene Einzelantworten
+  Die Logos der festgehaltenen Karte einer Marke und die Difference-Karten
+  laufen für den Sprung zur Fundstelle über denselben `jumpToModelAnswer`-Pfad. Dieser deckt verborgene Einzelantworten
   zuerst über `window.App.agentMode.showModelAnswers()` auf und
   markiert/scrollt synchron zum Zitat; die Geometrie-Abfrage erzwingt das
   aktualisierte Layout selbst. Der aktive Agent Mode wird dabei nicht
@@ -3150,9 +3152,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `#claimCountsSwitch` aktiviert sie über die Kontoeinstellung `claim_counts`
   (lokal `consensio.showClaimCounts.v1`) / die Body-Klasse `claim-counts-visible`.
   Ohne Badge übernimmt die Passage den Tastaturzugang; Hover und Klick bleiben
-  für Live- und gespeicherte Antworten verfügbar. Hover und Detaildialog betonen
-  die Quote fett und beziehen den Nenner ausdrücklich auf Modelle, die den Claim
-  behandelt haben; „Not addressed“ bleibt separat. Dünne Abdeckung zeigt keine Quote.
+  für Live- und gespeicherte Antworten verfügbar. Bei einer unbestrittenen
+  Aussage betont die Karte (Vorschau und festgehalten) die Quote fett und
+  bezieht den Nenner ausdrücklich auf Modelle, die den Claim behandelt haben;
+  „Not addressed“ bleibt separat. Dünne Abdeckung zeigt keine Quote. Eine
+  bestrittene Aussage zeigt keine Quote, sondern die Gegenüberstellung (Karte
+  einer Marke, unten).
   Das optionale `.claim-badge` daneben zeigt die scanbare Quote
   „4/6", jetzt als ruhige Mikro-Marke mit tabellarischen Ziffern, transparenter
   Flaeche und feiner Kontur. Sie ist damit klar von den Quellen-Pillen
@@ -3178,9 +3183,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Schweigen wird damit erst auf Wunsch sichtbar und weder als Zustimmung noch
   als Widerspruch ausgegeben. `renderStoredConsensusClaims` verankert dieselben
   Claims containerlokal in archivierten Chat-Turns, sodass ein Bookmark-Restore
-  nicht nur beim neuesten Turn Claim-Support zeigt. „View answer“ öffnet dort
-  den gemeinsamen Modellantwort-Leser mit genau diesem archivierten Turn
-  statt der globalen Modellbox des neuesten Turns.
+  nicht nur beim neuesten Turn Claim-Support zeigt. Ein Logo der
+  festgehaltenen Karte öffnet dort den gemeinsamen Modellantwort-Leser mit
+  genau diesem archivierten Turn statt der globalen Modellbox des neuesten
+  Turns.
   Dasselbe gilt seit 2026-08-17 für die Differences-Schublade: `buildDifference
   Cards(container, …)` baut die Karten in einen beliebigen Container, und
   `window.renderStoredDifferenceCards(container, differences_data, {modelLabel})`
@@ -3223,6 +3229,42 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (vertiefte Marke)
   ↔ `.claim-badge.is-linked-hover`. Wo ein Badge steht, ist es das
   fokussierbare Steuerelement und die Passage nur ein zusätzlicher Mausweg.
+  **Die Karte einer Marke (seit 2026-10-23, Max: „das muss perfekt sein“):**
+  Jede Marke zeigt dieselbe Karte, in der Sprache der Differences-Schublade:
+  Behauptungen, die sich gegenüberstehen, „vs“ dazwischen, unter jeder
+  `.cx-card-meta` mit Logo-Stapel (`App.createModelMark`, einfarbig, Farbe
+  unter dem Zeiger), ein oder zwei Namen, ab drei die Anzahl („3 models“) und
+  an der Seite der Antwort „In the answer“ (geprüfter Nutzertext: „In your
+  text“, `sideLabel`). `differenceCard` = Thema als Titel + Seiten wie in
+  `buildDifferenceCards` (Antwortseite vorn, „vs“ nur bei Widerspruch);
+  `claimCard` bestritten = Seite der Antwort (die eine `.cx-spot`-Stelle, sonst
+  der Anker) gegen die Zitate der Abweichler (gleiche Zitate = eine Seite),
+  unbestritten/dünn = Quote als Titel, Logos, „Not addressed“ (`.cx-card-aside`)
+  und der Satz, dass Übereinstimmung kein Beweis ist; `provisionalCard` ohne
+  Urteil. Keine Etiketten in Versalien, kein „Click for …“. Dieselbe Karte
+  erscheint als Vorschau beim Hovern (`.insight-preview`, `pointer-events:
+  none`), festgehalten nach Klick/Enter (`#claimPopover`, `openCard`) und auf
+  dem Handy (≤ 768 px) als Blatt vom unteren Rand (`.claim-popover.is-modal`,
+  Griff, graues ×, `settleAboveSheet` schiebt den Satz knapp darüber).
+  `placeCard` rechnet für Vorschau und festgehaltene Karte gleich: die Karte
+  steht über der ersten oder unter der letzten Zeile ihres Satzes (nie auf
+  ihm), auf der Seite der strittigen Worte, unten begrenzt vom Eingabefeld
+  (`cardFloor`); ihr Text beginnt bündig unter dem ersten markierten Wort, ihr
+  Pfeil (`--cx-arrow-x`, `::before`, Kontur per `drop-shadow` über Karte und
+  Pfeil) zeigt auf die Stelle. Stand die Vorschau schon da, bleibt die Karte
+  beim Klick exakt stehen (`is-instant`, keine Bewegung), erst dann werden
+  Logos (Antwort des Modells, `navigation.open(model, quote)`) und Thema eines
+  Unterschieds (Chevron, `openInDrawer` → `focusDifference` → Karte im Leser,
+  dort Resolve und Zitate) bedienbar; beide geben den Fokus zuerst an die
+  Marke zurück, damit der Leser ihn beim Schließen dorthin zurückgibt und
+  nicht an einen Knopf der geschlossenen Karte. Am Rechner folgt die
+  festgehaltene Karte beim Scrollen ihren Worten (`refreshPinnedCard`), die
+  Vorschau ebenso, solange ihr Satz unter dem Zeiger bleibt
+  (`refreshHoverPreview`; vorher blendete jedes Scroll-Ereignis sie aus und
+  wieder ein). Von Marke zu Marke wartet
+  die Vorschau kein zweites Mal (`HOVER_WARM_MS`); Ein- und Ausblenden laufen
+  über die Popover-Bewegung in `overlays.css`. Umami:
+  `app_consensus_marker_opened` mit `kind` (claim/difference) und `previewed`.
   **Hover-Vorschau (`.insight-preview`, seit 2026-10-21 nachgeschärft):**
   `canHoverPassages` fragt genau die CSS-Kapsel ab (vorher `any-hover`/`any-pointer`,
   das manches Handy erfüllt); dieselbe Prüfung gilt in `refreshHoverPreview`
@@ -3231,7 +3273,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   echter Zeiger): ein Tippen fokussiert den Satz ebenfalls, und ein
   geschlossener Leser (`model-answer-reader.js` `close()`) oder eine geschlossene
   Claim-Karte geben den Fokus an ihn zurück – auf dem Handy stand die
-  Vorschau danach von selbst da. `placeHoverPreview` verankert nur an
+  Vorschau danach von selbst da. `placeCard` verankert nur an
   Spans im Dokument mit Fläche (`getClientRects()`), ohne solche keine Karte;
   solange die Claim-Karte offen ist, keine Vorschau daneben. Neu markieren
   (`renderInlineMarkers`), `resetConsensusInsights` und `agent-review.js::overText`
@@ -3244,9 +3286,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   macht `attachPassageControl` den ersten Span selbst zum Steuerelement
   (`role="button"`, `tabindex="0"`, sprechendes `aria-label`, Enter/Space),
   sonst wäre der Widerspruch für Tastatur und Screenreader unerreichbar.
-  Das Claim-Detail ist mobil ein echtes modales Dialogfenster (`aria-modal`,
-  Fokuswechsel/-falle/-rückgabe, inerter Hintergrund); Desktop bleibt ein
-  nichtmodaler Popover am Badge.
+  Die festgehaltene Karte ist mobil ein echtes modales Blatt (`aria-modal`,
+  Fokuswechsel/-falle/-rückgabe, inerter Hintergrund); am Rechner bleibt sie
+  ein nichtmodaler Popover an ihren Worten (Escape oder Klick daneben
+  schließt). Ein Klick auf eine Widerspruchs-Passage öffnet seit 2026-10-23
+  diese Karte statt direkt den Leser; in den Leser führt ihr Thema.
   Seit **2026-10-01** sortiert `buildDifferenceCards` die Karten nach Schwere
   (kritischer Widerspruch → Detail-Widerspruch → andere Gewichtung, stabil
   innerhalb einer Stufe) und schreibt den Index in der übergebenen Liste als
@@ -5498,8 +5542,8 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   Der Klick schließt die Vorschau (Dokument-Capture), solange die Karte offen
   ist, erscheint keine, und die Fokus-Rückgabe beim Schließen bringt sie nicht
   zurück. Klick/Enter auf einen Satz
-  öffnet die gemeinsame Claim-Karte (`App.claimPopover`) mit „View answer"
-  über `App.agentReview.contextFor`, während des Laufs über einen
+  öffnet die gemeinsame Karte (`App.claimPopover`, Seite des Texts „In your
+  text“), deren Logos über `App.agentReview.contextFor` in die Antwort führen, während des Laufs über einen
   Minimal-Kontext aus `review.comparisons`. Darunter „Checked against N models
   that answered „…" without seeing your text.", eine an beiden Enden
   auslaufende Haarlinie trennt zur Antwort. Eingefügtes Markdown wird Text
@@ -9644,8 +9688,9 @@ zählen nicht):
   Feld, weil eine geprüfte Passage (`passage-check.js`) den `textContent`
   verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
   (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
-  stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open,
-  close, attachPreview, hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
+  stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open(claim,
+  anchor, models, navigation, {spans, sideLabel}), close, attachPreview(span, claim,
+  models, {sideLabel}), hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
   `syncThreadAskClamp`. Globale `.cx-claim`-Schleifen in `consensus-insights.js`
   schließen `.pc-claim` aus, sonst nähme die Highlights-Einstellung den Marken
   auf der Nachricht Rolle und Label.

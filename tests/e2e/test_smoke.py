@@ -1286,9 +1286,8 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     expect(archived_answer.locator(".claim-badge")).to_have_count(1)
     expect(archived_answer.locator('.cx-claim.is-major')).to_have_count(1)
     archived_answer.locator(".claim-badge").first.dispatch_event("click")
-    archived_jump = app_page.locator(
-        "#claimPopover .claim-model-row.is-agree .claim-jump-link"
-    ).first
+    # In the card a model's logo is the way into its answer.
+    archived_jump = app_page.locator("#claimPopover button.cx-card-logo").first
     expect(archived_jump).to_be_visible()
     archived_jump.click()
     # "View answer" belongs to this archived turn, not to the current live
@@ -1433,12 +1432,11 @@ def test_claim_hover_keeps_silent_models_available_on_demand(app_page):
     expect(preview).to_contain_text("Claude")
 
     badge.dispatch_event("click")
-    not_addressed = app_page.locator(
-        "#claimPopover .claim-section-label", has_text="Not addressed"
-    )
+    # The card keeps the silent models in one quiet line, never as votes.
+    not_addressed = app_page.locator("#claimPopover .cx-card-aside")
     expect(not_addressed).to_have_count(1)
-    section = not_addressed.locator("xpath=..")
-    expect(section.locator(".claim-model-row.is-neutral")).to_have_count(2)
+    expect(not_addressed.locator(".cx-card-aside-label")).to_have_text("Not addressed")
+    expect(not_addressed.locator(".cx-card-aside-names")).to_have_text("Grok, Claude")
 
 
 def test_repeated_sentence_claim_marks_the_requested_occurrence(app_page):
@@ -1500,12 +1498,14 @@ def test_claim_anchor_with_markdown_syntax_marks_the_rendered_sentence(app_page)
     # statt mit sichtbaren Sternchen. dispatch_event ist hier bewusst: Das
     # isolierte Renderer-Fixture haelt den aeusseren Ergebniscontainer hidden.
     app_page.locator("#consensusAnswerBody .claim-badge").dispatch_event("click")
-    claim_text = app_page.locator(".claim-popover-claim")
+    # The answer's side first, then the dissent's quote.
+    sides = app_page.locator("#claimPopover .cx-card-claim")
+    claim_text = sides.first
     expect(claim_text).to_be_visible()
     assert "*" not in claim_text.inner_text()
     expect(claim_text.locator("strong")).to_have_text("World class:")
-    expect(app_page.locator(".claim-model-quote")).to_have_text("about 1,200 watts")
-    expect(app_page.locator(".claim-model-quote strong")).to_have_text("about 1,200 watts")
+    expect(sides.nth(1)).to_have_text("about 1,200 watts")
+    expect(sides.nth(1).locator("strong")).to_have_text("about 1,200 watts")
 
     # Ein wirklich nicht auffindbarer Anker bleibt als Key-Claims-Fallback
     # sichtbar, rendert die Auszeichnung dort aber ebenfalls korrekt.
@@ -1647,14 +1647,21 @@ def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
     # seins, es bleibt also bei genau EINEM Steuerelement pro Satz.
     assert state["badges"] == ["3/3"], state["badges"]
 
-    # Und der Klick auf den strittigen Satz fuehrt zur Widerspruchs-Karte,
-    # nicht in ein Zustimmungs-Popover.
+    # Und der Klick auf den strittigen Satz haelt dessen Karte fest: der
+    # Widerspruch als zwei Seiten, nicht als Zustimmungsquote. Ihr Thema
+    # fuehrt zur Widerspruchs-Karte in der Schublade.
     app_page.evaluate(
         """() => document.querySelectorAll("#consensusAnswerBody .cx-claim")[0].click()"""
     )
+    popover = app_page.locator("#claimPopover")
+    expect(popover).to_be_visible()
+    expect(popover.locator(".cx-card-claim")).to_have_text(["50.000 km", "80.000 km"])
+    expect(popover.locator(".cx-card-vs")).to_have_count(1)
+    expect(popover).not_to_contain_text("support")
+    popover.locator("button.cx-card-title").click()
     expect(app_page.locator('#modelAnswerReader')).to_be_visible()
     expect(app_page.locator('#answerReaderInspector .diff-card.is-contradiction')).to_contain_text('Break-even-Kilometer')
-    expect(app_page.locator("#claimPopover")).to_be_hidden()
+    expect(popover).to_be_hidden()
 
 
 def test_emphasis_marker_still_yields_to_the_claim_badge(app_page):

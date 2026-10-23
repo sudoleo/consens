@@ -1,6 +1,7 @@
 """A pasted AI answer the Agent checked: a result card above the answer, built frontend, no providers."""
 import hashlib
 import json
+import re
 
 import pytest
 from playwright.sync_api import expect
@@ -158,7 +159,7 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
             quotes.hover()
             hover_card = page.locator(".insight-preview")
             expect(hover_card).to_be_visible()
-            expect(hover_card).to_contain_text("1/3")
+            expect(hover_card.locator(".cx-card-tag")).to_have_text("In your text")
             quotes.click()
             expect(hover_card).to_be_hidden()
             expect(popover).to_be_visible()
@@ -172,14 +173,14 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         # way to the model's own answer.
         card.locator('.passage-check-count[data-verdict="disputed"]').click()
         expect(popover).to_be_visible()
-        expect(popover).to_contain_text("Deviate")
+        expect(popover.locator(".cx-card-vs").first).to_be_visible()
         expect(popover).to_contain_text("Larger radiators are often enough.")
         _snapshot(page, f"passage-check-popover-{width}")
         page.keyboard.press("Escape")
         expect(popover).to_be_hidden()
         quotes.click()
         expect(popover).to_be_visible()
-        popover.get_by_role("button", name="View answer").first.click()
+        popover.get_by_role("button", name=re.compile(r"^Open the full answer from ")).first.click()
         expect(page.locator(".answer-reader-dialog, .answer-reader")).to_be_visible()
         page.keyboard.press("Escape")
         expect(page.locator(".answer-reader-dialog, .answer-reader")).to_be_hidden()

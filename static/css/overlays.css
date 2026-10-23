@@ -245,7 +245,7 @@ dialog.modal > .modal-content > .close-button {
    when it closes leaves through .is-leaving (App.popover.leave).
    -------------------------------------------------------------------------- */
 :is(.attach-menu, .email-popup, .model-picker-menu, .sidebar-quota,
-  .consensus-actions-menu, .claim-popover, .bookmark-menu, .agent-files-menu,
+  .consensus-actions-menu, .claim-popover, .insight-preview, .bookmark-menu, .agent-files-menu,
   .memory-selection-menu, .source-sheet) {
   transform-origin: var(--popover-origin-x, 50%) var(--popover-origin-y, 0%);
   transition-property: opacity, translate, scale, display, overlay;
@@ -256,7 +256,7 @@ dialog.modal > .modal-content > .close-button {
 
 :is(.attach-menu[hidden], .email-popup[hidden], .model-picker-menu:not(.is-open),
   .sidebar-quota:not(.is-open), .consensus-actions-menu:not(.open),
-  .claim-popover[hidden], .agent-files-menu[hidden], .memory-selection-menu[hidden],
+  .claim-popover[hidden], .insight-preview[hidden], .agent-files-menu[hidden], .memory-selection-menu[hidden],
   .source-sheet[hidden], [data-popover].is-leaving) {
   opacity: 0;
   translate: 0 var(--popover-shift, -4px);
@@ -269,7 +269,7 @@ dialog.modal > .modal-content > .close-button {
 @starting-style {
   :is(.attach-menu:not([hidden]), .email-popup:not([hidden]), .model-picker-menu.is-open,
     .sidebar-quota.is-open, .consensus-actions-menu.open, .claim-popover:not([hidden]),
-    .bookmark-menu, .agent-files-menu:not([hidden]), .memory-selection-menu:not([hidden]),
+    .insight-preview:not([hidden]), .bookmark-menu, .agent-files-menu:not([hidden]), .memory-selection-menu:not([hidden]),
     .source-sheet:not([hidden])) {
     opacity: 0;
     translate: 0 var(--popover-shift, -4px);
@@ -277,11 +277,35 @@ dialog.modal > .modal-content > .close-button {
   }
 }
 
-/* On a phone the sentence card (and the sources of a pill) is a sheet in
-   the middle of the screen; it rises like a dialog. */
-:is(.claim-popover, .source-sheet).is-modal {
+/* On a phone the sources of a pill are a sheet in the middle of the
+   screen; they rise like a dialog. */
+.source-sheet.is-modal {
   --popover-shift: 8px;
   --popover-origin-y: 50%;
+}
+
+/* The card of a marked sentence is a sheet from the bottom edge on a phone:
+   it slides up whole, at the pace of a layer, and goes down faster. */
+.claim-popover.is-modal {
+  --popover-shift: 100%;
+  transition-duration: var(--dur-layer);
+}
+
+.claim-popover.is-modal[hidden] {
+  scale: 1;
+  transition-duration: var(--dur-state);
+}
+
+@starting-style {
+  .claim-popover.is-modal:not([hidden]) {
+    scale: 1;
+  }
+}
+
+/* A click pins the hover card where it stands: the preview goes and the
+   card comes without moving (consensus-insights.js openCard). */
+:is(.insight-preview, .claim-popover).is-instant {
+  transition: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -440,7 +464,7 @@ dialog.modal > .modal-content > .close-button {
   .answer-reader-dialog,
   .toast,
   :is(.attach-menu, .email-popup, .model-picker-menu, .sidebar-quota,
-    .consensus-actions-menu, .claim-popover, .bookmark-menu, .agent-files-menu,
+    .consensus-actions-menu, .claim-popover, .insight-preview, .bookmark-menu, .agent-files-menu,
     .memory-selection-menu, .source-sheet) {
     translate: none !important;
     scale: none !important;

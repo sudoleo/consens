@@ -70,7 +70,7 @@ describe("where the hover card opens", () => {
     expect(mark.cxGroup.spans.every(span => span.isConnected)).toBe(true);
     hover(mark);
     await wait(160);
-    expect(shown().textContent).toContain("Contradiction");
+    expect([...shown().querySelectorAll(".cx-card-claim")].map(el => el.textContent)).toEqual(["Five", "Three"]);
     dom.window.close();
   });
 
@@ -130,7 +130,7 @@ describe("which devices get the card", () => {
     env.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Tab" }));
     mark.focus();
     await wait(160);
-    expect(env.shown().textContent).toContain("Contradiction");
+    expect(env.shown().querySelector(".cx-card-vs").textContent).toBe("vs");
     env.dom.window.close();
   });
 
@@ -182,8 +182,10 @@ describe("the checked sentences of the user's text", () => {
     const quoted = document.querySelector(".passage-check-quote .pc-claim");
     hover(quoted);
     await wait(160);
-    expect(shown().textContent).toContain("1/3");
-    expect(shown().textContent).toContain("Click for the full breakdown");
+    // The user's sentence against what the other models say.
+    expect([...shown().querySelectorAll(".cx-card-claim")].map(el => el.textContent))
+      .toEqual(["You always need underfloor heating for that.", "Claude says otherwise", "GPT says otherwise"]);
+    expect(shown().querySelector(".cx-card-tag").textContent).toBe("In your text");
     quoted.click();
     expect(shown()).toBeNull();
     const popover = document.getElementById("claimPopover");

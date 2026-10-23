@@ -73,7 +73,16 @@
   }
 }
 
-/* --- Popover / Bottom Sheet ---------------------------------------------- */
+/* --- Die Karte einer Marke ------------------------------------------------
+   Seit 2026-10-23 eine Karte fuer jede Marke im Text (consensus-insights.js
+   claimCard/differenceCard): als Vorschau beim Hovern (.insight-preview), am
+   Rechner festgehalten nach dem Klick (.claim-popover) und auf dem Handy als
+   Blatt vom unteren Rand (.claim-popover.is-modal). Vorschau und
+   festgehaltene Karte sehen gleich aus und stehen an derselben Stelle; der
+   Pfeil zeigt auf die strittigen Worte (--cx-arrow-x, placeCard). Die Flaeche
+   ist eine Stufe heller als die Seite; Kontur und Schatten liegen als
+   drop-shadow auf Karte UND Pfeil, damit beide eine Form sind. Bewegung:
+   overlays.css. */
 .claim-sheet-backdrop {
   position: fixed;
   inset: 0;
@@ -81,148 +90,403 @@
   z-index: calc(var(--z-modal) - 1);
 }
 
+.insight-preview,
 .claim-popover {
+  --cx-card-bg: #fff;
+  --cx-card-chip: #f0f0f1;
   position: absolute;
   box-sizing: border-box;
-  z-index: var(--z-modal);
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 14px 16px;
+  width: max-content;
+  min-width: 248px;
+  max-width: min(344px, calc(100vw - 24px));
+  padding: 13px 16px 15px;
   border-radius: var(--radius-md);
-  background: var(--container-bg);
-  border: var(--card-border);
-  box-shadow: var(--card-shadow-hover);
-  color: var(--text-color);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
+  background: var(--cx-card-bg);
+  color: var(--ink);
+  font-size: 0.9375rem;
+  line-height: 1.42;
+  letter-spacing: -0.006em;
+  filter: drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.3)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.05))
+    drop-shadow(0 12px 28px rgba(0, 0, 0, 0.11));
 }
 
-/* Mobile: zentriertes Modal in der Bildschirmmitte */
+.insight-preview {
+  z-index: var(--z-popover, 1400);
+  pointer-events: none;
+}
+
+.claim-popover {
+  z-index: var(--z-modal);
+}
+
+.dark-mode .insight-preview,
+.dark-mode .claim-popover {
+  --cx-card-bg: #2c2e32;
+  --cx-card-chip: #3b3d42;
+  filter: drop-shadow(0 0 0.5px rgba(255, 255, 255, 0.34)) drop-shadow(0 14px 34px rgba(0, 0, 0, 0.55));
+}
+
+/* Der Pfeil: ein gedrehtes Quadrat in der Kartenflaeche, die Spitze leicht
+   gerundet. */
+.insight-preview::before,
+.claim-popover:not(.is-modal)::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--cx-arrow-x, 50%) - 7px);
+  width: 14px;
+  height: 14px;
+  background: var(--cx-card-bg);
+  border-radius: 3px 0 0 0;
+}
+
+.insight-preview[data-placement="below"]::before,
+.claim-popover[data-placement="below"]:not(.is-modal)::before {
+  top: -6px;
+  transform: rotate(45deg);
+}
+
+.insight-preview[data-placement="above"]::before,
+.claim-popover[data-placement="above"]:not(.is-modal)::before {
+  bottom: -6px;
+  transform: rotate(225deg);
+}
+
+/* Lange Karten scrollen in sich; der Pfeil bleibt draussen stehen. Der
+   Rand gibt Fokusringen am Kartenrand Platz. */
+.cx-card {
+  max-height: min(60vh, 520px);
+  margin: -4px;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+
+.cx-card-title {
+  display: block;
+  margin: 0 0 9px;
+  font-weight: var(--font-weight-semibold);
+  text-wrap: balance;
+}
+
+.cx-card-title:last-child {
+  margin-bottom: 0;
+}
+
+/* Festgehalten fuehrt das Thema eines Unterschieds in die Schublade. */
+button.cx-card-title {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cx-card-chevron {
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: -1px;
+  color: var(--ink-3);
+}
+
+.cx-card-chevron > svg {
+  display: block;
+  rotate: -90deg;
+}
+
+button.cx-card-title:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.cx-card-title:hover .cx-card-title-text {
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 3px;
+  }
+
+  button.cx-card-title:hover .cx-card-chevron {
+    color: var(--ink);
+  }
+}
+
+.cx-card-claim {
+  text-wrap: pretty;
+}
+
+/* Wer eine Seite vertritt: Logos, ein oder zwei Namen oder die Anzahl,
+   und an der Seite der Antwort "In the answer". */
+.cx-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  margin-top: 6px;
+  font-size: var(--font-size-ui);
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+
+.cx-card-meta:first-child,
+.cx-card-title + .cx-card-meta {
+  margin-top: 0;
+}
+
+.cx-card-tag:not(:first-child)::before {
+  content: "·";
+  content: "·" / "";
+  margin-right: 7px;
+  color: var(--ink-3);
+}
+
+.cx-card-vs {
+  margin: 10px 0 9px;
+  font-size: var(--font-size-ui);
+  line-height: 1;
+  color: var(--ink-3);
+}
+
+/* Eine andere Gewichtung steht ohne "vs" untereinander. */
+.cx-card-side + .cx-card-side {
+  margin-top: 12px;
+}
+
+.cx-card-aside {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 12px;
+  font-size: var(--font-size-ui);
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+
+.cx-card-aside-label {
+  color: var(--ink-3);
+}
+
+.cx-card-note {
+  margin: 12px 0 0;
+  font-size: var(--font-size-ui);
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+.cx-card-title + .cx-card-note {
+  margin-top: 0;
+}
+
+/* Logos leise uebereinander, wie die Modelle am Verlauf; einfarbig in
+   Ruhe, in Farbe unter dem Zeiger. */
+.cx-card-logos {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cx-card-logo {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  margin: 0 0 0 -5px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--cx-card-chip);
+  box-shadow: 0 0 0 1.5px var(--cx-card-bg);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--font-size-xs);
+}
+
+.cx-card-logo:first-child {
+  margin-left: 0;
+}
+
+.cx-card-logo > img {
+  display: block;
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
+  filter: grayscale(1);
+}
+
+.dark-mode .cx-card-logo > img:is(.chatgpt-logo, .grok-logo, .mono-logo) {
+  filter: grayscale(1) invert(1) brightness(0.92);
+}
+
+.cx-card-logo > .model-mark-fallback {
+  width: auto;
+  height: auto;
+  font-size: var(--font-size-xs);
+}
+
+button.cx-card-logo {
+  cursor: pointer;
+}
+
+button.cx-card-logo:focus-visible {
+  z-index: 1;
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.cx-card-logo:hover {
+    z-index: 1;
+  }
+
+  button.cx-card-logo:hover > img {
+    filter: none;
+  }
+
+  .dark-mode button.cx-card-logo:hover > img:is(.chatgpt-logo, .grok-logo, .mono-logo) {
+    filter: invert(1) brightness(0.92);
+  }
+}
+
+@media (pointer: coarse) {
+  button.cx-card-logo::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+  }
+}
+
+/* Am Rechner schliesst ein Klick daneben oder Escape; das Kreuz gehoert dem
+   Blatt auf dem Handy. */
+.claim-popover-close {
+  display: none;
+}
+
+/* Handy: dieselbe Karte als Blatt vom unteren Rand, mit Griff. */
 .claim-popover.is-modal {
   position: fixed;
-  left: 50% !important;
-  top: 50% !important;
-  transform: translate(-50%, -50%);
-  width: min(92vw, 420px) !important;
-  max-height: 72vh;
-  border-radius: var(--radius-xl);
-}
-
-.claim-popover-header {
+  left: 0 !important;
+  right: 0;
+  top: auto !important;
+  bottom: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  flex-direction: column;
+  width: auto !important;
+  min-width: 0;
+  max-width: none;
+  max-height: min(82vh, 680px);
+  padding: 0 22px calc(24px + env(safe-area-inset-bottom, 0px));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  font-size: var(--font-size-read);
+  filter: none;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.14);
 }
 
-.claim-popover-title {
-  font-weight: var(--font-weight-bold);
+.dark-mode .claim-popover.is-modal {
+  --cx-card-bg: #26282b;
+  filter: none;
+  box-shadow: 0 -0.5px 0 rgba(255, 255, 255, 0.12), 0 -10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.claim-popover.is-modal::before {
+  content: "";
+  display: block;
+  flex: none;
+  width: 36px;
+  height: 5px;
+  margin: 8px auto 22px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.claim-popover.is-modal[hidden] {
+  display: none;
+}
+
+.claim-popover.is-modal > .cx-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.claim-popover.is-modal .claim-popover-close {
+  display: inline-flex;
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-2);
+}
+
+.claim-popover.is-modal .claim-popover-close .close-icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2;
+}
+
+@media (pointer: coarse) {
+  .claim-popover.is-modal .claim-popover-close::after {
+    inset: var(--hit-slop);
+  }
+}
+
+.claim-popover.is-modal .cx-card-title {
+  margin-bottom: 12px;
+}
+
+.claim-popover.is-modal .cx-card-meta {
+  gap: 6px 10px;
+  margin-top: 8px;
   font-size: var(--font-size-sm);
 }
 
-/* The shared close cross (.close-button, foundation.css); here its place. */
-.claim-popover-close {
-  margin: -6px -8px -6px 0;
-}
-
-.claim-popover-claim {
-  margin-bottom: 10px;
-  color: color-mix(in srgb, var(--text-color) 78%, var(--sidebar-text-muted));
-  font-style: italic;
-  overflow-wrap: anywhere;
-}
-
-.claim-popover-section + .claim-popover-section {
-  margin-top: 10px;
-}
-
-/* Die Einordnung unter der Aufstellung: leise, aber immer da. Sie steht
-   abgesetzt hinter einer Haarlinie, damit sie als Fussnote der Karte gelesen
-   wird und nicht als weitere Modellzeile. */
-.claim-popover-note {
-  margin: 12px 0 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-light, var(--line));
-  color: var(--sidebar-text-muted, var(--ink-2));
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-snug, 1.4);
-}
-
-.claim-section-label {
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-.claim-section-label.is-agree {
-  color: color-mix(in srgb, #2c7a2c 70%, var(--text-color));
-}
-
-.claim-section-label.is-dissent {
-  color: color-mix(in srgb, #b97718 75%, var(--text-color));
-}
-
-.dark-mode .claim-section-label.is-agree {
-  color: color-mix(in srgb, #8ee6c8 75%, var(--text-color));
-}
-
-.dark-mode .claim-section-label.is-dissent {
-  color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
-}
-
-.claim-model-row {
-  padding: 5px 0;
-}
-
-.claim-model-row + .claim-model-row {
-  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 50%, transparent);
-}
-
-.claim-model-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.claim-model-name {
-  font-weight: var(--font-weight-semibold);
-}
-
-.claim-model-quote {
-  margin: 4px 0 0;
-  padding: 2px 0 2px 10px;
-  border-left: 2px solid color-mix(in srgb, #b97718 50%, var(--sidebar-border));
-  color: color-mix(in srgb, var(--text-color) 80%, var(--sidebar-text-muted));
+.claim-popover.is-modal .cx-card-vs {
+  margin: 14px 0 12px;
   font-size: var(--font-size-sm);
-  overflow-wrap: anywhere;
 }
 
-.claim-jump-link {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  min-height: 28px;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--sidebar-border));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: color-mix(in srgb, var(--accent) 78%, var(--text-color));
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-family: inherit;
-  line-height: var(--line-height-heading);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: box-shadow var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
+.claim-popover.is-modal :is(.cx-card-aside, .cx-card-note) {
+  font-size: var(--font-size-sm);
 }
 
-/* Hover is a tone step, not a ring (Apple-Audit G5); focus keeps the one
-   focus ring of base.css. */
-@media (hover: hover) and (pointer: fine) {
-  .claim-jump-link:hover {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
+/* Mit dem Finger: Logos nebeneinander statt uebereinander, gross genug zum
+   Tippen. */
+.claim-popover.is-modal .cx-card-logos {
+  gap: 8px;
+}
+
+.claim-popover.is-modal .cx-card-logo {
+  width: 28px;
+  height: 28px;
+  margin-left: 0;
+  box-shadow: none;
+}
+
+.claim-popover.is-modal .cx-card-logo > img {
+  width: 16px;
+  height: 16px;
+}
+
+@media (forced-colors: active) {
+  .insight-preview,
+  .claim-popover {
+    border: 1px solid CanvasText;
+    filter: none;
+  }
+
+  .insight-preview::before,
+  .claim-popover:not(.is-modal)::before {
+    display: none;
   }
 }
 
@@ -1013,11 +1277,6 @@ mark.quote-flash {
      ohne die Zeilenhoehe anzufassen. */
   .claim-badge {
     font-size: var(--font-size-micro);
-  }
-
-  .claim-jump-link {
-    min-height: 36px;
-    padding: 6px 12px;
   }
 
   .diff-jump-link {
