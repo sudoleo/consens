@@ -2,6 +2,7 @@
 import gzip
 import json
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -119,6 +120,23 @@ def test_a_placeholder_takes_whole_elements_only(monkeypatch):
                    '<span aria-hidden="true">·</span> <span>18 Plätze frei</span></div>'
                    "<p>Zu <b>Luna</b> wechseln</p>")
     assert i18n.whole_elements("<0>a</0> <1/>") and not i18n.whole_elements("<0>a") and not i18n.whole_elements("a</0>")
+
+
+def test_long_content_does_not_stall_the_patterns():
+    # A shared answer whose paragraph repeats the literals of a pattern with
+    # four placeholders, without its ending: the lazy groups backtracked with
+    # the fourth power of the length (4.5 KB took seconds, the event loop
+    # stood still for every user). Text that long is content, not interface.
+    current = i18n.catalog("de")
+    unit = "a paused for this question because a API cannot read attachments. Remove the files to use "
+    paragraph = i18n.normalize(unit * 50)
+    assert len(paragraph) > 4000
+    started = time.perf_counter()
+    assert current.lookup(paragraph) is None
+    assert time.perf_counter() - started < 1
+    # Interface text with placeholders is far shorter and still translates.
+    assert current.lookup("Sources: 12") == current.translate("Sources: {0}", {"0": 12})
+    assert current.lookup("Sources: 12") != "Sources: 12"
 
 
 def test_english_is_left_alone():

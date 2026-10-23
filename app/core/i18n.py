@@ -84,6 +84,9 @@ _SPACE = re.compile(r"\s+")
 _PLACEHOLDER = re.compile(r"\{([A-Za-z_]\w*|\d+)\}")
 _MARKER = re.compile(r"<(\d+)>|</(\d+)>|<(\d+)/>")
 _LETTER = re.compile(r"[^\W\d_]")
+# Longest text tried against the patterns (Catalog.lookup); the longest
+# pattern key has 180 characters.
+PATTERN_TEXT_MAX = 500
 
 
 def normalize(text: str) -> str:
@@ -186,6 +189,12 @@ class Catalog:
         found = self.exact.get(text)
         if found is not None:
             return found
+        # The lazy groups backtrack with up to the fourth power of the length
+        # on text that repeats a pattern's literals (a 4.5 KB shared answer
+        # held the event loop for seconds). Interface text with placeholders
+        # is far shorter; anything longer is content and stays as it is.
+        if len(text) > PATTERN_TEXT_MAX:
+            return None
         for pattern in self.patterns:
             if pattern.hint and pattern.hint not in text:
                 continue
