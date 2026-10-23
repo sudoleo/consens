@@ -431,6 +431,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    meta text are --ink-3. Hierarchy inside comes from weight and size, never
    from a second black. Tokens carry light and dark mode. */
 .agent-activity, .agent-progress { --agent-ink: var(--ink-2); --agent-trace-ink: var(--ink-2); }
+/* The host keeps the activity's margins inside (flow-root), so its height is
+   the same at rest and while agent-activity.js animates it. Collapsing
+   through it, the 18px under "Thought for …" vanished once the motion fixed
+   the height: the answer jumped up and back down on every open and close.
+   The answer's first child has no top margin, so nothing moves at rest. */
+.agent-answer-activity { display: flow-root; }
 .agent-activity { margin: 0 0 18px; color: var(--ink-2); font-size: var(--font-size-ui); }
 .agent-activity > summary {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px; width: fit-content; max-width: 100%;
