@@ -116,6 +116,9 @@ MODEL_ANSWER_BATCH_SIZE = 100
 # EINER Unterhaltung erreicht niemand versehentlich.
 MAX_CHATS_PER_OWNER = 200
 MAX_TURNS_PER_CHAT = 500
+# The app context of an Agent question (date, reference time, selected model):
+# a few hundred characters, bounded so a turn document stays small.
+MAX_APP_CONTEXT_CHARS = 4000
 
 # Ticked checklist boxes of an answer ("- [ ] item"): their positions in the
 # answer, kept on the turn (static/js/task-checks.js). Absent until the reader
@@ -910,8 +913,15 @@ class ChatStore:
         attachments: object = None,
         execution_mode: str = "consensus",
         agent_settings: dict | None = None,
+        app_context: str | None = None,
     ) -> dict:
+        """``app_context``: the app's context block an Agent question is sent
+        with (agent_runs.with_app_context). Stored on the turn, never in its
+        projection: the chat's next message repeats the question with exactly
+        these bytes (AgentRunStore.messages)."""
         question = normalize_question(question)
+        if app_context is not None and (not isinstance(app_context, str) or len(app_context) > MAX_APP_CONTEXT_CHARS):
+            raise ValueError("app_context must be a short string")
         mode = normalize_mode(mode)
         if not isinstance(deep_search, bool):
             raise ValueError("deep_search must be a boolean")
@@ -997,6 +1007,8 @@ class ChatStore:
                 turn_document["attachments"] = attachments
             if execution_mode == "agent" and agent_settings is not None:
                 turn_document["agent_settings"] = agent_settings
+            if execution_mode == "agent" and app_context:
+                turn_document["app_context"] = app_context
             if client_request_id:
                 turn_document["client_request_id"] = client_request_id
 

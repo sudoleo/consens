@@ -20,7 +20,7 @@ from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
-from app.services.agent_runs import AgentRunStore
+from app.services.agent_runs import AgentRunStore, get_agent_turn_context
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
@@ -356,6 +356,9 @@ def run_agent(request: Request, payload: AgentRequest):
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
         memory = _memory_snapshot(uid)
+        # One context for the question: the turn keeps it, so the next
+        # message repeats this question byte for byte (prompt cache).
+        app_context = get_agent_turn_context(model, config)
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -372,12 +375,14 @@ def run_agent(request: Request, payload: AgentRequest):
                             "memory": memory.settings(),
                             "answer_mode": "merged",
                             "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
+            app_context=app_context,
         )
         if turn["status"] == "completed":
             lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
         chat_sources = []
-        messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources)
+        messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources,
+                                  context=app_context)
         cancellation = ProviderCancellation()
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,

@@ -556,6 +556,15 @@ def with_cache_points(messages, cache, history_end=None):
     A token is written once, whichever breakpoint covers it: the extra
     points cost nothing on a miss. With the top-level one, three of the
     four breakpoints a request may have.
+
+    Live probe 2026-10-23 (Sonnet 5.5 on Vertex): with OpenRouter's search
+    tool in the request only its last breakpoint is cached, these points
+    create nothing, with or without the top-level field; without the tool
+    the next message read the system prompt. Agent steps carry the tool, so
+    the next message reads through the history instead: it repeats each
+    question exactly as sent (AgentRunStore.messages, the turn's
+    ``app_context``) and so starts with the previous message's first prompt.
+    These points stay for requests without the tool (chats with Google data).
     """
     points = [0] if messages and messages[0].get("role") == "system" else []
     if type(history_end) is int and 0 < history_end < len(messages) - 1:

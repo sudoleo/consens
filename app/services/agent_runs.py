@@ -72,6 +72,11 @@ def agent_sources(completion, review=None):
 # and the replayed history then stay byte-identical across a chat's messages,
 # so providers can serve them from their prompt cache. A clock at the top of
 # the system prompt invalidated every cached token after it on every message.
+# The history repeats an earlier question with the context it was sent with
+# (the turn's ``app_context``): with OpenRouter's search tool a Claude request
+# caches only at its very end, so the next message reads the previous one's
+# first step only if it starts with exactly that prompt (live probe 2026-10-23,
+# docs/codebase-map.md "Feste Cache-Punkte").
 APP_CONTEXT_OPEN = "[consens.io context for this message, supplied by the app, not written by the user]"
 APP_CONTEXT_CLOSE = "[end of app context]"
 
@@ -153,10 +158,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0{step}".encode()).hexdigest()
         return self.db.collection("users").document(uid).collection("llm_calls").document(key)
 
-    def messages(self, uid, chat_id, target, model=None, config=None, sources=None):
+    def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None):
         """The conversation for the target turn. ``sources``, a list, receives
         the saved sources of the earlier turns it includes (read_source may
         open them; agent_read_source, "Sources from the chat itself").
+        ``context``: the app context the target turn was created with
+        (create_turn ``app_context``); an earlier turn's question comes back
+        with its own, so the prompt continues the one that turn first sent.
 
         A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages
         (history_start) and tells the model so in this message's app context;
@@ -175,6 +183,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 if turn["position"] >= target["position"] or turn["status"] not in {"completed", "failed"}:
                     continue
                 question, answer = turn["question"], turn.get("assistant_response", turn.get("consensus", ""))
+                if isinstance(turn.get("app_context"), str) and turn["app_context"]:
+                    question = with_app_context(question, turn["app_context"])
                 if turn["status"] == "failed":
                     # Match the visible saved conversation without claiming that
                     # an interrupted answer or its review completed successfully.
@@ -191,7 +201,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                              {"role": "assistant", "content": answer}])
             if sources is not None:
                 sources.extend(source for source in saved if isinstance(source, dict))
-        context = get_agent_turn_context(model, config)
+        context = context or get_agent_turn_context(model, config)
         if start:
             # The newest message's context changes every message anyway, so
             # the note costs no cached prefix.

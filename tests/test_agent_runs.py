@@ -13,7 +13,7 @@ pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 from app.core import config as cfg
 from app.api.routers import agent, chat_history
 from app.core.rate_limit import limiter, api_uid_limiter
-from app.services import persistence_guard
+from app.services import agent_runs, persistence_guard
 from app.services.agent_runs import APP_CONTEXT_OPEN, AgentRunStore, strip_app_context
 from app.services.chat_store import ChatStore, TurnStatusConflict
 from app.services.llm import agent_client
@@ -243,6 +243,40 @@ def api(monkeypatch, store):
     app.include_router(chat_history.router)
     app.include_router(agent.router)
     return TestClient(app), store, calls
+
+
+def test_the_next_message_repeats_the_question_exactly_as_it_was_sent(api):
+    """With OpenRouter's search tool a Claude request caches only at its end
+    (live probe 2026-10-23): the next message reads the previous one's first
+    step only if its prompt starts with exactly that step's prompt, the
+    question's app context (clock to the second) included."""
+    client, store, calls = api
+    chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
+    sent = []
+    for request_id, question in (("first", "Hi"), ("second", "And then?")):
+        payload = {"chat_id": chat_id, "question": question, "client_request_id": request_id,
+                   "bookmark_id": "agent_test"}
+        assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+        sent.append([dict(message) for message in calls[-1]["messages"]])
+    first, second = sent
+    assert second[:2] == first[:2]
+    assert first[1]["content"].startswith(APP_CONTEXT_OPEN) and strip_app_context(first[1]["content"]) == "Hi"
+    assert [message["role"] for message in second[:4]] == ["system", "user", "assistant", "user"]
+    assert strip_app_context(second[3]["content"]) == "And then?"
+    # The turn keeps the context it was sent with; its projection never shows it.
+    turn_id = next(turn["id"] for turn in store.list_turns(UID, chat_id)["turns"] if turn["question"] == "Hi")
+    stored = store._turn_ref(UID, chat_id, turn_id).get().to_dict()["app_context"]
+    assert first[1]["content"] == agent_runs.with_app_context("Hi", stored)
+    assert "app_context" not in store.get_turn(UID, chat_id, turn_id)
+
+
+def test_a_turn_keeps_only_a_short_app_context(store):
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    model = AgentModel()
+    with pytest.raises(ValueError):
+        store.create_turn(UID, chat_id, question="Q", mode="Agent", deep_search=False,
+                          selected_models=[model.model], consensus_model=model.model,
+                          execution_mode="agent", app_context="x" * 4001)
 
 
 def test_endpoint_single_call_replay_and_cumulative_costs(api, monkeypatch):
@@ -520,7 +554,11 @@ def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch, mo
     next_payload = {**payload, "client_request_id": "second", "model_id": "deepseek/deepseek-v4.1-flash"}
     assert "event: final" in client.post("/agent", json=next_payload, headers=AUTH).text
     assert calls[1]["model"].model == "deepseek/deepseek-v4.1-flash"
-    assert calls[1]["messages"][1:3] == [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "A helpful answer"}]
+    # The earlier question comes back as it was sent, its app context included (prompt cache).
+    earlier = calls[1]["messages"][1:3]
+    assert [message["role"] for message in earlier] == ["user", "assistant"]
+    assert strip_app_context(earlier[0]["content"]) == "Hi" and earlier[0]["content"].startswith(APP_CONTEXT_OPEN)
+    assert earlier[1]["content"] == "A helpful answer"
     monkeypatch.setattr(agent, "resolve_agent_model", lambda *a: pytest.fail("Replay must use saved settings"))
     assert client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH).status_code == 200
     assert len(calls) == 2
