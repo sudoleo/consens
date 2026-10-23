@@ -626,7 +626,9 @@
           button.addEventListener("click", () => show(button.dataset.agentId, button));
           inline._buttons.set(key, button); inline._stack.append(button);
         }
-        button.title = `${agent.model?.label || "Model"} · ${calls.length} ${calls.length === 1 ? "call" : "calls"} · ${labels[agent.status] || "Waiting"}`;
+        // Translated part by part: the model name, the count and the state.
+        button.title = [agent.model?.label || App.t("Model"), calls.length === 1 ? App.t("1 call") : App.t("{n} calls", { n: calls.length }),
+          App.t(labels[agent.status] || "Waiting")].join(" · ");
         button.dataset.status = agent.status;
         button.dataset.agentId = agent.id;
         button.setAttribute("aria-label", button.title);

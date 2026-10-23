@@ -306,7 +306,7 @@
   "Last updated: 17 October 2026": "Zuletzt aktualisiert: 17. Oktober 2026",
   "Last updated: 5 September 2026": "Zuletzt aktualisiert: 5. September 2026",
   "Try the demo": "Demo starten",
-  "<0>What would you want a second opinion on?</0> <1> <2/> <3/> <4> <5>Ask the agent</5> <6/> </4> </1>": "<0>Wozu hättest du gern eine zweite Meinung?</0> <1> <2/> <3/> <4> <5>Agenten fragen</5> <6/> </4> </1>",
+  "<0>What would you want a second opinion on?</0> <1> <2/> <3>6 AIs cross-check<4/></3> <5> <6>Ask the agent</6> <7/> </5> </1>": "<0>Wozu hättest du gern eine zweite Meinung?</0> <1> <2/> <3>6 KIs prüfen mit<4/></3> <5> <6>Agenten fragen</6> <7/> </5> </1>",
   "Reasoning auto · the model decides how long to think": "Nachdenken automatisch · das Modell entscheidet, wie lange es nachdenkt",
   "Reasoning auto": "Nachdenken automatisch",
   "Attachments": "Anhänge",
@@ -314,5 +314,6 @@
   "Comparison model providers": "Anbieter der Vergleichsmodelle",
   "Can a heat pump heat our 1978 house with the original radiators?|Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?": "Kann eine Wärmepumpe unser Haus von 1978 mit den alten Heizkörpern heizen?|Darf ich Ibuprofen zusammen mit Blutdrucksenkern nehmen?|Muss ich als deutscher Freelancer US-Kunden Umsatzsteuer berechnen?|Ist eine dreimonatige Kündigungsfrist in meinem Vertrag wirksam?|Ist es sicher, JWTs im localStorage zu speichern?",
   "Last updated: 23 October 2026": "Zuletzt aktualisiert: 23. Oktober 2026",
-  "Composer preview: reasoning on auto, attachments and six comparison models": "Vorschau des Eingabefelds: Nachdenken automatisch, Anhänge und sechs Vergleichsmodelle"
+  "Composer preview: reasoning on auto, attachments and six comparison models": "Vorschau des Eingabefelds: Nachdenken automatisch, Anhänge und sechs Vergleichsmodelle",
+  "<0>6 AIs cross-check<1/></0> <2> <3/> <4>Try the demo</4> </2>": "<0>6 KIs prüfen mit<1/></0> <2> <3/> <4>Demo ausprobieren</4> </2>"
 }

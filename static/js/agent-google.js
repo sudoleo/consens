@@ -347,7 +347,7 @@
       : linked.length === 1 ? `Connected · ${linked[0].email}` : `${linked.length} accounts connected`;
     if (sub && sub.textContent !== window.App.t(subText)) sub.textContent = subText;
     option?.classList.toggle('is-connected', linked.length > 0);
-    option?.setAttribute('aria-label', `Gmail & Calendar: ${text === 'Off' ? 'off' : text}. ${subText}`);
+    option?.setAttribute('aria-label', text === 'Off' ? `Gmail & Calendar: off. ${subText}` : `Gmail & Calendar: ${text}. ${subText}`);
   }
   function chip(icon, text, onOpen, removeLabel, onRemove, tone = '') {
     const wrap = node('span', '', `agent-google-chip${tone ? ' ' + tone : ''}`);
@@ -503,7 +503,7 @@
     input.checked = gmail ? gmailOn : calendarOn; input.disabled = !enabled;
     input.setAttribute('role', 'switch');
     input.setAttribute('aria-label', gmail ? 'Use Gmail for this message' : 'Use selected calendars');
-    const sub = node('small', !enabled ? `Allow ${gmail ? 'reading emails' : 'reading calendars'} first.`
+    const sub = node('small', !enabled ? (gmail ? 'Allow reading emails first.' : 'Allow reading calendars first.')
       : gmail ? 'Finds and reads only emails relevant to your question.' : `Choose up to ${MAX_CALENDARS} calendars below.`);
     toggle.querySelector('span').append(sub);
     toggle.prepend(svg(gmail ? 'mail' : 'calendar', 'agent-google-icon agent-google-source-icon'));
@@ -947,7 +947,7 @@
       toggle.addEventListener('click', () => {
         const openNow = toggle.getAttribute('aria-expanded') !== 'true';
         toggle.setAttribute('aria-expanded', String(openNow)); body.hidden = !openNow;
-        toggle.setAttribute('aria-label', `${openNow ? 'Hide' : 'Show'} details: ${title(action)}`);
+        toggle.setAttribute('aria-label', openNow ? `Hide details: ${title(action)}` : `Show details: ${title(action)}`);
       });
       head.append(toggle); body.hidden = true;
     }

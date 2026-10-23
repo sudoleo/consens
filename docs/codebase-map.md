@@ -436,9 +436,8 @@ erzählt die Landingpage Agent als Standard: Hero seit der Todo-Runde 3
 „One agent does the work. Six models check it.“ hatte den Mechanismus
 verdreht: die sechs antworten, ein unbeteiligter Judge prüft). Composer-Mockups
 wie in /app: (+) ohne Fläche, KEIN Moduschip mehr (der Modus steckt im (+)),
-rechts der Modell-Chip `{{ agent_label }} +6 ⌄` – `pages.py::landing` rendert
-das echte Default-Modell des Agents (`agent_client.agent_model_label()`, ohne
-Netzzugriff), nie ein Schaufenster-Modell; Lippe
+rechts der Modell-Chip „6 AIs cross-check ⌄“ wie in /app (seit 2026-10-23
+nennt er, was die Vergleichsmodelle tun, keinen Modellnamen); Lippe
 `partials/composer_toolbar_mockup.html` mit Reasoning Auto · Attach ·
 Modell-Icons, ohne eigenes Fenster um Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
 2026-10-02 einen Agent-Turn so nach, wie `agent-activity.js`/`agent-review.js`
@@ -4023,8 +4022,13 @@ sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält auße
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
 Chatmodell und Vergleichsmodelle teilen sich seit 2026-10-01 EINEN Chip in
-`.composer-models` (`.agent-model-picker`, Label „<Chatmodell> +6“: Name
-kürzt, `.model-picker-display-count` bleibt ganz). `renderControls` verknüpft
+`.composer-models` (`.agent-model-picker`). Seit 2026-10-23 sagt das Label,
+was die Vergleichsmodelle tun: „6 AIs cross-check“ („6 KIs prüfen mit“,
+`App.words.crossCheck`, unter 2 Modellen „No cross-check“); das Chatmodell
+steht im Tooltip („<Chatmodell> writes the answer, 6 AIs cross-check it.“)
+und im Menü. Vorher „<Chatmodell> +6“, das Neulingen nichts sagte. Der erste
+Frame (`app-bootstrap.js`) zeichnet dasselbe Label; `App.firstFrame` merkt
+sich den Namen des Chatmodells aus dessen Select. `renderControls` verknüpft
 `#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
 Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
 unverknüpft zurück. Das Menü öffnet mit „Agent“ (Chatmodell, Reasoning) und
@@ -6547,8 +6551,9 @@ ein Ladekreisel aussah (`#quotaRingArc` r=3.5, stroke-width 7, gleiche
 dashoffset-Logik in `sidebar-quota.js`). Unter dem Feld steht nur der
 Hinweissatz. Pro Modus gibt es genau EINEN
 Modell-Chip; er nennt nur, wer antwortet („6 models · Daily“ mit Consensus,
-„6 models“ in Compare, „<Chatmodell> +6“ in Agent: Chatmodell plus Zahl
-der Vergleichsmodelle, deren Menü beide Abschnitte trägt), nie den Modusnamen.
+„6 models“ in Compare, „6 AIs cross-check“ in Agent: was die
+Vergleichsmodelle tun, das Menü trägt Chatmodell und Vergleich), nie den
+Modusnamen.
 
 ### Consensus-Lauf (historisch „Agent Mode“)
 Wo dieses Dokument „Agent Mode an/aus“ sagt, ist heute Consensus bzw. Compare
@@ -9555,7 +9560,9 @@ ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` und
   Namen `translate="no"`; mehrdeutige Wörter per `data-i18n-context`
   (`agent freedom|Free`). Einzahl/Mehrzahl als ganze Sätze, nie `"model" + "s"`.
 - **Prüfung:** `scripts/i18n.py missing|check` (Vorlagen, Skripte,
-  Server-Sätze), `tests/test_i18n.py`, `tests/js/i18n.test.mjs`.
+  Server-Sätze; seit 2026-10-23 auch Sätze, die Wörter im `${…}` wählen
+  und so keinen Eintrag als Ganzes haben, `composed_gaps`),
+  `tests/test_i18n.py`, `tests/js/i18n.test.mjs`.
 - **Mails (seit 2026-10-23):** in der Sprache des Lesers. Konto-Mails
   (Watch, Morning Brief) lesen `users/{uid}.language`
   (`app/services/account_language.py`: `/user_status` schreibt sie nach der

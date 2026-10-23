@@ -198,8 +198,10 @@
     comparisons.forEach((comparison, index) => {
       const card = node('section', 'agent-activity-insight');
       const answers = comparison.answers || [], missing = comparison.failed_models || [];
-      card.append(node('h4', '', `Comparison ${index + 1} · ${comparison.status === 'running' ? 'Collecting answers…'
-        : `${answers.length} model ${answers.length === 1 ? 'answer' : 'answers'}`}`));
+      // Whole sentences: the page translates a text as one (docs/i18n.md).
+      const number = index + 1, count = answers.length;
+      card.append(node('h4', '', comparison.status === 'running' ? `Comparison ${number} · Collecting answers…`
+        : count === 1 ? `Comparison ${number} · 1 model answer` : `Comparison ${number} · ${count} model answers`));
       if (comparison.question) card.append(node('p', 'agent-activity-focus', comparison.question));
       if (comparison.reason) card.append(node('p', '', comparison.reason));
       const names = answers.map(a => a.model?.label || a.provider_label || a.provider).filter(Boolean);
@@ -222,7 +224,11 @@
         for (const difference of differences.slice(0, 3)) {
           const text = difference.claim || difference.consensus_anchor;
           if (!text) continue;
-          const item = node('li', '', `${difference.type === 'contradiction' ? 'Disagreement' : 'Difference'}: ${text}`);
+          // The label is translated on its own; the claim is model text.
+          const item = node('li', '', difference.type === 'contradiction' ? 'Disagreement' : 'Difference');
+          const claim = node('span', '', text);
+          claim.setAttribute('data-i18n-skip', '');
+          item.append(': ', claim);
           item.dataset.type = difference.type === 'contradiction' ? 'contradiction' : 'difference';
           list.append(item);
         }
@@ -618,7 +624,7 @@
         if ((review.versions || []).length > 1) {
           const history = node("details", "agent-evidence-context"); history.append(node("summary", "", "Earlier answer version"));
           for (const prior of review.versions.slice(0, -1)) {
-            history.append(node("p", "agent-review-note", `Version ${prior.id} · ${states[prior.status] || "Not reviewed"}`));
+            history.append(node("p", "agent-review-note", `Version ${prior.id} · ${App.t(states[prior.status] || "Not reviewed")}`));
             const text = node("div", "consensus-answer-body"); window.injectMarkdown?.(text, prior.text, []); history.append(text);
             window.linkifyAgentSources?.(text, safeSources([{sources}, {text: prior.text}]));
           }

@@ -113,12 +113,6 @@
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
-/* Agent: one chip for the chat model and the models it is compared with,
-   "Claude Opus 5.5 +6". The name gives way, the count stays whole. */
-.chat-input-container .model-picker-display-count {
-  flex: 0 0 auto; margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums;
-}
-.chat-input-container .model-picker-display-count[hidden] { display: none; }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::after {
   content: ''; flex: 0 0 1em; width: 1em; height: 1em; color: var(--ink-3);
   background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;

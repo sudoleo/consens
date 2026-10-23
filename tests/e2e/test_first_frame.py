@@ -113,16 +113,17 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         _routes(page)
         page.goto(phase4_server + "/app")
         _settled(page)
-        expect(page.locator("#agentModelControls .model-picker-display-text")).to_have_text("DeepSeek V4.1 Flash")
+        expect(page.locator("#agentModelControls .model-picker-display-text")).to_have_text("6 AIs cross-check")
+        expect(page.locator("#agentModelControls .model-picker-display")).to_have_attribute("title", re.compile(r"^DeepSeek V4\.1 Flash writes the answer"))
         page.reload()
         _settled(page)
         frames = _frames(page)
-        # One face from the first frame to the end: Agent's chip with the
-        # model it had when the page was left, Reasoning "Auto", no demo, no
+        # One face from the first frame to the end: Agent's chip with what
+        # the comparison models do, Reasoning "Auto", no demo, no
         # Consensus chip, a quiet Send (B1); "Chat" and "New chat" (B10).
         assert len(frames) == 1, frames
         first = frames[0]
-        assert first["agent"].startswith("chip:DeepSeek V4.1 Flash"), first
+        assert first["agent"] == "chip:6 AIs cross-check", first
         assert first["consensus"] == "hidden" and first["demo"] == "-" and first["send"] == "disabled", first
         assert first["reasoning"] == "Auto" and first["marks"] == 6, first
         assert first["tab"] == "Chat" and first["newChat"] == "New chat", first
@@ -214,11 +215,11 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
         assert not page.evaluate("document.documentElement.classList.contains('agent-shell-expected')")
         assert page.evaluate("document.body.classList.contains('is-guest')")
         frames = _frames(page)
-        # The remembered account's words first, the guest's in the end.
-        assert frames[0]["agent"].startswith("chip:GPT-5.6 Sol"), frames
+        # The chip says what the comparison models do, for the remembered
+        # account and the guest alike; the guest's buttons in the end.
+        assert frames[0]["agent"] == "chip:6 AIs cross-check", frames
         last = frames[-1]
-        label = page.evaluate("document.getElementById('appBootstrapConfig').dataset.agentDefaultLabel")
-        assert last["guestButtons"] and last["agent"].startswith(f"chip:{label}"), last
+        assert last["guestButtons"] and last["agent"] == "chip:6 AIs cross-check", last
         assert last["reasoning"] == "Auto" and last["consensus"] == "hidden", last
         assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         field.type("Still here")
@@ -230,8 +231,8 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
 @pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
 def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades_once(browser, phase4_server, width, height, mobile):
     """H3 (Max): a guest sees Agent's composer of a new chat as an account
-    does by default, from the first frame to the end: the chip with the
-    default model and the comparison count, Agent's greeting, Reasoning
+    does by default, from the first frame to the end: the chip with what
+    the comparison models do, Agent's greeting, Reasoning
     "Auto"; the demo offer stays a guest's (B13). One face, also on reload."""
     context = _context(browser, width, height, uid=None, mobile=mobile)
     page = context.new_page()
@@ -246,12 +247,10 @@ def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades
         page.wait_for_function("() => window.__consensioAuthState?.known === true && typeof window.openShareDialog === 'function'")
         page.wait_for_timeout(600)
         frames = _frames(page)
-        label = page.evaluate("document.getElementById('appBootstrapConfig').dataset.agentDefaultLabel")
-        assert label
         assert len(frames) == 1, frames
         first = frames[0]
         assert first["demo"] == "demo" and first["send"] == "hidden" and first["guestButtons"], first
-        assert first["agent"].startswith(f"chip:{label}") and first["agent"].endswith("+6"), first
+        assert first["agent"] == "chip:6 AIs cross-check", first
         assert first["consensus"] == "hidden", first
         assert first["reasoning"] == "Auto" and first["marks"] == 6, first
         assert first["greeting"] == "What do you want to be sure about?", first

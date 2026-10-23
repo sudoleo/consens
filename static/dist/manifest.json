@@ -1,5 +1,5 @@
 {
-  "sources": "89e11fc4d685",
+  "sources": "ad417e3f713d",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -209,7 +209,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.e454f0ad0695.js",
+      "src": "/static/dist/head.653609d574b7.js",
       "module": false,
       "defer": false
     },
@@ -233,20 +233,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.4bf326128709.js",
+      "src": "/static/dist/app.9d5d03933e8c.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.58e8f9cff5f5.css",
-    "landing": "/static/dist/landing.21853940b0eb.css",
+    "app": "/static/dist/app.a2a4d7641349.css",
+    "landing": "/static/dist/landing.2c9d99c0fa72.css",
     "public": "/static/dist/public.dec411513656.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "41faebe62d3b",
+      "hash": "24c6770cfe2d",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -288,7 +288,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "19d5ab4362ff",
+      "hash": "7c3f70eea0b9",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -317,20 +317,20 @@
     }
   },
   "previous_assets": [
+    "app.58e8f9cff5f5.css",
     "app.77742e6e6499.css",
-    "app.7b272ed92919.css",
+    "app.4bf326128709.js",
     "app.4b2dfad51a5e.js",
-    "app.10e67f572a5c.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.9242c9a39f0f.js",
     "demo.de6803a59a75.js",
     "firebase.930d0dabc686.js",
     "firebase.246aac0cf7d3.js",
+    "head.e454f0ad0695.js",
     "head.bc9f04f56061.js",
-    "head.f37d1d64ebf0.js",
+    "landing.21853940b0eb.css",
     "landing.7ec755d90b0f.css",
-    "landing.a81c4266e2f9.css",
     "public.a152705acb9b.css",
     "public.e32f981fe90c.css"
   ]

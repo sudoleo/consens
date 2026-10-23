@@ -91,12 +91,12 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         def box(selector):
             return page.locator(selector).evaluate('el => el.getBoundingClientRect().toJSON()')
-        # One models chip (the chat model and how many it is compared with),
-        # never a second comparison chip next to it.
+        # One models chip (what the comparison models do, the chat model in
+        # its tooltip), never a second comparison chip next to it.
         agent_model = box('.agent-model-picker .model-picker-display')
         expect(page.locator('.consensus-model-inline')).to_be_hidden()
         expect(page.locator('.composer-models .model-picker-display:visible')).to_have_count(1)
-        expect(page.locator('.agent-model-picker .model-picker-display-count')).to_have_text(re.compile(r'^\+\d$'))
+        expect(page.locator('.agent-model-picker .model-picker-display-text')).to_have_text(re.compile(r'^\d AIs cross-check$'))
         expect(page.locator('#runModeControl')).to_be_hidden()
         bounds = [box('#attachTrigger'), agent_model, box('#sendButton')]
         centers = [b['y'] + b['height'] / 2 for b in bounds]
@@ -263,7 +263,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
                 label = page.locator(".agent-model-picker .model-picker-display-text").bounding_box()
                 assert label["width"] >= 90
         expect(page.locator(".consensus-model-inline")).to_be_hidden()
-        expect(page.locator(".agent-model-picker .model-picker-display-count")).to_have_text(re.compile(r"^\+\d+$"))
+        expect(page.locator(".agent-model-picker .model-picker-display-text")).to_have_text(re.compile(r"^\d+ AIs cross-check$"))
         _open_agent_level(page, "companion")
         page.locator(".agent-model-picker .model-picker-custom-option").click()
         expect(page.locator(".agent-model-picker .model-picker-menu")).not_to_contain_text("Consensus engine")

@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import ast
 import html
+import itertools
 import json
 import re
 import sys
@@ -673,6 +674,69 @@ def script_keys(relative: str, source: str | None = None) -> list[Found]:
 
 
 # ---------------------------------------------------------------------------
+# Sentences composed from parts
+# ---------------------------------------------------------------------------
+# The page looks a text up as a whole (static/js/i18n.js). A template that
+# chooses words inside ${…} and puts other text around them ("Difference:
+# ${text}" with the word picked in the expression) has no entry of its own,
+# so those words stayed English on a German page. Each such template is
+# composed with its words, the other values standing in, and looked up the
+# way the page does it; what finds nothing is reported.
+
+_TRANSLATED_CALL = re.compile(r"\bApp\??\.t\s*\(|(?<![\w.])t\s*\(")
+_PLAIN_WORDS = re.compile(r"[a-z’']{3,}(?: [a-z’']+)*")
+
+
+def _chosen_words(expression: str) -> list[str]:
+    """Interface words a ${…} picks itself (not through App.t): the branches
+    of ``a ? "x" : "y"``, a fallback ``|| "x"``, a value in ``{key: "x"}``."""
+    if _TRANSLATED_CALL.search(expression):
+        return []
+    tokens = tokenize(expression)
+    return [token.value for index, token in enumerate(tokens) if token.kind == "string"
+            and index and tokens[index - 1].kind == "punct" and tokens[index - 1].value in "?:|"
+            and (_keys_of_text(token.value) or _PLAIN_WORDS.fullmatch(token.value))]
+
+
+def composed_in(relative: str, source: str, current: i18n.Catalog) -> list[Found]:
+    gaps: list[Found] = []
+    ignored = {number for number, line in enumerate(source.splitlines(), 1) if "i18n-ignore" in line}
+    for token in tokenize(source):
+        if token.kind != "template" or token.line in ignored:
+            continue
+        chunks, expressions = token.parts
+        # Markup is translated element by element, not as one text.
+        if _MARKUP.search("".join(chunks)):
+            continue
+        choices = [_chosen_words(expression) for expression in expressions]
+        if not any(choices) or (len(expressions) == 1 and not "".join(chunks).strip()):
+            continue
+        # A value no entry knows (a name, a number) stands in for the rest.
+        options = [words or [f"Q{index}7"] for index, words in enumerate(choices)]
+        for combination in itertools.islice(itertools.product(*options), 16):
+            text = i18n.normalize(chunks[0] + "".join(value + chunks[index + 1] for index, value in enumerate(combination)))
+            if not looks_like_text(re.sub(r"Q\d+7", "{x}", text)):
+                continue
+            translated = current.lookup(text)
+            # A pattern whose placeholder took the chosen word whole
+            # ("Allow {0} first." with "reading emails") leaves it English.
+            kept = translated is not None and any(
+                re.search(rf"(?<!\w){re.escape(word.strip())}(?!\w)", translated)
+                and current.lookup(i18n.normalize(word)) != i18n.normalize(word)
+                for word in combination if not word.startswith("Q") and re.search(r"[a-z]{3}", word))
+            if translated is None or kept:
+                gaps.append(Found(text, relative, token.line))
+                break
+    return gaps
+
+
+def composed_gaps(language: str = "de") -> list[Found]:
+    current = i18n.catalog(language) or i18n.Catalog({})
+    return [gap for relative in script_files()
+            for gap in composed_in(relative, (ROOT / relative).read_text(encoding="utf-8"), current)]
+
+
+# ---------------------------------------------------------------------------
 # Server sentences
 # ---------------------------------------------------------------------------
 
@@ -819,8 +883,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {item.line:5}  {item.key}")
     for key, value in rejected:
         print(f"invalid entry (markers or placeholders differ): {key!r} -> {value!r}")
-    print(f"\n{total} keys without {args.lang}, {len(rejected)} invalid entries")
-    return 1 if (args.command == "check" and (total or rejected)) else 0
+    composed = composed_gaps(args.lang)
+    if composed:
+        print("\ncomposed from parts, no entry for the whole (write whole sentences or App.t each part):")
+        for item in composed:
+            print(f"  {item.source}:{item.line}  {item.key}")
+    print(f"\n{total} keys without {args.lang}, {len(rejected)} invalid entries, {len(composed)} composed sentences")
+    return 1 if (args.command == "check" and (total or rejected or composed)) else 0
 
 
 if __name__ == "__main__":

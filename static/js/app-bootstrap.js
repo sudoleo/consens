@@ -153,8 +153,10 @@
     const agent = document.getElementById("agentModelDropdown");
     const look = { uid: state.uid || "", at: Date.now() };
     // Only words drawn from the loaded model list, never its placeholder.
+    // The chip itself says what the comparison models do, so the chat
+    // model's name comes from its select.
     if (agent?.dataset.catalog === "ready") {
-      look.agentModel = text(document.querySelector("#agentModelControls .agent-model-picker .model-picker-display-text"));
+      look.agentModel = text(agent.selectedOptions?.[0]);
       look.agentEffort = text(document.getElementById("agentReasoningEffort")?.selectedOptions?.[0]);
     }
     // The Consensus/Compare chip only while it is the one on screen; next to
@@ -235,7 +237,7 @@
   // The chip a custom picker (model-picker.js) will draw, drawn now: the same
   // button in the same place, which initCustomModelPicker adopts. The native
   // select behind it is hidden the way the enhanced picker hides it.
-  function seedPickerChip(wrapper, label, count) {
+  function seedPickerChip(wrapper, label, ariaLabel) {
     const select = wrapper?.querySelector("select");
     if (!select || !label || select._customModelPicker || wrapper.querySelector(":scope > .model-picker-display")) return;
     wrapper.classList.add("custom-model-picker", "is-enhanced");
@@ -246,18 +248,12 @@
     chip.dataset.seeded = "true";
     chip.setAttribute("aria-haspopup", "listbox");
     chip.setAttribute("aria-expanded", "false");
-    chip.setAttribute("aria-label", `${select.getAttribute("aria-label") || "Models"}: ${label}`);
+    // Translated part by part: "{picker}: {label}" has no entry of its own.
+    chip.setAttribute("aria-label", ariaLabel || `${window.App.t(select.getAttribute("aria-label") || "Models")}: ${window.App.t(label)}`);
     const name = document.createElement("span");
     name.className = "model-picker-display-text";
     name.textContent = label;
     chip.append(name);
-    if (count) {
-      const extra = document.createElement("span");
-      extra.className = "model-picker-display-count";
-      extra.setAttribute("aria-hidden", "true");
-      extra.textContent = count;
-      chip.append(extra);
-    }
     wrapper.append(chip);
   }
 
@@ -306,11 +302,12 @@
     const remembered = rememberedLook()?.consensus;
     if (remembered) return remembered;
     const count = checkedFamilies().length;
-    const models = `${count} ${count === 1 ? "model" : "models"}`;
+    const models = count === 1 ? "1 model" : `${count} models`;
     if (window.App.runMode?.preference?.() === "compare") return models;
     const presetId = window.App.userSettings?.get?.("consensus_preset") || window.DEFAULT_CONSENSUS_PRESET;
     const preset = (window.CONSENSUS_PRESETS || []).find(entry => entry.id === presetId);
-    return preset ? `${models} · ${preset.label}` : "";
+    // Translated part by part, as model-picker.js draws it.
+    return preset ? `${window.App.t(models)} · ${window.App.t(preset.label)}` : "";
   }
 
   let draftSeeded = false;
@@ -421,13 +418,13 @@
       // agent-chat.js keeps the reasoning select hidden: it lives in the chip's menu.
       const effortWrapper = document.getElementById("agentReasoningEffort")?.parentElement;
       if (effortWrapper) effortWrapper.hidden = true;
-      const count = checkedFamilies().length;
-      seedPickerChip(agentControls.querySelector(".agent-model-picker"), window.App.firstFrame.agentModel(), count ? `+${count}` : "");
+      const crossCheck = window.App.words.crossCheck(checkedFamilies().length);
+      seedPickerChip(agentControls.querySelector(".agent-model-picker"), crossCheck, crossCheck);
     }
     const consensusChip = once("consensusChip", document.querySelector(".consensus-model .select-wrapper select") && document.querySelector(".consensus-model"));
     if (consensusChip) {
       if (agentLook) consensusChip.hidden = true;
-      else if (!guestExpected()) seedPickerChip(consensusChip.querySelector(".select-wrapper"), consensusChipLabel(), "");
+      else if (!guestExpected()) seedPickerChip(consensusChip.querySelector(".select-wrapper"), consensusChipLabel());
     }
     // "Try the demo" is a one-time offer (demo.js): gone for good once used
     // or typed past, so a reload never shows it for a moment.

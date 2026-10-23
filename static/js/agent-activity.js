@@ -55,7 +55,7 @@
       return `Searched the web · ${urls.size} ${urls.size === 1 ? 'source' : 'sources'}: ${hosts.slice(0, 3).join(', ')}${more}`;
     }
     const count = Number.isInteger(item.count) && item.count > 0 ? item.count : 0;
-    return count ? `Searched the web · ${count} ${count === 1 ? 'search' : 'searches'}` : 'Searched the web';
+    return count === 1 ? 'Searched the web · 1 search' : count ? `Searched the web · ${count} searches` : 'Searched the web';
   }
   // "Read source · arxiv.org" only when the page was really read (the server
   // sends `read` from the fetch result); a failed or refused read says so.
@@ -88,7 +88,9 @@
     if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
     if (item.status === 'succeeded' && item.name === 'web_search') return searchSummary(item);
     if (item.status === 'succeeded') return tools[item.name]?.[2] || `${toolName(item.name)} · Completed`;
-    return `${toolName(item.name)} · ${{failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details'}`;
+    // Translated part by part: "{tool} · {state}" has no entry of its own.
+    const state = {failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details';
+    return `${App.t(toolName(item.name))} · ${App.t(state)}`;
   }
   function savedDuration(turn) {
     const start = Date.parse(turn?.created_at);
@@ -719,11 +721,17 @@
     view.note.hidden = !view.note.textContent;
     const measured = usage && Number.isFinite(usage.input_tokens) && Number.isFinite(usage.output_tokens);
     const number = App.format.number;
-    const tokens = measured ? `${number(usage.input_tokens + usage.output_tokens)} ${usage.complete === false ? "measured tokens · usage incomplete" : "tokens"}` : "Usage unavailable";
+    const total = measured ? number(usage.input_tokens + usage.output_tokens) : "";
+    // Translated part by part: the line is put together from several.
+    const tokens = !measured ? App.t("Usage unavailable")
+      : usage.complete === false ? App.t("{total} measured tokens · usage incomplete", { total }) : App.t("{total} tokens", { total });
     const dollars = Number.isFinite(usage?.estimated_cost_nano_usd) ? usage.estimated_cost_nano_usd / 1e9 : NaN;
     const providerCost = usage?.cost_source === "provider";
-    const cost = Number.isFinite(dollars)
-      ? ` · ${usage.cost_complete === false ? "at least " : ""}${providerCost ? "" : "~"}$${dollars.toFixed(dollars > 0 && dollars < .0001 ? 6 : 4)} ${providerCost ? "provider cost" : "estimated"}${usage.cost_complete === false ? " · cost incomplete" : ""}` : "";
+    const amount = `${providerCost ? "" : "~"}$${Number.isFinite(dollars) ? dollars.toFixed(dollars > 0 && dollars < .0001 ? 6 : 4) : ""}`;
+    const kind = App.t(providerCost ? "provider cost" : "estimated");
+    const cost = !Number.isFinite(dollars) ? ""
+      : usage.cost_complete === false ? ` · ${App.t("at least {amount} {kind} · cost incomplete", { amount, kind })}`
+      : ` · ${amount} ${kind}`;
     view.usageEl.textContent = tokens + cost;
     view.usageEl.title = measured ? `${number(usage.input_tokens)} input · ${number(usage.output_tokens)} output tokens` : "The provider did not report token usage.";
     view.usageEl.hidden = running;

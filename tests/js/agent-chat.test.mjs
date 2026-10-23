@@ -1193,7 +1193,8 @@ describe("single-model agent chat", () => {
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
     expect(document.getElementById("agentModelControls").hidden).toBe(false);
     const chip = document.querySelector(".agent-model-picker .model-picker-display");
-    expect(chip.querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
+    expect(chip.querySelector(".model-picker-display-text").textContent).toBe("2 AIs cross-check");
+    expect(chip.title).toBe("Claude Sonnet 5.5 writes the answer, 2 AIs cross-check it.");
     expect(chip.disabled).toBe(false);
     // No "Log in to use Agent." under the field, no model list to load.
     agent.syncComposer();
@@ -2230,7 +2231,7 @@ describe("single-model agent chat", () => {
   });
 });
 
-// Agent shows ONE chip for the chat model and the models it is compared with
+// Agent shows ONE chip for the chat model and the models that cross-check it
 // (model-picker.js, linked pickers). The comparison select keeps its rules
 // and persistence; it only draws into the Agent menu while Agent is on.
 const LINKED_BODY = BODY + `<div class="consensus-model consensus-model-inline"><div class="select-wrapper">
@@ -2264,9 +2265,12 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
     const menu = d.querySelector('.agent-model-picker .model-picker-menu');
     expect(d.querySelector('.consensus-model').hidden).toBe(true);
-    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
-    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+2');
-    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash, compared with 2 models');
+    // The chip says what the comparison models do; the chat model is named
+    // in its tooltip and menu.
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('2 AIs cross-check');
+    expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
+    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
+    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it');
     expect(trigger.textContent).not.toMatch(/Agent|Compare/);
 
     trigger.click();
@@ -2298,7 +2302,7 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     gemini.click();
     expect(d.getElementById('compareGemini').checked).toBe(true);
     expect(d.activeElement.dataset.focusKey).toBe('toggle:Gemini');
-    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+3');
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('3 AIs cross-check');
     expect(w.localStorage.getItem('pref_consensus_preset')).toBe('custom');
 
     // Escape closes the one menu and returns to the one chip.
@@ -2358,16 +2362,16 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const { window: w, document: d, dom } = bootLinked({ initComparison: false });
     await selectAgent(w);
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
-    // The count of the waiting link stands already (the first frame drew it,
-    // Apple-Audit B1); it does not leave until the link is made.
-    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+2');
+    // The words of the waiting link stand already (the first frame drew
+    // them, Apple-Audit B1); they do not leave until the link is made.
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('2 AIs cross-check');
     w.App.initCustomModelPicker(d.getElementById('consensusModelDropdown'), { presets: true });
-    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+2');
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('2 AIs cross-check');
     trigger.click();
     expect(d.querySelector('.agent-model-picker [data-picker-level="companion"]')).not.toBeNull();
     // Unlinking a link that never applied is a no-op, not an error.
     w.App.linkModelPicker(d.getElementById('agentModelDropdown'), null);
-    expect(trigger.querySelector('.model-picker-display-count').hidden).toBe(true);
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
     dom.window.close();
   });
 });

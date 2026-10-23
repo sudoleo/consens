@@ -103,7 +103,7 @@
     view.question.textContent = watch?.question || proposal.question;
     const goal = watch ? line(watch.condition) : proposal.goals[0] || '';
     view.goal.textContent = !goal ? 'Any change to the answer'
-      : `${watch?.status === 'resolved' ? 'Waited for' : 'Waiting for'}: ${goal}`;
+      : watch?.status === 'resolved' ? `Waited for: ${goal}` : `Waiting for: ${goal}`;
     view.settings.hidden = Boolean(watch);
     if (!watch && ui) view.settings.textContent = ui.settingsSummary(ui.watchDefaults(proposal.interval));
     // A failed start speaks only while starting is still the next step: an

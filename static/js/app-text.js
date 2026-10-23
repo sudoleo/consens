@@ -215,7 +215,10 @@
     failed: "Failed",
     stopped: "Stopped",
     // What is used up by a message.
-    allowance: "allowance"
+    allowance: "allowance",
+    // The Agent chip says what the comparison models do, not their names:
+    // "Claude Sonnet 5.5 +6" meant nothing to a reader new to AI models.
+    crossCheck: count => count >= 2 ? `${count} AIs cross-check` : "No cross-check"
   });
 
   // ------------------------------------------------------------------

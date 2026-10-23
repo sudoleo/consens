@@ -368,7 +368,8 @@
       reasoningButton.disabled = beta && !loading && (!effort || effort.disabled || effort.dataset.available !== "true");
       reasoningButton.setAttribute("role", beta ? "button" : "switch");
       reasoningButton.setAttribute("aria-checked", String(reasoningOn));
-      reasoningButton.title = `Reasoning ${reasoningOn ? "on" : "off"} · Models think longer before they answer`;
+      reasoningButton.title = reasoningOn ? "Reasoning on · Models think longer before they answer"
+        : "Reasoning off · Models think longer before they answer";
       // One write, and only of a change: the label is in the first frame
       // already (app-bootstrap.js).
       const state = document.getElementById(stateId);
@@ -432,8 +433,9 @@
     status.hidden = !summary;
     // The result on screen keeps its own mode; say so when the next
     // message will run differently.
+    // The summary comes translated (directSummary), so its prefix is too.
     status.textContent = summary
-      ? `${enabled ? "Shown: Compare result · " : ""}${summary}.`
+      ? `${enabled ? `${window.App.t("Shown: Compare result ·")} ` : ""}${summary}.`
       : "";
     status.title = status.textContent;
     status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";

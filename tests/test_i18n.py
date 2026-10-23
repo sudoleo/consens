@@ -270,6 +270,24 @@ def test_every_visible_english_text_has_german():
         f"{len(lines)} texts without German (python scripts/i18n.py missing; docs/i18n.md):\n" + "\n".join(lines[:60]))
 
 
+def test_a_sentence_composed_from_chosen_words_is_found():
+    """"Difference: ${text}" with the word picked inside ${…} has no entry of
+    its own; whole sentences or App.t for each part do (docs/i18n.md)."""
+    current = i18n.Catalog({"Difference": "Unterschied", "Disagreement": "Uneinigkeit",
+                            "Allow {0} first.": "Erlaube zuerst: {0}.", "Waiting for: {goal}": "Wartet auf: {goal}"})
+    composed = "li.textContent = `${hard ? 'Disagreement' : 'Difference'}: ${text}`;"
+    swallowed = "sub.textContent = `Allow ${gmail ? 'reading emails' : 'reading calendars'} first.`;"
+    whole = "view.goal.textContent = `Waiting for: ${goal}`; item.textContent = `${App.t(label)}: ${text}`;"
+    assert [gap.key for gap in i18n_tool.composed_in("x.js", composed, current)] == ["Disagreement: Q17"]
+    assert [gap.key for gap in i18n_tool.composed_in("x.js", swallowed, current)] == ["Allow reading emails first."]
+    assert i18n_tool.composed_in("x.js", whole, current) == []
+
+
+def test_no_script_composes_a_sentence_without_an_entry():
+    gaps = [f"{gap.source}:{gap.line}: {gap.key}" for gap in i18n_tool.composed_gaps("de")]
+    assert not gaps, "composed from parts, write whole sentences or App.t each part (docs/i18n.md):\n" + "\n".join(gaps)
+
+
 def test_words_a_script_writes_reach_the_browser():
     """page-*.json and mail.json stay on the server; a script's words must be in another file."""
     client = {}

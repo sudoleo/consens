@@ -924,8 +924,8 @@ img { display: block; max-width: 100%; }
 .lp-attach svg { width: 15px; height: 15px; }
 
 /* The picker of the /app composer row (composer.css): a quiet label with a
-   chevron. The models chip names the agent that writes plus the count it
-   checks with, and stands on the right, next to Send. */
+   chevron. The models chip says how many AIs cross-check the answer, and
+   stands on the right, next to Send. */
 .lp-run-chip {
   display: inline-flex;
   align-items: center;
@@ -945,7 +945,6 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-run-chip { margin-left: auto; }
-.lp-run-chip-count { margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums; transition: color var(--dur-state) var(--ease-standard); }
 
 .lp-run-chip i {
   width: 1em;
@@ -956,8 +955,7 @@ img { display: block; max-width: 100%; }
   mask: var(--chevron-mask) center / contain no-repeat;
 }
 
-/* Its step lights the text, never a frame: the picker in /app has none. */
-.lp-run-chip.is-lit .lp-run-chip-count { color: var(--ink); }
+/* Its step lights the chevron, never a frame: the picker in /app has none. */
 .lp-run-chip.is-lit i { opacity: 1; }
 
 .lp-send {

@@ -246,8 +246,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       inklusive unbekannter/offener Messungen prüfen. Automatisiert durch
       `test_agent_runs.py`, `agent-chat.test.mjs` und
       `test_agent_chat_frontend.py` (Browser-APIs gemockt).
-      Agent zeigt in `.composer-models` genau EINEN Chip („<Chatmodell>
-      +6“: Chatmodell + Zahl der Vergleichsmodelle, nie der Modusname); sein
+      Agent zeigt in `.composer-models` genau EINEN Chip („6 AIs
+      cross-check“ / „6 KIs prüfen mit“, Tooltip nennt das Chatmodell, nie
+      der Modusname); sein
       Menü öffnet mit „Agent“ (Modell, Reasoning) und „Compare with“
       (Presets/Custom, 2–6 Modelle). Agent-Modell darin per Maus/Tastatur
       (Rechts hinein, Links zurück) wechseln,
@@ -1038,8 +1039,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       E-Mail-Registrierung kommt die Frage nach dem Passwort-Setzen ebenfalls
       zurück (innerhalb einer Stunde läuft sie von selbst).
 - [ ] Gast sieht den Agent (seit 2026-10-21, Apple-Audit H3): privates Fenster,
-      `/app` hart neu laden — ab dem ersten Bild Agent-Chip mit dem
-      Standardmodell und `+6`, „What do you want to be sure about?“, Beispielfragen und
+      `/app` hart neu laden — ab dem ersten Bild Agent-Chip „6 AIs
+      cross-check“, „What do you want to be sure about?“, Beispielfragen und
       „Try the demo“; nichts springt, wenn der Login-Status kommt. (+) zeigt
       Agent gewählt, Consensus und Compare daneben. Chip, Reasoning, Attach
       (Leiste und Menü) öffnen je den Login mit eigenem Satz, kein Menü öffnet

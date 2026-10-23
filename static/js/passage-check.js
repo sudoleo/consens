@@ -185,8 +185,15 @@
     const state = verdict(claim);
     const total = claim.agree.length + claim.dissent.length;
     if (state === "unconfirmed") return claim.agree.length ? "Only one model says this" : "No other model says this";
-    const of = (count, verb) => `${count} of ${total} ${total === 1 ? "model" : "models"} ${count === 1 ? `${verb}s` : verb}`;
-    return state === "holds" ? of(claim.agree.length, "agree") : of(claim.dissent.length, "disagree");
+    // Whole sentences per number (docs/i18n.md): German forms them differently.
+    if (state === "holds") {
+      const count = claim.agree.length;
+      return total === 1 ? (count === 1 ? "1 of 1 model agrees" : `${count} of 1 model agree`)
+        : count === 1 ? `1 of ${total} models agrees` : `${count} of ${total} models agree`;
+    }
+    const count = claim.dissent.length;
+    return total === 1 ? (count === 1 ? "1 of 1 model disagrees" : `${count} of 1 model disagree`)
+      : count === 1 ? `1 of ${total} models disagrees` : `${count} of ${total} models disagree`;
   }
 
   function highlightMode() {
@@ -337,7 +344,7 @@
     disputed: count => `${count} disputed`,
     split: count => `${count} split`,
     unconfirmed: count => `${count} unconfirmed`,
-    holds: count => `${count} ${count === 1 ? "holds" : "hold"}`
+    holds: count => count === 1 ? "1 holds" : `${count} hold`
   };
 
   function issueNote(check) {
@@ -401,7 +408,7 @@
           : `No model contradicts your text, but none of its ${total} statements is confirmed`));
     } else if (tally.unconfirmed) {
       line.append("No model contradicts your text; ", figure(tally.holds, "holds"),
-        `${of} ${tally.holds === 1 ? "is" : "are"} confirmed`);
+        tally.holds === 1 ? `${of} is confirmed` : `${of} are confirmed`);
     } else if (total === 1) {
       line.append(unchecked ? "The checked statement in your text holds up" : "The statement in your text holds up");
     } else {

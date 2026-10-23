@@ -185,7 +185,8 @@
     picker.wrapper.hidden = select.hidden;
     picker.button.disabled = select.disabled;
     const current = select.options[select.selectedIndex];
-    picker.button.setAttribute("aria-label", `${picker.menu.getAttribute("aria-label")}: ${current?.textContent || "Choose"}`);
+    // Translated part by part: "{menu}: {choice}" has no entry of its own.
+    picker.button.setAttribute("aria-label", `${App.t(picker.menu.getAttribute("aria-label"))}: ${App.t(current?.textContent || "Choose")}`);
     picker.button.replaceChildren();
     const answer = selected?.answers.find(a => a.provider === select.value);
     if (answer && !select.id.endsWith("Turn")) picker.button.append(modelMark(answer));

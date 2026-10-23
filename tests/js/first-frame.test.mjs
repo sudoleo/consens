@@ -73,14 +73,14 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.body.classList.contains("is-guest")).toBe(true);
     expect(document.getElementById("authTopActions").hidden).toBe(false);
     // What an account sees by default (Max, Apple-Audit H3): Agent's chip
-    // with the default model and the comparison count, its greeting and
-    // Reasoning; no Consensus chip, no account placeholders.
+    // with what the comparison models do, its greeting and Reasoning; no
+    // Consensus chip, no account placeholders.
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
     expect(document.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
     expect(document.getElementById("agentModelControls").hidden).toBe(false);
-    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
-    expect(chip(document).querySelector(".model-picker-display-count").textContent).toBe("+3");
+    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("3 AIs cross-check");
+    expect(chip(document).querySelector(".model-picker-display-count")).toBeNull();
     expect(document.querySelector(".consensus-model").hidden).toBe(true);
     expect(document.getElementById("composerReasoningState").textContent).toBe("Auto");
     expect(document.getElementById("questionInput").placeholder).toBe("Ask anything, or paste an AI answer to check it");
@@ -142,13 +142,14 @@ describe("the composer's first frame (B1, B2, B13)", () => {
     expect(document.getElementById("agentModelControls").hidden).toBe(false);
     expect(document.querySelector(".agent-effort-control").hidden).toBe(true);
     expect(chip(document).dataset.seeded).toBe("true");
-    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Opus 5.5");
+    expect(chip(document).getAttribute("aria-label")).toBe("2 AIs cross-check");
     expect(document.getElementById("agentModelDropdown").classList.contains("native-model-picker")).toBe(true);
     expect(document.querySelector(".consensus-model").hidden).toBe(true);
     expect(document.getElementById("composerReasoningState").textContent).toBe("High");
-    // Grok left the comparison (the account's stored choice): two marks, "+2".
+    // Grok left the comparison (the account's stored choice): two marks,
+    // "2 AIs cross-check".
     expect(document.getElementById("grokCheck").checked).toBe(false);
-    expect(chip(document).querySelector(".model-picker-display-count").textContent).toBe("+2");
+    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("2 AIs cross-check");
     const marks = [...document.querySelectorAll("#composerModelIcons .composer-model-icon")];
     expect(marks.map(mark => mark.dataset.provider)).toEqual(["openai", "gemini"]);
     expect(marks[0].querySelector("img").getAttribute("src")).toBe("/static/openai.svg");
@@ -157,8 +158,9 @@ describe("the composer's first frame (B1, B2, B13)", () => {
 
   it("names the default model without a remembered look, and never another account's words", () => {
     const other = JSON.stringify({ uid: "someone-else", agentModel: "Claude Opus 5.5", agentEffort: "High" });
-    const { document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": other } });
-    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
+    const { window, document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": other } });
+    // The name the waiting chat model option carries (agent-chat.js).
+    expect(window.App.firstFrame.agentModel()).toBe("Claude Sonnet 5.5");
     expect(document.getElementById("composerReasoningState").textContent).toBe("Auto");
   });
 
@@ -187,9 +189,11 @@ describe("remembering the composer for the next first frame", () => {
   it("keeps the words drawn from the model list when the page is left", () => {
     const { window, document } = paint({ storage: { id_token: token("u1") } });
     window.__consensioAuthState = { known: true, uid: "u1" };
-    // The Agent picker as agent-chat.js draws it once the list has loaded.
+    // The Agent picker as agent-chat.js draws it once the list has loaded:
+    // the chat model's name comes from its select, the chip says what the
+    // comparison models do.
     document.getElementById("agentModelDropdown").dataset.catalog = "ready";
-    chip(document).querySelector(".model-picker-display-text").textContent = "GPT-6 Sol";
+    document.getElementById("agentModelDropdown").innerHTML = '<option value="gpt-6-sol" selected>GPT-6 Sol</option>';
     document.getElementById("agentReasoningEffort").innerHTML = '<option value="medium" selected>Medium</option>';
     window.dispatchEvent(new window.Event("pagehide"));
     const look = JSON.parse(window.localStorage.getItem("consensio.firstFrame.v1"));

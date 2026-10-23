@@ -172,16 +172,8 @@ def landing(request: Request):
         response.headers["Cache-Control"] = "private, no-store"
         response.headers["Vary"] = "Cookie, Sec-Fetch-Site"
         return response
-    # The composer mockups name the agent's real default model, never a
-    # showcase model the visitor would not get.
-    try:
-        from app.services.llm.agent_client import agent_model_label
-        agent_label = agent_model_label()
-    except Exception:
-        agent_label = ""
     response = templates.TemplateResponse(request=request, name="landing.html",
-                                          context={"agent_label": agent_label or "Agent",
-                                                   "pulse": landing_pulse_preview(),
+                                          context={"pulse": landing_pulse_preview(),
                                                    "live_watch_path": landing_live_watch()})
     # The same URL answers signed-in entries with a redirect.
     response.headers["Vary"] = "Cookie, Sec-Fetch-Site"

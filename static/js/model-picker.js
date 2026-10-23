@@ -533,19 +533,20 @@
         const presetValue = resolveConsensusPresetValue(select, presetId);
         if (preset && presetValue && select.value === presetValue) {
           displayLabel = preset.label;
-          displayTitle = `${preset.label} · ${selectedLabel}`;
+          displayTitle = `${window.App.t(preset.label)} · ${selectedLabel}`;
         }
       }
       // Der Consensus-Trigger ist im rahmenlosen Composer der EINZIGE
       // Lauf-Schalter. Er sagt deshalb beides: wie viele Modelle antworten
       // und welche Stufe den Konsens schreibt ("6 models · Daily").
       const count = window.App.getSelectedModelCount?.() || 0;
-      const countLabel = `${count} ${count === 1 ? "model" : "models"}`;
+      const countLabel = count === 1 ? "1 model" : `${count} models`;
       lastPresetDisplayLabel = displayLabel;
-      displayLabel = `${countLabel} · ${displayLabel}`;
+      // Translated part by part: "{models} · {preset}" has no entry of its own.
+      displayLabel = `${window.App.t(countLabel)} · ${window.App.t(displayLabel)}`;
       displayTitle = count < 2
         ? `${countLabel} selected · Choose at least 2 models to run consensus`
-        : `${countLabel} · ${displayTitle}`;
+        : `${window.App.t(countLabel)} · ${displayTitle}`;
       // Without a consensus (Compare, or the comparisons next to an Agent
       // answer) no preset writes anything, so the chip says only who answers.
       // It never says "Compare": that word is the mode.
@@ -558,25 +559,26 @@
       }
     }
 
-    // One chip for two choices (Agent): the chat model by name, then how many
-    // models it is compared with ("Claude Opus 5.5 +6"). The count stays
-    // whole while a long model name gives way.
-    let countLabel = "";
-    let ariaLabel = `${select.getAttribute("aria-label") || "Choose model"}: ${displayLabel}`;
-    // A companion still being enhanced is already this chip's count: its
-    // "+6" stands from the first frame (app-bootstrap.js) and must not go
-    // for the moment until the link is made.
-    if (!state.companion && pendingLinks.get(select)?.companion) {
-      countLabel = `+${window.App.getSelectedModelCount?.() || 0}`;
-    }
-    if (state.companion) {
+    // One chip for two choices (Agent). It says what the comparison models
+    // do ("6 AIs cross-check", App.words); the chat model that writes is
+    // named in its tooltip and menu.
+    // Translated part by part: "{picker}: {label}" has no entry of its own.
+    let ariaLabel = `${window.App.t(select.getAttribute("aria-label") || "Choose model")}: ${window.App.t(displayLabel)}`;
+    // A companion still being enhanced is already this chip's word: it
+    // stands from the first frame (app-bootstrap.js) and must not go for the
+    // moment until the link is made. A model list that failed to load says
+    // so instead ("Models unavailable"), next to its Retry.
+    const pending = pendingLinks.get(select);
+    if ((state.companion || pending?.companion) && select.dataset.catalog !== "failed") {
       const count = window.App.getSelectedModelCount?.() || 0;
-      const models = `${count} ${count === 1 ? "model" : "models"}`;
-      countLabel = `+${count}`;
+      const linked = state.linkedAriaLabel || pending?.options?.ariaLabel || select.getAttribute("aria-label");
+      displayLabel = window.App.words.crossCheck(count);
       displayTitle = count < 2
-        ? `${selectedLabel} · choose at least 2 models to compare with`
-        : `${selectedLabel} · compared with ${models}`;
-      ariaLabel = `${state.linkedAriaLabel}: ${selectedLabel}, compared with ${models}`;
+        ? `${selectedLabel} writes the answer. Choose at least 2 models to cross-check it.`
+        : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
+      ariaLabel = count < 2
+        ? `${linked}: ${selectedLabel} writes the answer, no cross-check`
+        : `${linked}: ${selectedLabel} writes the answer, ${count} AIs cross-check it`;
     }
 
     if (state.displayButton) {
@@ -585,17 +587,6 @@
       state.displayButton.disabled = select.disabled
         && !(state.companion && !state.companion.disabled);
       state.displayButton.querySelector(".model-picker-display-text").textContent = displayLabel;
-      let count = state.displayButton.querySelector(".model-picker-display-count");
-      if (countLabel && !count) {
-        count = document.createElement("span");
-        count.className = "model-picker-display-count";
-        count.setAttribute("aria-hidden", "true");
-        state.displayButton.appendChild(count);
-      }
-      if (count) {
-        count.textContent = countLabel;
-        count.hidden = !countLabel;
-      }
       state.displayButton.title = displayTitle;
       state.displayButton.setAttribute("aria-label", ariaLabel);
       state.displayButton.setAttribute('aria-haspopup', state.menu.getAttribute('role'));
@@ -722,7 +713,7 @@
     const selectedOption = select.options[select.selectedIndex];
     const modelCount = window.App.getSelectedModelCount?.() || 0;
     customHint.textContent = customActive
-      ? `${modelCount} ${modelCount === 1 ? "model" : "models"} · ${window.App.getModelOptionLabel(selectedOption)}`
+      ? `${window.App.t(modelCount === 1 ? "1 model" : `${modelCount} models`)} · ${window.App.getModelOptionLabel(selectedOption)}`
       : "Choose each model yourself";
     customLabel.appendChild(customHint);
     customItem.appendChild(customLabel);
@@ -804,7 +795,7 @@
     const button = document.createElement('button'); button.type = 'button';
     button.className = 'model-picker-option agent-reasoning-option'; button.tabIndex = -1;
     if (state.menu.getAttribute('role') === 'menu') button.setAttribute('role', 'menuitem');
-    button.textContent = `${state.secondaryLabel} · ${state.secondarySelect.selectedOptions[0]?.textContent || 'Auto'} ›`;
+    button.textContent = `${window.App.t(state.secondaryLabel)} · ${window.App.t(state.secondarySelect.selectedOptions[0]?.textContent || 'Auto')} ›`;
     button.disabled = state.secondarySelect.disabled;
     button.addEventListener('click', event => {
       event.stopPropagation(); state.view = 'secondary'; renderCustomModelPicker(select);
@@ -942,9 +933,9 @@
     const families = window.App.modelPrefs
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => pref.label || pref.key);
-    const models = `${count} ${count === 1 ? "model" : "models"}`;
+    const models = count === 1 ? "1 model" : `${count} models`;
     renderLevelRow(state, {
-      name: `${models} · ${preset ? preset.label : "Custom"}`,
+      name: `${window.App.t(models)} · ${window.App.t(preset ? preset.label : "Custom")}`,
       hint: count < 2 ? "Choose at least 2" : families.join(", "),
       level: "companion",
       disabled: state.companion.disabled,

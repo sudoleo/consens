@@ -126,10 +126,10 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         assert page.evaluate("App.agentChat.isSelected()") is True
         expect(page.locator("#attachTrigger")).to_be_visible()
         assert lead() == compare_lead
-        # Agent has ONE models chip: the chat model and how many models it is
-        # compared with. The comparison chip steps back into its menu.
+        # Agent has ONE models chip: what the comparison models do, the chat
+        # model in its tooltip. The comparison chip steps back into its menu.
         expect(page.locator(".consensus-model-inline")).to_be_hidden()
-        expect(page.locator(".agent-model-picker .model-picker-display-count")).to_have_text(re.compile(r"^\+\d+$"))
+        expect(page.locator(".agent-model-picker .model-picker-display-text")).to_have_text(re.compile(r"^\d+ AIs cross-check$"))
         expect(page.locator(".composer-models .model-picker-display:visible")).to_have_count(1)
         _shot(page, f"{width}-{'dark' if dark else 'light'}-agent")
         page.reload()
@@ -251,7 +251,8 @@ def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, 
         label = page.evaluate("document.getElementById('appBootstrapConfig').dataset.agentDefaultLabel")
         chip = page.locator("#agentModelControls .model-picker-display")
         expect(chip).to_be_visible()
-        expect(chip.locator(".model-picker-display-text")).to_have_text(label)
+        expect(chip.locator(".model-picker-display-text")).to_have_text(re.compile(r"^\d+ AIs cross-check$"))
+        expect(chip).to_have_attribute("title", re.compile("^" + re.escape(label) + " writes the answer"))
         expect(page.locator(".consensus-model")).to_be_hidden()
         expect(page.locator("#agentComposerNotice")).to_be_hidden()
         page.locator("#attachTrigger").click()

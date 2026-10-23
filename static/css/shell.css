@@ -4985,7 +4985,7 @@ body .theme-toggle:focus-visible {
    -------------------------------------------------------------------------- */
 :is(.run-time, .run-count, .agent-activity-title, .agent-agreement-num, .agent-session-tokens,
   .agent-sidebar-progress, .consensus-tab-count, .verdict-score-num, .quota-figure-value,
-  .quota-row-value, .model-picker-display-count) {
+  .quota-row-value) {
   font-variant-numeric: tabular-nums;
 }
 
