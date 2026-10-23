@@ -60,6 +60,15 @@ Die Frontend-Suite prüft auch die atomare Build-Veröffentlichung, unverändert
 Vendor-Dateien und die begrenzte Aufbewahrung voriger Bundles in temporären
 Verzeichnissen (`tests/js/frontend-output.test.mjs`), ohne den Projekt-Build zu ändern.
 
+Vitest läuft mit `pool: "forks"` (`vitest.config.mjs`): Jede Testdatei bekommt
+einen eigenen Kindprozess statt eines Worker-Threads. Mit dem früheren
+`threads`-Pool ließ sich unter Node 18 auf Windows der Worker nach
+`tests/js/dompurify-vendor.test.mjs` zeitweise nicht beenden. Alle Tests waren
+grün, aber der Lauf blieb nach der Zusammenfassung mit „Failed to terminate
+worker“ und „something prevents Vite server from exiting“ stehen, und
+`.\dev.ps1 check frontend` kam nicht zurück. Deshalb nicht auf `threads`
+zurückstellen.
+
 Eine einzelne Datei oder ein Verzeichnis innerhalb der gewählten Suite:
 
 ```powershell
