@@ -75,6 +75,9 @@ it('enables passage hover for a mouse attached after rendering, while touch stay
   await new Promise(resolve => window.setTimeout(resolve, 160));
   expect(document.querySelector('.insight-preview:not([hidden])').textContent).toContain('2/2');
   mark.dispatchEvent(new window.MouseEvent('mouseleave'));
+  // It waits a moment for the pointer to reach it, then goes.
+  expect(document.querySelector('.insight-preview:not([hidden])')).not.toBeNull();
+  await new Promise(resolve => window.setTimeout(resolve, 320));
   expect(document.querySelector('.insight-preview:not([hidden])')).toBeNull();
   dom.window.close();
 });

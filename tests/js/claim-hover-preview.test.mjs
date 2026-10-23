@@ -96,6 +96,172 @@ describe("where the hover card opens", () => {
   });
 });
 
+describe("where the card stands beside its sentence", () => {
+  // Max 2026-10-23: a disputed sentence split by **bold** into three spans,
+  // its first word at the end of a line. The card took the first span for
+  // the disputed words: it stood above the sentence, over the paragraph
+  // before, and hung out of the text to the right, with room to spare below.
+  const SENTENCE = "Die vollständigen Gewichte sollen bis 4. November erscheinen; bis dahin ist es offen.";
+  const data = { models_compared: ["OpenAI", "Gemini"], claims: [], differences: [{
+    claim: "Availability of the weights", consensus_anchor: SENTENCE, type: "contradiction", severity: "major",
+    positions: [{ models: ["OpenAI"], stance: "Not yet", quote: "not yet", in_answer: true },
+      { models: ["Gemini"], stance: "Already open", quote: "open" }] }] };
+  const box = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
+  // [left, top, width] of each line of each span, as the browser laid them out.
+  const LINES = { "Die": [[1152, 324, 26], [570, 353, 437]], "4.": [[1007, 353, 151]], " er": [[1158, 353, 97], [570, 382, 621]] };
+
+  function laidOut(floorTop) {
+    const env = boot();
+    const { window, document, body } = env;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1917 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 910 });
+    window.HTMLElement.prototype.getClientRects = function () {
+      if (!this.isConnected) return [];
+      if (this.classList.contains("cx-claim")) {
+        const key = Object.keys(LINES).find(start => this.textContent.startsWith(start));
+        return LINES[key].map(([left, top, width]) => box(left, top, width, 23));
+      }
+      return [box(0, 0, 10, 10)];
+    };
+    window.HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.tagName === "P") return box(570, 324, 704, 81);
+      if (this.classList.contains("chat-input-container")) return box(0, floorTop, 1917, 120);
+      return box(0, 0, 0, 0);
+    };
+    for (const side of ["offsetWidth", "offsetHeight"]) {
+      Object.defineProperty(window.HTMLElement.prototype, side, { configurable: true, get() {
+        return this.classList.contains("insight-preview") ? (side === "offsetWidth" ? 344 : 300) : 0;
+      } });
+    }
+    const composer = document.createElement("div");
+    composer.className = "chat-input-container";
+    document.body.appendChild(composer);
+    body.innerHTML = "<p>Für den Alltag zählt das. Die vollständigen Gewichte sollen bis <strong>4. November</strong> erscheinen; bis dahin ist es offen.</p>";
+    window.renderStoredConsensusClaims(body, data, document.createElement("div"), [], { focusDifference() {} });
+    expect(body.querySelectorAll(".cx-claim")).toHaveLength(3);
+    return env;
+  }
+
+  it("stands under the whole sentence where there is room, from the start of its last line", async () => {
+    const env = laidOut(820);
+    env.hover(env.body.querySelectorAll(".cx-claim")[1]);
+    await wait(160);
+    const card = env.shown();
+    expect(card.dataset.placement).toBe("below");
+    expect([card.style.left, card.style.top]).toEqual(["570px", "417px"]);
+    expect(card.style.getPropertyValue("--cx-arrow-x")).toBe("28px");
+    env.dom.window.close();
+  });
+
+  it("stands above it without room below, inside the text, the arrow on the word at the line's end", async () => {
+    const env = laidOut(600);
+    env.hover(env.body.querySelector(".cx-claim"));
+    await wait(160);
+    const card = env.shown();
+    expect(card.dataset.placement).toBe("above");
+    // The paragraph ends at 1274: the card's right edge stays there.
+    expect([card.style.left, card.style.top]).toEqual(["930px", "12px"]);
+    expect(card.style.getPropertyValue("--cx-arrow-x")).toBe("235px");
+    env.dom.window.close();
+  });
+});
+
+describe("reaching the card with the pointer", () => {
+  const launch = { claim: "the launch date", consensus_anchor: "The launch is on Monday.", type: "contradiction",
+    severity: "major", positions: [{ models: ["OpenAI"], stance: "Monday", quote: "Monday", in_answer: true },
+      { models: ["Gemini"], stance: "Friday", quote: "Friday" }] };
+  const tickets = { claim: "the ticket price", consensus_anchor: "Tickets cost ten euros.", type: "contradiction",
+    severity: "major", positions: [{ models: ["OpenAI"], stance: "Ten", quote: "ten", in_answer: true },
+      { models: ["Gemini"], stance: "Twelve", quote: "twelve" }] };
+  function marked(env, differences, ways) {
+    env.body.innerHTML = "<p>The launch is on Monday. Tickets cost ten euros.</p>";
+    env.window.renderStoredConsensusClaims(env.body, { models_compared: ["OpenAI", "Gemini"], claims: [], differences },
+      env.document.createElement("div"), [], ways);
+    return [...env.body.querySelectorAll(".cx-claim")];
+  }
+  const sides = card => [...card.querySelectorAll(".cx-card-claim")].map(el => el.textContent);
+
+  it("keeps it while the pointer is in it, and its footer leads into the reader", async () => {
+    const env = boot();
+    const ways = { focusDifference: vi.fn(), answerNavigation: { canOpen: () => true, open: vi.fn() } };
+    const [mark] = marked(env, [launch], ways);
+    env.hover(mark);
+    await wait(160);
+    const card = env.shown();
+    // On its way into the card the pointer leaves the sentence: the card waits.
+    env.leave(mark);
+    env.hover(card);
+    await wait(320);
+    expect(env.shown()).toBe(card);
+    expect(mark.classList.contains("is-hovered")).toBe(true);
+    // The answer toolbar's ways, for the pointer only: the keyboard finds
+    // them in the pinned card.
+    const actions = [...card.querySelectorAll(".cx-card-action")];
+    expect(actions.map(action => action.textContent)).toEqual(["Contradictions", "Answers"]);
+    expect(actions.every(action => action.tabIndex === -1)).toBe(true);
+    actions[1].click();
+    // The answer of the other side, at its quote.
+    expect(ways.answerNavigation.open).toHaveBeenCalledWith("Gemini", "Friday");
+    expect(env.shown()).toBeNull();
+    // The reader hands the focus back to the mark, not to a closed card.
+    expect(env.document.activeElement).toBe(mark);
+    env.hover(mark);
+    await wait(160);
+    env.shown().querySelector('.cx-card-action[data-section="differences"]').click();
+    expect(ways.focusDifference).toHaveBeenCalledWith(0);
+    env.dom.window.close();
+  });
+
+  it("goes a moment after the pointer left sentence and card", async () => {
+    const env = boot();
+    const [mark] = marked(env, [launch], { focusDifference() {} });
+    env.hover(mark);
+    await wait(160);
+    const card = env.shown();
+    env.leave(mark);
+    env.hover(card);
+    env.leave(card);
+    expect(env.shown()).toBe(card);
+    await wait(320);
+    expect(env.shown()).toBeNull();
+    expect(mark.classList.contains("is-hovered")).toBe(false);
+    env.dom.window.close();
+  });
+
+  it("takes the sentence's highlight along when a click elsewhere ends the wait", async () => {
+    const env = boot();
+    const [mark] = marked(env, [launch], { focusDifference() {} });
+    env.hover(mark);
+    await wait(160);
+    env.leave(mark);
+    env.document.body.dispatchEvent(new env.window.MouseEvent("click", { bubbles: true }));
+    expect(env.shown()).toBeNull();
+    expect(mark.classList.contains("is-hovered")).toBe(false);
+    env.dom.window.close();
+  });
+
+  it("is not taken over by a mark the pointer crosses on its way into it", async () => {
+    const env = boot();
+    const [launchMark, ticketMark] = marked(env, [launch, tickets], { focusDifference() {} });
+    env.hover(launchMark);
+    await wait(160);
+    const card = env.shown();
+    env.leave(launchMark);
+    env.hover(ticketMark);
+    env.leave(ticketMark);
+    env.hover(card);
+    await wait(200);
+    expect(sides(env.shown())).toEqual(["Monday", "Friday"]);
+    // Resting on the other mark brings its card.
+    env.leave(card);
+    env.hover(ticketMark);
+    await wait(160);
+    expect(sides(env.shown())).toEqual(["Ten", "Twelve"]);
+    expect(launchMark.classList.contains("is-hovered")).toBe(false);
+    env.dom.window.close();
+  });
+});
+
 describe("which devices get the card", () => {
   const contradiction = {
     models_compared: ["OpenAI", "Gemini"], claims: [],

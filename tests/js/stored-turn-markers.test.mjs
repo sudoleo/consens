@@ -110,13 +110,14 @@ describe("renderStoredConsensusClaims", () => {
 
     ctx.body.querySelector(".cx-claim.is-major")
       .dispatchEvent(new ctx.window.MouseEvent("click", { bubbles: true }));
-    // The click pins the mark's card: the two sides, and its topic leads on.
+    // The click pins the mark's card: the two sides, and its way into the
+    // contradictions (the answer toolbar's glyph and word) leads on.
     const popover = ctx.document.getElementById("claimPopover");
     expect(popover.hidden).toBe(false);
     expect([...popover.querySelectorAll(".cx-card-claim")].map(el => el.textContent))
       .toEqual(["29 euros", "more than 29 euros"]);
     expect(panel.hidden).toBe(true);
-    popover.querySelector("button.cx-card-title").click();
+    popover.querySelector('.cx-card-action[data-section="differences"]').click();
 
     expect(popover.hidden).toBe(true);
     expect(panel.hidden).toBe(false);
@@ -157,7 +158,7 @@ describe('real archived drawer row', () => {
       }
     }
     turns[1].querySelector('.cx-claim.is-major').click();
-    document.querySelector('#claimPopover button.cx-card-title').click();
+    document.querySelector('#claimPopover .cx-card-action[data-section="differences"]').click();
     expect(turns[1].querySelector('.diff-card.is-focused')).not.toBeNull();
     expect(turns[0].querySelector('.diff-card.is-focused')).toBeNull();
     expect(document.getElementById('differencesCards').children).toHaveLength(0);
@@ -414,7 +415,7 @@ describe("difference cards in the detail panel", () => {
     // The critical finding is the third entry of the data but the first card.
     ctx.body.querySelector(".cx-claim.is-major")
       .dispatchEvent(new ctx.window.MouseEvent("click", { bubbles: true }));
-    ctx.document.querySelector("#claimPopover button.cx-card-title").click();
+    ctx.document.querySelector('#claimPopover .cx-card-action[data-section="differences"]').click();
     const focused = cards.querySelector(".diff-card.is-focused");
     expect(focused.dataset.differenceIndex).toBe("2");
     expect(focused).toBe(cards.querySelector(".diff-card"));

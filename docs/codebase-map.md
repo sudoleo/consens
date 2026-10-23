@@ -3242,26 +3242,50 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   unbestritten/dünn = Quote als Titel, Logos, „Not addressed“ (`.cx-card-aside`)
   und der Satz, dass Übereinstimmung kein Beweis ist; `provisionalCard` ohne
   Urteil. Keine Etiketten in Versalien, kein „Click for …“. Dieselbe Karte
-  erscheint als Vorschau beim Hovern (`.insight-preview`, `pointer-events:
-  none`), festgehalten nach Klick/Enter (`#claimPopover`, `openCard`) und auf
-  dem Handy (≤ 768 px) als Blatt vom unteren Rand (`.claim-popover.is-modal`,
-  Griff, graues ×, `settleAboveSheet` schiebt den Satz knapp darüber).
+  erscheint als Vorschau beim Hovern (`.insight-preview`), festgehalten nach
+  Klick/Enter (`#claimPopover`, `openCard`) und auf dem Handy (≤ 768 px) als
+  Blatt vom unteren Rand (`.claim-popover.is-modal`, Griff, graues ×,
+  `settleAboveSheet` schiebt den Satz knapp darüber).
+  **Die Vorschau ist erreichbar (seit 2026-10-23, Max: dass ein Klick sie
+  festhält, war nicht zu erraten):** wer mit dem Zeiger hineinfährt, behält sie
+  und kann ihre Wege nehmen. Verlässt der Zeiger Satz oder Karte, geht sie erst
+  nach `HOVER_LEAVE_MS` (`leaveHoverPreview`); die Karte hört auf `mouseenter`/
+  `mouseleave` wie die Sätze (ein `pointerenter` käme vor dem `mouseleave` des
+  Satzes und ließe sie unter dem Zeiger verschwinden). Steht eine Karte, wechselt
+  sie zu einer anderen Marke erst nach `HOVER_SWITCH_MS`, damit eine Marke auf
+  dem Weg in die Karte sie nicht wegnimmt. Ihre Knöpfe tragen `tabindex=-1`
+  (die Vorschau bleibt `aria-hidden`; Tastatur und Screenreader bekommen
+  dieselben Wege in der festgehaltenen Karte). Ein Weg aus der Vorschau
+  (`ctx.close` = `leavePreviewFor`) setzt den Fokus vorher auf die Marke.
+  **Wege in den Leser:** die Fußzeile `.cx-card-actions` (`cardActions`) mit
+  Glyphe und Wort der Antwortleiste (`agent-review.js evidenceButton`):
+  „Contradictions“ (sonst „Differences“, `openInDrawer` → `focusDifference` →
+  Karte im Leser, dort Resolve und Zitate) und „Answers“ (erste Antwort, die
+  `navigation.canOpen` öffnen kann, zuerst die der Gegenseite, an ihrem
+  Zitat). Der Titel ist reiner Text; der frühere Chevron am Thema war der
+  einzige, unsichtbare Weg in die Schublade. Die Logos öffnen weiter die
+  Antwort ihres Modells. Alle Wege geben den Fokus zuerst an die Marke zurück,
+  damit der Leser ihn beim Schließen dorthin zurückgibt und nicht an einen
+  Knopf der geschlossenen Karte. Ein Leser fehlt der Seite: die Vorschau baut
+  trotzdem (`canOpenStored?.()`).
   `placeCard` rechnet für Vorschau und festgehaltene Karte gleich: die Karte
   steht über der ersten oder unter der letzten Zeile ihres Satzes (nie auf
   ihm), auf der Seite der strittigen Worte, unten begrenzt vom Eingabefeld
-  (`cardFloor`); ihr Text beginnt bündig unter dem ersten markierten Wort, ihr
+  (`cardFloor`). Worauf sie zeigt (`cardAnchor`), ist die `.cx-spot`-Stelle,
+  sonst ALLE Spans des Satzes: nur der erste war zu wenig, ein Satz mit
+  **fett** oder Link zerfällt in mehrere, und die Karte hielt dessen erste
+  Zeile für die Stelle (stand über dem Satz statt darunter). Ihr Text beginnt
+  bündig unter dem Anfang der Zeile, an der sie steht (`lineStart`: oberste
+  Zeile darüber, unterste darunter), bleibt aber im Textblock: rechts endet sie
+  an dessen Kante, außer der Block ist schmaler als sie (Tabellenzelle). Ihr
   Pfeil (`--cx-arrow-x`, `::before`, Kontur per `drop-shadow` über Karte und
-  Pfeil) zeigt auf die Stelle. Stand die Vorschau schon da, bleibt die Karte
-  beim Klick exakt stehen (`is-instant`, keine Bewegung), erst dann werden
-  Logos (Antwort des Modells, `navigation.open(model, quote)`) und Thema eines
-  Unterschieds (Chevron, `openInDrawer` → `focusDifference` → Karte im Leser,
-  dort Resolve und Zitate) bedienbar; beide geben den Fokus zuerst an die
-  Marke zurück, damit der Leser ihn beim Schließen dorthin zurückgibt und
-  nicht an einen Knopf der geschlossenen Karte. Am Rechner folgt die
+  Pfeil) zeigt auf diesen Zeilenanfang. Stand die Vorschau schon da, bleibt die Karte
+  beim Klick exakt stehen (`is-instant`, keine Bewegung). Am Rechner folgt die
   festgehaltene Karte beim Scrollen ihren Worten (`refreshPinnedCard`), die
-  Vorschau ebenso, solange ihr Satz unter dem Zeiger bleibt
+  Vorschau ebenso, solange ihr Satz oder sie selbst unter dem Zeiger bleibt
   (`refreshHoverPreview`; vorher blendete jedes Scroll-Ereignis sie aus und
-  wieder ein). Von Marke zu Marke wartet
+  wieder ein; Scrollen in einer langen Karte selbst bewegt nichts). Von Marke
+  zu Marke ohne stehende Karte wartet
   die Vorschau kein zweites Mal (`HOVER_WARM_MS`); Ein- und Ausblenden laufen
   über die Popover-Bewegung in `overlays.css`. Umami:
   `app_consensus_marker_opened` mit `kind` (claim/difference) und `previewed`.

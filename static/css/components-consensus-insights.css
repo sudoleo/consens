@@ -78,7 +78,8 @@
    claimCard/differenceCard): als Vorschau beim Hovern (.insight-preview), am
    Rechner festgehalten nach dem Klick (.claim-popover) und auf dem Handy als
    Blatt vom unteren Rand (.claim-popover.is-modal). Vorschau und
-   festgehaltene Karte sehen gleich aus und stehen an derselben Stelle; der
+   festgehaltene Karte sehen gleich aus, stehen an derselben Stelle und sind
+   beide bedienbar: der Zeiger darf in die Vorschau hinein. Der
    Pfeil zeigt auf die strittigen Worte (--cx-arrow-x, placeCard). Die Flaeche
    ist eine Stufe heller als die Seite; Kontur und Schatten liegen als
    drop-shadow auf Karte UND Pfeil, damit beide eine Form sind. Bewegung:
@@ -112,7 +113,6 @@
 
 .insight-preview {
   z-index: var(--z-popover, 1400);
-  pointer-events: none;
 }
 
 .claim-popover {
@@ -173,46 +173,57 @@
   margin-bottom: 0;
 }
 
-/* Festgehalten fuehrt das Thema eines Unterschieds in die Schublade. */
-button.cx-card-title {
-  width: 100%;
-  padding: 0;
+/* Die Wege aus der Karte: Glyphe und Wort wie in der Leiste unter der
+   Antwort (agent-chat.css .agent-evidence-link), unter einer leisen
+   Haarlinie. Die Knoepfe ruecken mit ihrer Innenluft zur Textkante, so weit
+   der Rand von .cx-card es erlaubt (weiter liefe die Karte quer). */
+.cx-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  margin: 12px -4px -4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  border-image: linear-gradient(90deg, transparent, var(--line-soft) 8px, var(--line-soft) calc(100% - 8px), transparent) 1;
+}
+
+.cx-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
   border: 0;
-  background: none;
-  color: inherit;
+  border-radius: var(--radius-2xs);
+  background: transparent;
+  color: var(--ink-2);
   font: inherit;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: inherit;
-  text-align: left;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1.2;
   cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
-.cx-card-chevron {
-  display: inline-block;
-  margin-left: 4px;
-  vertical-align: -1px;
-  color: var(--ink-3);
+.cx-card-action-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.cx-card-chevron > svg {
-  display: block;
-  rotate: -90deg;
-}
-
-button.cx-card-title:focus-visible {
+.cx-card-action:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  button.cx-card-title:hover .cx-card-title-text {
-    text-decoration: underline;
-    text-decoration-color: var(--line);
-    text-underline-offset: 3px;
-  }
-
-  button.cx-card-title:hover .cx-card-chevron {
+  .cx-card-action:hover {
+    background: var(--hover);
     color: var(--ink);
   }
 }
@@ -482,6 +493,20 @@ button.cx-card-logo:focus-visible {
 .claim-popover.is-modal .cx-card-logo > img {
   width: 16px;
   height: 16px;
+}
+
+/* Die Wege fingerbreit, je die halbe Breite. */
+.claim-popover.is-modal .cx-card-actions {
+  gap: 0 8px;
+  margin-top: 18px;
+  padding-top: 8px;
+}
+
+.claim-popover.is-modal .cx-card-action {
+  flex: 1 1 0;
+  justify-content: center;
+  min-height: 44px;
+  font-size: var(--font-size-sm);
 }
 
 @media (forced-colors: active) {

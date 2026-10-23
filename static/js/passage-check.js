@@ -269,7 +269,12 @@
     // With a mouse, resting on a painted sentence shows the same short
     // preview as a sentence of the answer; the click (bind) opens the card
     // and the preview goes (consensus-insights.js).
-    window.App.claimPopover?.attachPreview?.(span, claim, models, { sideLabel: TEXT_SIDE });
+    // Its ways into the answers ask the card the sentence stands in when used.
+    const card = () => span.closest(".passage-check");
+    window.App.claimPopover?.attachPreview?.(span, claim, models, { sideLabel: TEXT_SIDE, navigation: {
+      canOpen: name => Boolean(card()) && navigation(card()).canOpen(name),
+      open: (name, quote) => card() && navigation(card()).open(name, quote)
+    } });
     return span;
   }
 

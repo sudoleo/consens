@@ -378,11 +378,13 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         marker.focus()
         page.keyboard.press("Enter")
         # Enter pins the mark's card (a sheet on a phone): the two sides with
-        # "vs"; its topic leads to the difference in the reader.
+        # "vs"; its footer leads, with the toolbar's glyphs and words, to the
+        # difference in the reader and to the answers.
         card = page.locator('#claimPopover')
         expect(card).to_be_visible()
         expect(card.locator('.cx-card-vs')).to_have_count(1)
-        card.locator('button.cx-card-title').click()
+        expect(card.locator('.cx-card-action')).to_have_text(['Contradictions', 'Answers'])
+        card.locator('.cx-card-action[data-section="differences"]').click()
         expect(card).to_be_hidden()
         expect(page.locator('#modelAnswerReader')).to_be_visible()
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_count(1)

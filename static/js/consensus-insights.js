@@ -665,7 +665,7 @@
             } else if (anchorEl) {
               // Wie die Vorschau: der Pfeil zeigt auf die strittigen Worte,
               // auch wenn die sichtbare Quote der Ausloeser war.
-              pinnedCard = { anchor: spans ? cardAnchor(spans) : anchorEl, around: spans || [anchorEl] };
+              pinnedCard = { anchor: spans ? cardAnchor(spans) : [anchorEl], around: spans || [anchorEl] };
               placeCard(pop, pinnedCard.anchor, pinnedCard.around);
             }
             if (previewed) {
@@ -813,11 +813,13 @@
 
             return {
               canOpen: function (model) {
-                if (window.App?.answerReader?.canOpenStored(body.closest?.(".thread-history-turn"), model)) return true;
+                // Asked while a hover card is built: without a reader on the
+                // page the card still shows.
+                if (window.App?.answerReader?.canOpenStored?.(body.closest?.(".thread-history-turn"), model)) return true;
                 return !!targetFor(model);
               },
               open: function (model, quote) {
-                if (window.App?.answerReader?.openStored(body.closest?.(".thread-history-turn"), model, quote)) return;
+                if (window.App?.answerReader?.openStored?.(body.closest?.(".thread-history-turn"), model, quote)) return;
                 const section = targetFor(model);
                 if (!section) return;
                 const panel = section.closest(".thread-history-panel");
@@ -1281,11 +1283,20 @@
             if (on && !passageIsVisible(group)) return;
             group.hover = on;
             if (on) {
+              if (hoverGroup === group) window.clearTimeout(leaveTimer);
               applyPassageHover(group);
               scheduleHoverPreview(group);
               return;
             }
-            if (hoverGroup === group) hideHoverPreview();
+            if (hoverGroup === group) {
+              // Steht die Karte, ist der Zeiger vielleicht auf dem Weg in sie
+              // hinein (leaveHoverPreview); sonst gibt es nichts abzuwarten.
+              if (hoverCard && !hoverCard.hidden) {
+                leaveHoverPreview(group);
+                return;
+              }
+              hideHoverPreview();
+            }
             // Der Weg von einem Span zum naechsten (ein Satz kann in mehrere
             // Spans zerfallen) oder zum Marker feuert leave/enter nacheinander.
             // Ein Frame Verzoegerung verhindert das Flackern dazwischen.
@@ -1359,15 +1370,23 @@
 
           // --- Vorschau beim Hovern -------------------------------------------
           // Die Marke sagt "hier ist etwas", aber nicht was. Wer mit der Maus
-          // darauf verweilt, bekommt die Karte der Marke; wer klickt, haelt
-          // dieselbe Karte fest (openCard). Die Vorschau faengt keine Maus
-          // (pointer-events: none), damit sie den Klick auf die Passage nicht
-          // abfaengt. Wer von einer Marke zur naechsten zieht, wartet nicht
-          // ein zweites Mal (HOVER_WARM_MS), wie bei den Tooltips (tooltip.js).
+          // darauf verweilt, bekommt die Karte der Marke, und die Karte ist
+          // erreichbar: wer mit dem Zeiger hineinfaehrt, behaelt sie und kann
+          // ihre Wege nehmen (Logos, Fusszeile). Vorher fing sie keine Maus,
+          // verschwand auf dem Weg zu ihr, und dass ein Klick sie festhaelt,
+          // musste man erraten (Max 2026-10-23). Der Klick haelt sie weiter
+          // fest (openCard), fuer Touch und Tastatur ist das der Weg. Wer von
+          // einer Marke zur naechsten zieht, wartet nicht ein zweites Mal
+          // (HOVER_WARM_MS), wie bei den Tooltips (tooltip.js); steht noch eine
+          // Karte, wechselt sie erst nach HOVER_SWITCH_MS, damit eine Marke auf
+          // dem Weg in die Karte sie nicht wegnimmt.
           const HOVER_DELAY_MS = 130;
           const HOVER_WARM_MS = 400;
+          const HOVER_SWITCH_MS = 90;
+          const HOVER_LEAVE_MS = 260;
           let hoverCard = null;
           let hoverTimer = null;
+          let leaveTimer = null;
           let hoverGroup = null;
           let hoverHiddenAt = 0;
 
@@ -1375,10 +1394,58 @@
             if (hoverCard && hoverCard.isConnected) return hoverCard;
             hoverCard = document.createElement("div");
             hoverCard.className = "insight-preview";
+            // Tastatur und Screenreader bekommen dieselbe Karte als Dialog
+            // (Enter, openCard); diese hier gehoert dem Zeiger.
             hoverCard.setAttribute("aria-hidden", "true");
             hoverCard.hidden = true;
+            // Maus-, nicht Pointer-Ereignisse wie an den Saetzen: pointerenter
+            // kaeme vor dem mouseleave des Satzes, und der naehme die Karte
+            // unter dem Zeiger wieder weg.
+            hoverCard.addEventListener("mouseenter", holdHoverPreview);
+            hoverCard.addEventListener("mouseleave", function () {
+              if (hoverGroup && !hoverCard.hidden) setPassageHover(hoverGroup, false);
+            });
             document.body.appendChild(hoverCard);
             return hoverCard;
+          }
+
+          // Zeiger weg von Satz und Karte: die Karte geht erst nach einem
+          // Moment, sonst erreichte er sie nie. Ist er zurueck oder hat eine
+          // andere Marke uebernommen, bleibt es dabei.
+          function leaveHoverPreview(group) {
+            window.clearTimeout(leaveTimer);
+            leaveTimer = window.setTimeout(function () {
+              if (group.hover) return;
+              if (hoverGroup === group && hoverCard?.matches(":hover")) {
+                holdHoverPreview();
+                return;
+              }
+              if (hoverGroup === group) hideHoverPreview();
+              applyPassageHover(group);
+            }, HOVER_LEAVE_MS);
+          }
+
+          // Der Zeiger ist in der Karte: sie bleibt, ihr Satz bleibt
+          // angestrichen, und eine Marke, die er auf dem Weg gestreift hat,
+          // kommt nicht mehr.
+          function holdHoverPreview() {
+            const group = hoverGroup;
+            if (!group || !hoverCard || hoverCard.hidden) return;
+            window.clearTimeout(leaveTimer);
+            window.clearTimeout(hoverTimer);
+            group.hover = true;
+            applyPassageHover(group);
+          }
+
+          // Ein Weg aus der Vorschau (Logo, Fusszeile): sie geht, und der
+          // Fokus steht an ihrer Marke, damit der Leser ihn beim Schliessen
+          // dorthin zurueckgibt.
+          function leavePreviewFor(group) {
+            group.hover = false;
+            hideHoverPreview({ instant: true });
+            applyPassageHover(group);
+            const control = activeControl(group)?.el;
+            if (control?.isConnected && control.matches("button, [tabindex]")) control.focus({ preventScroll: true });
           }
 
           // Der Inhalt bleibt, bis die naechste Vorschau kommt: die Karte
@@ -1387,8 +1454,13 @@
           // die festgehaltene Karte.
           function hideHoverPreview(options) {
             window.clearTimeout(hoverTimer);
+            window.clearTimeout(leaveTimer);
+            const group = hoverGroup;
             hoverTimer = null;
             hoverGroup = null;
+            // Wartete die Karte noch auf den Zeiger, haengt am Satz noch der
+            // Anstrich; der ginge sonst erst mit dem abgebrochenen Timer.
+            if (group && !group.hover) applyPassageHover(group);
             if (!hoverCard || hoverCard.hidden) return;
             hoverCard.classList.toggle("is-instant", options?.instant === true);
             hoverCard.hidden = true;
@@ -1422,13 +1494,28 @@
           }
 
           // Worauf der Pfeil zeigt: die strittigen Worte (.cx-spot), sonst der
-          // Satz.
+          // ganze Satz. Nur sein erster Span war zu wenig: ein Satz mit
+          // **fett** oder Link zerfaellt in mehrere, und die Karte hielt
+          // dessen erste Zeile fuer die Stelle des Streits (stand ueber dem
+          // Satz und hing rechts aus dem Text, Max 2026-10-23).
           function cardAnchor(spans) {
             for (const span of spans) {
               const spot = span.querySelector?.(".cx-spot");
-              if (spot && spot.getClientRects().length) return spot;
+              if (spot && spot.getClientRects().length) return [spot];
             }
-            return spans.find(function (span) { return span.getClientRects().length; }) || spans[0];
+            const placed = spans.filter(function (span) { return span.getClientRects().length; });
+            return placed.length ? placed : spans.slice(0, 1);
+          }
+
+          // Das erste Stueck einer Zeile der Marke: der obersten (Karte darueber)
+          // oder der untersten (Karte darunter).
+          function lineStart(rects, bottom) {
+            const edge = bottom
+              ? Math.max.apply(null, rects.map(function (r) { return r.top; }))
+              : Math.min.apply(null, rects.map(function (r) { return r.top; }));
+            return rects.filter(function (r) { return Math.abs(r.top - edge) <= Math.max(r.height / 2, 1); })
+              .reduce(function (a, b) { return a && a.left <= b.left ? a : b; }, null)
+              || rects[bottom ? rects.length - 1 : 0];
           }
 
           // Unten endet der Platz am Eingabefeld (oder am Hinweis, der es in
@@ -1450,12 +1537,13 @@
           // Die Karte verdeckt nie den Satz, um den es geht: sie steht ueber
           // seiner ersten oder unter seiner letzten Zeile, auf der Seite der
           // strittigen Worte, und ihr Pfeil zeigt auf diese Worte. Ihr Text
-          // beginnt buendig unter dem ersten markierten Wort, nie links vom
-          // Textblock. Dieselbe Rechnung fuer Vorschau und festgehaltene Karte,
-          // damit ein Klick sie an Ort und Stelle laesst.
-          function placeCard(card, anchor, around) {
-            const marks = visibleRects([anchor]);
-            const lines = visibleRects(around && around.length ? around : [anchor]);
+          // beginnt buendig unter dem Wort, auf das der Pfeil zeigt, bleibt
+          // aber im Textblock: weder links davon noch rechts hinaus.
+          // Dieselbe Rechnung fuer Vorschau und festgehaltene Karte, damit
+          // ein Klick sie an Ort und Stelle laesst.
+          function placeCard(card, anchors, around) {
+            const marks = visibleRects(anchors);
+            const lines = visibleRects(around && around.length ? around : anchors);
             if (!marks.length || !lines.length) return;
             card.style.left = "0px";
             card.style.top = "0px";
@@ -1466,23 +1554,28 @@
             const floor = cardFloor(bottom);
             const fitsBelow = bottom + CARD_GAP + height <= floor;
             const fitsAbove = top - CARD_GAP - height >= CARD_EDGE;
-            const first = marks[0];
-            const last = marks[marks.length - 1];
+            const markTop = Math.min.apply(null, marks.map(function (r) { return r.top; }));
+            const markBottom = Math.max.apply(null, marks.map(function (r) { return r.bottom; }));
             // Steht die Stelle in der ersten Zeile eines laengeren Satzes,
             // liegt der kuerzere Weg ueber ihm.
-            const nearTop = first.top - top < 4 && bottom - last.bottom > 4;
+            const nearTop = markTop - top < 4 && bottom - markBottom > 4;
             let below = nearTop ? !fitsAbove && fitsBelow : fitsBelow || !fitsAbove;
             if (!fitsAbove && !fitsBelow) below = floor - bottom >= top;
             let y = below ? bottom + CARD_GAP : top - CARD_GAP - height;
             if (!fitsAbove && !fitsBelow) y = Math.max(CARD_EDGE, Math.min(y, floor - height));
 
+            const target = lineStart(marks, below);
             const inset = parseFloat(getComputedStyle(card).paddingLeft) || 0;
-            const block = anchor.closest("p, li, td, th, dd, dt, blockquote, h1, h2, h3, h4, h5, h6");
-            const blockLeft = block ? block.getBoundingClientRect().left : first.left;
-            const maxLeft = Math.max(CARD_EDGE, window.innerWidth - width - CARD_EDGE);
-            const minLeft = Math.min(Math.max(CARD_EDGE, blockLeft - inset), maxLeft);
-            const left = Math.max(minLeft, Math.min(first.left - inset, maxLeft));
-            const target = below ? last : first;
+            const block = anchors[0].closest("p, li, td, th, dd, dt, blockquote, h1, h2, h3, h4, h5, h6");
+            const box = block ? block.getBoundingClientRect() : null;
+            const viewMax = Math.max(CARD_EDGE, window.innerWidth - width - CARD_EDGE);
+            const minLeft = Math.min(Math.max(CARD_EDGE, (box ? box.left : target.left) - inset), viewMax);
+            // Ein Wort am Zeilenende zog die Karte sonst ueber den Rand des
+            // Texts hinaus; ein Block schmaler als die Karte (Tabellenzelle)
+            // begrenzt sie nicht.
+            const columnMax = box ? box.right + inset - width : viewMax;
+            const maxLeft = columnMax >= minLeft ? Math.min(columnMax, viewMax) : viewMax;
+            const left = Math.max(minLeft, Math.min(target.left - inset, maxLeft));
             const arrow = Math.max(20, Math.min(target.left + Math.min(target.width / 2, 28) - left, width - 20));
 
             card.dataset.placement = below ? "below" : "above";
@@ -1507,18 +1600,27 @@
             if (!build || !build.preview) return;
             const card = ensureHoverCard();
             card.classList.remove("is-instant");
-            card.replaceChildren(build.preview());
+            card.replaceChildren(build.preview({ interactive: true, close: function () { leavePreviewFor(group); } }));
+            // Nur fuer den Zeiger: der Tabulator erreicht dieselben Wege in
+            // der festgehaltenen Karte.
+            card.querySelectorAll("button, a[href]").forEach(function (el) { el.tabIndex = -1; });
             card.hidden = false;
             placeCard(card, cardAnchor(spans), spans);
           }
 
           function scheduleHoverPreview(group) {
+            const shown = hoverCard && !hoverCard.hidden ? hoverGroup : null;
+            if (shown === group) return;
             window.clearTimeout(hoverTimer);
-            hoverGroup = group;
-            const warm = !!hoverCard && (!hoverCard.hidden || Date.now() - hoverHiddenAt < HOVER_WARM_MS);
+            if (!shown) hoverGroup = group;
+            const warm = !!hoverCard && Date.now() - hoverHiddenAt < HOVER_WARM_MS;
             hoverTimer = window.setTimeout(function () {
-              if (group.hover) showHoverPreview(group);
-            }, warm ? 0 : HOVER_DELAY_MS);
+              if (!group.hover) return;
+              const previous = hoverGroup;
+              if (previous && previous !== group && !previous.hover) applyPassageHover(previous);
+              hoverGroup = group;
+              showHoverPreview(group);
+            }, shown ? HOVER_SWITCH_MS : warm ? 0 : HOVER_DELAY_MS);
           }
 
           // Am Rechner bleibt die festgehaltene Karte an ihren Worten, wenn
@@ -1526,7 +1628,7 @@
           function refreshPinnedCard() {
             const pop = $("claimPopover");
             if (!pinnedCard || !pop || pop.hidden || pop.classList.contains("is-modal")) return;
-            if (!pinnedCard.anchor.isConnected) {
+            if (!pinnedCard.anchor[0]?.isConnected) {
               closeClaimPopover({ restoreFocus: false });
               return;
             }
@@ -1539,7 +1641,10 @@
           // whose passage left goes, and a pending one is resumed. Hiding and
           // showing it again on every scroll event made it flicker.
           // Only with a real pointer: a tap leaves :hover stuck on touch.
-          function refreshHoverPreview() {
+          function refreshHoverPreview(event) {
+            // A long card scrolling in itself moves nothing.
+            const scrolled = event?.target;
+            if (scrolled?.nodeType === 1 && scrolled.closest(".insight-preview, .claim-popover")) return;
             refreshPinnedCard();
             const group = hoverGroup;
             if (!group || !canHoverPassages()) {
@@ -1548,7 +1653,7 @@
             }
             requestAnimationFrame(function () {
               if (hoverGroup !== group) return;
-              const targets = [...group.spans, ...group.controls.map(control => control.el)];
+              const targets = [...group.spans, ...group.controls.map(control => control.el), hoverCard].filter(Boolean);
               const held = targets.some(el => el.isConnected && el.matches(':hover, :focus-visible'));
               if (!held || !passageIsVisible(group)) {
                 hideHoverPreview();
@@ -1564,10 +1669,12 @@
           window.addEventListener("resize", refreshHoverPreview);
           // Ein Klick nimmt die Vorschau weg, ausser er gilt ihrer Marke
           // selbst: dann haelt openCard sie an Ort und Stelle fest. Ein Link
-          // oder Quellenchip im Satz nimmt sie mit.
+          // oder Quellenchip im Satz nimmt sie mit. In der Karte entscheiden
+          // ihre Knoepfe selbst.
           document.addEventListener("click", function (event) {
             const group = hoverGroup;
             const target = event.target;
+            if (hoverCard && hoverCard.contains(target)) return;
             const own = group && [...group.spans, ...group.controls.map(control => control.el)]
               .some(el => el.contains(target));
             if (!own || target.closest?.("a, button:not(.claim-badge)")) hideHoverPreview();
@@ -1580,10 +1687,13 @@
           // vertritt (Logos, ein oder zwei Namen, sonst die Anzahl). Keine
           // Quote "5/6 stuetzen das" an einem Streit, keine Namenslisten,
           // keine Etiketten, kein "Klicken fuer ...". Vorschau, festgehaltene
-          // Karte und das Blatt auf dem Handy bauen denselben Inhalt; erst
-          // festgehalten (ctx.interactive) werden die Logos zu Wegen in die
-          // Antwort ihres Modells und das Thema eines Unterschieds zum Weg in
-          // die Schublade (Resolve, Zitate, alle Unterschiede).
+          // Karte und das Blatt auf dem Handy bauen denselben Inhalt. Bedienbar
+          // (ctx.interactive) werden die Logos zu Wegen in die Antwort ihres
+          // Modells, und die Fusszeile (cardActions) fuehrt in den Leser: zum
+          // Unterschied (Resolve, Zitate, alle Unterschiede) und zu den
+          // Antworten. Ihr Titel fuehrte vorher als Chevron dorthin, das sah
+          // niemand (Max 2026-10-23). `ctx.close` schliesst die Karte vor dem
+          // Weg (festgehalten: closeClaimPopover, Vorschau: leavePreviewFor).
 
           function cardNode(tag, className, text) {
             const node = document.createElement(tag);
@@ -1625,7 +1735,7 @@
                 logo.addEventListener("click", function () {
                   // The focus goes back to the mark first: the reader that
                   // opens hands it back there, not to a button of a closed card.
-                  closeClaimPopover();
+                  closeCard(ctx);
                   ctx.navigation.open(model, quote);
                 });
               } else {
@@ -1669,27 +1779,63 @@
             return cardNode("div", "cx-card-vs", "vs");
           }
 
-          function cardTitle(text, ctx) {
-            const opens = !!(ctx.interactive && ctx.openInDrawer);
-            const title = cardNode(opens ? "button" : "div", "cx-card-title" + (ctx.openInDrawer ? " has-more" : ""));
-            const label = cardNode("span", "cx-card-title-text", text);
-            label.setAttribute("data-i18n-skip", "");
-            title.appendChild(label);
-            if (ctx.openInDrawer) {
-              const chevron = cardNode("span", "cx-card-chevron");
-              // The disclosure chevron of the resolve round, turned to point on (CSS).
-              chevron.innerHTML = RESOLVE_CHEVRON;
-              title.appendChild(chevron);
-            }
-            if (opens) {
-              title.type = "button";
-              title.title = "See all differences";
-              title.addEventListener("click", function () {
-                closeClaimPopover();
-                ctx.openInDrawer();
-              });
-            }
+          function closeCard(ctx) {
+            (ctx.close || closeClaimPopover)();
+          }
+
+          function cardTitle(text) {
+            const title = cardNode("div", "cx-card-title", text);
+            title.setAttribute("data-i18n-skip", "");
             return title;
+          }
+
+          // Die Wege aus der Karte, mit Glyphe und Wort der Leiste unter der
+          // Antwort (agent-review.js evidenceButton): wer sie dort kennt,
+          // weiss, wohin sie fuehren. `differences`: der Unterschied dieser
+          // Marke im Leser. `answers`: die erste Antwort, die sich oeffnen
+          // laesst, zuerst die der Gegenseite, an ihrem Zitat.
+          const CARD_ACTION_ICONS = {
+            differences: "M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5",
+            answers: "M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"
+          };
+
+          function cardAction(section, label, run, ctx) {
+            const button = cardNode("button", "cx-card-action");
+            button.type = "button";
+            button.dataset.section = section;
+            button.innerHTML = '<svg class="cx-card-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="'
+              + CARD_ACTION_ICONS[section] + '"/></svg>';
+            button.appendChild(cardNode("span", "cx-card-action-label", label));
+            button.addEventListener("click", function () {
+              closeCard(ctx);
+              run();
+            });
+            return button;
+          }
+
+          function cardActions(ctx, options) {
+            if (!ctx.interactive) return null;
+            const row = cardNode("div", "cx-card-actions");
+            if (ctx.openInDrawer) {
+              row.appendChild(cardAction("differences", options.differenceLabel || "Differences", ctx.openInDrawer, ctx));
+            }
+            const answer = (options.answers || []).find(function (item) {
+              return ctx.navigation?.canOpen?.(cardModel(item.model));
+            });
+            if (answer) {
+              row.appendChild(cardAction("answers", "Answers", function () {
+                ctx.navigation.open(cardModel(answer.model), answer.quote || "");
+              }, ctx));
+            }
+            return row.firstChild ? row : null;
+          }
+
+          function modelQuotes(sides) {
+            const list = [];
+            sides.forEach(function (side) {
+              (side.models || []).forEach(function (model) { list.push({ model: model, quote: side.quote || "" }); });
+            });
+            return list;
           }
 
           // Ohne sichtbaren Titel: der Name der Karte fuer Screenreader.
@@ -1784,6 +1930,10 @@
                 ? "Too little was said about this to compare. That is not evidence against it — it just was not checked."
                 : "Models agreeing is not proof. They can share the same source or the same blind spot."));
             }
+            const actions = cardActions(ctx, {
+              answers: modelQuotes(dissentSides(claim)).concat(modelQuotes([{ models: claim.agree }]))
+            });
+            if (actions) card.appendChild(actions);
             return card;
           }
 
@@ -1795,10 +1945,11 @@
             const readable = readableDifference(diff, modelDisplayName);
             const isVersus = diff.type === "contradiction" && readable.positions.length > 1;
             if (readable.narrative && isVersus) card.appendChild(cardHeading(differenceKind(diff)));
-            else card.appendChild(cardTitle(readable.claim, ctx));
-            readable.positions.slice().sort(function (a, b) {
+            else card.appendChild(cardTitle(readable.claim));
+            const positions = readable.positions.slice().sort(function (a, b) {
               return (b.in_answer === true) - (a.in_answer === true);
-            }).forEach(function (pos, index) {
+            });
+            positions.forEach(function (pos, index) {
               if (isVersus && index) card.appendChild(cardVersus());
               const text = pos.stance || pos.quote;
               card.appendChild(cardSide(text ? { text: text } : null, pos.models, ctx, {
@@ -1806,6 +1957,12 @@
                 label: pos.in_answer === true ? "In the answer" : ""
               }));
             });
+            const actions = cardActions(ctx, {
+              differenceLabel: diff.type === "contradiction" ? "Contradictions" : "Differences",
+              answers: modelQuotes(positions.filter(function (pos) { return pos.in_answer !== true; }))
+                .concat(modelQuotes(positions.filter(function (pos) { return pos.in_answer === true; })))
+            });
+            if (actions) card.appendChild(actions);
             return card;
           }
 
@@ -1907,8 +2064,10 @@
           // weiter die Karte (App.claimPopover.open), die die Vorschau ersetzt.
           function attachClaimPreview(span, claim, modelsCompared, options) {
             if (!span || !claim) return;
-            attachPreviewOnly([span], function () {
-              return claimCard(claim, modelsCompared, { interactive: false, spans: [span], sideLabel: options?.sideLabel });
+            attachPreviewOnly([span], function (ctx) {
+              return claimCard(claim, modelsCompared, Object.assign({
+                spans: [span], sideLabel: options?.sideLabel, navigation: options?.navigation
+              }, ctx));
             }, true);
           }
 
@@ -2003,7 +2162,12 @@
                 function () {
                   openDifferencePopover(diff, result.spans, answerNavigation, function () { focusDifference(index); });
                 },
-                function () { return differenceCard(diff, { interactive: false, openInDrawer: true }); }
+                function (ctx) {
+                  return differenceCard(diff, Object.assign({
+                    navigation: answerNavigation,
+                    openInDrawer: function () { focusDifference(index); }
+                  }, ctx));
+                }
               );
               if (diff.type === "contradiction" && result.spans[0]?.cxGroup) {
                 result.spans[0].cxGroup.hasContradiction = true;
@@ -2095,7 +2259,9 @@
               attachControl(result, badge, function () {
                 const anchor = document.body.classList.contains("claim-counts-visible") ? badge : result.spans[0];
                 openClaimPopover(claim, anchor, modelsCompared, answerNavigation, { spans: result.spans });
-              }, function () { return claimCard(claim, modelsCompared, { interactive: false, spans: result.spans }); });
+              }, function (ctx) {
+                return claimCard(claim, modelsCompared, Object.assign({ spans: result.spans, navigation: answerNavigation }, ctx));
+              });
             });
 
             // 3. Die Stelle des Streits: in einem bestrittenen Satz traegt nur

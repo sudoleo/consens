@@ -1648,8 +1648,8 @@ def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
     assert state["badges"] == ["3/3"], state["badges"]
 
     # Und der Klick auf den strittigen Satz haelt dessen Karte fest: der
-    # Widerspruch als zwei Seiten, nicht als Zustimmungsquote. Ihr Thema
-    # fuehrt zur Widerspruchs-Karte in der Schublade.
+    # Widerspruch als zwei Seiten, nicht als Zustimmungsquote. Ihre
+    # Fusszeile fuehrt zur Widerspruchs-Karte in der Schublade.
     app_page.evaluate(
         """() => document.querySelectorAll("#consensusAnswerBody .cx-claim")[0].click()"""
     )
@@ -1658,7 +1658,7 @@ def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
     expect(popover.locator(".cx-card-claim")).to_have_text(["50.000 km", "80.000 km"])
     expect(popover.locator(".cx-card-vs")).to_have_count(1)
     expect(popover).not_to_contain_text("support")
-    popover.locator("button.cx-card-title").click()
+    popover.locator('.cx-card-action[data-section="differences"]').click()
     expect(app_page.locator('#modelAnswerReader')).to_be_visible()
     expect(app_page.locator('#answerReaderInspector .diff-card.is-contradiction')).to_contain_text('Break-even-Kilometer')
     expect(popover).to_be_hidden()

@@ -303,8 +303,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       unter der Behauptung eine Metazeile Icon + Modellname (Klick öffnet die
       Originalantwort) · „In the answer“ · „Show quote“. Chevrons von Karte
       und „smaller differences“ auf einer Linie am rechten Rand.
-      Inline-Marker halten ihre Karte fest, deren Thema öffnet die richtige
-      Karte im Leser. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
+      Inline-Marker halten ihre Karte fest, deren „Contradictions“ öffnet die
+      richtige Karte im Leser. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
       Notizen, Modell-Icons 0→6, Writing/Checking, Marken, 45/100) ohne
@@ -1137,18 +1137,25 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 ### Gemeinsame Detail-Seitenleiste
 - [ ] Differences und Sources aus aktuellem und archiviertem Turn oeffnen rechts denselben Leser; auf Handy/Tablet bildschirmfuellend.
 - [ ] Abschnitts- und Fragenwechsel behalten die korrekte Zuordnung; Schliessen stellt Karten/Quellenlisten an ihren Ursprungsort zurueck.
-- [ ] Differences zeigen zuerst Typ und Kernaussage. Aufklappen zeigt Positionen, Zitate, Pruefhinweis und vorhandene Resolve-Aktionen; das Thema der Karte einer Marke oeffnet die passende Karte.
+- [ ] Differences zeigen zuerst Typ und Kernaussage. Aufklappen zeigt Positionen, Zitate, Pruefhinweis und vorhandene Resolve-Aktionen; „Contradictions“ in der Karte einer Marke oeffnet die passende Karte.
 - [ ] Karte einer Marke (2026-10-23), hell, dunkel, Handy: Mit Maus zeigt eine
       gefärbte Stelle nach kurzer Pause eine Karte mit Pfeil auf die strittigen
-      Worte. Widerspruch = Thema (mit ›) + zwei Behauptungen mit „vs“, darunter
+      Worte. Widerspruch = Thema + zwei Behauptungen mit „vs“, darunter
       Logos + Name oder Anzahl; geteilte Aussage = Satz der Antwort („In the
       answer“) vs Zitat des Abweichlers; keine Versalien, kein „Click for …“.
-      Die Karte verdeckt weder ihren eigenen Satz noch das Eingabefeld, ihr Text
-      beginnt bündig unter dem ersten markierten Wort. Ein Klick lässt sie exakt
-      stehen; dann öffnet ein Logo die Antwort des Modells, das Thema die Karte
-      im Leser; Escape/Klick daneben schließt, beim Scrollen bleibt sie an ihren
-      Worten. Handy: Blatt von unten mit Griff und grauem ×, der Satz rückt
-      knapp darüber; Schließen gibt den Fokus ohne Vorschau zurück.
+      Unten eine Fußzeile mit Glyphe und Wort der Antwortleiste:
+      „Contradictions“ (Unterschied im Leser) und „Answers“ (Antwort der
+      Gegenseite am Zitat). Die Karte verdeckt weder ihren eigenen Satz noch das
+      Eingabefeld und bleibt im Textblock; ein Satz mit **fett** oder Link, der am
+      Zeilenende beginnt, bekommt sie darunter, wenn Platz ist (vorher darüber,
+      rechts aus dem Text hängend). Mit der Maus in die Karte fahren: sie bleibt,
+      auch über eine andere Marke hinweg, und ihre Wege funktionieren ohne Klick
+      auf den Satz; Zeiger weg, sie geht nach einem Moment. Ein Klick auf den
+      Satz lässt sie exakt stehen (auch nach dem Wegfahren); Escape/Klick daneben
+      schließt, beim Scrollen bleibt sie an ihren Worten. Nach einem Weg und
+      Schließen des Lesers steht der Fokus auf der Marke. Handy: Blatt von unten
+      mit Griff und grauem ×, Fußzeile fingerbreit, der Satz rückt knapp
+      darüber; Schließen gibt den Fokus ohne Vorschau zurück.
 - [ ] Quellen zeigen Titel/Domain; laengere Auszuege sind separat aufklappbar.
 - [ ] Kurze Fragen haben keinen nutzlosen Chevron; lange Fragen lassen sich ohne doppelten Text auf- und zuklappen.
 - [ ] Desktop 1440/1920/2560px: Chat in der Restflaeche zentriert, Leser waechst mit; linke Navigation ein- und ausklappen.
