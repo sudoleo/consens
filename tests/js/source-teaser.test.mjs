@@ -44,6 +44,21 @@ describe('source teaser', () => {
     env.dom.window.close();
   });
 
+  it('previews a pill that carries its own source without a number', () => {
+    // The sources of a step in the Agent's activity (agent-activity.js).
+    const env = boot();
+    const pill = env.window.createSourceRef([{src: {url: 'https://docs.example/seats', title: 'How seats are counted'}, token: 'https://docs.example/seats'}]);
+    env.document.body.append(pill);
+    expect(pill.dataset.sourceNumber).toBe('');
+    env.hover(pill);
+    const popup = env.document.getElementById('sourceTeaser');
+    expect(popup.classList.contains('is-visible')).toBe(true);
+    expect(popup.textContent).toContain('How seats are counted');
+    expect(popup.textContent).toContain('docs.example');
+    expect(popup.querySelector('.source-teaser-index')).toBe(null);
+    env.dom.window.close();
+  });
+
   it('keeps the source of an earlier turn that reuses the same source ID', () => {
     const env = boot();
     const history = env.document.createElement('div');

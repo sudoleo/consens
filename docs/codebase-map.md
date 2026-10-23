@@ -2157,7 +2157,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nur den DOM, nicht Markdown oder Review-Hash; `agent-review.js` liest die
   Quellen einer Pille über `sourceGroup` zurück.
   Hover/Fokus auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
-  Snippet); bei einer Gruppen-Pille eine Zeile je Quelle. Der Teaser ist ein
+  Snippet); bei einer Gruppen-Pille eine Zeile je Quelle. Eine Pille, die ihre
+  Quelle selbst trägt (`sourceData`), braucht dafür keine Nummer (die Quellen
+  eines Schritts in der Agent-Aktivität); dann entfällt die Ziffer. Der Teaser ist ein
   Tooltip; zum Öffnen gibt es seit 2026-10-20 (Apple-Audit F6)
   `window.App.sourceSheet` (`sources.js`, `#sourceSheet`, `{open(pill,
   {asModal}), close, isOpen}`): auf Touch öffnet schon der erste Tipp auf

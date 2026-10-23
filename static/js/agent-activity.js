@@ -492,7 +492,8 @@
       const runDetails = document.createElement('p'); runDetails.className = 'agent-activity-run-details';
       const insights = document.createElement('div'); insights.className = 'agent-activity-insights'; insights.hidden = true;
       // While it runs and no step is under way: what it does now, the last
-      // entry of the timeline (the preview's line, hidden while this is open).
+      // entry of the timeline after the comparisons (the preview's line,
+      // hidden while this is open).
       const current = document.createElement('p'); current.className = 'agent-activity-current';
       current.setAttribute('role', 'status');
       current.append(document.createElement('strong'));
@@ -698,10 +699,11 @@
     if (currentStep) {
       const label = view.current.firstElementChild;
       if (label.textContent !== window.App.t(currentStep)) label.textContent = currentStep;
-      // Moved only when something was added after it: a move restarts its shine.
-      if (view.content.lastElementChild !== view.current) view.content.append(view.current);
+      // After the comparisons too; appended once, a move would restart its shine.
+      if (view.timeline.lastElementChild !== view.current) view.timeline.append(view.current);
     } else view.current.remove();
-    view.content.hidden = !progress.length && !reasoning.length && !tools.length && !currentStep;
+    view.timeline.classList.toggle('has-current', Boolean(currentStep));
+    view.content.hidden = !progress.length && !reasoning.length && !tools.length;
     App.agentReview?.renderActivity(view.insights, review, answerText);
     view.timeline.classList.toggle('has-insights', !view.insights.hidden);
     view.note.textContent = progress.length || !view.insights.hidden ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"

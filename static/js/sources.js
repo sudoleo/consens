@@ -848,10 +848,12 @@ const sourceTeaser = (function () {
     const head = document.createElement("div");
     head.className = "source-teaser-head";
 
-    const index = document.createElement("span");
-    index.className = "source-teaser-index";
-    index.textContent = String(number);
-    head.appendChild(index);
+    if (Number.isFinite(number)) {
+      const index = document.createElement("span");
+      index.className = "source-teaser-index";
+      index.textContent = String(number);
+      head.appendChild(index);
+    }
 
     const host = getSourceHost(src);
     if (host) {
@@ -876,7 +878,7 @@ const sourceTeaser = (function () {
 
     const title = document.createElement("div");
     title.className = "source-teaser-title";
-    title.textContent = getSourceTitle(src, "Source " + number);
+    title.textContent = getSourceTitle(src, Number.isFinite(number) ? "Source " + number : getSourcePillLabel(src));
     node.appendChild(title);
 
     const snippet = src && (src.snippet || src.text);
@@ -952,8 +954,11 @@ const sourceTeaser = (function () {
 
   function show(target) {
     const number = parseInt(target.dataset.sourceNumber || "", 10);
-    if (!Number.isFinite(number)) return;
-    const src = Object.prototype.hasOwnProperty.call(target, 'sourceData') ? target.sourceData : lookup(number);
+    // A pill that carries its own source needs no number (the sources of a
+    // step in the Agent's activity, agent-activity.js).
+    const own = Object.prototype.hasOwnProperty.call(target, 'sourceData');
+    if (!Number.isFinite(number) && !own) return;
+    const src = own ? target.sourceData : lookup(number);
     if (!src) { hide(); return; }
 
     // Also repair restored/legacy refs whose HTML still carries a title.

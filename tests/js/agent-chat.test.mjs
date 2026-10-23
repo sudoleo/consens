@@ -968,10 +968,21 @@ describe("single-model agent chat", () => {
     expect(details.open).toBe(true);
     // The model at the end of the history, what it does now as the timeline's last entry.
     expect(details.querySelector('.agent-activity-run-details').textContent).toBe('DeepSeek V4.1 Flash · High reasoning');
-    expect(details.querySelector('.agent-activity-content > :last-child').textContent).toBe('Thinking…');
+    expect(details.querySelector('.agent-activity-timeline > :last-child').textContent).toBe('Thinking…');
     w.App.agentActivity.render(host, {running:true,settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'},responding:true});
     expect(details.querySelector('[role="status"]').textContent).toBe('Writing answer…');
     expect(details.open).toBe(true);
+    // A finished comparison and later steps stay above it: it is always the last entry.
+    const events = [{id:'c', kind:'tool', name:'compare_models', status:'succeeded'}, {id:'w', kind:'status', status:'responding'}];
+    w.App.agentActivity.render(host, {running:true, events});
+    w.App.agentActivity.render(host, {running:true, events:[...events, {id:'p', kind:'progress', text:'Writing it up.'}]});
+    const timeline = details.querySelector('.agent-activity-timeline');
+    expect([...timeline.children].map(el => el.className)).toEqual(['agent-activity-content', 'agent-activity-insights', 'agent-activity-current']);
+    expect(timeline.classList.contains('has-current')).toBe(true);
+    expect(details.querySelectorAll('.agent-activity-current')).toHaveLength(1);
+    w.App.agentActivity.render(host, {running:false, events});
+    expect(details.querySelector('.agent-activity-current')).toBe(null);
+    expect(timeline.classList.contains('has-current')).toBe(false);
     dom.window.close();
   });
 

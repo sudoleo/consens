@@ -478,26 +478,35 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-content { margin: 0; overflow-wrap: anywhere; }
 .agent-activity-content[hidden] { display: none; }
 .agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 4px; border-radius: 3px; }
-.agent-activity-content > *, .agent-activity-insight { --dot-y: 11px; position: relative; margin: 0; padding-left: 20px; }
+.agent-activity-content > *, .agent-activity-insight, .agent-activity-timeline > .agent-activity-current {
+  --dot-y: 11px; position: relative; margin: 0; padding-left: 20px;
+}
 @supports (top: 1lh) {
-  .agent-activity-content > *, .agent-activity-insight { --dot-y: .5lh; }
+  .agent-activity-content > *, .agent-activity-insight, .agent-activity-timeline > .agent-activity-current { --dot-y: .5lh; }
 }
 .agent-activity-content > * + *, .agent-activity-insight + .agent-activity-insight,
-.agent-activity-content:not([hidden]) + .agent-activity-insights { margin-top: var(--activity-gap); }
-.agent-activity-content > *::before, .agent-activity-insight::before {
+.agent-activity-content:not([hidden]) + .agent-activity-insights,
+.agent-activity-timeline > .agent-activity-current { margin-top: var(--activity-gap); }
+.agent-activity-content[hidden] + .agent-activity-insights[hidden] + .agent-activity-current { margin-top: 0; }
+:is(.agent-activity-content > *, .agent-activity-insight, .agent-activity-timeline > .agent-activity-current)::before {
   content: ''; position: absolute; z-index: 1; left: 0; top: calc(var(--dot-y) - var(--activity-dot) / 2);
   width: var(--activity-dot); height: var(--activity-dot); border-radius: 50%;
   background: var(--ink-3); box-shadow: 0 0 0 3px var(--bg-color);
 }
-.agent-activity-content > *::after, .agent-activity-insight::after {
+:is(.agent-activity-content > *, .agent-activity-insight, .agent-activity-timeline > .agent-activity-current)::after {
   content: ''; position: absolute; left: calc(var(--activity-dot) / 2 - .5px); width: 1px;
   top: calc(-1 * var(--activity-gap)); bottom: 0; background: var(--line);
 }
+/* The first entry starts the rail at its dot, the last ends it there: the
+   current step when it runs, else the last comparison, else the last step
+   (.has-current / .has-insights, agent-activity.js). */
 .agent-activity-content > :first-child::after,
-.agent-activity-content[hidden] + .agent-activity-insights > .agent-activity-insight:first-of-type::after { top: var(--dot-y); }
-.agent-activity-timeline:not(.has-insights) .agent-activity-content > :last-child::after,
-.agent-activity-insight:last-of-type::after { bottom: calc(100% - var(--dot-y)); }
-.agent-activity-tool[data-status="running"]::before, .agent-activity-current::before { background: var(--agent-ink); }
+.agent-activity-content[hidden] + .agent-activity-insights > .agent-activity-insight:first-of-type::after,
+.agent-activity-content[hidden] + .agent-activity-insights[hidden] + .agent-activity-current::after { top: var(--dot-y); }
+.agent-activity-timeline > .agent-activity-current::after,
+.agent-activity-timeline:not(.has-current) .agent-activity-insight:last-of-type::after,
+.agent-activity-timeline:not(.has-insights):not(.has-current) .agent-activity-content > :last-child::after { bottom: calc(100% - var(--dot-y)); }
+.agent-activity-timeline :is(.agent-activity-tool[data-status="running"], .agent-activity-current)::before { background: var(--agent-ink); }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   .agent-activity.is-running :is(.agent-activity-tool[data-status="running"], .agent-activity-current)::before {
     animation: activity-dot-breathe var(--dur-beat) var(--ease-standard) infinite;
@@ -602,6 +611,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @media (forced-colors: active) {
   .agent-activity, .agent-progress, .dark-mode :is(.agent-activity, .agent-progress) { --agent-ink: CanvasText; --agent-trace-ink: CanvasText; }
+  /* The timeline's dots and rail are backgrounds, which forced colours would
+     paint in the page colour: they take the system's ink instead. */
+  :is(.agent-activity-content > *, .agent-activity-insight, .agent-activity-timeline > .agent-activity-current)::before,
+  .agent-activity-findings li[data-type]::before { forced-color-adjust: none; background: CanvasText; box-shadow: 0 0 0 3px Canvas; }
+  :is(.agent-activity-content > *, .agent-activity-insight, .agent-activity-timeline > .agent-activity-current)::after { forced-color-adjust: none; background: GrayText; }
 }
 /* Files, attachments and document versions: agent-workspace.css. */
 /* Google connection, consent and action cards: agent-google.css. */
