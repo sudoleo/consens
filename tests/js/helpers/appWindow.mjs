@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { JSDOM } from "jsdom";
+import { onTestFinished } from "vitest";
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -50,6 +51,13 @@ export function loadScripts(files, { body, before, virtualConsole, base = true }
   });
 
   const { window } = dom;
+  // The window goes with its test, also when the test fails before its own
+  // close(): left open, the app's timers kept running and the worker, and with
+  // it the whole run, never ended. Outside a test its owner closes it.
+  // A window its test already closed has no document left.
+  try {
+    onTestFinished(() => { if (window.document) window.close(); });
+  } catch (_) {}
   // jsdom has no rAF under some configurations, and several modules schedule
   // their DOM work through it. Run it synchronously so tests stay deterministic.
   window.requestAnimationFrame = (fn) => {
