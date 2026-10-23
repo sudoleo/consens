@@ -229,7 +229,14 @@ def test_late_worker_results_reach_the_answer_only_after_review_without_private_
                         self.text, self.finish_reason = "The first option costs 100.", "stop"
                         yield {"type": "delta", "text": self.text}
                         return
-                    if worker.state in {"review", "failed"} and not worker.reviewed:
+                    # Like a model, review only a result that reached the
+                    # conversation: the worker's state flips before its result
+                    # is delivered (wait_agents), and a review sent in between
+                    # put the rework request ahead of the result it reworks.
+                    latest = (None if mode == "fallback" else
+                              "OUTDATED_FINDING" if mode == "rework" and not did_rework else "VERIFIED_CURRENT_FINDING")
+                    if (worker.state in {"review", "failed"} and not worker.reviewed
+                            and (latest is None or latest in json.dumps(messages))):
                         self.tool_calls = [tool("review_agent", {"agent_id": worker.id, "accepted": mode != "fallback",
                             "use_fallback": mode == "fallback", "check": "VERIFIED_FALLBACK_FINDING" if mode == "fallback" else "Checked the supporting fact."}, identity)]
                         if mode == "rework" and not did_rework:
