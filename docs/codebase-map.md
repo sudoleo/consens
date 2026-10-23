@@ -10113,7 +10113,13 @@ kein Text ist (Aufzählungspunkt, Quellen-Pill, Kästchen, Linie, Tabelle), blen
 `agent-chat.css` über `#agentAnswerBody.is-stream-revealing` mit ein. Wird der
 Text fest (Modus `full`), rendert `renderAnswerBody` über
 `App.streamReveal.settle(body, text, render)`: Ein Rückstand läuft im Takt
-weiter, die volle Darstellung folgt dem letzten Wort. Ein Text, der nicht an
+weiter, die volle Darstellung folgt dem letzten Wort. Kommt sie so später als
+der Aufruf, ersetzt sie die Quellen-Pills und Marken, die `agentReview.render`
+schon auf den getakteten Text gesetzt hatte: `renderAnswerBody` zählt dann
+`_agentRenderSerial` hoch und projiziert die Ansicht per
+`registry.renderVisible()` neu (im Microtask, nachdem das Modul den Text
+gemessen hat). Bis 2026-10-23 blieben die `[S1]`-Pills einer Antwort ohne
+Vergleich so bis zum Reload aus. Ein Text, der nicht an
 den getakteten anschließt (anderer Chat), rendert sofort und beendet das Licht.
 Schreibt jemand anderes in die Antwort (`_markdownWrites`, etwa die Marken der
 Review), gibt das Modul sie ab. Der WAAPI-Fade des Antwortbeginns

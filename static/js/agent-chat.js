@@ -593,8 +593,20 @@
     } else if (window.morphMarkdown) {
       const morph = () => window.morphMarkdown(body, text, { decorate: streamSourcePills });
       const full = () => (window.keepTextSelection ? window.keepTextSelection(body, morph) : morph());
-      if (reveal) reveal.settle(body, text, full);
-      else full();
+      if (reveal) {
+        // A full render that follows the paced words comes after the review
+        // set its marks and source pills on the paced text, and replaces
+        // them: the view is projected again once it stands, after the reveal
+        // measured it, so no letter comes in twice.
+        let later = false;
+        reveal.settle(body, text, () => {
+          full();
+          if (!later) return;
+          body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
+          queueMicrotask(() => registry.renderVisible());
+        });
+        later = true;
+      } else full();
     } else {
       window.resetMarkdownStream?.(body);
       window.injectMarkdown?.(body, text, []);

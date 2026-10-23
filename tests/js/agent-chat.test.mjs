@@ -1756,6 +1756,49 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('sets the source pills again when the full render follows the paced words later', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    // The pace still has words to show: the full render waits for them.
+    let finish = null;
+    w.App.streamReveal = { active: () => true, stream: vi.fn(), settle: vi.fn((_el, _text, render) => { finish = render; }) };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    // As run-view.js does for a visible Agent run.
+    w.App.runRegistry.setProjector(context => context && w.App.agentChat.project(context));
+    const body = d.getElementById('agentAnswerBody');
+    const text = 'The race starts in Monaco [S1].';
+    const sources = [{ url: 'https://www.uci.org/rules', title: 'UCI' }];
+    handlers.delta.append(text);
+    w.App.agentChat.project(run);
+    resolve({ ok: true, data: { response: text, chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32), sources,
+      turn: { id: 'b'.repeat(32), consensus: text, execution_mode: 'agent', sources }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    w.App.agentChat.project(run);
+    expect(finish).toEqual(expect.any(Function));
+    expect(w.morphMarkdown).not.toHaveBeenCalled();
+    // The review set its pills on the paced text the full render replaces.
+    const reviewed = w.App.agentReview.render.mock.calls.length;
+    expect(reviewed).toBeGreaterThan(0);
+    const serial = body._agentRenderSerial;
+    finish();
+    expect(w.morphMarkdown).toHaveBeenLastCalledWith(body, text, { decorate: expect.any(Function) });
+    expect(body._agentRenderSerial).toBe(serial + 1);
+    await Promise.resolve();
+    expect(w.App.agentReview.render.mock.calls.length).toBeGreaterThan(reviewed);
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, undefined, expect.objectContaining({ sources }));
+    // The new projection keeps the rendered text: no second full render.
+    expect(w.morphMarkdown).toHaveBeenCalledTimes(1);
+    dom.window.close();
+  });
+
   it('keeps the marked answer DOM when the run ends with the text the review already rendered', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
