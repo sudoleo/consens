@@ -272,7 +272,10 @@
       state.shown = Math.min(state.target.length, state.shown + (state.speed * elapsed) / 1000);
     }
     if (now < state.paintAfter) return;
-    const cut = wordEnd(state.target, Math.floor(state.shown), Boolean(state.finish) || now - state.grewAt > IDLE_MS);
+    // A fixed answer paced to its end ends there, even on what looks like a
+    // line mark ("42."): no word follows it that the mark could wait for.
+    const cut = state.finish && state.shown >= state.target.length ? state.target.length
+      : wordEnd(state.target, Math.floor(state.shown), Boolean(state.finish) || now - state.grewAt > IDLE_MS);
     if (cut > state.cut) {
       const started = performance.now();
       show(state, cut, now, true);

@@ -124,6 +124,21 @@ describe("stream-reveal: the pace of a streamed answer", () => {
 });
 
 describe("stream-reveal: the fixed answer", () => {
+  it("renders a fixed answer whose last line looks like a list mark", () => {
+    // "42." or a closing "1." line is a whole answer once it is fixed, not
+    // the start of a list that waits for its first word.
+    for (const answer of ["42.", "Result:\n\n1."]) {
+      const { window, reveal, el, paint, run } = boot();
+      reveal.stream(el, answer, paint);
+      run(16);
+      const render = vi.fn(() => window.morphMarkdown(el, answer));
+      reveal.settle(el, answer, render);
+      run(3000);
+      expect(render).toHaveBeenCalledTimes(1);
+      expect(el.classList.contains("is-stream-revealing")).toBe(false);
+    }
+  });
+
   it("lets the full render follow the last paced word", () => {
     const { window, reveal, el, painted, paint, run } = boot();
     reveal.stream(el, ANSWER, paint);
