@@ -125,10 +125,29 @@ describe("a model change", () => {
     window.App.markConsensusPresetCustom({ family: pref(window, "Mistral") });
     expect(settings.get("consensus_preset")).toBe("custom");
     expect(settings.get("compare_models")).toEqual({
-      OpenAI: { model: "openai-a" }, Mistral: { model: "mistral-b" },
-      Anthropic: { model: "claude-a" }, Grok: { model: "grok-a" },
+      OpenAI: { model: "openai-a", enabled: true }, Mistral: { model: "mistral-b", enabled: true },
+      Anthropic: { model: "claude-a", enabled: true }, Grok: { model: "grok-a", enabled: false },
     });
     expect(settings.get("consensus_model")).toBe("Gemini");
+  });
+
+  it("leaving a preset keeps which families answer, over an older Custom choice", () => {
+    // An earlier Custom lineup (Anthropic in, Grok out) is still stored when
+    // the user picks Balanced (Grok in, Anthropic out) and then changes one
+    // of its models.
+    const { window, settings } = boot({ pref_check_Anthropic: "true", pref_check_Grok: "false" });
+    window.App.selectConsensusPreset("balanced");
+    window.document.getElementById("mistralModelSelect").value = "mistral-a";
+    window.App.markConsensusPresetCustom({ family: pref(window, "Mistral") });
+    const onScreen = lineup(window);
+    expect(onScreen.Grok.checked).toBe(true);
+    expect(onScreen.Anthropic.checked).toBe(false);
+    // The tier refresh after the next answer restores the saved choice: it
+    // is the lineup the user left the preset with.
+    window.restoreModelSelections();
+    expect(lineup(window)).toEqual(onScreen);
+    expect(settings.get("compare_models").Grok.enabled).toBe(true);
+    expect(settings.get("compare_models").Anthropic.enabled).toBe(false);
   });
 
   it("within Custom saves the changed family and keeps a stored model that is not offered right now", () => {

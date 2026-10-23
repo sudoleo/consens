@@ -140,6 +140,16 @@
     });
   }
 
+  // Tier refreshes restore persisted selections after /prepare. A provider
+  // disabled by the attachment compatibility gate must stay excluded during
+  // that restore; otherwise progress and consensus wait for an answer whose
+  // request was intentionally never started.
+  function blockedForRun(pref, checkbox) {
+    return runBlockedResponseIds.has(pref.responseId)
+      || (!!checkbox?.disabled
+        && checkbox.getAttribute("aria-describedby") === "attachmentProviderNotice");
+  }
+
   function animateResponseReorder(box, applyStateChange) {
     // "Reduce motion" moves nothing: the boxes change places at once (C10).
     if (!box || typeof box.animate !== "function" || window.App.motion?.reduced?.()) {
@@ -195,14 +205,7 @@
     // Eine ausdrueckliche Nutzeraktion (persist) ist staerker als der Block des
     // laufenden Laufs: wer das Modell selbst wieder anhakt, bekommt es zurueck.
     if (persist) runBlockedResponseIds.delete(pref.responseId);
-    // Tier refreshes restore persisted selections after /prepare. A provider
-    // disabled by the attachment compatibility gate must stay excluded during
-    // that restore; otherwise progress and consensus wait for an answer whose
-    // request was intentionally never started.
-    const attachmentBlocked = runBlockedResponseIds.has(pref.responseId)
-      || (checkbox?.disabled
-        && checkbox.getAttribute("aria-describedby") === "attachmentProviderNotice");
-    let checked = attachmentBlocked ? false : !!isChecked;
+    let checked = blockedForRun(pref, checkbox) ? false : !!isChecked;
 
     // Die siebte Familie wird abgelehnt statt eine andere still abzuwaehlen.
     // Gilt auch fuer die Wiederherstellung gespeicherter Auswahlen, damit ein
@@ -451,9 +454,18 @@
     const models = {};
     window.App.modelPrefs.forEach(pref => {
       const value = document.getElementById(pref.selectId)?.value;
+      const family = {};
       if (value && (leavingPreset || pref === change.family || stored[pref.key]?.model === undefined)) {
-        models[pref.key] = { model: value };
+        family.model = value;
       }
+      // The lineup also says who answers: an older Custom choice would
+      // otherwise switch families back at the next restore. A family left
+      // out only for this run (attachments) keeps its saved choice.
+      const checkbox = document.getElementById(pref.checkId);
+      if (leavingPreset && checkbox && !blockedForRun(pref, checkbox)) {
+        family.enabled = checkbox.checked;
+      }
+      if (Object.keys(family).length) models[pref.key] = family;
     });
     saveFamilies(models);
     const consensus = document.getElementById("consensusModelDropdown");
