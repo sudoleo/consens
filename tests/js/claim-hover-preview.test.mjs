@@ -240,6 +240,48 @@ describe("reaching the card with the pointer", () => {
     env.dom.window.close();
   });
 
+  it("shows a pin: outlined in the preview, filled once pinned, and a click on it lets go", async () => {
+    const env = boot();
+    const [mark] = marked(env, [launch], { focusDifference() {} });
+    env.hover(mark);
+    await wait(160);
+    const pin = env.shown().querySelector(".cx-card-pin");
+    expect(pin.getAttribute("aria-pressed")).toBe("false");
+    pin.click();
+    const popover = env.document.getElementById("claimPopover");
+    expect(popover.hidden).toBe(false);
+    expect(env.shown()).toBeNull();
+    const pinned = popover.querySelector(".cx-card-pin");
+    expect(pinned.getAttribute("aria-pressed")).toBe("true");
+    expect(pinned.getAttribute("aria-label")).toBe("Unpin");
+    pinned.click();
+    expect(popover.hidden).toBe(true);
+    env.dom.window.close();
+  });
+
+  it("leads from a yellow sentence's card to its card in the list", async () => {
+    const env = boot();
+    const focusDifference = vi.fn();
+    env.body.innerHTML = "<p>Mail judith-c.schneider@uni.de for an appointment.</p>";
+    env.window.renderStoredConsensusClaims(env.body, { models_compared: ["OpenAI", "Gemini", "DeepSeek"], differences: [], claims: [
+      { anchor: "Mail judith-c.schneider@uni.de for an appointment.", coverage: "split", agree: ["OpenAI", "Gemini"],
+        dissent: [{ model: "DeepSeek", quote: "judith.c.schneider@uni.de", target: "judith-c.schneider@uni.de" }] }] },
+      env.document.createElement("div"), [], { focusDifference });
+    env.hover(env.body.querySelector(".cx-claim"));
+    await wait(160);
+    env.shown().querySelector('.cx-card-action[data-section="differences"]').click();
+    expect(focusDifference).toHaveBeenCalledWith("c0");
+    // Pinned through its pin, the card keeps the way there.
+    env.hover(env.body.querySelector(".cx-claim"));
+    await wait(160);
+    env.shown().querySelector(".cx-card-pin").click();
+    const popover = env.document.getElementById("claimPopover");
+    expect(popover.hidden).toBe(false);
+    popover.querySelector('.cx-card-action[data-section="differences"]').click();
+    expect(focusDifference).toHaveBeenCalledTimes(2);
+    env.dom.window.close();
+  });
+
   it("is not taken over by a mark the pointer crosses on its way into it", async () => {
     const env = boot();
     const [launchMark, ticketMark] = marked(env, [launch, tickets], { focusDifference() {} });

@@ -33,8 +33,11 @@ html.is-theme-switching *::after {
 /* --------------------------------------------------------------------------
    2. Disclosures (disclosure.js animates the height; nothing here moves)
    -------------------------------------------------------------------------- */
+/* While its height moves, nothing may paint outside it: a component that sets
+   overflow: visible on its <details> (the differences cards) let the folding
+   content run over the rows below, text over text (Max 2026-10-23). */
 details.is-disclosing {
-  overflow: hidden;
+  overflow: hidden !important;
 }
 
 /* --------------------------------------------------------------------------

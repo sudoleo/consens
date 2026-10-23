@@ -1174,8 +1174,10 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     app_page.locator('#consensusDifferencesTab').click()
     card = app_page.locator('#answerReaderInspector .diff-card.is-contradiction').first
     expect(card).to_be_visible()
-    # A single difference is expanded by the reader on entry. Its real
-    # disclosure must close and reopen before following the model quote.
+    # Every difference starts folded (2026-10-23). Its real disclosure opens,
+    # closes and reopens before following the model quote.
+    expect(card).not_to_have_attribute('open', '')
+    card.locator('summary').click()
     expect(card).to_have_attribute('open', '')
     card.locator('summary').click()
     expect(card).not_to_have_attribute('open', '')

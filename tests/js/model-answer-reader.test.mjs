@@ -150,7 +150,7 @@ describe("model answer reader", () => {
     expect(ctx.document.getElementById('answerReaderColumns').textContent).toContain('Independent answer');
     expect(ctx.document.querySelector('#answerReaderSections [data-section="differences"]').hidden).toBe(true);
   });
-  it("opens the weightiest finding first when no marker picks one", () => {
+  it("keeps every finding folded when no marker picks one", () => {
     const ctx = boot(); ctx.project(run());
     const snapshot = { key: 'tool:first', question: 'Which plan?', answers: [], contextGroup: () => [snapshot],
       renderPanel() {
@@ -160,8 +160,9 @@ describe("model answer reader", () => {
         return panel;
       } };
     ctx.reader.openContext(snapshot, { section: 'differences' });
+    // Max 2026-10-23: the differences always start folded, the weightiest first.
     expect([...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')].map(card => card.open))
-      .toEqual([true, false, false]);
+      .toEqual([false, false, false]);
   });
   it("previews selected models without creating an answer or a loading state", () => {
     const ctx = boot();

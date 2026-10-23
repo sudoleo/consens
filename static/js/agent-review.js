@@ -140,14 +140,15 @@
     if (!issues.length) return state === 'succeeded' ? 'Checked' : states.partial;
     return issues.every(i => i.code === 'models_unavailable') ? 'Checked' : states.partial;
   }
+  // Above the findings only what they cannot say themselves: a missing
+  // model, a check still running or incomplete. "4 models answered ·
+  // Checked" for a complete check only confused (Max 2026-10-23); it is no
+  // line at all now (null).
   function evidenceStatus(comparison, answers, check, state, issues) {
     const unavailable = check ? comparison.failed_models || [] : [];
     const total = answers.length + unavailable.length;
-    const count = !check ? '' : unavailable.length ? `${answers.length} of ${total} models answered`
-      : total === 1 ? '1 model answered' : `${total} models answered`;
-    // Part by part through App.t: the joined line has no entry of its own.
-    const line = [count, checkWord(check?.status || state, issues)].filter(Boolean)
-      .map(part => window.App.t(part)).join(' · ');
+    const word = checkWord(check?.status || state, issues);
+    const parts = [unavailable.length ? `${answers.length} of ${total} models answered` : '', word === 'Checked' ? '' : word];
     const details = [];
     for (const model of unavailable) details.push(model.partial_text
       ? `${model.label}: stopped before it finished, ${failureReason(model.failure)}. Its partial answer is under Answers, not in the check.`
@@ -158,6 +159,11 @@
     if (check) for (const issue of issues) {
       if (issue.code !== 'models_unavailable' && !decisive.has(issue.code)) details.push(issueText(issue) + '.');
     }
+    // Notes on a complete check (an answer that came late) open under the count.
+    if (details.length && !parts.some(Boolean)) parts[0] = total === 1 ? '1 model answered' : `${total} models answered`;
+    // Part by part through App.t: the joined line has no entry of its own.
+    const line = parts.filter(Boolean).map(part => window.App.t(part)).join(' · ');
+    if (!line) return null;
     if (!details.length) return node('p', 'agent-evidence-status', line);
     const box = node('details', 'agent-evidence-status');
     box.append(node('summary', '', line));
@@ -599,7 +605,8 @@
           return sourcePanel(sources, readUrls(review));
         }
         const localIssues = checkIssues(comparison, check);
-        panel.append(evidenceStatus(comparison, answers, check, state, localIssues));
+        const status = evidenceStatus(comparison, answers, check, state, localIssues);
+        if (status) panel.append(status);
         for (const issue of localIssues.filter(i => decisive.has(i.code))) {
           // These change how the panel reads (no marks at all), so they stay visible.
           panel.append(node('p', 'agent-review-note agent-evidence-limit', issueText(issue) + '.'));

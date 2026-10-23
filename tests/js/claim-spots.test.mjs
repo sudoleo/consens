@@ -40,7 +40,8 @@ function boot(html, mode = null, { markdown = false } = {}) {
 }
 
 const split = (anchor, dissent) => ({ anchor, agree: ["OpenAI", "Gemini"], dissent, coverage: "split" });
-const spots = document => [...document.querySelectorAll(".cx-spot")].map(spot => spot.textContent);
+// The answer's spots; the list of differences repeats them on its cards.
+const spots = document => [...document.getElementById("consensusAnswerBody").querySelectorAll(".cx-spot")].map(spot => spot.textContent);
 // The answer's own text, without the support counts placed after a sentence.
 function text(element) {
   const copy = element.cloneNode(true);
@@ -68,7 +69,7 @@ it("finds words across bold text and keeps the visible text unchanged", () => {
     claims: [split("In Kona **Vincent Luis** won the men's race.",
       [{ model: "GLM", quote: "not in Kona", target: "Vincent Luis** won" }])] }, 3);
   expect(spots(document).join("")).toBe("Vincent Luis won");
-  const parts = [...document.querySelectorAll(".cx-spot")];
+  const parts = [...document.getElementById("consensusAnswerBody").querySelectorAll(".cx-spot")];
   expect(parts.length).toBe(2);
   expect(parts[0].classList.contains("cx-join-end")).toBe(true);
   expect(parts[1].classList.contains("cx-join-start")).toBe(true);

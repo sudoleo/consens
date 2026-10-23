@@ -198,24 +198,30 @@ describe("difference cards in the detail panel", () => {
     ]
   };
 
-  it("orders critical first, names severity in one word and keeps the data index", () => {
+  it("orders critical first, marks only it, folds the smaller ones and keeps the data index", () => {
     const ctx = boot();
     const cards = ctx.document.createElement("div");
     ctx.window.renderStoredDifferenceCards(cards, MIXED);
     const all = [...cards.querySelectorAll(".diff-card")];
-    expect(all.map(card => card.querySelector(".diff-type-tag").textContent)).toEqual(["Critical", "Minor", "Emphasis"]);
     expect(all.map(card => card.dataset.differenceIndex)).toEqual(["2", "0", "1"]);
-    expect(all.map(card => card.querySelector(".sev-dot").className)).toEqual(["sev-dot is-crit", "sev-dot is-warn", "sev-dot is-info"]);
-    // Behind a critical contradiction the smaller ones wait in one closed group.
+    // No severity line above the topics (Max 2026-10-23): a red dot before
+    // the critical one's topic is the only colour, the order says the rest.
+    expect(cards.querySelector(".diff-type-tag, .diff-card-tags")).toBe(null);
+    expect(all.map(card => [...card.querySelectorAll(".sev-dot")].map(dot => dot.className)))
+      .toEqual([["sev-dot is-crit"], [], []]);
+    expect(all[0].querySelector(".diff-card-claim > .sev-dot")).not.toBe(null);
+    // Every card starts folded to its head; behind a critical contradiction
+    // the smaller ones wait in one closed group.
     const group = cards.querySelector("details.diff-more");
     expect(group.open).toBe(false);
     expect(group.querySelector(".diff-more-summary").textContent).toBe("2 smaller differences");
     expect([...group.querySelectorAll(".diff-card")]).toEqual(all.slice(1));
+    expect(all.map(card => card.open)).toEqual([false, false, false]);
     expect(cards.lastElementChild).toBe(group);
     expect(cards.textContent).not.toContain("Contradiction ·");
-    // The full meaning stays available to screen readers and as a tooltip.
-    expect(all[0].querySelector(".diff-card-tags").textContent).toBe("Critical contradiction:");
-    expect(all[0].querySelector(".diff-type-tag").title).toBe("Critical contradiction");
+    // Screen readers hear the weight before the topic.
+    expect(all.map(card => card.querySelector(".diff-card-meaning").textContent)).toEqual([
+      "Critical contradiction: ", "Minor contradiction about a detail: ", "Different emphasis, not a contradiction: "]);
   });
 
   it("puts each position's models on one line, as jump links only when an answer is reachable", () => {
@@ -242,32 +248,39 @@ describe("difference cards in the detail panel", () => {
     expect(opened).toEqual([["Gemini", "35 euros"]]);
   });
 
-  it("sets a contradiction's claims against each other, the answer's side first", () => {
+  it("heads a contradiction with the answer's marked sentence, then the other side after \"In contrast\"", () => {
     const ctx = boot();
     const cards = ctx.document.createElement("div");
     ctx.document.body.appendChild(cards);
     const data = structuredClone(DIFFERENCES_DATA);
     data.differences[0].positions[1].in_answer = true;
     ctx.window.renderStoredDifferenceCards(cards, data);
-    const sides = cards.querySelector(".diff-sides");
-    // Always one above the other, so two and three sides look alike.
+    const card = cards.querySelector(".diff-card");
+    // The reader shows no answer (Max 2026-10-23: first the situation, then
+    // the rival claim, then who says what): its sentence, as marked in the
+    // text, is the card's head, under its quiet topic; no dot.
+    const summary = card.querySelector(".diff-card-summary");
+    expect(summary.querySelector(".diff-card-topic").textContent).toBe("the ticket price");
+    expect(summary.querySelector(".diff-position-lead")).toBe(null);
+    expect(summary.querySelector(".diff-card-claim.is-answer-text .diff-answer-mark").textContent).toBe(DISPUTED);
+    expect(summary.querySelector(".sev-dot")).toBe(null);
+    expect(summary.querySelector(".diff-card-meaning").textContent).toBe("Critical contradiction: ");
+    const sides = card.querySelector(".diff-sides");
+    // Always one above the other; "In contrast" instead of "vs".
     expect(sides.className).toBe("diff-sides is-versus");
-    expect([...sides.children].map(el => el.className))
-      .toEqual(["diff-position is-answer", "diff-versus-mark", "diff-position"]);
-    expect(sides.querySelector(".diff-versus-mark").textContent).toBe("vs");
+    expect(sides.querySelector(".diff-versus-mark")).toBe(null);
     const [answer, other] = sides.querySelectorAll(".diff-position");
-    expect(answer.querySelector(".diff-position-answer").textContent).toBe("In the answer");
-    expect(answer.querySelector(".diff-position-stance").textContent).toBe("more than 29 euros");
-    expect(other.querySelector(".diff-position-answer")).toBe(null);
-    // Several models: icons and a count; one model: its name.
-    expect(answer.querySelector(".diff-position-label").classList.contains("is-group")).toBe(true);
-    expect(answer.querySelector(".diff-position-count").textContent).toBe("2 models");
-    expect(other.querySelector(".diff-position-count")).toBe(null);
-    // The claim first, then one quiet line: who, the answer's side, the quote toggle.
-    expect([...answer.children].map(el => el.className))
-      .toEqual(["diff-position-stance", "diff-position-meta", "diff-position-quote"]);
+    expect(answer.className).toBe("diff-position is-answer");
+    // The answer's side under its sentence: only who says it and the quote.
+    expect([...answer.children].map(el => el.className)).toEqual(["diff-position-meta", "diff-position-quote"]);
     expect([...answer.querySelector(".diff-position-meta").children].map(el => el.className))
-      .toEqual(["diff-position-label is-group", "diff-position-answer", "diff-quote-toggle"]);
+      .toEqual(["diff-position-label is-group", "diff-quote-toggle"]);
+    expect(answer.querySelector(".diff-position-count").textContent).toBe("2 models");
+    expect([...other.children].map(el => el.className))
+      .toEqual(["diff-position-lead", "diff-position-stance", "diff-position-meta", "diff-position-quote"]);
+    expect(other.querySelector(".diff-position-lead").textContent).toBe("In contrast");
+    expect(other.querySelector(".diff-position-stance").textContent).toBe("29 euros");
+    expect(other.querySelector(".diff-position-count")).toBe(null);
     // The quote waits behind a toggle.
     const toggle = answer.querySelector(".diff-quote-toggle");
     const quote = answer.querySelector(".diff-position-quote");
@@ -278,6 +291,22 @@ describe("difference cards in the detail panel", () => {
     expect(toggle.textContent).toBe("Hide quote");
     toggle.click();
     expect(quote.hidden).toBe(true);
+  });
+
+  it("keeps the topic as head without a sentence of the answer, and leads each side", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    const data = structuredClone(DIFFERENCES_DATA);
+    delete data.differences[0].consensus_anchor;
+    data.differences[0].positions[1].in_answer = true;
+    ctx.window.renderStoredDifferenceCards(cards, data);
+    const summary = cards.querySelector(".diff-card-summary");
+    expect(summary.querySelector(".diff-card-claim").textContent).toBe("the ticket price");
+    expect(summary.querySelector(".diff-card-claim > .sev-dot.is-crit")).not.toBe(null);
+    const [answer, other] = cards.querySelectorAll(".diff-position");
+    expect(answer.querySelector(".diff-position-lead").textContent).toBe("In the answer");
+    expect(answer.querySelector(".diff-position-stance").textContent).toBe("more than 29 euros");
+    expect(other.querySelector(".diff-position-lead").textContent).toBe("In contrast");
   });
 
   it("shows the same claim once, with every model on its first side only", () => {
@@ -300,8 +329,7 @@ describe("difference cards in the detail panel", () => {
     const saved = structuredClone(data);
     ctx.window.renderStoredDifferenceCards(cards, data);
     const sides = cards.querySelector(".diff-sides");
-    expect([...sides.children].map(el => el.className))
-      .toEqual(["diff-position is-answer", "diff-versus-mark", "diff-position"]);
+    expect([...sides.children].map(el => el.className)).toEqual(["diff-position is-answer", "diff-position"]);
     const [answer, other] = sides.querySelectorAll(".diff-position");
     expect(answer.querySelector(".diff-position-stance").textContent)
       .toBe("The Hyperboost Edge is the pick for maximum cushioning.");
@@ -407,6 +435,56 @@ describe("difference cards in the detail panel", () => {
     expect(sides.querySelector(".diff-quote-toggle")).toBe(null);
   });
 
+  it("folds a yellow sentence with a named spot into the smaller differences", () => {
+    // Max 2026-10-23: what the text marks yellow is in the list too, among
+    // the smaller differences; a sentence a difference already carries, or
+    // one without a named spot, is not.
+    const MAIL = "Mail judith-c.schneider@uni.de for an appointment.";
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, {
+      models_compared: ["OpenAI", "Gemini", "DeepSeek"],
+      claims: [
+        { anchor: MAIL, coverage: "split", agree: ["OpenAI", "Gemini"],
+          dissent: [{ model: "DeepSeek", quote: "judith.c.schneider@uni.de", target: "judith-c.schneider@uni.de" }] },
+        { anchor: "The office opens at nine.", coverage: "split", agree: ["OpenAI"], dissent: [{ model: "Gemini", quote: "At ten." }] },
+        { anchor: DISPUTED, coverage: "split", agree: ["OpenAI"], dissent: [{ model: "Gemini", quote: "35 euros", target: "29 euros" }] },
+        { anchor: "Parking is free.", coverage: "supported", agree: ["OpenAI", "Gemini"], dissent: [] }
+      ],
+      differences: [
+        DIFFERENCES_DATA.differences[0],
+        { claim: "the opening day", type: "contradiction", severity: "minor", consensus_anchor: "It opens on Monday.",
+          positions: [{ models: ["OpenAI"], stance: "Monday" }, { models: ["Gemini"], stance: "Tuesday" }] }
+      ]
+    });
+    const all = [...cards.querySelectorAll(".diff-card")];
+    expect(all.map(card => card.dataset.differenceIndex)).toEqual(["0", "1", "c0"]);
+    const group = cards.querySelector("details.diff-more");
+    expect(group.querySelector(".diff-more-summary").textContent).toBe("2 smaller differences");
+    const sentence = all[2];
+    expect(group.contains(sentence)).toBe(true);
+    expect(sentence.classList.contains("is-split")).toBe(true);
+    expect(sentence.open).toBe(false);
+    // Its head: the sentence, coloured only at its spot, as in the text.
+    expect(sentence.querySelector(".diff-card-topic").textContent).toBe("Not every model agrees");
+    expect(sentence.querySelector(".diff-answer-mark").textContent).toBe(MAIL);
+    expect(sentence.querySelector(".diff-answer-mark .cx-spot").textContent).toBe("judith-c.schneider@uni.de");
+    const [answer, other] = sentence.querySelectorAll(".diff-position");
+    expect([...answer.querySelectorAll(".diff-position-name")].map(n => n.textContent)).toEqual(["OpenAI", "Gemini"]);
+    expect(other.querySelector(".diff-position-lead").textContent).toBe("In contrast");
+    expect(other.querySelector(".diff-position-stance").textContent).toBe("judith.c.schneider@uni.de");
+    expect(sentence.querySelector(".diff-resolve")).toBe(null);
+  });
+
+  it("lists a yellow sentence even when there is no difference at all", () => {
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, { models_compared: ["OpenAI", "Gemini"], differences: [], claims: [
+      { anchor: "Tickets cost 20 euros.", coverage: "split", agree: ["OpenAI"], dissent: [{ model: "Gemini", quote: "25 euros", target: "20 euros" }] }] });
+    expect(cards.querySelector(".diff-empty-state")).toBe(null);
+    expect([...cards.querySelectorAll(".diff-card")].map(card => card.dataset.differenceIndex)).toEqual(["c0"]);
+  });
+
   it("opens the card of the clicked marker by data index, not by card position", () => {
     const ctx = boot();
     ctx.window.renderStoredConsensusClaims(ctx.body, MIXED, ctx.fallback, []);
@@ -419,7 +497,7 @@ describe("difference cards in the detail panel", () => {
     const focused = cards.querySelector(".diff-card.is-focused");
     expect(focused.dataset.differenceIndex).toBe("2");
     expect(focused).toBe(cards.querySelector(".diff-card"));
-    expect(focused.querySelector(".diff-type-tag").textContent).toBe("Critical");
+    expect(focused.querySelector(".diff-card-meaning").textContent).toBe("Critical contradiction: ");
     expect(focused.open).toBe(true);
   });
 });

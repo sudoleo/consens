@@ -648,6 +648,7 @@
             }
 
             const asModal = isMobileViewport();
+            if (!asModal) pop.appendChild(cardPin(true, function () { closeClaimPopover(); }));
             pop.classList.toggle("is-modal", asModal);
             pop.classList.toggle("is-instant", previewed && !asModal);
             window.App?.popover?.opened(pop, { trigger: asModal ? null : anchorEl });
@@ -710,7 +711,8 @@
               return claimCard(claim, modelsCompared, Object.assign(ctx, {
                 spans: spans,
                 navigation: answerNavigation || LIVE_ANSWER_NAVIGATION,
-                sideLabel: options.sideLabel
+                sideLabel: options.sideLabel,
+                openInDrawer: options.openInDrawer
               }));
             }, "claim");
           }
@@ -1133,7 +1135,7 @@
 
           // Inline counts are opt-in; the marked passage remains accessible
           // when the badge is hidden. Fallback rows retain their detail button.
-          function makeBadge(claim, modelsCompared, answerNavigation) {
+          function makeBadge(claim, modelsCompared, answerNavigation, options) {
             const badge = document.createElement("button");
             badge.type = "button";
             const coverage = claimCoverage(claim);
@@ -1156,7 +1158,7 @@
             badge.setAttribute("aria-label", claimBadgeLabel(claim, modelsCompared));
             badge.addEventListener("click", function (event) {
               event.stopPropagation();
-              openClaimPopover(claim, badge, modelsCompared, answerNavigation);
+              openClaimPopover(claim, badge, modelsCompared, answerNavigation, options);
             });
             return badge;
           }
@@ -1601,6 +1603,13 @@
             const card = ensureHoverCard();
             card.classList.remove("is-instant");
             card.replaceChildren(build.preview({ interactive: true, close: function () { leavePreviewFor(group); } }));
+            if (build.pinnable !== false) {
+              card.appendChild(cardPin(false, function () {
+                const target = activeControl(group);
+                if (target?.isPassage) (group.spans[0] || target.el).click();
+                else target?.activate();
+              }));
+            }
             // Nur fuer den Zeiger: der Tabulator erreicht dieselben Wege in
             // der festgehaltenen Karte.
             card.querySelectorAll("button, a[href]").forEach(function (el) { el.tabIndex = -1; });
@@ -1694,6 +1703,30 @@
           // Antworten. Ihr Titel fuehrte vorher als Chevron dorthin, das sah
           // niemand (Max 2026-10-23). `ctx.close` schliesst die Karte vor dem
           // Weg (festgehalten: closeClaimPopover, Vorschau: leavePreviewFor).
+
+          // Der Pin oben rechts (Max 2026-10-23): dass ein Klick die Karte
+          // festhaelt, sieht man jetzt. In der Vorschau umrandet, ein Klick
+          // heftet an; an der festgehaltenen Karte gefuellt, ein Klick loest
+          // sie. Das Blatt auf dem Handy hat sein x statt des Pins.
+          const PIN_ICON = '<svg class="cx-card-pin-icon" viewBox="0 0 24 24" aria-hidden="true">'
+            + '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>'
+            + '</svg>';
+
+          function cardPin(pinned, act) {
+            const pin = document.createElement("button");
+            pin.type = "button";
+            pin.className = "cx-card-pin";
+            pin.innerHTML = PIN_ICON;
+            pin.setAttribute("aria-pressed", pinned ? "true" : "false");
+            pin.setAttribute("aria-label", pinned ? "Unpin" : "Pin");
+            pin.title = pinned ? "Unpin" : "Pin";
+            pin.addEventListener("click", function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              act();
+            });
+            return pin;
+          }
 
           function cardNode(tag, className, text) {
             const node = document.createElement(tag);
@@ -2050,7 +2083,7 @@
           function attachPreviewOnly(spans, preview, focusable) {
             if (!spans || !spans.length || spans[0].cxGroup) return null;
             const group = passageGroup(spans, false);
-            const entry = { el: spans[0], activate: function () {}, preview: preview, isPassage: true };
+            const entry = { el: spans[0], activate: function () {}, preview: preview, isPassage: true, pinnable: !!focusable };
             group.controls.push(entry);
             if (focusable) {
               spans[0].addEventListener("focus", function () { focusPassage(group, spans[0]); });
@@ -2201,8 +2234,11 @@
               spotTargets.get(spans).targets.push(...targets);
             }
             const coverageCounts = { supported: 0, split: 0, thin: 0 };
-            claims.forEach(function (claim) {
+            claims.forEach(function (claim, claimIndex) {
               const coverage = claimCoverage(claim);
+              // Steht der Satz in der Liste (listedClaim), fuehrt seine Karte dorthin.
+              const openInDrawer = listedClaim(claim, differences)
+                ? function () { focusDifference("c" + claimIndex); } : null;
               coverageCounts[coverage] = (coverageCounts[coverage] || 0) + 1;
               const result = mark(
                 claim.anchor,
@@ -2224,7 +2260,7 @@
               // zweites, schwaecher klingendes Steuerelement daneben.
               if (overlappingDifference && overlappingDifference.isContradiction) return;
 
-              const badge = makeBadge(claim, modelsCompared, answerNavigation);
+              const badge = makeBadge(claim, modelsCompared, answerNavigation, { openInDrawer: openInDrawer });
               const total = claim.agree.length + claim.dissent.length;
               const support = total ? claim.agree.length / total : 1;
               const existingClaim = claimControls.find(function (entry) {
@@ -2258,9 +2294,11 @@
               if (overlappingDifference) suppressControl(overlappingDifference.control);
               attachControl(result, badge, function () {
                 const anchor = document.body.classList.contains("claim-counts-visible") ? badge : result.spans[0];
-                openClaimPopover(claim, anchor, modelsCompared, answerNavigation, { spans: result.spans });
+                openClaimPopover(claim, anchor, modelsCompared, answerNavigation, { spans: result.spans, openInDrawer: openInDrawer });
               }, function (ctx) {
-                return claimCard(claim, modelsCompared, Object.assign({ spans: result.spans, navigation: answerNavigation }, ctx));
+                return claimCard(claim, modelsCompared, Object.assign({
+                  spans: result.spans, navigation: answerNavigation, openInDrawer: openInDrawer
+                }, ctx));
               });
             });
 
@@ -2503,12 +2541,19 @@
           }
 
           // Karte sichtbar als "gelöst/bestätigt/unklar" kennzeichnen: Status-
-          // Chip neben dem Typ-Tag plus Karten-Klasse für den Farbakzent.
+          // Chip in einer Zeile über dem Thema plus Karten-Klasse für den
+          // Farbakzent. Die Zeile entsteht erst mit dem Ergebnis.
           function markCardResolved(card, outcome) {
             const status = RESOLVE_STATUS[outcome];
             if (!card || !status) return;
             card.classList.add("has-resolution", "resolution-" + status.cls.slice(3));
-            const tagRow = card.querySelector(".diff-card-tags");
+            let tagRow = card.querySelector(".diff-card-tags");
+            const summary = card.querySelector(":scope > .diff-card-summary");
+            if (!tagRow && summary) {
+              tagRow = document.createElement("span");
+              tagRow.className = "diff-card-tags";
+              summary.insertBefore(tagRow, summary.querySelector(".diff-card-claim"));
+            }
             if (!tagRow || tagRow.querySelector(".diff-resolved-tag")) return;
             const chip = document.createElement("span");
             chip.className = "diff-resolved-tag " + status.cls;
@@ -2936,26 +2981,22 @@
             return diff.severity === "minor" ? 1 : 0;
           }
 
-          function differenceTag(diff) {
-            if (diff.type !== "contradiction") {
-              return { label: "Emphasis", spoken: ": a different emphasis, not a contradiction.",
-                meaning: "Different emphasis, not a contradiction" };
-            }
-            if (diff.severity === "major") {
-              return { label: "Critical", spoken: " contradiction:", meaning: "Critical contradiction" };
-            }
-            if (diff.severity === "minor") {
-              return { label: "Minor", spoken: " contradiction, a detail:", meaning: "Minor contradiction about a detail" };
-            }
-            return { label: "Contradiction", spoken: ":", meaning: "Contradiction" };
+          // Die Schwere in Worten, fuer Screenreader; ohne Severity (alte
+          // Bookmarks/Snapshots) das neutrale "Contradiction".
+          function differenceMeaning(diff) {
+            if (diff.type !== "contradiction") return "Different emphasis, not a contradiction";
+            if (diff.severity === "major") return "Critical contradiction";
+            if (diff.severity === "minor") return "Minor contradiction about a detail";
+            return "Contradiction";
           }
 
           // Karte zum Datenindex der Differences-Liste. Die Karten stehen nach
           // Schwere sortiert; die Kartenposition ist deshalb kein Index mehr.
           function differenceCardAt(container, index) {
             if (!container) return null;
-            return container.querySelector('.diff-card[data-difference-index="' + Number(index) + '"]')
-              || container.querySelectorAll(".diff-card")[index] || null;
+            const id = String(index).replace(/[^\w-]/g, "");
+            return container.querySelector('.diff-card[data-difference-index="' + id + '"]')
+              || (typeof index === "number" ? container.querySelectorAll(".diff-card")[index] : null) || null;
           }
           window.App.differenceCardAt = differenceCardAt;
 
@@ -3075,6 +3116,46 @@
             return { claim: withModelNames(diff.claim, names), narrative: narrative, positions: mergedPositions(positions) };
           }
 
+          // Gelbe Saetze der Satzpruefung mit benannter Streitstelle (Max
+          // 2026-10-23: was im Text markiert ist, steht auch in der Liste):
+          // als kleinere Unterschiede, Kopf ihr Satz mit seiner Stelle, dann
+          // die Gegenseiten. Ein Satz, den schon ein Unterschied traegt,
+          // bleibt dessen Karte. `claims` wie die Marken sie filtern; ihr
+          // Index dort ist die Kennung "c<i>" der Karte (data-difference-index).
+          function usableClaims(claims) {
+            return (Array.isArray(claims) ? claims : [])
+              .filter(function (c) { return c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent); });
+          }
+
+          function claimTargets(claim) {
+            return claim.dissent
+              .map(function (item) { return item && typeof item.target === "string" ? item.target.trim() : ""; })
+              .filter(Boolean);
+          }
+
+          function sentenceKey(text) {
+            return claimKey(visibleWords(text));
+          }
+
+          function listedClaim(claim, differences) {
+            if (claimCoverage(claim) !== "split" || !claimTargets(claim).length) return false;
+            const key = sentenceKey(claim.anchor);
+            return !(differences || []).some(function (diff) { return sentenceKey(diff.consensus_anchor) === key; });
+          }
+
+          function claimDifference(claim) {
+            return {
+              claim: "Not every model agrees",
+              consensus_anchor: claim.anchor,
+              type: "contradiction",
+              severity: "minor",
+              positions: [{ models: claim.agree.map(cardModel), stance: "", quote: "", in_answer: true }]
+                .concat(dissentSides(claim).map(function (side) {
+                  return { models: side.models.map(cardModel), stance: side.quote, quote: "" };
+                }))
+            };
+          }
+
           function buildDifferenceCards(cards, differences, modelCount, options) {
             const opts = options || {};
             const isStatic = !!opts.static;
@@ -3082,8 +3163,14 @@
               ? opts.modelLabel
               : modelDisplayName;
             cards.innerHTML = "";
+            const claimEntries = [];
+            usableClaims(opts.claims).forEach(function (claim, index) {
+              if (!listedClaim(claim, differences)) return;
+              claimEntries.push({ diff: claimDifference(claim), claim: claim, index: "c" + index,
+                order: differences.length + index });
+            });
 
-            if (!differences.length) {
+            if (!differences.length && !claimEntries.length) {
               // Flacher Empty-State: grüner Punkt + zwei Textzeilen statt Box.
               const empty = document.createElement("div");
               empty.className = "diff-empty-state";
@@ -3108,9 +3195,10 @@
               // Inline-Marker verlinken weiter per Datenindex
               // (data-difference-index), nicht per Kartenposition.
               const sorted = differences
-                .map(function (diff, index) { return { diff: diff, index: index }; })
+                .map(function (diff, index) { return { diff: diff, index: index, order: index }; })
+                .concat(claimEntries)
                 .sort(function (a, b) {
-                  return differenceRank(a.diff) - differenceRank(b.diff) || a.index - b.index;
+                  return differenceRank(a.diff) - differenceRank(b.diff) || a.order - b.order;
                 });
               const names = legacyModelNames(differences, labelFor);
               // Gibt es kritische Widersprueche, stehen die kleineren (ab zwei)
@@ -3136,70 +3224,99 @@
                 card.dataset.differenceIndex = String(entry.index);
                 let cardClass = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
                 if (diff.type === "contradiction" && diff.severity === "major") cardClass += " is-major";
+                if (entry.claim) cardClass += " is-split";
                 card.className = cardClass;
-                card.open = true;
+                // Jede Karte wartet zugeklappt auf ihren Kopf, die kleineren
+                // dazu in ihrer Gruppe: wer sich dafuer interessiert, oeffnet
+                // sie einzeln (Max 2026-10-23).
+                card.open = false;
+
+                // Ein Widerspruch sind Behauptungen, die sich gegenueberstehen:
+                // jede Seite ist ein Satz, immer untereinander, damit zwei und
+                // drei Seiten gleich aussehen. Die Seite, die die Antwort
+                // vertritt, steht vorn.
+                const ordered = readable.positions.slice().sort(function (a, b) {
+                  return (b.in_answer === true) - (a.in_answer === true);
+                });
+                // Seit 2026-10-23 in der Reihenfolge, in der man es versteht
+                // (Max: "zuerst WAS die Ausgangssituation ist, DANN die
+                // Aussage, die konkurriert, DANN welches Modell was sagt"):
+                // Im Leser fehlt die Antwort, also ist ihr markierter Satz
+                // woertlich der Kopf der Karte ("In the answer", in der Farbe
+                // seiner Marke, die auch die Schwere zeigt; das Thema leise
+                // darueber, kein Punkt), dann die Gegenseite ("In contrast"
+                // statt "vs"), darunter je wer sie vertritt. Ohne Satz in der
+                // Antwort bleibt das Thema der Kopf, ein kritisches mit rotem
+                // Punkt. Die Etikettzeile ("● Critical") ist weg; Screenreader
+                // hoeren die Schwere vorab (diff-card-meaning).
+                const answerAnchor = String(diff.consensus_anchor || "").replace(/\[S?\d+(?:\s*,\s*S?\d+)*\]/gi, "").trim();
+                const hasAnswerSide = ordered.some(function (pos) { return pos.in_answer === true; });
+                const opensOnAnswer = hasAnswerSide && !!answerAnchor;
 
                 const summary = document.createElement("summary");
                 summary.className = "diff-card-summary";
-                // Severity-Punkt: trägt die Farbe, das Label bleibt dezenter Text.
-                const sevDot = document.createElement("span");
-                let dotCls = "is-info";
-                if (diff.type === "contradiction") {
-                  dotCls = diff.severity === "major" ? "is-crit" : "is-warn";
-                }
-                sevDot.className = "sev-dot " + dotCls;
-                sevDot.setAttribute("aria-hidden", "true");
-                const typeTag = document.createElement("span");
-                typeTag.className = "diff-type-tag";
-                // Ein Wort reicht: im Differences-Panel ist "Contradiction"
-                // redundant. Die volle Bedeutung steht im Tooltip und fuer
-                // Screenreader; ohne Severity (alte Bookmarks/Snapshots) bleibt
-                // das neutrale "Contradiction".
-                const tag = differenceTag(diff);
-                typeTag.textContent = tag.label;
-                typeTag.title = tag.meaning;
-                const tagMeaning = document.createElement("span");
-                tagMeaning.className = "visually-hidden";
-                tagMeaning.textContent = tag.spoken;
-                // Kopfzeile: Punkt + Label; nimmt nach dem Resolve auch den
-                // rechtsbündigen Status-Text auf.
-                const tagRow = document.createElement("span");
-                tagRow.className = "diff-card-tags";
-                tagRow.append(sevDot, typeTag, tagMeaning);
+                const meaning = document.createElement("span");
+                meaning.className = "visually-hidden diff-card-meaning";
+                meaning.append(differenceMeaning(diff), document.createElement("span"));
+                meaning.lastChild.textContent = ": ";
                 const claimEl = document.createElement("span");
-                // Erzaehlt die Ueberschrift beide Seiten (alte Daten), steht sie
-                // nur im zugeklappten Zustand: offen sagen es die Seiten selbst.
-                claimEl.className = "diff-card-claim" + (readable.narrative && isVersus ? " is-narrative" : "");
-                claimEl.textContent = readable.claim;
-                summary.append(tagRow, claimEl);
+                if (opensOnAnswer) {
+                  // Das Thema leise darueber, auch zugeklappt: viele Saetze
+                  // sagen allein nichts ("Das ist unbestaetigt.", "Er ist CEO
+                  // ..."; Max' echte Daten 2026-10-23), das Thema gibt ihnen
+                  // ihren Zusammenhang. Dass der Satz aus der Antwort stammt,
+                  // sagt seine Marke.
+                  const lead = document.createElement("span");
+                  lead.className = "diff-card-topic";
+                  if (!entry.claim) lead.setAttribute("data-i18n-skip", "");
+                  lead.textContent = readable.claim;
+                  claimEl.className = "diff-card-claim is-answer-text";
+                  const answerMark = document.createElement("span");
+                  answerMark.className = "diff-answer-mark";
+                  renderInlineMarkdown(answerMark, answerAnchor);
+                  // Ein Satz der Satzpruefung: farbig nur seine Stelle, wie im Text.
+                  if (entry.claim) wrapSpots([answerMark], claimTargets(entry.claim));
+                  claimEl.appendChild(answerMark);
+                  summary.append(meaning, lead, claimEl);
+                } else {
+                  // Erzaehlt die Ueberschrift beide Seiten (alte Daten), steht
+                  // sie nur im zugeklappten Zustand: offen sagen es die Seiten.
+                  claimEl.className = "diff-card-claim" + (readable.narrative && isVersus ? " is-narrative" : "");
+                  if (diff.type === "contradiction" && diff.severity === "major") {
+                    const sevDot = document.createElement("span");
+                    sevDot.className = "sev-dot is-crit";
+                    sevDot.setAttribute("aria-hidden", "true");
+                    claimEl.appendChild(sevDot);
+                  }
+                  claimEl.append(readable.claim);
+                  summary.append(meaning, claimEl);
+                }
                 card.appendChild(summary);
 
                 const body = document.createElement("div");
                 body.className = "diff-card-body";
-                // Ein Widerspruch sind Behauptungen, die sich gegenueberstehen:
-                // jede Seite ist ein Satz, dazwischen steht "vs". Immer
-                // untereinander, damit zwei und drei Seiten gleich aussehen.
-                // Die Seite, die die Antwort vertritt, steht vorn. Eine andere
-                // Gewichtung ist kein Widerspruch und bekommt kein "vs".
-                const ordered = readable.positions.slice().sort(function (a, b) {
-                  return (b.in_answer === true) - (a.in_answer === true);
-                });
                 const sides = document.createElement("div");
                 sides.className = "diff-sides" + (isVersus ? " is-versus" : "");
                 ordered.forEach(function (pos, sideIndex) {
-                  if (isVersus && sideIndex > 0) {
-                    const mark = document.createElement("span");
-                    mark.className = "diff-versus-mark";
-                    mark.textContent = "vs";
-                    sides.appendChild(mark);
-                  }
                   const posEl = document.createElement("div");
                   posEl.className = "diff-position" + (pos.in_answer === true ? " is-answer" : "");
-                  const claimText = pos.stance || pos.quote;
-                  if (claimText) {
+                  // Die Seite der Antwort unter einem Kopf, der ihren Satz schon
+                  // zeigt: nur noch, wer sie vertritt.
+                  const shownAbove = opensOnAnswer && pos.in_answer === true;
+                  const lead = shownAbove ? ""
+                    : pos.in_answer === true ? "In the answer"
+                    : (hasAnswerSide || sideIndex > 0) ? (diff.type === "contradiction" ? "In contrast" : "Weighted differently")
+                    : "";
+                  if (lead) {
+                    const leadEl = document.createElement("div");
+                    leadEl.className = "diff-position-lead";
+                    leadEl.textContent = lead;
+                    posEl.appendChild(leadEl);
+                  }
+                  if (!shownAbove && (pos.stance || pos.quote)) {
                     const stance = document.createElement("div");
                     stance.className = "diff-position-stance";
-                    renderInlineMarkdown(stance, claimText);
+                    renderInlineMarkdown(stance, pos.stance || pos.quote);
                     posEl.appendChild(stance);
                   }
                   // Unter der Behauptung eine leise Zeile (2026-10-21): wer das
@@ -3262,14 +3379,8 @@
                     count.textContent = pos.models.length + " models";
                     label.appendChild(count);
                   }
-                  meta.appendChild(label);
-                  if (pos.in_answer === true) {
-                    const answerTag = document.createElement("span");
-                    answerTag.className = "diff-position-answer";
-                    answerTag.textContent = "In the answer";
-                    meta.appendChild(answerTag);
-                  }
-                  posEl.appendChild(meta);
+                  if (pos.models.length) meta.appendChild(label);
+                  if (meta.firstChild || (pos.stance && pos.quote)) posEl.appendChild(meta);
 
                   // Das Zitat belegt die Behauptung, es wiederholt sie: erst
                   // auf Wunsch (Klick-Delegation unten, auch fuer Kopien).
@@ -3294,7 +3405,7 @@
                 // eine Resolve-Runde laeuft gegen die Modelle des aktiven Laufs.
                 // Deshalb faellt jeder Knopf raus, auch bei einer Resolution
                 // mit unbekanntem Ausgang — die baut sonst wieder den Starter.
-                const resolveSection = (isStatic && !diff.resolution)
+                const resolveSection = (entry.claim || (isStatic && !diff.resolution))
                   ? null
                   : buildResolveSection(diff);
                 if (resolveSection && isStatic) {
@@ -3315,11 +3426,11 @@
             return cards;
           }
 
-          function renderDifferenceCards(differences, modelCount) {
+          function renderDifferenceCards(differences, modelCount, claims) {
             const cards = $("differencesCards");
             const diffP = document.querySelector("#consensusResponse .consensus-differences p");
             if (!cards) return;
-            buildDifferenceCards(cards, differences, modelCount);
+            buildDifferenceCards(cards, differences, modelCount, { claims: claims });
 
             cards.hidden = false;
             if (diffP) {
@@ -3348,6 +3459,7 @@
               || 0;
             buildDifferenceCards(container, differences, modelCount, {
               static: true,
+              claims: differencesData.claims,
               modelLabel: options && options.modelLabel,
               answerNavigation: options && options.answerNavigation
             });
@@ -3414,7 +3526,7 @@
 
             renderVerdictHeader(differences, modelCount, agreement, judge);
             // Karten zuerst: die Inline-Marker verlinken per Index auf sie.
-            renderDifferenceCards(differences, modelCount);
+            renderDifferenceCards(differences, modelCount, claims);
             const marks = renderInlineMarkers(claims, differences, modelsCompared, {
               sources: Array.isArray(options.sources) ? options.sources : undefined
             }) || {};

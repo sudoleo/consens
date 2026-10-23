@@ -238,7 +238,7 @@ it('explains a missing model without reporting a failed check, including older s
     const status = panel.querySelector('.agent-evidence-status');
     expect(status.tagName).toBe('DETAILS');
     expect(status.open).toBe(false);
-    expect(status.querySelector('summary').textContent).toBe('1 of 2 models answered · Checked');
+    expect(status.querySelector('summary').textContent).toBe('1 of 2 models answered');
     expect(status.querySelector('.agent-evidence-status-detail').textContent).toBe('GPT Luna: no answer, the provider was busy.');
     expect(panel.firstElementChild).toBe(status);
     expect(panel.querySelectorAll(':scope > p.agent-review-note')).toHaveLength(0);
@@ -250,14 +250,15 @@ it('explains a missing model without reporting a failed check, including older s
 it('writes the status line in the page language, one part at a time', () => {
   const {window: w, document: d, dom} = setup();
   // The joined line has no dictionary entry; its parts do (docs/i18n.md).
-  const german = {'1 of 2 models answered': '1 von 2 Modellen haben geantwortet', 'Checked': 'Geprüft'};
+  const german = {'1 of 2 models answered': '1 von 2 Modellen haben geantwortet', 'Partly checked': 'Teilweise geprüft'};
   w.App.t = text => german[text] ?? text;
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
-  w.App.agentReview.render(body, partialReview());
+  const review = partialReview(); delete review.checks[0].differences_data.judges.coverage;
+  w.App.agentReview.render(body, review);
   d.querySelector('[data-section="differences"]').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
   expect(panel.querySelector('.agent-evidence-status summary').textContent)
-    .toBe('1 von 2 Modellen haben geantwortet · Geprüft');
+    .toBe('1 von 2 Modellen haben geantwortet · Teilweise geprüft');
   dom.window.close();
 });
 it.each([
@@ -289,18 +290,18 @@ it.each([
   }
   dom.window.close();
 });
-it('keeps a fully answered check to one line above the findings', () => {
+it('opens a fully answered, finished check on its findings, without a status line', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   const review = snapshot();
   w.App.agentReview.render(body, review);
   d.querySelector('[data-section="differences"]').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  const status = panel.querySelector('.agent-evidence-status');
-  expect(status.tagName).toBe('P');
-  expect(status.textContent).toBe('1 model answered · Checked');
+  // "1 model answered · Checked" said nothing the findings don't (Max 2026-10-23).
+  expect(panel.querySelector('.agent-evidence-status')).toBeNull();
+  expect(panel.textContent).not.toContain('Checked');
   const order = [...panel.children].map(child => child.className);
-  expect(order).toEqual(['agent-evidence-status', 'agent-evidence-differences', 'agent-evidence-footer']);
+  expect(order).toEqual(['agent-evidence-differences', 'agent-evidence-footer']);
   const footer = panel.querySelector('.agent-evidence-footer');
   // No standing disclaimers or context toggle: the footer stays empty.
   expect(footer.textContent).not.toContain('Model agreement is not independent fact checking.');

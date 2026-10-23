@@ -30,6 +30,7 @@
     if (!current) return;
     running.delete(details);
     details.classList.remove("is-disclosing");
+    delete details.dataset.disclosing;
     current.motion.onfinish = null;
     current.motion.cancel();
   }
@@ -58,6 +59,9 @@
       return;
     }
     details.classList.add("is-disclosing");
+    // Which way it moves, for what should go with it (a surface that fades as
+    // its card folds, model-answer-reader.css).
+    details.dataset.disclosing = open ? "open" : "close";
     const motion = details.animate(
       [{ height: `${from}px` }, { height: `${to}px` }],
       {
@@ -69,6 +73,7 @@
     motion.onfinish = () => {
       running.delete(details);
       details.classList.remove("is-disclosing");
+      delete details.dataset.disclosing;
       if (!open) details.open = false;
     };
   }

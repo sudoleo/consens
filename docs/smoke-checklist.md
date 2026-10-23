@@ -294,11 +294,24 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       `tests/e2e/test_inspector_polish.py`.
 - [ ] Differences-Panel (Agent- und Consensus-Chat, Light/Dark, Desktop-Dock
       und 390 px): kein Untertitel, Frage als eine abgeschnittene Zeile ohne
-      Label; im Agent-Chat eine Statuszeile `N of M models answered · Checked`,
-      fehlende Modelle erst nach Aufklappen. Karten: Punkt + `Critical`/
-      `Minor`/`Emphasis`, kritische zuerst, keine Positionszahl; nur eine
-      Karte gleichzeitig offen. Drei Schriftstufen wie im Chat: Titel 17px
-      halbfett, Behauptungen 17px normal, alles Übrige 13px in einem Grau;
+      Label; im Agent-Chat eine Statuszeile `N of M models answered` nur, wenn
+      Modelle fehlen (fehlende erst nach Aufklappen); vollständig geprüft: keine Zeile. Karten ohne Schwere-Zeile:
+      Kopf ist der markierte Satz der Antwort („In der Antwort“ darüber, nur
+      offen; rot kritisch, grau sonst), darunter wer ihn vertritt, dann
+      „Dagegen“ + Gegenaussage + Modelle; ohne Satz das Thema (kritisch mit
+      rotem Punkt, zweite Zeile unter dem Text); kritische zuerst, keine
+      Positionszahl, kein Bernstein; die kleineren in „N kleinere
+      Unterschiede“ (Tinte, etwas kräftiger, zu), aufgeklappt nur ihre
+      markierten Sätze, einzeln aufklappbar; darin auch gelbe Sätze der
+      Satzprüfung mit Streitstelle („Nicht alle Modelle stimmen zu“, farbig
+      nur die Stelle), ihre Hover-Karte führt mit „Unterschiede“ hin; alle Karten starten zugeklappt
+      (ein Marker-Sprung öffnet genau seine); die offene liegt auf einer
+      getönten, gerundeten Fläche ohne Haarlinien, Text bleibt beim Öffnen
+      an seiner Kante; Zuklappen ohne Text über Text, die Fläche blendet mit
+      aus; Seiten mit deutlich Luft dazwischen; nur eine Karte
+      gleichzeitig offen. Drei Schriftstufen wie im Chat: Titel 17px
+      halbfett (der Satz der Antwort als Kopf 17px normal), Behauptungen 17px
+      normal, alles Übrige 13px in einem Grau;
       „vs“ leise ohne Farbe und Linien, Farbe nur auf dem Punkt. Pro Position
       unter der Behauptung eine Metazeile Icon + Modellname (Klick öffnet die
       Originalantwort) · „In the answer“ · „Show quote“. Chevrons von Karte
@@ -1143,7 +1156,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Worte. Widerspruch = Thema + zwei Behauptungen mit „vs“, darunter
       Logos + Name oder Anzahl; geteilte Aussage = Satz der Antwort („In the
       answer“) vs Zitat des Abweichlers; keine Versalien, kein „Click for …“.
-      Unten eine Fußzeile mit Glyphe und Wort der Antwortleiste:
+      Oben rechts ein Pin: in der Vorschau umrandet (Klick heftet an), an der
+      festgehaltenen Karte gefüllt (Klick löst sie). Unten eine Fußzeile mit
+      Glyphe und Wort der Antwortleiste:
       „Contradictions“ (Unterschied im Leser) und „Answers“ (Antwort der
       Gegenseite am Zitat). Die Karte verdeckt weder ihren eigenen Satz noch das
       Eingabefeld und bleibt im Textblock; ein Satz mit **fett** oder Link, der am

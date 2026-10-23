@@ -257,12 +257,11 @@
     inspector = null; get('Inspector').replaceChildren();
   }
   function polishInspector() {
-    // The first card is the weightiest (cards are ordered by severity): it
-    // opens the first time, the others wait as one line each.
-    const first = get('Inspector').querySelector('.diff-card');
+    // Every finding waits folded to its head, the weightiest first (cards are
+    // ordered by severity); only the one a marker asks for opens (Max
+    // 2026-10-23: "Unterschiede immer zuerst eingeklappt").
     get('Inspector').querySelectorAll('.diff-card:not([data-reader-ready])').forEach(card => {
       const key = card.querySelector('.diff-card-claim')?.textContent;
-      if (!inspector.seenClaims.has(key) && card === first && !inspector.targeted && !inspector.expanded.size) inspector.expanded.add(key);
       inspector.seenClaims.add(key);
       card.dataset.readerReady = 'true'; card.open = inspector.expanded.has(key);
     });
@@ -341,8 +340,8 @@
     if (!options.keepFocus) get('Close').focus({ preventScroll: true });
     if (index !== null) {
       // Cards are ordered by severity; markers address them by data index.
-      const card = get('Inspector').querySelector(`.diff-card[data-difference-index="${Number(index)}"]`)
-        || get('Inspector').querySelectorAll('.diff-card')[index];
+      const card = get('Inspector').querySelector(`.diff-card[data-difference-index="${String(index).replace(/[^\w-]/g, '')}"]`)
+        || (typeof index === 'number' ? get('Inspector').querySelectorAll('.diff-card')[index] : null);
       // Smaller differences wait in a group; a marker opens it too.
       if (card) { card.open = true; card.closest('details.diff-more')?.setAttribute('open', ''); card.scrollIntoView({ block: 'nearest' }); }
     }
@@ -355,7 +354,11 @@
     if (!event.target.open) { inspector.expanded.delete(key); return; }
     // One difference at a time: opening a card closes the one read before.
     inspector.expanded.clear(); inspector.expanded.add(key);
-    get('Inspector').querySelectorAll('.diff-card[open]').forEach(card => { if (card !== event.target) card.open = false; });
+    // It folds with the same motion as a click on it, not at once (a jump).
+    get('Inspector').querySelectorAll('.diff-card[open]').forEach(card => {
+      if (card === event.target) return;
+      if (App.disclosure?.toggle) App.disclosure.toggle(card, false); else card.open = false;
+    });
   }, true);
   get('Sections').addEventListener('click', event => {
     const kind = event.target.closest('[data-section]')?.dataset.section; if (!kind) return;

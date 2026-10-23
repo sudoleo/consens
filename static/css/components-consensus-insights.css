@@ -382,8 +382,65 @@ button.cx-card-logo:focus-visible {
   }
 }
 
-/* Am Rechner schliesst ein Klick daneben oder Escape; das Kreuz gehoert dem
-   Blatt auf dem Handy. */
+/* Der Pin oben rechts: leise umrandet in der Vorschau, gefuellt an der
+   festgehaltenen Karte. Die erste Zeile der Karte laeuft nicht unter ihn. */
+.cx-card-pin {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+}
+
+.cx-card-pin-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cx-card-pin[aria-pressed="true"] {
+  color: var(--ink);
+}
+
+.cx-card-pin[aria-pressed="true"] .cx-card-pin-icon {
+  fill: currentColor;
+}
+
+.cx-card-pin:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cx-card-pin:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
+}
+
+.claim-popover.is-modal .cx-card-pin {
+  display: none;
+}
+
+:is(.insight-preview, .claim-popover:not(.is-modal)):has(> .cx-card-pin) > .cx-card > :is(.cx-card-title:first-child, .visually-hidden:first-child + *) {
+  padding-right: 24px;
+}
+
+/* Am Rechner schliesst ein Klick daneben, Escape oder der Pin; das Kreuz
+   gehoert dem Blatt auf dem Handy. */
 .claim-popover-close {
   display: none;
 }
@@ -561,12 +618,27 @@ button.cx-card-logo:focus-visible {
   display: none;
 }
 
-/* Severity-Punkt: der einzige Farbträger im Kartenkopf. */
+/* Severity-Punkt: der einzige Farbträger im Kartenkopf, seit 2026-10-23
+   nur noch vor dem Thema eines kritischen Widerspruchs. */
 .sev-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* Der Punkt haengt vor der ersten Zeile; eine zweite Zeile beginnt unter
+   dem Text, nicht unter dem Punkt. */
+.diff-card-claim:has(> .sev-dot) {
+  padding-left: 15px;
+  text-indent: -15px;
+}
+
+.diff-card-claim > .sev-dot {
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: middle;
+  translate: 0 -1px;
 }
 
 .sev-dot.is-crit { background: #cf5a4a; }
@@ -675,8 +747,9 @@ button.cx-card-logo:focus-visible {
   overflow: hidden;
 }
 
-/* Die kleineren Unterschiede hinter den kritischen: eine leise Zeile, die
-   aufklappt. */
+/* Die kleineren Unterschiede hinter den kritischen: eine Zeile, die
+   aufklappt. In Tinte und etwas kraeftiger als die Metadaten, damit sie
+   als Weg zu mehr erkennbar ist und nicht als Fussnote (Max 2026-10-23). */
 .diff-more {
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
 }
@@ -687,7 +760,8 @@ button.cx-card-logo:focus-visible {
   gap: 8px;
   padding: 13px 0;
   font-size: var(--font-size-sm);
-  color: var(--ink-2);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--ink);
   cursor: pointer;
   list-style: none;
 }
@@ -749,6 +823,72 @@ button.cx-card-logo:focus-visible {
 
 .diff-position-answer {
   color: inherit;
+}
+
+/* Wo eine Seite steht, vor ihrem Satz: "In the answer", dann "In contrast"
+   (seit 2026-10-23 statt "vs"). Leise wie die Metazeile, aber zuerst
+   gelesen: erst die Ausgangslage, dann die Gegenseite. */
+.diff-position-lead {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  color: var(--ink-2);
+}
+
+/* Der Satz der Antwort, woertlich und in der Farbe seiner Marke im Text:
+   der Leser zeigt die Antwort nicht, so erkennt man ihn wieder. */
+.diff-answer-mark {
+  --cx-paint: var(--cx-mark-note);
+  padding: 0.1em 0;
+  border-radius: 3px;
+  background-color: var(--cx-paint);
+  box-shadow: -0.09em 0 0 var(--cx-paint), 0.09em 0 0 var(--cx-paint);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.diff-card.is-major .diff-answer-mark {
+  --cx-paint: var(--cx-mark-major);
+}
+
+.dark-mode .diff-card.is-major .diff-answer-mark {
+  color: var(--cx-ink-major, inherit);
+}
+
+/* Ein gelber Satz der Satzpruefung (is-split): farbig nur seine Stelle
+   (.cx-spot), Bernstein wie im Text; ohne gefundene Stelle der ganze Satz. */
+.diff-card.is-split .diff-answer-mark {
+  --cx-mark: var(--cx-mark-split);
+  --cx-mark-strong: var(--cx-mark-split-strong);
+  --cx-paint: var(--cx-mark-split);
+}
+
+.diff-card.is-split .diff-answer-mark.has-spot {
+  --cx-paint: transparent;
+}
+
+.dark-mode .diff-card.is-split .diff-answer-mark .cx-spot {
+  color: var(--cx-ink-split, inherit);
+}
+
+.consensus-markers-hidden .diff-answer-mark {
+  --cx-paint: transparent;
+}
+
+.consensus-markers-hidden .diff-answer-mark .cx-spot {
+  --cx-spot-paint: transparent;
+}
+
+/* Als Kopf einer Karte liest sich der Satz der Antwort wie eine Behauptung,
+   nicht wie eine Ueberschrift. */
+.diff-card-claim.is-answer-text {
+  font-weight: var(--font-weight-regular, 400);
+}
+
+/* Worum es geht, leise ueber dem markierten Satz der Antwort. */
+.diff-card-topic {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  color: var(--ink-2);
 }
 
 .diff-position-label {

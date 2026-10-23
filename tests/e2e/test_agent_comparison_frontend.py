@@ -522,7 +522,7 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
          "positions": [{"models": ["OpenAI", "Gemini"], "stance": "Billing is monthly.", "quote": "Confirm the seat limit."},
                        {"models": ["Kimi"], "stance": "Annual billing is cheaper.", "quote": "Choose the smaller plan."}]},
         {"claim": "Whether the smaller plan includes five seats", "consensus_anchor": critical, "type": "contradiction", "severity": "major",
-         "positions": [{"models": ["OpenAI", "Gemini", "Kimi"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
+         "positions": [{"models": ["OpenAI", "Gemini", "Kimi"], "stance": "Five seats are included.", "quote": "Choose the smaller plan.", "in_answer": True},
                        {"models": ["GLM"], "stance": "The seat limit needs confirmation.", "quote": "Confirm the seat limit."}]},
         {"claim": "What matters most when the team grows", "type": "emphasis",
          "positions": [{"models": ["Gemini"], "stance": "Upgrade flexibility."}, {"models": ["GLM"], "stance": "Monthly cost."}]}]
@@ -558,32 +558,49 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         assert line_box['height'] <= 24, line_box
         # One quiet status line; the missing models wait behind it.
         status = page.locator('#answerReaderInspector details.agent-evidence-status')
-        expect(status.locator('summary')).to_have_text('4 of 6 models answered · Checked')
+        expect(status.locator('summary')).to_have_text('4 of 6 models answered')
         expect(status.locator('.agent-evidence-status-detail')).to_be_hidden()
         expect(page.locator('#answerReaderInspector')).not_to_contain_text('Checked ·')
         cards = page.locator('#answerReaderInspector .diff-card')
         expect(cards).to_have_count(3)
-        expect(cards.locator('.diff-type-tag')).to_have_text(['Critical', 'Minor', 'Emphasis'])
+        # No severity line: the reader shows no answer, so the critical
+        # finding starts with its sentence as marked in the text (its colour
+        # tells the weight) under its quiet topic, then the other side after
+        # "In contrast". Screen readers hear the weight in words.
+        expect(page.locator('#answerReaderInspector .diff-type-tag, #answerReaderInspector .diff-card-tags')).to_have_count(0)
+        expect(cards.first.locator('.diff-card-summary .diff-answer-mark')).to_have_text(critical)
+        expect(cards.locator('.sev-dot')).to_have_count(0)
+        expect(cards.first.locator('.diff-card-summary .diff-card-topic')).to_have_text('Whether the smaller plan includes five seats')
+        expect(cards.first.locator('.diff-position-lead')).to_have_text(['In contrast'])
+        expect(cards.locator('.diff-card-meaning')).to_have_text([
+            'Critical contradiction:', 'Minor contradiction about a detail:', 'Different emphasis, not a contradiction:'])
         expect(page.locator('#answerReaderInspector')).not_to_contain_text('positions')
-        # The weightiest finding is open on entry; the others wait as one line.
-        expect(cards.first).to_have_attribute('open', '')
-        for index in (1, 2):
+        # Every finding starts folded to its head, the weightiest first
+        # (Max 2026-10-23); the head of the critical one is its sentence.
+        for index in range(3):
             expect(cards.nth(index)).not_to_have_attribute('open', '')
+        expect(cards.first.locator('.diff-card-summary .diff-card-topic')).to_be_visible()
+        expect(cards.first.locator('.diff-card-summary .diff-answer-mark')).to_be_visible()
         # The chat's type, three steps: a semibold title, the claims at the
         # answer's 17px, one meta size and grey for everything else.
         type_steps = cards.first.evaluate("""card => {
           const style = el => { const s = getComputedStyle(el); return [s.fontSize, s.fontWeight, s.color]; };
           return {title: style(card.querySelector('.diff-card-claim')), claim: style(card.querySelector('.diff-position-stance')),
-            tag: style(card.querySelector('.diff-type-tag')), meta: style(card.querySelector('.diff-position-meta')),
-            versus: style(card.querySelector('.diff-versus-mark')),
+            meta: style(card.querySelector('.diff-position-meta')),
+            lead: style(card.querySelector('.diff-sides .diff-position-lead')),
             status: style(document.querySelector('#answerReaderInspector .agent-evidence-status')),
             more: style(document.querySelector('#answerReaderInspector .diff-more-summary'))};
         }""")
-        assert type_steps['title'][:2] == ['17px', '600']
+        # The answer's sentence as head reads like a claim, not a title.
+        assert type_steps['title'][:2] == ['17px', '400']
         assert type_steps['claim'][:2] == ['17px', '400']
-        # The dot carries the colour, not the word, and "vs" is no warning sign.
-        assert type_steps['tag'] == type_steps['meta'] == type_steps['versus'] == type_steps['status'] == type_steps['more']
+        # One meta size and grey for the details, "In contrast" included.
+        assert type_steps['meta'] == type_steps['lead'] == type_steps['status']
         assert type_steps['meta'][0] == '13px'
+        # The row to the smaller differences is a way to more, not a footnote:
+        # the meta size, but in ink and a step bolder.
+        assert type_steps['more'][0] == '13px' and type_steps['more'][1] == '500'
+        assert type_steps['more'][2] == type_steps['title'][2] != type_steps['meta'][2]
         _snapshot(page, f'differences-calm-overview-{width}-{theme}')
         status.locator('summary').click()
         detail = status.locator('.agent-evidence-status-detail')
@@ -591,14 +608,17 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         expect(detail).to_contain_text('GPT-5.6 Luna: no answer, it was still writing when the answer was finished.')
         expect(detail).to_contain_text('DeepSeek V4 Flash: no answer, no complete answer arrived.')
         status.locator('summary').click()
+        cards.first.locator('summary').click()
         expect(cards.first).to_have_attribute('open', '')
-        # Two claims facing each other, always one above the other, "vs" between them.
+        # The answer's side under its sentence (who says it), then the rival
+        # claim, always one above the other.
         expect(cards.first.locator('.diff-sides.is-versus')).to_have_count(1)
-        expect(cards.first.locator('.diff-versus-mark')).to_have_text('vs')
-        expect(cards.first.locator('.diff-position-stance')).to_have_text(
-            ['Five seats are included.', 'The seat limit needs confirmation.'])
-        side_boxes = [cards.first.locator('.diff-position').nth(i).bounding_box() for i in range(2)]
-        assert side_boxes[1]['y'] > side_boxes[0]['y'] + side_boxes[0]['height'] - 1  # one above the other
+        expect(cards.first.locator('.diff-versus-mark')).to_have_count(0)
+        expect(cards.first.locator('.diff-position-stance')).to_have_text(['The seat limit needs confirmation.'])
+        # One layout frame: the status line above may still move the card
+        # between two separate round trips.
+        side_boxes = cards.first.evaluate("card => [...card.querySelectorAll('.diff-position')].slice(0, 2).map(el => el.getBoundingClientRect().toJSON())")
+        assert side_boxes[1]['y'] > side_boxes[0]['y'] + side_boxes[0]['height'] - 1, side_boxes  # one above the other
         heads = cards.first.locator('.diff-position-label')
         expect(heads).to_have_count(2)
         expect(heads.first.locator('.diff-position-name')).to_have_text(['GPT-5.4 Mini', 'Gemini 3.5 Flash-Lite', 'Kimi K2.6'])

@@ -585,13 +585,41 @@ body.comparison-layout-changing .input-section { transition: none; }
 
 .answer-reader-inspector :is(.differences-cards, .agent-evidence-differences) { display: grid; gap: 0; }
 .answer-reader-inspector .diff-card {
-  margin: 0;
-  padding: 0;
+  --diff-open-inset: 14px;
+  /* The same inset open or closed, so opening moves no text sideways. */
+  margin: 0 calc(-1 * var(--diff-open-inset));
+  padding: 0 var(--diff-open-inset);
   border: 0;
   border-bottom: 1px solid var(--line-soft);
   border-radius: 0;
   background: transparent;
   overflow: visible;
+  transition: background-color var(--dur-state) var(--ease-standard), border-radius var(--dur-state) var(--ease-standard);
+}
+/* The finding being read lies on a soft tone, rounded, like a selected row
+   on Apple's platforms (Max 2026-10-23: the eye should see at once which one
+   is open). Its text keeps the column's edge; the hairlines around it give
+   way to the surface. No colour of its own: the mark of its sentence says
+   how serious it is. */
+.answer-reader-inspector .diff-card[open]:not([data-disclosing="close"]) {
+  border-bottom-color: transparent;
+  border-radius: 14px;
+  background: var(--raise);
+}
+.answer-reader-inspector .diff-card:has(+ .diff-card[open]:not([data-disclosing="close"])) {
+  border-bottom-color: transparent;
+}
+/* That surface reaches past the text's edge, and the scroll box clips at its
+   own edge, which is the text's: the open card was cut off on the left (Max
+   2026-10-23). With findings in it the box takes the room from the reader's
+   side padding (24px); the text stays where it is. */
+.answer-reader-scroll:has(.answer-reader-inspector .diff-card) {
+  margin-inline: -14px;
+  padding-left: 14px;
+  padding-right: 20px;
+}
+@media (forced-colors: active) {
+  .answer-reader-inspector .diff-card[open] { border: 1px solid CanvasText; }
 }
 /* Differences, the chat's type (2026-10-21). The tab had five text sizes,
    three greys and red lines around "vs". It now continues the chat: three
@@ -636,8 +664,14 @@ body.comparison-layout-changing .input-section { transition: none; }
   .answer-reader-inspector :is(.diff-card-summary, .diff-more-summary):hover::after { color: var(--ink); }
 }
 /* The smaller differences: one meta row with the same chevron as a card. */
-.answer-reader-inspector .diff-more { border-top: 0; border-bottom: 1px solid var(--line-soft); }
-.answer-reader-inspector .diff-more > .diff-more-summary { font-size: var(--font-size-ui); line-height: var(--diff-meta-line); color: var(--ink-2); }
+.answer-reader-inspector .diff-more { margin: 0 calc(-1 * var(--diff-open-inset, 14px)); padding: 0 var(--diff-open-inset, 14px); border-top: 0; border-bottom: 1px solid var(--line-soft); }
+.answer-reader-inspector .diff-more > .diff-more-summary { font-size: var(--font-size-ui); line-height: var(--diff-meta-line); font-weight: var(--font-weight-medium, 500); color: var(--ink); }
+/* Without the severity line a finding's first line is its title: the chevron
+   sits on that line. Over the answer's sentence the first line is the quiet
+   topic (meta line), as with a resolved card's status line. */
+.answer-reader-inspector .diff-card > .diff-card-summary:not(:has(> .diff-card-tags, > .diff-card-topic))::after {
+  top: calc(var(--diff-row-pad) + (var(--font-size-read) * 1.4 - 14px) / 2);
+}
 .answer-reader-inspector .diff-more-body > .diff-card:last-child { border-bottom: 0; }
 .answer-reader-inspector .diff-card-tags { gap: 8px; font-size: var(--font-size-ui); line-height: var(--diff-meta-line); }
 .answer-reader-inspector .sev-dot { width: 7px; height: 7px; }
@@ -657,10 +691,16 @@ body.comparison-layout-changing .input-section { transition: none; }
 }
 .answer-reader-inspector .diff-card[open] > .diff-card-summary { padding-bottom: 12px; }
 .answer-reader-inspector .diff-card-body { padding: 0 0 20px; border: 0; background: transparent; }
-.answer-reader-inspector .diff-sides { gap: 12px; padding-top: 0; }
+/* Air groups the sides (Max 2026-10-23: "zu eng"): a side's claim, who says
+   it and its lead stay close, the next side starts well apart. */
+.answer-reader-inspector .diff-sides { gap: 24px; padding-top: 0; }
 .answer-reader-inspector .diff-position { gap: 4px; margin: 0; padding: 0; border: 0; }
+.answer-reader-inspector .diff-position-lead + .diff-position-stance { margin-top: -2px; }
+.answer-reader-inspector .diff-position-meta { margin-top: 2px; }
 .answer-reader-inspector .diff-position-stance { font-size: var(--font-size-read); font-weight: 400; line-height: 1.55; color: var(--ink); }
-.answer-reader-inspector :is(.diff-position-meta, .diff-versus-mark) {
+/* The answer's sentence as a finding's head reads like a claim, not a title. */
+.answer-reader-inspector .diff-card-claim.is-answer-text { font-weight: 400; line-height: 1.55; }
+.answer-reader-inspector :is(.diff-position-meta, .diff-versus-mark, .diff-position-lead, .diff-card-topic) {
   font-size: var(--font-size-ui);
   line-height: var(--diff-meta-line);
   color: var(--ink-2);

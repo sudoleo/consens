@@ -3268,6 +3268,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   damit der Leser ihn beim Schließen dorthin zurückgibt und nicht an einen
   Knopf der geschlossenen Karte. Ein Leser fehlt der Seite: die Vorschau baut
   trotzdem (`canOpenStored?.()`).
+  **Pin (seit 2026-10-23):** oben rechts in der Karte (`cardPin`,
+  `.cx-card-pin`): in der Vorschau umrandet (`aria-pressed=false`), ein Klick
+  heftet an wie ein Klick auf den Satz; an der festgehaltenen Karte gefüllt,
+  ein Klick löst sie (`closeClaimPopover`). Vorläufige Marken haben keinen
+  (`pinnable: false`, sie öffnen nichts), das Handy-Blatt hat sein ×. Die
+  erste Zeile der Karte hält ihm Platz frei.
   `placeCard` rechnet für Vorschau und festgehaltene Karte gleich: die Karte
   steht über der ersten oder unter der letzten Zeile ihres Satzes (nie auf
   ihm), auf der Seite der strittigen Worte, unten begrenzt vom Eingabefeld
@@ -3321,18 +3327,50 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `data-difference-index` an jede Karte. Inline-Marker, `focusDifferenceCard`,
   `storedDifferenceFocus`, `answerReader.openPanel(…, index)` und
   `sourceVerification.openResults` adressieren Karten über diesen Datenindex
-  (`App.differenceCardAt`), nie über die Kartenposition. Der Kartenkopf nennt
-  die Schwere in einem Wort (`Critical`/`Minor`/`Emphasis`, alte Daten ohne
-  Severity `Contradiction`; volle Bedeutung im Tooltip und als
-  `.visually-hidden`-Text), farbig ist nur der `.sev-dot`.
+  (`App.differenceCardAt`), nie über die Kartenposition. **Seit 2026-10-23
+  in der Reihenfolge, in der man es versteht** (Max: „zuerst WAS die
+  Ausgangssituation ist, DANN die Aussage, die konkurriert, DANN welches Modell
+  was sagt“; der Leser zeigt die Antwort nicht): Hat der Unterschied einen
+  `consensus_anchor` und eine `in_answer`-Seite, ist der **markierte Satz der
+  Antwort** wörtlich der Kopf der Karte (`.diff-card-claim.is-answer-text` mit
+  `.diff-answer-mark` in der Farbe seiner Marke im Text, rot kritisch, grau
+  sonst; darüber `.diff-position-lead` „In the answer“, zugeklappt
+  ausgeblendet). Die Farbe zeigt die Schwere, deshalb weder Thema noch Punkt
+  darüber. Die Seite der Antwort zeigt darunter nur noch, wer sie vertritt;
+  jede andere Seite beginnt mit „In contrast“ (Emphasis: „Weighted
+  differently“) statt „vs“. Ohne Satz in der Antwort bleibt das Thema der Kopf,
+  ein kritischer Widerspruch mit rotem `.sev-dot.is-crit` davor (hängender
+  Einzug). Die frühere Schwere-Zeile („● Critical/● Minor“ in eigener Schrift
+  und Farbe) ist weg („zu viel fürs Auge und das Gehirn“), Bernstein für
+  Details auch (im Text sind sie grau). Screenreader hören Schwere und Thema
+  vorab (`.diff-card-meaning`, `differenceMeaning`). Erst ein Resolve-Ergebnis
+  legt eine `.diff-card-tags`-Zeile über den Kopf (`markCardResolved`). Die
+  Share-Seite (`templates/share.html`, `check_page.difference_cards`:
+  `answer_html`, `contrast`) zeigt dieselbe Form.
+  **Gelbe Sätze in der Liste (seit 2026-10-23, Max):** Was im Text gelb
+  markiert ist, steht auch in der Liste: Claims der Satzprüfung mit
+  `coverage: "split"` und benannter Stelle (`dissent[].target`), deren Satz
+  kein Unterschied schon trägt (`listedClaim`), werden als kleinere
+  Unterschiede angehängt (`claimDifference`, `buildDifferenceCards`
+  `options.claims`; live aus `renderConsensusInsights`, gespeichert aus
+  `renderStoredDifferenceCards`). Kopf ist ihr Satz, farbig nur die Stelle
+  (`wrapSpots` → `.cx-spot`, Bernstein, `.diff-card.is-split`), darüber das
+  Thema „Not every model agrees“; darunter wer zustimmt, dann je Gegenseite
+  „In contrast“ und ihr Zitat; ohne Resolve. Kennung `data-difference-index`
+  `c<i>` (Index im gefilterten Claims-Array, dieselbe Filterung wie die
+  Marken); die Hover-Karte eines solchen Satzes führt mit „Differences“ dorthin
+  (`focusDifference("c<i>")`; `differenceCardAt` und `answerReader.openPanel`
+  finden Karten über die Kennung). Gibt es nur solche Sätze, entfällt der
+  leere Zustand. Die Share-Seite zeigt sie nicht (dort gibt es keine gelben
+  Marken). Die Karte an der Marke im Text
+  (`differenceCard`) bleibt bei Thema, Seiten und „vs“: dort steht der Satz
+  daneben.
   **Gegenüberstellung (seit 2026-10-16):** Ein Widerspruch sind Behauptungen,
-  die sich gegenüberstehen. Der Kartenkopf trägt nur noch das Thema
-  (`claim`), der Körper ist `.diff-sides`: jede Position als Satz
+  die sich gegenüberstehen. Der Körper ist `.diff-sides`: jede Position als Satz
   (`.diff-position-stance`), darunter eine Metazeile `.diff-position-meta`
   (wer das sagt, „In the answer“, „Show quote“, durch Mittelpunkte getrennt),
   zwischen den Seiten ein leises `.diff-versus-mark` „vs“ in Metagröße und
-  -grau. Seit 2026-10-21 hat das „vs“ weder Ampelfarbe noch Haarlinien: die
-  Schwere trägt allein der `.sev-dot`. Im Leser (`model-answer-reader.css`)
+  -grau. Seit 2026-10-21 hat das „vs“ weder Ampelfarbe noch Haarlinien. Im Leser (`model-answer-reader.css`)
   setzt der Tab die Chat-Typografie fort, drei Stufen: Thema als Titel
   (17px/600), Behauptungen in Antwortgröße (17px/400), alles Übrige eine
   Metastufe (13px, `--ink-2`); Abstände im 4px-Raster, ein Chevron für Karte
@@ -3342,8 +3380,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Seite mit `in_answer` steht vorn und trägt „In the answer“. Eine andere
   Gewichtung (`emphasis`) bekommt kein „vs“. Gibt es einen kritischen
   Widerspruch, stehen die kleineren Unterschiede (ab zwei) gebündelt in
-  `details.diff-more` („N smaller differences“, zu) hinter den kritischen;
-  wer eine Karte darin gezielt öffnet (Marker, Leser-`index`,
+  `details.diff-more` („N smaller differences“, zu) hinter den kritischen,
+  und jede Karte darin ist zugeklappt (nur ihr Thema, Drill-down einzeln).
+  Die Gruppenzeile steht in Tinte und 500 statt im Metadaten-Grau, damit sie
+  als Weg zu mehr erkennbar ist (seit 2026-10-23); im Leser sitzt der Chevron
+  einer Karte ohne Schwere-Zeile auf der ersten Titelzeile.
+  Wer eine Karte darin gezielt öffnet (Marker, Leser-`index`,
   `refreshContext`), öffnet die Gruppe mit (`openDifferenceCard`).
   Zugeklappte Überschriften sind auf zwei Zeilen begrenzt. Mehrere Modelle einer Seite
   zeigen nur Icons + Anzahl („4 models“, Namen bleiben Linktext/Tooltip),
@@ -5219,9 +5261,12 @@ mit `badge: "Cut off"` und `note`; die Agent-Leiste zeigt „Incomplete“ statt
 Prüfung selbst eingeschränkt ist: `Not compared · fewer than two models answered`,
 `Disagreements not checked` oder `Partly checked` (Coverage fehlt). Fehlende
 Modelle, ungeprüfte Sätze und Quellenlücken stehen nur im Leser: seit
-2026-10-01 als **eine** leise Zeile `evidenceStatus` (`4 of 6 models answered ·
-Checked` bzw. `· Partly checked`), hinter der ein `<details>` die fehlenden
-Modelle mit Grund, späte Antworten und kleinere Prüflücken auflistet. Nur
+2026-10-01 als **eine** leise Zeile `evidenceStatus` (`4 of 6 models answered`
+bzw. `· Partly checked`), hinter der ein `<details>` die fehlenden
+Modelle mit Grund, späte Antworten und kleinere Prüflücken auflistet. Eine
+vollständige Prüfung aller Antworten hat seit 2026-10-23 **keine** Zeile (vorher
+„4 models answered · Checked“, Max: „verwirrt und bringt nix“); „Checked“ steht
+nie mehr in der Zeile, und `evidenceStatus` gibt dann `null`. Nur
 entscheidende Lücken (`decisive`: keine Differences-/Coverage-Prüfung, zu wenige
 Antworten) stehen sichtbar darunter. Danach folgen die Karten; ältere
 Antwortversionen stehen in `.agent-evidence-footer` unter den Karten (ein
@@ -6739,9 +6784,21 @@ Differences starten als aufklappbarer Ueberblick: Schwere-Punkt + ein Wort,
 darunter die Kernaussage in normalem Gewicht, Haarlinien statt Kartenrahmen,
 keine Positionszahl. Kritische Funde stehen oben. Ihre Positionen, Zitate,
 Pruefhinweise und Resolve-Aktionen bleiben erhalten.
-Die erste (gewichtigste) Karte oeffnet beim Betreten, die uebrigen warten als
-je eine Zeile (seit 2026-10-16; vorher nur bei genau einer Karte). Springt ein
-Marker auf eine bestimmte Karte (`index`), bleibt die erste zu.
+Seit 2026-10-23 starten alle Karten zugeklappt auf ihren Kopf (Max:
+„Unterschiede immer zuerst eingeklappt“; vorher oeffnete die gewichtigste beim
+Betreten), auch im Live-Panel und auf der Share-Seite. Offen ist nur, was der
+Leser oeffnet, oder die eine Karte, auf die ein Marker springt (`index`).
+Die offene Karte liegt im Leser auf einer getoenten, gerundeten Flaeche
+(`--raise`, 14px Radius, wie eine ausgewaehlte Zeile bei Apple), ihre und die
+Haarlinie darueber weichen; alle Karten und die Gruppe tragen dafuer dieselbe
+Einrueckung (`--diff-open-inset`), damit Oeffnen keinen Text verschiebt. Beim
+Zuklappen blendet die Flaeche mit aus (`disclosure.js` setzt
+`data-disclosing="open|close"` waehrend der Bewegung), und das Akkordeon
+klappt die zuvor offene Karte mit derselben Bewegung zu statt sofort. Seiten
+stehen 24px auseinander (vorher 12px, „zu eng“), innerhalb einer Seite 4px.
+`details.is-disclosing { overflow: hidden !important }` (motion.css): die
+Differences-Karten setzten `overflow: visible` spezifischer, ihr Inhalt lief
+beim Zuklappen ueber die Zeilen darunter (Text ueber Text).
 Seit 2026-10-01 ist die Liste ein Akkordeon: der `toggle`-Listener im Inspector
 schliesst beim Oeffnen einer Karte die zuvor offene (auch bei Marker-Spruengen
 und `refreshContext`). Typografie im Inspector: 14px Inhalt, 12px Meta, 13px

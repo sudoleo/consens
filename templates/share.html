@@ -139,29 +139,40 @@
     </header>
 
     {#- A difference as the app draws it (consensus-insights.js
-        buildDifferenceCards, check_page.difference_cards): a dot and one word
-        for its weight, the point in dispute, then each side as one claim --
-        the answer's first, "vs" between -- with who says it, "In the answer"
-        and the quote on request. -#}
-    {% macro difference_card(card) %}
-    <details class="diff-card {{ card.classes }}" data-difference-index="{{ card.index }}" open>
+        buildDifferenceCards, check_page.difference_cards): the answer's
+        marked sentence heads the card, in the colour of its mark, which also
+        tells the weight, under its quiet topic; without one the
+        topic, a critical one with a red dot. Then each other side as one
+        claim after "In contrast", who says it and the quote on request. The
+        smaller differences start folded; screen readers hear weight and
+        topic first. Every card starts folded to its head. -#}
+    {% macro difference_card(card, open=False) %}
+    <details class="diff-card {{ card.classes }}" data-difference-index="{{ card.index }}"{% if open %} open{% endif %}>
       <summary class="diff-card-summary">
-        <span class="diff-card-tags"><span class="sev-dot {{ card.dot }}" aria-hidden="true"></span><span class="diff-type-tag" title="{{ card.meaning }}">{{ card.tag }}</span></span>
-        <span class="diff-card-claim">{{ card.claim }}</span>
+        <span class="visually-hidden">{{ card.meaning }}<span>: </span></span>
+        {%- if card.answer_html %}
+        <span class="diff-card-topic" data-i18n-skip>{{ card.claim }}</span>
+        <span class="diff-card-claim is-answer-text"><span class="diff-answer-mark">{{ card.answer_html | safe }}</span></span>
+        {%- else %}
+        <span class="diff-card-claim">{% if card.dot == 'is-crit' %}<span class="sev-dot is-crit" aria-hidden="true"></span>{% endif %}{{ card.claim }}</span>
+        {%- endif %}
       </summary>
       <div class="diff-card-body">
         <div class="diff-sides{% if card.versus %} is-versus{% endif %}">
           {%- for side in card.sides %}
-          {% if card.versus and not loop.first %}<span class="diff-versus-mark">vs</span>{% endif %}
+          {%- set shown_above = card.answer_html and side.in_answer %}
           <div class="diff-position{% if side.in_answer %} is-answer{% endif %}">
+            {% if not shown_above %}
+            {% if side.in_answer %}<div class="diff-position-lead">In the answer</div>
+            {% elif card.answer_html or not loop.first %}<div class="diff-position-lead">{{ card.contrast }}</div>{% endif %}
             {% if side.stance_html %}<div class="diff-position-stance">{{ side.stance_html | safe }}</div>{% endif %}
-            {% if side.models or side.in_answer or side.quote_html %}
+            {% endif %}
+            {% if side.models or side.quote_html %}
             <div class="diff-position-meta">
               {%- if side.models %}<span class="diff-position-label{% if side.models | length > 1 %} is-group{% endif %}">
                 {%- for m in side.models %}<span class="diff-position-model" title="{{ m.name }}"><span class="diff-position-icon" aria-hidden="true">{% if m.icon %}<img src="{{ m.icon }}" alt=""{% if m.mono %} class="is-mono"{% endif %} width="16" height="16" loading="lazy">{% else %}{{ m.name[:1] }}{% endif %}</span><span class="diff-position-name">{{ m.name }}</span></span>{% endfor -%}
                 {%- if side.models | length > 1 %}<span class="diff-position-count" aria-hidden="true">{{ side.models | length }} models</span>{% endif -%}
               </span>{% endif -%}
-              {%- if side.in_answer %}<span class="diff-position-answer">In the answer</span>{% endif -%}
               {%- if side.quote_html %}<button type="button" class="diff-quote-toggle" aria-expanded="false">Show quote</button>{% endif -%}
             </div>
             {% endif %}

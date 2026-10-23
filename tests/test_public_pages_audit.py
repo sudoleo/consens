@@ -453,6 +453,7 @@ def test_share_page_differences_are_the_apps_cards():
         {"claim": "Board size", "type": "contradiction", "severity": "minor",
          "positions": [side("Four members.", ["OpenAI"]), side("Five members.", ["Kimi"])]},
         {"claim": "Who leads", "type": "contradiction", "severity": "major", "verify": "Check the imprint.",
+         "consensus_anchor": "**Prof. Schneider** leads the institute.[S2]",
          "positions": [side("Weber leads.", ["DeepSeek"], quote="**Prof. Weber** leads"),
                        side("Schneider leads.", ["Gemini", "Qwen"], in_answer=True),
                        side("schneider leads", ["GLM"])]},
@@ -468,6 +469,11 @@ def test_share_page_differences_are_the_apps_cards():
     assert critical["sides"][1]["models"][0]["icon"].startswith("/static/icons/chat_icons/deepseek")
     assert [card["tag"] for card in view["smaller"]] == ["Minor", "Emphasis"]
     assert not view["smaller"][1]["versus"]
+    # The answer's marked sentence heads the card, its source tag gone; the
+    # other side follows "In contrast". Without an anchor the topic stays.
+    assert critical["answer_html"] == "<strong>Prof. Schneider</strong> leads the institute."
+    assert critical["contrast"] == "In contrast"
+    assert view["smaller"][0]["answer_html"] == "" and view["smaller"][1]["contrast"] == "Weighted differently"
 
     # One smaller difference does not fold.
     single = check_page.difference_cards(differences[:2], snapshots.PROVIDERS_BY_LABEL, render_inline_markdown)

@@ -317,6 +317,9 @@ def _merged_sides(positions):
     return merged
 
 
+_SOURCE_TAGS = re.compile(r"\[S?\d+(?:\s*,\s*S?\d+)*\]", re.IGNORECASE)
+
+
 def difference_cards(differences, providers, render_inline):
     """``differences`` as named_differences returns them; ``providers`` maps a
     family label to its provider (icon); ``render_inline`` turns a model's
@@ -337,6 +340,11 @@ def difference_cards(differences, providers, render_inline):
             tag, meaning, dot = "Emphasis", "Different emphasis, not a contradiction", "is-info"
         sides = _merged_sides([position for position in diff.get("positions") or [] if isinstance(position, dict)])
         sides.sort(key=lambda side: side.get("in_answer") is not True)
+        # The answer's marked sentence heads the card, as in the app
+        # (consensus-insights.js buildDifferenceCards): the page shows the
+        # answer elsewhere, the card starts where the reader stands.
+        anchor = _SOURCE_TAGS.sub("", str(diff.get("consensus_anchor") or "")).strip()
+        has_answer = any(side.get("in_answer") is True for side in sides)
         cards.append({
             "index": index,
             "rank": _difference_rank(diff),
@@ -344,6 +352,8 @@ def difference_cards(differences, providers, render_inline):
                        + (" is-major" if contradiction and diff.get("severity") == "major" else ""),
             "dot": dot, "tag": tag, "meaning": meaning,
             "claim": str(diff.get("claim") or ""),
+            "answer_html": render_inline(anchor) if anchor and has_answer else "",
+            "contrast": "In contrast" if contradiction else "Weighted differently",
             "versus": contradiction and len(sides) > 1,
             "verify": str(diff.get("verify") or "").strip(),
             "sides": [{

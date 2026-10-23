@@ -1356,6 +1356,8 @@ canvas {
 #differencesView .diff-card-summary::-webkit-details-marker { display: none; }
 
 #differencesView .sev-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+#differencesView .diff-card-claim:has(> .sev-dot) { padding-left: 15px; text-indent: -15px; }
+#differencesView .diff-card-claim > .sev-dot { display: inline-block; margin-right: 8px; vertical-align: middle; translate: 0 -1px; }
 #differencesView .sev-dot.is-crit { background: #cf5a4a; }
 #differencesView .sev-dot.is-warn { background: #d99b46; }
 #differencesView .sev-dot.is-info { background: color-mix(in srgb, var(--sidebar-text-muted) 55%, transparent); }
@@ -1382,7 +1384,7 @@ canvas {
 
 #differencesView .diff-card-body { padding: 0 0 13px; }
 
-#differencesView .diff-sides { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+#differencesView .diff-sides { display: flex; flex-direction: column; gap: 24px; padding-top: 4px; }
 
 #differencesView .diff-versus-mark {
   display: block;
@@ -1393,6 +1395,28 @@ canvas {
 
 #differencesView .diff-card.is-major .diff-versus-mark { color: #cf5a4a; }
 .dark-mode #differencesView .diff-card.is-major .diff-versus-mark { color: #e58a79; }
+
+/* Wie in der App (components-consensus-insights.css): der Satz der Antwort
+   als Kopf, in der Farbe seiner Marke; "In the answer" / "In contrast" davor. */
+#differencesView .diff-position-lead {
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+#differencesView .diff-card-topic { color: var(--ink-2); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+#differencesView .diff-card-claim.is-answer-text { font-weight: var(--font-weight-regular); }
+#differencesView .diff-answer-mark {
+  --diff-paint: var(--cx-mark-note, #ececed);
+  padding: 0.1em 0;
+  border-radius: 3px;
+  background-color: var(--diff-paint);
+  box-shadow: -0.09em 0 0 var(--diff-paint), 0.09em 0 0 var(--diff-paint);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+#differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, #f6dcdd); }
+.dark-mode #differencesView .diff-answer-mark { --diff-paint: var(--cx-mark-note, color-mix(in srgb, var(--ink) 9%, transparent)); }
+.dark-mode #differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, rgba(255, 123, 114, 0.19)); color: #ffb3ab; }
 
 #differencesView .diff-position {
   display: flex;
@@ -1533,8 +1557,9 @@ canvas {
   align-items: center;
   gap: 8px;
   padding: 13px 0;
-  color: var(--ink-2);
+  color: var(--ink);
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium, 500);
   cursor: pointer;
   list-style: none;
 }
