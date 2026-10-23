@@ -3860,6 +3860,29 @@ Fehler bleibt. Live nicht geprobt; nach dem Deploy mit `cache_hit_rate.py`
 den Anteil gelesener Tokens der ersten Sonnet-Schritte (`step completion:0`)
 von Folgefragen nachmessen.
 
+Nachgemessen 2026-10-23 (Receipts seit dem Deploy 2026-10-22 14:18, live ist
+`cae2e3f`): **Die Punkte wirken nicht.** Keine der sieben Folgefragen unter fünf
+Minuten (35–241 s nach der vorigen Nachricht) las den Cache, jeder erste
+Sonnet-Schritt schrieb wieder den ganzen Prompt. Innerhalb einer Nachricht las
+jeder Folgeschritt weiter den vollen Write des vorigen. Im Render-Log stand
+keine „Provider refused explicit cache points“-Warnung, die Punkte gingen also
+raus und wurden angenommen. Die Generation-Statistik von OpenRouter
+(`GET /api/v1/generation?id=<generation_id aus dem Receipt>`, kein
+Modell-Call) nennt für **jeden** Claude-Schritt `provider_name: Google`, also
+Vertex. Die Session hält, am Endpunkt liegt es nicht. Reservierte Ausgabe und
+Suchrunden waren über die Folgefragen gleich, eine geänderte
+Thinking-Konfiguration scheidet damit aus. Zum Vergleich las GPT-6 Luna bei
+Folgefragen fast den ganzen Präfix (83 s später 11 979 von 12 803 Tokens).
+Tools, System und Verlauf sind über Nachrichten also stabil. Offen bleibt,
+ob OpenRouter oder Vertex die Block-Marker neben dem Top-Level-Feld
+verwirft oder ob Claudes Präfix etwas Eigenes enthält. Klären lässt sich das
+nur mit einer Live-Probe (wenige Haiku-/Sonnet-Calls, ein paar Cent): zwei
+Nachrichten nacheinander, einmal mit beiden Markerformen, einmal nur mit
+Block-Markern (letzter Block explizit statt Top-Level), einmal ohne Suchtool,
+dazu einmal auf dem Endpunkt `anthropic` gepinnt. Es geht um rund 2–3 Cent je
+Folgefrage (Woche bis 10-22: 20 von 51 ersten Claude-Schritten). Die Punkte
+bleiben drin, weil sie bei einem Miss nichts kosten.
+
 **Zugang seit 2026-10-02: jedes angemeldete Konto.** `require_agent_access`
 verlangt nur noch eine UID (`/user_status` meldet `agent_access: true`); das
 Tageskonto begrenzt Agent pro Stufe. Pro bleiben die Premium-Modelle:
