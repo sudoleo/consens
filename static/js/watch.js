@@ -290,7 +290,8 @@
 
   // Der Hinweis bleibt stehen und wird zur Bestaetigung: der Nutzer soll
   // sehen, was er gerade ausgeloest hat — vor allem, dass er nur bei einer
-  // Aenderung etwas hoert.
+  // Aenderung etwas hoert. Der Zeitplan steht schon in der Sprache des Lesers
+  // (watch-fields.js) und ist im Satz nur ein Platzhalter (data-i18n-skip).
   function renderNudgeSuccess(watch) {
     const nudge = document.getElementById("watchFeatureNudge");
     if (!nudge) return;
@@ -298,7 +299,7 @@
       <button type="button" class="watch-feature-nudge-close close-button" aria-label="Dismiss"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       <span class="watch-feature-nudge-label is-active">Watching</span>
       <strong>You are set</strong>
-      <span class="watch-feature-nudge-copy">First check: ${escapeHtml(formatWatchSchedule(watch))}. We only write when a source moves the answer.</span>
+      <span class="watch-feature-nudge-copy">First check: <span data-i18n-skip>${escapeHtml(formatWatchSchedule(watch))}</span>. We only write when a source moves the answer.</span>
       <button type="button" class="watch-nudge-skip" id="watchNudgeOpenDash">Open Watches</button>
     `;
     nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
@@ -685,17 +686,20 @@
 
   // "Weekly on Sunday at 09:00 · E-mail · Private": schedule, channels,
   // alert rule (only when not the default) and page of a Watch's settings,
-  // in the create dialog and on the Agent card.
+  // in the create dialog and on the Agent card. One line of parts, so each
+  // part goes through App.t before they are joined (the schedule already
+  // did, watch-fields.js).
   function settingsSummary(settings) {
+    const say = text => window.App.t(text);
     const schedule = fields().scheduleLabel({ ...settings, timezone: settings.timezone || browserTimezone() });
     const channels = [
-      settings.email_enabled ? "Email" : "",
-      settings.telegram_enabled ? "Telegram" : ""
-    ].filter(Boolean).join(" + ") || "No channel";
+      settings.email_enabled ? say("Email") : "",
+      settings.telegram_enabled ? say("Telegram") : ""
+    ].filter(Boolean).join(" + ") || say("No channel");
     const parts = [schedule, channels];
-    if (settings.email_mode === "every_run") parts.push("Every check");
-    if (settings.email_mode === "condition") parts.push("Only when it is reached");
-    parts.push(settings.visibility === "public" ? "Public" : "Private");
+    if (settings.email_mode === "every_run") parts.push(say("Every check"));
+    if (settings.email_mode === "condition") parts.push(say("Only when it is reached"));
+    parts.push(say(settings.visibility === "public" ? "Public" : "Private"));
     return parts.join(" · ");
   }
 
@@ -714,7 +718,8 @@
   }
 
   // "weekly on Tuesday at 09:00", the time zone only when it is not the
-  // reader's own (watch-fields.js scheduleText: one wording everywhere).
+  // reader's own, in the reader's language (watch-fields.js scheduleText:
+  // one wording everywhere).
   function formatWatchSchedule(watch) {
     return fields().scheduleText(watch);
   }
@@ -1539,8 +1544,7 @@
       ? "You watched this question until its goal was reached."
       : paused ? "You already watch this question. The watch is paused."
         : "You already watch this question.";
-    card.querySelector("p").textContent = watch.interval
-      ? "Checks " + formatWatchSchedule(watch) + "." : "";
+    card.querySelector("p").textContent = watch.interval ? fields().checksSentence(watch) : "";
     body.appendChild(card);
     const open = dialogButton("watchOpenExisting", "Open watch", "primary");
     const close = dialogButton("watchCancelBtn", "Close");
@@ -1628,7 +1632,7 @@
     const buttons = [done];
     if (!onWatchPage) buttons.push(dialogButton("watchListLink", "Open Watches", "link"));
     body.appendChild(dialogActions(...buttons));
-    document.getElementById("watchStartSummary").textContent = "Checks " + formatWatchSchedule(watch);
+    document.getElementById("watchStartSummary").textContent = fields().checksSentence(watch, { period: false });
     const goal = String(watch.condition || "").trim();
     document.getElementById("watchMailSummary").textContent = watch.email_mode === "every_run"
       ? "You get every check, including the answer."
@@ -2145,7 +2149,6 @@
     popup: popup,
     escapeHtml: escapeHtml,
     makeButton: makeButton,
-    formatWatchSchedule: formatWatchSchedule,
     browserWeekday: browserWeekday,
     browserTimezone: browserTimezone,
     dailyIntervalAllowed: dailyIntervalAllowed,

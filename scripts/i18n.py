@@ -7,7 +7,8 @@ sources, so a new label cannot go out untranslated:
 - templates: each run and readable attribute of every page template (Jinja
   expressions become ``{name}`` placeholders, Jinja tags split runs);
 - scripts: string and template literals that read as interface text,
-  markup built in strings, and ``"…" + value + "…"`` chains as patterns;
+  markup built in strings, and ``"…" + value + "…"`` chains as patterns
+  (``App.t("…", params, "watch schedule")`` under its context);
 - server sentences: ``HTTPException`` details and ``{"error": …}`` bodies.
 
     python scripts/i18n.py missing            # keys without an entry, by file
@@ -596,6 +597,35 @@ def _chains(tokens: list[Token]) -> list[tuple[int, str]]:
     return found
 
 
+_T_CALL = re.compile(r"(^|\.)App\.t$")
+
+
+def _t_context(tokens: list[Token], index: int, callee: str) -> str:
+    """App.t("…", params, "watch schedule"): the context its first argument is
+    looked up under, so the key names that entry ("watch schedule|…")."""
+    if not index or not _T_CALL.search(callee) or tokens[index - 1].value != "(":
+        return ""
+    depth = commas = 0
+    for position in range(index + 1, len(tokens)):
+        token = tokens[position]
+        if token.kind != "punct":
+            continue
+        if token.value in "([{":
+            depth += 1
+        elif token.value in ")]}":
+            if not depth:
+                return ""
+            depth -= 1
+        elif token.value == "," and not depth:
+            commas += 1
+            if commas == 2:
+                rest = tokens[position + 1:position + 3]
+                if len(rest) == 2 and rest[0].kind == "string" and rest[1].value == ")":
+                    return rest[0].value
+                return ""
+    return ""
+
+
 def script_keys(relative: str, source: str | None = None) -> list[Found]:
     source = source if source is not None else (ROOT / relative).read_text(encoding="utf-8")
     # A line marked "i18n-ignore" holds words that are no English text (the
@@ -632,8 +662,9 @@ def script_keys(relative: str, source: str | None = None) -> list[Found]:
                 previous is not None and previous.kind == "name" and previous.value in {"case", "in", "typeof", "import", "from"}):
             continue
         text = token.value if token.kind == "string" else _template_text(token)
+        prefix = _t_context(tokens, index, context)
         for key in _keys_of_text(text):
-            found.append(Found(key, relative, token.line))
+            found.append(Found(f"{prefix}|{key}" if prefix else key, relative, token.line))
     for line, text in _chains(tokens):
         for key in _keys_of_text(text):
             if "{" in key:

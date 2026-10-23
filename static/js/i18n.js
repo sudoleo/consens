@@ -148,9 +148,15 @@
   }
 
   App.lang = lang;
+  // A context entry wins, a pattern too ("watch schedule|In {city} time"):
+  // an open pattern lives only there (app/core/i18n.py, t).
   App.t = function (text, params, context) {
     const key = normalize(text);
-    let found = context ? exact.get(context + "|" + key) : undefined;
+    let found;
+    if (context) {
+      found = exact.get(context + "|" + key);
+      if (found === undefined) found = templates.get(context + "|" + key);
+    }
     if (found === undefined) found = exact.get(key);
     if (found === undefined) found = templates.get(key);
     if (found === undefined) found = lookup(key);

@@ -161,7 +161,8 @@ def test_open_mail_patterns_cannot_catch_page_text():
     """German pages are translated with every dictionary file, mail.json too: a
     pattern of little more than placeholders would rewrite any matching page
     text ("Average response time" as a "{schedule} {city} time"). Those live
-    under a context ("mail|…") that no page text starts with."""
+    under a context ("mail|…", the browser's "watch schedule|…") that no page
+    text starts with."""
     import json
     import re
     entries = json.loads((i18n.DICTIONARY_ROOT / "de" / "mail.json").read_text(encoding="utf-8"))
@@ -169,7 +170,8 @@ def test_open_mail_patterns_cannot_catch_page_text():
         if "{" in key and "|" not in key.split("{", 1)[0]:
             assert len(re.sub(r"\{[^{}]*\}", "", key).strip()) >= 5, key
     current = i18n.catalog("de")
-    for text in ("Average response time", "In New York time", "Hello, my dear friend", "Updated at 10:00"):
+    for text in ("Average response time", "In New York time", "Hello, my dear friend", "Updated at 10:00",
+                 "In real time", "Checks sources.", "Fast (real time)"):
         assert current.lookup(i18n.normalize(text)) in (None, text), text
 
 

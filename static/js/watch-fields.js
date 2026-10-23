@@ -31,26 +31,60 @@
     return zone.split("/").pop().replace(/_/g, " ");
   }
 
+  // The hint beside a card's time field: "In New York time", "In UTC". The
+  // pattern stands under its context: plain, it would catch "In real time".
   function timezoneNote(timezone, own) {
     const city = timezoneCity(timezone, own);
-    return !city ? "" : city === "UTC" ? "UTC" : city + " time";
+    if (!city) return "";
+    return city === "UTC" ? App.t("In UTC") : App.t("In {city} time", { city }, "watch schedule");
   }
 
   // "weekly on Tuesday at 09:00 (New York time)": dialog, card, Agent card
-  // and the success line all write a schedule this way. Sentence case is the
-  // caller's (scheduleLabel for the start of a line).
-  function scheduleText(watch, { own } = {}) {
+  // and the success line all write a schedule this way, already in the
+  // reader's language (App.t): one whole sentence per shape, since German
+  // says "Jeden Dienstag um 09:00" (docs/i18n.md). "label" starts a line,
+  // "text" stands inside a sentence ("Checks weekly on …"). The single
+  // words go by "watch schedule": the plain "Daily" is the preset.
+  const SCHEDULES = {
+    label: {
+      daily: { alone: "Daily", at: "Daily at {time}" },
+      weekly: { alone: "Weekly", at: "Weekly at {time}", on: "Weekly on {weekday}", onAt: "Weekly on {weekday} at {time}" },
+      monthly: { alone: "Monthly", at: "Monthly at {time}" }
+    },
+    text: {
+      daily: { alone: "daily", at: "daily at {time}" },
+      weekly: { alone: "weekly", at: "weekly at {time}", on: "weekly on {weekday}", onAt: "weekly on {weekday} at {time}" },
+      monthly: { alone: "monthly", at: "monthly at {time}" }
+    }
+  };
+
+  function schedule(form, watch, { own } = {}) {
     const interval = ["daily", "monthly"].includes(watch?.interval) ? watch.interval : "weekly";
-    let text = interval;
-    if (interval === "weekly" && WEEKDAYS.includes(watch?.run_weekday)) text += " on " + capitalize(watch.run_weekday);
-    if (watch?.run_time) text += " at " + watch.run_time;
-    const note = timezoneNote(watch?.timezone, own);
-    if (note) text += ` (${note})`;
-    return text;
+    const words = SCHEDULES[form][interval];
+    const weekday = interval === "weekly" && WEEKDAYS.includes(watch?.run_weekday) ? App.t(capitalize(watch.run_weekday)) : "";
+    const time = watch?.run_time || "";
+    const key = weekday ? (time ? words.onAt : words.on) : (time ? words.at : words.alone);
+    const text = App.t(key, { weekday, time }, "watch schedule");
+    const city = timezoneCity(watch?.timezone, own);
+    if (!city) return text;
+    return city === "UTC" ? text + " (UTC)" : App.t("{schedule} ({city} time)", { schedule: text, city }, "watch schedule");
+  }
+
+  function scheduleText(watch, options) {
+    return schedule("text", watch, options);
   }
 
   function scheduleLabel(watch, options) {
-    return capitalize(scheduleText(watch, options));
+    return schedule("label", watch, options);
+  }
+
+  // "Checks weekly on Tuesday at 09:00.": the dialog's line for a watched
+  // question and the Agent card; `period: false` for the success heading.
+  function checksSentence(watch, { period = true, own } = {}) {
+    const schedule = scheduleText(watch, { own });
+    return period
+      ? App.t("Checks {schedule}.", { schedule }, "watch schedule")
+      : App.t("Checks {schedule}", { schedule }, "watch schedule");
   }
 
   // A watch's times are written by App.format (app-text.js), the one
@@ -121,12 +155,15 @@
     return node;
   }
 
+  // "watch schedule": its "Daily" is the interval, not the preset.
   function intervalSelect(id, selected, dailyAllowed) {
-    return select(id, [
+    const node = select(id, [
       option("weekly", "Weekly", { selected: selected !== "monthly" && selected !== "daily" }),
       option("monthly", "Monthly", { selected: selected === "monthly" }),
       option("daily", dailyAllowed ? "Daily" : "Daily (Pro)", { selected: selected === "daily", disabled: !dailyAllowed })
     ]);
+    node.dataset.i18nContext = "watch schedule";
+    return node;
   }
 
   function weekdaySelect(id, selected) {
@@ -350,6 +387,7 @@
     timezoneNote,
     scheduleText,
     scheduleLabel,
+    checksSentence,
     dateTimeTitle,
     shortDay,
     dayAndTime,

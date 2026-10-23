@@ -111,7 +111,7 @@
     view.status.textContent = state === 'proposal' ? view.message
       : paused ? 'You already watch this question. The watch is paused.'
         : watch?.status === 'resolved' ? 'This watch found what it waited for.'
-          : watch && ui ? `Checks ${ui.formatWatchSchedule(watch)}.`
+          : watch && App.watchFields ? App.watchFields.checksSentence(watch)
             : full && ui ? ui.limitMessage(limits) : '';
     view.status.hidden = !view.status.textContent;
     view.start.hidden = view.adjust.hidden = Boolean(watch);

@@ -910,7 +910,7 @@
       // A typed time and typed details stay through a failed save, like the goal.
       if (!keep(time) && !dirty.has("run_time")) time.value = current.run_time || "";
       const zone = fields.timezoneNote(current.timezone);
-      timeNote.textContent = zone ? "In " + zone : "";
+      timeNote.textContent = zone;
       timeNote.hidden = !zone;
       syncWeekday();
       if (!keep(alerts)) alerts.value = ["condition", "every_run"].includes(current.email_mode) ? current.email_mode : "changes_only";

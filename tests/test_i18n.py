@@ -266,6 +266,13 @@ def test_words_a_script_writes_reach_the_browser():
     assert not missing, "in server-only files, the browser never sees them:\n" + "\n".join(missing[:40])
 
 
+def test_a_script_sentence_with_a_context_names_its_entry():
+    """App.t("…", params, "watch schedule") is looked up under its context, so an
+    open pattern can live there ("watch schedule|In {city} time", docs/i18n.md)."""
+    source = 'note.textContent = window.App.t("In {city} time", { city }, "watch schedule") || App.t("Copy", null);'
+    assert [item.key for item in i18n_tool.script_keys("x.js", source)] == ["watch schedule|In {city} time", "Copy"]
+
+
 def test_the_engine_files_name_the_same_rules():
     """i18n.js mirrors app/core/i18n.py: same tags, attributes and markers."""
     script = (ROOT / "static/js/i18n.js").read_text(encoding="utf-8")

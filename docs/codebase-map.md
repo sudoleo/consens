@@ -2802,6 +2802,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Send to · Watch page · Details that matter. Außerdem die eine Schreibweise
   für Zeiten (J5, J30): `scheduleText`/`scheduleLabel` („weekly on Tuesday at
   09:00“, Zeitzone nur bei Abweichung und als Stadt: „(New York time)“),
+  `checksSentence` („Checks weekly on …“) und `timezoneNote` („In New York
+  time“) — seit 2026-10-23 schon in der Sprache des Lesers: ganze Sätze je
+  Form über `App.t` (Kontext `watch schedule`, `intervalSelect` trägt ihn
+  als `data-i18n-context`, docs/i18n.md), nie verkettet,
   `nextCheck(watch, now)` („Checking now…“ bei `checking`, „Check due now“
   bei `due` oder vergangenem `next_run_at`, „Next check in 12 min“, „Next
   check tomorrow, 09:00“), `relativePast`, `dateTimeTitle` (24 h).
