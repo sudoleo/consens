@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.core import config as cfg
 from app.core.notice_page import WATCHES_LINK, notice_page
+from app.core.i18n_middleware import request_language
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.entitlements import entitlements_for
@@ -457,6 +458,7 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
         sent = await mailer.send_message(mailer.build_follow_confirm_message(
             recipient=pending["email"], question=pending["question"],
             confirm_url=confirm_url, share_url=share_url,
+            language=request_language(request),
         ))
         if not sent:
             raise HTTPException(status_code=502, detail="Confirmation email could not be sent. Please try again later.")
@@ -487,7 +489,7 @@ def follow_confirm_page(request: Request, token: str = ""):
 @limiter.limit("20/minute")
 def follow_confirm(request: Request, token: str = ""):
     try:
-        result = watch_followers.confirm_follow(token)
+        result = watch_followers.confirm_follow(token, language=request_language(request))
     except watch_service.WatchError as exc:
         return _link_error(request, exc, eyebrow=_FOLLOW_EYEBROW, links=[{"href": "/", "label": "Open consens.io"}])
     return notice_page(

@@ -672,6 +672,9 @@ def _string_of(node: ast.AST) -> str | None:
 
 # Files whose data holds words for the page under other names.
 SERVER_TEXT_KEYS = {"app/services/starter_questions.py": {"label", "question"}, "app/core/config.py": {"label", "hint"}}
+# Files that mark every fixed word themselves: the first argument of these
+# calls is a key, whatever it looks like ("Why" is no prose to the heuristic).
+SERVER_MARKED = {"app/services/mailer.py": {"_t", "_h", "_N"}}
 
 
 def server_keys(relative: str) -> list[Found]:
@@ -690,6 +693,15 @@ def server_keys(relative: str) -> list[Found]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             name = node.func.attr if isinstance(node.func, ast.Attribute) else (node.func.id if isinstance(node.func, ast.Name) else "")
+            if name in SERVER_MARKED.get(relative, ()) and node.args:
+                text = _string_of(node.args[0])
+                # A context names its own entry: "mail|{schedule} {city} time".
+                context = next((_string_of(keyword.value) for keyword in node.keywords
+                                if keyword.arg == "context"), None)
+                if text and i18n.has_letter(text):
+                    found.append(Found((f"{context}|" if context else "") + i18n.normalize(text),
+                                       relative, node.lineno))
+                continue
             if name in {"HTTPException", "_http_error", "http_error", "error_response", "PublicError", "UserFacingError"}:
                 for keyword in node.keywords:
                     if keyword.arg in {"detail", "message"}:
@@ -721,7 +733,7 @@ def script_files() -> list[str]:
 
 def server_files() -> list[str]:
     files = sorted((ROOT / "app" / "api" / "routers").glob("*.py")) + [ROOT / "main.py"]
-    files += [ROOT / name for name in SERVER_TEXT_KEYS]
+    files += [ROOT / name for name in (*SERVER_TEXT_KEYS, *SERVER_MARKED)]
     return [path.relative_to(ROOT).as_posix() for path in files if path.name != "admin.py"]
 
 

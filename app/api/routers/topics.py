@@ -22,6 +22,7 @@ from app.core import not_found
 from app.core import seo_entity
 from app.core.notice_page import notice_page
 from app.core.site import SITE_URL
+from app.core.i18n_middleware import request_language
 from app.core.observability import safe_exception
 from app.core.rate_limit import (
     ApiUidRateLimitExceeded, api_uid_limiter, client_ip_key, limiter,
@@ -738,6 +739,7 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
             title=pending["title"],
             confirm_url=confirm_url,
             topic_url=topic_url,
+            language=request_language(request),
         ))
         if not sent:
             raise HTTPException(
@@ -784,7 +786,9 @@ def topic_follow_confirm_page(request: Request, token: str = ""):
 @limiter.limit("20/minute")
 async def topic_follow_confirm(request: Request, token: str = ""):
     try:
-        result = await asyncio.to_thread(topics.confirm_follow, token)
+        result = await asyncio.to_thread(
+            topics.confirm_follow, token, language=request_language(request),
+        )
     except Exception as exc:
         return _topic_link_error(request, exc, "This confirmation link is invalid or expired.")
     return notice_page(

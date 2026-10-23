@@ -1,11 +1,12 @@
 import logging
 from typing import Any, Literal, Optional
 from firebase_admin import auth, firestore
-from fastapi import APIRouter, Request, Body, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
+from app.core.i18n_middleware import request_language
 from app.core.observability import safe_exception
 import app.core.config as cfg
 from app.core.entitlements import entitlements_for
@@ -28,7 +29,7 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.account_deletion import FirestoreAccountDeletion
-from app.services import agent_memory, memory_edit, persistence_guard, user_memory, user_settings
+from app.services import account_language, agent_memory, memory_edit, persistence_guard, user_memory, user_settings
 from app.services.user_memory import FirestoreUserMemoryRepository
 
 router = APIRouter()
@@ -67,10 +68,12 @@ def _account_status_unavailable() -> HTTPException:
 
 @router.get("/user_status")
 @limiter.limit("20/minute")
-def get_user_status(request: Request):
+def get_user_status(request: Request, background_tasks: BackgroundTasks):
     """
     Prüft den Status des Nutzers (Free vs. Pro) basierend auf dem ID-Token.
-    Wird beim Seiten-Load (checkUserStatusOnLoad) aufgerufen.
+    Wird beim Seiten-Load (checkUserStatusOnLoad) aufgerufen. Nebenbei merkt
+    sich das Konto die Sprache der Seite für spätere Mails (account_language),
+    erst nach der Antwort.
     """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -91,6 +94,9 @@ def get_user_status(request: Request):
                 detail="Account tier is temporarily unavailable. Please retry.",
             ) from None
         entitlements = entitlements_for(tier)
+        background_tasks.add_task(
+            account_language.record, uid, request_language(request), db=db_firestore,
+        )
 
         return {
             "uid": uid,

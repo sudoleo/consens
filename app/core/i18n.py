@@ -281,11 +281,21 @@ def catalog(language: str) -> Catalog | None:
         return built
 
 
-def t(text: str, language: str | None, params: dict | None = None) -> str:
-    """A server sentence in ``language`` (mails, notices); English without an entry."""
+def t(text: str, language: str | None, params: dict | None = None, *, context: str = "") -> str:
+    """A server sentence in ``language`` (mails, notices); English without an entry.
+
+    A ``context`` entry ("watch schedule|Daily") wins over the plain one, as
+    inside an element with that data-i18n-context. A pattern that would catch
+    too much page text ("{schedule} {city} time") lives only under its
+    context ("mail|…"): the prefix never occurs on a page."""
     current = catalog(language or DEFAULT_LANGUAGE)
     if current is None:
         return fill(text, params)
+    if context:
+        key = f"{context}|{normalize(text)}"
+        found = current.exact.get(key, current.templates.get(key))
+        if found is not None:
+            return fill(found, params)
     return current.translate(text, params)
 
 
@@ -308,11 +318,16 @@ _bundle_lock = threading.Lock()
 _bundles: dict[str, tuple[tuple, ClientBundle]] = {}
 
 
+def server_only(path: Path) -> bool:
+    """Long public pages (``page-*``) and mails never reach the browser."""
+    return path.name.startswith("page-") or path.name == "mail.json"
+
+
 def client_bundle(language: str) -> ClientBundle | None:
-    """Dictionary (without the server-only ``page-*`` files) plus the engine."""
+    """Dictionary (without the server-only files) plus the engine."""
     if language not in TRANSLATED_LANGUAGES:
         return None
-    files = [path for path in _dictionary_files(language) if not path.name.startswith("page-")]
+    files = [path for path in _dictionary_files(language) if not server_only(path)]
     signature = _files_signature(files) + _files_signature([ENGINE_SCRIPT])
     with _bundle_lock:
         cached = _bundles.get(language)

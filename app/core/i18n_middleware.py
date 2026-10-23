@@ -62,6 +62,17 @@ def _cookie(language: str, secure: bool) -> str:
     return "; ".join(parts)
 
 
+def request_language(request) -> str:
+    """The language ``request`` is served in. The middleware passes /api/
+    through untouched, so there the same rule runs here: the cookie, else
+    the browser's Accept-Language (a follow from a German page mails in German)."""
+    language = getattr(request.state, "language", None)
+    if language in i18n.LANGUAGES:
+        return language
+    return (i18n.chosen_language(request.cookies.get(i18n.LANGUAGE_COOKIE))
+            or i18n.preferred_language(request.headers.get("accept-language")))
+
+
 def _cookies(headers: Headers) -> dict[str, str]:
     found: dict[str, str] = {}
     for chunk in headers.get("cookie", "").split(";"):

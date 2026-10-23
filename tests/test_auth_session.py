@@ -91,7 +91,7 @@ class AuthSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
         provision.assert_called_once_with("new@example.test")
-        deliver.assert_called_once_with("new@example.test", setup=True)
+        deliver.assert_called_once_with("new@example.test", setup=True, language="en")
         notify.assert_called_once_with("email/password", "new-owner")
 
     def test_existing_email_registration_does_not_notify(self):
@@ -121,7 +121,7 @@ class AuthSessionTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
-        deliver.assert_called_once_with("existing@example.test", setup=False)
+        deliver.assert_called_once_with("existing@example.test", setup=False, language="en")
         notify.assert_not_called()
 
     def test_resend_before_first_login_sends_the_setup_mail_again(self):
@@ -141,7 +141,7 @@ class AuthSessionTests(unittest.TestCase):
         ):
             self.client.post("/register", json={"email": "pending@example.test"})
 
-        deliver.assert_called_once_with("pending@example.test", setup=True)
+        deliver.assert_called_once_with("pending@example.test", setup=True, language="en")
 
     def test_setup_mails_per_address_are_capped_with_a_neutral_answer(self):
         pending = SimpleNamespace(

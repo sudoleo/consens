@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import app.core.config as cfg
 from google.cloud.firestore_v1.base_query import FieldFilter
+from app.core import i18n
 from app.core.security import db_firestore
 from app.services import drift_signal, follow_challenges, topic_figures
 from app.services.public_markdown import lead_sentences
@@ -1312,8 +1313,11 @@ def parse_follow_token(token: str, *, unsubscribe: bool) -> tuple[str, str]:
     return _parse_topic_token(token, unsubscribe=unsubscribe)
 
 
-def confirm_follow(token: str, *, db=None, now=None) -> dict:
+def confirm_follow(token: str, *, db=None, now=None, language: str = "") -> dict:
+    """``language``: the confirming click's, for the follower's mails
+    (account_language)."""
     db = db if db is not None else db_firestore
+    language = language if language in i18n.LANGUAGES else i18n.DEFAULT_LANGUAGE
     topic_id, email = _parse_topic_token(token, unsubscribe=False)
     ref = db.collection(FOLLOWERS_COLLECTION).document(follower_id(topic_id, email))
     topic_ref = db.collection(TOPICS_COLLECTION).document(topic_id)
@@ -1358,8 +1362,11 @@ def confirm_follow(token: str, *, db=None, now=None) -> dict:
             transaction.set(ref, {
                 "topic_id": topic_id,
                 "email": email,
+                "language": language,
                 "created_at": now or utcnow(),
             })
+        elif (follower_snapshot.to_dict() or {}).get("language") != language:
+            transaction.update(ref, {"language": language})
         return topic
 
     topic = _run_transaction(db, persist)

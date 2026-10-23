@@ -7862,7 +7862,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 
 **Firestore-Collections** (verifiziert über Code):
 - `users/{uid}` — `tier` (`free`/`plus`/`pro`, historisch auch `premium` = Pro)
-  plus `tier_updated_at`/`tier_updated_by`/`tier_note`, `role`; Subcollections `bookmarks`, `counters`, `chats`,
+  plus `tier_updated_at`/`tier_updated_by`/`tier_note`, `role`, `language`
+  (`en`/`de`, die Sprache der letzten App-Ladung für Konto-Mails, nur der
+  Server schreibt sie: `account_language`); Subcollections `bookmarks`, `counters`, `chats`,
   `chat_state`, `watch_state` und `watch_uniques` sowie
   die produktive run-basierte Usage:
   `bookmarks` speichert pro laufender Unterhaltung genau ein Dokument unter der
@@ -9168,7 +9170,10 @@ einzige; Betreff „Reached: <Ziel> · <Frage>“, ein „Why“ mit Grund und Q
 Label „You were waiting for“); lange Fragen werden auf ~200 Zeichen am Wortende
 gekürzt und verlinken auf die Seite, Betreffe enden ebenfalls an einem Wort.
 Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
-komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
+komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar. Wo er
+doch ASCII verlässt (deutsche Mails, Umlaute in Fragen), setzt
+`_base_message` quoted-printable fest. Feste Wörter laufen über das Wörterbuch
+(`_t`, siehe „Deutsch für deutsche Leser“).
 **Aussehen der Mails (seit 2026-10-20, Apple-Audit K2/K8):** Jede Mail sieht aus
 wie die App: die Tokens aus `public-tokens.css` als feste Farben
 (`mailer.GROUND/INK/INK_SOFT/MUTED/BORDER/RAISE`, `MAIL_PALETTE`), Wortmarke
@@ -9470,8 +9475,8 @@ Handy.
 ### Deutsch für deutsche Leser (i18n, seit 2026-10-22)
 
 Ausführlich in [`i18n.md`](i18n.md). Die Oberfläche bleibt im Code englisch;
-ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` nur
-für den Server) übersetzt, was ein Leser sieht:
+ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` und
+`mail.json` nur für den Server) übersetzt, was ein Leser sieht:
 - **Sprache:** `app/core/i18n_middleware.py` (zwischen `CorrelationMiddleware`
   und `StaticDeliveryMiddleware`): `/de/<Seite>` für `i18n.LOCALIZED_PATHS`
   (Start, About, Privacy, Terms, Imprint, Consensus engine, Model guide,
@@ -9499,7 +9504,20 @@ für den Server) übersetzt, was ein Leser sieht:
   (`agent freedom|Free`). Einzahl/Mehrzahl als ganze Sätze, nie `"model" + "s"`.
 - **Prüfung:** `scripts/i18n.py missing|check` (Vorlagen, Skripte,
   Server-Sätze), `tests/test_i18n.py`, `tests/js/i18n.test.mjs`.
-- **Noch englisch:** Mails, Telegram-Nachrichten, Admin, Topic-Inhalte,
+- **Mails (seit 2026-10-23):** in der Sprache des Lesers. Konto-Mails
+  (Watch, Morning Brief) lesen `users/{uid}.language`
+  (`app/services/account_language.py`: `/user_status` schreibt sie nach der
+  Antwort per Background-Task, nur bei Änderung, mit Löschsperre; `of` liest
+  sie in `notification_delivery`), Follower die Sprache ihres
+  Bestätigungsklicks (`language` am Dokument in `watch_followers` bzw.
+  `topic_followers`), Bestätigungs- und Registrierungsmails die der Anfrage
+  (`i18n_middleware.request_language`, auch für das von der Middleware
+  ausgelassene `/api/`). `mailer.py`: `_t`/`_h`/`_N` und `@_localized` am
+  `build_*` (Parameter `language`), Sätze in `mail.json`,
+  `mailer.brief_date_label` für das Datum des Morning Brief; `i18n.t(...,
+  context=)` für mehrdeutige Wörter (`watch schedule|Daily` = Täglich, nicht
+  das Preset Alltag). Tests: `tests/test_mail_language.py`.
+- **Noch englisch:** Telegram-Nachrichten, Admin, Topic-Inhalte,
   OG-Bilder; vom Server formatierte Daten (`date_display`).
 
 ### Was die App sagt: Namen, Schreibstil, Admin-Zahlen (seit 2026-10-20, Apple-Audit H3–H5, H10)

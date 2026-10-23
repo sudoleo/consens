@@ -20,6 +20,7 @@ from app.core.observability import safe_exception
 from app.core.security import db_firestore
 from app.core.site import SITE_URL
 from app.services import (
+    account_language,
     mailer,
     notification_outbox as outbox,
     share_snapshots,
@@ -113,7 +114,7 @@ def _delta(payload: dict) -> dict:
     }
 
 
-def _owner_message(item: dict, payload: dict, recipient: str, answer: tuple):
+def _owner_message(item: dict, payload: dict, recipient: str, answer: tuple, language: str = ""):
     consensus, answer_sources = answer
     share_url = SITE_URL + mailer.owner_page_path(
         _share_path(payload, private_aware=True),
@@ -126,7 +127,7 @@ def _owner_message(item: dict, payload: dict, recipient: str, answer: tuple):
     question = payload.get("question") or ""
     if item["kind"] == outbox.KIND_WATCH_PAUSED:
         return mailer.build_paused_message(
-            recipient=recipient, question=question,
+            recipient=recipient, question=question, language=language,
             share_url=share_url, unsubscribe_url=unsubscribe_url,
             resume_url=(
                 SITE_URL + "/watch/resume?token="
@@ -137,22 +138,22 @@ def _owner_message(item: dict, payload: dict, recipient: str, answer: tuple):
     delta = _delta(payload)
     if alert == "every_run":
         return mailer.build_run_message(
-            recipient=recipient, question=question, delta=delta,
+            recipient=recipient, question=question, delta=delta, language=language,
             moved=bool(payload.get("moved")), consensus=consensus,
             share_url=share_url, unsubscribe_url=unsubscribe_url,
             answer_sources=answer_sources,
         )
     if alert == "condition":
         return mailer.build_condition_message(
-            recipient=recipient, question=question,
+            recipient=recipient, question=question, language=language,
             goal=payload.get("condition") or "",
-            reason=payload.get("condition_reason") or "The goal is met by the new answer.",
+            reason=payload.get("condition_reason") or "",
             sources=payload.get("condition_sources") or [],
             consensus=consensus, share_url=share_url, unsubscribe_url=unsubscribe_url,
             answer_sources=answer_sources,
         )
     return mailer.build_change_message(
-        recipient=recipient, question=question, delta=delta,
+        recipient=recipient, question=question, delta=delta, language=language,
         share_url=share_url, unsubscribe_url=unsubscribe_url,
     )
 
@@ -175,7 +176,8 @@ async def _deliver_watch_email(item: dict, db) -> tuple:
         answer = await asyncio.to_thread(
             _watch_version_answer, payload, item.get("run_id") or "", db,
         )
-    return await _send_mail(_owner_message(item, payload, recipient, answer))
+    language = await asyncio.to_thread(account_language.of, item["uid"], db=db)
+    return await _send_mail(_owner_message(item, payload, recipient, answer, language))
 
 
 def _telegram_outcome(status: dict) -> tuple:
@@ -266,6 +268,7 @@ async def _deliver_watch_follower(item: dict, db) -> tuple:
     token = watch_followers.make_follow_unsubscribe_token(share_id, email)
     message = mailer.build_follower_change_message(
         recipient=email, question=payload.get("question") or "",
+        language=follower.get("language") or "",
         delta=_delta(payload),
         share_url=SITE_URL + _share_path(payload, private_aware=False),
         unsubscribe_url=SITE_URL + "/watch/follow/unsubscribe?token=" + token,
@@ -288,7 +291,7 @@ async def _deliver_topic_follower(item: dict, db) -> tuple:
         return outbox.SKIPPED, "smtp_not_configured"
     email = follower["email"]
     message = mailer.build_topic_change_message(
-        recipient=email,
+        recipient=email, language=follower.get("language") or "",
         title=payload.get("title") or topic.get("title") or "",
         question=payload.get("question") or "",
         delta=_delta(payload),
@@ -326,11 +329,13 @@ async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
     label_time = scheduled_at if isinstance(scheduled_at, datetime) else now
     timezone_name = str(payload.get("timezone") or "UTC")
     try:
-        date_label = label_time.astimezone(ZoneInfo(timezone_name)).strftime("%A, %d %B %Y")
+        label_time = label_time.astimezone(ZoneInfo(timezone_name))
     except (ZoneInfoNotFoundError, ValueError):
-        date_label = label_time.strftime("%A, %d %B %Y")
+        pass
+    language = await asyncio.to_thread(account_language.of, uid, db=db)
     message = mailer.build_brief_message(
-        recipient=recipient, date_label=date_label, items=items,
+        recipient=recipient, language=language,
+        date_label=mailer.brief_date_label(label_time, language=language), items=items,
         changes_count=changes, site_url=SITE_URL,
         unsubscribe_url=SITE_URL + "/watch/brief/unsubscribe?token="
         + watch_brief.make_brief_unsubscribe_token(uid),

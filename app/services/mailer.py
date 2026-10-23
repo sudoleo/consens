@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import functools
 import html
 import logging
 import os
@@ -13,6 +15,7 @@ from email.message import EmailMessage
 from urllib.parse import quote, urlsplit
 from datetime import datetime, timezone
 
+from app.core import i18n
 from app.core.observability import safe_exception
 from app.services import notification_markdown
 from app.services.llm.mock_llm import mock_llm_enabled
@@ -112,11 +115,51 @@ def _base_message(recipient: str, subject: str, plain: str, html_body: str,
         # from the same address. The route acts on that POST, never on a GET.
         message["List-Unsubscribe"] = _OneLineHeader("List-Unsubscribe", f"<{unsubscribe_url}>")
         message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-    message.set_content(plain)
+    # Umlauts or a quoted question leave ASCII: quoted-printable keeps the
+    # rest, links included, readable in the raw text, where base64 would not.
+    message.set_content(plain, **({} if plain.isascii() else {"cte": "quoted-printable"}))
     message.add_alternative(html_body, subtype="html")
     return message
 
 
+# ---------------------------------------------------------------------------
+# The reader's language
+#
+# A mail speaks the language its reader reads the site in: the account's
+# (account_language), a follower's from the confirming click, a sign-up's
+# from its request. Every fixed word goes through _t and the dictionary
+# (app/i18n/<lang>/mail.json, docs/i18n.md); questions, answers and change
+# summaries stay in the language they were written in. _N marks a word that
+# is translated later, where it is used.
+# ---------------------------------------------------------------------------
+
+_LANGUAGE = contextvars.ContextVar("mail_language", default=i18n.DEFAULT_LANGUAGE)
+
+
+def _N(text: str) -> str:
+    return text
+
+
+def _t(text: str, *, context: str = "", **params) -> str:
+    """``text`` in the reader's language, ``params`` filled in as given."""
+    return i18n.t(text, _LANGUAGE.get(), params or None, context=context)
+
+
+def _h(text: str, **markup) -> str:
+    """``_t`` for a text node: the sentence escaped, ``markup`` inserted as given."""
+    return i18n.fill(html.escape(i18n.t(text, _LANGUAGE.get()), quote=False), markup or None)
+
+
+def _localized(build):
+    """``build`` with a ``language`` keyword; English when missing or unknown."""
+    @functools.wraps(build)
+    def wrapper(*args, language: str = "", **kwargs):
+        token = _LANGUAGE.set(language if language in i18n.LANGUAGES else i18n.DEFAULT_LANGUAGE)
+        try:
+            return build(*args, **kwargs)
+        finally:
+            _LANGUAGE.reset(token)
+    return wrapper
 
 
 # ---------------------------------------------------------------------------
@@ -234,23 +277,23 @@ def _link_html(url: str, label: str, *, muted: bool = False) -> str:
     )
 
 
-def _question_html(question, url: str, *, label: str = "Question") -> str:
+def _question_html(question, url: str, *, label: str = "") -> str:
     text, truncated = _question_view(question)
     more = (
         f'<p style="margin:6px 0 0;font-size:13px">'
-        f'{_link_html(url, "Read the full question", muted=True)}</p>'
+        f'{_link_html(url, _t("Read the full question"), muted=True)}</p>'
         if truncated and url else ""
     )
     return (
-        f'<div style="margin:28px 0 0">{_label_html(label)}'
+        f'<div style="margin:28px 0 0">{_label_html(label or _t("Question"))}'
         f'<p class="cx-ink" style="margin:4px 0 0;font-size:16px;font-weight:600;'
         f'line-height:1.45;color:{INK}">{html.escape(text)}</p>{more}</div>'
     )
 
 
-def _question_plain(question, *, label: str = "QUESTION") -> str:
+def _question_plain(question) -> str:
     text, _truncated = _question_view(question)
-    return _ascii(f"{label}\n{text}")
+    return _ascii(f"{_t('Question').upper()}\n{text}")
 
 
 def _change_block_html(label: str, summary, *, notable: bool = True) -> str:
@@ -302,7 +345,7 @@ def _secondary_link_html(url: str, label: str) -> str:
 def _shell_html(*, eyebrow: str, heading: str, preheader: str, body: str,
                 footer: str, width: int = 600) -> str:
     return (
-        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{_LANGUAGE.get()}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<meta name="color-scheme" content="light dark">'
         '<meta name="supported-color-schemes" content="light dark">'
@@ -344,12 +387,12 @@ def _subject_clip(text, limit: int = 72) -> str:
 # Why a check moved, in the words of the evidence model
 # (docs/watch-evidence-model.md). A cause without a sentence is not shown.
 _CAUSE_SENTENCES = {
-    "new_evidence": "New evidence: a source the earlier answer did not have.",
-    "reassessment": (
+    "new_evidence": _N("New evidence: a source the earlier answer did not have."),
+    "reassessment": _N(
         "Same evidence, read differently by the models, and a second check "
         "confirmed that reading before this message was sent."
     ),
-    "model_change": (
+    "model_change": _N(
         "The answering models changed, and a second check confirmed the new "
         "reading before this message was sent."
     ),
@@ -397,7 +440,7 @@ def _why_html(sentence, sources) -> str:
         for item in items
     )
     return (
-        f'<div style="margin:24px 0 0">{_label_html("Why")}'
+        f'<div style="margin:24px 0 0">{_label_html(_t("Why"))}'
         + (
             f'<p class="cx-soft" style="margin:4px 0 0;color:{INK_SOFT}">{html.escape(sentence)}</p>'
             if sentence else ""
@@ -412,7 +455,7 @@ def _why_plain(sentence, sources) -> str:
     items = _clean_sources(sources)
     if not sentence and not items:
         return ""
-    lines = ["WHY"] + ([sentence] if sentence else [])
+    lines = [_t("Why").upper()] + ([sentence] if sentence else [])
     lines += [f"- {item['title']} ({item['url']})" for item in items]
     return _ascii("\n".join(lines))
 
@@ -422,23 +465,23 @@ def _held_html(held) -> str:
     if not text:
         return ""
     return (
-        f'<div style="margin:24px 0 0">{_label_html("What held")}'
+        f'<div style="margin:24px 0 0">{_label_html(_t("What held"))}'
         f'<p class="cx-soft" style="margin:4px 0 0;color:{INK_SOFT}">{html.escape(text)}</p></div>'
     )
 
 
 def _held_plain(held) -> str:
     text = _normalized(held)
-    return _ascii(f"WHAT HELD\n{text}") if text else ""
+    return _ascii(f"{_t('What held').upper()}\n{text}") if text else ""
 
 
-def _goal_html(goal, status_line, *, label: str = "Waiting for") -> str:
+def _goal_html(goal, status_line, *, label: str = "") -> str:
     goal = _normalized(goal)
     if not goal:
         return ""
     return (
         f'<div class="cx-raise" style="margin:24px 0 0;padding:14px 16px;background:{RAISE};'
-        f'border-radius:12px">{_label_html(label)}'
+        f'border-radius:12px">{_label_html(label or _t("Waiting for"))}'
         f'<p class="cx-ink" style="margin:4px 0 0;font-weight:600;color:{INK}">{html.escape(goal)}</p>'
         + (
             f'<p class="cx-muted" style="margin:4px 0 0;font-size:14px;color:{MUTED}">'
@@ -449,19 +492,20 @@ def _goal_html(goal, status_line, *, label: str = "Waiting for") -> str:
     )
 
 
-def _goal_plain(goal, status_line, *, label: str = "WAITING FOR") -> str:
+def _goal_plain(goal, status_line, *, label: str = "") -> str:
     goal = _normalized(goal)
     if not goal:
         return ""
+    label = (label or _t("Waiting for")).upper()
     return _ascii(f"{label}\n{goal}" + (f"\n{status_line}" if status_line else ""))
 
 
 def _goal_status_line(delta: dict) -> str:
     reason = _normalized(delta.get("goal_reason"))
     if delta.get("goal_status") == "not_met":
-        return "Not yet. " + reason if reason else "Not yet."
+        return _t("Not yet. {reason}", reason=reason) if reason else _t("Not yet.")
     if delta.get("goal_status") == "met":
-        return "Reported met, re-checking before the watch closes."
+        return _t("Reported met, re-checking before the watch closes.")
     return reason
 
 
@@ -474,7 +518,7 @@ def _answer_html(consensus: str, sources) -> str:
     )
     return (
         f'<div class="cx-line" style="margin:32px 0 0;padding:24px 0 0;'
-        f'border-top:1px solid {BORDER}">{_label_html("The answer")}'
+        f'border-top:1px solid {BORDER}">{_label_html(_t("The answer"))}'
         f'<div class="cx-ink" style="margin:10px 0 0;font-size:15px;line-height:1.6;'
         f'color:{INK}">{rendered}</div></div>'
     )
@@ -483,7 +527,7 @@ def _answer_html(consensus: str, sources) -> str:
 def _answer_plain(consensus: str, sources) -> str:
     if not consensus:
         return ""
-    return "THE ANSWER\n\n" + notification_markdown.answer_plain(consensus, sources=sources)
+    return _t("The answer").upper() + "\n\n" + notification_markdown.answer_plain(consensus, sources=sources)
 
 
 def _delta_parts(delta: dict, *, notable: bool = True) -> tuple[str, str]:
@@ -496,14 +540,15 @@ def _delta_parts(delta: dict, *, notable: bool = True) -> tuple[str, str]:
     summary = delta.get("summary") or ""
     goal_line = _goal_status_line(delta)
     cause = _CAUSE_SENTENCES.get(str(delta.get("cause") or ""), "")
+    cause = _t(cause) if cause else ""
     html_part = (
-        _change_block_html("What changed", summary, notable=notable)
+        _change_block_html(_t("What changed"), summary, notable=notable)
         + _why_html(cause, delta.get("sources"))
         + _held_html(delta.get("held"))
         + _goal_html(delta.get("goal"), goal_line)
     )
     plain_part = "\n\n".join(part for part in (
-        _change_block_plain("What changed", summary),
+        _change_block_plain(_t("What changed"), summary),
         _why_plain(cause, delta.get("sources")),
         _held_plain(delta.get("held")),
         _goal_plain(delta.get("goal"), goal_line),
@@ -511,36 +556,39 @@ def _delta_parts(delta: dict, *, notable: bool = True) -> tuple[str, str]:
     return html_part, plain_part
 
 
+@_localized
 def build_change_message(*, recipient: str, question: str, delta: dict,
                          share_url: str, unsubscribe_url: str) -> EmailMessage:
-    subject = f"Moved: {_subject_clip(question)}"
+    subject = _t("Moved: {question}", question=_subject_clip(question))
     lead, _rest = _split_lead(delta.get("summary"))
     delta_html, delta_plain = _delta_parts(delta)
     plain = (
-        "Your Watch found a change backed by evidence.\n\n"
+        _t("Your Watch found a change backed by evidence.") + "\n\n"
         + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
-        f"See what changed: {share_url}\nPause this watch: {unsubscribe_url}\n"
+        + _t("See what changed: {url}", url=share_url) + "\n"
+        + _t("Pause this watch: {url}", url=unsubscribe_url) + "\n"
     )
     body = (
         delta_html
         + _question_html(question, share_url)
-        + _button_html(share_url, "See what changed")
+        + _button_html(share_url, _t("See what changed"))
     )
     html_body = _shell_html(
-        eyebrow="Watch · Moved",
-        heading="The answer moved",
-        preheader=lead or "A watched question moved on new evidence.",
+        eyebrow=_t("Watch · Moved"),
+        heading=_t("The answer moved"),
+        preheader=lead or _t("A watched question moved on new evidence."),
         body=body,
-        footer=(
+        footer=_h(
             "A Watch only writes when a change is backed by a source or "
-            "confirmed by a second check. "
-            f'{_link_html(unsubscribe_url, "Pause this watch", muted=True)}.'
+            "confirmed by a second check. {link}.",
+            link=_link_html(unsubscribe_url, _t("Pause this watch"), muted=True),
         ),
     )
     return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
+@_localized
 def build_run_message(*, recipient: str, question: str, delta: dict, moved: bool,
                       consensus: str, share_url: str, unsubscribe_url: str,
                       answer_sources=None) -> EmailMessage:
@@ -548,73 +596,78 @@ def build_run_message(*, recipient: str, question: str, delta: dict, moved: bool
 
     ``answer_sources`` are the sources of the answer's version: its [S1]
     citations link to them."""
-    subject = f"New check: {_subject_clip(question)}"
+    subject = _t("New check: {question}", question=_subject_clip(question))
     consensus_text = str(consensus or "").strip()
     if not moved:
-        delta = {**delta, "summary": "Nothing moved on evidence in this check.", "cause": "", "sources": []}
+        delta = {**delta, "summary": _t("Nothing moved on evidence in this check."), "cause": "", "sources": []}
     delta_html, delta_plain = _delta_parts(delta, notable=moved)
     plain = "\n\n".join(part for part in (
-        "Your Watch completed a new check.",
+        _t("Your Watch completed a new check."),
         delta_plain,
         _question_plain(question),
         _answer_plain(consensus_text, answer_sources),
-        f"Open the watch: {share_url}\nPause this watch: {unsubscribe_url}",
+        _t("Open the watch: {url}", url=share_url) + "\n" + _t("Pause this watch: {url}", url=unsubscribe_url),
     ) if part) + "\n"
     body = (
         delta_html
         + _question_html(question, share_url)
         + _answer_html(consensus_text, answer_sources)
-        + _button_html(share_url, "Open the watch")
+        + _button_html(share_url, _t("Open the watch"))
     )
     html_body = _shell_html(
-        eyebrow="Watch · Moved" if moved else "Watch · Checked again",
-        heading="The answer moved" if moved else "Checked again",
+        eyebrow=_t("Watch · Moved") if moved else _t("Watch · Checked again"),
+        heading=_t("The answer moved") if moved else _t("Checked again"),
         preheader=_split_lead(delta.get("summary"))[0],
         body=body,
-        footer=(
-            "You chose to receive every check. "
-            f'{_link_html(unsubscribe_url, "Pause this watch", muted=True)}.'
+        footer=_h(
+            "You chose to receive every check. {link}.",
+            link=_link_html(unsubscribe_url, _t("Pause this watch"), muted=True),
         ),
         width=640,
     )
     return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
+@_localized
 def build_condition_message(*, recipient: str, question: str, goal: str, reason: str,
                             sources, consensus: str, share_url: str,
                             unsubscribe_url: str, answer_sources=None) -> EmailMessage:
     """Sent once, when the goal a watch was waiting for is met on evidence.
 
     The subject names the goal and the question, so the one message the
-    reader waited for is clear in the inbox list alone."""
+    reader waited for is clear in the inbox list alone. Without a ``reason``
+    of its own, the goal is met by the new answer."""
     clipped_goal = _normalized(goal)[:500]
-    clipped_reason = _normalized(reason)[:400]
+    clipped_reason = _normalized(reason)[:400] or _t("The goal is met by the new answer.")
     goal_part = _subject_clip(clipped_goal, limit=48)
     question_part = _subject_clip(question, limit=max(32, 100 - len(goal_part)))
-    subject = f"Reached: {goal_part}" + (f" · {question_part}" if question_part else "")
+    subject = (
+        _t("Reached: {goal} · {question}", goal=goal_part, question=question_part)
+        if question_part else _t("Reached: {goal}", goal=goal_part)
+    )
     consensus_text = str(consensus or "").strip()
     items = _clean_sources(sources)
     plain = "\n\n".join(part for part in (
-        "The goal your Watch was waiting for is met. The watch is complete.",
-        _goal_plain(clipped_goal, "", label="YOU WERE WAITING FOR"),
+        _t("The goal your Watch was waiting for is met. The watch is complete."),
+        _goal_plain(clipped_goal, "", label=_t("You were waiting for")),
         _why_plain(clipped_reason, items),
         _question_plain(question),
         _answer_plain(consensus_text, answer_sources),
-        f"Open the watch: {share_url}",
+        _t("Open the watch: {url}", url=share_url),
     ) if part) + "\n"
     body = (
-        _goal_html(clipped_goal, "", label="You were waiting for")
+        _goal_html(clipped_goal, "", label=_t("You were waiting for"))
         + _why_html(clipped_reason, items)
         + _question_html(question, share_url)
         + _answer_html(consensus_text, answer_sources)
-        + _button_html(share_url, "Open the watch")
+        + _button_html(share_url, _t("Open the watch"))
     )
     html_body = _shell_html(
-        eyebrow="Watch · Goal reached",
-        heading="What you were waiting for happened",
+        eyebrow=_t("Watch · Goal reached"),
+        heading=_t("What you were waiting for happened"),
         preheader=_split_lead(clipped_reason)[0] or clipped_goal,
         body=body,
-        footer=(
+        footer=_h(
             "The watch stopped checking and freed its slot. Open it to watch for "
             "something new."
         ),
@@ -623,171 +676,185 @@ def build_condition_message(*, recipient: str, question: str, goal: str, reason:
     return _base_message(recipient, subject, plain, html_body)
 
 
+@_localized
 def build_follow_confirm_message(*, recipient: str, question: str,
                                  confirm_url: str, share_url: str) -> EmailMessage:
     """Double-Opt-in: einmalige Bestätigungs-Mail für Seiten-Follower."""
-    subject = f'Confirm: follow "{_subject_clip(question)}"'
+    subject = _t('Confirm: follow "{question}"', question=_subject_clip(question))
     plain = (
-        "Confirm that you want to follow this question on consens.io.\n\n"
+        _t("Confirm that you want to follow this question on consens.io.") + "\n\n"
         + _question_plain(question) + "\n\n"
-        "You will get one email whenever this answer changes materially.\n"
-        f"Confirm: {confirm_url}\n\n"
-        f"Page: {share_url}\n"
-        "If you did not request this, simply ignore this email - nothing is stored.\n"
+        + _t("You will get one email whenever this answer changes materially.") + "\n"
+        + _t("Confirm: {url}", url=confirm_url) + "\n\n"
+        + _t("Page: {url}", url=share_url) + "\n"
+        + _t("If you did not request this, simply ignore this email - nothing is stored.") + "\n"
     )
     body = (
         _question_html(question, share_url)
-        + f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">You will get one '
-        "email whenever this answer changes materially – no account needed.</p>"
-        + _button_html(confirm_url, "Confirm and follow")
+        + f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">'
+        + _h("You will get one email whenever this answer changes materially – no account needed.")
+        + "</p>"
+        + _button_html(confirm_url, _t("Confirm and follow"))
     )
     html_body = _shell_html(
-        eyebrow="Confirm follow",
-        heading="Follow this question?",
-        preheader="One click confirms; we only write when the consensus moves.",
+        eyebrow=_t("Confirm follow"),
+        heading=_t("Follow this question?"),
+        preheader=_t("One click confirms; we only write when the consensus moves."),
         body=body,
-        footer=(
-            "If you did not request this, simply ignore this email – nothing is stored. "
-            f'{_link_html(share_url, "Open the page", muted=True)}.'
+        footer=_h(
+            "If you did not request this, simply ignore this email – nothing is stored. {link}.",
+            link=_link_html(share_url, _t("Open the page"), muted=True),
         ),
     )
     return _base_message(recipient, subject, plain, html_body)
 
 
+@_localized
 def build_topic_follow_confirm_message(*, recipient: str, title: str,
                                        confirm_url: str, topic_url: str) -> EmailMessage:
     """Double opt-in confirmation for the independent curated Topics area."""
     clipped_title = _normalized(title)
-    subject = f'Confirm: follow "{_subject_clip(clipped_title)}"'
+    subject = _t('Confirm: follow "{question}"', question=_subject_clip(clipped_title))
     plain = (
-        "Confirm that you want to follow this topic on consens.io.\n\n"
+        _t("Confirm that you want to follow this topic on consens.io.") + "\n\n"
         f"{clipped_title}\n\n"
-        "You will receive an email when the curated consensus changes materially.\n"
-        f"Confirm: {confirm_url}\n\n"
-        f"Topic: {topic_url}\n"
-        "If you did not request this, ignore this email; nothing is stored.\n"
+        + _t("You will receive an email when the curated consensus changes materially.") + "\n"
+        + _t("Confirm: {url}", url=confirm_url) + "\n\n"
+        + _t("Topic: {url}", url=topic_url) + "\n"
+        + _t("If you did not request this, ignore this email; nothing is stored.") + "\n"
     )
     body = (
-        _question_html(clipped_title, topic_url, label="Topic")
-        + f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">You will receive an '
-        "email when the curated AI consensus changes materially.</p>"
-        + _button_html(confirm_url, "Confirm and follow")
+        _question_html(clipped_title, topic_url, label=_t("Topic"))
+        + f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">'
+        + _h("You will receive an email when the curated AI consensus changes materially.")
+        + "</p>"
+        + _button_html(confirm_url, _t("Confirm and follow"))
     )
     html_body = _shell_html(
-        eyebrow="Confirm follow",
-        heading="Follow this topic?",
-        preheader="One click confirms; we only write when the curated consensus moves.",
+        eyebrow=_t("Confirm follow"),
+        heading=_t("Follow this topic?"),
+        preheader=_t("One click confirms; we only write when the curated consensus moves."),
         body=body,
-        footer=(
-            "If you did not request this, ignore this email; nothing is stored. "
-            f'{_link_html(topic_url, "Open the topic", muted=True)}.'
+        footer=_h(
+            "If you did not request this, ignore this email; nothing is stored. {link}.",
+            link=_link_html(topic_url, _t("Open the topic"), muted=True),
         ),
     )
     return _base_message(recipient, subject, plain, html_body)
 
 
+@_localized
 def build_topic_change_message(*, recipient: str, title: str, question: str,
                                delta: dict, topic_url: str,
                                unsubscribe_url: str) -> EmailMessage:
     """Material-change notification for a confirmed Topic follower."""
     clipped_title = _normalized(title)
-    subject = f"Topic update: {_subject_clip(clipped_title)}"
+    subject = _t("Topic update: {title}", title=_subject_clip(clipped_title))
     lead, _rest = _split_lead(delta.get("summary"))
     delta_html, delta_plain = _delta_parts(delta)
     plain = (
-        f"The curated consensus moved.\n\n{clipped_title}\n\n"
+        _t("The curated consensus moved.") + f"\n\n{clipped_title}\n\n"
         + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
-        f"Open the timeline: {topic_url}\nUnfollow: {unsubscribe_url}\n"
+        + _t("Open the timeline: {url}", url=topic_url) + "\n"
+        + _t("Unfollow: {url}", url=unsubscribe_url) + "\n"
     )
     body = (
         delta_html
-        + _question_html(question, topic_url, label="Tracked question")
-        + _button_html(topic_url, "Open the timeline")
+        + _question_html(question, topic_url, label=_t("Tracked question"))
+        + _button_html(topic_url, _t("Open the timeline"))
     )
     html_body = _shell_html(
-        eyebrow="Topic you follow",
+        eyebrow=_t("Topic you follow"),
         heading=clipped_title,
-        preheader=lead or "The curated consensus moved.",
+        preheader=lead or _t("The curated consensus moved."),
         body=body,
-        footer=(
-            "You follow this curated topic on consens.io. "
-            f'{_link_html(unsubscribe_url, "Unfollow", muted=True)}.'
+        footer=_h(
+            "You follow this curated topic on consens.io. {link}.",
+            link=_link_html(unsubscribe_url, _t("Unfollow"), muted=True),
         ),
     )
     return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
+@_localized
 def build_follower_change_message(*, recipient: str, question: str, delta: dict,
                                   share_url: str, unsubscribe_url: str) -> EmailMessage:
     """Änderungs-Mail an bestätigte Seiten-Follower (nicht den Watch-Owner)."""
-    subject = f"The AI consensus moved: {_subject_clip(question)}"
+    subject = _t("The AI consensus moved: {question}", question=_subject_clip(question))
     lead, _rest = _split_lead(delta.get("summary"))
     # The goal belongs to the owner; followers subscribed to the question.
     delta_html, delta_plain = _delta_parts({**delta, "goal": ""})
     plain = (
-        "A question you follow on consens.io moved.\n\n"
+        _t("A question you follow on consens.io moved.") + "\n\n"
         + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
-        f"See what changed: {share_url}\nUnfollow: {unsubscribe_url}\n"
+        + _t("See what changed: {url}", url=share_url) + "\n"
+        + _t("Unfollow: {url}", url=unsubscribe_url) + "\n"
     )
     body = (
         delta_html
         + _question_html(question, share_url)
-        + _button_html(share_url, "See what changed")
+        + _button_html(share_url, _t("See what changed"))
     )
     html_body = _shell_html(
-        eyebrow="Question you follow",
-        heading="The AI consensus moved",
-        preheader=lead or "A question you follow moved.",
+        eyebrow=_t("Question you follow"),
+        heading=_t("The AI consensus moved"),
+        preheader=lead or _t("A question you follow moved."),
         body=body,
-        footer=(
-            "You follow this question on consens.io. "
-            f'{_link_html(unsubscribe_url, "Unfollow", muted=True)}.'
+        footer=_h(
+            "You follow this question on consens.io. {link}.",
+            link=_link_html(unsubscribe_url, _t("Unfollow"), muted=True),
         ),
     )
     return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
+@_localized
 def build_paused_message(*, recipient: str, question: str, share_url: str,
                          unsubscribe_url: str, resume_url: str = "") -> EmailMessage:
     """Three failed checks paused the watch. The way out is resuming it, so
     that is the button; a link to pause it again would be no help. The
     List-Unsubscribe header still lets a mail client stop these mails."""
-    subject = f"Watch paused: {_subject_clip(question)}"
-    action_url, action_label = (resume_url, "Resume watch") if resume_url else (share_url, "Open the watch")
+    subject = _t("Watch paused: {question}", question=_subject_clip(question))
+    action_url, action_label = (resume_url, _t("Resume watch")) if resume_url else (share_url, _t("Open the watch"))
     plain = "\n\n".join(part for part in (
-        "Your watch was paused after three failed checks in a row. Nothing was "
-        "lost: resuming it continues the same history.",
+        _t("Your watch was paused after three failed checks in a row. Nothing was "
+           "lost: resuming it continues the same history."),
         _question_plain(question),
-        f"Resume this watch: {resume_url}" if resume_url else "",
-        f"Open the watch: {share_url}",
+        _t("Resume this watch: {url}", url=resume_url) if resume_url else "",
+        _t("Open the watch: {url}", url=share_url),
     ) if part) + "\n"
     body = (
-        f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">Three checks in a row '
-        "could not be completed, so this watch was paused. Nothing was lost – resuming "
-        "it continues the same history.</p>"
+        f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">'
+        + _h("Three checks in a row could not be completed, so this watch was paused. "
+             "Nothing was lost – resuming it continues the same history.")
+        + "</p>"
         + _question_html(question, share_url)
         + _button_html(action_url, action_label)
-        + (_secondary_link_html(share_url, "Open the watch") if resume_url else "")
+        + (_secondary_link_html(share_url, _t("Open the watch")) if resume_url else "")
     )
     html_body = _shell_html(
-        eyebrow="Watch · Paused",
-        heading="This watch was paused",
-        preheader="Three checks in a row failed. Resume it with one click.",
+        eyebrow=_t("Watch · Paused"),
+        heading=_t("This watch was paused"),
+        preheader=_t("Three checks in a row failed. Resume it with one click."),
         body=body,
-        footer="A resumed watch checks again on its usual schedule.",
+        footer=_h("A resumed watch checks again on its usual schedule."),
     )
     return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
+_BRIEF_STATUS = {
+    "active": _N("Active"),
+    "paused": _N("Paused"),
+    "paused_error": _N("Paused after errors"),
+    "resolved": _N("Resolved"),
+}
+
+
 def _brief_status_label(status: str) -> str:
-    return {
-        "active": "Active",
-        "paused": "Paused",
-        "paused_error": "Paused after errors",
-        "resolved": "Resolved",
-    }.get(status, "Paused")
+    # A resolved watch reached its goal; plain "Resolved" is a settled disagreement.
+    return _t(_BRIEF_STATUS.get(status, _BRIEF_STATUS["paused"]), context="watch status")
 
 
 def _brief_reached(item: dict) -> str:
@@ -813,8 +880,8 @@ def _brief_goal_line(item: dict) -> str:
         return ""  # the Reached line says it
     goal = _normalized(item.get("goal"))
     if not goal:
-        return "Watching for any change on evidence"
-    return "Waiting for: " + _question_view(goal, limit=90)[0]
+        return _t("Watching for any change on evidence")
+    return _t("Waiting for: {goal}", goal=_question_view(goal, limit=90)[0])
 
 
 def _city(timezone_name: str) -> str:
@@ -822,37 +889,84 @@ def _city(timezone_name: str) -> str:
     return str(timezone_name or "").rsplit("/", 1)[-1].replace("_", " ")
 
 
+# Indexed by date.weekday() and date.month - 1; the watch's run_weekday by name.
+_WEEKDAYS = (_N("Monday"), _N("Tuesday"), _N("Wednesday"), _N("Thursday"),
+             _N("Friday"), _N("Saturday"), _N("Sunday"))
+_WEEKDAY_NAMES = dict(zip(("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"),
+                          _WEEKDAYS))
+_MONTHS = (_N("January"), _N("February"), _N("March"), _N("April"), _N("May"), _N("June"),
+           _N("July"), _N("August"), _N("September"), _N("October"), _N("November"),
+           _N("December"))
+# Interval alone and with its time, one sentence each. "Daily" alone is the
+# preset (Alltag); as a schedule it is said in its own context.
+_INTERVALS = {
+    "daily": (_N("Daily"), _N("Daily at {time}")),
+    "weekly": (_N("Weekly"), _N("Weekly at {time}")),
+    "monthly": (_N("Monthly"), _N("Monthly at {time}")),
+}
+
+
 def _brief_schedule(item: dict, brief_timezone: str) -> str:
     if str(item.get("status") or "") == "resolved":
         return ""  # a reached watch no longer checks
-    schedule = str(item.get("interval") or "").capitalize()
-    if item.get("interval") == "weekly" and item.get("run_weekday"):
-        schedule += f" on {str(item['run_weekday']).capitalize()}"
-    if item.get("run_time"):
-        schedule += f" at {item['run_time']}"
-        zone = str(item.get("timezone") or "")
-        # The brief's own zone needs no name; another one is said as a city.
-        if zone and zone != brief_timezone:
-            schedule += f" {_city(zone)} time"
+    interval = str(item.get("interval") or "")
+    run_time = str(item.get("run_time") or "")
+    weekday = str(item.get("run_weekday") or "").lower()
+    if interval == "weekly" and weekday:
+        weekday = _t(_WEEKDAY_NAMES.get(weekday, weekday.capitalize()))
+        schedule = (_t("Weekly on {weekday} at {time}", weekday=weekday, time=run_time) if run_time
+                    else _t("Weekly on {weekday}", weekday=weekday))
+    elif interval in _INTERVALS:
+        alone, timed = _INTERVALS[interval]
+        schedule = _t(timed, time=run_time) if run_time else _t(alone, context="watch schedule")
+    else:
+        schedule = " at ".join(part for part in (interval.capitalize(), run_time) if part)
+    zone = str(item.get("timezone") or "")
+    # The brief's own zone needs no name; another one is said as a city.
+    # Patterns this open live under "mail|" only (i18n.t): on a page they
+    # would catch any "... time".
+    if run_time and schedule and zone and zone != brief_timezone:
+        schedule = _t("{schedule} {city} time", context="mail", schedule=schedule, city=_city(zone))
     return schedule
 
 
+@_localized
+def brief_date_label(moment: datetime) -> str:
+    """The brief's day as its reader writes it: "Friday, 23 October 2026"."""
+    return _t("{weekday}, {day} {month} {year}", context="mail", weekday=_t(_WEEKDAYS[moment.weekday()]),
+              day=moment.day, month=_t(_MONTHS[moment.month - 1]), year=moment.year)
+
+
+def _brief_subject(changes_count: int, watch_count: int) -> str:
+    # Whole sentences per number (docs/i18n.md): German counts differently.
+    if not changes_count:
+        return (_t("Morning brief: your {watches} watch, no material changes", watches=watch_count)
+                if watch_count == 1 else
+                _t("Morning brief: your {watches} watches, no material changes", watches=watch_count))
+    if changes_count == 1:
+        return (_t("Morning brief: {changes} change across {watches} watch", changes=1, watches=watch_count)
+                if watch_count == 1 else
+                _t("Morning brief: {changes} change across {watches} watches", changes=1, watches=watch_count))
+    return (_t("Morning brief: {changes} changes across {watches} watch", changes=changes_count, watches=watch_count)
+            if watch_count == 1 else
+            _t("Morning brief: {changes} changes across {watches} watches", changes=changes_count,
+               watches=watch_count))
+
+
+@_localized
 def build_brief_message(*, recipient: str, date_label: str, items: list,
                         changes_count: int, site_url: str,
                         unsubscribe_url: str, brief_timezone: str = "") -> EmailMessage:
     """Daily digest over all watches of one user (no per-watch mail replaced).
 
     ``brief_timezone`` is the brief's own: watch times in it are written without a
-    zone name, times in another zone name its city."""
+    zone name, times in another zone name its city. ``date_label`` comes from
+    brief_date_label in the same language."""
     watch_count = len(items)
-    subject = (
-        f"Morning brief: {changes_count} change{'s' if changes_count != 1 else ''} "
-        f"across {watch_count} watch{'es' if watch_count != 1 else ''}"
-        if changes_count else
-        f"Morning brief: your {watch_count} watch{'es' if watch_count != 1 else ''}, no material changes"
-    )
+    subject = _brief_subject(changes_count, watch_count)
     watches_url = f"{site_url}/app/watches"
     plain_rows, html_rows = [], []
+    reached_label, changed_label = _t("Reached."), _t("Changed.")
     # Watches with news come first: the digest is scanned top-down and a
     # quiet week should never bury the one line that matters.
     def has_news(entry):
@@ -870,18 +984,19 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
         changes = _brief_changes(item)[:3]
         plain = _ascii(f"- {question}\n  {meta}\n")
         if reached:
-            plain += _ascii(f"  REACHED: {reached}\n")
+            plain += _ascii(f"  {reached_label.rstrip('.').upper()}: {reached}\n")
         for summary in changes:
-            plain += _ascii(f"  CHANGED: {summary}\n")
+            plain += _ascii(f"  {changed_label.rstrip('.').upper()}: {summary}\n")
         if not changes and not reached:
-            plain += "  No material change.\n"
+            plain += "  " + _t("No material change.") + "\n"
         plain += f"  {url}\n"
         plain_rows.append(plain)
 
         news_html = "".join(
             f'<p class="cx-ink" style="margin:8px 0 0;font-size:14px;line-height:1.5;color:{INK}">'
-            f'<strong style="font-weight:600">{label}</strong> {html.escape(text)}</p>'
-            for label, text in ([("Reached.", reached)] if reached else []) + [("Changed.", summary) for summary in changes]
+            f'<strong style="font-weight:600">{html.escape(label)}</strong> {html.escape(text)}</p>'
+            for label, text in ([(reached_label, reached)] if reached else [])
+            + [(changed_label, summary) for summary in changes]
         )
         html_rows.append(
             f'<div class="cx-line" style="padding:16px 0;border-top:1px solid {BORDER}">'
@@ -892,92 +1007,102 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
             f"{html.escape(meta)}</p>{news_html}</div>"
         )
     plain = (
-        f"Your morning brief – {date_label}\n\n"
-        + ("\n".join(plain_rows) if plain_rows else "You have no watches yet.\n")
-        + f"\nOpen your watches: {watches_url}\nUnsubscribe from this brief: {unsubscribe_url}\n"
+        _t("Your morning brief – {date}", date=date_label) + "\n\n"
+        + ("\n".join(plain_rows) if plain_rows else _t("You have no watches yet.") + "\n")
+        + "\n" + _t("Open your watches: {url}", url=watches_url) + "\n"
+        + _t("Unsubscribe from this brief: {url}", url=unsubscribe_url) + "\n"
     )
-    intro = (
-        f"{changes_count} notable change{'s' if changes_count != 1 else ''} since your last brief."
-        if changes_count else "No material changes since your last brief."
-    )
+    if changes_count == 1:
+        intro = _t("{changes} notable change since your last brief.", changes=1)
+    elif changes_count:
+        intro = _t("{changes} notable changes since your last brief.", changes=changes_count)
+    else:
+        intro = _t("No material changes since your last brief.")
     body = (
         f'<p class="cx-soft" style="margin:8px 0 24px;color:{INK_SOFT}">{html.escape(date_label)} · '
         f"{html.escape(intro)}</p>"
         + "".join(html_rows)
-        + _button_html(watches_url, "Open your watches")
+        + _button_html(watches_url, _t("Open your watches"))
     )
     html_body = _shell_html(
-        eyebrow="Morning brief",
-        heading="Your watches this morning",
+        eyebrow=_t("Morning brief"),
+        heading=_t("Your watches this morning"),
         preheader=intro,
         body=body,
-        footer=(
+        footer=_h(
             "You receive this daily digest because you turned on the morning brief. "
-            f'{_link_html(unsubscribe_url, "Turn off the brief", muted=True)} '
-            "– individual watch alerts are unaffected."
+            "{link} – individual watch alerts are unaffected.",
+            link=_link_html(unsubscribe_url, _t("Turn off the brief"), muted=True),
         ),
         width=640,
     )
     return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
+@_localized
 def build_account_setup_message(*, recipient: str, setup_url: str) -> EmailMessage:
     """Sign-up mail: choose a password. Replaces Firebase's "Reset your
     password" template, which this project cannot edit."""
     plain = (
-        "Welcome to consens.io!\n\n"
-        "One step left: choose a password for your account.\n"
+        _t("Welcome to consens.io!") + "\n\n"
+        + _t("One step left: choose a password for your account.") + "\n"
         f"{setup_url}\n\n"
-        "The next page is our login provider's standard page and is titled\n"
-        "\"Reset your password\" - that's the right place. Afterwards you are\n"
-        "taken straight back to consens.io.\n\n"
-        "The link works for one hour. Didn't sign up? Just ignore this email.\n"
+        + _t("The next page is our login provider's standard page and is titled\n"
+             "\"Reset your password\" - that's the right place. Afterwards you are\n"
+             "taken straight back to consens.io.") + "\n\n"
+        + _t("The link works for one hour. Didn't sign up? Just ignore this email.") + "\n"
     )
     body = (
-        f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">Thanks for signing up. '
-        "Choose a password and you're in.</p>"
-        + _button_html(setup_url, "Choose my password")
-        + f'<p class="cx-muted" style="margin:20px 0 0;font-size:14px;color:{MUTED}">The next '
-        "page is our login provider's standard page and is titled “Reset your password” – "
-        "that's the right place. Afterwards you are taken straight back to consens.io.</p>"
+        f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">'
+        + _h("Thanks for signing up. Choose a password and you're in.")
+        + "</p>"
+        + _button_html(setup_url, _t("Choose my password"))
+        + f'<p class="cx-muted" style="margin:20px 0 0;font-size:14px;color:{MUTED}">'
+        + _h("The next page is our login provider's standard page and is titled “Reset your password” – "
+             "that's the right place. Afterwards you are taken straight back to consens.io.")
+        + "</p>"
     )
     html_body = _shell_html(
-        eyebrow="Account",
-        heading="One step left: choose your password",
-        preheader="Choose a password and you're in.",
+        eyebrow=_t("Account"),
+        heading=_t("One step left: choose your password"),
+        preheader=_t("Choose a password and you're in."),
         body=body,
-        footer="The link works for one hour. Didn't sign up? Just ignore this email.",
+        footer=_h("The link works for one hour. Didn't sign up? Just ignore this email."),
     )
-    return _base_message(recipient, "Finish setting up your consens.io account", plain, html_body)
+    return _base_message(recipient, _t("Finish setting up your consens.io account"), plain, html_body)
 
 
+@_localized
 def build_existing_account_message(*, recipient: str, login_url: str,
                                    reset_url: str) -> EmailMessage:
     """Sign-up with an address that already has an account. The sign-up form
     answers identically either way; only the mailbox owner learns this."""
     plain = (
-        "Someone - probably you - just signed up on consens.io with this address,\n"
-        "but it already has an account.\n\n"
-        f"Log in as usual (with Google or your password): {login_url}\n\n"
-        f"Forgot your password? Set a new one (link works for one hour):\n{reset_url}\n\n"
-        "Didn't do this? Just ignore this email - nothing has changed.\n"
+        _t("Someone - probably you - just signed up on consens.io with this address,\n"
+           "but it already has an account.") + "\n\n"
+        + _t("Log in as usual (with Google or your password): {url}", url=login_url) + "\n\n"
+        + _t("Forgot your password? Set a new one (link works for one hour):") + f"\n{reset_url}\n\n"
+        + _t("Didn't do this? Just ignore this email - nothing has changed.") + "\n"
     )
     body = (
-        f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">Someone – probably you – '
-        "just signed up with this address, but it already has an account. Log in as usual, "
-        "with Google or your password.</p>"
-        + _button_html(login_url, "Log in")
-        + f'<p class="cx-muted" style="margin:20px 0 0;font-size:14px;color:{MUTED}">Forgot your '
-        f'password? {_link_html(reset_url, "Set a new one")} (link works for one hour).</p>'
+        f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">'
+        + _h("Someone – probably you – just signed up with this address, but it already has an account. "
+             "Log in as usual, with Google or your password.")
+        + "</p>"
+        + _button_html(login_url, _t("Log in"))
+        + f'<p class="cx-muted" style="margin:20px 0 0;font-size:14px;color:{MUTED}">'
+        + _h("Forgot your password? {link} (link works for one hour).",
+             link=_link_html(reset_url, _t("Set a new one")))
+        + "</p>"
     )
     html_body = _shell_html(
-        eyebrow="Account",
-        heading="You already have an account",
-        preheader="Log in as usual – or set a new password.",
+        eyebrow=_t("Account"),
+        heading=_t("You already have an account"),
+        preheader=_t("Log in as usual – or set a new password."),
         body=body,
-        footer="Didn't do this? Just ignore this email – nothing has changed.",
+        footer=_h("Didn't do this? Just ignore this email – nothing has changed."),
     )
-    return _base_message(recipient, "You already have a consens.io account", plain, html_body)
+    return _base_message(recipient, _t("You already have a consens.io account"), plain, html_body)
 
 
 def deliver_now(message: EmailMessage) -> bool:

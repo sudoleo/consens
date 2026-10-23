@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.i18n_middleware import request_language
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import verify_user_token, AuthenticationUnavailable, auth_unavailable_error
@@ -114,6 +115,7 @@ async def register_user(
             deliver_password_setup_email,
             email,
             setup=created or needs_password_setup(user),
+            language=request_language(request),
         )
         if created:
             background_tasks.add_task(

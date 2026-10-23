@@ -253,17 +253,17 @@ def test_every_visible_english_text_has_german():
 
 
 def test_words_a_script_writes_reach_the_browser():
-    """page-*.json stays on the server; a script's words must be in another file."""
+    """page-*.json and mail.json stay on the server; a script's words must be in another file."""
     client = {}
     for path in _dictionary_files():
-        if not path.name.startswith("page-"):
+        if not i18n.server_only(path):
             client.update({i18n.normalize(key): value for key, value in json.loads(path.read_text(encoding="utf-8")).items()})
     current = i18n.Catalog(client)
     missing = sorted({
         item.key for relative in i18n_tool.script_files() for item in i18n_tool.script_keys(relative)
         if not i18n_tool.covered(current, item.key)
     })
-    assert not missing, "in page-*.json only, the browser never sees them:\n" + "\n".join(missing[:40])
+    assert not missing, "in server-only files, the browser never sees them:\n" + "\n".join(missing[:40])
 
 
 def test_the_engine_files_name_the_same_rules():

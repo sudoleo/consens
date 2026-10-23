@@ -120,12 +120,13 @@ def _password_reset_link(email: str) -> str:
         return auth.generate_password_reset_link(email)
 
 
-def send_own_setup_email(email: str, *, setup: bool) -> bool:
+def send_own_setup_email(email: str, *, setup: bool, language: str = "") -> bool:
     """Our own wording via SMTP; False means "use Firebase's mail instead".
 
     Firebase's "Reset your password" template cannot be edited for this
     project, and a sign-up that arrives as a password reset reads like a
-    mistake. The link itself still comes from Firebase.
+    mistake. The link itself still comes from Firebase. ``language``: the
+    sign-up request's (i18n_middleware).
     """
     if not mailer.is_configured():
         return False
@@ -135,18 +136,18 @@ def send_own_setup_email(email: str, *, setup: bool) -> bool:
         logging.warning("Own setup mail: link generation failed (%s)", safe_exception(exc))
         return False
     if setup:
-        message = mailer.build_account_setup_message(recipient=email, setup_url=link)
+        message = mailer.build_account_setup_message(recipient=email, setup_url=link, language=language)
     else:
         message = mailer.build_existing_account_message(
-            recipient=email, login_url=password_setup_continue_url(), reset_url=link,
+            recipient=email, login_url=password_setup_continue_url(), reset_url=link, language=language,
         )
     return mailer.deliver_now(message)
 
 
-def deliver_password_setup_email(email: str, *, setup: bool = True) -> bool:
+def deliver_password_setup_email(email: str, *, setup: bool = True, language: str = "") -> bool:
     """Background-task wrapper that keeps logs content-free."""
     try:
-        if send_own_setup_email(email, setup=setup):
+        if send_own_setup_email(email, setup=setup, language=language):
             return True
         send_password_setup_email(email)
         return True

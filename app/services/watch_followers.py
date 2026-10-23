@@ -14,6 +14,7 @@ from datetime import datetime
 
 from firebase_admin import firestore
 
+from app.core import i18n
 from app.core.security import db_firestore
 from app.services import follow_challenges, share_snapshots, watch_service
 from app.services.watch_service import (
@@ -106,8 +107,11 @@ def parse_follow_confirm_token(token: str) -> tuple[str, str]:
     return payload["sid"], normalize_email(payload.get("em"))
 
 
-def confirm_follow(token: str, db=None, *, now=None) -> dict:
+def confirm_follow(token: str, db=None, *, now=None, language: str = "") -> dict:
+    """``language``: the confirming click's, for the follower's mails
+    (account_language)."""
     db = db if db is not None else db_firestore
+    language = language if language in i18n.LANGUAGES else i18n.DEFAULT_LANGUAGE
     share_id, email = parse_follow_confirm_token(token)
     ref = db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email))
     share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
@@ -161,8 +165,11 @@ def confirm_follow(token: str, db=None, *, now=None) -> dict:
             transaction.set(ref, {
                 "share_id": share_id,
                 "email": email,
+                "language": language,
                 "created_at": firestore.SERVER_TIMESTAMP,
             })
+        elif (follower_snapshot.to_dict() or {}).get("language") != language:
+            transaction.update(ref, {"language": language})
         return share
 
     share = watch_service._run_transaction(db, persist)
