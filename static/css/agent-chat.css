@@ -465,22 +465,51 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(180deg); }
 .agent-activity.is-closing .agent-activity-chevron { transform: none; }
-.agent-activity-history { display: flow-root; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
-.agent-activity-run-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0 0 18px; font-size: var(--font-size-xs); line-height: 1.65; }
-.agent-activity-run-details[hidden] { display: none; }
-.agent-activity-run-details dt { color: var(--ink-3); }
-.agent-activity-run-details dd { margin: 0; color: var(--agent-ink); overflow-wrap: anywhere; }
-.agent-activity-content {
-  margin: 0 0 8px; overflow-wrap: anywhere;
-}
+/* The opened history is one timeline, no frame and no rule across the
+   column: a dot per entry on a thin rail, the agent's notes in the reading
+   ink of the live run, its steps in the live run's words, the sources as
+   the answer's pills, and the model as a quiet line at the end. Each entry
+   draws its own stretch of the rail, from the gap above it to its bottom,
+   so it never needs to know how tall its neighbour is; the first starts and
+   the last stops at its dot. A ring in the page colour around every dot
+   cuts the rail there. */
+.agent-activity-history { display: flow-root; margin-top: 8px; }
+.agent-activity-timeline { --activity-gap: 14px; --activity-dot: 5px; }
+.agent-activity-content { margin: 0; overflow-wrap: anywhere; }
 .agent-activity-content[hidden] { display: none; }
-.agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 2px; border-radius: 3px; }
+.agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 4px; border-radius: 3px; }
+.agent-activity-content > *, .agent-activity-insight { --dot-y: 11px; position: relative; margin: 0; padding-left: 20px; }
+@supports (top: 1lh) {
+  .agent-activity-content > *, .agent-activity-insight { --dot-y: .5lh; }
+}
+.agent-activity-content > * + *, .agent-activity-insight + .agent-activity-insight,
+.agent-activity-content:not([hidden]) + .agent-activity-insights { margin-top: var(--activity-gap); }
+.agent-activity-content > *::before, .agent-activity-insight::before {
+  content: ''; position: absolute; z-index: 1; left: 0; top: calc(var(--dot-y) - var(--activity-dot) / 2);
+  width: var(--activity-dot); height: var(--activity-dot); border-radius: 50%;
+  background: var(--ink-3); box-shadow: 0 0 0 3px var(--bg-color);
+}
+.agent-activity-content > *::after, .agent-activity-insight::after {
+  content: ''; position: absolute; left: calc(var(--activity-dot) / 2 - .5px); width: 1px;
+  top: calc(-1 * var(--activity-gap)); bottom: 0; background: var(--line);
+}
+.agent-activity-content > :first-child::after,
+.agent-activity-content[hidden] + .agent-activity-insights > .agent-activity-insight:first-of-type::after { top: var(--dot-y); }
+.agent-activity-timeline:not(.has-insights) .agent-activity-content > :last-child::after,
+.agent-activity-insight:last-of-type::after { bottom: calc(100% - var(--dot-y)); }
+.agent-activity-tool[data-status="running"]::before, .agent-activity-current::before { background: var(--agent-ink); }
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .agent-activity.is-running :is(.agent-activity-tool[data-status="running"], .agent-activity-current)::before {
+    animation: activity-dot-breathe var(--dur-beat) var(--ease-standard) infinite;
+  }
+}
+@keyframes activity-dot-breathe { 50% { opacity: .35; } }
 .agent-activity-reasoning { color: var(--agent-trace-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; font-size: var(--font-size-sm); }
-.agent-activity-reasoning + .agent-activity-reasoning { margin-top: 12px; }
-.agent-activity-tool { margin: 12px 0; padding: 0; color: var(--agent-ink); overflow-wrap: anywhere; line-height: 1.65; }
+.agent-activity-tool, .agent-activity-current { color: var(--agent-ink); overflow-wrap: anywhere; font-size: var(--font-size-ui); line-height: 1.65; }
+.agent-activity-current > strong { display: block; font-weight: 500; }
 .agent-progress { display: flow-root; margin: -8px 0 24px; color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; }
-.agent-progress p, .agent-activity-update { margin: 0 0 14px; overflow-wrap: anywhere; }
-.agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; }
+.agent-progress p { margin: 0 0 14px; overflow-wrap: anywhere; }
+.agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; overflow-wrap: anywhere; }
 .agent-progress-step { margin: 0 0 16px; color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
 .agent-current-status { font-weight: 500; }
 /* The live status row starts with the consens mark, drawn as a mask in the
@@ -504,7 +533,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     background-size: 250% 100%; animation: label-shine var(--dur-beat) var(--ease-linear) infinite;
   }
   @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .agent-activity.is-running .agent-activity-tool[data-status="running"] > strong {
+    .agent-activity.is-running :is(.agent-activity-tool[data-status="running"], .agent-activity-current) > strong {
       width: fit-content; max-width: 100%;
       background-image: linear-gradient(105deg, var(--agent-ink) 43%,
         color-mix(in srgb, var(--agent-ink) 45%, var(--bg-color, #fff)) 50%, var(--agent-ink) 57%);
@@ -514,33 +543,45 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     }
   }
 }
-.agent-progress p:last-child, .agent-progress-step:last-child, .agent-activity-update:last-child { margin-bottom: 0; }
+.agent-progress p:last-child, .agent-progress-step:last-child { margin-bottom: 0; }
 .agent-progress-step[hidden] { display: none; }
 .agent-progress[hidden], .agent-activity[open] ~ .agent-progress { display: none; }
-.agent-activity-tool strong { display: block; font-size: var(--font-size-xs); font-weight: 500; }
-.agent-activity-tool p { white-space: pre-wrap; margin: 6px 0; font-size: var(--font-size-xs); }
-.agent-activity-tool a { display: block; width: fit-content; max-width: 100%; margin-top: 5px; color: var(--ink-2); font-size: var(--font-size-xs); text-decoration: underline; text-underline-offset: 3px; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-activity-tool a:hover { color: var(--ink); }
-}
-.agent-activity-tool a:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
-.agent-activity-note, .agent-usage { margin: 8px 0 4px; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
+.agent-activity-tool strong { display: block; font-weight: 400; }
+.agent-activity-tool p { white-space: pre-wrap; margin: 2px 0 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
+/* The sources of a step: the answer's own pills (source-pill.css), set in a
+   row instead of on a line of prose. */
+.agent-activity-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.agent-activity-sources .src-ref { top: 0; margin: 0; }
+/* The end of the history: how the notes came about and the model it ran on,
+   in the quietest ink, one line each. */
+.agent-activity-note, .agent-activity-run-details, .agent-usage { margin: 16px 0 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
+.agent-activity-note:not([hidden]) ~ :is(.agent-activity-run-details, .agent-usage),
+.agent-activity-run-details:not([hidden]) ~ .agent-usage { margin-top: 2px; }
+.agent-activity-run-details[hidden] { display: none; }
 .agent-usage { font-variant-numeric: tabular-nums; }
-.agent-activity-insights { color: var(--agent-ink); border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; overflow-wrap: anywhere; }
+/* A comparison is the timeline's next entry: what was asked, who answered,
+   what came out. The kind of a finding is the colour of its dot. */
+.agent-activity-insights { color: var(--agent-ink); overflow-wrap: anywhere; }
 .agent-activity-insights[hidden] { display: none; }
-.agent-activity-insights h3 { margin: 0 0 16px; font-size: var(--font-size-ui); font-weight: 600; }
-.agent-activity-insight + .agent-activity-insight { margin-top: 20px; }
-.agent-activity-insight h4 { margin: 0 0 8px; font-size: var(--font-size-xs); font-weight: 600; }
-.agent-activity-insight p { margin: 6px 0; font-size: var(--font-size-ui); line-height: 1.65; }
-.agent-activity-focus { font-weight: 500; }
-.agent-activity-insight .agent-activity-models { font-size: var(--font-size-xs); color: var(--ink-2); }
-.agent-activity-check { font-weight: 500; }
-.agent-activity-findings { margin: 8px 0; padding-left: 18px; line-height: 1.65; }
-.agent-activity-findings li + li { margin-top: 5px; }
-.agent-activity-insight-actions { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; }
-.agent-activity-insight-actions button { color: var(--ink-2); background: none; border: 0; padding: 7px 0; font: inherit; font-size: var(--font-size-xs); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-activity-insight { font-size: var(--font-size-ui); line-height: 1.65; }
+.agent-activity-insight h4 { margin: 0; font: inherit; color: var(--agent-ink); }
+.agent-activity-insight p { margin: 2px 0 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
+.agent-activity-insight .agent-activity-focus { margin-top: 4px; font-size: var(--font-size-sm); color: var(--agent-ink); }
+.agent-activity-findings { list-style: none; margin: 6px 0 0; padding: 0; font-size: var(--font-size-sm); line-height: 1.6; color: var(--agent-ink); }
+.agent-activity-findings li { position: relative; padding-left: 14px; }
+.agent-activity-findings li + li { margin-top: 4px; }
+.agent-activity-findings li:not([data-type]) { color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-activity-findings li[data-type]::before {
+  content: ''; position: absolute; left: 0; top: calc(.8em - 3px); width: 6px; height: 6px; border-radius: 50%; background: var(--partial);
+}
+.agent-activity-findings li[data-type="contradiction"]::before { background: var(--dispute); }
+.agent-activity-insight-actions { display: flex; flex-wrap: wrap; gap: 0 18px; margin-top: 4px; }
+.agent-activity-insight-actions .consensus-tab {
+  width: auto; min-height: 36px; justify-content: flex-start; padding: 6px 0; border-radius: 0; background: none;
+  color: var(--ink-2); font-size: var(--font-size-xs); text-align: left; text-decoration: none; cursor: pointer;
+}
 @media (hover: hover) and (pointer: fine) {
-  .agent-activity-insight-actions button:hover { color: var(--agent-ink); }
+  .agent-activity-insight-actions button:hover { color: var(--ink); }
 }
 .agent-activity-insight-actions button:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
 .agent-activity-insight-actions button:focus-visible { outline: var(--focus-ring); outline-offset: 3px; border-radius: 2px; }

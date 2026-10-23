@@ -76,10 +76,10 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(preview.locator('.agent-current-status')).to_have_text('Thinking…')
         thinking_details = page.locator('#agentAnswerActivity details')
         thinking_details.locator('.agent-activity-title').click()
-        expect(thinking_details.locator('.agent-activity-run-details')).to_be_visible()
-        expect(thinking_details.locator('.agent-activity-run-details')).to_contain_text('DeepSeek V4.1 Flash')
-        expect(thinking_details.locator('.agent-activity-run-details')).to_contain_text('Thinking…')
-        expect(thinking_details.locator('.agent-activity-run-details')).to_contain_text('Model default')
+        # Before any step: what it does now, then the model it runs on (its
+        # default reasoning goes unsaid).
+        expect(thinking_details.locator('.agent-activity-current')).to_have_text('Thinking…')
+        expect(thinking_details.locator('.agent-activity-run-details')).to_have_text('DeepSeek V4.1 Flash')
         page.wait_for_function("""() => {
           const host = document.getElementById('agentAnswerActivity');
           return getComputedStyle(host.querySelector('.agent-activity-history')).opacity === '1'
@@ -130,11 +130,11 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         details = page.locator("#agentAnswerActivity details")
         expect(details).to_have_attribute("open", "")
         expect(preview).not_to_be_visible()
-        expect(details.locator('.agent-activity-run-details')).to_contain_text('DeepSeek V4.1 Flash')
-        expect(details.locator('.agent-activity-run-details')).to_contain_text('Checking the answer…')
+        expect(details.locator('.agent-activity-run-details')).to_have_text('DeepSeek V4.1 Flash')
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
+        # The steps in the live run's words; the running one is what it does now.
         expect(details.locator('.agent-activity-tool strong')).to_have_text([
-            'Model comparison · Completed', 'Answer check · Working…'])
+            'Compared perspectives', 'Checking the answer…'])
         _snapshot(page, f'agent-live-expanded-{snapshot_variant}')
         if quiet != 'colors':
             assert details.locator('.agent-activity-update').first.evaluate('el => getComputedStyle(el).color') == trace_color

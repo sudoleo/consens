@@ -190,7 +190,9 @@
     host._activitySignature = signature;
     host.replaceChildren();
     if (!comparisons.length) return;
-    host.append(node('h3', '', 'Comparison details'));
+    // The comparisons continue the timeline (agent-chat.css); the heading
+    // stays for screen readers only.
+    host.append(node('h3', 'visually-hidden', 'Comparison details'));
     comparisons.forEach((comparison, index) => {
       const card = node('section', 'agent-activity-insight');
       const answers = comparison.answers || [], missing = comparison.failed_models || [];
@@ -217,7 +219,10 @@
         const list = node('ul', 'agent-activity-findings');
         for (const difference of differences.slice(0, 3)) {
           const text = difference.claim || difference.consensus_anchor;
-          if (text) list.append(node('li', '', `${difference.type === 'contradiction' ? 'Disagreement' : 'Difference'}: ${text}`));
+          if (!text) continue;
+          const item = node('li', '', `${difference.type === 'contradiction' ? 'Disagreement' : 'Difference'}: ${text}`);
+          item.dataset.type = difference.type === 'contradiction' ? 'contradiction' : 'difference';
+          list.append(item);
         }
         if (differences.length > 3) list.append(node('li', '', `${differences.length - 3} more in the detailed review.`));
         card.append(list);

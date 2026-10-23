@@ -353,7 +353,10 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(insights).to_contain_text('Compare cost and flexibility')
         expect(insights).to_contain_text('6 model answers')
         expect(insights).to_contain_text('Disagreement: Whether the smaller plan includes five seats')
-        expect(details.locator('.agent-activity-history')).to_contain_text('Read source · example.org')
+        # The read page is the step's pill: its domain, the live run's verb.
+        read = details.locator('.agent-activity-tool', has_text='Read source')
+        expect(read.locator('strong')).to_have_text('Read source')
+        expect(read.locator('.agent-activity-sources .src-ref')).to_have_text('example.org')
         expect(insights).to_have_css('opacity', '1')
         page.wait_for_function("""() => {
           const host = document.getElementById('agentAnswerActivity');
@@ -836,7 +839,7 @@ def test_live_comparison_quotes_model_reasoning_in_turn_only_while_comparing(bro
         activity = page.locator("#agentAnswerActivity")
         activity.locator(".agent-activity-title").click()
         expect(activity.locator(".agent-activity-history")).to_be_visible()
-        expect(activity).to_contain_text("Model comparison")
+        expect(activity).to_contain_text("Compared perspectives")
         expect(activity).not_to_contain_text("Comparing the seat limits")
         expect(activity).not_to_contain_text("Gemini 3.5 Flash-Lite:")
         expect(activity.locator(".agent-progress")).to_be_hidden()

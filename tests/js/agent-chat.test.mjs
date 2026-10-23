@@ -418,7 +418,7 @@ describe("single-model agent chat", () => {
     // A turn with an answer check of its own keeps the usual words.
     review.checks.push({comparison_id:'c2',status:'succeeded'});
     w.App.agentActivity.render(host, {events, review});
-    expect(host.textContent).toContain('Answer check · Completed');
+    expect(host.textContent).toContain('Checked the answer');
     expect(host.textContent).not.toContain('Checked your text');
     dom.window.close();
   });
@@ -430,7 +430,7 @@ describe("single-model agent chat", () => {
       {kind:'tool',id:'s',name:'check_contradictions',status:'succeeded'}];
     w.App.agentActivity.render(host, {events, review: {checks:[{comparison_id:'c1',status:'succeeded'}]}});
     expect(host.querySelectorAll('.agent-activity-tool')).toHaveLength(1);
-    expect(host.textContent).toContain('Answer check · Completed');
+    expect(host.textContent).toContain('Checked the answer');
     expect(host.textContent).not.toMatch(/source check|Tool ·/i);
     dom.window.close();
   });
@@ -442,7 +442,7 @@ describe("single-model agent chat", () => {
     const events = [{kind:'tool',id:'c',name:'check_text',status:'succeeded'},
       {kind:'tool',id:'a',name:'answer',status:'succeeded'}];
     w.App.agentActivity.render(host, {events});
-    expect(host.textContent).toContain('Text check · Completed');
+    expect(host.textContent).toContain('Checked your text against independent answers');
     expect(host.textContent).not.toContain('Tool ·');
     const highlights = [{id:'h', label:'Gemini', text:'Checking the figures.'}];
     w.App.agentActivity.render(host, {running:true, events:[{kind:'tool',id:'c',name:'check_text',status:'running'}], highlights});
@@ -603,7 +603,7 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('.agent-progress-action')).toBe(null);
     window.App.agentActivity.render(host, { events, running: false });
     expect(host.querySelector('.agent-progress').hidden).toBe(true);
-    expect(host.querySelector('.agent-activity-tool strong').textContent).toBe('Model comparison · Completed');
+    expect(host.querySelector('.agent-activity-tool strong').textContent).toBe('Compared perspectives');
     dom.window.close();
   });
 
@@ -859,7 +859,7 @@ describe("single-model agent chat", () => {
       expect(preview.hidden).toBe(true);
       expect(preview.childElementCount).toBe(0);
       // The step stays named in the history (and the answer shows its check).
-      expect(host.querySelector('.agent-activity-run-details [role="status"]').textContent).toBe('Checking the answer…');
+      expect(host.querySelector('.agent-activity-tool[data-status="running"] strong').textContent).toBe('Checking the answer…');
       activity.receive(events, {version:1, id:name, kind:'tool', name, status:'succeeded'});
     }
     activity.render(host, {events, running:false, answerText:'The answer begins and ends.'});
@@ -930,14 +930,18 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('.agent-current-status').textContent).toBe('Reading arxiv.org…');
     w.App.agentActivity.render(host, {running:true, events:[{id:'r', kind:'tool', name:'read_source', status:'running'}]});
     expect(host.querySelector('.agent-current-status').textContent).toBe('Reading a source…');
-    // The saved history names the host too, and never calls a failed read "Completed".
+    // The saved history names the host in the source's pill, and never calls
+    // a failed read "Completed".
     const history = event => {
       w.App.agentActivity.render(host, {running:false, events:[event]});
       return host.querySelector('.agent-activity-tool strong').textContent;
     };
     expect(history({...read, status:'succeeded', read:'completed', sources:[{url:'https://arxiv.org/a', title:'Paper'}]}))
-      .toBe('Read source · arxiv.org');
-    expect(host.querySelector('.agent-activity-tool a').textContent).toBe('Paper');
+      .toBe('Read source');
+    const pill = host.querySelector('.agent-activity-tool .agent-activity-sources a.src-ref');
+    expect(pill.textContent).toBe('arxiv.org');
+    expect(pill.href).toBe('https://arxiv.org/a');
+    expect(pill.rel).toBe('noopener noreferrer');
     expect(history({...read, id:'r2', status:'succeeded', read:'failed'})).toBe('Could not read · arxiv.org');
     dom.window.close();
   });
@@ -962,8 +966,9 @@ describe("single-model agent chat", () => {
     const details = host.querySelector('details');
     details.querySelector('summary').click();
     expect(details.open).toBe(true);
-    expect([...details.querySelectorAll('.agent-activity-run-details dd')].map(el => el.textContent))
-      .toEqual(['DeepSeek V4.1 Flash','High','Thinking…']);
+    // The model at the end of the history, what it does now as the timeline's last entry.
+    expect(details.querySelector('.agent-activity-run-details').textContent).toBe('DeepSeek V4.1 Flash · High reasoning');
+    expect(details.querySelector('.agent-activity-content > :last-child').textContent).toBe('Thinking…');
     w.App.agentActivity.render(host, {running:true,settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'},responding:true});
     expect(details.querySelector('[role="status"]').textContent).toBe('Writing answer…');
     expect(details.open).toBe(true);
@@ -1035,7 +1040,7 @@ describe("single-model agent chat", () => {
     const details = d.querySelector('#agentAnswerActivity details');
     details.querySelector('summary').click();
     expect(details.querySelector('.agent-activity-update').textContent).toBe('Ich prüfe die Belege.');
-    expect(details.querySelector('.agent-activity-tool').textContent).toContain('Completed');
+    expect(details.querySelector('.agent-activity-tool').textContent).toBe('Checked the answer');
     dom.window.close();
   });
 
@@ -1568,7 +1573,9 @@ describe("single-model agent chat", () => {
     window.App.agentActivity.renderTurn(host, { agent_activity: events, agent_usage: {
       input_tokens: 100, output_tokens: 20, complete: false, estimated_cost_nano_usd: 10000000 } });
     expect(host.textContent).toContain("Activity");
-    expect(host.textContent).toContain("Web search · Completed · 1 search");
+    // In the live run's words; the source is a pill with its domain, never the title's markup.
+    expect(host.querySelector(".agent-activity-tool strong").textContent).toBe("Searched the web");
+    expect(host.querySelector(".agent-activity-sources .src-ref").textContent).toBe("example.com");
     expect(host.textContent).toContain("usage incomplete");
     expect(host.querySelector("img")).toBe(null);
     expect(host.querySelectorAll("a")).toHaveLength(1);

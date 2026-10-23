@@ -944,7 +944,9 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         details = page.locator("#agentAnswerActivity details")
         expect(details.locator("summary")).to_have_text("Thought for 18s")
         details.locator("summary").click()
-        expect(details.locator(".agent-activity-tool")).to_contain_text("Web search · Completed · 2 searches")
+        # The live run's words; the sources are the answer's pills, by domain.
+        expect(details.locator(".agent-activity-tool strong")).to_have_text("Searched the web")
+        expect(details.locator(".agent-activity-sources .src-ref")).to_have_text(["example.com", "example.org"])
         expect(details.locator("a")).to_have_count(2)
         expect(details.locator("a").first).to_have_attribute("rel", "noopener noreferrer")
         details.scroll_into_view_if_needed()

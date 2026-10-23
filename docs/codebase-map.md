@@ -4939,7 +4939,22 @@ Ereignisreihenfolge ab. Laufende Schritte aktualisieren sich im selben DOM-Knote
 zu abgeschlossenen Schritten; ohne aktives Tool steht der aktuelle Thinking-/
 Writing-/Review-Status am Ende. Fortschrittsabsätze sind im hellen Modus dunkelgrau
 und im dunklen hellgrau, damit sie sich von der Antwort abheben. Arbeitsschritte
-bleiben schwarz bzw. weiß; in Forced Colors gilt für beide `CanvasText`.
+tragen dieselbe Sekundärtinte; in Forced Colors gilt für beide `CanvasText`.
+Aufgeklappt ist der Verlauf seit 2026-10-23 eine Zeitleiste ohne Rahmen und
+ohne Linie über die Spalte (`.agent-activity-timeline`): je Eintrag ein Punkt
+auf einer dünnen Schiene, die jeder Eintrag selbst zeichnet (vom Abstand
+darüber bis zu seinem Ende; der erste beginnt, der letzte endet am Punkt).
+Schritte stehen in den Worten des Live-Laufs (`historyTitle`: „Searched the
+web“, „Read source“, „Checked the answer“; Fehlschläge weiter „Web search ·
+Failed“), ihre Quellen als die Pillen der Antwort (`createSourceRef` aus
+`sources.js`, Zeile `.agent-activity-sources`, Vorschau beim Hover). Läuft der
+Turn ohne aktives Tool, ist `.agent-activity-current` (`role="status"`) der
+letzte Eintrag. Die Vergleiche (`agent-review.js` `renderActivity`) sind die
+nächsten Einträge (Überschrift nur für Screenreader, der Punkt eines Funds in
+Ampelfarbe); am Ende steht leise `.agent-activity-run-details` mit
+`label(settings)` (Modell, Reasoning nur wenn nicht Standard). Der Container
+`.agent-answer-activity` ist `flow-root`, damit beim Auf- und Zuklappen nichts
+darunter springt (`tests/e2e/test_agent_activity_motion_frontend.py`).
 `ProgressArgs.status_update` ergänzt die Tools
 `compare_models`, `check_text` und `read_source` um maximal 400 Zeichen (bis 2026-10-14 auch `answer`);
 für ältere Aufrufer ist das Feld optional. Der injizierte Produktprompt verlangt

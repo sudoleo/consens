@@ -392,22 +392,39 @@
     return `${settings.label}${effort && effort !== "default" ? ` · ${effort === "none" ? "Reasoning off" : `${effortName(effort)} reasoning`}` : ""}`;
   }
 
-  function renderRunDetails(view, settings, running, heading) {
-    const rows = [];
-    if (settings?.label) rows.push(['Chat model', settings.label]);
-    if (settings?.reasoning_effort) rows.push(['Reasoning', effortName(settings.reasoning_effort)]);
-    if (running) rows.push(['Current step', heading]);
-    const signature = JSON.stringify(rows);
-    view.runDetails.hidden = !rows.length;
-    if (view.runDetails.dataset.signature === signature) return;
-    view.runDetails.dataset.signature = signature;
-    view.runDetails.replaceChildren();
-    for (const [label, text] of rows) {
-      const term = document.createElement('dt'), value = document.createElement('dd');
-      term.textContent = label; value.textContent = text;
-      if (label === 'Current step') value.setAttribute('role', 'status');
-      view.runDetails.append(term, value);
+  // The model the turn ran on, with its reasoning only when it was not the
+  // model's default (the same words as the answer's label).
+  function renderRunDetails(view, settings) {
+    const text = settings?.label ? label(settings) : '';
+    view.runDetails.hidden = !text;
+    if (view.runDetails.dataset.label !== text) {
+      view.runDetails.dataset.label = text;
+      view.runDetails.textContent = text;
     }
+  }
+  // A step in the timeline says what happened in the words of the live run
+  // ("Searched the web"); its sources follow as the answer's pills.
+  const failedSteps = { failed: "Failed", blocked: "Skipped · allowance kept for the answer", cancelled: "Stopped", unknown: "Usage unavailable" };
+  function historyTitle(item, textOnly, linked) {
+    if (item.status === 'succeeded' && linked && !textOnly) {
+      if (item.name === 'web_search') return tools.web_search[2];
+      if (item.name === 'read_source' && item.read === 'completed') return tools.read_source[2];
+    }
+    if (failedSteps[item.status] && !(item.name === 'read_source' && readSummary(item))) {
+      const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
+      return `${toolName(item.name)} · ${failedSteps[item.status]}${count}`;
+    }
+    return stepLabel(item, textOnly);
+  }
+  function sourcePill(url, title) {
+    // sources.js builds the answer's pill (favicon, domain, preview on hover).
+    if (typeof window.createSourceRef === 'function') return window.createSourceRef([{ src: { url: url.href, title }, token: url.href }]);
+    const link = document.createElement('a');
+    link.className = 'src-ref';
+    link.href = url.href;
+    link.textContent = url.hostname.replace(/^www\./, '');
+    if (title) link.title = title;
+    return link;
   }
 
   function render(host, spec) {
@@ -469,15 +486,24 @@
       preview.setAttribute('aria-relevant', 'additions text');
       preview.setAttribute('aria-label', 'Progress updates');
       const history = document.createElement('div'); history.className = 'agent-activity-history';
-      const runDetails = document.createElement('dl'); runDetails.className = 'agent-activity-run-details';
+      // One timeline: the agent's notes and its steps in order, then what the
+      // comparisons found; the model it ran on is a quiet line at the end.
+      const timeline = document.createElement('div'); timeline.className = 'agent-activity-timeline';
+      const runDetails = document.createElement('p'); runDetails.className = 'agent-activity-run-details';
       const insights = document.createElement('div'); insights.className = 'agent-activity-insights'; insights.hidden = true;
+      // While it runs and no step is under way: what it does now, the last
+      // entry of the timeline (the preview's line, hidden while this is open).
+      const current = document.createElement('p'); current.className = 'agent-activity-current';
+      current.setAttribute('role', 'status');
+      current.append(document.createElement('strong'));
       history.inert = true;
-      history.append(runDetails, content, insights, note, usageEl);
+      timeline.append(content, insights);
+      history.append(timeline, note, runDetails, usageEl);
       details.append(summary, history);
       // Progress shows at the model icons in the summary (agent-chat.css,
       // "Progress at the models"), not on a line of its own.
       host.replaceChildren(details, preview);
-      host._agentActivity = { details, summary, history, title, runDetails, insights, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
+      host._agentActivity = { details, summary, history, title, timeline, runDetails, insights, content, current, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
       summary.addEventListener('click', event => {
         event.preventDefault();
         const view = host._agentActivity;
@@ -517,7 +543,7 @@
     const settled = status === 'failed' && !running && answerText
       && App.agentReview?.failureNote?.({error: 'failed'}, review, answerText) === '';
     updateClock(view, elapsedMs, running, settled ? 'succeeded' : status);
-    renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings, running, heading);
+    renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings);
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
     // Completion collapses a manually opened live history only offscreen
@@ -634,32 +660,31 @@
         if (node.dataset.signature !== signature) {
           node.dataset.signature = signature;
           node.dataset.status = item.status;
+          const pills = [];
+          for (const source of (Array.isArray(item.sources) ? item.sources : []).slice(0, 5)) {
+            try {
+              if (typeof source.url !== "string" || source.url.length > 2048) continue;
+              const url = new URL(source.url);
+              if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) continue;
+              const pill = sourcePill(url, String(source.title || '').slice(0, 200));
+              pill.target = "_blank";
+              pill.rel = "noopener noreferrer";
+              pills.push(pill);
+            } catch (_) { /* Ignore invalid provider URLs. */ }
+          }
           const title = document.createElement("strong");
-          const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Skipped · allowance kept for the answer", cancelled: "Stopped", unknown: "Usage unavailable" };
-          const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
-          title.textContent = item.status === 'succeeded' && textOnly && textOnlySteps[item.name]
-            ? textOnlySteps[item.name]
-            // A read source names its host; "Completed" would hide a page that could not be read.
-            : (item.name === 'read_source' && readSummary(item))
-              || `${toolName(item.name)} · ${toolStatus[item.status] || "Details"}${count}`;
+          title.textContent = historyTitle(item, textOnly, pills.length > 0);
           node.replaceChildren(title);
           if (item.text) {
             const text = document.createElement("p");
             text.textContent = String(item.text).slice(0, 8000);
             node.appendChild(text);
           }
-          for (const source of (Array.isArray(item.sources) ? item.sources : []).slice(0, 5)) {
-            try {
-              if (typeof source.url !== "string" || source.url.length > 2048) continue;
-              const url = new URL(source.url);
-              if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) continue;
-              const link = document.createElement("a");
-              link.href = url.href;
-              link.target = "_blank";
-              link.rel = "noopener noreferrer";
-              link.textContent = String(source.title || url.hostname).slice(0, 200);
-              node.appendChild(link);
-            } catch (_) { /* Ignore invalid provider URLs. */ }
+          if (pills.length) {
+            const row = document.createElement("span");
+            row.className = "agent-activity-sources";
+            row.append(...pills);
+            node.appendChild(row);
           }
         }
       } else {
@@ -669,8 +694,16 @@
       }
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
-    view.content.hidden = !progress.length && !reasoning.length && !tools.length;
+    const currentStep = running && (!activeTool || waiting || reconnecting) ? heading : '';
+    if (currentStep) {
+      const label = view.current.firstElementChild;
+      if (label.textContent !== window.App.t(currentStep)) label.textContent = currentStep;
+      // Moved only when something was added after it: a move restarts its shine.
+      if (view.content.lastElementChild !== view.current) view.content.append(view.current);
+    } else view.current.remove();
+    view.content.hidden = !progress.length && !reasoning.length && !tools.length && !currentStep;
     App.agentReview?.renderActivity(view.insights, review, answerText);
+    view.timeline.classList.toggle('has-insights', !view.insights.hidden);
     view.note.textContent = progress.length || !view.insights.hidden ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
       ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
       : !reasoning.length ? (running ? "Waiting for the model’s response."
