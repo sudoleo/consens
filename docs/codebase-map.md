@@ -1726,7 +1726,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (übernimmt die gemeldete Revision für den nächsten Save). Alte Clients ohne
   `expected_revision` erhalten 409 mit Reload-Hinweis statt still neuere Inhalte
   zu überschreiben; das Bewahren fehlender Legacy-`notes` bleibt für interne
-  Aufrufer erhalten. Ein Reload nach Remember/Correct/Undo
+  Aufrufer erhalten. Liegt die gespeicherte Notiz über dem aktuellen Limit
+  (Pro → Free, Admin senkt `memory_*_chars`), zeigt `GET` nur die gekappte
+  Ansicht; ein `PUT`, das genau diese Ansicht oder keine Notiz schickt
+  (Schalter, anderes Feld), lässt den vollen Text gespeichert. Erst eine
+  geänderte Notiz ersetzt ihn. Ein Reload nach Remember/Correct/Undo
   (`load(true, {keepDraft: true})`) überschreibt einen ungespeicherten
   Settings-Entwurf nicht. Der Schalter speichert immer
   den zuletzt **gespeicherten** Textstand und lässt den Entwurf in den Feldern

@@ -489,15 +489,29 @@ class FirestoreUserMemoryRepository:
             current_revision = max(0, int((previous or {}).get("revision") or 0))
             if expected_revision is not None and int(expected_revision) != current_revision:
                 raise MemoryRevisionConflict(current_revision)
+            stored_notes = (previous or {}).get(NOTES_FIELD, "")
             if preserve_existing_notes:
-                raw[NOTES_FIELD] = (previous or {}).get(NOTES_FIELD, "")
+                raw[NOTES_FIELD] = stored_notes
             if preserve_auto_memory:
                 raw["auto_memory"] = (previous or {}).get("auto_memory") is True
             clean = sanitize_profile(raw, max_notes_chars=max_notes_chars)
+            stored = dict(clean)
+            # Ein gesunkenes Notizlimit (Pro -> Free, Admin) kappt nur die
+            # Ansicht. Kommt genau diese Ansicht zurueck (Schalter, anderes
+            # Feld) oder gar keine Notiz, bleibt der volle Text gespeichert;
+            # nur eine bewusste Aenderung der Notiz ersetzt ihn.
+            full_notes = _clean_notes(
+                stored_notes, len(stored_notes) if isinstance(stored_notes, str) else 0
+            )
+            if (
+                len(full_notes) > len(clean[NOTES_FIELD])
+                and clean[NOTES_FIELD] == _clean_notes(full_notes, max_notes_chars)
+            ):
+                stored[NOTES_FIELD] = full_notes
             revision = current_revision + 1
             transaction.set(
                 profile_ref,
-                {**clean, "revision": revision, "updated_at": written},
+                {**stored, "revision": revision, "updated_at": written},
             )
             saved["profile"] = clean
             saved["revision"] = revision

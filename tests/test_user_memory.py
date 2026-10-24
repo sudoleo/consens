@@ -285,6 +285,36 @@ def test_deliberate_clear_with_current_revision_still_works(repository):
     assert cleared["role"] == "" and cleared["notes"] == ""
 
 
+def test_a_lower_note_limit_never_cuts_the_stored_note_on_an_unrelated_save(repository):
+    # Pro -> Free: the stored note is longer than the new limit. GET shows the
+    # clipped view; a switch or a role change sends that view (or no note) back.
+    long_note = "\n".join(f"Line {index}: keep me." for index in range(40))
+    _, revision = repository.save_with_revision(
+        UID, {"notes": long_note}, max_notes_chars=24_000, expected_revision=0
+    )
+    view, _ = repository.get_with_revision(UID, max_notes_chars=100)
+    assert len(view["notes"]) <= 100
+
+    saved, revision = repository.save_with_revision(
+        UID, {**view, "enabled": False}, max_notes_chars=100, expected_revision=revision
+    )
+    assert saved["notes"] == view["notes"]
+    _, revision = repository.save_with_revision(
+        UID, {"role": "Doctor", "enabled": False}, max_notes_chars=100, expected_revision=revision
+    )
+
+    stored = repository._profile_ref(UID).doc.data
+    assert stored["notes"] == long_note
+    assert stored["enabled"] is False and stored["role"] == "Doctor"
+    assert repository.get(UID, max_notes_chars=24_000)["notes"] == long_note
+
+    edited, _ = repository.save_with_revision(
+        UID, {"notes": "Only this now."}, max_notes_chars=100, expected_revision=revision
+    )
+    assert edited["notes"] == "Only this now."
+    assert repository._profile_ref(UID).doc.data["notes"] == "Only this now."
+
+
 def test_repository_write_is_fenced_by_the_account_tombstone(monkeypatch):
     calls = []
 
