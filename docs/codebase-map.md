@@ -1792,7 +1792,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Abbruch bzw. ein nie wiederholter Auftrag endet über Retry oder Retention
   terminal als `failed/interrupted` (HTTP 409) und gibt die In-flight-Lease frei.
   Idempotente Wiederholungen rufen Luna nie erneut auf. Provider-begonnene
-  Fehler bleiben budgetiert.
+  Fehler bleiben budgetiert. Der Browser behält die Request-ID deshalb nur,
+  solange keine Serverantwort kam (Netz, Gateway, `processing`) oder der Server
+  `edit_in_progress`/`lease_lost` meldet; nach jeder anderen Absage mit
+  `error_code` sendet ein erneuter Versuch eine neue ID.
   `memory-edit.js` bindet Auswahl, Dialog, Request und Undo-Toast an
   `{uid, App.authState.generation}`: ein Kontowechsel schließt Dialog und Toast,
   verwirft Auswahl/Request-ID und bricht den Fetch ab; vor dem Absenden sowie

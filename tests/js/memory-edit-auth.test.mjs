@@ -21,8 +21,8 @@ function boot() {
     body: '<textarea id="questionInput">Account A preference</textarea>',
     before(window) {
       window.auth = { currentUser: account("A") };
-      window.fetch = (url, options) => new Promise(resolve => {
-        requests.push({ url, options, resolve });
+      window.fetch = (url, options) => new Promise((resolve, reject) => {
+        requests.push({ url, options, resolve, reject });
       });
     },
   });
@@ -143,5 +143,53 @@ describe("memory edit dialog ownership", () => {
     expect(JSON.parse(ctx.requests[0].options.body).selected_text).toBe("Account A preference");
     expect(ctx.window.App.userMemory.load).toHaveBeenCalledWith(true, { keepDraft: true });
     expect(undoToast(ctx).textContent).toContain("Added to Memory");
+  });
+});
+
+describe("memory edit retries", () => {
+  const requestId = request => JSON.parse(request.options.body).client_request_id;
+
+  it("sends a fresh request id after the server refused this one for good", async () => {
+    const ctx = boot();
+    selectAndOpen(ctx);
+    submit(ctx);
+    await settle();
+    // Luna failed: the server marks this id failed and would answer every
+    // repeat with "already failed" without calling Luna again.
+    ctx.requests[0].resolve({
+      ok: false,
+      status: 502,
+      json: async () => ({ detail: { error_code: "provider_failed", message: "Luna could not prepare the memory edit. Please try later." } }),
+    });
+    await settle();
+    expect(ctx.document.getElementById("memoryEditStatus").dataset.kind).toBe("error");
+
+    submit(ctx);
+    await settle();
+
+    expect(ctx.requests).toHaveLength(2);
+    expect(JSON.parse(ctx.requests[1].options.body).correction).toBe("Account A preference");
+    expect(requestId(ctx.requests[1])).not.toBe(requestId(ctx.requests[0]));
+  });
+
+  it("repeats the same request id when no answer from the server arrived", async () => {
+    const ctx = boot();
+    selectAndOpen(ctx);
+    submit(ctx);
+    await settle();
+    // The edit may have been applied: only the same id keeps a retry from
+    // applying it twice.
+    ctx.requests[0].reject(new TypeError("Failed to fetch"));
+    await settle();
+    submit(ctx);
+    await settle();
+    ctx.requests[1].resolve({ ok: false, status: 504, json: async () => ({}) });
+    await settle();
+    submit(ctx);
+    await settle();
+
+    expect(ctx.requests).toHaveLength(3);
+    expect(requestId(ctx.requests[1])).toBe(requestId(ctx.requests[0]));
+    expect(requestId(ctx.requests[2])).toBe(requestId(ctx.requests[0]));
   });
 });

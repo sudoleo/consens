@@ -459,6 +459,9 @@
     if (!same) resetForAuthChange();
   }
 
+  // Another worker still holds this request; its result answers a repeat.
+  const RETRY_SAME_REQUEST = new Set(["edit_in_progress", "lease_lost"]);
+
   async function submitEdit() {
     if (state.busy || !state.selection) return;
     const binding = state.binding;
@@ -493,6 +496,13 @@
       if (error?.stale || epoch !== state.epoch) {
         if (epoch === state.epoch) resetForAuthChange();
         return;
+      }
+      // The server's own refusal (it names a code) is final for this id: a
+      // repeat would only hear "already failed". Without an answer (network,
+      // gateway) the edit may have been applied, so the same id stays.
+      if (error?.code && !RETRY_SAME_REQUEST.has(error.code)) {
+        state.requestId = null;
+        state.requestFeedback = null;
       }
       showFieldError(window.App.userError(error, { fallback: "Memory couldn’t be updated. Try again." }));
     } finally {
