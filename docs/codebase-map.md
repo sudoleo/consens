@@ -4777,6 +4777,10 @@ Kurze Agent-Transaktionen teilen innerhalb eines Prozesses einen kontogebundenen
 Lock-Pool, damit parallele Claims, Statusmeldungen und Abrechnungen nicht um
 dieselben Root-/Kontingentdokumente konkurrieren. Firestore bleibt die atomare
 Absicherung zwischen Prozessen; Modellaufrufe laufen weiterhin parallel.
+Bricht Firestore bei solcher Konkurrenz schon ein Lesen ab (das SDK wiederholt
+nur abgebrochene Commits), beginnt `ChatStore._transaction` die Transaktion bis
+zu `TRANSACTION_READ_ATTEMPTS`-mal neu, statt einen Stopp oder Claim scheitern
+zu lassen (seit 2026-10-24).
 **Wartezeit im Server (seit 2026-10-21).** Weil alle Transaktionen eines Kontos
 hintereinander laufen, darf keine davon zwischen einem Modell-Stream und dem
 Server stehen, und jede liest ihre Dokumente in einem Rundgang:

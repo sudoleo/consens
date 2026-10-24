@@ -13,14 +13,17 @@ import hmac
 import json
 import logging
 import os
+import random
 import re
 import secrets
+import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Callable, TypeVar
 
 from firebase_admin import firestore
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+from google.api_core.exceptions import Aborted
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 
@@ -53,6 +56,8 @@ PROVIDER_DOCUMENT_IDS = {
     label: provider for provider, label in cfg.PROVIDER_LABEL_BY_ID.items()
 }
 MAX_MODEL_ANSWERS = cfg.MAX_RUN_FAMILIES
+# Neue Anlaeufe einer Transaktion, deren Lesen Firestore abbricht (_transaction).
+TRANSACTION_READ_ATTEMPTS = 4
 FAILED_TURN_ERROR_CODES = frozenset({
     "agent_failed",
     "consensus_failed",
@@ -1323,13 +1328,22 @@ class ChatStore:
         fake_runner = getattr(self.db, "run_transaction", None)
         if callable(fake_runner):
             return fake_runner(operation)
-        transaction = self.db.transaction(max_attempts=12)
 
         @firestore.transactional
         def run(tx):
             return operation(tx)
 
-        return run(transaction)
+        # Das SDK wiederholt eine Transaktion nur, wenn ihr Commit abbricht.
+        # Unter Konkurrenz kann Firestore schon ein Lesen abbrechen (die
+        # juengere von zwei Transaktionen weicht; der Emulator per Lock-
+        # Timeout) -- dann beginnt sie neu, statt als Fehler zu enden.
+        for attempt in range(TRANSACTION_READ_ATTEMPTS):
+            try:
+                return run(self.db.transaction(max_attempts=12))
+            except Aborted:
+                if attempt == TRANSACTION_READ_ATTEMPTS - 1:
+                    raise
+                time.sleep(random.uniform(.05, .15) * (attempt + 1))
 
     def _chat_count(self, uid: str) -> int:
         """Anzahl der Chats eines Eigentuemers, so billig wie moeglich.

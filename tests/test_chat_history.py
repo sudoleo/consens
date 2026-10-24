@@ -2312,3 +2312,41 @@ def test_turn_detail_drops_malformed_stored_task_checks():
     detail = chat_store.turn_detail("a" * 32, {"status": "completed", "task_checks": ["x"]}, {})
     assert "task_checks" not in detail
     assert chat_store.turn_detail("a" * 32, {"task_checks": [2, 1]}, {})["task_checks"] == [1, 2]
+
+
+def test_a_transaction_aborted_while_reading_starts_again(monkeypatch):
+    # The SDK repeats a transaction only when its commit is aborted; under
+    # contention Firestore may already abort a read (CI 2026-10-24).
+    from google.api_core.exceptions import Aborted
+
+    transactions, reads = [], []
+
+    class TransactionOnlyDatabase:
+        def transaction(self, **kwargs):
+            transactions.append(kwargs)
+            return object()
+
+    def read(tx):
+        reads.append(tx)
+        if len(reads) < 3:
+            raise Aborted("Transaction lock timeout.")
+        return "done"
+
+    monkeypatch.setattr(chat_store.firestore, "transactional", lambda operation: operation)
+    monkeypatch.setattr(chat_store.time, "sleep", lambda seconds: None)
+    store = chat_store.ChatStore(TransactionOnlyDatabase())
+    assert store._transaction(read) == "done"
+    # Each new start is a fresh transaction with the commit retry budget.
+    assert transactions == [{"max_attempts": 12}] * 3
+    assert len(set(map(id, reads))) == 3
+
+    # A lasting conflict still ends as the error, after a bounded number of starts.
+    attempts = []
+
+    def always_aborted(tx):
+        attempts.append(tx)
+        raise Aborted("Transaction lock timeout.")
+
+    with pytest.raises(Aborted):
+        store._transaction(always_aborted)
+    assert len(attempts) == chat_store.TRANSACTION_READ_ATTEMPTS
