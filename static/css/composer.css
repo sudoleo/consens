@@ -559,6 +559,36 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
   .composer-starters::-webkit-scrollbar { display: none; }
   .composer-starter { flex: 0 0 auto; }
 }
+/* Where the row scrolls sideways it runs out softly at its ends, as the
+   chat list in the phone's sidebar does, instead of cutting the next
+   example through a word. The fade lies over the row's own 12px padding and
+   28px into the last visible pill; scrolled to the end, the right fade
+   draws back into the padding, so the last example stands whole. */
+@property --starters-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 28px;
+}
+@media (max-width: 640px), (max-height: 500px) {
+  body.is-hero:not(.direct-comparison-active) .composer-starters {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - var(--starters-fade-end)), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - var(--starters-fade-end)), transparent);
+  }
+  @supports (animation-timeline: scroll()) {
+    body.is-hero:not(.direct-comparison-active) .composer-starters {
+      animation: composer-starters-end auto var(--ease-linear) both;
+      animation-timeline: scroll(self inline);
+    }
+  }
+}
+@keyframes composer-starters-end {
+  85% { --starters-fade-end: 28px; }
+  to { --starters-fade-end: 12px; }
+}
+@media (forced-colors: active) {
+  body.is-hero:not(.direct-comparison-active) .composer-starters { -webkit-mask-image: none; mask-image: none; }
+}
+
 /* 44px to the finger (Apple-Audit F5): each example reaches 6px beyond its
    32px pill. Where the row scrolls sideways it clips, so there it gives
    itself that room inside and takes it back outside: the pills, the row's
