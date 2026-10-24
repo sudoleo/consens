@@ -106,8 +106,11 @@ def test_wide_reader_centering_and_source_cards(browser, phase4_server, width, t
         page.locator('#answerReaderSections [data-section="differences"]').click()
         reader_screenshot(page, f'finished-differences-{width}-{theme}')
         page.locator('#answerReaderExpand').click()
-        # The weightiest finding is open on entry.
-        expect(page.locator('#answerReaderInspector .diff-card').first).to_have_attribute('open', '')
+        # Every finding starts folded (Max 2026-10-23); the weightiest opens on a click.
+        first = page.locator('#answerReaderInspector .diff-card').first
+        expect(first).not_to_have_attribute('open', '')
+        first.locator('summary').click()
+        expect(first).to_have_attribute('open', '')
         reader_screenshot(page, f'finished-expanded-{width}-{theme}')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     finally:
@@ -125,7 +128,11 @@ def test_single_difference_and_missing_favicon(browser, phase4_server):
           App.runRegistry.renderVisible();
         }""")
         page.locator('#consensusDifferencesTab').click()
-        expect(page.locator('#answerReaderInspector .diff-card')).to_have_attribute('open','')
+        # Even a single finding starts folded and opens on a click.
+        card = page.locator('#answerReaderInspector .diff-card')
+        expect(card).not_to_have_attribute('open','')
+        card.locator('summary').click()
+        expect(card).to_have_attribute('open','')
         page.locator('#answerReaderSections [data-section="sources"]').click()
         # A missing favicon is the globe in the same box (source-pill.css).
         expect(page.locator('#answerReaderInspector .answer-reader-site-icon > .site-icon-fallback')).to_be_visible()
@@ -152,7 +159,10 @@ def test_detail_panel_survives_resize_and_short_viewports(browser, phase4_server
           App.runRegistry.renderVisible();
         }""")
         page.locator('#consensusDifferencesTab').click()
-        expect(page.locator('#answerReaderInspector .diff-card').first).to_have_attribute('open', '')
+        first = page.locator('#answerReaderInspector .diff-card').first
+        expect(first).not_to_have_attribute('open', '')
+        first.locator('summary').click()
+        expect(first).to_have_attribute('open', '')
         for width, height in [(1920, 1080), (1400, 900), (1399, 900), (1100, 768),
                               (1099, 768), (320, 568), (844, 390)]:
             page.set_viewport_size({'width': width, 'height': height})
@@ -249,10 +259,13 @@ def test_differences_and_sources_share_turn_scoped_sidebar(browser, phase4_serve
         expect(page.locator('#answerReaderTitle')).to_have_text('Differences')
         cards = page.locator('#answerReaderInspector .diff-card')
         expect(cards).to_have_count(2)
-        # The weightiest finding opens on entry, the other waits as one line.
-        expect(cards.first).to_have_attribute('open','')
+        # Every finding starts folded to one line (Max 2026-10-23).
+        expect(cards.first).not_to_have_attribute('open','')
         expect(cards.nth(1)).not_to_have_attribute('open','')
         reader_screenshot(page, f'differences-overview-{width}-{theme}')
+        cards.first.locator('summary').click()
+        expect(cards.first).to_have_attribute('open','')
+        expect(cards.nth(1)).not_to_have_attribute('open','')
         expect(cards.first.locator('.diff-resolve-btn')).to_be_visible()
         reader_screenshot(page, f'differences-detail-{width}-{theme}')
         # Projection may rebuild the live cards; the expanded claim stays open.
@@ -616,7 +629,10 @@ def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, p
         assert page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'balanced'
         if agent_mode:
             expect(page.locator('#consensusOutput')).to_be_visible(timeout=30000)
-            expect(page.locator('#differencesCards .diff-card')).to_have_count(3, timeout=60000)
+            # The demo's three differences, and after them its yellow
+            # sentences with a named point of dispute (2026-10-23).
+            expect(page.locator('#differencesCards .diff-card:not(.is-split)')).to_have_count(3, timeout=60000)
+            expect(page.locator('#differencesCards .diff-card.is-split').first).to_be_attached()
         else:
             answers = page.locator('.is-direct .answer-reader-body')
             expect(answers).to_have_count(6)

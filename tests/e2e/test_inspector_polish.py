@@ -82,6 +82,13 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
                 expect(settings).to_be_hidden()
                 expect(inspector).to_be_visible()
             page.locator('#answerReaderSections [data-section="differences"]').click()
+            # The card starts folded (Max 2026-10-23) and keeps its state
+            # when it comes back into the reader on the next width.
+            card = inspector.locator('.diff-card[data-reader-ready]')
+            expect(card).to_have_count(1)
+            if card.get_attribute('open') is None:
+                card.locator('summary').click()
+            expect(card).to_have_attribute('open', '')
             button = inspector.locator('.diff-resolve-btn')
             expect(button).to_be_visible()
             # Compact and sized to its content, not the chat's card-wide bar.
