@@ -5,7 +5,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 const STORAGE_KEY = "consensio.showConsensusMarkers.v1";
 const CLAIM = "The launch date is September 3.";
 
-function boot(stored = null, mode = null, denyStorage = false) {
+function boot(stored = null, mode = null, denyStorage = false, storage = {}) {
   return loadScripts([
     "static/js/user-settings.js", "static/js/consensus-anchor.js",
     "static/js/consensus-insights.js"
@@ -18,6 +18,7 @@ function boot(stored = null, mode = null, denyStorage = false) {
       </select>
       <small id="consensusHighlightsHelp"></small>
       <input type="checkbox" id="claimCountsSwitch">
+      <input type="checkbox" id="markLinesSwitch">
       <div id="consensusAnswerBody" class="consensus-answer-body"><p>${CLAIM}</p></div>
       <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
       <div id="differencesCards"></div>
@@ -27,6 +28,7 @@ function boot(stored = null, mode = null, denyStorage = false) {
     before(window) {
       if (stored !== null) window.localStorage.setItem(STORAGE_KEY, stored);
       if (mode !== null) window.localStorage.setItem("consensio.consensusHighlightMode.v1", mode);
+      Object.entries(storage).forEach(([key, value]) => window.localStorage.setItem(key, value));
       if (denyStorage) window.Storage.prototype.setItem = () => { throw new Error("denied"); };
       window.App = window.App || {};
       window.App.consensusBodyEl = () => window.document.getElementById("consensusAnswerBody");
@@ -276,5 +278,36 @@ describe("highlight defaults", () => {
     const explicit=boot("true","all"); renderMixed(explicit);
     expect(explicit.document.body.dataset.consensusHighlightMode).toBe("all");
     expect(explicit.document.querySelectorAll(".cx-claim:not(.is-marker-filtered)")).toHaveLength(6);
+  });
+});
+
+describe("lines under the marks", () => {
+  // Account setting mark_lines (2026-10-25): a line whose shape names the
+  // verdict, for readers who cannot tell the tints apart. The lines are CSS
+  // (components-consensus-visuals.css); this checks the switch and the class.
+  it("are off until switched on, follow the account, and keep the marks themselves", () => {
+    const { window, document, dom } = boot();
+    const toggle = document.getElementById("markLinesSwitch");
+    expect(document.body.classList.contains("marks-underlined")).toBe(false);
+    expect(toggle.checked).toBe(false);
+    renderContradiction(window);
+    const marks = document.querySelectorAll(".cx-claim").length;
+    toggle.click();
+    expect(document.body.classList.contains("marks-underlined")).toBe(true);
+    expect(window.App.userSettings.get("mark_lines")).toBe(true);
+    expect(window.localStorage.getItem("consensio.markLines.v1")).toBe("true");
+    expect(document.querySelectorAll(".cx-claim")).toHaveLength(marks);
+    // Another tab, the account or the agent switches them off again.
+    window.App.userSettings.set("mark_lines", false, { source: "agent" });
+    expect(document.body.classList.contains("marks-underlined")).toBe(false);
+    expect(toggle.checked).toBe(false);
+    dom.window.close();
+  });
+
+  it("stand from the start for a reader who chose them", () => {
+    const { document, dom } = boot(null, null, false, { "consensio.markLines.v1": "true" });
+    expect(document.body.classList.contains("marks-underlined")).toBe(true);
+    expect(document.getElementById("markLinesSwitch").checked).toBe(true);
+    dom.window.close();
   });
 });

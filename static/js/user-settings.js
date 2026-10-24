@@ -381,6 +381,8 @@
     agreement_display: agreementDisplay,
     consensus_highlights: consensusHighlights,
     claim_counts: booleanSetting("consensio.showClaimCounts.v1"),
+    // Off unless true: consensus-insights.js sets body.marks-underlined.
+    mark_lines: booleanSetting("consensio.markLines.v1"),
     // On unless false: stream-reveal.js and letter-clouds.js read it.
     letter_animations: booleanSetting("consensio.letterAnimations.v1"),
   });

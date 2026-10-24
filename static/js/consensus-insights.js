@@ -143,6 +143,23 @@
           });
           window.addEventListener("pageshow", restoreClaimCounts);
 
+          // Lines under the marks (account setting mark_lines, off unless
+          // true): solid, dashed or dotted by verdict beside the tint, for
+          // readers who cannot tell the tints apart. The lines themselves are
+          // CSS (components-consensus-visuals.css); in contrast mode they
+          // stand without the switch.
+          const markLinesToggle = $("markLinesSwitch");
+          function restoreMarkLines() {
+            const show = settings.get("mark_lines") === true;
+            document.body.classList.toggle("marks-underlined", show);
+            if (markLinesToggle) markLinesToggle.checked = show;
+          }
+          markLinesToggle?.addEventListener("change", function () {
+            settings.set("mark_lines", this.checked);
+            restoreMarkLines();
+          });
+          window.addEventListener("pageshow", restoreMarkLines);
+
           function readMarkerPreferences() {
             const stored = settings.get("consensus_highlights");
             markersVisible = stored !== "none";
@@ -3629,6 +3646,7 @@
           // Modal-State.
           readMarkerPreferences();
           restoreClaimCounts();
+          restoreMarkLines();
           highlightSelect?.addEventListener("change", function () {
             const show = this.value !== "none";
             if (show) highlightMode = Object.prototype.hasOwnProperty.call(MARKER_FILTERS, this.value) ? this.value : DEFAULT_HIGHLIGHT_MODE;
@@ -3642,6 +3660,9 @@
           });
           settings.onChange("claim_counts", function (detail) {
             if (detail.source !== "local") restoreClaimCounts();
+          });
+          settings.onChange("mark_lines", function (detail) {
+            if (detail.source !== "local") restoreMarkLines();
           });
 
           // Zitat einer Differenz-Seite ein-/ausklappen: delegiert, weil der

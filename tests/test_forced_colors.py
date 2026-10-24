@@ -81,22 +81,34 @@ def test_every_masked_icon_keeps_a_colour_in_contrast_mode():
         assert re.search(r"background-color:\s*(CanvasText|Canvas)\b", body), selector
 
 
-def test_sentence_marks_speak_through_their_underline_in_contrast_mode():
+def test_sentence_marks_speak_through_their_underline_in_contrast_mode_and_on_request():
+    """The account setting mark_lines and contrast mode switch on the same
+    lines; their shape names the verdict without any colour."""
     visuals = strip_comments((CSS / "components-consensus-visuals.css").read_text(encoding="utf-8"))
-    block = "\n".join(media_blocks(visuals, "forced-colors: active"))
-    styles = {}
-    for selectors, body in rules(block):
+    forced = media_blocks(visuals, "forced-colors: active")
+    assert any(re.search(r"(?<![.\w-])body\s*\{\s*--cx-underline:\s*underline;\s*\}", block) for block in forced)
+    outside = visuals
+    for block in forced:
+        outside = outside.replace(block, "")
+    assert re.search(r"body\.marks-underlined\s*\{\s*--cx-underline:\s*underline;\s*\}", outside)
+
+    styles, lines = {}, []
+    for selectors, body in rules(outside):
         style = re.search(r"text-decoration-style:\s*(\w+)", body)
-        if style:
-            for selector in selectors:
+        for selector in selectors:
+            if style:
                 styles[selector] = style.group(1)
+            if "text-decoration-line: var(--cx-underline, none)" in body:
+                lines.append(selector)
+    # Off without the switch, and a mark still handing over keeps its own line.
+    assert lines and all(".was-provisional" in selector for selector in lines)
 
     def style_of(kind: str) -> str:
         hits = [value for selector, value in styles.items()
-                if f".is-{kind}" in selector and ".cx-spot" not in selector and "provisional" not in selector]
+                if f".is-{kind}" in selector and ".cx-spot" not in selector and ".is-provisional" not in selector]
         return hits[-1]
 
-    # A contradiction must not read like an agreement in contrast mode.
+    # A contradiction must not read like an agreement.
     assert style_of("major") == "solid"
     assert style_of("split") == "dashed"
     assert style_of("unanimous") == "dotted"

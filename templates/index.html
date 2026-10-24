@@ -1376,6 +1376,18 @@
                   </span>
                 </label>
               </div>
+              {#- Off unless switched on (account setting mark_lines): the shape
+                  of the line names the verdict, for readers who cannot tell
+                  the tints apart. consensus-insights.js binds the switch. -#}
+              <div class="settings-section" data-settings-keywords="unterstreichen unterstrichen underline linie linien line lines form shape farben colors farbenblind colorblind farbsehschwäche rot grün red green kontrast contrast barrierefreiheit accessibility markierungen highlights">
+                <label for="markLinesSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Underline highlights</strong>
+                    <small>Adds a line under each highlight: solid for a contradiction, dashed for a disagreement, dotted for agreement. Helps when the colors are hard to tell apart.</small>
+                  </span>
+                  <input type="checkbox" id="markLinesSwitch">
+                </label>
+              </div>
               <div class="settings-section" data-settings-keywords="zahlen numbers anzahl count counts zählung behauptungen claims aussagen modelle models unterstützung support">
                 <label for="claimCountsSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>

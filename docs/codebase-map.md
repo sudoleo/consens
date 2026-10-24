@@ -699,7 +699,10 @@ Masken-Icons gehören auf die Liste, `tests/test_forced_colors.py` prüft das),
 Schaltern, dem abgehakten Kästchen, dem Feld-Fokus und gewählten Zeilen
 (`Highlight`-Kontur). Die Satzmarken sprechen dort über ihre Unterkante
 (`components-consensus-visuals.css`: Widerspruch durchgezogen 2 px, uneinig
-gestrichelt, Zustimmung gepunktet). Außerhalb des Modus ändert sich nichts.
+gestrichelt, Zustimmung gepunktet). Außerhalb des Modus ändert sich nichts,
+außer der Leser schaltet dieselben Linien ein (Kontoeinstellung `mark_lines`,
+`body.marks-underlined`): beide setzen nur `--cx-underline: underline`, eine
+Regel zeichnet für beide, außerhalb des Kontrastmodus in der Farbe der Stufe.
 **Material-Bausteine (seit 2026-10-20, Apple-Audit Welle 2, w2c):** ein zweiter
 Block `:root, .dark-mode` in `foundation.css` leitet aus den Themenwerten ab
 (auch auf `body.dark-mode` deklariert, sonst erbt der dunkle App-Body die helle
@@ -7348,7 +7351,10 @@ Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
 `consensus_model`, `consensus_preset`, `system_prompt` (höchstens 12.000 Zeichen
 / 32.000 Bytes; ein Lauf akzeptiert 64 mehr für die Datumszeile, die
 `query-send.js` voranstellt, `chat.py`), `agreement_display`,
-`consensus_highlights`, `claim_counts`, `letter_animations` (Display → Letter
+`consensus_highlights`, `claim_counts`, `mark_lines` (Display → Underline
+highlights, seit 2026-10-25; fehlt = aus; `consensus-insights.js` bindet
+`#markLinesSwitch` und setzt `body.marks-underlined`, die Linien selbst stehen in
+`components-consensus-visuals.css`), `letter_animations` (Display → Letter
 animations; fehlt = an, `false` = aus; `app-ui.js` bindet
 `#letterAnimationsSwitch`, `stream-reveal.js` und `letter-clouds.js` lesen sie).
 **Bewusst im Browser** bleiben Theme,

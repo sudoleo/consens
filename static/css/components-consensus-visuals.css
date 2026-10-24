@@ -458,31 +458,54 @@ body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
   body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
     text-decoration-color: GrayText;
   }
+}
 
-  /* Die Flaeche der Marken malt der Kontrastmodus in Canvas, sie waeren
-     weg (a11y-Audit V2). Dort sprechen sie ueber die Form ihrer Unterkante:
-     Widerspruch durchgezogen und kraeftig, uneinig gestrichelt, Zustimmung
-     und duenne Lage gepunktet. Eine benannte Stelle traegt die Linie statt
-     ihres Satzes, wie sonst die Farbe. */
-  body:not(.consensus-markers-hidden) .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
-  body:not(.consensus-markers-hidden) .cx-claim.has-spot:not(.is-marker-filtered) .cx-spot {
-    text-decoration-line: underline;
-    text-decoration-style: dotted;
-    text-decoration-thickness: 1px;
-    text-decoration-color: CanvasText;
-    text-underline-offset: 0.22em;
-  }
+/* Linien unter den Marken. Die Flaeche allein trennt Widerspruch und
+   Uneinigkeit nur ueber den Farbton, fuer etwa jeden zwoelften Mann kaum
+   (a11y-Audit, Abschnitt 6). Die Kontoeinstellung mark_lines
+   (body.marks-underlined, consensus-insights.js, seit 2026-10-25) legt deshalb
+   eine Linie zur Flaeche, deren Form das Ergebnis traegt: Widerspruch
+   durchgezogen und kraeftig, Uneinigkeit und Detail gestrichelt, Zustimmung
+   und duenne Lage gepunktet, jede in der Farbe ihrer Stufe. Im Kontrastmodus
+   faellt die Flaeche weg (Canvas); dort stehen die Linien immer, die Farbe
+   setzt das System (V2). Eine benannte Stelle traegt die Linie statt ihres
+   Satzes, wie sonst die Farbe; eine eben noch vorlaeufige Marke behaelt bis
+   zum Anstreichen ihre eigene Linie. Ohne Einstellung bleibt --cx-underline
+   leer und die Regel zeichnet nichts. */
+body.marks-underlined {
+  --cx-underline: underline;
+}
 
-  body:not(.consensus-markers-hidden) .cx-claim:is(.is-minor, .is-split):not(.is-marker-filtered, .has-spot),
-  body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-minor, .is-split):not(.is-marker-filtered) .cx-spot {
-    text-decoration-style: dashed;
+@media (forced-colors: active) {
+  body {
+    --cx-underline: underline;
   }
+}
 
-  body:not(.consensus-markers-hidden) .cx-claim.is-major:not(.is-marker-filtered, .has-spot),
-  body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-filtered) .cx-spot {
-    text-decoration-style: solid;
-    text-decoration-thickness: 2px;
-  }
+.cx-claim.is-thin { --cx-line: var(--ink-3); }
+.cx-claim.is-unanimous { --cx-line: var(--agree); }
+.cx-claim.is-minor { --cx-line: var(--ink-2); }
+.cx-claim.is-split { --cx-line: var(--partial); }
+.cx-claim.is-major { --cx-line: var(--dispute); }
+
+body:not(.consensus-markers-hidden) .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot, .was-provisional),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot:not(.is-marker-filtered, .was-provisional) .cx-spot {
+  text-decoration-line: var(--cx-underline, none);
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--cx-line);
+  text-underline-offset: 0.22em;
+}
+
+body:not(.consensus-markers-hidden) .cx-claim:is(.is-minor, .is-split):not(.is-marker-filtered, .has-spot, .was-provisional),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-minor, .is-split):not(.is-marker-filtered, .was-provisional) .cx-spot {
+  text-decoration-style: dashed;
+}
+
+body:not(.consensus-markers-hidden) .cx-claim.is-major:not(.is-marker-filtered, .has-spot, .was-provisional),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-filtered, .was-provisional) .cx-spot {
+  text-decoration-style: solid;
+  text-decoration-thickness: 2px;
 }
 
 /* Gemeinsame Geometrie aller vier Stufen. Die Marke darf keinen Platz

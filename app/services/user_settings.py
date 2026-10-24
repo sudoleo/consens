@@ -98,6 +98,9 @@ class UserSettings(_Strict):
         Literal["none", "all", "contradictions", "concerns", "critical"]
     ] = None
     claim_counts: Optional[bool] = None
+    # A line under each highlight whose shape names its verdict
+    # (consensus-insights.js, body.marks-underlined); None is off.
+    mark_lines: Optional[bool] = None
     # The letters of a streamed answer and behind the empty start screen
     # (stream-reveal.js, letter-clouds.js); None is on.
     letter_animations: Optional[bool] = None
