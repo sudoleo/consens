@@ -123,6 +123,16 @@ def test_a_placeholder_takes_whole_elements_only(monkeypatch):
     assert i18n.whole_elements("<0>a</0> <1/>") and not i18n.whole_elements("<0>a") and not i18n.whole_elements("a</0>")
 
 
+@pytest.mark.parametrize("html_text", [
+    # A shared question or answer that types our own markers: the page used
+    # to answer 500 (IndexError, the marker names an element that is not there).
+    "<p>&lt;0/&gt; chats</p>",
+    "<p>Read the &lt;0&gt;privacy policy&lt;/0&gt; first.</p>",
+])
+def test_markers_typed_in_the_text_are_left_alone(small_catalog, html_text):
+    assert i18n.translate_html(html_text, "de") == html_text
+
+
 def test_long_content_does_not_stall_the_patterns():
     # A shared answer whose paragraph repeats the literals of a pattern with
     # four placeholders, without its ending: the lazy groups backtracked with

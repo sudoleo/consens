@@ -770,6 +770,10 @@ class _Translator:
         key, elements = run_key(core)
         if not has_letter(key):
             return nodes
+        if len(_MARKER.findall(key)) != sum(2 if element.kind() == "phrasing" else 1 for element in elements):
+            # The text itself types a marker ("<0/>" in a shared question): no
+            # entry can say which element it means.
+            return nodes
         found = self.find(key)
         if found is not None:
             first, last = core[0], core[-1]
