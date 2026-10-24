@@ -541,6 +541,8 @@ oder bei „Ready for review“.
 Fehlgeschlagene Backend- und Browser-Tests stehen als Annotationen am Lauf
 (`scripts/ci_annotate_failures.py`): Jobs-Logs brauchen einen GitHub-Login,
 Annotationen nicht, also ist ein roter Lauf aus der Fehler-Mail heraus lesbar.
+Die zweite Zeile nennt die Stelle im Test (`at tests/...py:<Zeile>`), auch wenn
+die Meldung selbst in Bibliotheks-Frames endet (abgelaufenes Playwright-Warten).
 Rote Läufe gehen als Mail an den, der gepusht hat. Darum prüft jede Session ihren Push selbst (AGENTS.md):
 
 ```powershell
