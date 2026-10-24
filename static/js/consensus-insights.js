@@ -1623,6 +1623,9 @@
             card.replaceChildren(build.preview({ interactive: true, close: function () { leavePreviewFor(group); } }));
             if (build.pinnable !== false) {
               card.appendChild(cardPin(false, function () {
+                // Der Zeiger kam aus der Karte (holdHoverPreview), nicht vom
+                // Satz: kein mouseleave naehme dessen Anstrich spaeter weg.
+                group.hover = false;
                 const target = activeControl(group);
                 if (target?.isPassage) (group.spans[0] || target.el).click();
                 else target?.activate();

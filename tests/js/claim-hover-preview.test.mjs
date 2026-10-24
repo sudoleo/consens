@@ -259,6 +259,29 @@ describe("reaching the card with the pointer", () => {
     env.dom.window.close();
   });
 
+  it("lets go of the sentence's highlight once the pointer pinned its card from inside it", async () => {
+    const env = boot();
+    const [launchMark, ticketMark] = marked(env, [launch, tickets], { focusDifference() {} });
+    env.hover(launchMark);
+    await wait(160);
+    const card = env.shown();
+    // The pointer goes into the card and pins it there: it never leaves the
+    // sentence again, so nothing else would take its highlight off.
+    env.leave(launchMark);
+    env.hover(card);
+    card.querySelector(".cx-card-pin").click();
+    const popover = env.document.getElementById("claimPopover");
+    popover.querySelector(".cx-card-pin").click();
+    expect(popover.hidden).toBe(true);
+    expect(launchMark.classList.contains("is-hovered")).toBe(false);
+    // Resting on another mark later highlights that one alone.
+    env.hover(ticketMark);
+    await wait(160);
+    expect(ticketMark.classList.contains("is-hovered")).toBe(true);
+    expect(launchMark.classList.contains("is-hovered")).toBe(false);
+    env.dom.window.close();
+  });
+
   it("leads from a yellow sentence's card to its card in the list", async () => {
     const env = boot();
     const focusDifference = vi.fn();
