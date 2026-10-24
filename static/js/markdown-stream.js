@@ -26,13 +26,23 @@ function reportMarkdownFallback(missingDependency) {
 // with private data in it the moment the answer renders. Nothing in a model
 // answer may therefore trigger a request on its own: no remote images, media,
 // <style> blocks or CSS with url()/functions. Links still need a click.
+// SVG <image>/<feImage> and MathML <mglyph> load their href/src like an <img>.
 const MODEL_HTML_CONFIG = {
-  FORBID_TAGS: ["style", "video", "audio", "source", "picture", "track", "form", "input", "link", "meta"],
+  FORBID_TAGS: ["style", "video", "audio", "source", "picture", "track", "form", "input", "link", "meta",
+    "image", "feimage", "mglyph"],
   FORBID_ATTR: ["srcset", "poster", "background", "ping"]
 };
 
+// The browser's own URL parser decides: it drops tabs and newlines and reads
+// "\" as "/", so "/<tab>/host" or "/\host" would leave the site.
 function isInlineImageSource(src) {
-  return /^data:image\//i.test(src) || (src.startsWith("/") && !src.startsWith("//"));
+  if (/^data:image\//i.test(src)) return true;
+  if (!src.startsWith("/")) return false;
+  try {
+    return new URL(src, window.location.href).origin === window.location.origin;
+  } catch (error) {
+    return false;
+  }
 }
 
 // Runs while the nodes still belong to DOMPurify's inert document: an <img>

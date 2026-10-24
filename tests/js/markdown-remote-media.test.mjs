@@ -38,6 +38,22 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect(output.textContent).toContain("text");
   });
 
+  it("blocks a remote image hidden behind the URL parser or in SVG and MathML", () => {
+    const output = render([
+      // Tab, newline and backslash: the browser reads all three as //host.
+      '<img src="/&#9;/evil.example/tab">',
+      '<img src="/&#10;/evil.example/newline">',
+      '<img src="/\\evil.example/backslash">',
+      '<svg><image href="https://evil.example/image"></image></svg>',
+      '<svg><image xlink:href="https://evil.example/xlink"></image></svg>',
+      '<svg><filter><feImage href="https://evil.example/feimage"></feImage></filter></svg>',
+      '<math><mglyph src="https://evil.example/mglyph"></mglyph></math>',
+      '<img src="/static/own.png" alt="own">',
+    ].join("\n\n"));
+    expect(output.innerHTML).not.toContain("evil.example");
+    expect(output.querySelector('img[src="/static/own.png"]')).not.toBeNull();
+  });
+
   it("blocks a remote image before its node reaches the page document", () => {
     const { window, document } = boot();
     const adopt = document.adoptNode.bind(document);

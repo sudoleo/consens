@@ -135,7 +135,10 @@ Hourly retention purges expired OAuth states/actions (skipped without Google
 configuration); chat deletion removes `actions`; account deletion revokes stored
 grants at Google (`GoogleConnections.revoke_all`) and removes credentials and
 pending grants. `markdown-stream.js` renders model answers without auto-loading
-remote resources (no remote images/media/style), closing markup exfiltration. See `docs/google-integrations-setup.md` for required
+remote resources (no remote images/media/style), closing markup exfiltration:
+an image source must be `data:image/…` or resolve, by the browser's own URL
+parser, to the page's origin; SVG `image`/`feImage` and MathML `mglyph` are
+forbidden tags. See `docs/google-integrations-setup.md` for required
 secrets, indexes, approved model routing, Google verification and live-test limits.
 
 Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,
