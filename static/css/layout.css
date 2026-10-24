@@ -494,9 +494,13 @@ body:has(.sidebar.active) .brand-float {
     transition: opacity var(--dur-state) var(--ease-standard);
   }
 
-  .sidebar-resizer:focus-visible::after,
   body.is-resizing-sidebar .sidebar-resizer::after {
     opacity: 0.45;
+  }
+  /* The keyboard's mark has to stand out (3:1): the whole line in ink-2. */
+  .sidebar-resizer:focus-visible::after {
+    opacity: 1;
+    background: var(--ink-2);
   }
   @media (hover: hover) and (pointer: fine) {
     .sidebar-resizer:hover::after {

@@ -72,8 +72,11 @@
 
   function setAppTitle(question = "") {
     const normalized = String(question || "").replace(/\s+/g, " ").trim();
+    // The page's one h1, for screen readers (index.html #appHeading).
+    const heading = document.getElementById("appHeading");
     if (!normalized) {
       document.title = DEFAULT_APP_TITLE;
+      if (heading) heading.textContent = DEFAULT_APP_TITLE;
       return;
     }
 
@@ -82,6 +85,7 @@
       ? `${normalized.slice(0, maxQuestionLength - 1).trimEnd()}…`
       : normalized;
     document.title = `${shortened} | consens.io`;
+    if (heading) heading.textContent = shortened;
   }
 
   // Anhaenge der sichtbaren Frage. Sie gehoeren zu der Nachricht, mit der sie

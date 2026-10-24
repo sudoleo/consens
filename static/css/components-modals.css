@@ -550,7 +550,6 @@
 }
 
 .settings-select select:focus-visible {
-  outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-color) 10%, transparent);
 }
 

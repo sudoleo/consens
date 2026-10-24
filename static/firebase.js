@@ -3698,7 +3698,8 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
     if (item.dataset.action === "rename") startBookmarkRename(row);
     else if (item.dataset.action === "pin") pinBookmark(bookmarkId, meta?.pinned !== true);
     else if (item.dataset.action === "share") shareBookmark(bookmarkId);
-    else if (item.dataset.action === "delete") deleteBookmarkWithUndo(bookmarkId);
+    // A click without a pointer (detail 0) came from the keyboard.
+    else if (item.dataset.action === "delete") deleteBookmarkWithUndo(bookmarkId, { keyboard: event.detail === 0 });
   });
   // Keyboard users land on the first item; after a pointer press the menu
   // itself holds focus, so the arrow keys still reach the items.
@@ -3898,7 +3899,7 @@ function leaveDeletedChat() {
   if (window.App?.glideComposer) window.App.glideComposer(enterHero);
   else enterHero();
 }
-function deleteBookmarkWithUndo(bookmarkId) {
+function deleteBookmarkWithUndo(bookmarkId, { keyboard = false } = {}) {
   if (!auth.currentUser || !bookmarkId || undoableBookmarkDeletes.has(bookmarkId)) return;
   if (!window.App?.undoNotice?.show) { deleteBookmark(bookmarkId); return; }
   const rows = [...document.querySelectorAll(`#bookmarksContainer .bookmark[data-id="${bookmarkId}"]`)];
@@ -3917,12 +3918,17 @@ function deleteBookmarkWithUndo(bookmarkId) {
       document.querySelectorAll(`#bookmarksContainer .bookmark[data-id="${bookmarkId}"]`).forEach(expandBookmarkRow);
       window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
       if (wasOpen && !window.App.runRegistry?.visible?.() && document.body.classList.contains("is-hero")) window.openBookmark(bookmarkId);
+      // Back where the keyboard was: the restored chat's menu button.
+      if (keyboard) document.querySelector(`#bookmarksContainer .bookmark[data-id="${bookmarkId}"] .bookmark-menu-button`)?.focus({ preventScroll: true });
     },
     onExpire() {
       undoableBookmarkDeletes.delete(bookmarkId);
       entry.promise = deleteBookmark(bookmarkId);
     },
   });
+  // The menu closed without handing focus back: a keyboard reader would
+  // never reach Undo in its few seconds (docs/a11y-audit-2026-10-23.md, K4).
+  if (keyboard) entry.notice?.focusAction?.();
 }
 // Settles every deletion still waiting for its Undo; resolves once each was sent.
 function settleUndoableBookmarkDeletes() {

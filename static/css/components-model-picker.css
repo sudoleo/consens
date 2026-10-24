@@ -623,7 +623,6 @@
   color: var(--accent);
   background: var(--hover);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
-  outline: none;
 }
 @media (hover: hover) and (pointer: fine) {
   .model-name-trigger:hover {

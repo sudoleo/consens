@@ -83,7 +83,8 @@ function createSourceChip(src, fallbackLabel) {
   el.className = "source-link";
   el.textContent = getSourceSiteName(src) || fallbackLabel;
   el.title = getSourceTitle(src, fallbackLabel);
-  el.setAttribute("aria-label", `Source: ${el.title}`);
+  // In an answer (data-i18n-skip) only App.t translates a label (docs/i18n.md).
+  el.setAttribute("aria-label", window.App.t("Source: {title}", { title: el.title }));
 
   if (href) {
     el.href = href;
@@ -207,7 +208,9 @@ function sourceRefAriaLabel(entries) {
   const first = entries[0] || {};
   const label = getSourcePillLabel(first.src, first.token);
   const more = entries.length - 1;
-  return more > 0 ? `Source: ${label} (and ${more} more)` : `Source: ${label}`;
+  return more > 0
+    ? window.App.t("Source: {label} (and {more} more)", { label, more })
+    : window.App.t("Source: {label}", { label });
 }
 
 // (Re)builds the pill's content in place. Keeping the element lets a focused

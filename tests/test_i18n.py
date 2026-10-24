@@ -329,7 +329,23 @@ def test_a_sentence_composed_from_chosen_words_is_found():
     assert i18n_tool.composed_in("x.js", whole, current) == []
 
 
+def test_a_tag_inside_a_label_marks_its_key():
+    """{% if %} inside a label's value renders whole sentences that the key
+    glued from both branches stands for neither of: the German page kept
+    "Consensus verdict at a glance" (share.html, a11y audit L2)."""
+    glued = '<div aria-label="{% if a %}Answer check{% else %}Consensus verdict{% endif %} at a glance"></div>'
+    whole = ("<div aria-label=\"{{ 'Answer check at a glance' if a else 'Consensus verdict at a glance' }}\""
+             ' class="box{% if a %} is-agent{% endif %}"></div>')
+
+    def keys(source):
+        return i18n.html_segments(i18n_tool.jinja_to_html(source))
+
+    assert keys(glued) == ["{%}Answer check{%}Consensus verdict{%} at a glance"]
+    assert not any(i18n_tool.TAG_IN_VALUE in key for key in keys(whole))
+
+
 def test_no_script_composes_a_sentence_without_an_entry():
+    """Scripts, and labels in templates with a tag inside their value."""
     gaps = [f"{gap.source}:{gap.line}: {gap.key}" for gap in i18n_tool.composed_gaps("de")]
     assert not gaps, "composed from parts, write whole sentences or App.t each part (docs/i18n.md):\n" + "\n".join(gaps)
 

@@ -92,11 +92,19 @@ def _placeholder(expression: str, index: int, literals: list[str] | None = None)
     return "{" + str(index) + "}"
 
 
+# A tag inside an attribute's value ("{% if a %}Answer check{% else %}…")
+# leaves this mark in its key: the page translates each value it renders as
+# a whole, and a key glued from both branches stands for none of them
+# (composed_gaps; docs/a11y-audit-2026-10-23.md, L2).
+TAG_IN_VALUE = "{%}"
+
+
 def jinja_to_html(source: str, literals: list[str] | None = None) -> str:
     """Template source as HTML a parser can read: expressions as placeholders.
 
     Tags ({% %}) outside markup become comments, which split a run the way
-    the branches they choose between would; inside a start tag they vanish.
+    the branches they choose between would; inside a start tag they vanish,
+    and inside a quoted value they leave ``TAG_IN_VALUE``.
     ``literals`` collects the strings inside expressions.
     """
     out: list[str] = []
@@ -125,6 +133,8 @@ def jinja_to_html(source: str, literals: list[str] | None = None) -> str:
         if token.startswith("{%"):
             if not in_tag:
                 out.append("<!--j-->")
+            elif quote:
+                out.append(TAG_IN_VALUE)
             continue
         counter += 1
         out.append(_placeholder(token, counter, literals))
@@ -732,8 +742,10 @@ def composed_in(relative: str, source: str, current: i18n.Catalog) -> list[Found
 
 def composed_gaps(language: str = "de") -> list[Found]:
     current = i18n.catalog(language) or i18n.Catalog({})
-    return [gap for relative in script_files()
+    gaps = [gap for relative in script_files()
             for gap in composed_in(relative, (ROOT / relative).read_text(encoding="utf-8"), current)]
+    gaps.extend(item for relative in template_files() for item in template_keys(relative) if TAG_IN_VALUE in item.key)
+    return gaps
 
 
 # ---------------------------------------------------------------------------
@@ -856,7 +868,7 @@ def missing(language: str = "de") -> dict[str, list[Found]]:
     grouped: dict[str, list[Found]] = {}
     seen: set[str] = set()
     for item in all_keys():
-        if item.key in seen or covered(current, item.key):
+        if item.key in seen or covered(current, item.key) or TAG_IN_VALUE in item.key:
             continue
         seen.add(item.key)
         grouped.setdefault(item.source, []).append(item)
@@ -885,7 +897,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"invalid entry (markers or placeholders differ): {key!r} -> {value!r}")
     composed = composed_gaps(args.lang)
     if composed:
-        print("\ncomposed from parts, no entry for the whole (write whole sentences or App.t each part):")
+        print("\ncomposed from parts, no entry for the whole (write whole sentences, in a template one"
+              " whole value per branch, or App.t each part):")
         for item in composed:
             print(f"  {item.source}:{item.line}  {item.key}")
     print(f"\n{total} keys without {args.lang}, {len(rejected)} invalid entries, {len(composed)} composed sentences")

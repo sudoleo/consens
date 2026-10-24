@@ -225,7 +225,7 @@
               if (accessible) {
                 mark.setAttribute("role", "button");
                 mark.tabIndex = 0;
-                mark.setAttribute("aria-label", control.el.getAttribute("aria-label"));
+                mark.setAttribute("aria-label", passageLabel(group.spans, control.el.getAttribute("aria-label")));
               }
               if (!mark.dataset.cxKeyboard) {
                 mark.dataset.cxKeyboard = "1";
@@ -1114,23 +1114,40 @@
 
           // --- Agreement-Badges in der Konsens-Antwort -----------------------
           function claimBadgeLabel(claim, modelsCompared) {
+            const t = window.App.t;
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
             // Die Formulierung bleibt fuer Screenreader und den Detaildialog
             // erhalten. Die sichtbare Erklaerung liefert allein die formatierte
             // Hover-Vorschau, nicht zusaetzlich ein nativer Browser-Tooltip.
+            // Teil fuer Teil durch App.t: Das Label steht in der Antwort, und
+            // dort uebersetzt i18n.js nichts (data-i18n-skip, docs/i18n.md).
             const notAddressed = modelsNotAddressingClaim(claim, modelsCompared).length;
+            const open = " " + t("— open details");
             if (claimCoverage(claim) === "thin") {
               const compared = total + notAddressed;
-              return "Too few models addressed this"
-                + (compared ? " — only " + total + " of " + compared : "")
-                + " — open details";
+              return (compared
+                ? t("Too few models addressed this — only {total} of {compared}", { total, compared })
+                : t("Too few models addressed this")) + open;
             }
-            return (claim.dissent.length
-              ? agreeCount + " of " + total + " models support this"
-              : "All " + total + " models that address this agree")
-              + (notAddressed ? "; " + notAddressed + " did not address it" : "")
-              + " — open details";
+            const head = claim.dissent.length
+              ? t("{length} of {total} models support this", { length: agreeCount, total })
+              : t("All {total} models that address this agree", { total });
+            const tail = !notAddressed ? ""
+              : "; " + (notAddressed === 1
+                ? t("1 did not address it")
+                : t("{count} did not address it", { count: notAddressed }));
+            return head + tail + open;
+          }
+
+          // Eine Marke mit role="button" ersetzt ihren Text durch ihren Namen:
+          // Ohne den Satz darin las ein Screenreader an den strittigen Stellen
+          // nur das Urteil vor (docs/a11y-audit-2026-10-23.md, B1). Gleiche
+          // Form wie ein Satz eines geprueften Texts (passage-check.js).
+          function passageLabel(spans, label) {
+            const text = spans.map(function (span) { return span.textContent; })
+              .join("").replace(/\s+/g, " ").trim();
+            return text ? window.App.t("“{text}” – {label}", { text, label }, "marked sentence") : label;
           }
 
           // Inline counts are opt-in; the marked passage remains accessible
@@ -1186,7 +1203,8 @@
           }
 
           function diffMarkerLabel(diff) {
-            return differenceKind(diff) + " — open details";
+            const t = window.App.t;
+            return t(differenceKind(diff)) + (diff.claim ? ": " + diff.claim : "") + " " + t("— open details");
           }
 
           // Öffnet die zugehörige Karte im Differences-Überblick und hebt sie
@@ -2041,7 +2059,7 @@
             const host = spans[0];
             host.setAttribute("role", "button");
             host.setAttribute("tabindex", "0");
-            host.setAttribute("aria-label", label);
+            host.setAttribute("aria-label", passageLabel(spans, label));
             if (!host.dataset.cxKeyboard) {
               host.dataset.cxKeyboard = "1";
               host.addEventListener("keydown", function (event) {
@@ -2191,7 +2209,7 @@
               }
               const control = attachPassageControl(
                 result,
-                diffMarkerLabel(diff) + ": " + diff.claim,
+                diffMarkerLabel(diff),
                 function () {
                   openDifferencePopover(diff, result.spans, answerNavigation, function () { focusDifference(index); });
                 },

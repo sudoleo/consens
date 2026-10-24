@@ -44,6 +44,23 @@ a {
   outline-offset: var(--focus-ring-offset);
 }
 
+/* The skip link (index.html): out of sight until the keyboard reaches it as
+   the first stop, then a quiet pill in the top left, above everything. */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: var(--z-tooltip);
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--well);
+  color: var(--ink);
+  font-size: 14px;
+  box-shadow: var(--lift);
+  transform: translateY(calc(-100% - 20px));
+}
+.skip-link:focus { transform: none; }
+
 /* A text link keeps the same air, with its corners rounded like a control's. */
 :where(a):focus-visible {
   border-radius: var(--radius-2xs);

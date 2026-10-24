@@ -104,6 +104,14 @@ describe("renderStoredConsensusClaims", () => {
       .toContain("contradict");
   });
 
+  // A button's name replaces its text: without the sentence in it, a screen
+  // reader heard only the verdict, right where the models disagree (B1 in
+  // docs/a11y-audit-2026-10-23.md).
+  it("names the disputed sentence before its verdict", () => {
+    expect(ctx.body.querySelector("[role='button']").getAttribute("aria-label"))
+      .toBe("“A ticket costs 29 euros.” – The models contradict each other here: the ticket price — open details");
+  });
+
   it("opens the difference card of its own turn from the mark's card, not the live footer", () => {
     const { tab, panel, cards } = appendStoredCards(ctx.window, ctx.document, DIFFERENCES_DATA);
     const liveCards = ctx.document.getElementById("differencesCards");
@@ -180,6 +188,27 @@ describe("renderStoredConsensusClaims without differences", () => {
     const badge = ctx.body.querySelector(".claim-badge");
     expect(badge).not.toBe(null);
     expect(badge.getAttribute("aria-label")).toContain("1 of 3 models support this");
+    const mark = ctx.body.querySelector(".cx-claim[role='button']").getAttribute("aria-label");
+    expect(mark.startsWith("“A ticket costs 29 euros.” – 1 of 3 models support this")).toBe(true);
+    expect(mark.endsWith(" — open details")).toBe(true);
+  });
+
+  // The answer is never translated (data-i18n-skip), so i18n.js never sees
+  // these labels: each goes through App.t itself (L3 in the a11y audit).
+  it("builds its labels through App.t", () => {
+    const ctx = boot();
+    const asked = [];
+    const t = ctx.window.App.t;
+    ctx.window.App.t = (text, params, context) => {
+      asked.push(context ? `${context}|${text}` : text);
+      return t(text, params, context);
+    };
+
+    ctx.window.renderStoredConsensusClaims(ctx.body, { ...DIFFERENCES_DATA, differences: [] }, ctx.fallback, []);
+
+    expect(asked).toEqual(expect.arrayContaining([
+      "{length} of {total} models support this", "— open details", "marked sentence|“{text}” – {label}"
+    ]));
   });
 });
 

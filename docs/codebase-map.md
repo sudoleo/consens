@@ -825,7 +825,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 - **`watch-state.js`** — besitzt Telegram-, Limit-, Request- und Session-Epoch-
   State des Watch-Frontends. `watch.js` hält nur Rendering und Produktaktionen.
 - **`app-dom-events.js`** — zentrale Event-Delegation für Bookmarks, Send,
-  Provider-Exclude, Settings und Key-Test; ersetzt HTML-Eventattribute.
+  Provider-Exclude, Settings und Key-Test; ersetzt HTML-Eventattribute. Dazu
+  die Sprungmarke `.skip-link` (erster Tab-Stopp in `index.html`, seit
+  2026-10-24): im Chat in `#questionInput`, in der Watch-Ansicht auf
+  `#watchDashTitle`, sonst auf das unsichtbare `h1#appHeading`.
 - **`error-reporter.js`** — lädt vor allen App-Modulen, fängt ungefangene
   Browserfehler, Promise-Rejections und relevante Asset-Ladefehler ab und stellt
   `window.App.reportCriticalError` für explizite Run-Abbrüche bereit. Nur
@@ -1437,7 +1440,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   grau (Gold bleibt am Kürzel). Imprint · Privacy · Terms bleiben bewusst
   sichtbar unter dem Konto (Impressum direkt erreichbar).
   Beide Sidebar-Toggles
-  referenzieren `#appSidebar` per `aria-controls`. Der Inhaltsanfang reserviert
+  referenzieren `#appSidebar` per `aria-controls`. Landmarks (seit
+  2026-10-24): `#appSidebar` ist `<nav aria-label="Chats">`, der Chat
+  `main#appMain.container` mit einem unsichtbaren `h1#appHeading` (Titel des
+  offenen Chats, `App.setAppTitle`), die Watch-Seite `main#watchDashboard`;
+  es ist immer nur eines der beiden `main` sichtbar. Der Inhaltsanfang reserviert
   die Leistenhöhe. Reading Chrome blendet mobil die gesamte Leiste gemeinsam
   aus/ein; eine offene Overlay-Sidebar blendet sie ebenfalls aus. Auf Desktop
   bleibt der Wrapper `display: contents` und die bestehende Float-Anordnung
@@ -3486,7 +3493,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   sichtbaren Lauf: „Working… · <Titel>“, danach „Answer ready“ bzw. „Run
   stopped“. Hört auf `consensio:run-registry-change` und `visibilitychange`;
   sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
-  schon vor dem Verlassen fertig war, wird nicht gemeldet.
+  schon vor dem Verlassen fertig war, wird nicht gemeldet. Für Screenreader
+  schreibt es außerdem „Answer ready“ in die Statuszeile `#answerStatus`
+  (`role="status"`, in `main#appMain`), sobald der sichtbare Lauf von
+  `starting`/`running` auf `succeeded` wechselt; der Start leert sie.
 - **`app-update.js`** (seit 2026-10-15, nach `tab-status.js`, `App.appUpdate`) —
   ein offenes App-Fenster holt neue Deploys selbst. Es vergleicht seinen Build
   (`data-app-build`) mit `GET /api/build`: beim Verlassen (`visibilitychange`
@@ -9690,7 +9700,8 @@ ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` und
   (`agent freedom|Free`). Einzahl/Mehrzahl als ganze Sätze, nie `"model" + "s"`.
 - **Prüfung:** `scripts/i18n.py missing|check` (Vorlagen, Skripte,
   Server-Sätze; seit 2026-10-23 auch Sätze, die Wörter im `${…}` wählen
-  und so keinen Eintrag als Ganzes haben, `composed_gaps`),
+  und so keinen Eintrag als Ganzes haben, `composed_gaps`; seit 2026-10-24
+  auch lesbare Attribute einer Vorlage mit `{% if %}` im Wert, `TAG_IN_VALUE`),
   `tests/test_i18n.py`, `tests/js/i18n.test.mjs`.
 - **Mails (seit 2026-10-23):** in der Sprache des Lesers. Konto-Mails
   (Watch, Morning Brief) lesen `users/{uid}.language`

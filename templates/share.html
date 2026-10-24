@@ -64,7 +64,8 @@
         {% if date_display %}<span>{{ date_display }}</span>{% endif %}
       </div>
       {% if scoreboard and (scoreboard.score is not none or scoreboard.model_count) %}
-      <div class="share-scoreboard" role="group" aria-label="{% if is_agent %}Answer check{% else %}Consensus verdict{% endif %} at a glance">
+      {#- A whole label per branch, so a translation finds it (docs/i18n.md). -#}
+      <div class="share-scoreboard" role="group" aria-label="{{ 'Answer check at a glance' if is_agent else 'Consensus verdict at a glance' }}">
         {% if scoreboard.score is not none %}
         <div class="share-scoreboard-score">
           <strong>{{ scoreboard.score }}</strong>
@@ -131,7 +132,7 @@
       </div>
       {% endif %}
       {% if has_differences_view %}
-      <div class="share-toggle has-cue" role="group" aria-label="Switch between {% if is_agent %}answer{% else %}consensus{% endif %} and differences">
+      <div class="share-toggle has-cue" role="group" aria-label="{{ 'Switch between answer and differences' if is_agent else 'Switch between consensus and differences' }}">
         <button type="button" id="toggleConsensusView" aria-pressed="true">{% if is_agent %}Answer{% else %}Consensus{% endif %}</button>
         <button type="button" id="toggleDifferencesView" aria-pressed="false">Differences</button>
       </div>

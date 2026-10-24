@@ -98,6 +98,9 @@
 </head>
 
 <body class="is-hero">
+  <!-- Erster Tab-Stopp: an Seitenleiste und Kopf vorbei zum Inhalt, im Chat
+       direkt in die Frage (app-dom-events.js; docs/a11y-audit-2026-10-23.md, B2). -->
+  <a class="skip-link" href="#appMain">Skip to main content</a>
   <!-- iPhone-Safari liest hier die Farbe unter der unteren Leiste (shell.css). -->
   <div class="app-bottom-edge" aria-hidden="true"></div>
   <!-- Mobile: one opaque reading header. Desktop keeps the floating controls. -->
@@ -149,7 +152,7 @@
     </button>
   </div>
   </header>
-  <div id="appSidebar" class="sidebar">
+  <nav id="appSidebar" class="sidebar" aria-label="Chats">
     <!-- Kompakter Sidebar-Kopf: Wortmarke links, Collapse-Aktion rechts. Der
          schwebende Toggle erscheint weiterhin nur bei geschlossener Sidebar. -->
     <div class="sidebar-brand-row">
@@ -348,8 +351,13 @@
       </nav>
       </div>
     </div>
-  </div>
-  <div class="container">
+  </nav>
+  <main id="appMain" class="container">
+    <!-- Ueberschrift fuer Screenreader: der Titel des offenen Chats
+         (app-core.js setAppTitle), sonst der Name der App. -->
+    <h1 id="appHeading" class="visually-hidden" data-i18n-skip>consens.io</h1>
+    <!-- "Answer ready" for screen readers when a run ends (tab-status.js). -->
+    <p id="answerStatus" class="visually-hidden" role="status" aria-live="polite"></p>
     <!-- Abgeschlossene Turns eines Follow-ups. Vor dem neuen aktiven Turn wird
          die bisherige Frage samt gerenderter Consensus-Antwort hier als
          schreibgeschuetzter Verlauf abgelegt. New comparison leert ihn wieder. -->
@@ -475,7 +483,7 @@
           <button type="button" id="composerQuoteRemove" class="composer-quote-remove"
             aria-label="Remove the quoted passage"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
         </figure>
-        <textarea class="input-field" id="questionInput" rows="1" placeholder="Enter your question"></textarea>
+        <textarea class="input-field" id="questionInput" rows="1" aria-label="Your question" placeholder="Enter your question"></textarea>
         <!-- Attachment-Menü (öffnet über dem Plus-Button) -->
         <div id="attachMenu" class="attach-menu" hidden>
           <!-- One anatomy for every row (composer.css, "The (+) menu"):
@@ -814,7 +822,7 @@
   {# app-init.js and app-dom-events.js moved into the deferred "app" group in
      <head>. Deferred scripts only run once parsing is finished, so their
      position in the document never affected execution order. #}
-  </div>
+  </main>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
        Block für position:fixed – das klemmt das Login-Modal in die App-Spalte. -->
@@ -946,7 +954,7 @@
        der Chat tritt solange zur Seite (body.is-watch-view). app-bootstrap.js
        malt sie bei direktem Aufruf ab dem ersten Bild mit Kartenskelett,
        watch.js hält URL und Umschalter synchron, watch-dashboard.js rendert. -->
-  <div id="watchDashboard" class="watch-page" hidden>
+  <main id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
       <header class="wd-head">
         <div class="wd-head-copy">
@@ -963,7 +971,7 @@
       </header>
       <div id="watchDashBody"></div>
     </div>
-  </div>
+  </main>
 
   <!-- Attachment preview (native <dialog>, App.modalDialog; attachments.js) -->
   <dialog id="attachmentViewerModal" class="modal attachment-viewer-dialog" aria-labelledby="attachmentViewerTitle">

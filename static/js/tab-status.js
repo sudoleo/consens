@@ -3,6 +3,7 @@
 // doing ("Working…") and, once it is done, that the answer is ready. The
 // moment the page is shown again the normal title returns. Nothing changes
 // while the page is in front: there the page itself shows the run.
+// A screen reader hears that the answer is ready there too (#answerStatus).
 (function () {
   "use strict";
   const READY = "Answer ready";
@@ -10,13 +11,35 @@
   const FAILED = "Failed";
   let baseTitle = document.title;
   let shown = null; // the label currently in the title, or null for the base
+  let watched = { runId: null, status: null };
 
-  function visibleStatus() {
+  function visibleRun() {
     try {
-      return window.App?.runRegistry?.visible?.()?.status || null;
+      return window.App?.runRegistry?.visible?.() || null;
     } catch (_) {
       return null;
     }
+  }
+
+  function visibleStatus() {
+    return visibleRun()?.status || null;
+  }
+
+  // The answer's words arrive without a word about them, and the progress
+  // lines leave with the first of them: the end of a run is said in a
+  // polite status line (docs/a11y-audit-2026-10-23.md, B4). Failures speak
+  // for themselves (role="alert"). Emptied at the start, so the same words
+  // are news again for the next run.
+  function announce() {
+    const run = visibleRun();
+    const runId = run?.runId || null;
+    const status = run?.status || null;
+    const was = watched.runId === runId ? watched.status : null;
+    watched = { runId, status };
+    const line = document.getElementById("answerStatus");
+    if (!line || status === was) return;
+    if (status === "starting") line.textContent = "";
+    else if (status === "succeeded" && (was === "starting" || was === "running")) line.textContent = window.App.t(READY);
   }
 
   function label(status) {
@@ -43,5 +66,6 @@
   }
 
   window.addEventListener("consensio:run-registry-change", sync);
+  window.addEventListener("consensio:run-registry-change", announce);
   document.addEventListener("visibilitychange", sync);
 })();

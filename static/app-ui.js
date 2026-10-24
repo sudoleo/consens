@@ -217,15 +217,28 @@ function bindSettingsModalControls() {
 
 // The language of the page is chosen on the server (cookie consens_lang,
 // docs/i18n.md): ?lang= stores the choice and comes back without it.
+// On a closed select every arrow key is a "change": reloading there left
+// no way past the first option (docs/a11y-audit-2026-10-23.md, K5). Keys
+// only choose; Enter or leaving the field applies the choice.
 function bindLanguageSelect() {
   const select = document.getElementById("languageSelect");
   if (!select || select.dataset.bound) return;
   select.dataset.bound = "1";
-  select.addEventListener("change", () => {
+  const current = select.value;
+  let choosing = false;
+  const apply = () => {
+    choosing = false;
+    if (select.value === current) return;
     const url = new URL(window.location.href);
     url.searchParams.set("lang", select.value);
     window.location.assign(url.toString());
+  };
+  select.addEventListener("keydown", event => {
+    if (event.key === "Enter") apply();
+    else if (event.key !== "Tab" && event.key !== "Escape") choosing = true;
   });
+  select.addEventListener("change", () => { if (!choosing) apply(); });
+  select.addEventListener("blur", () => { if (choosing) apply(); });
 }
 
 // Letter animations (account setting "letter_animations", on unless false):

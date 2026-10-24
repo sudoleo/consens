@@ -263,9 +263,14 @@
     span.tabIndex = 0;
     span.setAttribute("role", "button");
     span.setAttribute("aria-haspopup", "dialog");
+    // The reader's own words are never looked up, so neither is the label:
+    // it goes through App.t here (docs/i18n.md).
+    span.setAttribute("data-i18n-skip", "");
     // A button's name replaces its text: the sentence has to be in it.
     // Quoted, the verdict line right below says the rest.
-    span.setAttribute("aria-label", quoted ? `“${text}” – Show details` : `“${text}” – ${claimLabel(claim)}. Show details`);
+    span.setAttribute("aria-label", quoted
+      ? window.App.t("“{text}” – Show details", { text })
+      : window.App.t("“{text}” – {verdict}. Show details", { text, verdict: window.App.t(claimLabel(claim)) }));
     // With a mouse, resting on a painted sentence shows the same short
     // preview as a sentence of the answer; the click (bind) opens the card
     // and the preview goes (consensus-insights.js).
