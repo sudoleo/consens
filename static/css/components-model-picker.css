@@ -733,9 +733,11 @@
     white-space: normal;
   }
 
+  /* Two even lines, not a lone "mistakes." under a full one (390px). */
   .feedback-note {
     flex: 1 1 100%;
     text-align: center;
+    text-wrap: balance;
   }
 
   .consensus-model .select-wrapper select,
