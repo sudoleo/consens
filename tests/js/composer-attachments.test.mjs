@@ -84,6 +84,31 @@ describe("composer attachment tray", () => {
     expect(window.App.composer.expand).toHaveBeenCalled();
   });
 
+  it("ends the (+) menu above the bottom edge of a short phone, where it scrolls", () => {
+    const { window, document } = boot();
+    const menu = document.getElementById("attachMenu");
+    const trigger = document.getElementById("attachTrigger");
+    // 320x568: on the start screen the menu opens down from y=321, 341px tall
+    // (8px under a composer that ends at 313). Its box on screen is still
+    // mid-motion, 11px lower; the layout says where it comes to rest.
+    let height = 568;
+    Object.defineProperty(window, "visualViewport", { configurable: true, get: () => ({ offsetTop: 0, height }) });
+    const composer = { getBoundingClientRect: () => ({ top: 174 }), clientTop: 1 };
+    Object.defineProperty(menu, "offsetParent", { configurable: true, value: composer });
+    Object.defineProperty(menu, "offsetTop", { configurable: true, value: 146 });
+    Object.defineProperty(menu, "offsetHeight", { configurable: true, value: 341 });
+    menu.getBoundingClientRect = () => ({ top: 332, bottom: 666, left: 27, right: 315, width: 282, height: 334 });
+    trigger.click();
+    expect(menu.hidden).toBe(false);
+    expect(menu.style.maxHeight).toBe("235px");
+    // With room below (390x844) the stylesheet's own limit is left alone.
+    trigger.click();
+    height = 844;
+    trigger.click();
+    expect(menu.hidden).toBe(false);
+    expect(menu.style.maxHeight).toBe("");
+  });
+
   it("separates preview from removal and returns focus to the next available action", () => {
     const { window, document } = boot();
     window.pendingAttachments.push({ ...FILE, name: "Second.txt" });

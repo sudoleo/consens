@@ -179,6 +179,22 @@
       )).filter(function (item) { return !item.closest("[hidden]") && item.getClientRects().length > 0; });
     }
 
+    // On the start screen the menu opens down from the centred composer. On
+    // a short phone (320x568) its last rows lay below the screen edge, out
+    // of reach of its own scroll; it now ends above the edge and scrolls.
+    // In a chat it opens upward with its own limit (shell.css). Measured
+    // from the layout, not the box on screen: that is still mid-motion
+    // (overlays.css), moved and scaled by up to 11px.
+    function fitMenuToViewport() {
+      menu.style.removeProperty("max-height");
+      const viewport = window.visualViewport;
+      const floor = (viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 12;
+      const parent = menu.offsetParent;
+      const top = parent ? parent.getBoundingClientRect().top + parent.clientTop + menu.offsetTop
+        : menu.getBoundingClientRect().top;
+      if (top + menu.offsetHeight > floor) menu.style.maxHeight = Math.max(160, Math.floor(floor - top)) + "px";
+    }
+
     function setMenuOpen(open, options) {
       const focus = options && options.focus;
       if (menu.hidden === !open) {
@@ -188,6 +204,7 @@
       if (open) window.App?.popover?.opened(menu, { trigger: trigger });
       else window.App?.popover?.closed(menu);
       menu.hidden = !open;
+      if (open) fitMenuToViewport();
       trigger.setAttribute("aria-expanded", String(open));
       trigger.classList.toggle("is-open", open);
       if (inputContainer) inputContainer.classList.toggle("attach-menu-open", open);
