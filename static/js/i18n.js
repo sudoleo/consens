@@ -370,7 +370,12 @@
     }
     const { key, elements, fresh } = runKey(core);
     if (!fresh || !LETTER.test(key)) return;
-    const found = values.has(key) && !exact.has(key) ? null : find(key, contextOf(parent));
+    // The text itself types a marker ("<0/>" in a file name): no entry can
+    // say which element it means; its pieces still translate
+    // (app/core/i18n.py, _Translator.run).
+    const expected = elements.reduce((sum, element) => sum + (kind(element) === "phrasing" ? 2 : 1), 0);
+    const typed = (key.match(MARKER) || []).length !== expected;
+    const found = typed || (values.has(key) && !exact.has(key)) ? null : find(key, contextOf(parent));
     if (found !== null) {
       replaceRun(parent, core, found, elements);
       return;

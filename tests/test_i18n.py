@@ -133,6 +133,11 @@ def test_markers_typed_in_the_text_are_left_alone(small_catalog, html_text):
     assert i18n.translate_html(html_text, "de") == html_text
 
 
+def test_a_typed_marker_leaves_the_rest_of_its_run_translated(small_catalog):
+    out = i18n.translate_html("<p>&lt;0/&gt; chats <b>New chat</b></p>", "de")
+    assert out == "<p>&lt;0/&gt; chats <b>Neuer Chat</b></p>"
+
+
 def test_long_content_does_not_stall_the_patterns():
     # A shared answer whose paragraph repeats the literals of a pattern with
     # four placeholders, without its ending: the lazy groups backtracked with

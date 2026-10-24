@@ -70,6 +70,19 @@ describe("i18n.js on a German page", () => {
     expect(document.getElementById("b").textContent).toBe("Zu Vergleich wechseln");
   });
 
+  it("leaves text that types a marker itself, and goes on with the rest", async () => {
+    // A file named "<0/> chats" or a question with "<0>…</0>": the marker
+    // names an element that is not there (TypeError, the batch stopped).
+    const { window, document } = germanPage("<main><span id=a></span><span id=b></span><span id=c></span></main>");
+    document.getElementById("a").textContent = "<0/> chats";
+    document.getElementById("b").textContent = "Read the <0>privacy policy</0> first.";
+    document.getElementById("c").textContent = "New chat";
+    await settle(window);
+    expect(document.getElementById("a").textContent).toBe("<0/> chats");
+    expect(document.getElementById("b").textContent).toBe("Read the <0>privacy policy</0> first.");
+    expect(document.getElementById("c").textContent).toBe("Neuer Chat");
+  });
+
   it("never translates its own German twice", async () => {
     const { window, document } = germanPage("<main><p id=p></p></main>");
     const p = document.getElementById("p");
