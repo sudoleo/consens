@@ -514,6 +514,23 @@ describe("difference cards in the detail panel", () => {
     expect([...cards.querySelectorAll(".diff-card")].map(card => card.dataset.differenceIndex)).toEqual(["c0"]);
   });
 
+  it("heads a yellow sentence no model backs with the sentence, its dissent in contrast", () => {
+    // coverage split with agree [] (coverage_judge.coverage_state): the
+    // answer's side has no models, yet the sentence is still the answer's.
+    const ctx = boot();
+    const cards = ctx.document.createElement("div");
+    ctx.window.renderStoredDifferenceCards(cards, { models_compared: ["OpenAI", "Gemini", "DeepSeek"], differences: [], claims: [
+      { anchor: "The bridge opened in 1932.", coverage: "split", agree: [],
+        dissent: [{ model: "Gemini", quote: "It opened in 1937.", target: "1932" }] }] });
+    const card = cards.querySelector(".diff-card");
+    expect(card.querySelector(".diff-card-topic").textContent).toBe("Not every model agrees");
+    expect(card.querySelector(".diff-answer-mark").textContent).toBe("The bridge opened in 1932.");
+    const sides = [...card.querySelectorAll(".diff-position")];
+    expect(sides).toHaveLength(1);
+    expect(sides[0].querySelector(".diff-position-lead").textContent).toBe("In contrast");
+    expect(sides[0].querySelector(".diff-position-stance").textContent).toBe("It opened in 1937.");
+  });
+
   it("opens the card of the clicked marker by data index, not by card position", () => {
     const ctx = boot();
     ctx.window.renderStoredConsensusClaims(ctx.body, MIXED, ctx.fallback, []);

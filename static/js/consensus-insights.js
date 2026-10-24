@@ -3271,7 +3271,10 @@
                 // Punkt. Die Etikettzeile ("● Critical") ist weg; Screenreader
                 // hoeren die Schwere vorab (diff-card-meaning).
                 const answerAnchor = String(diff.consensus_anchor || "").replace(/\[S?\d+(?:\s*,\s*S?\d+)*\]/gi, "").trim();
-                const hasAnswerSide = ordered.some(function (pos) { return pos.in_answer === true; });
+                // Ein gelber Satz steht in der Antwort, auch wenn kein Modell
+                // ihn stuetzt (agree leer): dann fiel seine Seite mangels
+                // Modellen aus mergedPositions.
+                const hasAnswerSide = !!entry.claim || ordered.some(function (pos) { return pos.in_answer === true; });
                 const opensOnAnswer = hasAnswerSide && !!answerAnchor;
 
                 const summary = document.createElement("summary");
