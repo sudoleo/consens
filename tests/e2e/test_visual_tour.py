@@ -332,6 +332,9 @@ def _app_start(browser, server, view, shoot):
     try:
         _soft_wait(page, agent_ready)
         shoot(page, "konto-leer")
+        # Phones scroll the examples sideways: the row's far end.
+        page.evaluate("() => { const row = document.getElementById('composerStarters'); row.scrollLeft = row.scrollWidth; }")
+        shoot(page, "konto-beispiele-ende")
         page.click("#attachTrigger")
         _soft_wait(page, "() => !document.getElementById('attachMenu').hidden")
         shoot(page, "konto-plusmenue")
