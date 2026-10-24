@@ -1459,13 +1459,17 @@
 
           // Ein Weg aus der Vorschau (Logo, Fusszeile): sie geht, und der
           // Fokus steht an ihrer Marke, damit der Leser ihn beim Schliessen
-          // dorthin zurueckgibt.
+          // dorthin zurueckgibt. Ohne sichtbare Zaehler ist das Badge
+          // display:none und nimmt keinen Fokus, dann ist der Satz die Marke
+          // (applyConsensusMarkerVisibility gibt nur einem von beiden tabindex).
           function leavePreviewFor(group) {
             group.hover = false;
             hideHoverPreview({ instant: true });
             applyPassageHover(group);
-            const control = activeControl(group)?.el;
-            if (control?.isConnected && control.matches("button, [tabindex]")) control.focus({ preventScroll: true });
+            const target = [group.spans[0], activeControl(group)?.el].find(function (el) {
+              return el?.isConnected && el.matches("button, [tabindex]");
+            });
+            if (target) target.focus({ preventScroll: true });
           }
 
           // Der Inhalt bleibt, bis die naechste Vorschau kommt: die Karte

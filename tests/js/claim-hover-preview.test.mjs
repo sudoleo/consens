@@ -282,6 +282,27 @@ describe("reaching the card with the pointer", () => {
     env.dom.window.close();
   });
 
+  it("hands the focus to the sentence, not to its hidden count, on the way into the reader", async () => {
+    const env = boot();
+    const open = vi.fn(() => env.document.activeElement);
+    env.body.innerHTML = "<p>Mail judith-c.schneider@uni.de for an appointment.</p>";
+    env.window.renderStoredConsensusClaims(env.body, { models_compared: ["OpenAI", "Gemini", "DeepSeek"], differences: [], claims: [
+      { anchor: "Mail judith-c.schneider@uni.de for an appointment.", coverage: "split", agree: ["OpenAI", "Gemini"],
+        dissent: [{ model: "DeepSeek", quote: "judith.c.schneider@uni.de", target: "judith-c.schneider@uni.de" }] }] },
+      env.document.createElement("div"), [], { focusDifference() {}, answerNavigation: { canOpen: () => true, open } });
+    // Counts off (the default): the badge is display:none (shell.css) and
+    // the sentence is the button.
+    expect(env.document.body.classList.contains("claim-counts-visible")).toBe(false);
+    const mark = env.body.querySelector(".cx-claim");
+    expect(mark.getAttribute("role")).toBe("button");
+    env.hover(mark);
+    await wait(160);
+    env.shown().querySelector('.cx-card-action[data-section="answers"]').click();
+    expect(open).toHaveBeenCalled();
+    expect(open.mock.results[0].value).toBe(mark);
+    env.dom.window.close();
+  });
+
   it("leads from a yellow sentence's card to its card in the list", async () => {
     const env = boot();
     const focusDifference = vi.fn();
