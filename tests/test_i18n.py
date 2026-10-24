@@ -1,4 +1,5 @@
 """German for German readers (docs/i18n.md): engine, addresses, dictionary."""
+import asyncio
 import gzip
 import json
 import re
@@ -228,6 +229,36 @@ def test_lang_parameter_stores_the_choice(client):
     assert client.get("/about", headers={"Accept-Language": "de"}).status_code == 200
     forget = client.get("/app?lang=auto")
     assert forget.headers["location"] == "/app" and "Max-Age=0" in forget.headers["set-cookie"]
+
+
+def _redirect_location(path: str, query: bytes = b"") -> str:
+    """Location of a redirect for a raw ASGI path, as uvicorn decodes it."""
+    async def inner(scope, receive, send):
+        raise AssertionError("expected a redirect")
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "GET", "path": path, "query_string": query, "headers": []}
+    asyncio.run(I18nMiddleware(inner)(scope, None, send))
+    assert sent[0]["status"] == 302
+    return dict(sent[0]["headers"])[b"location"].decode("latin-1")
+
+
+@pytest.mark.parametrize("path, query", [
+    ("/de//evil.example", b""),
+    ("/de//evil.example/about", b"x=1"),
+    ("//evil.example", b"lang=de"),
+    ("/\\evil.example", b"lang=de"),
+    ("/de/\\evil.example", b""),
+    ("/\t/evil.example", b"lang=en"),
+])
+def test_language_redirects_stay_on_this_site(small_catalog, path, query):
+    location = _redirect_location(path, query)
+    assert location.startswith("/") and not location.startswith("//"), location
+    assert "\\" not in location and "\t" not in location, location
 
 
 def test_footer_offers_the_other_language():

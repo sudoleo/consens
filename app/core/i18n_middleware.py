@@ -29,7 +29,7 @@ through untouched.
 from __future__ import annotations
 
 import gzip
-from urllib.parse import parse_qsl, urlencode
+from urllib.parse import parse_qsl, quote, urlencode
 
 from starlette.datastructures import Headers, MutableHeaders
 
@@ -87,6 +87,14 @@ async def _send_simple(send, status: int, headers: list[tuple[bytes, bytes]], bo
     await send({"type": "http.response.body", "body": body})
 
 
+def _local_location(path: str, query: list[tuple[str, str]]) -> str:
+    """A redirect target on this site. ``path`` arrives decoded, so it is quoted
+    again (a ``\\`` or a tab would otherwise read as ``//`` to the browser) and
+    never starts with ``//``, which names another host."""
+    location = "/" + quote(path, safe="/:@!$&'()*+,;=").lstrip("/")
+    return location + (f"?{urlencode(query)}" if query else "")
+
+
 def _redirect_headers(location: str, *extra: tuple[bytes, bytes]) -> list[tuple[bytes, bytes]]:
     return [
         (b"location", location.encode("latin-1", "replace")),
@@ -122,7 +130,7 @@ class I18nMiddleware:
 
         if prefix_language and page_path not in i18n.LOCALIZED_PATHS:
             if method in {"GET", "HEAD"}:
-                await _send_simple(send, 302, _redirect_headers(page_path + (f"?{urlencode(query)}" if query else "")))
+                await _send_simple(send, 302, _redirect_headers(_local_location(page_path, query)))
                 return
             prefix_language = None
             page_path = path
@@ -132,9 +140,8 @@ class I18nMiddleware:
             rest = [(name, value) for name, value in query if name != "lang"]
             # "auto" forgets the choice: the browser's language decides again.
             target = i18n.localized_path(page_path, switch) if page_path in i18n.LOCALIZED_PATHS and switch != "auto" else page_path
-            location = target + (f"?{urlencode(rest)}" if rest else "")
             await _send_simple(send, 302, _redirect_headers(
-                location, (b"set-cookie", _cookie(switch, secure).encode("latin-1"))))
+                _local_location(target, rest), (b"set-cookie", _cookie(switch, secure).encode("latin-1"))))
             return
 
         chosen = i18n.chosen_language(_cookies(headers).get(i18n.LANGUAGE_COOKIE))
@@ -142,7 +149,7 @@ class I18nMiddleware:
         localized = page_path in i18n.LOCALIZED_PATHS
         if not prefix_language and localized and language != i18n.DEFAULT_LANGUAGE and method in {"GET", "HEAD"}:
             target = i18n.localized_path(page_path, language)
-            await _send_simple(send, 302, _redirect_headers(target + (f"?{urlencode(query)}" if query else "")))
+            await _send_simple(send, 302, _redirect_headers(_local_location(target, query)))
             return
 
         if prefix_language:
