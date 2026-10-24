@@ -45,7 +45,9 @@ a {
 }
 
 /* The skip link (index.html): out of sight until the keyboard reaches it as
-   the first stop, then a quiet pill in the top left, above everything. */
+   the first stop, then a quiet pill in the top left, above everything. Its
+   lift comes with it: parked above the edge, the shadow reached 30px into
+   the page and lay as a grey smudge over the brand on the light theme. */
 .skip-link {
   position: fixed;
   top: 10px;
@@ -56,10 +58,9 @@ a {
   background: var(--well);
   color: var(--ink);
   font-size: 14px;
-  box-shadow: var(--lift);
   transform: translateY(calc(-100% - 20px));
 }
-.skip-link:focus { transform: none; }
+.skip-link:focus { transform: none; box-shadow: var(--lift); }
 
 /* A text link keeps the same air, with its corners rounded like a control's. */
 :where(a):focus-visible {
