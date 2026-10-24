@@ -58,7 +58,7 @@ def test_public_styles_share_the_app_aligned_token_layer():
         "--partial: #896512;",
         "--partial-bg: #fbebcf;",
         "--dispute: #ad4b57;",
-        "--dispute-bg: #f5e0e1;",
+        "--dispute-bg: #fbe7e8;",
         "--ground: #191a1c;",
         "--raise: #212325;",
         "--ink-2: #b0b2b6;",
@@ -223,7 +223,7 @@ def test_share_page_loads_the_common_math_renderer():
     assert "asset_url('/static/js/math-render.js')" in partial
     # Die Klassenliste des Shells waechst (share-shell, topic-detail-shell);
     # gepruefft wird, dass der Renderer am Shell haengt, nicht ihre Reihenfolge.
-    assert re.search(r'<main class="page-shell[^"]*" data-math-render>', template)
+    assert re.search(r'<main id="main" class="page-shell[^"]*" data-math-render>', template)
 
 
 def test_watch_page_leads_with_one_state_line_and_keeps_the_curve_off_phones():

@@ -566,14 +566,27 @@
         const threadComposer = document.querySelector(".input-section");
         const threadColumn = threadComposer?.closest(".container") || null;
         const MOVING_COMPOSER = ["composer-animating", "composer-gliding"];
+        // The same height as the page's scroll-padding, at every width: a
+        // link or mark reached with Tab scrolls into view above the composer
+        // (sticky on a desktop, fixed on a phone) instead of behind it (WCAG
+        // 2.4.11, a11y audit K3). A plain property of <html>, not a custom
+        // one, so its change restyles nothing below.
+        function syncFocusReserve(height) {
+          const root = document.documentElement;
+          const value = height > 0 && !document.body.classList.contains("is-hero") ? `${height}px` : "";
+          if (root.style.scrollPaddingBottom !== value) root.style.scrollPaddingBottom = value;
+        }
         function syncThreadComposerReserve() {
-          if (!threadComposer || !threadColumn || !usesOverlaySidebar()) {
+          if (!threadComposer) return;
+          const moving = MOVING_COMPOSER.some(name => document.body.classList.contains(name));
+          const composerHeight = moving ? 0 : Math.ceil(threadComposer.getBoundingClientRect().height);
+          if (!moving) syncFocusReserve(composerHeight);
+          if (!threadColumn || !usesOverlaySidebar()) {
             threadColumn?.style.removeProperty("--thread-composer-height");
             return;
           }
-          if (MOVING_COMPOSER.some(name => document.body.classList.contains(name))) return;
+          if (moving) return;
 
-          const composerHeight = Math.ceil(threadComposer.getBoundingClientRect().height);
           const value = `${composerHeight}px`;
           if (composerHeight > 0 && threadColumn.style.getPropertyValue("--thread-composer-height") !== value) {
             threadColumn.style.setProperty("--thread-composer-height", value);
@@ -585,11 +598,15 @@
           threadComposerObserver.observe(threadComposer);
         }
         // The end of a move: its final height (the observer kept quiet).
+        // The start page has no composer over the text: no reserve there.
         let composerWasMoving = false;
+        let wasHero = document.body.classList.contains("is-hero");
         new MutationObserver(() => {
           const moving = MOVING_COMPOSER.some(name => document.body.classList.contains(name));
-          if (composerWasMoving && !moving) requestAnimationFrame(syncThreadComposerReserve);
+          const hero = document.body.classList.contains("is-hero");
+          if ((composerWasMoving && !moving) || hero !== wasHero) requestAnimationFrame(syncThreadComposerReserve);
           composerWasMoving = moving;
+          wasHero = hero;
         }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
         requestAnimationFrame(syncThreadComposerReserve);
 

@@ -253,3 +253,103 @@ html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-she
     inset: -6px;
   }
 }
+
+/* Windows contrast mode (a11y audit V2). The system paints every background
+   in Canvas and drops every shadow, so whatever only a fill or a shadow
+   showed would vanish: icons drawn through a mask (their fill is the
+   background), the track and knob of a switch, a ticked box, the focus of a
+   text field (outline: none plus a ring of box-shadow) and the chosen row of
+   a list. Here each gets a system colour or a line instead; outside this mode
+   nothing changes. !important because the component files come later in the
+   cascade. The sentence marks are in components-consensus-visuals.css;
+   tests/test_forced_colors.py keeps every masked icon on the list below. */
+@media (forced-colors: active) {
+  .chevron,
+  .agent-session > summary::after,
+  .agent-activity-chevron,
+  .agent-doc-earlier > summary::before,
+  .diff-more-summary::after,
+  .consensus-differences-summary::before,
+  .consensus-model .select-wrapper::after,
+  .attachment-chip-icon::before,
+  .settings-select::after,
+  .settings-note > summary::before,
+  .model-picker-option-chevron,
+  .wd-explainer > summary::after,
+  .wd-action-toggle::after,
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::after,
+  .chat-input-container .attach-menu .attach-menu-item[aria-haspopup] .attach-menu-value::after,
+  .lp-link::after,
+  .lp-run-chip i,
+  .lp-agent-clock i,
+  .answer-reader-context summary::after,
+  .answer-reader-chevron,
+  .answer-reader-sources summary::after,
+  .answer-reader-source-excerpt summary::after,
+  .answer-reader-inspector :is(.diff-card > .diff-card-summary, .diff-more > .diff-more-summary)::after,
+  .answer-reader-inspector details.agent-evidence-status > summary::after,
+  .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary::after,
+  #differencesView .diff-more-summary::after,
+  .thread-ask-bubble .thread-ask-more::after,
+  .response-answer-more::after,
+  .src-ref-glyph,
+  .answer-reader-site-icon > .site-icon-fallback {
+    forced-color-adjust: none;
+    background-color: CanvasText !important;
+  }
+  /* Apart: a browser without :has() would drop the whole list above. */
+  .agent-file-type:not(:has(svg))::before {
+    forced-color-adjust: none;
+    background-color: CanvasText !important;
+  }
+
+  /* A ticked box is a filled box with the tick cut out of it. */
+  .md-task-box[aria-checked="true"] {
+    forced-color-adjust: none;
+    background-color: CanvasText !important;
+    border-color: CanvasText !important;
+  }
+  .md-task-box[aria-checked="true"]::after {
+    forced-color-adjust: none;
+    background-color: Canvas !important;
+  }
+
+  /* The switch: a drawn track, a knob in text colour, on in Highlight. */
+  .slider {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+  .slider::before {
+    forced-color-adjust: none;
+    background-color: CanvasText !important;
+  }
+  input:checked + .slider {
+    forced-color-adjust: none;
+    background-color: Highlight !important;
+    outline-color: Highlight;
+  }
+  input:checked + .slider::before {
+    background-color: HighlightText !important;
+  }
+  input:focus-visible + .slider {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+  }
+
+  /* Text fields focus with a ring of box-shadow, which is gone here. */
+  :is(input:not([type="checkbox"], [type="radio"]), textarea, select, [contenteditable="true"]):focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 0;
+  }
+
+  /* What is chosen showed it by its fill alone. */
+  .bookmark.is-active,
+  .settings-nav-item.is-active,
+  .view-switch-btn.is-active,
+  [role="tab"][aria-selected="true"],
+  .attach-menu-mode[aria-pressed="true"],
+  .composer-tool[aria-checked="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

@@ -136,6 +136,10 @@
   // A card pinned to a screen position is wrong the moment anything moves.
   window.addEventListener("scroll", hidePreview, true);
   window.addEventListener("resize", hidePreview);
+  // Dismissable without moving the pointer (WCAG 1.4.13).
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && hoverCard && !hoverCard.hidden) hidePreview();
+  }, true);
 
   // ---------------------------------------------------------------- popover
   let popover = null;
@@ -176,11 +180,23 @@
     popoverTrigger = null;
   }
 
+  // The card holds one control, its cross. On a phone it is a dialog over
+  // the page and keeps the focus; on a desktop it reads as if it followed
+  // its badge: Tab past the cross goes on behind the badge (the browser
+  // continues from the focus handed back), Shift+Tab stands on the badge.
   function onKeyDown(event) {
     if (event.key === "Escape") {
       event.stopPropagation();
       closePopover();
+      return;
     }
+    if (event.key !== "Tab" || !popover || !popover.contains(document.activeElement)) return;
+    if (popover.classList.contains("is-modal")) {
+      event.preventDefault();
+      return;
+    }
+    if (event.shiftKey) event.preventDefault();
+    closePopover();
   }
 
   function onDocClick(event) {
@@ -217,7 +233,7 @@
     return section;
   }
 
-  function openClaimPopover(claim, anchor) {
+  function openClaimPopover(claim, anchor, byKey) {
     const pop = ensurePopover();
     closePopover({ restoreFocus: false });
     hidePreview();
@@ -226,6 +242,8 @@
     const header = document.createElement("div");
     header.className = "claim-popover-header";
     const title = document.createElement("span");
+    title.id = "landingClaimPopoverTitle";
+    pop.setAttribute("aria-labelledby", title.id);
     title.className = "claim-popover-title";
     title.textContent = claim.dissent.length
       ? claim.agree.length + " of " + (claim.agree.length + claim.dissent.length) + " models agree"
@@ -283,6 +301,9 @@
         ? rect.bottom + 8
         : Math.max(12, rect.top - height - 8);
       pop.style.top = (top + window.scrollY) + "px";
+      // From the keyboard the card has to be reachable; a click keeps
+      // the focus on the badge, as before.
+      if (byKey) close.focus({ preventScroll: true });
     }
 
     document.addEventListener("keydown", onKeyDown, true);
@@ -382,7 +403,8 @@
     badge.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
-      openClaimPopover(claim, badge);
+      // detail 0: a click from Enter or Space, not from a pointer.
+      openClaimPopover(claim, badge, event.detail === 0);
       if (window.umami && typeof window.umami.track === "function") {
         window.umami.track("landing_claim_opened");
       }

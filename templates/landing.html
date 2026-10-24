@@ -71,7 +71,7 @@
 <body>
   {% include "partials/public_nav.html" %}
 
-  <main>
+  <main id="main">
     <!-- ====================================================== HERO -->
     <!-- The field is the primary CTA and behaves like one: a click on it opens
          /app with the caret in the real composer (?focus=1). Only the demo
@@ -442,9 +442,9 @@
         </div>
         <div class="bench-hero lp-reveal" style="margin-top: clamp(36px, 5vw, 56px);">
           <div class="bench-mini">
-            <p class="bench-mini-title">When the models disagree</p>
+            <p class="bench-mini-title" id="lpBenchMiniTitle">When the models disagree</p>
             <p class="bench-mini-sub">Accuracy on the questions where they split · MMLU-Pro</p>
-            <div class="bench-mini-plot">
+            <div class="bench-mini-plot" aria-hidden="true">
               <div class="bench-mini-col is-consensus" style="--i:0; --v:72.1"><span class="bench-mini-val">72.1%</span><div class="bench-mini-bar"></div></div>
               <div class="bench-mini-col" style="--i:1; --v:70.6"><span class="bench-mini-val">70.6%</span><div class="bench-mini-bar"></div></div>
               <div class="bench-mini-col" style="--i:2; --v:69.1"><span class="bench-mini-val">69.1%</span><div class="bench-mini-bar"></div></div>
@@ -453,7 +453,7 @@
               <div class="bench-mini-col" style="--i:5; --v:44.1"><span class="bench-mini-val">44.1%</span><div class="bench-mini-bar"></div></div>
               <div class="bench-mini-col" style="--i:6; --v:39.7"><span class="bench-mini-val">39.7%</span><div class="bench-mini-bar"></div></div>
             </div>
-            <div class="bench-mini-icons">
+            <div class="bench-mini-icons" aria-hidden="true">
               <span><img src="/static/favicon.png" alt="consens.io"></span>
               <span><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt="Claude"></span>
               <span><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt="GPT-5.5"></span>
@@ -462,6 +462,18 @@
               <span><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt="DeepSeek"></span>
               <span><img src="{{ asset_url('/static/icons/chat_icons/mistral.png') }}" alt="Mistral"></span>
             </div>
+            <div class="bench-sr"><table aria-labelledby="lpBenchMiniTitle">
+              <thead><tr><th scope="col">System</th><th scope="col">Accuracy</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">consens.io consensus</th><td>72.1%</td></tr>
+                <tr><th scope="row">Claude</th><td>70.6%</td></tr>
+                <tr><th scope="row">GPT-5.5</th><td>69.1%</td></tr>
+                <tr><th scope="row">Gemini</th><td>64.7%</td></tr>
+                <tr><th scope="row">Grok</th><td>58.8%</td></tr>
+                <tr><th scope="row">DeepSeek</th><td>44.1%</td></tr>
+                <tr><th scope="row">Mistral</th><td>39.7%</td></tr>
+              </tbody>
+            </table></div>
           </div>
           <div class="lp-bench-aside">
             <div class="bench-stat-row" style="margin-top:0;">

@@ -1,5 +1,5 @@
 {
-  "sources": "b907af331bd5",
+  "sources": "9b2ecdb19a4d",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -233,20 +233,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.a884b121825a.js",
+      "src": "/static/dist/app.6d19112991f1.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.051c29285e84.css",
-    "landing": "/static/dist/landing.2c9d99c0fa72.css",
-    "public": "/static/dist/public.edf00d7468d0.css"
+    "app": "/static/dist/app.677501f5b641.css",
+    "landing": "/static/dist/landing.adf9a8235d44.css",
+    "public": "/static/dist/public.5be036eaae96.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "5b2b0f2e55e5",
+      "hash": "2fb761987126",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -288,7 +288,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "7c3f70eea0b9",
+      "hash": "a868a346a698",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -304,7 +304,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "94aa081282de",
+      "hash": "f31601c65b2c",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -317,10 +317,10 @@
     }
   },
   "previous_assets": [
-    "app.bd7f990bed87.css",
-    "app.21225292f39e.css",
+    "app.d24821459485.css",
+    "app.051c29285e84.css",
+    "app.a884b121825a.js",
     "app.9ce60a400ebb.js",
-    "app.0d31546e1266.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.9242c9a39f0f.js",
@@ -329,9 +329,9 @@
     "firebase.930d0dabc686.js",
     "head.e454f0ad0695.js",
     "head.bc9f04f56061.js",
+    "landing.2c9d99c0fa72.css",
     "landing.21853940b0eb.css",
-    "landing.7ec755d90b0f.css",
-    "public.dec411513656.css",
-    "public.a152705acb9b.css"
+    "public.edf00d7468d0.css",
+    "public.dec411513656.css"
   ]
 }

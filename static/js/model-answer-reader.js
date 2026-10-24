@@ -894,7 +894,8 @@
 
   get("Close").addEventListener("click", () => close());
   dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
-  dialog.addEventListener("keydown", event => { if (event.key === "Escape" && dialog.dataset.modal === "false") close(); });
+  // An Escape a sentence's preview took (consensus-insights.js) leaves the reader open.
+  dialog.addEventListener("keydown", event => { if (event.key === "Escape" && !event.defaultPrevented && dialog.dataset.modal === "false") close(); });
   let backdropPress = false;
   const onBackdrop = event => {
     const rect = dialog.getBoundingClientRect();

@@ -397,6 +397,27 @@ describe("which devices get the card", () => {
     env.dom.window.close();
   });
 
+  it("lets Escape take the preview away while focus and pointer stay", async () => {
+    // WCAG 1.4.13 (a11y audit K6): dismissable without moving either.
+    const env = boot();
+    const mark = marked(env);
+    env.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Tab" }));
+    mark.focus();
+    await wait(160);
+    expect(env.shown()).not.toBeNull();
+    const escape = new env.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    mark.dispatchEvent(escape);
+    expect(env.shown()).toBeNull();
+    // Taken: a reader around the sentence stays open (model-answer-reader.js).
+    expect(escape.defaultPrevented).toBe(true);
+    expect(env.document.activeElement).toBe(mark);
+    // Nothing on screen: Escape stays free for everyone else.
+    const next = new env.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    mark.dispatchEvent(next);
+    expect(next.defaultPrevented).toBe(false);
+    env.dom.window.close();
+  });
+
   it("does not bring it back on a scroll once there is no pointer any more", async () => {
     const env = boot();
     const mark = marked(env);
@@ -410,6 +431,85 @@ describe("which devices get the card", () => {
     env.window.dispatchEvent(new env.window.Event("scroll"));
     await wait(160);
     expect(env.shown()).toBeNull();
+    env.dom.window.close();
+  });
+});
+
+describe("reaching the pinned card with the keyboard", () => {
+  // a11y audit K1: on a desktop the pinned card hangs at the end of <body>
+  // and the focus stayed on the sentence, so Tab never reached its ways.
+  const launch = { models_compared: ["OpenAI", "Gemini"], claims: [],
+    differences: [{ claim: "the launch date", consensus_anchor: "The launch is on Monday.", type: "contradiction",
+      severity: "major", positions: [{ models: ["OpenAI"], stance: "Monday", quote: "Monday", in_answer: true },
+        { models: ["Gemini"], stance: "Friday", quote: "Friday" }] }] };
+  function opened(env, how) {
+    env.body.innerHTML = "<p>The launch is on Monday. Then the rest.</p>";
+    env.window.renderStoredConsensusClaims(env.body, launch, env.document.createElement("div"), [],
+      { focusDifference() {}, answerNavigation: { canOpen: () => true, open() {} } });
+    const mark = env.body.querySelector(".cx-claim");
+    mark.focus();
+    if (how === "key") {
+      mark.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    } else {
+      mark.dispatchEvent(new env.window.Event("pointerdown", { bubbles: true }));
+      mark.click();
+    }
+    return { mark, popover: env.document.getElementById("claimPopover") };
+  }
+  const tab = (env, shiftKey = false) => {
+    const event = new env.window.KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true });
+    env.document.activeElement.dispatchEvent(event);
+    return event;
+  };
+  const ways = popover => [...popover.querySelectorAll("button, a[href]")].filter(el => el.tabIndex !== -1);
+
+  it("takes the focus to the card's first way when Enter opened it", async () => {
+    const env = boot();
+    const { popover } = opened(env, "key");
+    expect(popover.hidden).toBe(false);
+    const card = popover.querySelector(".claim-popover-close").nextElementSibling;
+    expect(card.contains(env.document.activeElement)).toBe(true);
+    expect(env.document.activeElement).toBe(ways(card)[0]);
+    env.dom.window.close();
+  });
+
+  it("goes on behind the sentence after the card's last way, and back to it before the first", async () => {
+    const env = boot();
+    const { mark, popover } = opened(env, "key");
+    await wait(0);
+    const all = ways(popover);
+    all[all.length - 1].focus();
+    // The browser continues from the sentence: the next stop is behind it.
+    expect(tab(env).defaultPrevented).toBe(false);
+    expect(popover.hidden).toBe(true);
+    expect(env.document.activeElement).toBe(mark);
+
+    mark.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await wait(0);
+    ways(popover)[0].focus();
+    expect(tab(env, true).defaultPrevented).toBe(true);
+    expect(popover.hidden).toBe(true);
+    expect(env.document.activeElement).toBe(mark);
+    env.dom.window.close();
+  });
+
+  it("moves between the card's ways without closing it", async () => {
+    const env = boot();
+    const { popover } = opened(env, "key");
+    await wait(0);
+    const all = ways(popover);
+    expect(all.length).toBeGreaterThan(1);
+    all[0].focus();
+    expect(tab(env).defaultPrevented).toBe(false);
+    expect(popover.hidden).toBe(false);
+    env.dom.window.close();
+  });
+
+  it("leaves the focus at the sentence when the pointer pinned the card", async () => {
+    const env = boot();
+    const { mark, popover } = opened(env, "pointer");
+    expect(popover.hidden).toBe(false);
+    expect(env.document.activeElement).toBe(mark);
     env.dom.window.close();
   });
 });

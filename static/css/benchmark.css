@@ -514,6 +514,23 @@
 }
 .bench-mini-foot b { color: var(--text-primary); }
 
+/* The numbers behind each chart, for screen readers (a11y audit P1): the bars
+   and their labels sit in separate containers and only draw them, so the
+   chart is aria-hidden and this table speaks for it. tests/test_benchmark_
+   charts.py keeps both in step. The box around it hides it: a table never
+   shrinks below its content's width. */
+.bench-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --- Responsive ---------------------------------------------------------- */
 @media (max-width: 960px) {
   .bench-hero { grid-template-columns: 1fr; gap: 36px; }

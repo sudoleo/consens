@@ -465,6 +465,9 @@ bzw. 170vh durch und enden ohne Leerlauf, ihre Schiene ist 1 px und trägt an
 der Spitze das Hauslicht. `.lp-reveal` blendet nicht mehr aus: Blöcke sind ab
 dem ersten Frame sichtbar, nur unterhalb der Falz startende (`.is-armed`)
 steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`).
+Die Leiste beginnt seit 2026-10-25 mit der Sprungmarke `.skip-link` auf
+`#main` (a11y-Audit P3); jede Seite mit der Leiste hat genau ein
+`<main id="main">` (`tests/test_public_skip_link.py`).
 Die öffentliche Navigation hat bis 700 px ein Menü (`<details class="nav-menu">`
 in `partials/public_nav.html`, Stil in `static/css/public-nav.css`, importiert
 von `landing.css` und `public-pages.css`); ab derselben Breite verschwinden
@@ -589,7 +592,13 @@ Firestore wartet; `pages.landing_live_watch`). Direkt davor steht seit
 zeigt Best-answer-Raten pro Lauf, in dem eine Familie war (siehe oben), und
 trennt dieses
 Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
-`/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
+`/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Seit
+2026-10-25 (a11y-Audit P1) sind die Balkendiagramme auf `/benchmark` und das
+kleine auf der Landing `aria-hidden`; je eine unsichtbare Tabelle
+(`.bench-sr`, benannt per `aria-labelledby` nach dem Diagrammtitel) trägt
+dieselben Werte samt 95-%-Intervall, die großen Diagramme sind als Scroller
+fokussierbar. `tests/test_benchmark_charts.py` hält Balken und Tabelle gleich.
+Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
 Eingabe-Mockups im Landing-Hero und der Ask-Szene verwenden zusätzlich
 `partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste wie die App
@@ -682,6 +691,15 @@ die Bewegungs-Tokens (`--ease-standard`/`--ease-out`/`--ease-in`,
 EIN Fokusring (`--focus-ring`, `--focus-ring-offset`; `base.css` setzt ihn per
 `:where(...)` als Default für jedes fokussierbare Element) und `--light` für das
 Hauslicht. Komponenten wählen den nächstliegenden Token statt eines eigenen Werts.
+**Kontrastmodus (seit 2026-10-25, a11y-Audit V2):** Der Block
+`@media (forced-colors: active)` am Ende von `foundation.css` gibt allem, was
+nur über Fläche oder Schatten sichtbar war, eine Systemfarbe oder Linie:
+jedem Masken-Icon (`forced-color-adjust: none` + `CanvasText`; neue
+Masken-Icons gehören auf die Liste, `tests/test_forced_colors.py` prüft das),
+Schaltern, dem abgehakten Kästchen, dem Feld-Fokus und gewählten Zeilen
+(`Highlight`-Kontur). Die Satzmarken sprechen dort über ihre Unterkante
+(`components-consensus-visuals.css`: Widerspruch durchgezogen 2 px, uneinig
+gestrichelt, Zustimmung gepunktet). Außerhalb des Modus ändert sich nichts.
 **Material-Bausteine (seit 2026-10-20, Apple-Audit Welle 2, w2c):** ein zweiter
 Block `:root, .dark-mode` in `foundation.css` leitet aus den Themenwerten ab
 (auch auf `body.dark-mode` deklariert, sonst erbt der dunkle App-Body die helle
@@ -2749,7 +2767,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   oder Login-Hinweis) und schreibt sie als `--thread-composer-height` an die
   `.container` (nicht an `<html>`; während `composer-animating`/
   `composer-gliding` erst einmal mit der Endhöhe, Apple-Audit D9); dieselbe
-  Höhe wird als Bottom-Padding der Thread-`.container` reserviert. Dafür wird
+  Höhe wird als Bottom-Padding der Thread-`.container` reserviert. Seit
+  2026-10-25 (a11y-Audit K3) schreibt `syncFocusReserve` sie auf allen Breiten
+  auch als `scroll-padding-bottom` an `<html>` (eine normale, nicht erbende
+  Eigenschaft, also kein Restyle der Seite; auf der Startseite `is-hero` leer):
+  per Tab erreichte Links und Marken scrollen über den Composer statt dahinter. Dafür wird
   dort `container-type` aufgehoben, da es ein `position:fixed`-Containing-Block
   erzeugen würde. So endet der Ergebnis-Footer am vollständigen Scrollende
   oberhalb des Composers, ohne Überdeckung. Zusätzlich gibt
@@ -3336,7 +3358,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Die festgehaltene Karte ist mobil ein echtes modales Blatt (`aria-modal`,
   Fokuswechsel/-falle/-rückgabe, inerter Hintergrund); am Rechner bleibt sie
   ein nichtmodaler Popover an ihren Worten (Escape oder Klick daneben
-  schließt). Ein Klick auf eine Widerspruchs-Passage öffnet seit 2026-10-23
+  schließt). **Tastatur (seit 2026-10-25, a11y-Audit K1):** Kam die Karte von
+  Enter/Leertaste (`lastActivationByKey`, ein `pointerdown` setzt es zurück),
+  fokussiert `openCard` ihren ersten Weg; die Maus lässt den Fokus an der
+  Marke. `leavePinnedCardByTab`: Tab hinter dem letzten Weg schließt die Karte
+  und gibt den Fokus an die Marke zurück, ohne `preventDefault`, sodass der
+  Browser hinter ihr weitergeht; Shift+Tab vor dem ersten bleibt an der Marke.
+  Die Landing-Karte (`landing-insights.js`) macht es ebenso (Name per
+  `aria-labelledby`, Tastatur am `click.detail === 0`). Escape nimmt eine
+  Vorschau weg, ohne Zeiger oder Fokus zu bewegen (K6, Capture-Listener mit
+  `preventDefault`; der nichtmodale Leser prüft `defaultPrevented` und bleibt
+  offen). Ein Klick auf eine Widerspruchs-Passage öffnet seit 2026-10-23
   diese Karte statt direkt den Leser; in den Leser führt ihr Thema.
   Seit **2026-10-01** sortiert `buildDifferenceCards` die Karten nach Schwere
   (kritischer Widerspruch → Detail-Widerspruch → andere Gewichtung, stabil

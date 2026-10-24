@@ -49,13 +49,13 @@
   /* Agreement traffic light — shared by run, marks, dots and diff rails.
      One meaning, one hue: the sentence marks (components-consensus-visuals.css)
      take their hue from these, the -bg tints sit on the same hue. Every
-     value is text-safe (>= 4.5:1) on ground and raise. */
+     value is text-safe (>= 4.5:1) on ground and raise and on its own tint. */
   --agree: #217863;
   --agree-bg: #e0efea;
   --partial: #896512;
   --partial-bg: #fbebcf;
   --dispute: #ad4b57;
-  --dispute-bg: #f5e0e1;
+  --dispute-bg: #fbe7e8;
   /* The light a streamed answer's newest letters arrive in, the house green
      of the Send button's light (stream-reveal.js). */
   --stream-light: var(--agree);
@@ -200,7 +200,7 @@
   --field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
   --field-lift-active: 0 2px 5px rgba(0, 0, 0, 0.36), 0 22px 44px -20px rgba(0, 0, 0, 0.6);
   /* Raised surfaces are lighter in the dark: the start field one shade up. */
-  --field-start: color-mix(in srgb, var(--well) 95%, white);
+  --field-start: color-mix(in srgb, var(--well) 97%, white);
   --field-lift-start: 0 2px 6px rgba(0, 0, 0, 0.34), 0 26px 56px -22px rgba(0, 0, 0, 0.62);
   --field-lift-start-active: 0 2px 6px rgba(0, 0, 0, 0.38), 0 30px 60px -22px rgba(0, 0, 0, 0.68);
 

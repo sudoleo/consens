@@ -552,7 +552,11 @@
               closeClaimPopover();
               return;
             }
-            if (event.key !== "Tab" || !pop.classList.contains("is-modal")) return;
+            if (event.key !== "Tab") return;
+            if (!pop.classList.contains("is-modal")) {
+              leavePinnedCardByTab(event, pop);
+              return;
+            }
             const focusables = claimPopoverFocusables(pop);
             if (!focusables.length) {
               event.preventDefault();
@@ -569,6 +573,30 @@
               first.focus();
             }
           }
+
+          // Am Rechner steht die festgehaltene Karte am Ende von <body>, liest
+          // sich aber wie direkt hinter ihrer Marke: wer mit Tab ueber ihre
+          // letzte Aktion hinaus geht, landet hinter der Marke (der Browser
+          // geht vom zurueckgegebenen Fokus aus weiter), Shift+Tab vor der
+          // ersten steht wieder an der Marke. Die Karte geht dabei.
+          function leavePinnedCardByTab(event, pop) {
+            const focusables = claimPopoverFocusables(pop);
+            const index = focusables.indexOf(document.activeElement);
+            if (index < 0) return;
+            if (event.shiftKey ? index === 0 : index === focusables.length - 1) {
+              if (event.shiftKey) event.preventDefault();
+              closeClaimPopover();
+            }
+          }
+
+          // Enter oder Leertaste zuletzt: die Karte kam von der Tastatur, und
+          // ihre Wege muessen per Tab erreichbar sein (a11y-Audit K1). Die
+          // Maus behaelt den Fokus an der Marke, wie bisher.
+          let lastActivationByKey = false;
+          document.addEventListener("keydown", function (event) {
+            lastActivationByKey = event.key === "Enter" || event.key === " ";
+          }, true);
+          document.addEventListener("pointerdown", function () { lastActivationByKey = false; }, true);
 
           // Popover/Backdrop nach <body> verschieben: Vorfahren mit
           // backdrop-filter/transform erzeugen sonst einen eigenen Containing
@@ -668,6 +696,10 @@
               // auch wenn die sichtbare Quote der Ausloeser war.
               pinnedCard = { anchor: spans ? cardAnchor(spans) : [anchorEl], around: spans || [anchorEl] };
               placeCard(pop, pinnedCard.anchor, pinnedCard.around);
+              if (lastActivationByKey) {
+                const first = claimPopoverFocusables(card)[0] || close;
+                first.focus({ preventScroll: true });
+              }
             }
             if (previewed) {
               requestAnimationFrame(function () {
@@ -1490,6 +1522,17 @@
             hoverCard.hidden = true;
             hoverHiddenAt = Date.now();
           }
+
+          // Escape nimmt die Vorschau weg, ohne dass Zeiger oder Fokus sich
+          // bewegen muessen (WCAG 1.4.13, a11y-Audit K6). Steht eine
+          // festgehaltene Karte, gehoert ihr das Escape (onKeyDown).
+          document.addEventListener("keydown", function (event) {
+            if (event.key !== "Escape" || event.defaultPrevented || !hoverCard || hoverCard.hidden) return;
+            const pinned = $("claimPopover");
+            if (pinned && !pinned.hidden) return;
+            event.preventDefault();
+            hideHoverPreview();
+          }, true);
 
           // Marks of `root` are redrawn or taken off: a preview of one of them
           // (or of a mark already gone) goes too, any other stays.

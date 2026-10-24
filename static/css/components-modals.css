@@ -31,7 +31,10 @@
   max-height: min(86vh, 680px);
   margin: clamp(24px, 8vh, 72px) auto;
   padding: 0;
-  overflow: hidden;
+  /* Clips the heading's tint to the corners; at 400 % zoom the form scrolls
+     instead of losing Send below the edge (WCAG 1.4.10). */
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--text-color);
   text-align: left;
 }
@@ -286,6 +289,11 @@
   color: var(--sidebar-text-muted);
 }
 
+/* On the darker hover/focus fill ink-3 drops to 4.3:1; one rung up. */
+.settings-search input:focus::placeholder {
+  color: var(--ink-2);
+}
+
 /* Das Loeschkreuz in Tinte statt im Akzentblau des Browsers. */
 .settings-search input::-webkit-search-cancel-button {
   -webkit-appearance: none;
@@ -300,6 +308,9 @@
 @media (hover: hover) and (pointer: fine) {
   .settings-search input:hover {
     background: var(--selected);
+  }
+  .settings-search input:hover::placeholder {
+    color: var(--ink-2);
   }
 }
 
@@ -1177,16 +1188,18 @@
   background: color-mix(in srgb, var(--sidebar-border) 20%, transparent);
 }
 
+/* The traffic light's own tints: its text is measured against them
+   (test_material_tokens.py); a 10 % mix on the raised dialog was 4.05:1. */
 .api-keys-status.is-error {
   border-color: color-mix(in srgb, var(--dispute) 55%, var(--sidebar-border));
   color: var(--dispute);
-  background: color-mix(in srgb, var(--dispute) 10%, transparent);
+  background: var(--dispute-bg);
 }
 
 .api-keys-status.is-success {
   border-color: color-mix(in srgb, var(--agree) 55%, var(--sidebar-border));
   color: var(--agree);
-  background: color-mix(in srgb, var(--agree) 10%, transparent);
+  background: var(--agree-bg);
 }
 
 .help-button {

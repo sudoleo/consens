@@ -62,7 +62,7 @@
 <body>
   {% include "partials/public_nav.html" %}
 
-  <main>
+  <main id="main">
     <!-- ====================================================== HERO -->
     <section class="lp-section lp-section--white">
       <div class="lp-shell bench-hero">
@@ -91,9 +91,9 @@
         </div>
         <div class="bench-hero-visual lp-reveal">
           <div class="bench-mini">
-            <p class="bench-mini-title">When the models disagree</p>
+            <p class="bench-mini-title" id="benchMiniTitle">When the models disagree</p>
             <p class="bench-mini-sub">Accuracy on the questions where they split · MMLU-Pro</p>
-            <div class="bench-mini-plot">
+            <div class="bench-mini-plot" aria-hidden="true">
               <div class="bench-mini-col is-consensus" style="--i:0; --v:72.1"><span class="bench-mini-val">72.1%</span><div class="bench-mini-bar"></div></div>
               <div class="bench-mini-col" style="--i:1; --v:70.6"><span class="bench-mini-val">70.6%</span><div class="bench-mini-bar"></div></div>
               <div class="bench-mini-col" style="--i:2; --v:69.1"><span class="bench-mini-val">69.1%</span><div class="bench-mini-bar"></div></div>
@@ -102,7 +102,7 @@
               <div class="bench-mini-col" style="--i:5; --v:44.1"><span class="bench-mini-val">44.1%</span><div class="bench-mini-bar"></div></div>
               <div class="bench-mini-col" style="--i:6; --v:39.7"><span class="bench-mini-val">39.7%</span><div class="bench-mini-bar"></div></div>
             </div>
-            <div class="bench-mini-icons">
+            <div class="bench-mini-icons" aria-hidden="true">
               <span><img src="/static/favicon.png" alt="consens.io"></span>
               <span><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt="Claude"></span>
               <span><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt="GPT-5.5"></span>
@@ -111,6 +111,18 @@
               <span><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt="DeepSeek"></span>
               <span><img src="{{ asset_url('/static/icons/chat_icons/mistral.png') }}" alt="Mistral"></span>
             </div>
+            <div class="bench-sr"><table aria-labelledby="benchMiniTitle">
+              <thead><tr><th scope="col">System</th><th scope="col">Accuracy</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">consens.io consensus</th><td>72.1%</td></tr>
+                <tr><th scope="row">Claude</th><td>70.6%</td></tr>
+                <tr><th scope="row">GPT-5.5</th><td>69.1%</td></tr>
+                <tr><th scope="row">Gemini</th><td>64.7%</td></tr>
+                <tr><th scope="row">Grok</th><td>58.8%</td></tr>
+                <tr><th scope="row">DeepSeek</th><td>44.1%</td></tr>
+                <tr><th scope="row">Mistral</th><td>39.7%</td></tr>
+              </tbody>
+            </table></div>
             <p class="bench-mini-foot">The highlighted bar is the <b>consens.io consensus</b>, first on the questions where the models can't agree.</p>
           </div>
         </div>
@@ -162,10 +174,10 @@
           </p>
         </div>
 
-        <div class="bench-chart lp-reveal">
-          <p class="bench-chart-title">Overall accuracy on MMLU-Pro</p>
+        <div class="bench-chart lp-reveal" role="group" aria-labelledby="benchOverallTitle" tabindex="0">
+          <p class="bench-chart-title" id="benchOverallTitle">Overall accuracy on MMLU-Pro</p>
           <p class="bench-chart-sub">Share of 314 questions answered correctly · whiskers show the 95% confidence interval</p>
-          <div class="bench-plot">
+          <div class="bench-plot" aria-hidden="true">
             <div class="bench-ytitle">Accuracy</div>
             <div class="bench-yaxis">
               <span style="top: 0%">100%</span>
@@ -208,7 +220,7 @@
               </div>
             </div>
           </div>
-          <div class="bench-xrow">
+          <div class="bench-xrow" aria-hidden="true">
             <div class="bench-xlabel is-consensus"><img src="/static/favicon.png" alt=""><span>consens.io<br>consensus</span></div>
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt=""><span>Claude<br>Opus 4.8</span></div>
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt=""><span>GPT-5.5</span></div>
@@ -218,12 +230,25 @@
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt=""><span>DeepSeek<br>V4 Pro</span></div>
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/mistral.png') }}" alt=""><span>Mistral<br>Medium 3.5</span></div>
           </div>
-          <div class="bench-legend">
+          <div class="bench-legend" aria-hidden="true">
             <span><i class="bench-swatch is-consensus"></i>consens.io consensus</span>
             <span><i class="bench-swatch is-model"></i>Single model</span>
             <span><i class="bench-swatch is-majority"></i>Majority vote (baseline)</span>
             <span><i class="bench-ci-key"></i>95% confidence interval</span>
           </div>
+          <div class="bench-sr"><table aria-labelledby="benchOverallTitle">
+            <thead><tr><th scope="col">System</th><th scope="col">Accuracy</th><th scope="col">95% confidence interval</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">consens.io consensus</th><td>91.1%</td><td>87.4–93.8%</td></tr>
+              <tr><th scope="row">Claude Opus 4.8</th><td>90.8%</td><td>87.1–93.5%</td></tr>
+              <tr><th scope="row">GPT-5.5</th><td>90.5%</td><td>86.7–93.2%</td></tr>
+              <tr><th scope="row">Majority vote (baseline)</th><td>89.8%</td><td>86.0–92.7%</td></tr>
+              <tr><th scope="row">Gemini 3.5 Flash</th><td>89.5%</td><td>85.6–92.4%</td></tr>
+              <tr><th scope="row">Grok 4.3</th><td>88.2%</td><td>84.2–91.3%</td></tr>
+              <tr><th scope="row">DeepSeek V4 Pro</th><td>85.0%</td><td>80.7–88.6%</td></tr>
+              <tr><th scope="row">Mistral Medium 3.5</th><td>84.1%</td><td>79.6–87.7%</td></tr>
+            </tbody>
+          </table></div>
         </div>
       </div>
     </section>
@@ -242,10 +267,10 @@
           </p>
         </div>
 
-        <div class="bench-chart lp-reveal">
-          <p class="bench-chart-title">Accuracy on the 68 disagreement questions</p>
+        <div class="bench-chart lp-reveal" role="group" aria-labelledby="benchSplitTitle" tabindex="0">
+          <p class="bench-chart-title" id="benchSplitTitle">Accuracy on the 68 disagreement questions</p>
           <p class="bench-chart-sub">Only questions where the six models did not unanimously agree · whiskers show the 95% confidence interval</p>
-          <div class="bench-plot">
+          <div class="bench-plot" aria-hidden="true">
             <div class="bench-ytitle">Accuracy</div>
             <div class="bench-yaxis">
               <span style="top: 0%">100%</span>
@@ -288,7 +313,7 @@
               </div>
             </div>
           </div>
-          <div class="bench-xrow">
+          <div class="bench-xrow" aria-hidden="true">
             <div class="bench-xlabel is-consensus"><img src="/static/favicon.png" alt=""><span>consens.io<br>consensus</span></div>
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt=""><span>Claude<br>Opus 4.8</span></div>
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt=""><span>GPT-5.5</span></div>
@@ -298,12 +323,25 @@
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt=""><span>DeepSeek<br>V4 Pro</span></div>
             <div class="bench-xlabel"><img src="{{ asset_url('/static/icons/chat_icons/mistral.png') }}" alt=""><span>Mistral<br>Medium 3.5</span></div>
           </div>
-          <div class="bench-legend">
+          <div class="bench-legend" aria-hidden="true">
             <span><i class="bench-swatch is-consensus"></i>consens.io consensus</span>
             <span><i class="bench-swatch is-model"></i>Single model</span>
             <span><i class="bench-swatch is-majority"></i>Majority vote (baseline)</span>
             <span><i class="bench-ci-key"></i>95% confidence interval</span>
           </div>
+          <div class="bench-sr"><table aria-labelledby="benchSplitTitle">
+            <thead><tr><th scope="col">System</th><th scope="col">Accuracy</th><th scope="col">95% confidence interval</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">consens.io consensus</th><td>72.1%</td><td>60.4–81.3%</td></tr>
+              <tr><th scope="row">Claude Opus 4.8</th><td>70.6%</td><td>58.9–80.1%</td></tr>
+              <tr><th scope="row">GPT-5.5</th><td>69.1%</td><td>57.4–78.8%</td></tr>
+              <tr><th scope="row">Majority vote (baseline)</th><td>66.2%</td><td>54.3–76.3%</td></tr>
+              <tr><th scope="row">Gemini 3.5 Flash</th><td>64.7%</td><td>52.8–75.0%</td></tr>
+              <tr><th scope="row">Grok 4.3</th><td>58.8%</td><td>47.0–69.7%</td></tr>
+              <tr><th scope="row">DeepSeek V4 Pro</th><td>44.1%</td><td>33.0–55.9%</td></tr>
+              <tr><th scope="row">Mistral Medium 3.5</th><td>39.7%</td><td>28.9–51.6%</td></tr>
+            </tbody>
+          </table></div>
         </div>
       </div>
     </section>

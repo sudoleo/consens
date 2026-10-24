@@ -458,6 +458,31 @@ body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
   body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
     text-decoration-color: GrayText;
   }
+
+  /* Die Flaeche der Marken malt der Kontrastmodus in Canvas, sie waeren
+     weg (a11y-Audit V2). Dort sprechen sie ueber die Form ihrer Unterkante:
+     Widerspruch durchgezogen und kraeftig, uneinig gestrichelt, Zustimmung
+     und duenne Lage gepunktet. Eine benannte Stelle traegt die Linie statt
+     ihres Satzes, wie sonst die Farbe. */
+  body:not(.consensus-markers-hidden) .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
+  body:not(.consensus-markers-hidden) .cx-claim.has-spot:not(.is-marker-filtered) .cx-spot {
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
+    text-decoration-thickness: 1px;
+    text-decoration-color: CanvasText;
+    text-underline-offset: 0.22em;
+  }
+
+  body:not(.consensus-markers-hidden) .cx-claim:is(.is-minor, .is-split):not(.is-marker-filtered, .has-spot),
+  body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-minor, .is-split):not(.is-marker-filtered) .cx-spot {
+    text-decoration-style: dashed;
+  }
+
+  body:not(.consensus-markers-hidden) .cx-claim.is-major:not(.is-marker-filtered, .has-spot),
+  body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-filtered) .cx-spot {
+    text-decoration-style: solid;
+    text-decoration-thickness: 2px;
+  }
 }
 
 /* Gemeinsame Geometrie aller vier Stufen. Die Marke darf keinen Platz

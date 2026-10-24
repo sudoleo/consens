@@ -171,6 +171,31 @@ def test_traffic_light_is_text_safe_and_dispute_is_not_the_amber():
         assert abs(hue(LIGHT[f"--{name}-bg"]) - hue(LIGHT[f"--{name}"])) <= 3, name
 
 
+def tint_over(value: str, surface: str) -> str:
+    match = re.fullmatch(r"rgba\((\d+), (\d+), (\d+), ([\d.]+)\)", value.strip())
+    if not match:
+        return value
+    solid = "#" + "".join("%02x" % int(v) for v in match.groups()[:3])
+    return mix(solid, float(match.group(4)), surface)
+
+
+def test_traffic_light_text_reads_on_its_own_tint():
+    """Badges, error lines and the API-key status set the colour on its -bg
+    tint; --dispute on its tint was 4.24:1 (a11y audit V3)."""
+    for theme, tokens in THEMES.items():
+        for name in ("agree", "partial", "dispute"):
+            for surface in (tokens["--ground"], tokens["--raise"]):
+                tint = tint_over(tokens[f"--{name}-bg"], surface)
+                assert contrast(tokens[f"--{name}"], tint) >= 4.5, (theme, name, tint)
+
+
+def test_the_start_field_keeps_its_placeholder_readable():
+    match = re.fullmatch(r"color-mix\(in srgb, var\(--well\) (\d+)%, white\)", DARK["--field-start"])
+    assert match, DARK["--field-start"]
+    field = mix(DARK["--well"], int(match.group(1)) / 100, "#ffffff")
+    assert contrast(DARK["--ink-3"], field) >= 4.5, field
+
+
 MARKS = {
     # mark: (token, lightness, chroma, alpha in dark or None)
     "--cx-mark-agree": ("--agree", 0.962, 0.017),

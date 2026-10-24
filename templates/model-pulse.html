@@ -51,7 +51,7 @@
 
   {% set rival_short = (families | selectattr('key', 'equalto', pulse.rival) | map(attribute='short') | first) if pulse and pulse.rival else '' %}
 
-  <main>
+  <main id="main">
     <section class="lp-section lp-section--white pulse-hero">
       <div class="lp-shell pulse-hero-grid">
         <div class="lp-head">

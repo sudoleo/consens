@@ -98,3 +98,22 @@
   from { opacity: 1; transform: none; }
   to { opacity: 0; transform: translateY(-4px); }
 }
+
+/* The skip link (partials/public_nav.html), as in /app (base.css): out of
+   sight until the keyboard reaches it as the first stop, then a quiet pill in
+   the top left above the bar. Before it, 7-8 stops of the bar came first on
+   every page (a11y audit P3). */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 2000;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--well);
+  color: var(--ink);
+  font-size: 14px;
+  box-shadow: var(--lift);
+  transform: translateY(calc(-100% - 20px));
+}
+.skip-link:focus { transform: none; }
