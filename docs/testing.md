@@ -220,6 +220,10 @@ endgültigen Namen bauen: Die `.exe`-Starter in `venv\Scripts` (`uvicorn.exe`,
 `pip.exe`) enthalten den absoluten Pfad und gehen beim Umbenennen kaputt. In
 `.claude/worktrees/…` ist `venv` meist eine Junction auf die Haupt-venv; sie
 dort nur mit `cmd /c rmdir venv` entfernen, nie mit `Remove-Item -Recurse`.
+Auch `git worktree remove` läuft durch eine noch vorhandene Junction und leert
+die Haupt-venv. Für Läufe geplanter Aufgaben legt `scripts/task_worktree.py
+new <aufgabe>` einen Worktree samt `npm ci` und Junction an (etwa 45 s), und
+`scripts/task_worktree.py remove <pfad>` löst die Junction vor dem Entfernen.
 
 ### Pakete ändern
 

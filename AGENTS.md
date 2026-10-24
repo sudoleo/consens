@@ -21,6 +21,18 @@
   routinemäßiger Freigabe oder manueller Orchestrierung fragen. Explizite
   Einschränkungen im jeweiligen Auftrag (z. B. „nur Entwurf“, „nicht mergen“)
   gehen vor.
+- **Geplante Aufgaben arbeiten pro Lauf in einem eigenen Worktree:** Läufe aus
+  `C:\Users\maxlp\.claude\scheduled-tasks` starten mehrmals am Tag und oft
+  gleichzeitig, auch dieselbe Aufgabe doppelt. Ein Lauf, der am Repo etwas
+  ändert, legt zu Beginn im Hauptordner mit `venv/Scripts/python.exe
+  scripts/task_worktree.py new <aufgabe>` einen frischen Worktree von
+  `origin/main` an (letzte Ausgabezeile = Pfad, mit `node_modules` und
+  venv-Junction). Er arbeitet, testet und committet nur dort, pusht mit
+  `git push origin HEAD:main` und gibt ihn am Ende im Hauptordner mit
+  `... task_worktree.py remove <pfad>` zurück. Das Skript verweigert das
+  Entfernen bei Ungesichertem; bewusst Verworfenes braucht `--discard`. Den
+  Hauptordner und fremde Worktrees nicht anfassen, nie einen Worktree mit
+  festem Namen wiederverwenden. Rein lesende Aufgaben brauchen keinen.
 - Vor Änderungen den Arbeitskontext und relevante laufende Tasks prüfen, um
   parallele Arbeit zu erkennen. Im PR-/Parallelbetrieb auch offene PRs prüfen
   und Abhängigkeiten, Überschneidungen sowie die Merge-Reihenfolge eigenständig

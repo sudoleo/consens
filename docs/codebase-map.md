@@ -8878,7 +8878,11 @@ braucht (Vorschläge, fertiger Freitags-Post, offene Entscheidung), einmal per
 `scripts/task_ping.py "<Satz>"`: Operator-Bot, Ziel
 `TASK_PING_TELEGRAM_CHAT_ID` aus der lokalen `.env` (bewusst nicht
 `TELEGRAM_CHAT_ID`, sonst alarmierten lokale Server), Text auf 300 Zeichen
-gekürzt, damit kein Bericht in Telegram landet; ebenfalls freigegeben. Grok 4.3 ist
+gekürzt, damit kein Bericht in Telegram landet; ebenfalls freigegeben. Läufe
+geplanter Tasks, die am Repo arbeiten, nehmen pro Lauf einen eigenen Worktree
+(`scripts/task_worktree.py new <task>` / `remove <pfad>`, AGENTS.md): frisch von
+`origin/main`, venv als Junction, die beim Entfernen zuerst gelöst wird; `new`
+räumt saubere, gepushte Task-Worktrees nach 24 h selbst ab. Grok 4.3 ist
 seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
 (OpenRouter-Standard „low“; Reasoning-Schalter und Agent-Menü setzen die Stufe).
 Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten
