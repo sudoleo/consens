@@ -116,11 +116,20 @@ class VMBackend:
         pass
 
 
+# A login shell's environment (PATH with the image's and the user's tools,
+# language settings) without its startup noise: the profile files run
+# silently (the Sprites .bashrc warns about ``bind`` in every non-interactive
+# shell), then the command runs as written, without positional parameters.
+SHELL_PRELUDE = ('for __profile in /etc/profile "$HOME/.profile"; do [ -r "$__profile" ] && . "$__profile"; '
+                 'done >/dev/null 2>&1; __command=$1; set --; eval "$__command"')
+
+
 def wrapped_command(command, timeout):
-    """The argv the VM runs: a login shell (PATH with the user's installs)
+    """The argv the VM runs: bash with the login environment (SHELL_PRELUDE)
     under coreutils ``timeout``, so a command never outlives its limit, also
     when the backend's connection is gone."""
-    return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), "bash", "-lc", command]
+    return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), "bash", "-c", SHELL_PRELUDE,
+            "bash", command]
 
 
 class SpritesBackend(VMBackend):
@@ -136,13 +145,15 @@ class SpritesBackend(VMBackend):
 
     # --- REST -----------------------------------------------------------------
 
-    def _request(self, operation, method, path, *, ok=(200,), missing_ok=False, **kwargs):
+    def _request(self, operation, method, path, *, missing_ok=False, **kwargs):
+        """One REST call; any 2xx is success (the API answers 200, 201 or
+        204 depending on the operation, the policy for instance with 204)."""
         try:
             response = self._http.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
             logging.warning("Agent VM request failed operation=%s category=%s", operation, safe_exception(exc))
             raise VMUnavailable(f"{operation}: no connection") from None
-        if response.status_code in ok or (missing_ok and response.status_code == 404):
+        if response.is_success or (missing_ok and response.status_code == 404):
             return response
         logging.warning("Agent VM request refused operation=%s status=%s", operation, response.status_code)
         raise VMUnavailable(f"{operation}: HTTP {response.status_code}")
@@ -153,7 +164,7 @@ class SpritesBackend(VMBackend):
     def ensure(self, name):
         if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
             try:
-                self._request("create", "POST", "/v1/sprites", ok=(200, 201), json={"name": name})
+                self._request("create", "POST", "/v1/sprites", json={"name": name})
             except VMUnavailable:
                 # Another message of the chat may have created it just now.
                 if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
@@ -166,7 +177,7 @@ class SpritesBackend(VMBackend):
             with self._http.stream("GET", self._sprite(name) + "/fs/read", params=params) as response:
                 if response.status_code == 404:
                     raise VMFileMissing(path)
-                if response.status_code != 200:
+                if not response.is_success:
                     logging.warning("Agent VM request refused operation=read status=%s", response.status_code)
                     raise VMUnavailable(f"read: HTTP {response.status_code}")
                 data = bytearray()
@@ -194,7 +205,7 @@ class SpritesBackend(VMBackend):
         try:
             with self._http.stream("POST", self._sprite(name) + "/checkpoint", json={"comment": comment},
                                    timeout=CHECKPOINT_SECONDS) as response:
-                if response.status_code != 200:
+                if not response.is_success:
                     logging.warning("Agent VM request refused operation=checkpoint status=%s", response.status_code)
                     raise VMUnavailable(f"checkpoint: HTTP {response.status_code}")
                 done = False
@@ -219,7 +230,7 @@ class SpritesBackend(VMBackend):
         return str(max(found, key=lambda item: str(item.get("create_time") or ""))["id"])
 
     def delete(self, name):
-        self._request("delete", "DELETE", self._sprite(name), ok=(200, 204), missing_ok=True)
+        self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
 
     def close(self):
         self._http.close()

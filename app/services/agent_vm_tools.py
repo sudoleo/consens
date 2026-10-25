@@ -32,6 +32,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.observability import safe_exception
 from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
+from app.services.error_alerts import report_server_exception
+from app.services.llm.provider_runtime import ProviderCancelled
 
 HOME = agent_vm.HOME
 INPUT_DIR = HOME + "/input"
@@ -64,7 +66,7 @@ _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
 class VmExecArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    command: str = Field(min_length=1, max_length=20_000, description="Shell command, run with bash -lc.")
+    command: str = Field(min_length=1, max_length=20_000, description="Shell command, run by bash with your login environment.")
     cwd: str = Field(default="", max_length=1024, description=f"Working directory; default {HOME}.")
     timeout_seconds: int = Field(default=EXEC_TIMEOUT_DEFAULT, ge=1, le=EXEC_TIMEOUT_MAX)
 
@@ -88,6 +90,14 @@ class _VMOff(ValueError):
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _unexpected(exc, operation):
+    """A failure that is not the provider's: a bug or a broken install (a
+    package missing). It still costs only the VM, and is reported."""
+    if not isinstance(exc, agent_vm.VMUnavailable):
+        logging.warning("Agent VM %s failed unexpectedly category=%s", operation, safe_exception(exc))
+        report_server_exception(exc, where=f"agent_vm.{operation}", phase="tool")
 
 
 def vm_path(path):
@@ -203,7 +213,10 @@ class VMSession:
                     logging.warning("Agent VM checkpoint unavailable")
                 self._copy_inputs(cancellation)
                 self.state = "ready"
-            except agent_vm.VMUnavailable:
+            except ProviderCancelled:
+                raise
+            except Exception as exc:
+                _unexpected(exc, "start")
                 self.state = "unavailable"
                 raise _VMOff(VM_UNAVAILABLE) from None
 
@@ -314,6 +327,19 @@ class VMTools:
             self.session.calls += 1
         self.session.ready(cancellation)
 
+    def _provider(self, operation, call):
+        """One call to the provider: any failure turns the VM off for the rest
+        of the message and becomes the agent's short message, never a failed
+        answer. A missing file and Stop pass through."""
+        try:
+            return call()
+        except (ProviderCancelled, agent_vm.VMFileMissing):
+            raise
+        except Exception as exc:
+            _unexpected(exc, operation)
+            self.session.failed()
+            raise _VMOff(VM_UNAVAILABLE) from None
+
     def _timeout(self, requested):
         timeout = min(requested, EXEC_TIMEOUT_MAX)
         left = self.loop.answer_time_left()
@@ -339,12 +365,12 @@ class VMTools:
                 report(output.shown())
         report({"started_at": _now()})
         try:
-            outcome = self.session.backend.exec(self.session.name, args.command, cwd=cwd, timeout=timeout,
-                                                on_output=on_output, cancellation=cancellation)
-        except agent_vm.VMUnavailable:
-            self.session.failed()
+            outcome = self._provider("exec", lambda: self.session.backend.exec(
+                self.session.name, args.command, cwd=cwd, timeout=timeout, on_output=on_output,
+                cancellation=cancellation))
+        except _VMOff:
             report(output.shown())
-            raise _VMOff(VM_UNAVAILABLE) from None
+            raise
         with self.session._lock:
             self.session.commands += 1
             self.session.seconds += outcome.seconds
@@ -362,12 +388,10 @@ class VMTools:
         path = vm_path(args.path)
         self._start(cancellation)
         try:
-            raw, complete = self.session.backend.read_file(self.session.name, path, limit=READ_BYTES)
+            raw, complete = self._provider("read", lambda: self.session.backend.read_file(
+                self.session.name, path, limit=READ_BYTES))
         except agent_vm.VMFileMissing:
             raise ValueError(f"No file at {path}.") from None
-        except agent_vm.VMUnavailable:
-            self.session.failed()
-            raise _VMOff(VM_UNAVAILABLE) from None
         report({"bytes": len(raw)})
         if b"\x00" in raw[:8192]:
             return self.session.announce({"path": path, "binary": True, "bytes": len(raw),
@@ -398,11 +422,8 @@ class VMTools:
         report = report or (lambda fields: None)
         path = vm_path(args.path)
         self._start(cancellation)
-        try:
-            size = self.session.backend.write_file(self.session.name, path, args.content.encode("utf-8"))
-        except agent_vm.VMUnavailable:
-            self.session.failed()
-            raise _VMOff(VM_UNAVAILABLE) from None
+        size = self._provider("write", lambda: self.session.backend.write_file(
+            self.session.name, path, args.content.encode("utf-8")))
         report({"bytes": size})
         return self.session.announce({"path": path, "bytes": size})
 

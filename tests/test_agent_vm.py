@@ -312,6 +312,26 @@ def test_a_vm_failing_mid_command_is_off_for_the_rest_of_the_message(store, fake
     assert [call[2] for call in fake_vm.calls if call[0] == "exec"] == ["ls", "make"]
 
 
+@pytest.mark.parametrize("operation", ["ensure", "exec"])
+def test_an_unexpected_vm_failure_also_costs_only_the_tools(store, fake_vm, monkeypatch, operation):
+    """A broken install (live 2026-10-25: websockets missing in the server's
+    Python) or a bug is no provider refusal, yet it must not fail the answer."""
+    reported = []
+    monkeypatch.setattr(agent_vm_tools, "report_server_exception",
+                        lambda exc, **kwargs: reported.append((type(exc).__name__, kwargs["where"])))
+
+    def broken(self, *args, **kwargs):
+        raise ModuleNotFoundError("No module named 'websockets'")
+    monkeypatch.setattr(_FakeBackend, operation, broken)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]))
+    list(loop.run())
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert results(loop) == [{"error": VM_UNAVAILABLE}, {"error": VM_UNAVAILABLE}]
+    assert reported == [("ModuleNotFoundError", f"agent_vm.{'start' if operation == 'ensure' else 'exec'}")]
+    assert turn["agent_vm"]["unavailable"] is True
+
+
 def test_no_vm_without_the_setting_or_in_chats_with_google_data(store, fake_vm):
     for request_id, kwargs in (("off", {"vm": "off"}), ("google", {"google_data": True})):
         script = Agent()
@@ -485,7 +505,8 @@ def test_sprites_creates_a_missing_vm_and_applies_the_egress_rules():
         assert request.headers["Authorization"] == "Bearer secret-token"
         if request.method == "GET":
             return httpx.Response(404)
-        return httpx.Response(201 if request.url.path == "/v1/sprites" else 200, json={})
+        # Live 2026-10-25: the policy answers 204 without a body; any 2xx is success.
+        return httpx.Response(201, json={}) if request.url.path == "/v1/sprites" else httpx.Response(204)
     sprites(handler).ensure("consens-abc")
     assert seen == [("GET", "/v1/sprites/consens-abc", None),
                     ("POST", "/v1/sprites", json.dumps({"name": "consens-abc"}, separators=(",", ":"))),
@@ -572,8 +593,11 @@ def test_sprites_exec_streams_the_frames_and_never_sends_the_token_to_the_vm():
     [(url, token)] = opened
     query = httpx.URL(url).params
     assert url.startswith("wss://api.sprites.dev/v1/sprites/consens-abc/exec?")
-    # A login shell under the VM-side limit; no environment, the token only in the header.
-    assert query.get_list("cmd") == ["timeout", "--kill-after=5", "60", "bash", "-lc", "make && echo 'done'"]
+    # Under the VM-side limit, with the login environment loaded silently (the
+    # Sprites .bashrc warned about bind in every command, live 2026-10-25);
+    # no environment from the backend, the token only in the header.
+    assert query.get_list("cmd") == ["timeout", "--kill-after=5", "60", "bash", "-c", agent_vm.SHELL_PRELUDE,
+                                     "bash", "make && echo 'done'"]
     assert query["dir"] == "/home/sprite/app" and query["stdin"] == "false" and "env" not in query
     assert token == "secret-token" and "secret-token" not in url
 

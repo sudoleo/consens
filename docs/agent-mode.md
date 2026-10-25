@@ -403,7 +403,10 @@ einer per `\r` überschriebenen Zeile (Fortschrittsbalken) bleibt der letzte
 Stand. Ein Befehl läuft nie länger als sein Limit und nie länger, als die
 Antwort noch Zeit lässt (`answer_time_left`; unter `MIN_COMMAND_SECONDS` = 15
 startet er nicht, „Not enough time…“). Die Grenze setzt die VM selbst
-(`timeout --kill-after=5 … bash -lc`), sie gilt also auch ohne Verbindung.
+(`timeout --kill-after=5 … bash -c`), sie gilt also auch ohne Verbindung. Die
+Login-Umgebung (PATH mit `/.sprite/bin` und `~/.local/bin`) lädt still vorweg
+(`SHELL_PRELUDE`): Die `.bashrc` der Sprite warnt sonst in jedem Befehl über
+`bind`; die Ausgabe des Befehls selbst bleibt ungefiltert.
 VM-Aufrufe zählen zu den Grenzen der Nachricht (24 Schritte, Zeit), nicht zur
 Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
 Änderung sind Fortschritt). `vm_exec` und `vm_read_file` bringen Fremdinhalt
@@ -448,10 +451,16 @@ deshalb das WebSocket. Stop schließt den Socket und beendet den Befehl in der
 VM (`exec/{session}/kill`). Ein Wechsel zu E2B betrifft nur diese Datei.
 
 **Fehler kosten Werkzeuge, nie die Antwort.** Jeder Ausfall des Anbieters ist
-`VMUnavailable`; der Agent bekommt einmal `VM_UNAVAILABLE` („The VM is not
+`VMUnavailable` (jede 2xx-Antwort gilt als Erfolg, die Netzwerkregel antwortet
+mit 204); der Agent bekommt einmal `VM_UNAVAILABLE` („The VM is not
 available right now. Continue without it…“), danach ist die VM für diese
-Nachricht aus, ohne weitere Anfragen. Die Aktivität zeigt ruhig „VM not
-available“, nie die Fehlermeldung des Anbieters.
+Nachricht aus, ohne weitere Anfragen. Dasselbe gilt für jeden unerwarteten
+Fehler eines VM-Aufrufs (`VMTools._provider`, `VMSession.ready`), etwa ein
+fehlendes Paket: er wird zusätzlich gemeldet (`report_server_exception`),
+kostet aber nie die Antwort. Die Aktivität zeigt ruhig „VM not available“,
+nie die Fehlermeldung des Anbieters. Live geprüft am 2026-10-25 gegen die
+echte Sprites-API: Anlegen, Netzwerkregel (example.com gesperrt, PyPI
+erreichbar), Checkpoint, Dateien, Live-Ausgabe, Exit-Code, Zeitlimit.
 
 **Arbeitsprotokoll und Anzeige.** Jeder VM-Aufruf ist ein Tool-Event seines
 Werkzeugs (live und mit `agent_activity` gespeichert): beim Start `command`/
