@@ -510,6 +510,8 @@ def _app_agent(browser, server, view, shoot):
             page.keyboard.press("Escape")
             _soft_wait(page, "() => document.getElementById('claimPopover').hidden")
             page.mouse.move(0, 0)
+            # Escape hands the focus back to the sentence; the footer is shot at rest.
+            page.evaluate("() => document.activeElement?.blur()")
 
         page.locator("#agentAnswer .agent-evidence-link").first.evaluate("el => el.scrollIntoView({block: 'center'})")
         shoot(page, "fuss")
