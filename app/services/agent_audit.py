@@ -231,21 +231,27 @@ def review_entry(entry, text, limit=ENTRY_CHARS):
     return item
 
 
-def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None):
+def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None, earlier=None):
     """The user message of one round: the new log entries (as JSON, data) and,
-    in the final round, the fixed answer."""
+    in the final round, the fixed answer. ``earlier``: a final round that
+    starts over in a new session gets the whole log and the marks of the live
+    rounds, whose conversation it no longer has."""
     log = _dumps({"entries": [review_entry(entry, text, limit) for entry, text in entries]})
     if answer is None:
         return f"Round {number}. New entries of the work log; the agent is still working:\n{log}"
+    if earlier is not None:
+        return ("Final round. The agent's answer is fixed. Your earlier rounds no longer fit, so you get the whole "
+                f"work log again:\n{log}\n\nYour marks from the earlier rounds:\n" + _dumps({"marks": earlier})
+                + "\n\nThe fixed answer:\n" + _dumps({"answer": answer}))
     return ("Final round. The agent's answer is fixed. New entries of the work log since your last round:\n"
             f"{log}\n\nThe fixed answer:\n" + _dumps({"answer": answer}))
 
 
-def fitted_round(number, entries, room, *, answer=None):
+def fitted_round(number, entries, room, *, answer=None, earlier=None):
     """The round's message within ``room`` characters, its entries read
     shorter as needed; None when even the shortest does not fit."""
     for limit in (ENTRY_CHARS, TIGHT_ENTRY_CHARS, MIN_ENTRY_CHARS):
-        message = round_message(number, entries, limit=limit, answer=answer)
+        message = round_message(number, entries, limit=limit, answer=answer, earlier=earlier)
         if len(message) <= room:
             return message
     return None
@@ -670,13 +676,15 @@ class ReviewerSession:
                                answer=answer)
         if message is None and self.cursor:
             # The conversation is full: the final round starts over with the
-            # whole log, read shorter, in a new session.
+            # whole log, read shorter, in a new session. It gets the marks of
+            # the live rounds, else its complete list would lose them.
             worker, self.worker = self.worker, None
             if worker is not None and worker.state not in {"completed", "failed", "stopped"}:
                 self.loop._state(worker, "completed")
             self.messages = [self.messages[0]]
             self.chars, self.cursor = len(self.messages[0]["content"]), 0
-            message = fitted_round(1, log.entries_after(0), self.budget - self.chars, answer=answer)
+            message = fitted_round(1, log.entries_after(0), self.budget - self.chars, answer=answer,
+                                   earlier=self.live_marks)
         self._set(status="running")
         try:
             if message is None:

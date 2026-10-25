@@ -128,9 +128,12 @@ Prüfers fasst 60 % des Kontextfensters seines Modells nach der Antwort, zu 3
 Zeichen je Token, höchstens 400.000 Zeichen (`session_budget`); der Rest
 bleibt für Suchtreffer. Passt eine Runde nicht in den verbleibenden Platz,
 liest sie ihre Einträge kürzer (1.500, dann 300 Zeichen, `fitted_round`).
-Live-Runden enden bei 75 % des Platzes. Passt die Schlussrunde nicht mehr,
-beginnt sie in einer neuen Sitzung mit dem ganzen Protokoll, kürzer gelesen;
-passt auch das nicht, fehlen die Schlussbefunde (`context_limit`).
+Live-Runden enden bei 75 % des Platzes. Im Normalfall bleibt die Schlussrunde
+im selben Gespräch und sieht alle eigenen Live-Runden. Passt sie nicht mehr,
+beginnt sie in einer neuen Sitzung mit dem ganzen Protokoll, kürzer gelesen,
+und bekommt die Befunde ihrer Live-Runden mit (`earlier`), damit ihre
+vollständige Liste sie nicht verliert; passt auch das nicht, fehlen die
+Schlussbefunde (`context_limit`), und die Live-Befunde gelten.
 
 **Auftrag (ein Prompt für alle, `review_system_prompt`):** Prüfe
 unvoreingenommen, ob der Agent die Bitte des Nutzers richtig erfüllt, ob seine

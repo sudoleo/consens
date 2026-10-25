@@ -161,6 +161,7 @@ def round_entries(message):
     """The log entries of a round's user message, and the fixed answer of the final round."""
     text = message["content"]
     log, _, answer = text.partition("\n\nThe fixed answer:\n")
+    log = log.partition("\n\nYour marks from the earlier rounds:\n")[0]
     entries = json.loads(log[log.index("\n") + 1:])["entries"]
     return entries, (json.loads(answer)["answer"] if answer else None)
 
@@ -403,7 +404,10 @@ def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store
     # A conversation too full for the final round: it starts over with the
     # whole log, read shorter, in a new session.
     monkeypatch.setattr(agent_audit, "session_budget", lambda model: 60_000)
-    script = Audit(tool_steps=1, live={"anthropic": json.dumps({"marks": []}), "openai": json.dumps({"marks": []})})
+    script = Audit(tool_steps=1, live={
+        "anthropic": lambda messages: json.dumps({"marks": [
+            {"entry": entry_of(messages, "step"), "kind": "doubtful", "note": "Unchecked."}]}),
+        "openai": json.dumps({"marks": []})})
     loop = audit_loop(store, script)
     sessions = {}
 
@@ -423,6 +427,11 @@ def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store
     system, final = script.prompts["anthropic"]
     entries, answer = round_entries(final)
     assert answer == ANSWER and entries[0]["seq"] == 1
+    # It keeps the marks of its live round, whose conversation it no longer has.
+    step = [e["seq"] for e in entries if e["kind"] == "step"][0]
+    earlier = final["content"].split("\n\nYour marks from the earlier rounds:\n")[1].split("\n\nThe fixed answer:")[0]
+    assert json.loads(earlier) == {"marks": [{"entry": step, "kind": "doubtful", "note": "Unchecked."}]}
+    assert '"marks": []' in script.prompts["openai"][-1]["content"]
     views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 4
 
